@@ -39,9 +39,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._proxy import CapabilityProxy
 from ..decorators import get_capability_meta
 from ..errors import AstrBotError
+from ._proxy import CapabilityProxy
 
 
 def _resolve_handler_capability(

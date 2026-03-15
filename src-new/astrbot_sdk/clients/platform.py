@@ -10,10 +10,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, cast
 
-from ._proxy import CapabilityProxy
+from ..message_components import BaseMessageComponent
+from ..message_result import MessageChain
+from ..message_session import MessageSession
 from ..protocol.descriptors import SessionRef
+from ._proxy import CapabilityProxy
 
 
 class PlatformClient:
@@ -35,13 +39,19 @@ class PlatformClient:
 
     def _build_target_payload(
         self,
-        session: str | SessionRef,
+        session: str | SessionRef | MessageSession,
     ) -> tuple[str, dict[str, Any]]:
         if isinstance(session, SessionRef):
             return session.session, {"target": session.to_payload()}
+        if isinstance(session, MessageSession):
+            return str(session), {}
         return str(session), {}
 
-    async def send(self, session: str | SessionRef, text: str) -> dict[str, Any]:
+    async def send(
+        self,
+        session: str | SessionRef | MessageSession,
+        text: str,
+    ) -> dict[str, Any]:
         """发送文本消息。
 
         向指定的会话（用户或群组）发送文本消息。
@@ -65,7 +75,7 @@ class PlatformClient:
 
     async def send_image(
         self,
-        session: str | SessionRef,
+        session: str | SessionRef | MessageSession,
         image_url: str,
     ) -> dict[str, Any]:
         """发送图片消息。
@@ -93,8 +103,8 @@ class PlatformClient:
 
     async def send_chain(
         self,
-        session: str | SessionRef,
-        chain: list[dict[str, Any]],
+        session: str | SessionRef | MessageSession,
+        chain: MessageChain | Sequence[BaseMessageComponent] | Sequence[dict[str, Any]],
     ) -> dict[str, Any]:
         """发送富消息链。
 
@@ -106,12 +116,25 @@ class PlatformClient:
             发送结果
         """
         session_id, extra = self._build_target_payload(session)
+        if isinstance(chain, MessageChain):
+            chain_payload = await chain.to_payload_async()
+        elif isinstance(chain, Sequence) and all(
+            isinstance(item, BaseMessageComponent) for item in chain
+        ):
+            components = cast(Sequence[BaseMessageComponent], chain)
+            chain_payload = await MessageChain(list(components)).to_payload_async()
+        else:
+            payload_items = cast(Sequence[dict[str, Any]], chain)
+            chain_payload = [dict(item) for item in payload_items]
         return await self._proxy.call(
             "platform.send_chain",
-            {"session": session_id, "chain": chain, **extra},
+            {"session": session_id, "chain": chain_payload, **extra},
         )
 
-    async def get_members(self, session: str | SessionRef) -> list[dict[str, Any]]:
+    async def get_members(
+        self,
+        session: str | SessionRef | MessageSession,
+    ) -> list[dict[str, Any]]:
         """获取群组成员列表。
 
         获取指定群组的成员信息列表。注意仅对群组会话有效。

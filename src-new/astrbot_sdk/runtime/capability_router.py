@@ -97,33 +97,25 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import inspect
-import json
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from .._invocation_context import current_caller_plugin_id
 from ..errors import AstrBotError
 from ..protocol.descriptors import (
-    BUILTIN_CAPABILITY_SCHEMAS,
     RESERVED_CAPABILITY_PREFIXES,
     CapabilityDescriptor,
-    SessionRef,
 )
+from ._capability_router_builtins import BuiltinCapabilityRouterMixin
+from ._streaming import StreamExecution
 
 CallHandler = Callable[[str, dict[str, Any], object], Awaitable[dict[str, Any]]]
 FinalizeHandler = Callable[[list[dict[str, Any]]], dict[str, Any]]
 CAPABILITY_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
-
-
-@dataclass(slots=True)
-class StreamExecution:
-    iterator: AsyncIterator[dict[str, Any]]
-    finalize: FinalizeHandler
-    collect_chunks: bool = True
 
 
 StreamHandler = Callable[
@@ -149,14 +141,18 @@ class _RegisteredPlugin:
     config: dict[str, Any]
 
 
-class CapabilityRouter:
+class CapabilityRouter(BuiltinCapabilityRouterMixin):
     def __init__(self) -> None:
         self._registrations: dict[str, _CapabilityRegistration] = {}
         self.db_store: dict[str, Any] = {}
         self.memory_store: dict[str, dict[str, Any]] = {}
         self.sent_messages: list[dict[str, Any]] = []
+        self.event_actions: list[dict[str, Any]] = []
+        self._event_streams: dict[str, dict[str, Any]] = {}
         self.http_api_store: list[dict[str, Any]] = []
         self._plugins: dict[str, _RegisteredPlugin] = {}
+        self._system_data_root = Path.cwd() / ".astrbot_sdk_testing" / "plugin_data"
+        self._session_waiters: dict[str, set[str]] = {}
         self._db_watch_subscriptions: dict[
             str, tuple[str | None, asyncio.Queue[dict[str, Any]]]
         ] = {}
@@ -212,9 +208,7 @@ class CapabilityRouter:
             queue.put_nowait(event)
 
     def descriptors(self) -> list[CapabilityDescriptor]:
-        return [
-            entry.descriptor for entry in self._registrations.values() if entry.exposed
-        ]
+        return [entry.descriptor for entry in self._registrations.values()]
 
     def contains(self, name: str) -> bool:
         return name in self._registrations
@@ -231,7 +225,13 @@ class CapabilityRouter:
         finalize: FinalizeHandler | None = None,
         exposed: bool = True,
     ) -> None:
-        if not CAPABILITY_NAME_PATTERN.fullmatch(descriptor.name):
+        is_internal_reserved = not exposed and descriptor.name.startswith(
+            RESERVED_CAPABILITY_PREFIXES
+        )
+        if (
+            not CAPABILITY_NAME_PATTERN.fullmatch(descriptor.name)
+            and not is_internal_reserved
+        ):
             raise ValueError(
                 f"capability 名称必须匹配 {{namespace}}.{{method}}：{descriptor.name}"
             )
@@ -318,599 +318,6 @@ class CapabilityRouter:
             iterator=execution.iterator,
             finalize=validated_finalize,
             collect_chunks=execution.collect_chunks,
-        )
-
-    # ------------------------------------------------------------------
-    # Built-in capability registration
-    # ------------------------------------------------------------------
-
-    def _register_builtin_capabilities(self) -> None:
-        """注册全部内建 capability。"""
-        self._register_llm_capabilities()
-        self._register_memory_capabilities()
-        self._register_db_capabilities()
-        self._register_platform_capabilities()
-        self._register_http_capabilities()
-        self._register_metadata_capabilities()
-
-    def _builtin_descriptor(
-        self,
-        name: str,
-        description: str,
-        *,
-        supports_stream: bool = False,
-        cancelable: bool = False,
-    ) -> CapabilityDescriptor:
-        """构建内建 capability 描述符，schema 从注册表读取。"""
-        schema = BUILTIN_CAPABILITY_SCHEMAS[name]
-        return CapabilityDescriptor(
-            name=name,
-            description=description,
-            input_schema=copy.deepcopy(schema["input"]),
-            output_schema=copy.deepcopy(schema["output"]),
-            supports_stream=supports_stream,
-            cancelable=cancelable,
-        )
-
-    def _resolve_target(
-        self, payload: dict[str, Any]
-    ) -> tuple[str, dict[str, Any] | None]:
-        """从 payload 解析 session + target。"""
-        target_payload = payload.get("target")
-        if isinstance(target_payload, dict):
-            target = SessionRef.model_validate(target_payload)
-            return target.session, target.to_payload()
-        return str(payload.get("session", "")), None
-
-    # ------------------------------------------------------------------
-    # LLM handlers
-    # ------------------------------------------------------------------
-
-    async def _llm_chat(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        prompt = str(payload.get("prompt", ""))
-        return {"text": f"Echo: {prompt}"}
-
-    async def _llm_chat_raw(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        prompt = str(payload.get("prompt", ""))
-        text = f"Echo: {prompt}"
-        return {
-            "text": text,
-            "usage": {
-                "input_tokens": len(prompt),
-                "output_tokens": len(text),
-            },
-            "finish_reason": "stop",
-            "tool_calls": [],
-        }
-
-    async def _llm_stream(
-        self,
-        _request_id: str,
-        payload: dict[str, Any],
-        token,
-    ) -> AsyncIterator[dict[str, Any]]:  # type: ignore[override]
-        text = f"Echo: {str(payload.get('prompt', ''))}"
-        for char in text:
-            token.raise_if_cancelled()
-            await asyncio.sleep(0)
-            yield {"text": char}
-
-    def _register_llm_capabilities(self) -> None:
-        self.register(
-            self._builtin_descriptor("llm.chat", "发送对话请求，返回文本"),
-            call_handler=self._llm_chat,
-        )
-        self.register(
-            self._builtin_descriptor("llm.chat_raw", "发送对话请求，返回完整响应"),
-            call_handler=self._llm_chat_raw,
-        )
-        self.register(
-            self._builtin_descriptor(
-                "llm.stream_chat",
-                "流式对话",
-                supports_stream=True,
-                cancelable=True,
-            ),
-            stream_handler=self._llm_stream,
-            finalize=lambda chunks: {
-                "text": "".join(item.get("text", "") for item in chunks)
-            },
-        )
-
-    # ------------------------------------------------------------------
-    # Memory handlers
-    # ------------------------------------------------------------------
-
-    async def _memory_search(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        query = str(payload.get("query", ""))
-        items = [
-            {"key": key, "value": value}
-            for key, value in self.memory_store.items()
-            if query in key or query in json.dumps(value, ensure_ascii=False)
-        ]
-        return {"items": items}
-
-    async def _memory_save(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        key = str(payload.get("key", ""))
-        value = payload.get("value")
-        if not isinstance(value, dict):
-            raise AstrBotError.invalid_input("memory.save 的 value 必须是 object")
-        self.memory_store[key] = value
-        return {}
-
-    async def _memory_get(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        return {"value": self.memory_store.get(str(payload.get("key", "")))}
-
-    async def _memory_delete(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        self.memory_store.pop(str(payload.get("key", "")), None)
-        return {}
-
-    async def _memory_save_with_ttl(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        """保存带 TTL 的记忆项（测试实现，TTL 仅记录但不实际过期）。"""
-        key = str(payload.get("key", ""))
-        value = payload.get("value")
-        ttl_seconds = payload.get("ttl_seconds", 0)
-        if not isinstance(value, dict):
-            raise AstrBotError.invalid_input(
-                "memory.save_with_ttl 的 value 必须是 object"
-            )
-        # 在测试实现中，我们只存储值，TTL 由实际后端实现
-        self.memory_store[key] = {"value": value, "ttl_seconds": ttl_seconds}
-        return {}
-
-    async def _memory_get_many(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        """批量获取多个记忆项。"""
-        keys_payload = payload.get("keys")
-        if not isinstance(keys_payload, (list, tuple)):
-            raise AstrBotError.invalid_input("memory.get_many 的 keys 必须是数组")
-        keys = [str(item) for item in keys_payload]
-        items = []
-        for key in keys:
-            stored = self.memory_store.get(key)
-            # 如果存储的是带 TTL 的结构，提取实际值
-            if (
-                isinstance(stored, dict)
-                and "value" in stored
-                and "ttl_seconds" in stored
-            ):
-                value = stored["value"]
-            else:
-                value = stored
-            items.append({"key": key, "value": value})
-        return {"items": items}
-
-    async def _memory_delete_many(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        """批量删除多个记忆项。"""
-        keys_payload = payload.get("keys")
-        if not isinstance(keys_payload, (list, tuple)):
-            raise AstrBotError.invalid_input("memory.delete_many 的 keys 必须是数组")
-        keys = [str(item) for item in keys_payload]
-        deleted_count = 0
-        for key in keys:
-            if key in self.memory_store:
-                del self.memory_store[key]
-                deleted_count += 1
-        return {"deleted_count": deleted_count}
-
-    async def _memory_stats(
-        self, _request_id: str, _payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        """获取记忆统计信息。"""
-        total_items = len(self.memory_store)
-        # 简单估算字节大小
-        total_bytes = sum(
-            len(str(key)) + len(str(value)) for key, value in self.memory_store.items()
-        )
-        return {"total_items": total_items, "total_bytes": total_bytes}
-
-    def _register_memory_capabilities(self) -> None:
-        self.register(
-            self._builtin_descriptor("memory.search", "搜索记忆"),
-            call_handler=self._memory_search,
-        )
-        self.register(
-            self._builtin_descriptor("memory.save", "保存记忆"),
-            call_handler=self._memory_save,
-        )
-        self.register(
-            self._builtin_descriptor("memory.get", "读取单条记忆"),
-            call_handler=self._memory_get,
-        )
-        self.register(
-            self._builtin_descriptor("memory.delete", "删除记忆"),
-            call_handler=self._memory_delete,
-        )
-        self.register(
-            self._builtin_descriptor("memory.save_with_ttl", "保存带过期时间的记忆"),
-            call_handler=self._memory_save_with_ttl,
-        )
-        self.register(
-            self._builtin_descriptor("memory.get_many", "批量获取记忆"),
-            call_handler=self._memory_get_many,
-        )
-        self.register(
-            self._builtin_descriptor("memory.delete_many", "批量删除记忆"),
-            call_handler=self._memory_delete_many,
-        )
-        self.register(
-            self._builtin_descriptor("memory.stats", "获取记忆统计信息"),
-            call_handler=self._memory_stats,
-        )
-
-    # ------------------------------------------------------------------
-    # DB handlers
-    # ------------------------------------------------------------------
-
-    async def _db_get(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        return {"value": self.db_store.get(str(payload.get("key", "")))}
-
-    async def _db_set(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        key = str(payload.get("key", ""))
-        value = payload.get("value")
-        self.db_store[key] = value
-        self._emit_db_change(op="set", key=key, value=value)
-        return {}
-
-    async def _db_delete(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        key = str(payload.get("key", ""))
-        self.db_store.pop(key, None)
-        self._emit_db_change(op="delete", key=key, value=None)
-        return {}
-
-    async def _db_list(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        prefix = payload.get("prefix")
-        keys = sorted(self.db_store.keys())
-        if isinstance(prefix, str):
-            keys = [item for item in keys if item.startswith(prefix)]
-        return {"keys": keys}
-
-    async def _db_get_many(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        keys_payload = payload.get("keys")
-        if not isinstance(keys_payload, (list, tuple)):
-            raise AstrBotError.invalid_input("db.get_many 的 keys 必须是数组")
-        keys = [str(item) for item in keys_payload]
-        items = [{"key": key, "value": self.db_store.get(key)} for key in keys]
-        return {"items": items}
-
-    async def _db_set_many(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        items_payload = payload.get("items")
-        if not isinstance(items_payload, (list, tuple)):
-            raise AstrBotError.invalid_input("db.set_many 的 items 必须是数组")
-        for entry in items_payload:
-            if not isinstance(entry, dict):
-                raise AstrBotError.invalid_input(
-                    "db.set_many 的 items 必须是 object 数组"
-                )
-            key = str(entry.get("key", ""))
-            value = entry.get("value")
-            self.db_store[key] = value
-            self._emit_db_change(op="set", key=key, value=value)
-        return {}
-
-    async def _db_watch(
-        self, request_id: str, payload: dict[str, Any], _token
-    ) -> StreamExecution:
-        prefix = payload.get("prefix")
-        prefix_value: str | None
-        if isinstance(prefix, str):
-            prefix_value = prefix
-        elif prefix is None:
-            prefix_value = None
-        else:
-            raise AstrBotError.invalid_input("db.watch 的 prefix 必须是 string 或 null")
-
-        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-        self._db_watch_subscriptions[request_id] = (prefix_value, queue)
-
-        async def iterator() -> AsyncIterator[dict[str, Any]]:
-            try:
-                while True:
-                    yield await queue.get()
-            finally:
-                self._db_watch_subscriptions.pop(request_id, None)
-
-        return StreamExecution(
-            iterator=iterator(),
-            finalize=lambda _chunks: {},
-            collect_chunks=False,
-        )
-
-    def _register_db_capabilities(self) -> None:
-        self.register(
-            self._builtin_descriptor("db.get", "读取 KV"),
-            call_handler=self._db_get,
-        )
-        self.register(
-            self._builtin_descriptor("db.set", "写入 KV"),
-            call_handler=self._db_set,
-        )
-        self.register(
-            self._builtin_descriptor("db.delete", "删除 KV"),
-            call_handler=self._db_delete,
-        )
-        self.register(
-            self._builtin_descriptor("db.list", "列出 KV"),
-            call_handler=self._db_list,
-        )
-        self.register(
-            self._builtin_descriptor("db.get_many", "批量读取 KV"),
-            call_handler=self._db_get_many,
-        )
-        self.register(
-            self._builtin_descriptor("db.set_many", "批量写入 KV"),
-            call_handler=self._db_set_many,
-        )
-        self.register(
-            self._builtin_descriptor(
-                "db.watch",
-                "订阅 KV 变更",
-                supports_stream=True,
-                cancelable=True,
-            ),
-            stream_handler=self._db_watch,
-        )
-
-    # ------------------------------------------------------------------
-    # Platform handlers
-    # ------------------------------------------------------------------
-
-    async def _platform_send(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        session, target = self._resolve_target(payload)
-        text = str(payload.get("text", ""))
-        message_id = f"msg_{len(self.sent_messages) + 1}"
-        sent = {"message_id": message_id, "session": session, "text": text}
-        if target is not None:
-            sent["target"] = target
-        self.sent_messages.append(sent)
-        return {"message_id": message_id}
-
-    async def _platform_send_image(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        session, target = self._resolve_target(payload)
-        image_url = str(payload.get("image_url", ""))
-        message_id = f"img_{len(self.sent_messages) + 1}"
-        sent = {
-            "message_id": message_id,
-            "session": session,
-            "image_url": image_url,
-        }
-        if target is not None:
-            sent["target"] = target
-        self.sent_messages.append(sent)
-        return {"message_id": message_id}
-
-    async def _platform_send_chain(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        session, target = self._resolve_target(payload)
-        chain = payload.get("chain")
-        if not isinstance(chain, list) or not all(
-            isinstance(item, dict) for item in chain
-        ):
-            raise AstrBotError.invalid_input(
-                "platform.send_chain 的 chain 必须是 object 数组"
-            )
-        message_id = f"chain_{len(self.sent_messages) + 1}"
-        sent = {
-            "message_id": message_id,
-            "session": session,
-            "chain": [dict(item) for item in chain],
-        }
-        if target is not None:
-            sent["target"] = target
-        self.sent_messages.append(sent)
-        return {"message_id": message_id}
-
-    async def _platform_get_members(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        session, _target = self._resolve_target(payload)
-        return {
-            "members": [
-                {"user_id": f"{session}:member-1", "nickname": "Member 1"},
-                {"user_id": f"{session}:member-2", "nickname": "Member 2"},
-            ]
-        }
-
-    def _register_platform_capabilities(self) -> None:
-        self.register(
-            self._builtin_descriptor("platform.send", "发送消息"),
-            call_handler=self._platform_send,
-        )
-        self.register(
-            self._builtin_descriptor("platform.send_image", "发送图片"),
-            call_handler=self._platform_send_image,
-        )
-        self.register(
-            self._builtin_descriptor("platform.send_chain", "发送消息链"),
-            call_handler=self._platform_send_chain,
-        )
-        self.register(
-            self._builtin_descriptor("platform.get_members", "获取群成员"),
-            call_handler=self._platform_get_members,
-        )
-
-    # ------------------------------------------------------------------
-    # HTTP handlers
-    # ------------------------------------------------------------------
-
-    async def _http_register_api(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        methods_payload = payload.get("methods")
-        if not isinstance(methods_payload, list) or not all(
-            isinstance(item, str) for item in methods_payload
-        ):
-            raise AstrBotError.invalid_input(
-                "http.register_api 的 methods 必须是 string 数组"
-            )
-
-        route = str(payload.get("route", "")).strip()
-        handler_capability = str(payload.get("handler_capability", "")).strip()
-        if not route or not handler_capability:
-            raise AstrBotError.invalid_input(
-                "http.register_api 需要 route 和 handler_capability"
-            )
-
-        plugin_name = self._require_caller_plugin_id("http.register_api")
-        methods = sorted({method.upper() for method in methods_payload if method})
-        entry = {
-            "route": route,
-            "methods": methods,
-            "handler_capability": handler_capability,
-            "description": str(payload.get("description", "")),
-            "plugin_id": plugin_name,
-        }
-        self.http_api_store = [
-            item
-            for item in self.http_api_store
-            if not (
-                item.get("route") == route
-                and item.get("plugin_id") == entry["plugin_id"]
-                and item.get("methods") == methods
-            )
-        ]
-        self.http_api_store.append(entry)
-        return {}
-
-    async def _http_unregister_api(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        route = str(payload.get("route", "")).strip()
-        methods_payload = payload.get("methods")
-        if not isinstance(methods_payload, list) or not all(
-            isinstance(item, str) for item in methods_payload
-        ):
-            raise AstrBotError.invalid_input(
-                "http.unregister_api 的 methods 必须是 string 数组"
-            )
-
-        plugin_name = self._require_caller_plugin_id("http.unregister_api")
-        methods = {method.upper() for method in methods_payload if method}
-        updated: list[dict[str, Any]] = []
-        for entry in self.http_api_store:
-            if entry.get("route") != route:
-                updated.append(entry)
-                continue
-            if entry.get("plugin_id") != plugin_name:
-                updated.append(entry)
-                continue
-            if not methods:
-                continue
-            remaining_methods = [
-                method for method in entry.get("methods", []) if method not in methods
-            ]
-            if remaining_methods:
-                updated.append({**entry, "methods": remaining_methods})
-        self.http_api_store = updated
-        return {}
-
-    async def _http_list_apis(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        plugin_name = self._require_caller_plugin_id("http.list_apis")
-        apis = [
-            dict(entry)
-            for entry in self.http_api_store
-            if entry.get("plugin_id") == plugin_name
-        ]
-        return {"apis": apis}
-
-    def _register_http_capabilities(self) -> None:
-        self.register(
-            self._builtin_descriptor("http.register_api", "注册 HTTP 路由"),
-            call_handler=self._http_register_api,
-        )
-        self.register(
-            self._builtin_descriptor("http.unregister_api", "注销 HTTP 路由"),
-            call_handler=self._http_unregister_api,
-        )
-        self.register(
-            self._builtin_descriptor("http.list_apis", "列出 HTTP 路由"),
-            call_handler=self._http_list_apis,
-        )
-
-    # ------------------------------------------------------------------
-    # Metadata handlers
-    # ------------------------------------------------------------------
-
-    async def _metadata_get_plugin(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        name = str(payload.get("name", "")).strip()
-        plugin = self._plugins.get(name)
-        if plugin is None:
-            return {"plugin": None}
-        return {"plugin": dict(plugin.metadata)}
-
-    async def _metadata_list_plugins(
-        self, _request_id: str, _payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        plugins = [
-            dict(self._plugins[name].metadata) for name in sorted(self._plugins.keys())
-        ]
-        return {"plugins": plugins}
-
-    async def _metadata_get_plugin_config(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        name = str(payload.get("name", "")).strip()
-        caller_plugin_id = self._require_caller_plugin_id("metadata.get_plugin_config")
-        if name != caller_plugin_id:
-            return {"config": None}
-        plugin = self._plugins.get(name)
-        if plugin is None:
-            return {"config": None}
-        return {"config": dict(plugin.config)}
-
-    def _register_metadata_capabilities(self) -> None:
-        self.register(
-            self._builtin_descriptor("metadata.get_plugin", "获取单个插件元数据"),
-            call_handler=self._metadata_get_plugin,
-        )
-        self.register(
-            self._builtin_descriptor("metadata.list_plugins", "列出插件元数据"),
-            call_handler=self._metadata_list_plugins,
-        )
-        self.register(
-            self._builtin_descriptor(
-                "metadata.get_plugin_config",
-                "获取插件配置",
-            ),
-            call_handler=self._metadata_get_plugin_config,
         )
 
     # ------------------------------------------------------------------

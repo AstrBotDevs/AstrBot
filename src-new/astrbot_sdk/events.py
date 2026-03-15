@@ -16,6 +16,14 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from .message_components import (
+    BaseMessageComponent,
+    Image,
+    Plain,
+    component_to_payload_sync,
+    payloads_to_components,
+)
+from .message_result import EventResultType, MessageChain, MessageEventResult
 from .protocol.descriptors import SessionRef
 
 if TYPE_CHECKING:
@@ -63,8 +71,13 @@ class MessageEvent:
         group_id: str | None = None,
         platform: str | None = None,
         session_id: str | None = None,
+        self_id: str | None = None,
+        platform_id: str | None = None,
+        message_type: str | None = None,
+        sender_name: str | None = None,
+        is_admin: bool = False,
         raw: dict[str, Any] | None = None,
-        context: "Context | None" = None,
+        context: Context | None = None,
         reply_handler: ReplyHandler | None = None,
     ) -> None:
         """初始化消息事件。
@@ -84,7 +97,25 @@ class MessageEvent:
         self.group_id = group_id
         self.platform = platform
         self.session_id = session_id or group_id or user_id or ""
+        self.self_id = self_id or ""
+        self.platform_id = platform_id or platform or ""
+        self.message_type = (message_type or "").lower()
+        self.sender_name = sender_name or ""
+        self._is_admin = bool(is_admin)
         self.raw = raw or {}
+        self._stopped = False
+        self._extras = (
+            dict(self.raw.get("extras", {}))
+            if isinstance(self.raw.get("extras"), dict)
+            else {}
+        )
+        messages_payload = self.raw.get("messages")
+        self._messages = (
+            payloads_to_components(messages_payload)
+            if isinstance(messages_payload, list)
+            else []
+        )
+        self._message_outline = str(self.raw.get("message_outline", self.text))
         self._context = context
         self._reply_handler = reply_handler
         if self._reply_handler is None and context is not None:
@@ -93,7 +124,7 @@ class MessageEvent:
                 text,
             )
 
-    def _require_runtime_context(self, action: str) -> "Context":
+    def _require_runtime_context(self, action: str) -> Context:
         """获取运行时上下文，不存在则抛出异常。"""
         if self._context is None:
             raise RuntimeError(f"MessageEvent 未绑定运行时上下文，无法 {action}")
@@ -108,9 +139,9 @@ class MessageEvent:
         cls,
         payload: dict[str, Any],
         *,
-        context: "Context | None" = None,
+        context: Context | None = None,
         reply_handler: ReplyHandler | None = None,
-    ) -> "MessageEvent":
+    ) -> MessageEvent:
         """从协议载荷创建事件实例。
 
         Args:
@@ -134,6 +165,11 @@ class MessageEvent:
             group_id=payload.get("group_id"),
             platform=platform,
             session_id=session_id,
+            self_id=payload.get("self_id"),
+            platform_id=payload.get("platform_id"),
+            message_type=payload.get("message_type"),
+            sender_name=payload.get("sender_name"),
+            is_admin=bool(payload.get("is_admin", False)),
             raw=payload,
             context=context,
             reply_handler=reply_handler,
@@ -153,10 +189,22 @@ class MessageEvent:
                 "group_id": self.group_id,
                 "platform": self.platform,
                 "session_id": self.session_id,
+                "self_id": self.self_id,
+                "platform_id": self.platform_id,
+                "message_type": self.message_type,
+                "sender_name": self.sender_name,
+                "is_admin": self._is_admin,
             }
         )
         if self.session_ref is not None:
             payload["target"] = self.session_ref.to_payload()
+        if self._extras:
+            payload["extras"] = dict(self._extras)
+        if self._messages:
+            payload["messages"] = [
+                component_to_payload_sync(component) for component in self._messages
+            ]
+        payload["message_outline"] = self._message_outline
         return payload
 
     @property
@@ -178,6 +226,67 @@ class MessageEvent:
     def target(self) -> SessionRef | None:
         """session_ref 的别名。"""
         return self.session_ref
+
+    @property
+    def unified_msg_origin(self) -> str:
+        """Unified message origin string."""
+        return self.session_id
+
+    def is_private_chat(self) -> bool:
+        """Whether the current event belongs to a private chat."""
+        if self.message_type:
+            return self.message_type == "private"
+        return not bool(self.group_id)
+
+    def get_platform_id(self) -> str:
+        """Get the platform instance identifier."""
+        return self.platform_id
+
+    def get_message_type(self) -> str:
+        """Get the normalized message type."""
+        return self.message_type
+
+    def get_session_id(self) -> str:
+        """Get the current session identifier."""
+        return self.session_id
+
+    def is_admin(self) -> bool:
+        """Whether the sender has admin permission."""
+        return self._is_admin
+
+    def get_messages(self) -> list[BaseMessageComponent]:
+        """Return SDK message components for the current event."""
+        return list(self._messages)
+
+    def get_message_outline(self) -> str:
+        """Return the normalized message outline."""
+        return self._message_outline
+
+    def set_extra(self, key: str, value: Any) -> None:
+        """Store SDK-local transient event data."""
+        self._extras[key] = value
+
+    def get_extra(self, key: str | None = None, default: Any = None) -> Any:
+        """Read SDK-local transient event data."""
+        if key is None:
+            return dict(self._extras)
+        return self._extras.get(key, default)
+
+    def clear_extra(self) -> None:
+        """Clear SDK-local transient event data."""
+        self._extras.clear()
+
+    def stop_event(self) -> None:
+        """Mark the SDK-local event as stopped."""
+        self._stopped = True
+
+    def continue_event(self) -> None:
+        """Clear the SDK-local stop flag."""
+        self._stopped = False
+
+    def is_stopped(self) -> bool:
+        """Return whether the SDK-local event is stopped."""
+        return self._stopped
 
     async def reply(self, text: str) -> None:
         """回复文本消息。
@@ -204,7 +313,10 @@ class MessageEvent:
         context = self._require_runtime_context("reply_image")
         await context.platform.send_image(self._reply_target(), image_url)
 
-    async def reply_chain(self, chain: list[dict[str, Any]]) -> None:
+    async def reply_chain(
+        self,
+        chain: MessageChain | list[BaseMessageComponent] | list[dict[str, Any]],
+    ) -> None:
         """回复消息链（多类型消息组合）。
 
         Args:
@@ -215,6 +327,82 @@ class MessageEvent:
         """
         context = self._require_runtime_context("reply_chain")
         await context.platform.send_chain(self._reply_target(), chain)
+
+    async def react(self, emoji: str) -> bool:
+        """Send a platform reaction when supported."""
+        context = self._require_runtime_context("react")
+        output = await context._proxy.call(  # noqa: SLF001
+            "system.event.react",
+            {
+                "target": (
+                    self.session_ref.to_payload()
+                    if self.session_ref is not None
+                    else None
+                ),
+                "emoji": emoji,
+            },
+        )
+        return bool(output.get("supported", False))
+
+    async def send_typing(self) -> bool:
+        """Emit typing state when the host platform supports it."""
+        context = self._require_runtime_context("send_typing")
+        output = await context._proxy.call(  # noqa: SLF001
+            "system.event.send_typing",
+            {
+                "target": (
+                    self.session_ref.to_payload()
+                    if self.session_ref is not None
+                    else None
+                ),
+            },
+        )
+        return bool(output.get("supported", False))
+
+    async def send_streaming(
+        self,
+        generator,
+        use_fallback: bool = False,
+    ) -> bool:
+        """Replay normalized chunks through the host streaming pathway."""
+        context = self._require_runtime_context("send_streaming")
+        output = await context._proxy.call(  # noqa: SLF001
+            "system.event.send_streaming",
+            {
+                "target": (
+                    self.session_ref.to_payload()
+                    if self.session_ref is not None
+                    else None
+                ),
+                "use_fallback": use_fallback,
+            },
+        )
+        if not bool(output.get("supported", False)):
+            return False
+
+        stream_id = str(output.get("stream_id", ""))
+        if not stream_id:
+            return False
+
+        try:
+            async for item in generator:
+                if isinstance(item, str):
+                    chain = MessageChain([Plain(item, convert=False)])
+                else:
+                    chain = self._coerce_chain_or_raise(item)
+                await context._proxy.call(  # noqa: SLF001
+                    "system.event.send_streaming_chunk",
+                    {
+                        "stream_id": stream_id,
+                        "chain": await chain.to_payload_async(),
+                    },
+                )
+        finally:
+            output = await context._proxy.call(  # noqa: SLF001
+                "system.event.send_streaming_close",
+                {"stream_id": stream_id},
+            )
+        return bool(output.get("supported", False))
 
     def bind_reply_handler(self, reply_handler: ReplyHandler) -> None:
         """绑定自定义回复处理器。
@@ -234,3 +422,46 @@ class MessageEvent:
             PlainTextResult 实例
         """
         return PlainTextResult(text=text)
+
+    def make_result(self) -> MessageEventResult:
+        """Create an empty SDK-local result wrapper."""
+        return MessageEventResult(type=EventResultType.EMPTY)
+
+    def image_result(self, url_or_path: str) -> MessageEventResult:
+        """Create a chain result that contains one image component."""
+        if url_or_path.startswith(("http://", "https://")):
+            image = Image.fromURL(url_or_path)
+        elif url_or_path.startswith("base64://"):
+            image = Image.fromBase64(url_or_path.removeprefix("base64://"))
+        else:
+            image = Image.fromFileSystem(url_or_path)
+        return MessageEventResult(
+            type=EventResultType.CHAIN,
+            chain=MessageChain([image]),
+        )
+
+    def chain_result(
+        self,
+        chain: MessageChain | list[BaseMessageComponent],
+    ) -> MessageEventResult:
+        """Create a chain result from SDK components."""
+        normalized = (
+            chain if isinstance(chain, MessageChain) else MessageChain(list(chain))
+        )
+        return MessageEventResult(type=EventResultType.CHAIN, chain=normalized)
+
+    @staticmethod
+    def _coerce_chain_or_raise(item: Any) -> MessageChain:
+        if isinstance(item, MessageEventResult):
+            return item.chain
+        if isinstance(item, MessageChain):
+            return item
+        if isinstance(item, BaseMessageComponent):
+            return MessageChain([item])
+        if isinstance(item, list) and all(
+            isinstance(component, BaseMessageComponent) for component in item
+        ):
+            return MessageChain(list(item))
+        raise TypeError(
+            "send_streaming only accepts str, MessageChain, MessageEventResult or SDK message components"
+        )

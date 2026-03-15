@@ -62,11 +62,26 @@ def _serialize_history(
     return serialized
 
 
+def _normalize_chat_context_payload(
+    *,
+    history: Sequence[ChatHistoryItem] | None = None,
+    contexts: Sequence[ChatHistoryItem] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    if contexts is not None:
+        return {"contexts": _serialize_history(contexts)}
+    if history is not None:
+        return {"contexts": _serialize_history(history)}
+    return {}
+
+
 def _build_chat_payload(
     prompt: str,
     *,
     system: str | None = None,
     history: Sequence[ChatHistoryItem] | None = None,
+    contexts: Sequence[ChatHistoryItem] | None = None,
+    provider_id: str | None = None,
+    tool_calls_result: list[dict[str, Any]] | None = None,
     model: str | None = None,
     temperature: float | None = None,
     extra: dict[str, Any] | None = None,
@@ -74,8 +89,11 @@ def _build_chat_payload(
     payload: dict[str, Any] = {"prompt": prompt}
     if system is not None:
         payload["system"] = system
-    if history is not None:
-        payload["history"] = _serialize_history(history)
+    payload.update(_normalize_chat_context_payload(history=history, contexts=contexts))
+    if provider_id is not None:
+        payload["provider_id"] = provider_id
+    if tool_calls_result is not None:
+        payload["tool_calls_result"] = [dict(item) for item in tool_calls_result]
     if model is not None:
         payload["model"] = model
     if temperature is not None:
@@ -101,6 +119,9 @@ class LLMResponse(BaseModel):
     usage: dict[str, Any] | None = None
     finish_reason: str | None = None
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    role: str | None = None
+    reasoning_content: str | None = None
+    reasoning_signature: str | None = None
 
 
 class LLMClient:
@@ -126,6 +147,9 @@ class LLMClient:
         *,
         system: str | None = None,
         history: Sequence[ChatHistoryItem] | None = None,
+        contexts: Sequence[ChatHistoryItem] | None = None,
+        provider_id: str | None = None,
+        tool_calls_result: list[dict[str, Any]] | None = None,
         model: str | None = None,
         temperature: float | None = None,
         **kwargs: Any,
@@ -163,6 +187,9 @@ class LLMClient:
                 prompt,
                 system=system,
                 history=history,
+                contexts=contexts,
+                provider_id=provider_id,
+                tool_calls_result=tool_calls_result,
                 model=model,
                 temperature=temperature,
                 extra=kwargs,
@@ -173,6 +200,14 @@ class LLMClient:
     async def chat_raw(
         self,
         prompt: str,
+        *,
+        system: str | None = None,
+        history: Sequence[ChatHistoryItem] | None = None,
+        contexts: Sequence[ChatHistoryItem] | None = None,
+        provider_id: str | None = None,
+        tool_calls_result: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """发送聊天请求并返回完整响应。
@@ -192,9 +227,17 @@ class LLMClient:
             print(f"生成文本: {response.text}")
             print(f"Token 使用: {response.usage}")
         """
-        payload = {"prompt": prompt, **kwargs}
-        if "history" in payload:
-            payload["history"] = _serialize_history(payload["history"])
+        payload = _build_chat_payload(
+            prompt,
+            system=system,
+            history=history,
+            contexts=contexts,
+            provider_id=provider_id,
+            tool_calls_result=tool_calls_result,
+            model=model,
+            temperature=temperature,
+            extra=kwargs,
+        )
         output = await self._proxy.call(
             "llm.chat_raw",
             payload,
@@ -207,6 +250,9 @@ class LLMClient:
         *,
         system: str | None = None,
         history: Sequence[ChatHistoryItem] | None = None,
+        contexts: Sequence[ChatHistoryItem] | None = None,
+        provider_id: str | None = None,
+        tool_calls_result: list[dict[str, Any]] | None = None,
         model: str | None = None,
         temperature: float | None = None,
         **kwargs: Any,
@@ -236,6 +282,9 @@ class LLMClient:
                 prompt,
                 system=system,
                 history=history,
+                contexts=contexts,
+                provider_id=provider_id,
+                tool_calls_result=tool_calls_result,
                 model=model,
                 temperature=temperature,
                 extra=kwargs,

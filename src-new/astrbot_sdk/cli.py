@@ -1,9 +1,21 @@
-"""AstrBot SDK 的命令行入口。"""
+"""AstrBot SDK 的命令行入口。
+
+本模块提供 astrbot-sdk 命令行工具的所有子命令，包括：
+- init: 创建新插件骨架，生成 plugin.yaml、main.py、README.md 等模板文件
+- validate: 校验插件清单、导入路径和 handler 发现是否正常
+- build: 将插件打包为 .zip 发布包
+- dev: 本地开发模式，支持 --local/--watch/--interactive 等调试选项
+- run: 启动插件主管进程（supervisor），通过 stdio 与 AstrBot 核心通信
+- worker: 内部命令，由 supervisor 调用以启动单个插件工作进程
+
+错误处理：
+所有 CLI 异常都会被分类并返回标准化的退出码和错误提示，
+便于 CI/CD 集成和用户快速定位问题。
+"""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 import sys
 import typing
@@ -41,9 +53,6 @@ BUILD_EXCLUDED_FILES = {
     ".astrbot-worker-state.json",
 }
 WATCH_POLL_INTERVAL_SECONDS = 0.5
-INIT_DEFAULT_AUTHOR = ""
-INIT_DEFAULT_PYTHON_VERSION = "3.12"
-INIT_DEFAULT_VERSION = "1.0.0"
 
 
 class _CliPluginValidationError(RuntimeError):
@@ -545,6 +554,11 @@ def _handle_dev_meta_command(command: str, state: dict[str, Any]) -> bool:
     return False
 
 
+def _slugify_plugin_name(value: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", value).strip("_").lower()
+    return slug or "my_plugin"
+
+
 def _class_name_for_plugin(value: str) -> str:
     parts = [part for part in re.split(r"[^a-zA-Z0-9]+", value) if part]
     if not parts:
@@ -557,62 +571,18 @@ def _sanitize_build_part(value: str) -> str:
     return sanitized or "artifact"
 
 
-def _yaml_string(value: str) -> str:
-    return json.dumps(value, ensure_ascii=False)
-
-
-def _normalize_init_plugin_name(value: str) -> str:
-    normalized = re.sub(r"[\s-]+", "_", value.strip())
-    normalized = re.sub(r"[^a-zA-Z0-9_]+", "_", normalized)
-    normalized = re.sub(r"_+", "_", normalized).strip("_").lower()
-    if not normalized:
-        normalized = "my_plugin"
-
-    prefix = "astrbot_plugin_"
-    if normalized == "astrbot_plugin":
-        return f"{prefix}my_plugin"
-    if normalized.startswith(prefix):
-        suffix = normalized.removeprefix(prefix).strip("_") or "my_plugin"
-        return f"{prefix}{suffix}"
-    return f"{prefix}{normalized}"
-
-
-def _prompt_required_init_name() -> str:
-    while True:
-        value = click.prompt("插件名字", default="", show_default=False).strip()
-        if value:
-            return value
-        click.echo("插件名字不能为空")
-
-
-def _collect_init_inputs(name: str | None) -> tuple[str, str, str]:
-    if name is not None:
-        return name, INIT_DEFAULT_AUTHOR, INIT_DEFAULT_VERSION
-
-    plugin_name = _prompt_required_init_name()
-    author = click.prompt("作者名字", default="", show_default=False).strip()
-    version = click.prompt("版本", default=INIT_DEFAULT_VERSION).strip()
-    return plugin_name, author, version or INIT_DEFAULT_VERSION
-
-
-def _render_init_plugin_yaml(
-    *,
-    plugin_name: str,
-    display_name: str,
-    author: str,
-    version: str,
-    python_version: str,
-) -> str:
+def _render_init_plugin_yaml(*, plugin_name: str, display_name: str) -> str:
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
     class_name = _class_name_for_plugin(plugin_name)
     return dedent(
         f"""\
         name: {plugin_name}
-        display_name: {_yaml_string(display_name)}
-        desc: {_yaml_string("使用 AstrBot SDK 创建的插件")}
-        author: {_yaml_string(author)}
-        version: {_yaml_string(version)}
+        display_name: {display_name}
+        desc: 使用 AstrBot SDK 创建的插件
+        author: your-name
+        version: 0.1.0
         runtime:
-          python: {_yaml_string(python_version)}
+          python: "{python_version}"
         components:
           - class: main:{class_name}
         """
@@ -672,7 +642,7 @@ def _render_init_readme(*, plugin_name: str) -> str:
 def _render_init_test_py(*, plugin_name: str) -> str:
     class_name = _class_name_for_plugin(plugin_name)
     return dedent(
-        f'''\
+        f"""\
         from pathlib import Path
 
         import pytest
@@ -704,7 +674,7 @@ def _render_init_test_py(*, plugin_name: str) -> str:
                 records = await harness.dispatch_text("hello")
 
             assert any(record.text == "Hello, World!" for record in records)
-        '''
+        """
     )
 
 
@@ -777,24 +747,19 @@ def _iter_build_files(plugin_dir: Path, output_dir: Path) -> list[Path]:
     return files
 
 
-def _init_plugin(name: str | None) -> None:
-    raw_name, author, version = _collect_init_inputs(name)
-    normalized_name = _normalize_init_plugin_name(raw_name)
-    target_dir = Path(normalized_name)
+def _init_plugin(name: str) -> None:
+    target_dir = Path(name)
     if target_dir.exists():
         raise _CliPluginValidationError(f"目标目录已存在：{target_dir}")
 
-    plugin_name = normalized_name
-    display_name = raw_name
+    plugin_name = _slugify_plugin_name(target_dir.name)
+    display_name = target_dir.name
     target_dir.mkdir(parents=True, exist_ok=False)
     (target_dir / "tests").mkdir()
     (target_dir / "plugin.yaml").write_text(
         _render_init_plugin_yaml(
             plugin_name=plugin_name,
             display_name=display_name,
-            author=author,
-            version=version,
-            python_version=INIT_DEFAULT_PYTHON_VERSION,
         ),
         encoding="utf-8",
     )
@@ -811,7 +776,7 @@ def _init_plugin(name: str | None) -> None:
         _render_init_test_py(plugin_name=plugin_name),
         encoding="utf-8",
     )
-    click.echo(f"已创建插件骨架：{target_dir.resolve()}")
+    click.echo(f"已创建插件骨架：{target_dir}")
     click.echo("后续命令：")
     click.echo(f"  astrbot-sdk validate --plugin-dir {target_dir}")
     click.echo(
@@ -867,43 +832,23 @@ def cli(ctx, verbose: bool) -> None:
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
     help="Directory containing plugin folders",
 )
-@click.option(
-    "--worker-wire-codec",
-    default="json",
-    show_default=True,
-    type=click.Choice(["json", "msgpack"]),
-    help="Wire codec for supervisor-to-worker transport",
-)
-def run(plugins_dir: Path, worker_wire_codec: str) -> None:
+def run(plugins_dir: Path) -> None:
     """Start the plugin supervisor over stdio."""
-    entrypoint = (
-        run_supervisor(plugins_dir=plugins_dir)
-        if worker_wire_codec == "json"
-        else run_supervisor(
-            plugins_dir=plugins_dir,
-            worker_wire_codec=worker_wire_codec,
-        )
-    )
     _run_async_entrypoint(
-        entrypoint,
+        run_supervisor(plugins_dir=plugins_dir),
         log_message=f"启动插件主管进程，插件目录：{plugins_dir}",
-        context={
-            "plugins_dir": plugins_dir,
-            "worker_wire_codec": worker_wire_codec,
-        },
+        context={"plugins_dir": plugins_dir},
     )
 
 
 @cli.command()
-@click.argument("name", required=False, type=str)
-def init(name: str | None) -> None:
-    """Create a new plugin skeleton; omit name to enter interactive mode."""
+@click.argument("name", type=str)
+def init(name: str) -> None:
+    """Create a new plugin skeleton in the target directory."""
     _run_sync_entrypoint(
         lambda: _init_plugin(name),
-        log_message=(
-            f"创建插件骨架：{name}" if name is not None else "创建插件骨架：交互模式"
-        ),
-        context={"target": name or "<interactive>"},
+        log_message=f"创建插件骨架：{name}",
+        context={"target": Path(name)},
     )
 
 
@@ -1028,15 +973,7 @@ def dev(
     required=False,
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
 )
-@click.option(
-    "--wire-codec",
-    default="json",
-    show_default=True,
-    type=click.Choice(["json", "msgpack"]),
-)
-def worker(
-    plugin_dir: Path | None, group_metadata: Path | None, wire_codec: str
-) -> None:
+def worker(plugin_dir: Path | None, group_metadata: Path | None) -> None:
     """Internal command used by the supervisor to start a worker."""
     if plugin_dir is None and group_metadata is None:
         raise click.UsageError("Either --plugin-dir or --group-metadata is required")
@@ -1047,42 +984,23 @@ def worker(
 
     target = str(group_metadata or plugin_dir)
     if group_metadata is not None:
-        entrypoint = (
-            run_plugin_worker(group_metadata=group_metadata)
-            if wire_codec == "json"
-            else run_plugin_worker(group_metadata=group_metadata, wire_codec=wire_codec)
-        )
+        entrypoint = run_plugin_worker(group_metadata=group_metadata)
     else:
-        entrypoint = (
-            run_plugin_worker(plugin_dir=plugin_dir)
-            if wire_codec == "json"
-            else run_plugin_worker(plugin_dir=plugin_dir, wire_codec=wire_codec)
-        )
+        entrypoint = run_plugin_worker(plugin_dir=plugin_dir)
     _run_async_entrypoint(
         entrypoint,
         log_message=f"启动插件工作进程：{target}",
         log_level="debug",
-        context={"plugin_dir": plugin_dir, "wire_codec": wire_codec},
+        context={"plugin_dir": plugin_dir},
     )
 
 
 @cli.command(hidden=True)
 @click.option("--port", default=8765, type=int, help="WebSocket server port")
-@click.option(
-    "--wire-codec",
-    default="json",
-    show_default=True,
-    type=click.Choice(["json", "msgpack"]),
-)
-def websocket(port: int, wire_codec: str) -> None:
+def websocket(port: int) -> None:
     """WebSocket runtime entrypoint kept for standalone bridge scenarios."""
-    entrypoint = (
-        run_websocket_server(port=port)
-        if wire_codec == "json"
-        else run_websocket_server(port=port, wire_codec=wire_codec)
-    )
     _run_async_entrypoint(
-        entrypoint,
+        run_websocket_server(port=port),
         log_message=f"启动 WebSocket 服务器，端口：{port}",
-        context={"port": port, "wire_codec": wire_codec},
+        context={"port": port},
     )

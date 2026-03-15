@@ -94,7 +94,7 @@ class AstrBotError(Exception):
         return self.message
 
     @classmethod
-    def cancelled(cls, message: str = "调用被取消") -> "AstrBotError":
+    def cancelled(cls, message: str = "调用被取消") -> AstrBotError:
         """创建取消错误。
 
         Args:
@@ -111,7 +111,7 @@ class AstrBotError(Exception):
         )
 
     @classmethod
-    def capability_not_found(cls, name: str) -> "AstrBotError":
+    def capability_not_found(cls, name: str) -> AstrBotError:
         """创建能力未找到错误。
 
         Args:
@@ -133,7 +133,7 @@ class AstrBotError(Exception):
         message: str,
         *,
         hint: str = "请检查调用参数",
-    ) -> "AstrBotError":
+    ) -> AstrBotError:
         """创建输入无效错误。
 
         Args:
@@ -151,7 +151,7 @@ class AstrBotError(Exception):
         )
 
     @classmethod
-    def protocol_version_mismatch(cls, message: str) -> "AstrBotError":
+    def protocol_version_mismatch(cls, message: str) -> AstrBotError:
         """创建协议版本不匹配错误。
 
         Args:
@@ -168,7 +168,7 @@ class AstrBotError(Exception):
         )
 
     @classmethod
-    def protocol_error(cls, message: str) -> "AstrBotError":
+    def protocol_error(cls, message: str) -> AstrBotError:
         """创建协议错误。
 
         Args:
@@ -190,7 +190,7 @@ class AstrBotError(Exception):
         message: str,
         *,
         hint: str = "请联系插件作者",
-    ) -> "AstrBotError":
+    ) -> AstrBotError:
         """创建内部错误。
 
         Args:
@@ -223,7 +223,7 @@ class AstrBotError(Exception):
         }
 
     @classmethod
-    def from_payload(cls, payload: dict[str, object]) -> "AstrBotError":
+    def from_payload(cls, payload: dict[str, object]) -> AstrBotError:
         """从字典反序列化错误实例。
 
         Args:

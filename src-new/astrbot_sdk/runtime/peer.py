@@ -5,7 +5,7 @@
 而不是业务上的用户、群聊或会话对象。
 
 核心职责：
-    - 通过可插拔 codec 做消息编解码
+    - 消息序列化/反序列化
     - 初始化握手协议
     - 能力调用（同步/流式）
     - 取消处理
@@ -69,7 +69,7 @@
     - 入站任务在收到 CancelMessage 时被取消
     - 早到取消：在任务执行前检查 cancel_token，避免竞态条件
 
-    `Peer` 把 `Transport`、wire codec 和 v4 协议消息模型接起来，负责：
+`Peer` 把 `Transport` 和 v4 协议消息模型接起来，负责：
 
 - 握手与远端元数据缓存
 - 请求 ID 关联
@@ -100,8 +100,8 @@ from ..protocol.messages import (
     InvokeMessage,
     PeerInfo,
     ResultMessage,
+    parse_message,
 )
-from ..protocol.wire_codecs import JsonProtocolCodec, ProtocolCodec
 from .capability_router import StreamExecution
 
 InitializeHandler = Callable[[InitializeMessage], Awaitable[InitializeOutput]]
@@ -181,7 +181,6 @@ class Peer:
         peer_info: PeerInfo,
         protocol_version: str = "1.0",
         supported_protocol_versions: Sequence[str] | None = None,
-        codec: ProtocolCodec | None = None,
     ) -> None:
         """创建一个协议对等端实例。
 
@@ -193,10 +192,6 @@ class Peer:
         """
         self.transport = transport
         self.peer_info = peer_info
-        self.codec = codec or JsonProtocolCodec()
-        configure_for_codec = getattr(self.transport, "configure_for_codec", None)
-        if callable(configure_for_codec):
-            configure_for_codec(self.codec)
         self.protocol_version = protocol_version
         self.supported_protocol_versions = _dedupe_protocol_versions(
             supported_protocol_versions,
@@ -350,7 +345,6 @@ class Peer:
             asyncio.get_running_loop().create_future()
         )
         self._pending_results[request_id] = future
-        # FIXME: 这里会输出乱七八糟的各种东西
         await self._send(
             InitializeMessage(
                 id=request_id,
@@ -361,7 +355,6 @@ class Peer:
                 metadata=handshake_metadata,
             )
         )
-        # FIXME: 👆会输出各种乱七八糟的东西
         result = await future
         if result.kind != "initialize_result":
             raise AstrBotError.protocol_error("initialize 必须收到 initialize_result")
@@ -507,10 +500,10 @@ class Peer:
         if self._unusable:
             raise AstrBotError.protocol_error("连接已进入不可用状态")
 
-    async def _handle_raw_message(self, payload: bytes) -> None:
+    async def _handle_raw_message(self, payload: str) -> None:
         """解析原始消息并分发到对应的消息处理分支。"""
         try:
-            message = self.codec.decode_message(payload)
+            message = parse_message(payload)
             if isinstance(message, ResultMessage):
                 await self._handle_result(message)
                 return
@@ -759,4 +752,4 @@ class Peer:
 
     async def _send(self, message) -> None:
         """序列化协议消息并通过底层传输发送出去。"""
-        await self.transport.send(self.codec.encode_message(message))
+        await self.transport.send(message.model_dump_json(exclude_none=True))

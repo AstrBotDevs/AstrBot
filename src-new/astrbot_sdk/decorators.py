@@ -28,18 +28,23 @@ Example:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 from pydantic import BaseModel
 
 from .protocol.descriptors import (
+    RESERVED_CAPABILITY_PREFIXES,
     CapabilityDescriptor,
+    CommandRouteSpec,
     CommandTrigger,
     EventTrigger,
+    FilterSpec,
     MessageTrigger,
+    MessageTypeFilterSpec,
     Permissions,
-    RESERVED_CAPABILITY_PREFIXES,
+    PlatformFilterSpec,
     ScheduleTrigger,
 )
 
@@ -69,6 +74,9 @@ class HandlerMeta:
     contract: str | None = None
     priority: int = 0
     permissions: Permissions = field(default_factory=Permissions)
+    filters: list[FilterSpec] = field(default_factory=list)
+    local_filters: list[Any] = field(default_factory=list)
+    command_route: CommandRouteSpec | None = None
 
 
 @dataclass(slots=True)
@@ -183,6 +191,7 @@ def on_message(
     regex: str | None = None,
     keywords: list[str] | None = None,
     platforms: list[str] | None = None,
+    message_types: list[str] | None = None,
 ) -> Callable[[HandlerCallable], HandlerCallable]:
     """注册消息处理方法。
 
@@ -215,10 +224,42 @@ def on_message(
             regex=regex,
             keywords=keywords or [],
             platforms=platforms or [],
+            message_types=message_types or [],
         )
+        if platforms:
+            meta.filters.append(PlatformFilterSpec(platforms=list(platforms)))
+        if message_types:
+            meta.filters.append(
+                MessageTypeFilterSpec(message_types=list(message_types))
+            )
         return func
 
     return decorator
+
+
+def append_filter_meta(
+    func: HandlerCallable,
+    *,
+    specs: list[FilterSpec] | None = None,
+    local_bindings: list[Any] | None = None,
+) -> HandlerCallable:
+    """追加过滤器元数据。"""
+    meta = _get_or_create_meta(func)
+    if specs:
+        meta.filters.extend(specs)
+    if local_bindings:
+        meta.local_filters.extend(local_bindings)
+    return func
+
+
+def set_command_route_meta(
+    func: HandlerCallable,
+    route: CommandRouteSpec,
+) -> HandlerCallable:
+    """设置命令路由元数据。"""
+    meta = _get_or_create_meta(func)
+    meta.command_route = route
+    return func
 
 
 def on_event(event_type: str) -> Callable[[HandlerCallable], HandlerCallable]:
