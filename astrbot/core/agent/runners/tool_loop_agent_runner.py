@@ -665,6 +665,31 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
 
+        def _handle_image_content(
+            base64_data: str,
+            mime_type: str,
+            tool_call_id: str,
+            tool_name: str,
+            content_index: int,
+        ) -> _HandleFunctionToolsResult:
+            """Helper to cache image and return result for LLM visibility."""
+            cached_img = tool_image_cache.save_image(
+                base64_data=base64_data,
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                index=content_index,
+                mime_type=mime_type,
+            )
+            _append_tool_call_result(
+                tool_call_id,
+                (
+                    f"Image returned and cached at path='{cached_img.file_path}'. "
+                    f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
+                    f"with type='image' and path='{cached_img.file_path}'."
+                ),
+            )
+            return _HandleFunctionToolsResult.from_cached_image(cached_img)
+
         # 执行函数调用
         for func_tool_name, func_tool_args, func_tool_id in zip(
             llm_response.tools_call_name,
@@ -767,24 +792,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 )
                             elif isinstance(content, ImageContent):
                                 # Cache the image instead of sending directly
-                                cached_img = tool_image_cache.save_image(
+                                yield _handle_image_content(
                                     base64_data=content.data,
+                                    mime_type=content.mimeType or "image/png",
                                     tool_call_id=func_tool_id,
                                     tool_name=func_tool_name,
-                                    index=content_index,
-                                    mime_type=content.mimeType or "image/png",
-                                )
-                                _append_tool_call_result(
-                                    func_tool_id,
-                                    (
-                                        f"Image returned and cached at path='{cached_img.file_path}'. "
-                                        f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
-                                        f"with type='image' and path='{cached_img.file_path}'."
-                                    ),
-                                )
-                                # Yield image info for LLM visibility (will be handled in step())
-                                yield _HandleFunctionToolsResult.from_cached_image(
-                                    cached_img
+                                    content_index=content_index,
                                 )
                             elif isinstance(content, EmbeddedResource):
                                 resource = content.resource
@@ -799,24 +812,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     and resource.mimeType.startswith("image/")
                                 ):
                                     # Cache the image instead of sending directly
-                                    cached_img = tool_image_cache.save_image(
+                                    yield _handle_image_content(
                                         base64_data=resource.blob,
+                                        mime_type=resource.mimeType,
                                         tool_call_id=func_tool_id,
                                         tool_name=func_tool_name,
-                                        index=content_index,
-                                        mime_type=resource.mimeType,
-                                    )
-                                    _append_tool_call_result(
-                                        func_tool_id,
-                                        (
-                                            f"Image returned and cached at path='{cached_img.file_path}'. "
-                                            f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
-                                            f"with type='image' and path='{cached_img.file_path}'."
-                                        ),
-                                    )
-                                    # Yield image info for LLM visibility
-                                    yield _HandleFunctionToolsResult.from_cached_image(
-                                        cached_img
+                                        content_index=content_index,
                                     )
                                 else:
                                     _append_tool_call_result(
