@@ -15,20 +15,31 @@
 
 <script setup>
 import { RouterView } from 'vue-router';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useToastStore } from '@/stores/toast'
-import WaitingForRestart from '@/components/shared/WaitingForRestart.vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useTheme } from "vuetify";
+import { useToastStore } from '@/stores/toast';
+import { useCustomizerStore } from '@/stores/customizer';
+import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 
-const toastStore = useToastStore()
-const globalWaitingRef = ref(null)
-let disposeTrayRestartListener = null
+const toastStore = useToastStore();
+const theme = useTheme();
+const customizer = useCustomizerStore();
+const globalWaitingRef = ref(null);
+let disposeTrayRestartListener = null;
 
 const snackbarShow = computed({
   get: () => !!toastStore.current,
   set: (val) => {
     if (!val) toastStore.shift()
   }
-})
+});
+
+// 统一监听 uiTheme 变化并同步到 Vuetify
+watch(() => customizer.uiTheme, (newTheme) => {
+  if (newTheme) {
+    theme.global.name.value = newTheme;
+  }
+}, { immediate: true });
 
 onMounted(() => {
   const desktopBridge = window.astrbotDesktop

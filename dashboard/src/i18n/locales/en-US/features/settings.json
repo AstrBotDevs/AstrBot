@@ -54,7 +54,7 @@
     },
     "autoSync": {
       "title": "Auto-Switch Light/Dark Theme",
-      "subtitle": "Can Switch to Dark Theme based on your system theme.",
+      "subtitle": "Automatically switch between light and dark themes based on your system's appearance setting.",
       "label": "Enable Auto-Switch"
     }
   },

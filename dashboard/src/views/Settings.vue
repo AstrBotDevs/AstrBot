@@ -577,15 +577,7 @@ const autoThemeSwitcher = computed({
   get: () => customizer.autoSwitchTheme,
   set: (value) => {
     customizer.SET_AUTO_SYNC(value);
-    if (value) {
-      // 启用时立即应用系统主题
-      customizer.APPLY_SYSTEM_THEME();
-
-      // 更新Vuetify主题
-      if (theme?.global?.name?.value) {
-        theme.global.name.value = customizer.uiTheme;
-      }
-    }
+    if (value) { customizer.APPLY_SYSTEM_THEME() };
   }
 });
 
