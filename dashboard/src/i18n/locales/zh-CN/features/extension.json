@@ -52,6 +52,7 @@
     "selectFile": "选择文件",
     "refresh": "刷新",
     "updateAll": "更新全部插件",
+    "checkUpdates": "检查插件更新",
     "deleteSource": "删除源",
     "reshuffle": "随机一发"
   },
@@ -214,7 +215,9 @@
     "updateAllFailed": "有 {failed}/{total} 个插件更新失败:",
     "fillSourceNameAndUrl": "请填写完整的插件源名称和地址",
     "invalidUrl": "请输入有效的URL地址",
-    "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址"
+    "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址",
+    "checkUpdatesSuccess": "插件更新检查完成，{count} 个插件有更新",
+    "checkUpdatesFailed": "检查插件更新失败:"
   },
   "upload": {
     "fromFile": "从文件安装",

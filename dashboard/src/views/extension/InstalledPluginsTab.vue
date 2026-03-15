@@ -152,6 +152,8 @@ const {
   selectedInstallPlugin,
   checkInstallCompatibility,
   refreshPluginMarket,
+  isCheckingUpdates,
+  checkPluginUpdates,
   handleLocaleChange,
   searchDebounceTimer,
 } = props.state;
@@ -217,6 +219,16 @@ const {
                     >
                       <v-icon>mdi-update</v-icon>
                       {{ tm("buttons.updateAll") }}
+                    </v-btn>
+
+                    <v-btn
+                      color="info"
+                      variant="tonal"
+                      :loading="isCheckingUpdates"
+                      @click="checkPluginUpdates"
+                    >
+                      <v-icon>mdi-cloud-sync</v-icon>
+                      {{ tm("buttons.checkUpdates") }}
                     </v-btn>
                   </div>
 
