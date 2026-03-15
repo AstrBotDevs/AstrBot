@@ -1,8 +1,9 @@
 import asyncio
+import copy
 import logging
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Generic
+from typing import Any, Generic
 
 from tenacity import (
     before_sleep_log,
@@ -105,6 +106,55 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         return False, f"Connection timeout: {timeout} seconds"
     except Exception as e:
         return False, f"{e!s}"
+
+
+def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Normalize common non-standard MCP JSON Schema variants.
+
+    Some MCP servers incorrectly mark required properties with a boolean
+    `required: true` on the property schema itself. Draft 2020-12 requires the
+    parent object to declare `required` as an array of property names instead.
+    We lift those booleans to the parent object so the schema remains usable
+    without disabling validation entirely.
+    """
+
+    def _normalize(node: Any) -> Any:
+        if isinstance(node, list):
+            return [_normalize(item) for item in node]
+
+        if not isinstance(node, dict):
+            return node
+
+        normalized = {key: _normalize(value) for key, value in node.items()}
+
+        properties = normalized.get("properties")
+        if isinstance(properties, dict):
+            required = normalized.get("required")
+            required_list = required[:] if isinstance(required, list) else []
+
+            for prop_name, prop_schema in properties.items():
+                if not isinstance(prop_schema, dict):
+                    continue
+
+                prop_required = prop_schema.get("required")
+                if isinstance(prop_required, bool):
+                    prop_schema.pop("required", None)
+                    if prop_required:
+                        required_list.append(prop_name)
+
+            if required_list:
+                seen: set[str] = set()
+                normalized["required"] = [
+                    name
+                    for name in required_list
+                    if not (name in seen or seen.add(name))
+                ]
+            elif isinstance(required, list):
+                normalized.pop("required", None)
+
+        return normalized
+
+    return _normalize(copy.deepcopy(schema))
 
 
 class MCPClient:
@@ -382,7 +432,7 @@ class MCPTool(FunctionTool, Generic[TContext]):
         super().__init__(
             name=mcp_tool.name,
             description=mcp_tool.description or "",
-            parameters=mcp_tool.inputSchema,
+            parameters=_normalize_mcp_input_schema(mcp_tool.inputSchema),
         )
         self.mcp_tool = mcp_tool
         self.mcp_client = mcp_client
