@@ -23,7 +23,7 @@ jobs:
             const bad = regex.test(body);
             core.setOutput("bad", bad);
 
-      - name: Close PR if checklist violated
+      - name: Close PR
         if: steps.check.outputs.bad == 'true'
         uses: actions/github-script@v7
         with:
@@ -43,41 +43,3 @@ jobs:
               pull_number: pr.number,
               state: "closed"
             });
-
-      - name: Check target branch
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const pr = context.payload.pull_request;
-            const base = pr.base.ref;
-
-            if (base !== "dev") {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr.number,
-                body: `⚠️ 当前 PR 的 **目标分支是 \`${base}\`**。
-
-建议将 PR 合并到 **\`dev\` 分支（开发分支）**，这样通常可以 **更快被合并**。
-
-除非你的 PR **非常紧急**，否则请不要直接提交到 **\`master\` 分支**。`
-              });
-            }
-
-      - name: Check source branch
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const pr = context.payload.pull_request;
-            const head = pr.head.ref;
-
-            if (head !== "dev") {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr.number,
-                body: `💡 当前 PR 的 **源分支是 \`${head}\`**。
-
-建议 **基于 \`dev\` 分支进行开发**，并及时从 \`dev\` 拉取更新，这样可以显著减少 **合并冲突的可能性**。`
-              });
-            }
