@@ -3,7 +3,7 @@
 name: PR Checklist Check
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, edited, reopened, synchronize]
 
 jobs:
@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
+      issues: write
 
     steps:
       - name: Check if user checked "我没有认真阅读"
@@ -20,8 +21,8 @@ jobs:
           script: |
             const body = context.payload.pull_request.body || '';
 
-            // 只匹配：整行是 - [x] + 包含“没有认真阅读”
-            const regex = /-\s*\[\s*x\s*\].*我\*\*没有\*\*认真阅读以上内容/im;
+            // 精确匹配完整的 checklist 项：- [x] 或 - [X] 后跟完整句子，忽略大小写和多余空格
+            const regex = /-+\s*\[\s*[xX]\s*\]\s*⚠️\s*我\*\*没有\*\*认真阅读以上内容，直接提交。/im;
             const isBad = regex.test(body);
 
             return isBad;
@@ -39,29 +40,30 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
-              body: `👋 @${author}
+              body: |
+                👋 @${author}
 
-您的 PR 未通过检查清单校验 —— 检测到您勾选了「我**没有**认真阅读以上内容，直接提交」。
+                您的 PR 未通过检查清单校验 —— 检测到您勾选了「我**没有**认真阅读以上内容，直接提交」。
 
-请按照以下规则重新提交 PR：
+                请按照以下规则重新提交 PR：
 
-1. 请仔细阅读 PR 模板中的所有说明。
-2. 本次开发请**基于 \`dev\` 分支**进行，并将 PR 目标分支设置为**开发分支（\`dev\`）**（除非极其紧急的情况才允许合并到主分支）。
-3. 完成上述检查后，请重新发起 PR。
+                1. 请仔细阅读 PR 模板中的所有说明。
+                2. 本次开发请**基于 \`dev\` 分支**进行，并将 PR 目标分支设置为**开发分支（\`dev\`）**（除非极其紧急的情况才允许合并到主分支）。
+                3. 完成上述检查后，请重新发起 PR。
 
-本 PR 已自动关闭，请按规范重新拉起。感谢您的贡献！🙏
+                本 PR 已自动关闭，请按规范重新拉起。感谢您的贡献！🙏
 
----
+                ---
 
-Your PR failed the checklist validation — the item "I **did not** read the above carefully before submitting" was checked.
+                Your PR failed the checklist validation — the item "I **did not** read the above carefully before submitting" was checked.
 
-Please follow these rules and reopen a new PR:
+                Please follow these rules and reopen a new PR:
 
-1. Read all the instructions in the PR template carefully.
-2. Make sure your development is **based on the \`dev\` branch**, and set the PR target branch to the **development branch (\`dev\`)** (only merge to main if extremely urgent).
-3. Once you have reviewed everything, please open a new PR.
+                1. Read all the instructions in the PR template carefully.
+                2. Make sure your development is **based on the \`dev\` branch**, and set the PR target branch to the **development branch (\`dev\`)** (only merge to main if extremely urgent).
+                3. Once you have reviewed everything, please open a new PR.
 
-This PR has been automatically closed. Please reopen a correct one. Thank you for your contribution! 🙏`
+                This PR has been automatically closed. Please reopen a correct one. Thank you for your contribution! 🙏
             });
 
             await github.rest.pulls.update({
