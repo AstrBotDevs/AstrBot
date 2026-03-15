@@ -35,11 +35,6 @@ class ProviderOpenAIOAuth(ProviderOpenAIOfficial):
             patched_config.get("api_base")
             or "https://chatgpt.com/backend-api/codex"
         ).rstrip("/")
-        self.http_client = httpx.AsyncClient(
-            proxy=patched_config.get("proxy") or None,
-            timeout=self.timeout,
-            follow_redirects=True,
-        )
 
     async def get_models(self):
         logger.info(
@@ -69,12 +64,17 @@ class ProviderOpenAIOAuth(ProviderOpenAIOfficial):
             for key, value in custom_headers.items():
                 headers[str(key)] = str(value)
 
-        response = await self.http_client.post(
-            f"{self.base_url}/responses",
-            headers=headers,
-            json=payload,
-        )
-        raw_text = await response.aread()
+        async with httpx.AsyncClient(
+            proxy=self.provider_config.get("proxy") or None,
+            timeout=self.timeout,
+            follow_redirects=True,
+        ) as client:
+            response = await client.post(
+                f"{self.base_url}/responses",
+                headers=headers,
+                json=payload,
+            )
+            raw_text = await response.aread()
         text = raw_text.decode("utf-8", errors="replace")
         if response.status_code < 200 or response.status_code >= 300:
             raise Exception(self._format_backend_error(response.status_code, text))
