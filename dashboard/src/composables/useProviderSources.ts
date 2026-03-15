@@ -204,7 +204,22 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const advancedSourceConfig = computed(() => {
     if (!editableProviderSource.value) return null
 
-    const excluded = new Set(['id', 'key', 'api_base', 'enable', 'type', 'provider_type', 'provider'])
+    const excluded = new Set([
+      'id',
+      'key',
+      'api_base',
+      'enable',
+      'type',
+      'provider_type',
+      'provider',
+      'auth_mode',
+      'oauth_provider',
+      'oauth_access_token',
+      'oauth_refresh_token',
+      'oauth_expires_at',
+      'oauth_account_email',
+      'oauth_account_id'
+    ])
     const advanced: Record<string, any> = {}
 
     for (const key of Object.keys(editableProviderSource.value)) {

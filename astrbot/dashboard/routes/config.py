@@ -21,6 +21,13 @@ from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider import Provider
+from astrbot.core.provider.oauth.openai_oauth import (
+    create_pkce_flow,
+    exchange_authorization_code,
+    parse_authorization_input,
+    parse_oauth_credential_json,
+    refresh_access_token,
+)
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.utils.astrbot_path import (
@@ -343,6 +350,7 @@ class ConfigRoute(Route):
         self._logo_token_cache = {}  # 缓存logo token，避免重复注册
         self.acm = core_lifecycle.astrbot_config_mgr
         self.ucr = core_lifecycle.umop_config_router
+        self._provider_source_oauth_flows: dict[str, dict[str, str]] = {}
         self.routes = {
             "/config/abconf/new": ("POST", self.create_abconf),
             "/config/abconf": ("GET", self.get_abconf),
@@ -384,8 +392,213 @@ class ConfigRoute(Route):
                 "POST",
                 self.delete_provider_source,
             ),
+            "/config/provider_sources/openai_oauth/start": (
+                "POST",
+                self.start_provider_source_openai_oauth,
+            ),
+            "/config/provider_sources/openai_oauth/complete": (
+                "POST",
+                self.complete_provider_source_openai_oauth,
+            ),
+            "/config/provider_sources/openai_oauth/refresh": (
+                "POST",
+                self.refresh_provider_source_openai_oauth,
+            ),
+            "/config/provider_sources/openai_oauth/disconnect": (
+                "POST",
+                self.disconnect_provider_source_openai_oauth,
+            ),
         }
         self.register_routes()
+
+    def _find_provider_source(self, source_id: str) -> tuple[list[dict], int, dict]:
+        provider_sources = self.config.get("provider_sources", [])
+        target_idx = next(
+            (i for i, ps in enumerate(provider_sources) if ps.get("id") == source_id),
+            -1,
+        )
+        if target_idx == -1:
+            raise ValueError("未找到对应的 provider source")
+        return provider_sources, target_idx, provider_sources[target_idx]
+
+    def _is_openai_oauth_supported_source(self, provider_source: dict) -> bool:
+        return (
+            provider_source.get("provider") == "openai"
+            and provider_source.get("type") == "openai_oauth_chat_completion"
+        )
+
+    async def _reload_provider_source_providers(self, source_id: str) -> list[str]:
+        prov_mgr = self.core_lifecycle.provider_manager
+        reload_errors = []
+        for provider in self.config.get("provider", []):
+            if provider.get("provider_source_id") != source_id:
+                continue
+            try:
+                await prov_mgr.reload(provider)
+            except Exception as e:
+                logger.error(traceback.format_exc())
+                reload_errors.append(f"{provider.get('id')}: {e}")
+        return reload_errors
+
+    async def _persist_provider_source_patch(self, source_id: str, updates: dict) -> dict:
+        provider_sources, target_idx, provider_source = self._find_provider_source(source_id)
+        provider_sources[target_idx] = {**provider_source, **updates}
+        self.config["provider_sources"] = provider_sources
+        save_config(self.config, self.config, is_core=True)
+        reload_errors = await self._reload_provider_source_providers(source_id)
+        if reload_errors:
+            raise ValueError("更新成功，但部分提供商重载失败: " + ", ".join(reload_errors))
+        return provider_sources[target_idx]
+
+    async def start_provider_source_openai_oauth(self):
+        post_data = await request.json or {}
+        source_id = (post_data.get("source_id") or "").strip()
+        if not source_id:
+            return Response().error("缺少 source_id").__dict__
+        try:
+            _, _, provider_source = self._find_provider_source(source_id)
+        except ValueError:
+            new_source_config = post_data.get("config") or {}
+            if not isinstance(new_source_config, dict):
+                return Response().error("未找到对应的 provider source").__dict__
+            if (new_source_config.get("id") or "").strip() != source_id:
+                return Response().error("provider source ID 不匹配").__dict__
+            provider_sources = self.config.get("provider_sources", [])
+            provider_sources.append(new_source_config)
+            self.config["provider_sources"] = provider_sources
+            try:
+                save_config(self.config, self.config, is_core=True)
+            except Exception as e:
+                logger.error(traceback.format_exc())
+                return Response().error(f"保存 provider source 失败: {e}").__dict__
+            _, _, provider_source = self._find_provider_source(source_id)
+        if not self._is_openai_oauth_supported_source(provider_source):
+            return Response().error("当前 provider source 不支持 OpenAI OAuth").__dict__
+        flow = create_pkce_flow()
+        self._provider_source_oauth_flows[source_id] = flow
+        return Response().ok(
+            data={
+                "authorize_url": flow["authorize_url"],
+                "state": flow["state"],
+            }
+        ).__dict__
+
+    async def complete_provider_source_openai_oauth(self):
+        post_data = await request.json or {}
+        source_id = (post_data.get("source_id") or "").strip()
+        auth_input = post_data.get("input") or ""
+        if not source_id:
+            return Response().error("缺少 source_id").__dict__
+        flow = self._provider_source_oauth_flows.get(source_id)
+        try:
+            _, _, provider_source = self._find_provider_source(source_id)
+            token = parse_oauth_credential_json(auth_input)
+            if token is None:
+                if not flow:
+                    return Response().error("OAuth 流程未开始或已过期").__dict__
+                code, state = parse_authorization_input(auth_input)
+                if not code:
+                    return Response().error("缺少授权码").__dict__
+                if not state:
+                    return Response().error("缺少 state").__dict__
+                if state != flow.get("state"):
+                    return Response().error("state 不匹配").__dict__
+                token = await exchange_authorization_code(
+                    code,
+                    flow.get("verifier", ""),
+                    provider_source.get("proxy", ""),
+                )
+            updated_source = await self._persist_provider_source_patch(
+                source_id,
+                {
+                    "auth_mode": "openai_oauth",
+                    "oauth_provider": "openai",
+                    "oauth_access_token": token["access_token"],
+                    "oauth_refresh_token": token["refresh_token"],
+                    "oauth_expires_at": token["expires_at"],
+                    "oauth_account_email": token.get("email", ""),
+                    "oauth_account_id": token.get("account_id", ""),
+                },
+            )
+            self._provider_source_oauth_flows.pop(source_id, None)
+            return Response().ok(
+                data={
+                    "source": updated_source,
+                    "email": updated_source.get("oauth_account_email", ""),
+                    "expires_at": updated_source.get("oauth_expires_at", ""),
+                },
+                message="账号态 OAuth 绑定成功",
+            ).__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"账号态 OAuth 绑定失败: {e}").__dict__
+
+    async def refresh_provider_source_openai_oauth(self):
+        post_data = await request.json or {}
+        source_id = (post_data.get("source_id") or "").strip()
+        if not source_id:
+            return Response().error("缺少 source_id").__dict__
+        try:
+            _, _, provider_source = self._find_provider_source(source_id)
+            refresh_token_value = (provider_source.get("oauth_refresh_token") or "").strip()
+            if not refresh_token_value:
+                return Response().error("当前 provider source 没有可用的 refresh token").__dict__
+            token = await refresh_access_token(
+                refresh_token_value,
+                provider_source.get("proxy", ""),
+            )
+            updated_source = await self._persist_provider_source_patch(
+                source_id,
+                {
+                    "auth_mode": "openai_oauth",
+                    "oauth_provider": "openai",
+                    "oauth_access_token": token["access_token"],
+                    "oauth_refresh_token": token["refresh_token"],
+                    "oauth_expires_at": token["expires_at"],
+                    "oauth_account_email": token.get("email")
+                    or provider_source.get("oauth_account_email", ""),
+                    "oauth_account_id": token.get("account_id")
+                    or provider_source.get("oauth_account_id", ""),
+                },
+            )
+            return Response().ok(
+                data={
+                    "source": updated_source,
+                    "email": updated_source.get("oauth_account_email", ""),
+                    "expires_at": updated_source.get("oauth_expires_at", ""),
+                },
+                message="账号态 OAuth 刷新成功",
+            ).__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"账号态 OAuth 刷新失败: {e}").__dict__
+
+    async def disconnect_provider_source_openai_oauth(self):
+        post_data = await request.json or {}
+        source_id = (post_data.get("source_id") or "").strip()
+        if not source_id:
+            return Response().error("缺少 source_id").__dict__
+        try:
+            updated_source = await self._persist_provider_source_patch(
+                source_id,
+                {
+                    "auth_mode": "manual",
+                    "oauth_provider": "",
+                    "oauth_access_token": "",
+                    "oauth_refresh_token": "",
+                    "oauth_expires_at": "",
+                    "oauth_account_email": "",
+                    "oauth_account_id": "",
+                },
+            )
+            self._provider_source_oauth_flows.pop(source_id, None)
+            return Response().ok(
+                data={"source": updated_source},
+                message="账号态 OAuth 已断开",
+            ).__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"断开账号态 OAuth 失败: {e}").__dict__
 
     async def delete_provider_source(self):
         """删除 provider_source，并更新关联的 providers"""
