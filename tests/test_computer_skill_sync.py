@@ -74,6 +74,35 @@ def test_sync_skills_keeps_builtin_skills_when_local_is_empty(monkeypatch, tmp_p
     ]
 
 
+def test_sync_skills_sets_revision_after_success(monkeypatch, tmp_path: Path):
+    skills_root = tmp_path / "skills"
+    temp_root = tmp_path / "temp"
+    skill_dir = skills_root / "custom-agent-skill"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    skill_dir.joinpath("SKILL.md").write_text("# demo", encoding="utf-8")
+    temp_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+        lambda: str(skills_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.SkillManager.set_sandbox_skills_cache",
+        lambda self, skills: None,
+    )
+
+    booter = _FakeBooter(
+        '{"skills":[{"name":"custom-agent-skill","description":"","path":"skills/custom-agent-skill/SKILL.md"}]}'
+    )
+    asyncio.run(computer_client._sync_skills_to_sandbox(booter))
+
+    assert getattr(booter, "_astrbot_skills_revision", None)
+
+
 def test_sync_skills_uses_managed_strategy_instead_of_wiping_all(
     monkeypatch,
     tmp_path: Path,

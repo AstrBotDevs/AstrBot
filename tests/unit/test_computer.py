@@ -733,6 +733,94 @@ class TestComputerClient:
         computer_client.session_booter.clear()
 
     @pytest.mark.asyncio
+    async def test_get_booter_refreshes_existing_session_when_skills_change(self):
+        """Test get_booter re-syncs local skills before reusing a stale sandbox."""
+        from astrbot.core.computer import computer_client
+
+        computer_client.session_booter.clear()
+
+        mock_context = MagicMock()
+        mock_config = MagicMock()
+        mock_config.get = lambda key, default=None: {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {
+                    "booter": "shipyard",
+                    "shipyard_endpoint": "http://localhost:8080",
+                    "shipyard_access_token": "test_token",
+                }
+            }
+        }.get(key, default)
+        mock_context.get_config = MagicMock(return_value=mock_config)
+
+        mock_booter = MagicMock()
+        mock_booter.available = AsyncMock(return_value=True)
+        mock_booter._astrbot_skills_revision = "rev-old"
+
+        sync_mock = AsyncMock()
+        with (
+            patch(
+                "astrbot.core.computer.computer_client._compute_local_skills_revision",
+                return_value="rev-new",
+            ),
+            patch(
+                "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
+                sync_mock,
+            ),
+        ):
+            computer_client.session_booter["test-session"] = mock_booter
+
+            booter = await computer_client.get_booter(mock_context, "test-session")
+            assert booter is mock_booter
+            sync_mock.assert_awaited_once_with(mock_booter)
+
+        computer_client.session_booter.clear()
+
+    @pytest.mark.asyncio
+    async def test_get_booter_skips_resync_when_skills_revision_matches(self):
+        """Test get_booter reuses existing booter without redundant syncs."""
+        from astrbot.core.computer import computer_client
+
+        computer_client.session_booter.clear()
+
+        mock_context = MagicMock()
+        mock_config = MagicMock()
+        mock_config.get = lambda key, default=None: {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {
+                    "booter": "shipyard",
+                    "shipyard_endpoint": "http://localhost:8080",
+                    "shipyard_access_token": "test_token",
+                }
+            }
+        }.get(key, default)
+        mock_context.get_config = MagicMock(return_value=mock_config)
+
+        mock_booter = MagicMock()
+        mock_booter.available = AsyncMock(return_value=True)
+        mock_booter._astrbot_skills_revision = "rev-same"
+
+        sync_mock = AsyncMock()
+        with (
+            patch(
+                "astrbot.core.computer.computer_client._compute_local_skills_revision",
+                return_value="rev-same",
+            ),
+            patch(
+                "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
+                sync_mock,
+            ),
+        ):
+            computer_client.session_booter["test-session"] = mock_booter
+
+            booter = await computer_client.get_booter(mock_context, "test-session")
+            assert booter is mock_booter
+            sync_mock.assert_not_awaited()
+
+        computer_client.session_booter.clear()
+
+    @pytest.mark.asyncio
     async def test_get_booter_rebuild_unavailable(self):
         """Test get_booter rebuilds when existing booter is unavailable."""
         from astrbot.core.computer import computer_client
