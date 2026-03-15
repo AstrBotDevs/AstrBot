@@ -87,6 +87,21 @@ def _build_tool_result_status_message(
     return status_msg
 
 
+def _extract_final_streaming_chain(msg_chain: MessageChain) -> MessageChain | None:
+    if not msg_chain.chain:
+        return None
+
+    final_chain: list[BaseMessageComponent] = []
+    for comp in msg_chain.chain:
+        if isinstance(comp, Plain):
+            continue
+        final_chain.append(comp)
+
+    if not final_chain:
+        return None
+    return MessageChain(chain=final_chain, type=msg_chain.type)
+
+
 async def run_agent(
     agent_runner: AgentRunner,
     max_step: int = 30,
@@ -211,6 +226,11 @@ async def run_agent(
                         # display the reasoning content only when configured
                         continue
                     yield resp.data["chain"]  # MessageChain
+                elif resp.type == "llm_result":
+                    if final_chain := _extract_final_streaming_chain(
+                        resp.data["chain"]
+                    ):
+                        yield final_chain
             if not stop_watcher.done():
                 stop_watcher.cancel()
                 try:

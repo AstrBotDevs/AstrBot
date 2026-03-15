@@ -1,11 +1,16 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
+from importlib import metadata
 from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.20.0"
+try:
+    __version__ = metadata.version("AstrBot")
+except metadata.PackageNotFoundError:
+    __version__ = "unknown"
+VERSION = __version__
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
