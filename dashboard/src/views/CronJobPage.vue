@@ -48,8 +48,11 @@
               <div class="text-caption text-medium-emphasis">{{ item.timezone || tm('table.timezoneLocal') }}</div>
             </div>
           </template>
-          <template #item.session="{ item }">
-            <div>{{ item.session || tm('table.notAvailable') }}</div>
+          <template #item.target_sessions="{ item }">
+            <div v-if="item.target_sessions?.length">
+              <div v-for="session in item.target_sessions" :key="session">{{ session }}</div>
+            </div>
+            <div v-else>{{ tm('table.notAvailable') }}</div>
           </template>
           <template #item.next_run_time="{ item }">{{ formatTime(item.next_run_time) }}</template>
           <template #item.last_run_at="{ item }">{{ formatTime(item.last_run_at) }}</template>
@@ -58,6 +61,9 @@
             <div class="d-flex align-center flex-nowrap" style="gap: 12px; min-width: 140px;">
               <v-switch v-model="item.enabled" inset density="compact" hide-details color="primary"
                 class="mt-0" @change="toggleJob(item)" />
+              <v-btn size="small" variant="text" color="primary" @click="openEdit(item)">
+                {{ tm('actions.edit') }}
+              </v-btn>
               <v-btn size="small" variant="text" color="error" @click="deleteJob(item)">
                 {{ tm('actions.delete') }}
               </v-btn>
@@ -73,7 +79,9 @@
 
     <v-dialog v-model="createDialog" max-width="560">
       <v-card>
-        <v-card-title class="text-h6">{{ tm('form.title') }}</v-card-title>
+        <v-card-title class="text-h6">
+          {{ editingJobId ? tm('form.editTitle') : tm('form.title') }}
+        </v-card-title>
         <v-card-subtitle class="text-body-2 text-medium-emphasis">
           {{ tm('form.chatHint') }}
         </v-card-subtitle>
@@ -85,15 +93,18 @@
             :placeholder="tm('form.cronPlaceholder')" variant="outlined" density="comfortable" />
           <v-text-field v-else v-model="newJob.run_at" :label="tm('form.runAt')" type="datetime-local"
             variant="outlined" density="comfortable" />
-          <v-text-field v-model="newJob.session" :label="tm('form.session')" variant="outlined" density="comfortable" />
+          <v-textarea v-model="newJob.target_sessions_text" :label="tm('form.targetSessions')"
+            :placeholder="tm('form.targetSessionsPlaceholder')" variant="outlined" density="comfortable"
+            rows="3" auto-grow />
           <v-text-field v-model="newJob.timezone" :label="tm('form.timezone')" variant="outlined"
             density="comfortable" />
           <v-switch v-model="newJob.enabled" :label="tm('form.enabled')" inset color="primary" hide-details />
         </v-card-text>
         <v-card-actions class="justify-end">
           <v-btn variant="text" @click="createDialog = false">{{ tm('actions.cancel') }}</v-btn>
-          <v-btn variant="tonal" color="primary" :loading="creating" @click="createJob">{{ tm('actions.submit')
-            }}</v-btn>
+          <v-btn variant="tonal" color="primary" :loading="creating" @click="submitJob">
+            {{ editingJobId ? tm('actions.save') : tm('actions.submit') }}
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -112,13 +123,14 @@ const jobs = ref<any[]>([])
 const proactivePlatforms = ref<{ id: string; name: string; display_name?: string }[]>([])
 const createDialog = ref(false)
 const creating = ref(false)
+const editingJobId = ref<string | null>(null)
 const newJob = ref({
   run_once: false,
   name: '',
   note: '',
   cron_expression: '',
   run_at: '',
-  session: '',
+  target_sessions_text: '',
   timezone: '',
   enabled: true
 })
@@ -133,7 +145,7 @@ const headers = computed(() => [
   { title: tm('table.headers.name'), key: 'name', minWidth: '200px' },
   { title: tm('table.headers.type'), key: 'type', width: 110 },
   { title: tm('table.headers.cron'), key: 'cron_expression', minWidth: '160px' },
-  { title: tm('table.headers.session'), key: 'session', minWidth: '200px' },
+  { title: tm('table.headers.targetSessions'), key: 'target_sessions', minWidth: '220px' },
   { title: tm('table.headers.nextRun'), key: 'next_run_time', minWidth: '160px' },
   { title: tm('table.headers.lastRun'), key: 'last_run_at', minWidth: '160px' },
   { title: tm('table.headers.note'), key: 'note', minWidth: '220px' },
@@ -150,6 +162,31 @@ function formatTime(val: any): string {
     return new Date(val).toLocaleString()
   } catch (e) {
     return String(val)
+  }
+}
+
+function parseTargetSessions(text: string): string[] {
+  return Array.from(
+    new Set(
+      String(text || '')
+        .split(/\r?\n|,/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  )
+}
+
+function buildJobPayload() {
+  const target_sessions = parseTargetSessions(newJob.value.target_sessions_text)
+  return {
+    run_once: newJob.value.run_once,
+    name: newJob.value.name,
+    note: newJob.value.note,
+    cron_expression: newJob.value.cron_expression,
+    run_at: newJob.value.run_at,
+    target_sessions,
+    timezone: newJob.value.timezone,
+    enabled: newJob.value.enabled
   }
 }
 
@@ -171,7 +208,7 @@ async function loadJobs() {
       const data = Array.isArray(res.data.data) ? res.data.data : []
       jobs.value = data.map((job: any) => ({
         ...job,
-        session: job?.payload?.session || job?.session || ''
+        target_sessions: job?.target_sessions || job?.payload?.target_sessions || (job?.payload?.session ? [job.payload.session] : [])
       }))
     } else {
       toast(res.data.message || tm('messages.loadFailed'), 'error')
@@ -228,7 +265,23 @@ async function deleteJob(job: any) {
 }
 
 function openCreate() {
+  editingJobId.value = null
   resetNewJob()
+  createDialog.value = true
+}
+
+function openEdit(job: any) {
+  editingJobId.value = job.job_id
+  newJob.value = {
+    run_once: !!job.run_once,
+    name: job.name || '',
+    note: job.note || job.description || '',
+    cron_expression: job.cron_expression || '',
+    run_at: job.run_at ? String(job.run_at).slice(0, 16) : '',
+    target_sessions_text: (job.target_sessions || []).join('\n'),
+    timezone: job.timezone || '',
+    enabled: Boolean(job.enabled)
+  }
   createDialog.value = true
 }
 
@@ -239,15 +292,16 @@ function resetNewJob() {
     note: '',
     cron_expression: '',
     run_at: '',
-    session: '',
+    target_sessions_text: '',
     timezone: '',
     enabled: true
   }
 }
 
-async function createJob() {
-  if (!newJob.value.session) {
-    toast(tm('messages.sessionRequired'), 'warning')
+async function submitJob() {
+  const payload = buildJobPayload()
+  if (!payload.target_sessions.length) {
+    toast(tm('messages.targetSessionsRequired'), 'warning')
     return
   }
   if (!newJob.value.note) {
@@ -264,18 +318,32 @@ async function createJob() {
   }
   creating.value = true
   try {
-    const payload: any = { ...newJob.value }
-    const res = await axios.post('/api/cron/jobs', payload)
+    const url = editingJobId.value
+      ? `/api/cron/jobs/${editingJobId.value}`
+      : '/api/cron/jobs'
+    const method = editingJobId.value ? 'patch' : 'post'
+    const res = await axios({
+      url,
+      method,
+      data: payload
+    })
     if (res.data.status === 'ok') {
-      toast(tm('messages.createSuccess'))
+      toast(editingJobId.value ? tm('messages.updateSuccess') : tm('messages.createSuccess'))
       createDialog.value = false
+      editingJobId.value = null
       resetNewJob()
       await loadJobs()
     } else {
-      toast(res.data.message || tm('messages.createFailed'), 'error')
+      toast(
+        res.data.message || (editingJobId.value ? tm('messages.updateFailed') : tm('messages.createFailed')),
+        'error'
+      )
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.createFailed'), 'error')
+    toast(
+      e?.response?.data?.message || (editingJobId.value ? tm('messages.updateFailed') : tm('messages.createFailed')),
+      'error'
+    )
   } finally {
     creating.value = false
   }

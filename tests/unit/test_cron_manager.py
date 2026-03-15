@@ -447,6 +447,36 @@ class TestRunJob:
         mock_db.update_cron_job.assert_not_called()
 
 
+class TestRunActiveJob:
+    """Tests for active agent cron execution."""
+
+    @pytest.mark.asyncio
+    async def test_run_active_job_supports_multiple_target_sessions(
+        self, cron_manager, sample_cron_job
+    ):
+        """Cron payload target_sessions should be executed one by one."""
+        sample_cron_job.job_type = "active_agent"
+        sample_cron_job.payload = {
+            "session": "wuju:GroupMessage:203014918",
+            "target_sessions": [
+                "wuju:GroupMessage:203014918",
+                "wuju:GroupMessage:1043307527",
+            ],
+            "note": "send report",
+        }
+
+        with patch.object(cron_manager, "_woke_main_agent", new=AsyncMock()) as mock_woke:
+            await cron_manager._run_active_agent_job(
+                sample_cron_job, start_time=datetime.now(timezone.utc)
+            )
+
+        assert mock_woke.await_count == 2
+        assert [call.kwargs["session_str"] for call in mock_woke.await_args_list] == [
+            "wuju:GroupMessage:203014918",
+            "wuju:GroupMessage:1043307527",
+        ]
+
+
 class TestRunBasicJob:
     """Tests for _run_basic_job method."""
 

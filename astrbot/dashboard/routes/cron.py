@@ -30,12 +30,42 @@ class CronRoute(Route):
                 data[k] = data[k].isoformat()
         # expose note explicitly for UI (prefer payload.note then description)
         payload = data.get("payload") or {}
+        target_sessions = self._normalize_target_sessions(
+            payload.get("target_sessions"), payload.get("session")
+        )
         data["note"] = payload.get("note") or data.get("description") or ""
         data["run_at"] = payload.get("run_at")
         data["run_once"] = data.get("run_once", False)
+        data["target_sessions"] = target_sessions
+        data["session"] = target_sessions[0] if target_sessions else ""
         # status is internal; hide to avoid implying one-time completion for recurring jobs
         data.pop("status", None)
         return data
+
+    @staticmethod
+    def _normalize_target_sessions(
+        target_sessions, fallback_session: str | None = None
+    ) -> list[str]:
+        sessions: list[str] = []
+
+        if isinstance(target_sessions, list):
+            raw_items = target_sessions
+        elif isinstance(target_sessions, str):
+            raw_items = target_sessions.splitlines()
+        else:
+            raw_items = []
+
+        for item in raw_items:
+            session = str(item).strip()
+            if session and session not in sessions:
+                sessions.append(session)
+
+        if fallback_session:
+            session = str(fallback_session).strip()
+            if session and session not in sessions:
+                sessions.insert(0, session)
+
+        return sessions
 
     async def list_jobs(self):
         try:
@@ -68,6 +98,9 @@ class CronRoute(Route):
             cron_expression = payload.get("cron_expression")
             note = payload.get("note") or payload.get("description") or name
             session = payload.get("session")
+            target_sessions = self._normalize_target_sessions(
+                payload.get("target_sessions"), session
+            )
             persona_id = payload.get("persona_id")
             provider_id = payload.get("provider_id")
             timezone = payload.get("timezone")
@@ -75,8 +108,10 @@ class CronRoute(Route):
             run_once = bool(payload.get("run_once", False))
             run_at = payload.get("run_at")
 
-            if not session:
-                return jsonify(Response().error("session is required").__dict__)
+            if not target_sessions:
+                return jsonify(
+                    Response().error("at least one session is required").__dict__
+                )
             if run_once and not run_at:
                 return jsonify(
                     Response().error("run_at is required when run_once=true").__dict__
@@ -99,7 +134,8 @@ class CronRoute(Route):
                     )
 
             job_payload = {
-                "session": session,
+                "session": target_sessions[0],
+                "target_sessions": target_sessions,
                 "note": note,
                 "persona_id": persona_id,
                 "provider_id": provider_id,
@@ -135,22 +171,44 @@ class CronRoute(Route):
             if not isinstance(payload, dict):
                 return jsonify(Response().error("Invalid payload").__dict__)
 
+            existing_job = await cron_mgr.db.get_cron_job(job_id)
+            if not existing_job:
+                return jsonify(Response().error("Job not found").__dict__)
+
+            payload_data = dict(existing_job.payload or {})
+            if "note" in payload:
+                payload_data["note"] = payload.get("note")
+            if "run_at" in payload:
+                payload_data["run_at"] = payload.get("run_at")
+            if "persona_id" in payload:
+                payload_data["persona_id"] = payload.get("persona_id")
+            if "provider_id" in payload:
+                payload_data["provider_id"] = payload.get("provider_id")
+            if "session" in payload or "target_sessions" in payload:
+                target_sessions = self._normalize_target_sessions(
+                    payload.get("target_sessions"),
+                    payload.get("session"),
+                )
+                if not target_sessions:
+                    return jsonify(
+                        Response().error("at least one session is required").__dict__
+                    )
+                payload_data["session"] = target_sessions[0]
+                payload_data["target_sessions"] = target_sessions
+            if isinstance(payload.get("payload"), dict):
+                payload_data.update(payload["payload"])
+
             updates = {
                 "name": payload.get("name"),
                 "cron_expression": payload.get("cron_expression"),
-                "description": payload.get("description"),
+                "description": payload.get("note") or payload.get("description"),
                 "enabled": payload.get("enabled"),
                 "timezone": payload.get("timezone"),
                 "run_once": payload.get("run_once"),
-                "payload": payload.get("payload"),
+                "payload": payload_data,
             }
             # remove None values to avoid unwanted resets
             updates = {k: v for k, v in updates.items() if v is not None}
-            if "run_at" in payload:
-                updates.setdefault("payload", {})
-                if updates["payload"] is None:
-                    updates["payload"] = {}
-                updates["payload"]["run_at"] = payload.get("run_at")
 
             job = await cron_mgr.update_job(job_id, **updates)
             if not job:
