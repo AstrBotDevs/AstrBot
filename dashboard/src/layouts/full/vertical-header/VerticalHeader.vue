@@ -27,6 +27,24 @@ const customizer = useCustomizerStore();
 const authStore = useAuthStore();
 const theme = useTheme();
 const { t } = useI18n();
+
+const { languageOptions, currentLanguage, switchLanguage, locale } =
+  useLanguageSwitcher();
+
+const languages = computed(() =>
+  languageOptions.value.map((lang) => ({
+    code: lang.value,
+    name: lang.label,
+    flag: lang.flag,
+  })),
+);
+
+const currentLocale = computed(() => locale.value);
+
+const changeLanguage = async (langCode: string) => {
+  await switchLanguage(langCode as Locale);
+};
+
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
 let dialog = ref(false);

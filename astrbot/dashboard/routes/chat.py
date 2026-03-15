@@ -36,6 +36,20 @@ async def track_conversation(convs: dict, conv_id: str):
         convs.pop(conv_id, None)
 
 
+async def _poll_webchat_stream_result(back_queue, username: str):
+    try:
+        result = await asyncio.wait_for(back_queue.get(), timeout=1)
+    except asyncio.TimeoutError:
+        return None, False
+    except asyncio.CancelledError:
+        logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
+        return None, True
+    except Exception as e:
+        logger.error(f"WebChat stream error: {e}")
+        return None, False
+    return result, False
+
+
 class ChatRoute(Route):
     def __init__(
         self,
