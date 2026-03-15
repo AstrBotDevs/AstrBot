@@ -1344,7 +1344,9 @@ class ConfigRoute(Route):
         tools = tool_mgr.get_func_desc_openai_style()
         return Response().ok(tools).__dict__
 
-    async def _register_platform_logo(self, platform, platform_logo_tokens) -> None:
+    async def _register_platform_logo(
+        self, platform, platform_logo_tokens: dict[str, str]
+    ) -> None:
         """注册平台logo文件并生成访问令牌"""
         if not platform.logo_path:
             return
