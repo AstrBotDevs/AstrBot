@@ -274,10 +274,11 @@ class CronJobManager:
             _select_provider,
             build_main_agent,
         )
-        from astrbot.core.astr_main_agent_resources import (
-            SEND_MESSAGE_TO_USER_TOOL,
+        from astrbot.core.tools.prompts import (
+            CONVERSATION_HISTORY_INJECT_PREFIX,
             build_proactive_agent_cron_woke_system_prompt,
         )
+        from astrbot.core.tools.send_message import SEND_MESSAGE_TO_USER_TOOL
 
         try:
             session = (
@@ -308,10 +309,13 @@ class CronJobManager:
         if cron_payload.get("origin", "tool") == "api":
             cron_event.role = "admin"
 
+        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
+
         config = MainAgentBuildConfig(
             tool_call_timeout=3600,
             llm_safety_mode=False,
             streaming_response=False,
+            tool_providers=[ComputerToolProvider()],
         )
         provider = _select_provider(cron_event, self.ctx)
         allow_send_message_tool = not (
@@ -327,10 +331,7 @@ class CronJobManager:
             context_dump = req._print_friendly_context()
             req.contexts = []
             req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"---\n"
-                f"{context_dump}\n"
-                f"---\n"
+                CONVERSATION_HISTORY_INJECT_PREFIX + f"---\n{context_dump}\n---\n"
             )
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
         req.system_prompt += build_proactive_agent_cron_woke_system_prompt(

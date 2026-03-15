@@ -12,6 +12,8 @@
   "onboard": {
     "title": "快速引导",
     "subtitle": "欢迎页可直接完成初始化。",
+    "step0Title": "配置后端地址",
+    "step0Desc": "配置 AstrBot 的后端 API 地址。",
     "step1Title": "配置平台机器人",
     "step1Desc": "将 AstrBot 连接到 QQ、飞书、企业微信、Telegram 等 IM 平台。",
     "step2Title": "配置 AI 模型",
