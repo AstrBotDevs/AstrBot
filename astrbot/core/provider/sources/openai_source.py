@@ -322,7 +322,7 @@ class ProviderOpenAIOfficial(Provider):
             if reasoning:
                 llm_response.reasoning_content = reasoning
                 _y = True
-            if delta.content:
+            if delta and delta.content:
                 # Don't strip streaming chunks to preserve spaces between words
                 completion_text = self._normalize_content(delta.content, strip=False)
                 llm_response.result_chain = MessageChain(
