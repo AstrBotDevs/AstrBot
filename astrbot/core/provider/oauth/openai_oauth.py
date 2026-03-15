@@ -53,9 +53,6 @@ def parse_authorization_input(raw: str) -> tuple[str, str]:
     value = (raw or "").strip()
     if not value:
         raise ValueError("empty input")
-    if "#" in value:
-        code, state = value.split("#", 1)
-        return code.strip(), state.strip()
     if "code=" in value:
         parsed = urlparse(value)
         if parsed.query:
@@ -63,6 +60,9 @@ def parse_authorization_input(raw: str) -> tuple[str, str]:
             return query.get("code", [""])[0].strip(), query.get("state", [""])[0].strip()
         query = parse_qs(value)
         return query.get("code", [""])[0].strip(), query.get("state", [""])[0].strip()
+    if "#" in value:
+        code, state = value.split("#", 1)
+        return code.strip(), state.strip()
     return value, ""
 
 
