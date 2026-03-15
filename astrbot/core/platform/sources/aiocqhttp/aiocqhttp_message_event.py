@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 
 from aiocqhttp import CQHttp, Event
 
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     At,
