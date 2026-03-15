@@ -724,6 +724,38 @@ def _sanitize_context_by_modalities(
     req.contexts = sanitized_contexts
 
 
+def _model_outputs_image(provider: Provider, req: ProviderRequest) -> bool:
+    model = req.model or provider.get_model()
+    if not model:
+        return False
+    model_info = LLM_METADATAS.get(model)
+    if not model_info:
+        return False
+    output_modalities = model_info.get("modalities", {}).get("output", [])
+    return "image" in output_modalities
+
+
+def _should_disable_streaming_for_webchat_output(
+    event: AstrMessageEvent,
+    provider: Provider,
+    req: ProviderRequest,
+) -> bool:
+    if event.get_platform_name() != "webchat":
+        return False
+
+    provider_cfg = provider.provider_config
+    provider_type = provider_cfg.get("type", "")
+    if provider_type == "googlegenai_chat_completion" and provider_cfg.get(
+        "gm_resp_image_modal", False
+    ):
+        return True
+
+    if _model_outputs_image(provider, req):
+        return not bool(provider_cfg.get("supports_streaming_output_modalities", False))
+
+    return False
+
+
 def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
     """根据事件中的插件设置，过滤请求中的工具列表。
 
@@ -1091,6 +1123,17 @@ async def build_main_agent(
     if action_type == "live":
         req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
 
+    streaming_response = config.streaming_response
+    if streaming_response and _should_disable_streaming_for_webchat_output(
+        event, provider, req
+    ):
+        logger.info(
+            "Disable streaming for webchat direct media output. provider=%s model=%s",
+            provider.provider_config.get("id", "unknown"),
+            req.model or provider.get_model(),
+        )
+        streaming_response = False
+
     reset_coro = agent_runner.reset(
         provider=provider,
         request=req,
@@ -1100,7 +1143,7 @@ async def build_main_agent(
         ),
         tool_executor=FunctionToolExecutor(),
         agent_hooks=MAIN_AGENT_HOOKS,
-        streaming=config.streaming_response,
+        streaming=streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent=config.llm_compress_keep_recent,
         llm_compress_provider=_get_compress_provider(config, plugin_context),

@@ -1046,6 +1046,103 @@ class TestBuildMainAgent:
         assert result is not None
         assert result.provider_request == existing_req
 
+    @pytest.mark.asyncio
+    async def test_build_main_agent_disables_streaming_for_webchat_gemini_image_output(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test Gemini image output requests force non-streaming on webchat."""
+        module = ama
+        mock_provider.provider_config = {
+            "id": "google_gemini",
+            "type": "googlegenai_chat_completion",
+            "gm_resp_image_modal": True,
+            "modalities": ["image", "tool_use"],
+        }
+        mock_provider.get_model.return_value = "gemini-3-pro-image-preview"
+        mock_event.get_platform_name.return_value = "webchat"
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    streaming_response=True,
+                ),
+            )
+
+        assert result is not None
+        assert mock_runner.reset.call_args.kwargs["streaming"] is False
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_disables_streaming_for_webchat_image_output_model_metadata(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test image-output model metadata forces non-streaming on webchat."""
+        module = ama
+        mock_provider.provider_config = {
+            "id": "test-provider",
+            "type": "openai_chat_completion",
+            "modalities": ["image", "tool_use"],
+        }
+        mock_provider.get_model.return_value = "test-image-output-model"
+        mock_event.get_platform_name.return_value = "webchat"
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch.dict(
+                "astrbot.core.astr_main_agent.LLM_METADATAS",
+                {
+                    "test-image-output-model": {
+                        "id": "test-image-output-model",
+                        "reasoning": False,
+                        "tool_call": False,
+                        "knowledge": "none",
+                        "release_date": "",
+                        "modalities": {"input": ["text"], "output": ["text", "image"]},
+                        "open_weights": False,
+                        "limit": {"context": 0, "output": 0},
+                    }
+                },
+                clear=False,
+            ),
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    streaming_response=True,
+                ),
+            )
+
+        assert result is not None
+        assert mock_runner.reset.call_args.kwargs["streaming"] is False
+
 
 class TestHandleWebchat:
     """Tests for _handle_webchat function."""

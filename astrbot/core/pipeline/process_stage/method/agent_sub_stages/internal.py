@@ -239,6 +239,8 @@ class InternalAgentSubStage(Stage):
                     if reset_coro:
                         await reset_coro
 
+                    effective_streaming_response = bool(agent_runner.streaming)
+
                     register_active_runner(event.unified_msg_origin, agent_runner)
                     runner_registered = True
                     action_type = event.get_extra("action_type")
@@ -247,7 +249,7 @@ class InternalAgentSubStage(Stage):
                         "astr_agent_prepare",
                         system_prompt=req.system_prompt,
                         tools=req.func_tool.names() if req.func_tool else [],
-                        stream=streaming_response,
+                        stream=effective_streaming_response,
                         chat_provider={
                             "id": provider.provider_config.get("id", ""),
                             "model": provider.get_model(),
@@ -301,7 +303,7 @@ class InternalAgentSubStage(Stage):
                                 user_aborted=agent_runner.was_aborted(),
                             )
 
-                    elif streaming_response and not stream_to_general:
+                    elif effective_streaming_response and not stream_to_general:
                         # 流式响应
                         event.set_result(
                             MessageEventResult()
