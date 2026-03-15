@@ -92,6 +92,22 @@ class AstrBotConfig(dict):
 
         return conf
 
+    # 插件可通过 AstrBotConfig.register_dynamic_key("provider_settings.xxx")
+    # 来注册动态配置项，迁移时不会被删除
+    _dynamic_config_keys: set[str] = set()
+
+    @classmethod
+    def register_dynamic_key(cls, path: str) -> None:
+        """注册一个动态配置项路径，迁移时不会被删除。
+
+        路径格式: "provider_settings.maibot_agent_runner_provider_id"
+        """
+        cls._dynamic_config_keys.add(path)
+
+    @classmethod
+    def unregister_dynamic_key(cls, path: str) -> None:
+        cls._dynamic_config_keys.discard(path)
+
     def check_config_integrity(self, refer_conf: dict, conf: dict, path=""):
         """检查配置完整性，如果有新的配置项或顺序不一致则返回 True"""
         has_new = False
@@ -130,12 +146,16 @@ class AstrBotConfig(dict):
                 # 直接使用现有配置
                 new_conf[key] = conf[key]
 
-        # 检查是否存在参考配置中没有的配置项
+        # 检查不在参考配置中的项：如果在动态白名单中则保留，否则删除
         for key in list(conf.keys()):
             if key not in refer_conf:
-                path_ = path + "." + key if path else key
-                logger.info(f"检查到配置项 {path_} 不存在，将从当前配置中删除")
-                has_new = True
+                full_path = path + "." + key if path else key
+                if full_path in self._dynamic_config_keys:
+                    logger.debug(f"配置项 {full_path} 为动态注册项，保留")
+                    new_conf[key] = conf[key]
+                else:
+                    logger.info(f"检查到配置项 {full_path} 不存在，将从当前配置中删除")
+                    has_new = True
 
         # 顺序不一致也算作变更
         if list(conf.keys()) != list(new_conf.keys()):

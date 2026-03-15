@@ -16,6 +16,7 @@ from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
     DeerFlowAgentRunner,
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
+from astrbot.core.agent.runners.registry import agent_runner_registry
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -44,6 +45,8 @@ from astrbot.core.utils.metrics import Metric
 from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
 from ....context import PipelineContext, call_event_hook
 
+# Built-in runner type -> provider_id config key mapping.
+# Plugin-registered runners use agent_runner_registry instead.
 AGENT_RUNNER_TYPE_KEY = {
     "dify": "dify_agent_runner_provider_id",
     "coze": "coze_agent_runner_provider_id",
@@ -166,10 +169,15 @@ class ThirdPartyAgentSubStage(Stage):
         self.ctx = ctx
         self.conf = ctx.astrbot_config
         self.runner_type = self.conf["provider_settings"]["agent_runner_type"]
-        self.prov_id = self.conf["provider_settings"].get(
-            AGENT_RUNNER_TYPE_KEY.get(self.runner_type, ""),
-            "",
-        )
+
+        # Resolve provider ID config key: check built-in map first, then registry
+        prov_id_key = AGENT_RUNNER_TYPE_KEY.get(self.runner_type, "")
+        if not prov_id_key:
+            registry_entry = agent_runner_registry.get(self.runner_type)
+            if registry_entry:
+                prov_id_key = registry_entry.provider_id_key
+        self.prov_id = self.conf["provider_settings"].get(prov_id_key, "")
+
         settings = ctx.astrbot_config["provider_settings"]
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
@@ -185,6 +193,22 @@ class ThirdPartyAgentSubStage(Stage):
             field_name="third_party_stream_consumption_close_timeout_sec",
             source="Third-party runner config",
         )
+
+        # Invoke on_initialize callback for plugin-registered runners
+        registry_entry = agent_runner_registry.get(self.runner_type)
+        if registry_entry and registry_entry.on_initialize and self.prov_id:
+            asyncio.create_task(self._run_registry_on_initialize(registry_entry))
+
+    async def _run_registry_on_initialize(self, entry) -> None:
+        """Run the on_initialize callback for a plugin-registered runner."""
+        try:
+            await entry.on_initialize(self.ctx, self.prov_id)
+        except Exception as e:
+            logger.warning(
+                "[%s] on_initialize failed (will retry on first message): %s",
+                entry.runner_type,
+                e,
+            )
 
     async def _resolve_persona_custom_error_message(
         self, event: AstrMessageEvent
@@ -337,9 +361,14 @@ class ThirdPartyAgentSubStage(Stage):
         elif self.runner_type == DEERFLOW_PROVIDER_TYPE:
             runner = DeerFlowAgentRunner[AstrAgentContext]()
         else:
-            raise ValueError(
-                f"Unsupported third party agent runner type: {self.runner_type}",
-            )
+            # Fallback to plugin-registered runners
+            registry_entry = agent_runner_registry.get(self.runner_type)
+            if registry_entry:
+                runner = registry_entry.runner_cls[AstrAgentContext]()
+            else:
+                raise ValueError(
+                    f"Unsupported third party agent runner type: {self.runner_type}",
+                )
 
         astr_agent_ctx = AstrAgentContext(
             context=self.ctx.plugin_manager.context,

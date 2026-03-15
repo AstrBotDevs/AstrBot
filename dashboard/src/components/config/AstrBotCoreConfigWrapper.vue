@@ -76,11 +76,18 @@ export default {
     const { tm: tmMetadata } = useModuleI18n('features/config-metadata');
     
     const tm = (key) => {
+      if (!key) return '';
       const metadataResult = tmMetadata(key);
       if (!metadataResult.startsWith('[MISSING:') && !metadataResult.startsWith('[INVALID:')) {
         return metadataResult;
       }
-      return tmConfig(key);
+      const configResult = tmConfig(key);
+      if (!configResult.startsWith('[MISSING:') && !configResult.startsWith('[INVALID:')) {
+        return configResult;
+      }
+      // Fallback: return the key itself so that dynamically injected
+      // descriptions (e.g. from AgentRunnerRegistry) display as-is.
+      return key;
     };
     
     return {
