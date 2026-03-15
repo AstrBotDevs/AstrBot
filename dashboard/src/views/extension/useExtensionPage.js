@@ -1,9 +1,19 @@
 import axios from "axios";
-import { pinyin } from "pinyin-pro";
 import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { getPlatformDisplayName } from "@/utils/platformUtils";
 import { resolveErrorMessage } from "@/utils/errorUtils";
+import {
+  buildSearchQuery,
+  matchesPluginSearch,
+  normalizeStr,
+  toInitials,
+  toPinyinText,
+} from "@/utils/pluginSearch";
+import {
+  getValidHashTab,
+  replaceTabRoute,
+} from "@/utils/hashRouteTabs.mjs";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
@@ -97,16 +107,11 @@ export const useExtensionPage = () => {
   const activeTab = ref("installed");
   const validTabs = ["installed", "market", "mcp", "skills", "components"];
   const isValidTab = (tab) => validTabs.includes(tab);
-  const getLocationHash = () =>
-    typeof window !== "undefined" ? window.location.hash : "";
-  const extractTabFromHash = (hash) => {
-    const lastHashIndex = (hash || "").lastIndexOf("#");
-    if (lastHashIndex === -1) return "";
-    return hash.slice(lastHashIndex + 1);
-  };
+  const getLocationHash = () => route.hash || "";
+  const extractTabFromHash = (hash) => getValidHashTab(hash, validTabs);
   const syncTabFromHash = (hash) => {
     const tab = extractTabFromHash(hash);
-    if (isValidTab(tab)) {
+    if (tab) {
       activeTab.value = tab;
       return true;
     }
@@ -180,6 +185,9 @@ export const useExtensionPage = () => {
   };
   const isListView = ref(getInitialListViewMode());
   const pluginSearch = ref("");
+  const installedStatusFilter = ref("all");
+  const installedSortBy = ref("default");
+  const installedSortOrder = ref("desc");
   const loading_ = ref(false);
   
   // 分页相关
@@ -240,37 +248,6 @@ export const useExtensionPage = () => {
   });
   
   // 插件市场拼音搜索
-  const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
-  const toPinyinText = (s) =>
-    pinyin(s ?? "", { toneType: "none" })
-      .toLowerCase()
-      .replace(/\s+/g, "");
-  const toInitials = (s) =>
-    pinyin(s ?? "", { pattern: "first", toneType: "none" })
-      .toLowerCase()
-      .replace(/\s+/g, "");
-  const marketCustomFilter = (value, query, item) => {
-    const q = normalizeStr(query);
-    if (!q) return true;
-  
-    const candidates = new Set();
-    if (value != null) candidates.add(String(value));
-    if (item?.name) candidates.add(String(item.name));
-    if (item?.trimmedName) candidates.add(String(item.trimmedName));
-    if (item?.display_name) candidates.add(String(item.display_name));
-    if (item?.desc) candidates.add(String(item.desc));
-    if (item?.author) candidates.add(String(item.author));
-  
-    for (const v of candidates) {
-      const nv = normalizeStr(v);
-      if (nv.includes(q)) return true;
-      const pv = toPinyinText(v);
-      if (pv.includes(q)) return true;
-      const iv = toInitials(v);
-      if (iv.includes(q)) return true;
-    }
-    return false;
-  };
   
   const plugin_handler_info_headers = computed(() => [
     { title: tm("table.headers.eventType"), key: "event_type_h" },
@@ -278,6 +255,18 @@ export const useExtensionPage = () => {
     { title: tm("table.headers.specificType"), key: "type" },
     { title: tm("table.headers.trigger"), key: "cmd" },
   ]);
+
+  const installedSortItems = computed(() => [
+    { title: tm("sort.default"), value: "default" },
+    { title: tm("sort.installTime"), value: "install_time" },
+    { title: tm("sort.name"), value: "name" },
+    { title: tm("sort.author"), value: "author" },
+    { title: tm("sort.updateStatus"), value: "update_status" },
+  ]);
+
+  const installedSortUsesOrder = computed(
+    () => installedSortBy.value !== "default",
+  );
   
   // 插件表格的表头定义
   const showAuthorColumn = computed(() => width.value >= 1280);
@@ -286,16 +275,19 @@ export const useExtensionPage = () => {
       {
         title: tm("table.headers.name"),
         key: "name",
+        sortable: false,
         width: showAuthorColumn.value ? "24%" : "26%",
       },
       {
         title: tm("table.headers.description"),
         key: "desc",
+        sortable: false,
         width: showAuthorColumn.value ? "32%" : "36%",
       },
       {
         title: tm("table.headers.version"),
         key: "version",
+        sortable: false,
         width: showAuthorColumn.value ? "12%" : "14%",
       },
     ];
@@ -304,6 +296,7 @@ export const useExtensionPage = () => {
       headers.push({
         title: tm("table.headers.author"),
         key: "author",
+        sortable: false,
         width: "10%",
       });
     }
@@ -326,68 +319,132 @@ export const useExtensionPage = () => {
     }
     return data;
   });
-  
-  const sortPluginsByName = (plugins) => {
+
+  const compareInstalledPluginNames = (left, right) =>
+    normalizeStr(left?.name ?? "").localeCompare(
+      normalizeStr(right?.name ?? ""),
+      undefined,
+      {
+        sensitivity: "base",
+      },
+    );
+
+  const compareInstalledPluginAuthors = (left, right) =>
+    normalizeStr(left?.author ?? "").localeCompare(
+      normalizeStr(right?.author ?? ""),
+      undefined,
+      { sensitivity: "base" },
+    );
+
+  const getInstalledAtTimestamp = (plugin) => {
+    const parsed = Date.parse(plugin?.installed_at ?? "");
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const sortInstalledPlugins = (plugins) => {
     return plugins
-      .map((plugin, index) => ({ plugin, index }))
-      .sort((a, b) => {
-        const nameA = String(a.plugin?.name ?? "");
-        const nameB = String(b.plugin?.name ?? "");
-        const nameCompare = nameA.localeCompare(nameB, undefined, {
-          sensitivity: "base",
-        });
-        if (nameCompare !== 0) {
-          return nameCompare;
+      .map((plugin, index) => ({
+        plugin,
+        index,
+        installedAtTimestamp: getInstalledAtTimestamp(plugin),
+      }))
+      .sort((left, right) => {
+        const fallbackNameCompare = compareInstalledPluginNames(
+          left.plugin,
+          right.plugin,
+        );
+        const fallbackResult =
+          fallbackNameCompare !== 0 ? fallbackNameCompare : left.index - right.index;
+
+        if (installedSortBy.value === "install_time") {
+          const leftTimestamp = left.installedAtTimestamp;
+          const rightTimestamp = right.installedAtTimestamp;
+
+          if (leftTimestamp == null && rightTimestamp == null) {
+            return fallbackResult;
+          }
+          if (leftTimestamp == null) {
+            return 1;
+          }
+          if (rightTimestamp == null) {
+            return -1;
+          }
+
+          const timeDiff =
+            installedSortOrder.value === "desc"
+              ? rightTimestamp - leftTimestamp
+              : leftTimestamp - rightTimestamp;
+          return timeDiff !== 0 ? timeDiff : fallbackResult;
         }
-        return a.index - b.index;
+
+        if (installedSortBy.value === "name") {
+          const nameCompare = compareInstalledPluginNames(left.plugin, right.plugin);
+          if (nameCompare !== 0) {
+            return installedSortOrder.value === "desc"
+              ? -nameCompare
+              : nameCompare;
+          }
+          return left.index - right.index;
+        }
+
+        if (installedSortBy.value === "author") {
+          const authorCompare = compareInstalledPluginAuthors(
+            left.plugin,
+            right.plugin,
+          );
+          if (authorCompare !== 0) {
+            return installedSortOrder.value === "desc"
+              ? -authorCompare
+              : authorCompare;
+          }
+          return fallbackResult;
+        }
+
+        if (installedSortBy.value === "update_status") {
+          const leftHasUpdate = left.plugin?.has_update ? 1 : 0;
+          const rightHasUpdate = right.plugin?.has_update ? 1 : 0;
+          const updateDiff =
+            installedSortOrder.value === "desc"
+              ? rightHasUpdate - leftHasUpdate
+              : leftHasUpdate - rightHasUpdate;
+          return updateDiff !== 0 ? updateDiff : fallbackResult;
+        }
+
+        return fallbackResult;
       })
       .map((item) => item.plugin);
   };
 
   // 通过搜索过滤插件
   const filteredPlugins = computed(() => {
-    const plugins = filteredExtensions.value;
-    let filtered = plugins;
+    const plugins = filteredExtensions.value.filter((plugin) => {
+      if (installedStatusFilter.value === "enabled") {
+        return !!plugin.activated;
+      }
+      if (installedStatusFilter.value === "disabled") {
+        return !plugin.activated;
+      }
+      return true;
+    });
 
-    if (pluginSearch.value) {
-      const search = pluginSearch.value.toLowerCase();
-      filtered = plugins.filter((plugin) => {
-        const pluginName = (plugin.name ?? "").toLowerCase();
-        const pluginDesc = (plugin.desc ?? "").toLowerCase();
-        const pluginAuthor = (plugin.author ?? "").toLowerCase();
-        const supportPlatforms = Array.isArray(plugin.support_platforms)
-          ? plugin.support_platforms.join(" ").toLowerCase()
-          : "";
-        const astrbotVersion = (plugin.astrbot_version ?? "").toLowerCase();
+    const query = buildSearchQuery(pluginSearch.value);
+    const filtered = query
+      ? plugins.filter((plugin) => matchesPluginSearch(plugin, query))
+      : plugins;
 
-        return (
-          pluginName.includes(search) ||
-          pluginDesc.includes(search) ||
-          pluginAuthor.includes(search) ||
-          supportPlatforms.includes(search) ||
-          astrbotVersion.includes(search)
-        );
-      });
-    }
-
-    return sortPluginsByName([...filtered]);
+    return sortInstalledPlugins(filtered);
   });
   
   // 过滤后的插件市场数据（带搜索）
   const filteredMarketPlugins = computed(() => {
-    if (!debouncedMarketSearch.value) {
+    const query = buildSearchQuery(debouncedMarketSearch.value);
+    if (!query) {
       return pluginMarketData.value;
     }
-  
-    const search = debouncedMarketSearch.value.toLowerCase();
-    return pluginMarketData.value.filter((plugin) => {
-      // 使用自定义过滤器
-      return (
-        marketCustomFilter(plugin.name, search, plugin) ||
-        marketCustomFilter(plugin.desc, search, plugin) ||
-        marketCustomFilter(plugin.author, search, plugin)
-      );
-    });
+
+    return pluginMarketData.value.filter((plugin) =>
+      matchesPluginSearch(plugin, query),
+    );
   });
   
   // 所有插件列表，推荐插件排在前面
@@ -1251,6 +1308,7 @@ export const useExtensionPage = () => {
     onLoadingDialogResult(1, resData.message);
     dialog.value = false;
     await getExtensions();
+    checkAlreadyInstalled();
 
     viewReadme({
       name: resData.data.name,
@@ -1377,9 +1435,7 @@ export const useExtensionPage = () => {
   // 生命周期
   onMounted(async () => {
     if (!syncTabFromHash(getLocationHash())) {
-      if (typeof window !== "undefined") {
-        window.location.hash = `#${activeTab.value}`;
-      }
+      await replaceTabRoute(router, route, activeTab.value);
     }
     await getExtensions();
   
@@ -1387,17 +1443,9 @@ export const useExtensionPage = () => {
     loadCustomSources();
   
     // 检查是否有 open_config 参数
-    let urlParams;
-    if (window.location.hash) {
-      // For hash mode (#/path?param=value)
-      const hashQuery = window.location.hash.split("?")[1] || "";
-      urlParams = new URLSearchParams(hashQuery);
-    } else {
-      // For history mode (/path?param=value)
-      urlParams = new URLSearchParams(window.location.search);
-    }
-    console.log("URL Parameters:", urlParams.toString());
-    const plugin_name = urlParams.get("open_config");
+    const plugin_name = Array.isArray(route.query.open_config)
+      ? route.query.open_config[0]
+      : route.query.open_config;
     if (plugin_name) {
       console.log(`Opening config for plugin: ${plugin_name}`);
       openExtensionConfig(plugin_name);
@@ -1469,10 +1517,10 @@ export const useExtensionPage = () => {
   );
   
   watch(
-    () => route.fullPath,
-    () => {
-      const tab = extractTabFromHash(getLocationHash());
-      if (isValidTab(tab) && tab !== activeTab.value) {
+    () => route.hash,
+    (newHash) => {
+      const tab = extractTabFromHash(newHash);
+      if (tab && tab !== activeTab.value) {
         activeTab.value = tab;
       }
     },
@@ -1480,15 +1528,8 @@ export const useExtensionPage = () => {
   
   watch(activeTab, (newTab) => {
     if (!isValidTab(newTab)) return;
-    const currentTab = extractTabFromHash(getLocationHash());
-    if (currentTab === newTab) return;
-    const hash = getLocationHash();
-    const lastHashIndex = hash.lastIndexOf("#");
-    const nextHash =
-      lastHashIndex > 0 ? `${hash.slice(0, lastHashIndex)}#${newTab}` : `#${newTab}`;
-    if (typeof window !== "undefined") {
-      window.location.hash = nextHash;
-    }
+    if (route.hash === `#${newTab}`) return;
+    void replaceTabRoute(router, route, newTab);
   });
 
   return {
@@ -1529,6 +1570,9 @@ export const useExtensionPage = () => {
     getInitialListViewMode,
     isListView,
     pluginSearch,
+    installedStatusFilter,
+    installedSortBy,
+    installedSortOrder,
     loading_,
     currentPage,
     dangerConfirmDialog,
@@ -1563,8 +1607,9 @@ export const useExtensionPage = () => {
     normalizeStr,
     toPinyinText,
     toInitials,
-    marketCustomFilter,
     plugin_handler_info_headers,
+    installedSortItems,
+    installedSortUsesOrder,
     pluginHeaders,
     filteredExtensions,
     filteredPlugins,

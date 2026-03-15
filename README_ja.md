@@ -78,10 +78,19 @@ AstrBot を素早く試したいユーザーで、コマンドラインに慣れ
 ```bash
 uv tool install astrbot
 astrbot init # 初回のみ実行して環境を初期化します
-astrbot
+astrbot run
 ```
 
 > [uv](https://docs.astral.sh/uv/) のインストールが必要です。
+
+> [!NOTE]
+> macOS ユーザーの場合：macOS のセキュリティチェックにより、`astrbot` コマンドの初回実行に時間がかかる場合があります（約 10〜20 秒）。
+
+`astrbot` の更新：
+
+```bash
+uv tool upgrade astrbot
+```
 
 ### Docker デプロイ
 
@@ -214,6 +223,7 @@ pre-commit install
 - 5群: 822130018
 - 6群: 753075035
 - 開発者群: 975206796
+- 開発者群（正式）: 1039761811
 
 ### Discord サーバー
 

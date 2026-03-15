@@ -1,5 +1,5 @@
 """企业微信智能机器人平台适配器
-基于企业微信智能机器人 API 的消息平台适配器，支持 HTTP 回调
+基于企业微信智能机器人 API 的消息平台适配器，支持 HTTP 回调与长连接
 参考webchat_adapter.py的队列机制，实现异步消息处理和流式响应
 """
 
@@ -31,6 +31,7 @@ from .wecomai_api import (
     WecomAIBotStreamMessageBuilder,
 )
 from .wecomai_event import WecomAIBotMessageEvent
+from .wecomai_long_connection import WecomAIBotLongConnectionClient
 from .wecomai_queue_mgr import WecomAIQueueMgr
 from .wecomai_server import WecomAIBotServer
 from .wecomai_utils import (
@@ -78,8 +79,13 @@ class WecomAIBotAdapter(Platform):
         self.settings = platform_settings
 
         # 初始化配置参数
-        self.token = self.config["token"]
-        self.encoding_aes_key = self.config["encoding_aes_key"]
+        self.connection_mode = self.config.get(
+            "wecom_ai_bot_connection_mode", "webhook"
+        )
+        self.token = self.config.get("token", self.config.get("wecomaibot_token", ""))
+        self.encoding_aes_key = self.config.get(
+            "encoding_aes_key", self.config.get("wecomaibot_encoding_aes_key", "")
+        )
         self.port = int(self.config["port"])
         self.host = self.config.get("callback_server_host", "0.0.0.0")
         self.bot_name = self.config.get("wecom_ai_bot_name", "")
@@ -96,25 +102,52 @@ class WecomAIBotAdapter(Platform):
         self.only_use_webhook_url_to_send = bool(
             self.config.get("only_use_webhook_url_to_send", False),
         )
+        self.long_connection_bot_id = self.config.get(
+            "wecomaibot_ws_bot_id", self.config.get("long_connection_bot_id", "")
+        )
+        self.long_connection_secret = self.config.get(
+            "wecomaibot_ws_secret", self.config.get("long_connection_secret", "")
+        )
+        self.long_connection_ws_url = self.config.get(
+            "wecomaibot_ws_url",
+            "wss://openws.work.weixin.qq.com",
+        )
+        self.long_connection_heartbeat_interval = int(
+            self.config.get("wecomaibot_heartbeat_interval", 30),
+        )
 
         # 平台元数据
         self.metadata = PlatformMetadata(
             name="wecom_ai_bot",
-            description="企业微信智能机器人适配器，支持 HTTP 回调接收消息",
+            description="企业微信智能机器人适配器，支持 HTTP 回调和长连接模式",
             id=self.config.get("id", "wecom_ai_bot"),
             support_proactive_message=bool(self.msg_push_webhook_url),
         )
 
-        # 初始化 API 客户端
-        self.api_client = WecomAIBotAPIClient(self.token, self.encoding_aes_key)
+        self.api_client: WecomAIBotAPIClient | None = None
+        self.server: WecomAIBotServer | None = None
+        self.long_connection_client: WecomAIBotLongConnectionClient | None = None
 
-        # 初始化 HTTP 服务器
-        self.server = WecomAIBotServer(
-            host=self.host,
-            port=self.port,
-            api_client=self.api_client,
-            message_handler=self._process_message,
-        )
+        if self.connection_mode == "long_connection":
+            if not self.long_connection_bot_id or not self.long_connection_secret:
+                logger.warning(
+                    "企业微信智能机器人长连接模式缺少 BotID 或 Secret，连接可能失败"
+                )
+            self.long_connection_client = WecomAIBotLongConnectionClient(
+                bot_id=self.long_connection_bot_id,
+                secret=self.long_connection_secret,
+                ws_url=self.long_connection_ws_url,
+                heartbeat_interval=self.long_connection_heartbeat_interval,
+                message_handler=self._process_long_connection_payload,
+            )
+        else:
+            self.api_client = WecomAIBotAPIClient(self.token, self.encoding_aes_key)
+            self.server = WecomAIBotServer(
+                host=self.host,
+                port=self.port,
+                api_client=self.api_client,
+                message_handler=self._process_message,
+            )
 
         # 事件循环和关闭信号
         self.shutdown_event = asyncio.Event()
@@ -161,6 +194,9 @@ class WecomAIBotAdapter(Platform):
             加密后的响应消息，无需响应时返回 None
 
         """
+        if not self.api_client:
+            logger.error("Webhook 消息处理失败: API 客户端未初始化")
+            return None
         msgtype = message_data.get("msgtype")
         if not msgtype:
             logger.warning(f"消息类型未知，忽略: {message_data}")
@@ -320,6 +356,89 @@ class WecomAIBotAdapter(Platform):
                     logger.error("处理欢迎消息时发生异常: %s", e)
                     return None
 
+    async def _process_long_connection_payload(
+        self,
+        payload: dict[str, Any],
+    ) -> None:
+        """处理长连接回调消息。"""
+        cmd = payload.get("cmd")
+        headers = payload.get("headers") or {}
+        body = payload.get("body") or {}
+        req_id = headers.get("req_id")
+        if not isinstance(body, dict):
+            return
+
+        if cmd == "aibot_msg_callback":
+            session_id = self._extract_session_id(body)
+            stream_id = f"{session_id}_{generate_random_string(10)}"
+            await self._enqueue_message(
+                body, {"req_id": req_id or ""}, stream_id, session_id
+            )
+            self.queue_mgr.set_pending_response(
+                stream_id,
+                {
+                    "req_id": req_id or "",
+                    "connection_mode": "long_connection",
+                },
+            )
+
+            if self.initial_respond_text and req_id:
+                await self._send_long_connection_respond_msg(
+                    req_id=req_id,
+                    body={
+                        "msgtype": "stream",
+                        "stream": {
+                            "id": stream_id,
+                            "finish": False,
+                            "content": self.initial_respond_text,
+                        },
+                    },
+                )
+            return
+
+        if cmd == "aibot_event_callback":
+            event = body.get("event") or {}
+            event_type = event.get("eventtype")
+            if (
+                event_type == "enter_chat"
+                and self.friend_message_welcome_text
+                and req_id
+            ):
+                await self._send_long_connection_respond_welcome(req_id)
+            elif event_type == "disconnected_event":
+                logger.warning(
+                    "[WecomAI][LongConn] 收到 disconnected_event，旧连接将被关闭"
+                )
+
+    async def _send_long_connection_respond_welcome(self, req_id: str) -> bool:
+        client = self.long_connection_client
+        if not client:
+            return False
+        return await client.send_command(
+            cmd="aibot_respond_welcome_msg",
+            req_id=req_id,
+            body={
+                "msgtype": "text",
+                "text": {
+                    "content": self.friend_message_welcome_text,
+                },
+            },
+        )
+
+    async def _send_long_connection_respond_msg(
+        self,
+        req_id: str,
+        body: dict[str, Any],
+    ) -> bool:
+        client = self.long_connection_client
+        if not client:
+            return False
+        return await client.send_command(
+            cmd="aibot_respond_msg",
+            req_id=req_id,
+            body=body,
+        )
+
     def _extract_session_id(self, message_data: dict[str, Any]) -> str:
         """从消息数据中提取会话ID"""
         user_id = message_data.get("from", {}).get("userid", "default_user")
@@ -355,15 +474,16 @@ class WecomAIBotAdapter(Platform):
         content = ""
         image_base64 = []
 
-        _img_url_to_process = []
+        _img_url_to_process: list[tuple[str, str | None]] = []
         msg_items = []
 
         if msgtype == WecomAIBotConstants.MSG_TYPE_TEXT:
             content = WecomAIBotMessageParser.parse_text_message(message_data)
         elif msgtype == WecomAIBotConstants.MSG_TYPE_IMAGE:
-            _img_url_to_process.append(
-                WecomAIBotMessageParser.parse_image_message(message_data),
-            )
+            image_payload = message_data.get("image", {})
+            image_url = image_payload.get("url", "")
+            if image_url:
+                _img_url_to_process.append((image_url, image_payload.get("aeskey")))
         elif msgtype == WecomAIBotConstants.MSG_TYPE_MIXED:
             # 提取混合消息中的文本内容
             msg_items = WecomAIBotMessageParser.parse_mixed_message(message_data)
@@ -374,9 +494,12 @@ class WecomAIBotAdapter(Platform):
                     if text_content:
                         text_parts.append(text_content)
                 elif item.get("msgtype") == WecomAIBotConstants.MSG_TYPE_IMAGE:
-                    image_url = item.get("image", {}).get("url", "")
+                    image_payload = item.get("image", {})
+                    image_url = image_payload.get("url", "")
                     if image_url:
-                        _img_url_to_process.append(image_url)
+                        _img_url_to_process.append(
+                            (image_url, image_payload.get("aeskey"))
+                        )
             content = " ".join(text_parts) if text_parts else ""
         else:
             content = f"[{msgtype}消息]"
@@ -384,8 +507,8 @@ class WecomAIBotAdapter(Platform):
         # 并行处理图片下载和解密
         if _img_url_to_process:
             tasks = [
-                process_encrypted_image(url, self.encoding_aes_key)
-                for url in _img_url_to_process
+                process_encrypted_image(url, aes_key or self.encoding_aes_key)
+                for url, aes_key in _img_url_to_process
             ]
             results = await asyncio.gather(*tasks)
             for success, result in results:
@@ -459,26 +582,43 @@ class WecomAIBotAdapter(Platform):
         """运行适配器，同时启动HTTP服务器和队列监听器"""
 
         async def run_both() -> None:
-            # 如果启用统一 webhook 模式，则不启动独立服务器
-            webhook_uuid = self.config.get("webhook_uuid")
-            if self.unified_webhook_mode and webhook_uuid:
-                log_webhook_info(f"{self.meta().id}(企业微信智能机器人)", webhook_uuid)
-                # 只运行队列监听器
-                await self.queue_listener.run()
-            else:
+            if self.connection_mode == "long_connection":
+                if not self.long_connection_client:
+                    raise RuntimeError("长连接客户端未初始化")
                 logger.info(
-                    "启动企业微信智能机器人适配器，监听 %s:%d", self.host, self.port
+                    "启动企业微信智能机器人长连接模式: %s", self.long_connection_ws_url
                 )
-                # 同时运行HTTP服务器和队列监听器
                 await asyncio.gather(
-                    self.server.start_server(),
+                    self.long_connection_client.start(),
                     self.queue_listener.run(),
                 )
+            else:
+                # 如果启用统一 webhook 模式，则不启动独立服务器
+                webhook_uuid = self.config.get("webhook_uuid")
+                if self.unified_webhook_mode and webhook_uuid:
+                    log_webhook_info(
+                        f"{self.meta().id}(企业微信智能机器人)", webhook_uuid
+                    )
+                    # 只运行队列监听器
+                    await self.queue_listener.run()
+                else:
+                    if not self.server:
+                        raise RuntimeError("Webhook 服务器未初始化")
+                    logger.info(
+                        "启动企业微信智能机器人适配器，监听 %s:%d", self.host, self.port
+                    )
+                    # 同时运行HTTP服务器和队列监听器
+                    await asyncio.gather(
+                        self.server.start_server(),
+                        self.queue_listener.run(),
+                    )
 
         return run_both()
 
     async def webhook_callback(self, request: Any) -> Any:
         """统一 Webhook 回调入口"""
+        if self.connection_mode == "long_connection" or not self.server:
+            return "long_connection mode does not accept webhook callbacks", 400
         # 根据请求方法分发到不同的处理函数
         if request.method == "GET":
             return await self.server.handle_verify(request)
@@ -489,7 +629,10 @@ class WecomAIBotAdapter(Platform):
         """终止适配器"""
         logger.info("企业微信智能机器人适配器正在关闭...")
         self.shutdown_event.set()
-        await self.server.shutdown()
+        if self.long_connection_client:
+            await self.long_connection_client.shutdown()
+        if self.server:
+            await self.server.shutdown()
 
     def meta(self) -> PlatformMetadata:
         """获取平台元数据"""
@@ -507,17 +650,22 @@ class WecomAIBotAdapter(Platform):
                 queue_mgr=self.queue_mgr,
                 webhook_client=self.webhook_client,
                 only_use_webhook_url_to_send=self.only_use_webhook_url_to_send,
+                long_connection_sender=self._send_long_connection_respond_msg,
             )
+            message_event.is_at_or_wake_command = (
+                True  # 企业微信智能机器人默认消息都是 at 或唤醒命令
+            )
+            message_event.is_wake = True  # 企业微信智能机器人消息默认当做唤醒命令处理
 
             self.commit_event(message_event)
 
         except Exception as e:
             logger.error("处理消息时发生异常: %s", e)
 
-    def get_client(self) -> WecomAIBotAPIClient:
+    def get_client(self) -> WecomAIBotAPIClient | None:
         """获取 API 客户端"""
         return self.api_client
 
-    def get_server(self) -> WecomAIBotServer:
+    def get_server(self) -> WecomAIBotServer | None:
         """获取 HTTP 服务器实例"""
         return self.server

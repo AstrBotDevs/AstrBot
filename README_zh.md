@@ -78,10 +78,19 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 ```bash
 uv tool install astrbot
 astrbot init # 仅首次执行此命令以初始化环境
-astrbot
+astrbot run
 ```
 
 > 需要安装 [uv](https://docs.astral.sh/uv/)。
+
+> [!NOTE]
+> 对于 macOS 用户：由于 macOS 安全检查，首次运行 `astrbot` 命令可能需要较长时间（约 10-20 秒）。
+
+更新 `astrbot`：
+
+```bash
+uv tool upgrade astrbot
+```
 
 ### Docker 部署
 
@@ -209,13 +218,16 @@ pre-commit install
 
 ### QQ 群组
 
+- 9 群: 1076659624 (新)
+- 10 群: 1078079676 (新)
 - 1 群：322154837
 - 3 群：630166526
 - 5 群：822130018
 - 6 群：753075035
 - 7 群：743746109
 - 8 群：1030353265
-- 开发者群：975206796
+- 开发者群（偏闲聊吹水）：975206796
+- 开发者群（正式）：1039761811
 
 ### Discord 频道
 

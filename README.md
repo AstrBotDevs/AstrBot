@@ -78,10 +78,19 @@ For users who want to quickly experience AstrBot, are familiar with command-line
 ```bash
 uv tool install astrbot
 astrbot init # Only execute this command for the first time to initialize the environment
-astrbot
+astrbot run
 ```
 
 > Requires [uv](https://docs.astral.sh/uv/) to be installed.
+
+> [!NOTE]
+> For macOS user: due to macOS security checks, the first run of the `astrbot` command may take longer (about 10-20s).
+
+Update `astrbot`:
+
+```bash
+uv tool upgrade astrbot
+```
 
 ### Docker Deployment
 
@@ -216,13 +225,17 @@ pre-commit install
 
 ### QQ Groups
 
+- Group 9: 1076659624 (New)
+- Group 10: 1078079676 (New)
 - Group 1: 322154837
 - Group 3: 630166526
 - Group 5: 822130018
 - Group 6: 753075035
 - Group 7: 743746109
 - Group 8: 1030353265
-- Developer Group: 975206796
+
+- Developer Group(Chit-chat): 975206796
+- Developer Group(Formal): 1039761811
 
 ### Discord Server
 

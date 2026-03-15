@@ -45,7 +45,7 @@ jobs:
 
       - name: Create GitHub Release
         if: github.event_name == 'push'
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@v1.20.0
         with:
           tag: release-${{ github.sha }}
           owner: AstrBotDevs
