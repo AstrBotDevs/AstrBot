@@ -63,6 +63,7 @@ dependencies = [
   "shipyard-python-sdk>=0.2.4",
   "shipyard-neo-sdk>=0.2.0",
   "python-socks>=2.8.0",
+  "socksio>=1.0.0",
   "packaging>=24.2",
 ]
 

@@ -72,12 +72,64 @@ def log_connection_failure(
         )
 
     if effective_proxy:
+        sanitized_proxy = _sanitize_proxy_url(effective_proxy)
+        error_text = str(error)
+        if effective_proxy:
+            error_text = error_text.replace(effective_proxy, sanitized_proxy)
         logger.error(
             f"[{provider_label}] 网络/代理连接失败 ({error_type})。"
-            f"代理地址: {effective_proxy}，错误: {error}"
+            f"代理地址: {sanitized_proxy}，错误: {error_text}"
         )
     else:
         logger.error(f"[{provider_label}] 网络连接失败 ({error_type})。错误: {error}")
+
+
+def _is_socks_proxy(proxy: str) -> bool:
+    """Check if the proxy URL is a SOCKS proxy.
+
+    Args:
+        proxy: The proxy URL string
+
+    Returns:
+        True if the proxy is a SOCKS proxy (socks4://, socks5://, socks5h://)
+    """
+    return proxy.lower().startswith(("socks4://", "socks5://", "socks5h://"))
+
+
+def _sanitize_proxy_url(proxy: str) -> str:
+    """Sanitize proxy URL by masking credentials for safe logging.
+
+    Args:
+        proxy: The proxy URL string
+
+    Returns:
+        Sanitized proxy URL with credentials masked (e.g., "http://****@host:port")
+    """
+    try:
+        from urllib.parse import urlparse, urlunparse
+
+        parsed = urlparse(proxy)
+        # Any userinfo in netloc should be masked to avoid leaking tokens/passwords.
+        if "@" in parsed.netloc and parsed.hostname:
+            host = parsed.hostname
+            if ":" in host and not host.startswith("["):
+                host = f"[{host}]"
+            netloc = f"****@{host}"
+            if parsed.port:
+                netloc += f":{parsed.port}"
+            return urlunparse(
+                (
+                    parsed.scheme,
+                    netloc,
+                    parsed.path,
+                    parsed.params,
+                    parsed.query,
+                    parsed.fragment,
+                )
+            )
+    except Exception:
+        return "****"
+    return proxy
 
 
 def create_proxy_client(
@@ -95,8 +147,27 @@ def create_proxy_client(
 
     Returns:
         An httpx.AsyncClient configured with the proxy, or None if no proxy
+
+    Raises:
+        ImportError: If SOCKS proxy is used but socksio is not installed
     """
-    if proxy:
-        logger.info(f"[{provider_label}] 使用代理: {proxy}")
-        return httpx.AsyncClient(proxy=proxy)
-    return None
+    if not proxy:
+        return None
+
+    sanitized_proxy = _sanitize_proxy_url(proxy)
+    logger.info(f"[{provider_label}] 使用代理: {sanitized_proxy}")
+
+    # Check for SOCKS proxy and provide helpful error if socksio is not installed
+    if _is_socks_proxy(proxy):
+        try:
+            import socksio  # noqa: F401
+        except ImportError:
+            raise ImportError(
+                f"使用 SOCKS 代理需要安装 socksio 包。请运行以下命令安装：\n"
+                f"  pip install 'httpx[socks]'\n"
+                f"或者：\n"
+                f"  pip install socksio\n"
+                f"代理地址: {sanitized_proxy}"
+            ) from None
+
+    return httpx.AsyncClient(proxy=proxy)
