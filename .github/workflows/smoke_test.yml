@@ -42,7 +42,7 @@ jobs:
           uv run main.py &
           # uv tool install -e . --force
           # astrbot init -y 
-          # astrbot run --backend-only
+          # astrbot run --backend-only &
           APP_PID=$!
 
           echo "Waiting for application to start..."
