@@ -154,10 +154,13 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
                 description = "Read SKILL.md for details."
 
         if skill.source_type == "sandbox_only":
-            rendered_path = (
-                f"{str(SANDBOX_WORKSPACE_ROOT)}/{str(SANDBOX_SKILLS_ROOT)}/"
-                f"{display_name}/SKILL.md"
-            )
+            # Prefer the actual path from sandbox cache if available
+            rendered_path = _sanitize_prompt_path_for_prompt(skill.path)
+            if not rendered_path:
+                rendered_path = (
+                    f"{str(SANDBOX_WORKSPACE_ROOT)}/{str(SANDBOX_SKILLS_ROOT)}/"
+                    f"{display_name}/SKILL.md"
+                )
         else:
             rendered_path = _sanitize_prompt_path_for_prompt(skill.path)
             if not rendered_path:
@@ -389,12 +392,10 @@ class SkillManager:
                 if active_only and not active:
                     continue
                 description = sandbox_cached_descriptions.get(skill_name, "")
-                if show_sandbox_path:
-                    path_str = f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
-                else:
-                    path_str = sandbox_cached_paths.get(skill_name, "")
-                    if not path_str:
-                        path_str = f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
+                # For sandbox_only skills, show_sandbox_path is implicitly True
+                # since there is no local path to show. Always prefer the
+                # actual path from sandbox cache.
+                path_str = sandbox_cached_paths.get(skill_name) or f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
                 skills_by_name[skill_name] = SkillInfo(
                     name=skill_name,
                     description=description,
