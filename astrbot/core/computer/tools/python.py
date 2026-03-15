@@ -98,7 +98,8 @@ class LocalPythonTool(FunctionTool):
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
-        sb = get_local_booter()
+        work_dir = context.context.event.get_extra("local_working_dir", "")
+        sb = get_local_booter(work_dir=work_dir)
         try:
             result = await sb.python.exec(code, silent=silent)
             return await handle_result(result, context.context.event)

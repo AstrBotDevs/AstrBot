@@ -6,7 +6,8 @@ import os
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 from typing import Any
 
 from astrbot.api import logger
@@ -41,16 +42,47 @@ def _is_safe_command(command: str) -> bool:
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
 
 
-def _ensure_safe_path(path: str) -> str:
+def _is_path_under_root(abs_path: str, root: str) -> bool:
+    """Check if abs_path is under the given root directory using commonpath.
+
+    This avoids the prefix-matching issue with startswith (e.g., /data matching /data2).
+    """
+    try:
+        return os.path.commonpath([abs_path, root]) == root
+    except ValueError:
+        # Different drives on Windows
+        return False
+
+
+def _ensure_safe_path(path: str, extra_allowed_roots: Iterable[str] = ()) -> str:
     abs_path = os.path.abspath(path)
     allowed_roots = [
         os.path.abspath(get_astrbot_root()),
         os.path.abspath(get_astrbot_data_path()),
         os.path.abspath(get_astrbot_temp_path()),
     ]
-    if not any(abs_path.startswith(root) for root in allowed_roots):
+    allowed_roots.extend(os.path.abspath(r) for r in extra_allowed_roots if r)
+
+    if not any(_is_path_under_root(abs_path, root) for root in allowed_roots):
         raise PermissionError("Path is outside the allowed computer roots.")
     return abs_path
+
+
+def _resolve_work_dir(
+    cwd: str | None,
+    configured_work_dir: str | None,
+    extra_allowed_roots: Iterable[str] = (),
+) -> str:
+    """Resolve the working directory with consistent priority rules.
+
+    Priority:
+    1. User-supplied cwd (requires safety check)
+    2. Configured work_dir
+    3. Default AstrBot root directory
+    """
+    if cwd:
+        return _ensure_safe_path(cwd, extra_allowed_roots)
+    return configured_work_dir or get_astrbot_root()
 
 
 def _decode_shell_output(output: bytes | None) -> str:
@@ -80,6 +112,9 @@ def _decode_shell_output(output: bytes | None) -> str:
 
 @dataclass
 class LocalShellComponent(ShellComponent):
+    _work_dir: str = field(default="", repr=False)
+    _extra_allowed_roots: list[str] = field(default_factory=list, repr=False)
+
     async def exec(
         self,
         command: str,
@@ -96,7 +131,11 @@ class LocalShellComponent(ShellComponent):
             run_env = os.environ.copy()
             if env:
                 run_env.update({str(k): str(v) for k, v in env.items()})
-            working_dir = _ensure_safe_path(cwd) if cwd else get_astrbot_root()
+            working_dir = _resolve_work_dir(
+                cwd=cwd,
+                configured_work_dir=self._work_dir,
+                extra_allowed_roots=self._extra_allowed_roots,
+            )
             if background:
                 # `command` is intentionally executed through the current shell so
                 # local computer-use behavior matches existing tool semantics.
@@ -132,6 +171,8 @@ class LocalShellComponent(ShellComponent):
 
 @dataclass
 class LocalPythonComponent(PythonComponent):
+    _work_dir: str = field(default="", repr=False)
+
     async def exec(
         self,
         code: str,
@@ -139,13 +180,21 @@ class LocalPythonComponent(PythonComponent):
         timeout: int = 30,
         silent: bool = False,
     ) -> dict[str, Any]:
+        work_dir = _resolve_work_dir(
+            cwd=None,
+            configured_work_dir=self._work_dir,
+        )
+
         def _run() -> dict[str, Any]:
             try:
-                result = subprocess.run(
+                # Execute Python code via interpreter (not shell).
+                # Safe: no shell=True, args are passed as a list, code runs in Python not shell.
+                result = subprocess.run(  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                     [os.environ.get("PYTHON", sys.executable), "-c", code],
                     timeout=timeout,
                     capture_output=True,
                     text=True,
+                    cwd=work_dir,
                 )
                 stdout = "" if silent else result.stdout
                 stderr = result.stderr if result.returncode != 0 else ""
@@ -168,11 +217,13 @@ class LocalPythonComponent(PythonComponent):
 
 @dataclass
 class LocalFileSystemComponent(FileSystemComponent):
+    _extra_allowed_roots: list[str] = field(default_factory=list, repr=False)
+
     async def create_file(
         self, path: str, content: str = "", mode: int = 0o644
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = _ensure_safe_path(path)
+            abs_path = _ensure_safe_path(path, self._extra_allowed_roots)
             os.makedirs(os.path.dirname(abs_path), exist_ok=True)
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -183,7 +234,7 @@ class LocalFileSystemComponent(FileSystemComponent):
 
     async def read_file(self, path: str, encoding: str = "utf-8") -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = _ensure_safe_path(path)
+            abs_path = _ensure_safe_path(path, self._extra_allowed_roots)
             with open(abs_path, encoding=encoding) as f:
                 content = f.read()
             return {"success": True, "content": content}
@@ -194,7 +245,7 @@ class LocalFileSystemComponent(FileSystemComponent):
         self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = _ensure_safe_path(path)
+            abs_path = _ensure_safe_path(path, self._extra_allowed_roots)
             os.makedirs(os.path.dirname(abs_path), exist_ok=True)
             with open(abs_path, mode, encoding=encoding) as f:
                 f.write(content)
@@ -204,7 +255,7 @@ class LocalFileSystemComponent(FileSystemComponent):
 
     async def delete_file(self, path: str) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = _ensure_safe_path(path)
+            abs_path = _ensure_safe_path(path, self._extra_allowed_roots)
             if os.path.isdir(abs_path):
                 shutil.rmtree(abs_path)
             else:
@@ -217,7 +268,7 @@ class LocalFileSystemComponent(FileSystemComponent):
         self, path: str = ".", show_hidden: bool = False
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = _ensure_safe_path(path)
+            abs_path = _ensure_safe_path(path, self._extra_allowed_roots)
             entries = os.listdir(abs_path)
             if not show_hidden:
                 entries = [e for e in entries if not e.startswith(".")]
@@ -227,10 +278,35 @@ class LocalFileSystemComponent(FileSystemComponent):
 
 
 class LocalBooter(ComputerBooter):
-    def __init__(self) -> None:
-        self._fs = LocalFileSystemComponent()
-        self._python = LocalPythonComponent()
-        self._shell = LocalShellComponent()
+    def __init__(self, work_dir: str = "") -> None:
+        # Normalize work_dir to an absolute path once and use it consistently
+        abs_work_dir = os.path.abspath(work_dir) if work_dir else ""
+        self._work_dir = abs_work_dir
+        self._extra_allowed_roots: list[str] = []
+
+        # Auto-create work directory if configured and not exists
+        if abs_work_dir:
+            if not os.path.exists(abs_work_dir):
+                try:
+                    os.makedirs(abs_work_dir, exist_ok=True)
+                    logger.info(f"Created local working directory: {abs_work_dir}")
+                except OSError as e:
+                    logger.warning(
+                        f"Failed to create local working directory {abs_work_dir}: {e}"
+                    )
+            self._extra_allowed_roots = [abs_work_dir]
+
+        self._fs = LocalFileSystemComponent(
+            _extra_allowed_roots=self._extra_allowed_roots
+        )
+        self._python = LocalPythonComponent(_work_dir=abs_work_dir)
+        self._shell = LocalShellComponent(
+            _work_dir=abs_work_dir, _extra_allowed_roots=self._extra_allowed_roots
+        )
+
+    @property
+    def work_dir(self) -> str:
+        return self._work_dir
 
     async def boot(self, session_id: str) -> None:
         logger.info(f"Local computer booter initialized for session: {session_id}")
