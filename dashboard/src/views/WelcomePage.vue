@@ -638,4 +638,13 @@ watch(showProviderDialog, async (visible, wasVisible) => {
 .welcome-announcement-markdown {
   line-height: 1.7;
 }
+
+.welcome-announcement-markdown :deep(p > code),
+.welcome-announcement-markdown :deep(li > code) {
+  background-color: rgba(var(--v-theme-on-surface), 0.08) !important;
+  color: rgb(var(--v-theme-primary)) !important;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-weight: bold;
+}
 </style>
