@@ -25,15 +25,16 @@ class ProviderOpenAIOAuth(ProviderOpenAIOfficial):
         super().__init__(patched_config, provider_settings)
         self.provider_config = patched_config
         self.api_keys = [access_token] if access_token else self.api_keys
-        self.chosen_api_key = access_token or (self.api_keys[0] if self.api_keys else "")
+        self.chosen_api_key = access_token or (
+            self.api_keys[0] if self.api_keys else ""
+        )
         self.account_id = (
             patched_config.get("oauth_account_id")
             or patched_config.get("account_id")
             or ""
         ).strip()
         self.base_url = (
-            patched_config.get("api_base")
-            or "https://chatgpt.com/backend-api/codex"
+            patched_config.get("api_base") or "https://chatgpt.com/backend-api/codex"
         ).rstrip("/")
 
     async def get_models(self):
@@ -44,12 +45,18 @@ class ProviderOpenAIOAuth(ProviderOpenAIOfficial):
         return []
 
     async def _request_backend(self, payload: dict[str, Any]) -> dict[str, Any]:
-        access_token = (self.provider_config.get("oauth_access_token") or self.chosen_api_key or "").strip()
-        account_id = (self.provider_config.get("oauth_account_id") or self.account_id or "").strip()
+        access_token = (
+            self.provider_config.get("oauth_access_token") or self.chosen_api_key or ""
+        ).strip()
+        account_id = (
+            self.provider_config.get("oauth_account_id") or self.account_id or ""
+        ).strip()
         if not access_token:
             raise Exception("当前 OAuth Source 尚未绑定 access token")
         if not account_id:
-            raise Exception("当前 OAuth Source 缺少 chatgpt_account_id，请重新绑定或导入完整 JSON 凭据")
+            raise Exception(
+                "当前 OAuth Source 缺少 chatgpt_account_id，请重新绑定或导入完整 JSON 凭据"
+            )
 
         headers = {
             "Authorization": f"Bearer {access_token}",
@@ -88,7 +95,9 @@ class ProviderOpenAIOAuth(ProviderOpenAIOfficial):
             data = json.loads(stripped)
             return f"Codex backend request failed: status={status_code}, body={data}"
         except Exception:
-            return f"Codex backend request failed: status={status_code}, body={stripped}"
+            return (
+                f"Codex backend request failed: status={status_code}, body={stripped}"
+            )
 
     def _parse_backend_response(self, text: str) -> dict[str, Any]:
         completed_response: dict[str, Any] | None = None
@@ -123,10 +132,14 @@ class ProviderOpenAIOAuth(ProviderOpenAIOfficial):
         if stripped.startswith("{"):
             data = json.loads(stripped)
             if isinstance(data, dict):
-                if data.get("type") == "response.completed" and isinstance(data.get("response"), dict):
+                if data.get("type") == "response.completed" and isinstance(
+                    data.get("response"), dict
+                ):
                     return data["response"]
                 return data
-        raise Exception("Codex backend response did not contain response.completed event")
+        raise Exception(
+            "Codex backend response did not contain response.completed event"
+        )
 
     def _convert_message_content(self, raw_content: Any) -> str | list[dict[str, Any]]:
         if isinstance(raw_content, str):
@@ -235,7 +248,9 @@ class ProviderOpenAIOAuth(ProviderOpenAIOfficial):
                     if not name or not call_id:
                         continue
                     if not isinstance(arguments, str):
-                        arguments = json.dumps(arguments, ensure_ascii=False, default=str)
+                        arguments = json.dumps(
+                            arguments, ensure_ascii=False, default=str
+                        )
                     response_items.append(
                         {
                             "type": "function_call",
@@ -244,7 +259,9 @@ class ProviderOpenAIOAuth(ProviderOpenAIOfficial):
                             "arguments": arguments,
                         }
                     )
-        return "\n\n".join(part for part in instructions_parts if part).strip(), response_items
+        return "\n\n".join(
+            part for part in instructions_parts if part
+        ).strip(), response_items
 
     def _extract_response_usage(self, usage: Any) -> TokenUsage | None:
         if usage is None:
@@ -265,7 +282,9 @@ class ProviderOpenAIOAuth(ProviderOpenAIOfficial):
             output=output_tokens,
         )
 
-    def _convert_tools_to_backend_format(self, tool_list: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _convert_tools_to_backend_format(
+        self, tool_list: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         backend_tools: list[dict[str, Any]] = []
         for tool in tool_list:
             if not isinstance(tool, dict):
@@ -283,7 +302,8 @@ class ProviderOpenAIOAuth(ProviderOpenAIOfficial):
                 "type": "function",
                 "name": name,
                 "description": str(function.get("description") or "").strip(),
-                "parameters": function.get("parameters") or {"type": "object", "properties": {}},
+                "parameters": function.get("parameters")
+                or {"type": "object", "properties": {}},
             }
             backend_tools.append(backend_tool)
         return backend_tools
@@ -298,43 +318,95 @@ class ProviderOpenAIOAuth(ProviderOpenAIOfficial):
         if output_text:
             llm_response.result_chain = MessageChain().message(output_text)
 
-        output_items = list(response.get("output", []) if isinstance(response, dict) else getattr(response, "output", []) or [])
+        output_items = list(
+            response.get("output", [])
+            if isinstance(response, dict)
+            else getattr(response, "output", []) or []
+        )
         reasoning_parts: list[str] = []
         tool_args: list[dict[str, Any]] = []
         tool_names: list[str] = []
         tool_ids: list[str] = []
 
         for item in output_items:
-            item_type = item.get("type") if isinstance(item, dict) else getattr(item, "type", None)
+            item_type = (
+                item.get("type")
+                if isinstance(item, dict)
+                else getattr(item, "type", None)
+            )
             if item_type == "reasoning":
-                summaries = item.get("summary", []) if isinstance(item, dict) else getattr(item, "summary", []) or []
+                summaries = (
+                    item.get("summary", [])
+                    if isinstance(item, dict)
+                    else getattr(item, "summary", []) or []
+                )
                 for summary in summaries:
-                    text = summary.get("text") if isinstance(summary, dict) else getattr(summary, "text", None)
+                    text = (
+                        summary.get("text")
+                        if isinstance(summary, dict)
+                        else getattr(summary, "text", None)
+                    )
                     if text:
                         reasoning_parts.append(str(text))
             elif item_type == "function_call" and tools is not None:
-                arguments = item.get("arguments", "{}") if isinstance(item, dict) else getattr(item, "arguments", "{}")
+                arguments = (
+                    item.get("arguments", "{}")
+                    if isinstance(item, dict)
+                    else getattr(item, "arguments", "{}")
+                )
                 try:
-                    parsed_args = json.loads(arguments) if isinstance(arguments, str) else arguments
+                    parsed_args = (
+                        json.loads(arguments)
+                        if isinstance(arguments, str)
+                        else arguments
+                    )
                 except Exception:
                     parsed_args = {}
                 tool_args.append(parsed_args if isinstance(parsed_args, dict) else {})
-                tool_names.append(str(item.get("name", "") if isinstance(item, dict) else getattr(item, "name", "") or ""))
-                tool_ids.append(str(item.get("call_id", "") if isinstance(item, dict) else getattr(item, "call_id", "") or ""))
+                tool_names.append(
+                    str(
+                        item.get("name", "")
+                        if isinstance(item, dict)
+                        else getattr(item, "name", "") or ""
+                    )
+                )
+                tool_ids.append(
+                    str(
+                        item.get("call_id", "")
+                        if isinstance(item, dict)
+                        else getattr(item, "call_id", "") or ""
+                    )
+                )
             elif item_type == "message" and not output_text:
-                content_items = item.get("content", []) if isinstance(item, dict) else getattr(item, "content", []) or []
+                content_items = (
+                    item.get("content", [])
+                    if isinstance(item, dict)
+                    else getattr(item, "content", []) or []
+                )
                 item_text_parts: list[str] = []
                 for content in content_items:
-                    ctype = content.get("type") if isinstance(content, dict) else getattr(content, "type", None)
+                    ctype = (
+                        content.get("type")
+                        if isinstance(content, dict)
+                        else getattr(content, "type", None)
+                    )
                     if ctype in {"output_text", "text"}:
-                        text = content.get("text") if isinstance(content, dict) else getattr(content, "text", None)
+                        text = (
+                            content.get("text")
+                            if isinstance(content, dict)
+                            else getattr(content, "text", None)
+                        )
                         if text:
                             item_text_parts.append(str(text))
                 if item_text_parts:
-                    llm_response.result_chain = MessageChain().message("".join(item_text_parts).strip())
+                    llm_response.result_chain = MessageChain().message(
+                        "".join(item_text_parts).strip()
+                    )
 
         if reasoning_parts:
-            llm_response.reasoning_content = "\n".join(part for part in reasoning_parts if part)
+            llm_response.reasoning_content = "\n".join(
+                part for part in reasoning_parts if part
+            )
 
         if tool_args:
             llm_response.role = "tool"
@@ -346,10 +418,18 @@ class ProviderOpenAIOAuth(ProviderOpenAIOfficial):
             raise Exception(f"账号态 responses 响应无法解析：{response}。")
 
         llm_response.raw_completion = response
-        response_id = response.get("id") if isinstance(response, dict) else getattr(response, "id", None)
+        response_id = (
+            response.get("id")
+            if isinstance(response, dict)
+            else getattr(response, "id", None)
+        )
         if response_id:
             llm_response.id = response_id
-        usage = self._extract_response_usage(response.get("usage") if isinstance(response, dict) else getattr(response, "usage", None))
+        usage = self._extract_response_usage(
+            response.get("usage")
+            if isinstance(response, dict)
+            else getattr(response, "usage", None)
+        )
         if usage is not None:
             llm_response.usage = usage
         return llm_response
