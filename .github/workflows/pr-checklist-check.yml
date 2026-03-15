@@ -5,7 +5,7 @@ on:
     types: [opened, edited, reopened, synchronize]
 
 jobs:
-  check-checklist:
+  check:
     runs-on: ubuntu-latest
 
     permissions:
@@ -19,14 +19,11 @@ jobs:
         with:
           script: |
             const body = context.payload.pull_request.body || "";
-
             const regex = /-\s*\[\s*x\s*\].*没有.*认真阅读/i;
-
             const bad = regex.test(body);
-
             core.setOutput("bad", bad);
 
-      - name: Close PR if violated
+      - name: Close PR
         if: steps.check.outputs.bad == 'true'
         uses: actions/github-script@v7
         with:
@@ -37,13 +34,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: pr.number,
-              body: `👋 @${pr.user.login}
-
-检测到你勾选了 **“我没有认真阅读”**。
-
-请重新阅读 PR 模板并重新提交 PR。
-
-This PR has been automatically closed.`
+              body: `检测到你勾选了“我没有认真阅读”，PR 已关闭。`
             });
 
             await github.rest.pulls.update({
