@@ -512,11 +512,7 @@ class ProviderOpenAIOfficial(Provider):
                     # can be returned by get_final_completion(). Check function.name instead of type.
                     tool_func = getattr(tool_call, "function", None)
                     tool_call_id = getattr(tool_call, "id", None)
-                    if (
-                        tool_func is not None
-                        and hasattr(tool_func, "name")
-                        and tool.name == tool_func.name
-                    ):
+                    if tool_func and getattr(tool_func, "name", None) == tool.name:
                         tool_func_args = getattr(tool_func, "arguments", None)
                         # workaround for #1454
                         if isinstance(tool_func_args, str):
