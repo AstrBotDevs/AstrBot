@@ -1575,142 +1575,96 @@ class TestApplyLlmSafetyMode:
         assert "You are running in Safe Mode" in req.system_prompt
 
 
-class TestApplySandboxTools:
-    """Tests for _apply_sandbox_tools function."""
+class TestComputerToolProvider:
+    """Tests for sandbox tool injection via ComputerToolProvider."""
 
-    def test_apply_sandbox_tools_creates_toolset_if_none(self):
-        """Test that ToolSet is created when func_tool is None."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
+    @staticmethod
+    def _ctx(*, sandbox_cfg: dict | None = None):
+        from astrbot.core.tool_provider import ToolProviderContext
+
+        return ToolProviderContext(
             computer_use_runtime="sandbox",
-            sandbox_cfg={},
+            sandbox_cfg=sandbox_cfg or {},
+            session_id="session-123",
         )
-        req = ProviderRequest(prompt="Test", func_tool=None)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+    def test_sandbox_tools_returns_tool_list(self):
+        """Test that sandbox runtime returns a non-empty tool list."""
+        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
 
-        assert req.func_tool is not None
-        assert isinstance(req.func_tool, ToolSet)
+        tools = ComputerToolProvider().get_tools(self._ctx())
 
-    def test_apply_sandbox_tools_adds_required_tools(self):
-        """Test that all required sandbox tools are added."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={},
-        )
-        req = ProviderRequest(prompt="Test", func_tool=None)
+        assert tools
+        assert isinstance(tools, list)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+    def test_sandbox_tools_add_required_tools(self):
+        """Test that required sandbox tools are exposed."""
+        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
 
-        tool_names = req.func_tool.names()
+        tools = ComputerToolProvider().get_tools(self._ctx())
+
+        tool_names = {tool.name for tool in tools}
         assert "astrbot_execute_shell" in tool_names
         assert "astrbot_execute_ipython" in tool_names
         assert "astrbot_upload_file" in tool_names
         assert "astrbot_download_file" in tool_names
 
-    def test_apply_sandbox_tools_adds_sandbox_prompt(self):
-        """Test that sandbox mode prompt is added to system_prompt."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={},
+    def test_sandbox_prompt_addon_contains_sandbox_prompt(self):
+        """Test that sandbox mode prompt is exposed via prompt addon."""
+        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
+
+        prompt = ComputerToolProvider().get_system_prompt_addon(self._ctx())
+
+        assert "sandboxed environment" in prompt
+
+    def test_sandbox_tools_with_shipyard_booter(self):
+        """Test shipyard booter exposes 4 basic tools with complete config."""
+        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
+
+        tools = ComputerToolProvider().get_tools(
+            self._ctx(
+                sandbox_cfg={
+                    "booter": "shipyard",
+                    "shipyard_endpoint": "https://shipyard.example.com",
+                    "shipyard_access_token": "test-token",
+                }
+            )
         )
-        req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
 
-        module._apply_sandbox_tools(config, req, "session-123")
-
-        assert "sandboxed environment" in req.system_prompt
-
-    def test_apply_sandbox_tools_with_shipyard_booter(self):
-        """Test sandbox tools with shipyard booter registers 4 basic tools."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={
-                "booter": "shipyard",
-                "shipyard_endpoint": "https://shipyard.example.com",
-                "shipyard_access_token": "test-token",
-            },
-        )
-        req = ProviderRequest(prompt="Test", func_tool=None)
-
-        module._apply_sandbox_tools(config, req, "session-123")
-
-        names = req.func_tool.names()
+        names = {tool.name for tool in tools}
         assert "astrbot_execute_shell" in names
         assert len(names) == 4
 
-    def test_apply_sandbox_tools_neo_booter_registers_18_tools(self):
-        """Test sandbox tools with Neo booter registers all 18 tools."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={"booter": "shipyard_neo"},
+    def test_sandbox_tools_neo_booter_registers_18_tools(self):
+        """Test Neo booter exposes the full 18-tool set."""
+        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
+
+        tools = ComputerToolProvider().get_tools(
+            self._ctx(sandbox_cfg={"booter": "shipyard_neo"})
         )
-        req = ProviderRequest(prompt="Test", func_tool=None)
 
-        with patch(
-            "astrbot.core.computer.computer_client.get_sandbox_tools",
-            return_value=[],
-        ):
-            module._apply_sandbox_tools(config, req, "session-123")
-
-        names = req.func_tool.names()
+        names = {tool.name for tool in tools}
         assert "astrbot_create_skill_candidate" in names
         assert "astrbot_execute_browser" in names
         assert len(names) == 18
 
-    def test_apply_sandbox_tools_preserves_existing_toolset(self):
-        """Test that existing tools are preserved when adding sandbox tools."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={},
+    def test_sandbox_prompt_addon_appends_to_existing_system_prompt(self):
+        """Test sandbox prompt addon can be appended to an existing prompt."""
+        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
+
+        base_prompt = "Base prompt"
+        prompt = base_prompt + ComputerToolProvider().get_system_prompt_addon(
+            self._ctx()
         )
-        existing_toolset = ToolSet()
-        existing_tool = MagicMock()
-        existing_tool.name = "existing_tool"
-        existing_toolset.add_tool(existing_tool)
-        req = ProviderRequest(prompt="Test", func_tool=existing_toolset)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        assert prompt.startswith(base_prompt)
+        assert "sandboxed environment" in prompt
 
-        assert "existing_tool" in req.func_tool.names()
-        assert "astrbot_execute_shell" in req.func_tool.names()
+    def test_sandbox_prompt_addon_is_string(self):
+        """Test sandbox prompt addon is always a string."""
+        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
 
-    def test_apply_sandbox_tools_appends_to_existing_system_prompt(self):
-        """Test that sandbox prompt is appended to existing system prompt."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={},
-        )
-        req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
+        prompt = ComputerToolProvider().get_system_prompt_addon(self._ctx())
 
-        module._apply_sandbox_tools(config, req, "session-123")
-
-        assert req.system_prompt.startswith("Base prompt")
-        assert "sandboxed environment" in req.system_prompt
-
-    def test_apply_sandbox_tools_with_none_system_prompt(self):
-        """Test that sandbox prompt is applied when system_prompt is None."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={},
-        )
-        req = ProviderRequest(prompt="Test", system_prompt=None)
-
-        module._apply_sandbox_tools(config, req, "session-123")
-
-        assert isinstance(req.system_prompt, str)
-        assert "sandboxed environment" in req.system_prompt
+        assert isinstance(prompt, str)
+        assert "sandboxed environment" in prompt
