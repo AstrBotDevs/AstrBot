@@ -275,7 +275,8 @@ const uploadMode = ref('file') // 'file' or 'url'
 const uploadUrl = ref('')
 const llmProviders = ref<any[]>([])
 const uploadingTasks = ref<Map<string, any>>(new Map())
-const progressPollingInterval = ref<number | null>(null)
+const progressPollingInterval = ref<ReturnType<typeof setTimeout> | null>(null)
+const isUnmounted = ref(false)
 const tavilyConfigStatus = ref('loading') // 'loading', 'configured', 'not_configured', 'error'
 const showTavilyDialog = ref(false)
 
@@ -561,10 +562,11 @@ const startProgressPolling = (taskId: string) => {
     stopProgressPolling()
   }
 
-  progressPollingInterval.value = window.setInterval(async () => {
+  const poll = async () => {
     try {
       const response = await axios.get('/api/kb/document/upload/progress', {
-        params: { task_id: taskId }
+        params: { task_id: taskId },
+        timeout: 4000
       })
 
       if (response.data.status === 'ok') {
@@ -593,6 +595,9 @@ const startProgressPolling = (taskId: string) => {
             }
             return doc
           })
+          // 继续轮询
+          if (isUnmounted.value) return
+          progressPollingInterval.value = setTimeout(poll, 500)
         } else if (status === 'completed') {
           // 任务完成
           stopProgressPolling()
@@ -621,6 +626,10 @@ const startProgressPolling = (taskId: string) => {
           documents.value = documents.value.filter(doc => doc.taskId !== taskId)
 
           showSnackbar(`上传失败: ${data.error || '未知错误'}`, 'error')
+        } else {
+          // 其他状态，继续轮询
+          if (isUnmounted.value) return
+          progressPollingInterval.value = setTimeout(poll, 500)
         }
       } else {
         // 任务不存在，停止轮询
@@ -630,14 +639,19 @@ const startProgressPolling = (taskId: string) => {
     } catch (error) {
       console.error('Failed to fetch progress:', error)
       // 不立即停止，允许重试
+      if (isUnmounted.value) return
+      progressPollingInterval.value = setTimeout(poll, 500)
     }
-  }, 500) // 每500ms轮询一次
+  }
+
+  // 开始轮询
+  poll()
 }
 
 // 停止轮询进度
 const stopProgressPolling = () => {
   if (progressPollingInterval.value) {
-    clearInterval(progressPollingInterval.value)
+    clearTimeout(progressPollingInterval.value)
     progressPollingInterval.value = null
   }
 }
@@ -805,6 +819,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  isUnmounted.value = true
   stopProgressPolling()
 })
 </script>
