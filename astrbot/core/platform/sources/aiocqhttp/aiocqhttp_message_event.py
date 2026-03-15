@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 
 from aiocqhttp import CQHttp, Event
 
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     At,
@@ -156,8 +157,29 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     payload["user_id"] = session_id
                     await bot.call_action("send_private_forward_msg", **payload)
             elif isinstance(seg, File):
-                d = await cls._from_segment_to_dict(seg)
-                await cls._dispatch_send(bot, event, is_group, session_id, [d])
+                # 使用 OneBot V11 文件 API 发送文件
+                file_path = seg.file_ or seg.url
+                if not file_path:
+                    logger.warning("无法发送文件：文件路径或 URL 为空。")
+                    continue
+
+                file_name = seg.name or "file"
+                session_id_int = (
+                    int(session_id) if session_id and session_id.isdigit() else None
+                )
+
+                if session_id_int is None:
+                    logger.warning(f"无法发送文件：无效的 session_id: {session_id}")
+                    continue
+
+                if is_group:
+                    await bot.send_group_file(
+                        group_id=session_id_int, file=file_path, name=file_name
+                    )
+                else:
+                    await bot.send_private_file(
+                        user_id=session_id_int, file=file_path, name=file_name
+                    )
             else:
                 messages = await cls._parse_onebot_json(MessageChain([seg]))
                 if not messages:
