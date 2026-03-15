@@ -647,6 +647,35 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             async for resp in self.step():
                 yield resp
 
+    # Default timeout for individual tool execution (seconds).
+    # Override via provider_config["tool_exec_timeout"] or per-tool timeout attribute.
+    DEFAULT_TOOL_TIMEOUT: float = 120.0
+
+    @staticmethod
+    async def _iter_with_timeout(
+        aiter: T.AsyncGenerator, timeout: float, label: str = ""
+    ) -> T.AsyncGenerator:
+        """Wrap an async generator with a per-item timeout.
+
+        If a single iteration (i.e. the tool producing one result chunk)
+        takes longer than *timeout* seconds, an asyncio.TimeoutError is raised
+        so the caller can record the failure and move on.
+        """
+        try:
+            while True:
+                try:
+                    item = await asyncio.wait_for(aiter.__anext__(), timeout=timeout)
+                    yield item
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError:
+                    logger.error(
+                        "Tool '%s' timed out after %.0fs", label, timeout
+                    )
+                    raise
+        finally:
+            await aiter.aclose()
+
     async def _handle_function_tools(
         self,
         req: ProviderRequest,
@@ -747,6 +776,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 except Exception as e:
                     logger.error(f"Error in on_tool_start hook: {e}", exc_info=True)
 
+                tool_timeout = getattr(
+                    func_tool, "timeout", None
+                ) or self.provider.provider_config.get(
+                    "tool_exec_timeout", self.DEFAULT_TOOL_TIMEOUT
+                )
+
                 executor = self.tool_executor.execute(
                     tool=func_tool,
                     run_context=self.run_context,
@@ -754,7 +789,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
 
                 _final_resp: CallToolResult | None = None
-                async for resp in executor:  # type: ignore
+                async for resp in self._iter_with_timeout(executor, tool_timeout, func_tool_name):  # type: ignore
                     if isinstance(resp, CallToolResult):
                         res = resp
                         _final_resp = resp
@@ -854,6 +889,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)
+            except asyncio.TimeoutError:
+                _append_tool_call_result(
+                    func_tool_id,
+                    f"error: Tool '{func_tool_name}' timed out. Consider increasing the timeout or simplifying the request.",
+                )
             except Exception as e:
                 logger.warning(traceback.format_exc())
                 _append_tool_call_result(
