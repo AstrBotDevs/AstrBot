@@ -128,7 +128,16 @@
       </v-btn>
     </div>
 
-    <v-text-field
+    <!-- 若 string 类型且标记了 widget: 'palette'，则渲染调色盘 -->
+	<PaletteEditor
+      v-else-if="itemMeta?.type === 'string' && itemMeta?.widget === WIDGET_PALETTE"
+      :model-value="modelValue"
+      @update:model-value="emitUpdate"
+      :format="itemMeta?.widget_props?.format"
+      class="config-field"
+    />
+
+	<v-text-field
       v-else-if="itemMeta?.type === 'string'"
       :model-value="modelValue"
       @update:model-value="emitUpdate"
@@ -233,6 +242,8 @@ import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
+import PaletteEditor from './PaletteEditor.vue'
+import { WIDGET_PALETTE } from '@/utils/color'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 const props = defineProps({
