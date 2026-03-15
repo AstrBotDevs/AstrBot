@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 223 icons */
+/* Auto-generated MDI subset – 229 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -64,6 +64,10 @@
   content: "\F0045";
 }
 
+.mdi-arrow-down-thin::before {
+  content: "\F19B3";
+}
+
 .mdi-arrow-left::before {
   content: "\F004D";
 }
@@ -86,6 +90,10 @@
 
 .mdi-arrow-up-circle::before {
   content: "\F0CE1";
+}
+
+.mdi-arrow-up-thin::before {
+  content: "\F19B2";
 }
 
 .mdi-backup-restore::before {
@@ -158,6 +166,10 @@
 
 .mdi-checkbox-marked::before {
   content: "\F0132";
+}
+
+.mdi-checkbox-multiple-marked-outline::before {
+  content: "\F0139";
 }
 
 .mdi-chevron-double-left::before {
@@ -404,6 +416,10 @@
   content: "\F0234";
 }
 
+.mdi-filter-variant::before {
+  content: "\F0236";
+}
+
 .mdi-flash::before {
   content: "\F0241";
 }
@@ -522,6 +538,10 @@
 
 .mdi-key-plus::before {
   content: "\F0309";
+}
+
+.mdi-keyboard-outline::before {
+  content: "\F097B";
 }
 
 .mdi-label::before {
@@ -648,6 +668,10 @@
   content: "\F03E4";
 }
 
+.mdi-pause-circle-outline::before {
+  content: "\F03E6";
+}
+
 .mdi-pencil::before {
   content: "\F03EB";
 }
@@ -670,6 +694,10 @@
 
 .mdi-play::before {
   content: "\F040A";
+}
+
+.mdi-play-circle-outline::before {
+  content: "\F040D";
 }
 
 .mdi-plus::before {
@@ -766,10 +794,6 @@
 
 .mdi-sort-ascending::before {
   content: "\F04BC";
-}
-
-.mdi-sort-descending::before {
-  content: "\F04BD";
 }
 
 .mdi-sort-variant::before {
@@ -913,6 +937,13 @@
 }
 
 /* Utility classes (extracted from @mdi/font) */
+/* MaterialDesignIcons.com */
+
+.mdi-blank::before {
+  content: "\F68C";
+  visibility: hidden;
+}
+
 .mdi-18px.mdi-set, .mdi-18px.mdi:before {
   font-size: 18px;
 }
