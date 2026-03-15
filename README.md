@@ -206,6 +206,10 @@ Connect AstrBot to your favorite chat platform.
 
 Issues and Pull Requests are always welcome! Feel free to submit your changes to this project :)
 
+These are the tech stack used:
+
+![Stack Fingerprint](https://stackfingerprint.vercel.app/api/card?repo=AstrBotDevs/AstrBot&theme=slate&layout=banner&size=md&icons=color&pills=round)
+
 ### How to Contribute
 
 You can contribute by reviewing issues or helping with pull request reviews. Any issues or PRs are welcome to encourage community participation. Of course, these are just suggestions—you can contribute in any way you like. For adding new features, please discuss through an Issue first.
