@@ -111,6 +111,12 @@ class AstrBotDashboard:
             else:
                 self.data_path = os.path.abspath(user_dist)
 
+        if self.enable_webui and not (Path(self.data_path) / "index.html").exists():
+            raise RuntimeError(
+                f"Dashboard static assets not found: index.html is missing in {self.data_path}. "
+                "Please run the WebUI build step."
+            )
+
     def _init_app(self):
         """初始化 Quart 应用"""
         global APP
