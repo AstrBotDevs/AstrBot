@@ -49,7 +49,10 @@
                     }}
                   </p>
                   <div class="d-flex align-center">
-                    <div style="max-width: 300px" class="flex-grow-1 mr-2">
+                    <div
+                      style="max-width: 100%; min-width: 200px"
+                      class="flex-grow-1 mr-2"
+                    >
                       <v-text-field
                         v-model="apiBaseUrl"
                         label="Backend URL"
