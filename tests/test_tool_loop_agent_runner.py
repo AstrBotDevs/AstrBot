@@ -1,5 +1,6 @@
 import os
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -84,6 +85,29 @@ class MockToolExecutor:
 
             result = CallToolResult(
                 content=[TextContent(type="text", text="工具执行结果")]
+            )
+            yield result
+
+        return generator()
+
+
+class MockMixedContentToolExecutor:
+    """模拟返回图片 + 文本的工具执行器"""
+
+    @classmethod
+    def execute(cls, tool, run_context, **tool_args):
+        async def generator():
+            from mcp.types import CallToolResult, ImageContent, TextContent
+
+            result = CallToolResult(
+                content=[
+                    ImageContent(
+                        type="image",
+                        data="dGVzdA==",
+                        mimeType="image/png",
+                    ),
+                    TextContent(type="text", text="直播间标题：新游首发：零~红蝶~"),
+                ]
             )
             yield result
 
@@ -370,6 +394,66 @@ async def test_hooks_called_with_max_step(
     assert mock_hooks.agent_done_called, "on_agent_done应该被调用"
     assert mock_hooks.tool_start_called, "on_tool_start应该被调用"
     assert mock_hooks.tool_end_called, "on_tool_end应该被调用"
+
+
+@pytest.mark.asyncio
+async def test_tool_result_includes_all_calltoolresult_content(
+    runner, mock_provider, provider_request, mock_hooks, monkeypatch
+):
+    """工具返回多个 content 项时，tool result 应包含全部内容。"""
+
+    from astrbot.core.agent.tool_image_cache import tool_image_cache
+
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 1
+
+    saved_images = []
+
+    def fake_save_image(
+        base64_data, tool_call_id, tool_name, index=0, mime_type="image/png"
+    ):
+        saved_images.append(
+            {
+                "base64_data": base64_data,
+                "tool_call_id": tool_call_id,
+                "tool_name": tool_name,
+                "index": index,
+                "mime_type": mime_type,
+            }
+        )
+        return SimpleNamespace(file_path=f"/tmp/{tool_call_id}_{index}.png")
+
+    monkeypatch.setattr(tool_image_cache, "save_image", fake_save_image)
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=MockMixedContentToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    tool_messages = [
+        m for m in runner.run_context.messages if getattr(m, "role", None) == "tool"
+    ]
+    assert len(tool_messages) == 1
+
+    content = str(tool_messages[0].content)
+    assert "Image returned and cached at path='/tmp/call_123_0.png'." in content
+    assert "直播间标题：新游首发：零~红蝶~" in content
+    assert saved_images == [
+        {
+            "base64_data": "dGVzdA==",
+            "tool_call_id": "call_123",
+            "tool_name": "test_tool",
+            "index": 0,
+            "mime_type": "image/png",
+        }
+    ]
 
 
 @pytest.mark.asyncio
