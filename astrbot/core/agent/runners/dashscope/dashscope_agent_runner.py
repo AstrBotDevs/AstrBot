@@ -302,7 +302,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
 
         while True:
             try:
-                item_type, item_data = await asyncio.get_event_loop().run_in_executor(
+                item_type, item_data = await asyncio.get_running_loop().run_in_executor(
                     None, response_queue.get, True, 1
                 )
             except queue.Empty:
@@ -388,7 +388,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
 
         # 发起请求
         partial = functools.partial(Application.call, **payload)
-        response = await asyncio.get_event_loop().run_in_executor(None, partial)
+        response = await asyncio.get_running_loop().run_in_executor(None, partial)
 
         async for resp in self._handle_streaming_response(response, session_id):
             yield resp
