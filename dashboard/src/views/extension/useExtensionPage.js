@@ -18,6 +18,9 @@ import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
 import { useExtensionShareCode } from "./useExtensionShareCode";
+import { useShareSelection } from "./useShareSelection";
+import { runBatchWithProgress } from "./useBatchWithProgress";
+import { useLoadingDialog } from "./useLoadingDialog";
 
 const useRandomPluginsDisplay = ({ activeTab, marketSearch, currentPage }) => {
   const showRandomPlugins = ref(true);
@@ -132,27 +135,17 @@ export const useExtensionPage = () => {
     return false;
   };
   const showReserved = ref(getInitialShowReserved());
-  const isShareMode = ref(false);
-  const selectedSharePluginNames = ref(new Set());
-  const cancelShareMode = () => {
-    isShareMode.value = false;
-    selectedSharePluginNames.value = new Set();
-  };
-  const toggleShareMode = () => {
-    if (isShareMode.value) {
-      cancelShareMode();
-      return;
-    }
-    isShareMode.value = true;
-    selectedSharePluginNames.value = new Set();
-  };
-  const normalizePluginNames = (pluginNames = []) =>
-    pluginNames.filter((name) => typeof name === "string" && name.length > 0);
-  const updateSelectedSharePlugins = (updater) => {
-    const nextSelected = new Set(selectedSharePluginNames.value);
-    updater(nextSelected);
-    selectedSharePluginNames.value = nextSelected;
-  };
+  const {
+    isActive: isShareMode,
+    selected: selectedSharePluginNames,
+    toggleMode: toggleShareMode,
+    clear: cancelShareMode,
+    toggleItem: toggleSharePluginSelection,
+    toggleAll: toggleShareSelectAll,
+    isSelected: isSharePluginSelected,
+    areAllSelected: areAllSharePluginsSelected,
+    count: selectedSharePluginCount,
+  } = useShareSelection();
   const confirmShareSelection = async () => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
     const selectedNames = selectedSharePluginNames.value;
@@ -188,49 +181,6 @@ export const useExtensionPage = () => {
       cancelShareMode();
     }
   };
-  const toggleSharePluginSelection = (pluginName) => {
-    if (!isShareMode.value || !pluginName) {
-      return;
-    }
-    updateSelectedSharePlugins((nextSelected) => {
-      if (nextSelected.has(pluginName)) {
-        nextSelected.delete(pluginName);
-      } else {
-        nextSelected.add(pluginName);
-      }
-    });
-  };
-  const toggleShareSelectAll = (pluginNames = []) => {
-    if (!isShareMode.value) {
-      return;
-    }
-    const names = normalizePluginNames(pluginNames);
-    if (names.length === 0) {
-      return;
-    }
-    const allSelected = names.every((name) =>
-      selectedSharePluginNames.value.has(name),
-    );
-    updateSelectedSharePlugins((nextSelected) => {
-      if (allSelected) {
-        names.forEach((name) => nextSelected.delete(name));
-        return;
-      }
-      names.forEach((name) => nextSelected.add(name));
-    });
-  };
-  const areAllSharePluginsSelected = (pluginNames = []) => {
-    const names = normalizePluginNames(pluginNames);
-    if (names.length === 0) {
-      return false;
-    }
-    return names.every((name) => selectedSharePluginNames.value.has(name));
-  };
-  const isSharePluginSelected = (pluginName) =>
-    !!pluginName && selectedSharePluginNames.value.has(pluginName);
-  const selectedSharePluginCount = computed(
-    () => selectedSharePluginNames.value.size,
-  );
   const snack_message = ref("");
   const snack_show = ref(false);
   const snack_success = ref("success");
@@ -240,19 +190,25 @@ export const useExtensionPage = () => {
     config: {},
   });
   const pluginMarketData = ref([]);
-  const defaultProgress = () => ({
-    enabled: false,
-    current: 0,
-    total: 0,
-    label: "",
-  });
   const loadingDialog = reactive({
     show: false,
     title: tm("dialogs.loading.title"),
     statusCode: 0, // 0: loading, 1: success, 2: error,
     result: "",
-    progress: defaultProgress(),
+    progress: {
+      enabled: false,
+      current: 0,
+      total: 0,
+      label: "",
+    },
   });
+  const {
+    reset: resetLoadingDialog,
+    start: startLoadingDialog,
+    startProgress: startLoadingDialogProgress,
+    updateProgress: updateLoadingDialogProgress,
+    finish: onLoadingDialogResult,
+  } = useLoadingDialog(loadingDialog, tm);
   const showPluginInfoDialog = ref(false);
   const selectedPlugin = ref({});
   const curr_namespace = ref("");
@@ -659,24 +615,6 @@ export const useExtensionPage = () => {
     snack_success.value = success;
   };
   
-  const resetLoadingDialog = () => {
-    Object.assign(loadingDialog, {
-      show: false,
-      title: tm("dialogs.loading.title"),
-      statusCode: 0,
-      result: "",
-      progress: defaultProgress(),
-    });
-  };
-  
-  const onLoadingDialogResult = (statusCode, result, timeToClose = 2000) => {
-    loadingDialog.statusCode = statusCode;
-    loadingDialog.result = result;
-    loadingDialog.progress.enabled = false;
-    if (timeToClose === -1) return;
-    setTimeout(resetLoadingDialog, timeToClose);
-  };
-  
   const failedPluginsDict = ref({});
   const failedPluginItems = computed(() =>
     buildFailedPluginItems(failedPluginsDict.value),
@@ -871,9 +809,7 @@ export const useExtensionPage = () => {
       return;
     }
   
-    resetLoadingDialog();
-    loadingDialog.title = tm("status.loading");
-    loadingDialog.show = true;
+    startLoadingDialog(tm("status.loading"));
     try {
       const res = await axios.post("/api/plugin/update", {
         name: extension_name,
@@ -937,9 +873,7 @@ export const useExtensionPage = () => {
   const updateAllExtensions = async () => {
     if (updatingAll.value || updatableExtensions.value.length === 0) return;
     updatingAll.value = true;
-    resetLoadingDialog();
-    loadingDialog.title = tm("status.loading");
-    loadingDialog.show = true;
+    startLoadingDialog(tm("status.loading"));
   
     const targets = updatableExtensions.value.map((ext) => ext.name);
     try {
@@ -1416,11 +1350,9 @@ export const useExtensionPage = () => {
     repos,
     { ignoreVersionCheck, onProgress } = {},
   ) => {
-    const failedItems = [];
-    let successCount = 0;
-
-    for (const [index, repoUrl] of repos.entries()) {
-      try {
+    const { results } = await runBatchWithProgress(
+      repos,
+      async (repoUrl) => {
         const res = await performInstallRequest({
           source: "url",
           ignoreVersionCheck,
@@ -1428,26 +1360,39 @@ export const useExtensionPage = () => {
         });
         const resData = res.data || {};
         if (resData.status === "ok") {
+          return { success: true, url: repoUrl };
+        }
+        return {
+          success: false,
+          url: repoUrl,
+          message: resData.message || tm("messages.installFailed"),
+        };
+      },
+      ({ current, total, item }) => {
+        onProgress?.({ current, total, repoUrl: item });
+      },
+    );
+
+    const failedItems = [];
+    let successCount = 0;
+    results.forEach((result) => {
+      if (result.status === "fulfilled") {
+        if (result.value.success) {
           successCount += 1;
         } else {
           failedItems.push({
-            url: repoUrl,
-            message: resData.message || tm("messages.installFailed"),
+            url: result.value.url,
+            message: result.value.message || tm("messages.installFailed"),
           });
         }
-      } catch (err) {
-        failedItems.push({
-          url: repoUrl,
-          message: resolveErrorMessage(err, tm("messages.installFailed")),
-        });
-      } finally {
-        onProgress?.({
-          current: index + 1,
-          total: repos.length,
-          repoUrl,
-        });
+        return;
       }
-    }
+
+      failedItems.push({
+        url: tm("status.unknown"),
+        message: resolveErrorMessage(result.reason, tm("messages.installFailed")),
+      });
+    });
 
     return {
       successCount,
@@ -1477,13 +1422,7 @@ export const useExtensionPage = () => {
     }
 
     loading_.value = true;
-    resetLoadingDialog();
-    loadingDialog.title = tm("status.loading");
-    loadingDialog.show = true;
-    loadingDialog.progress.enabled = true;
-    loadingDialog.progress.current = 0;
-    loadingDialog.progress.total = uniqueRepos.length;
-    loadingDialog.progress.label = "";
+    startLoadingDialogProgress(tm("status.loading"), uniqueRepos.length);
 
     let successCount = 0;
     let failedItems = [];
@@ -1491,9 +1430,7 @@ export const useExtensionPage = () => {
       const batchResult = await installReposBatch(uniqueRepos, {
         ignoreVersionCheck,
         onProgress: ({ current, total, repoUrl }) => {
-          loadingDialog.progress.current = current;
-          loadingDialog.progress.total = total;
-          loadingDialog.progress.label = repoUrl;
+          updateLoadingDialogProgress(current, total, repoUrl);
         },
       });
       successCount = batchResult.successCount;
@@ -1563,9 +1500,7 @@ export const useExtensionPage = () => {
       return;
     }
     loading_.value = true;
-    resetLoadingDialog();
-    loadingDialog.title = tm("status.loading");
-    loadingDialog.show = true;
+    startLoadingDialog(tm("status.loading"));
 
     const source = upload_file.value !== null ? "file" : "url";
     toast(
