@@ -61,18 +61,42 @@ class DiscordPlatformEvent(AstrMessageEvent):
             logger.error(f"[Discord] 解析消息链时失败: {e}", exc_info=True)
             return
 
-        kwargs = {}
-        if content:
-            kwargs["content"] = content
-        if files:
-            kwargs["files"] = files
-        if view:
-            kwargs["view"] = view
-        if embeds:
-            kwargs["embeds"] = embeds
-        if reference_message_id and not self.interaction_followup_webhook:
-            kwargs["reference"] = self.client.get_message(int(reference_message_id))
-        if not kwargs:
+        text_chunks = self._split_content(content)
+        if len(text_chunks) > 1:
+            logger.info(
+                f"[Discord] 消息内容超长，已自动分段发送，共 {len(text_chunks)} 段。"
+            )
+
+        payloads: list[dict] = []
+        if text_chunks:
+            for index, chunk in enumerate(text_chunks):
+                kwargs = {"content": chunk}
+                if index == 0:
+                    if files:
+                        kwargs["files"] = files
+                    if view:
+                        kwargs["view"] = view
+                    if embeds:
+                        kwargs["embeds"] = embeds
+                    if reference_message_id and not self.interaction_followup_webhook:
+                        kwargs["reference"] = self.client.get_message(
+                            int(reference_message_id)
+                        )
+                payloads.append(kwargs)
+        else:
+            kwargs = {}
+            if files:
+                kwargs["files"] = files
+            if view:
+                kwargs["view"] = view
+            if embeds:
+                kwargs["embeds"] = embeds
+            if reference_message_id and not self.interaction_followup_webhook:
+                kwargs["reference"] = self.client.get_message(int(reference_message_id))
+            if kwargs:
+                payloads.append(kwargs)
+
+        if not payloads:
             logger.debug("[Discord] 尝试发送空消息，已忽略。")
             return
 
@@ -80,7 +104,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
         try:
             # -- 斜杠指令/交互上下文 --
             if self.interaction_followup_webhook:
-                await self.interaction_followup_webhook.send(**kwargs)
+                for payload in payloads:
+                    await self.interaction_followup_webhook.send(**payload)
 
             # -- 常规消息上下文 --
             else:
@@ -90,12 +115,133 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 if not isinstance(channel, discord.abc.Messageable):
                     logger.error(f"[Discord] 频道 {channel.id} 不是可发送消息的类型")
                     return
-                await channel.send(**kwargs)
+                for payload in payloads:
+                    await channel.send(**payload)
 
         except Exception as e:
             logger.error(f"[Discord] 发送消息时发生未知错误: {e}", exc_info=True)
 
         await super().send(message)
+
+    def _split_content(self, content: str, limit: int = 2000) -> list[str]:
+        if not content:
+            return []
+
+        chunks: list[str] = []
+        index = 0
+        in_code_block = False
+        fence_marker = "```"
+        fence_lang = ""
+
+        while index < len(content):
+            prefix = f"{fence_marker}{fence_lang}\n" if in_code_block else ""
+            max_body_length = limit - len(prefix)
+            if max_body_length <= 0:
+                break
+
+            end = min(len(content), index + max_body_length)
+            if end < len(content):
+                newline_pos = content.rfind("\n", index, end)
+                if newline_pos > index:
+                    candidate = content[index : newline_pos + 1]
+                    if not (
+                        not in_code_block and self._is_standalone_fence_line(candidate)
+                    ):
+                        end = newline_pos + 1
+
+            body = content[index:end]
+            (
+                end_in_code_block,
+                end_fence_marker,
+                end_fence_lang,
+            ) = self._parse_code_fence_state(
+                body,
+                in_code_block,
+                fence_marker,
+                fence_lang,
+            )
+
+            suffix = f"\n{end_fence_marker}" if end_in_code_block else ""
+
+            while len(prefix) + len(body) + len(suffix) > limit and len(body) > 1:
+                end -= 1
+                body = content[index:end]
+                (
+                    end_in_code_block,
+                    end_fence_marker,
+                    end_fence_lang,
+                ) = self._parse_code_fence_state(
+                    body,
+                    in_code_block,
+                    fence_marker,
+                    fence_lang,
+                )
+                suffix = f"\n{end_fence_marker}" if end_in_code_block else ""
+
+            if not body:
+                break
+
+            chunk = f"{prefix}{body}{suffix}"
+            if len(chunk) > limit:
+                raw_end = min(len(content), index + limit)
+                raw_body = content[index:raw_end]
+                chunks.append(raw_body)
+                (
+                    in_code_block,
+                    fence_marker,
+                    fence_lang,
+                ) = self._parse_code_fence_state(
+                    raw_body,
+                    in_code_block,
+                    fence_marker,
+                    fence_lang,
+                )
+                index = raw_end
+                continue
+
+            chunks.append(chunk)
+            index = end
+            in_code_block = end_in_code_block
+            fence_marker = end_fence_marker
+            fence_lang = end_fence_lang
+
+        return chunks
+
+    def _parse_code_fence_state(
+        self,
+        text: str,
+        in_code_block: bool,
+        fence_marker: str,
+        fence_lang: str,
+    ) -> tuple[bool, str, str]:
+        for line in text.splitlines():
+            stripped = line.lstrip()
+            marker = ""
+            if stripped.startswith("```"):
+                marker = "```"
+            elif stripped.startswith("~~~"):
+                marker = "~~~"
+
+            if not marker:
+                continue
+
+            if not in_code_block:
+                in_code_block = True
+                fence_marker = marker
+                fence_lang = stripped[3:].strip()[:100]
+            elif marker == fence_marker:
+                in_code_block = False
+                fence_lang = ""
+
+        return in_code_block, fence_marker, fence_lang
+
+    def _is_standalone_fence_line(self, text: str) -> bool:
+        stripped = text.strip("\r\n")
+        if not stripped or "\n" in stripped:
+            return False
+
+        stripped = stripped.lstrip()
+        return stripped.startswith("```") or stripped.startswith("~~~")
 
     async def send_streaming(
         self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
@@ -262,9 +408,6 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 logger.debug(f"[Discord] 忽略了不支持的消息组件: {i.type}")
 
         content = "".join(content_parts)
-        if len(content) > 2000:
-            logger.warning("[Discord] 消息内容超过2000字符，将被截断。")
-            content = content[:2000]
         return content, files, view, embeds, reference_message_id
 
     async def react(self, emoji: str) -> None:
