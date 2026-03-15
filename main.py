@@ -94,8 +94,14 @@ async def check_dashboard_files(webui_dir: str | None = None):
     try:
         await download_dashboard(version=f"v{VERSION}", latest=False)
     except Exception as e:
-        logger.critical(f"下载管理面板文件失败: {e}。")
-        return None
+        logger.warning(
+            f"下载指定版本(v{VERSION})的管理面板文件失败: {e}，尝试下载最新版本。"
+        )
+        try:
+            await download_dashboard(latest=True)
+        except Exception as e:
+            logger.critical(f"下载管理面板文件失败: {e}。")
+            return None
 
     logger.info("管理面板下载完成。")
     return data_dist_path

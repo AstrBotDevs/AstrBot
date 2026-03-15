@@ -913,6 +913,50 @@ class FunctionToolManager:
         except Exception as e:
             raise Exception(f"同步 ModelScope MCP 服务器时发生错误: {e!s}")
 
+    # Module paths whose ``get_all_tools()`` function returns internal tools.
+    # To add a new internal-tool provider, simply append its module path here.
+    _INTERNAL_TOOL_PROVIDERS: list[str] = [
+        "astrbot.core.tools.cron_tools",
+        "astrbot.core.tools.kb_query",
+        "astrbot.core.tools.send_message",
+        "astrbot.core.computer.computer_tool_provider",
+    ]
+
+    def register_internal_tools(self) -> None:
+        """Register AstrBot built-in tools from all internal providers.
+
+        Each provider module is expected to expose a ``get_all_tools()``
+        function that returns a list of ``FunctionTool`` instances.
+
+        Tools are marked with ``source='internal'`` so the WebUI can
+        distinguish them from plugin and MCP tools, and subagent
+        orchestrators can resolve them by name.
+
+        Duplicate registration is idempotent (skips if name already present).
+        """
+        import importlib
+
+        existing_names = {t.name for t in self.func_list}
+
+        for module_path in self._INTERNAL_TOOL_PROVIDERS:
+            try:
+                mod = importlib.import_module(module_path)
+                provider_tools = mod.get_all_tools()
+            except Exception as e:
+                logger.warning(
+                    "Failed to load internal tool provider %s: %s",
+                    module_path,
+                    e,
+                )
+                continue
+
+            for tool in provider_tools:
+                tool.source = "internal"
+                if tool.name not in existing_names:
+                    self.func_list.append(tool)
+                    existing_names.add(tool.name)
+                    logger.info("Registered internal tool: %s", tool.name)
+
     def __str__(self) -> str:
         return str(self.func_list)
 
