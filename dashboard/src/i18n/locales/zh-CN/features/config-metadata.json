@@ -815,6 +815,17 @@
             }
           }
         },
+        "telethon_userbot": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Telethon Userbot] 启用预回应表情"
+            },
+            "emojis": {
+              "description": "表情列表(Unicode)",
+              "hint": "Telethon Userbot 依赖 Telegram 反应能力,通常应使用 Telegram 支持的固定反应集合。"
+            }
+          }
+        },
         "discord": {
           "pre_ack_emoji": {
             "enable": {

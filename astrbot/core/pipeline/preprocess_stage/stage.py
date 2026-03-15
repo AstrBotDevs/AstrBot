@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 from astrbot.core import logger
 from astrbot.core.message.components import Image, Plain, Record
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.capabilities import PRE_ACK_EMOJI_SUPPORTED_PLATFORMS
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
@@ -27,7 +28,6 @@ class PreProcessStage(Stage):
     ) -> None | AsyncGenerator[None, None]:
         """在处理事件之前的预处理"""
         # 平台特异配置：platform_specific.<platform>.pre_ack_emoji
-        supported = {"telegram", "lark", "discord"}
         platform = event.get_platform_name()
         cfg = (
             self.config.get("platform_specific", {})
@@ -37,7 +37,7 @@ class PreProcessStage(Stage):
         emojis = cfg.get("emojis") or []
         if (
             cfg.get("enable", False)
-            and platform in supported
+            and platform in PRE_ACK_EMOJI_SUPPORTED_PLATFORMS
             and emojis
             and event.is_at_or_wake_command
         ):

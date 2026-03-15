@@ -1344,7 +1344,9 @@ class ConfigRoute(Route):
         tools = tool_mgr.get_func_desc_openai_style()
         return Response().ok(tools).__dict__
 
-    async def _register_platform_logo(self, platform, platform_default_tmpl) -> None:
+    async def _register_platform_logo(
+        self, platform, platform_logo_tokens: dict[str, str]
+    ) -> None:
         """注册平台logo文件并生成访问令牌"""
         if not platform.logo_path:
             return
@@ -1354,12 +1356,7 @@ class ConfigRoute(Route):
             cache_key = f"{platform.name}:{platform.logo_path}"
             if cache_key in self._logo_token_cache:
                 cached_token = self._logo_token_cache[cache_key]
-                # 确保platform_default_tmpl[platform.name]存在且为字典
-                if platform.name not in platform_default_tmpl or not isinstance(
-                    platform_default_tmpl[platform.name], dict
-                ):
-                    platform_default_tmpl[platform.name] = {}
-                platform_default_tmpl[platform.name]["logo_token"] = cached_token
+                platform_logo_tokens[platform.name] = cached_token
                 logger.debug(f"Using cached logo token for platform {platform.name}")
                 return
 
@@ -1382,14 +1379,7 @@ class ConfigRoute(Route):
                     logo_file_path,
                     timeout=3600,
                 )
-
-                # 确保platform_default_tmpl[platform.name]存在且为字典
-                if platform.name not in platform_default_tmpl or not isinstance(
-                    platform_default_tmpl[platform.name], dict
-                ):
-                    platform_default_tmpl[platform.name] = {}
-
-                platform_default_tmpl[platform.name]["logo_token"] = logo_token
+                platform_logo_tokens[platform.name] = logo_token
 
                 # 缓存token
                 self._logo_token_cache[cache_key] = logo_token
@@ -1452,9 +1442,9 @@ class ConfigRoute(Route):
         ]["metadata"]["platform"]
 
         # 平台适配器的默认配置模板注入
-        platform_default_tmpl = metadata["platform_group"]["metadata"]["platform"][
-            "config_template"
-        ]
+        platform_metadata = metadata["platform_group"]["metadata"]["platform"]
+        platform_default_tmpl = platform_metadata["config_template"]
+        platform_logo_tokens = platform_metadata.setdefault("logo_tokens", {})
 
         # 收集平台的 i18n 翻译数据
         platform_i18n_translations = {}
@@ -1476,7 +1466,7 @@ class ConfigRoute(Route):
                 # 收集logo注册任务
                 if platform.logo_path:
                     logo_registration_tasks.append(
-                        self._register_platform_logo(platform, platform_default_tmpl),
+                        self._register_platform_logo(platform, platform_logo_tokens),
                     )
 
         # 并行执行logo注册

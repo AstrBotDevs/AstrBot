@@ -66,6 +66,7 @@ The values in `support_platforms` must be keys from `ADAPTER_NAME_2_TYPE`. Curre
 - `aiocqhttp`
 - `qq_official`
 - `telegram`
+- `telethon_userbot`
 - `wecom`
 - `lark`
 - `dingtalk`
