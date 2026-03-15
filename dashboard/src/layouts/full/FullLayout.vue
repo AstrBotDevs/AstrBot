@@ -22,6 +22,10 @@ const isChatPage = computed(() => {
   return route.path.startsWith('/chat');
 });
 
+const isTracePage = computed(() => {
+  return route.path === '/trace';
+});
+
 const showSidebar = computed(() => {
   return customizer.viewMode === 'bot';
 });
@@ -111,19 +115,19 @@ onMounted(() => {
       <VerticalHeaderVue />
       <VerticalSidebarVue v-if="showSidebar" />
       <v-main :style="{
-        height: showChatPage ? 'calc(100vh - 55px)' : undefined,
-        overflow: showChatPage ? 'hidden' : undefined
+        height: (showChatPage || isTracePage) ? 'calc(100vh - 50px)' : undefined,
+        overflow: (showChatPage || isTracePage) ? 'hidden' : undefined
       }">
         <v-container
           fluid
           class="page-wrapper"
-          :class="{ 'chat-mode-container': showChatPage }"
+          :class="{ 'chat-mode-container': (showChatPage || isTracePage) }"
           :style="{
-            height: showChatPage ? '100%' : 'calc(100% - 8px)',
-            padding: (isChatPage || showChatPage) ? '0' : undefined,
-            minHeight: showChatPage ? 'unset' : undefined
+            height: (showChatPage || isTracePage) ? '100%' : 'calc(100% - 8px)',
+            padding: (isChatPage || showChatPage || isTracePage) ? '0' : undefined,
+            minHeight: (showChatPage || isTracePage) ? 'unset' : undefined
           }">
-          <div :style="{ height: '100%', width: '100%', overflow: showChatPage ? 'hidden' : undefined }">
+          <div :style="{ height: '100%', width: '100%', overflow: (showChatPage || isTracePage) ? 'hidden' : undefined }">
             <div v-if="showChatPage" style="height: 100%; width: 100%; overflow: hidden;">
               <Chat />
             </div>

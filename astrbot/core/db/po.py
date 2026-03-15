@@ -435,6 +435,32 @@ class CommandConflict(TimestampMixin, SQLModel, table=True):
     )
 
 
+class TraceEntry(SQLModel, table=True):
+    """Persisted trace record — one row per completed AstrMessageEvent processing cycle."""
+
+    __tablename__: str = "traces"
+
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
+    trace_id: str = Field(unique=True, index=True)
+    umo: str | None = Field(default=None, index=True)
+    sender_name: str | None = Field(default=None)
+    message_outline: str | None = Field(default=None)
+    started_at: float = Field(default=0.0)
+    finished_at: float | None = Field(default=None)
+    duration_ms: float | None = Field(default=None)
+    status: str = Field(default="ok")
+    spans: dict = Field(default_factory=dict, sa_type=JSON)
+    input_text: str | None = Field(default=None, sa_type=Text)
+    output_text: str | None = Field(default=None, sa_type=Text)
+    total_input_tokens: int = Field(default=0)
+    total_output_tokens: int = Field(default=0)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 @dataclass
 class Conversation:
     """LLM 对话类

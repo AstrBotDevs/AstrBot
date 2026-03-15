@@ -440,11 +440,12 @@ async def _ensure_persona_and_skills(
         if router_prompt:
             req.system_prompt += f"\n{router_prompt}\n"
     try:
-        event.trace.record(
-            "sel_persona",
+        persona_span = event.trace.child("sel_persona", span_type="pipeline_stage")
+        persona_span.set_input(
             persona_id=persona_id,
             persona_toolset=persona_toolset.names(),
         )
+        persona_span.finish()
     except Exception:
         pass
 

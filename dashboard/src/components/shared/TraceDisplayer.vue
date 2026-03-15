@@ -1,487 +1,456 @@
 <script setup>
+defineOptions({ name: 'TraceDisplayer' });
+
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import axios from 'axios';
 import { EventSourcePolyfill } from 'event-source-polyfill';
+
+const props = defineProps({
+  selectedTraceId: {
+    type: String,
+    default: null
+  }
+});
+
+const emit = defineEmits(['select-trace']);
+
+// ── state ──────────────────────────────────────────────────────────────────
+const traces = ref([]);
+const pagination = ref({ page: 1, page_size: 20, total: 0 });
+const loading = ref(false);
+const searchText = ref('');
+const umoFilter = ref('');
+const highlightMap = ref({});
+const traceCount = ref(0);
+const traceDiskUsage = ref('0 B');
+const dbDiskUsage = ref('0 B');
+
+let highlightTimers = {};
+let eventSource = null;
+let retryTimer = null;
+let retryAttempts = 0;
+const MAX_RETRY = 10;
+
+// ── fetch ───────────────────────────────────────────────────────────────────
+async function fetchTraces(page = 1) {
+  loading.value = true;
+  try {
+    const params = { page, page_size: pagination.value.page_size };
+    if (searchText.value) params.search = searchText.value;
+    if (umoFilter.value) params.umo = umoFilter.value;
+    const res = await axios.get('/api/trace/list', { params });
+    if (res.data?.status === 'ok') {
+      traces.value = res.data.data.traces;
+      pagination.value = { ...pagination.value, ...res.data.data.pagination };
+      traceCount.value = res.data.data.pagination.total;
+      traceDiskUsage.value = res.data.data.trace_disk_usage;
+      dbDiskUsage.value = res.data.data.db_disk_usage;
+    }
+  } catch (err) {
+    console.error('Failed to fetch traces:', err);
+  } finally {
+    loading.value = false;
+  }
+}
+
+function onSearch() {
+  pagination.value.page = 1;
+  fetchTraces(1);
+}
+
+function onPageChange(page) {
+  fetchTraces(page);
+}
+
+// ── SSE (real-time new traces) ─────────────────────────────────────────────
+function connectSSE() {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+  const token = localStorage.getItem('token');
+  eventSource = new EventSourcePolyfill('/api/live-log', {
+    headers: { Authorization: token ? `Bearer ${token}` : '' },
+    heartbeatTimeout: 300000,
+    withCredentials: true
+  });
+
+  eventSource.onopen = () => { retryAttempts = 0; };
+
+  eventSource.onmessage = (e) => {
+    try {
+      const payload = JSON.parse(e.data);
+      if (payload?.type !== 'trace_complete') return;
+      // new trace completed – prepend if on first page
+      if (pagination.value.page === 1) {
+        prependTrace(payload);
+      }
+    } catch {}
+  };
+
+  eventSource.onerror = () => {
+    if (eventSource) { eventSource.close(); eventSource = null; }
+    if (retryAttempts >= MAX_RETRY) return;
+    const delay = Math.min(1000 * Math.pow(2, retryAttempts), 30000);
+    retryTimer = setTimeout(() => { retryAttempts++; connectSSE(); }, delay);
+  };
+}
+
+function prependTrace(payload) {
+  // Avoid duplicates
+  if (traces.value.some(t => t.trace_id === payload.trace_id)) return;
+  traces.value.unshift({
+    trace_id: payload.trace_id,
+    umo: payload.umo,
+    sender_name: payload.sender_name,
+    message_outline: payload.message_outline,
+    started_at: payload.started_at,
+    finished_at: payload.finished_at,
+    duration_ms: payload.duration_ms,
+    status: payload.status,
+    total_input_tokens: payload.total_input_tokens ?? 0,
+    total_output_tokens: payload.total_output_tokens ?? 0
+  });
+  pagination.value.total += 1;
+  traceCount.value += 1; // Update traceCount as well
+  // trim to page_size
+  if (traces.value.length > pagination.value.page_size) {
+    traces.value.pop();
+  }
+  pulseTrace(payload.trace_id);
+}
+
+function pulseTrace(traceId) {
+  if (highlightTimers[traceId]) clearTimeout(highlightTimers[traceId]);
+  highlightMap.value = { ...highlightMap.value, [traceId]: true };
+  highlightTimers[traceId] = setTimeout(() => {
+    const next = { ...highlightMap.value };
+    delete next[traceId];
+    highlightMap.value = next;
+    delete highlightTimers[traceId];
+  }, 1500);
+}
+
+// ── utils ───────────────────────────────────────────────────────────────────
+function formatTime(ts) {
+  if (!ts) return '-';
+  return new Date(ts * 1000).toLocaleString();
+}
+
+function formatDuration(ms) {
+  if (ms == null) return '-';
+  if (ms < 1000) return `${ms.toFixed(0)}ms`;
+  return `${(ms / 1000).toFixed(2)}s`;
+}
+
+function statusColor(status) {
+  if (status === 'ok') return 'success';
+  if (status === 'error') return 'error';
+  if (status === 'filtered') return 'warning';
+  return 'default';
+}
+
+// ── lifecycle ────────────────────────────────────────────────────────────────
+onMounted(async () => {
+  await fetchTraces();
+  connectSSE();
+});
+
+onBeforeUnmount(() => {
+  if (eventSource) { eventSource.close(); eventSource = null; }
+  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+  Object.values(highlightTimers).forEach(clearTimeout);
+  highlightTimers = {};
+});
 </script>
 
 <template>
-  <div class="trace-wrapper">
-    <div class="trace-table" ref="scrollEl" :style="{ height: tableHeight }">
-      <div class="trace-row trace-header">
-        <div class="trace-cell time">Time</div>
-        <div class="trace-cell span">Event ID</div>
-        <div class="trace-cell umo">UMO</div>
-        <!-- <div class="trace-cell count">Records</div> -->
-        <!-- <div class="trace-cell last">Last</div> -->
-        <div class="trace-cell sender">Sender</div>
-        <div class="trace-cell outline">Outline</div>
-        <div class="trace-cell fields"></div>
+  <div class="trace-displayer">
+    <!-- toolbar -->
+    <div class="trace-toolbar">
+      <v-text-field
+        v-model="searchText"
+        density="compact"
+        variant="outlined"
+        rounded="lg"
+        hide-details
+        placeholder="Search message..."
+        prepend-inner-icon="mdi-magnify"
+        clearable
+        style="max-width: 260px;"
+        @keyup.enter="onSearch"
+        @click:clear="onSearch"
+      />
+      <v-text-field
+        v-model="umoFilter"
+        density="compact"
+        variant="outlined"
+        rounded="lg"
+        hide-details
+        placeholder="Filter UMO..."
+        clearable
+        style="max-width: 200px;"
+        @keyup.enter="onSearch"
+        @click:clear="onSearch"
+      />
+      <v-btn
+        density="compact"
+        variant="tonal"
+        color="primary"
+        icon="mdi-magnify"
+        rounded="lg"
+        @click="onSearch"
+      />
+      <v-spacer />
+      <div class="trace-toolbar-left">
+        <span class="trace-count">Count: {{ traceCount }}</span>
+        <div v-if="traceDiskUsage" class="trace-disk-tag ml-3" title="Trace Log Size">
+          <v-icon size="12" class="mr-1">mdi-harddisk</v-icon>
+          <span>{{ traceDiskUsage }}</span>
+        </div>
       </div>
-      <div class="trace-group" :class="{ highlight: highlightMap[event.span_id] }" v-for="event in events"
-        :key="event.span_id">
-        <div class="trace-row trace-event">
-          <div class="trace-cell time">{{ formatTime(event.first_time) }}</div>
-          <div class="trace-cell span" :title="event.span_id">
-            <div class="event-title">
-              {{ shortSpan(event.span_id) }}
+    </div>
+
+    <!-- table -->
+    <div class="trace-table-wrap">
+      <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-1" />
+
+      <div v-if="traces.length === 0 && !loading" class="trace-empty">
+        <v-icon size="40" color="grey-lighten-1" class="mb-2">mdi-chart-timeline-variant</v-icon>
+        <div>No traces yet. Enable tracing and send a message.</div>
+      </div>
+
+      <div
+        v-for="trace in traces"
+        :key="trace.trace_id"
+        class="trace-row"
+        :class="{
+          highlight: highlightMap[trace.trace_id],
+          selected: trace.trace_id === selectedTraceId
+        }"
+        @click="$emit('select-trace', trace.trace_id)"
+      >
+        <!-- status indicator -->
+        <div class="trace-status-bar" :class="`status-${trace.status}`" />
+
+        <div class="trace-row-content">
+          <div class="trace-row-top">
+            <v-chip size="x-small" :color="statusColor(trace.status)" variant="flat" rounded="pill" class="mr-2">
+              {{ trace.status }}
+            </v-chip>
+            <span class="trace-sender">{{ trace.sender_name || '-' }}</span>
+            <span class="trace-outline">{{ trace.message_outline || '-' }}</span>
+            <v-spacer />
+            <span class="trace-duration">{{ formatDuration(trace.duration_ms) }}</span>
+          </div>
+          <div class="trace-row-bottom">
+            <span class="trace-time">{{ formatTime(trace.started_at) }}</span>
+            <span class="trace-umo ml-2">{{ trace.umo || '' }}</span>
+            <v-spacer />
+            <div v-if="trace.total_input_tokens" class="trace-tokens-tag">
+              <v-icon size="10" color="grey" class="mr-1">mdi-arrow-up-bold-outline</v-icon>
+              <span>{{ trace.total_input_tokens }}</span>
+              <v-icon size="10" color="grey" class="ml-2 mr-1">mdi-arrow-down-bold-outline</v-icon>
+              <span>{{ trace.total_output_tokens }}</span>
             </div>
           </div>
-          <div class="trace-cell umo">{{ event.umo }}</div>
-          <!-- <div class="trace-cell count">
-            <div class="event-meta">{{ event.records.length }}</div>
-          </div> -->
-          <!-- <div class="trace-cell last">
-            <div class="event-meta">{{ formatTime(event.last_time) }}</div>
-          </div> -->
-          <div class="trace-cell sender">
-            <div class="event-sub" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{
-              event.sender_name || '-' }}</div>
-          </div>
-          <div class="trace-cell outline">
-            <div class="event-sub outline">{{ event.message_outline || '-' }}</div>
-          </div>
-          <div class="trace-cell fields event-controls">
-            <v-btn size="x-small" variant="text" color="primary" @click="toggleEvent(event.span_id)">
-              {{ event.collapsed ? 'Expand' : 'Collapse' }}
-              <span v-if="event.hasAgentPrepare" class="agent-dot" />
-            </v-btn>
-          </div>
         </div>
-        <div class="trace-records" v-if="!event.collapsed">
-          <div class="trace-record" v-for="record in getVisibleRecords(event)" :key="record.key">
-            <div class="trace-record-time">{{ record.timeLabel }}</div>
-            <div class="trace-record-action">{{ record.action }}</div>
-            <pre class="trace-record-fields">{{ record.fieldsText }}</pre>
-          </div>
-          <div class="event-more" v-if="event.visibleCount < event.records.length">
-            <v-btn size="x-small" variant="tonal" color="primary" @click="showMore(event.span_id)">
-              Show more
-            </v-btn>
-          </div>
-        </div>
+
+        <v-icon size="16" color="grey" class="trace-row-arrow">mdi-chevron-right</v-icon>
       </div>
-      <div v-if="events.length === 0" class="trace-empty">No trace data yet.</div>
+    </div>
+
+    <!-- pagination -->
+    <div class="trace-pagination" v-show="pagination.total > pagination.page_size">
+      <v-pagination
+        v-model="pagination.page"
+        :length="Math.max(1, Math.ceil(pagination.total / pagination.page_size))"
+        density="compact"
+        rounded
+        @update:model-value="onPageChange"
+      />
     </div>
   </div>
 </template>
 
-<script>
-export default {
-  name: 'TraceDisplayer',
-  props: {
-    autoScroll: {
-      type: Boolean,
-      default: true
-    },
-    maxItems: {
-      type: Number,
-      default: 300
-    }
-  },
-  data() {
-    return {
-      events: [],
-      eventIndex: {},
-      highlightMap: {},
-      highlightTimers: {},
-      eventSource: null,
-      retryTimer: null,
-      retryAttempts: 0,
-      maxRetryAttempts: 10,
-      baseRetryDelay: 1000,
-      lastEventId: null,
-      tableHeight: 'auto'
-    };
-  },
-  async mounted() {
-    await this.fetchTraceHistory();
-    this.connectSSE();
-    this.updateTableHeight();
-    window.addEventListener('resize', this.updateTableHeight);
-  },
-  beforeUnmount() {
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
-    }
-    if (this.retryTimer) {
-      clearTimeout(this.retryTimer);
-      this.retryTimer = null;
-    }
-    this.retryAttempts = 0;
-    window.removeEventListener('resize', this.updateTableHeight);
-  },
-  methods: {
-    updateTableHeight() {
-      this.$nextTick(() => {
-        const el = this.$refs.scrollEl;
-        if (!el || typeof window === 'undefined') return;
-        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-        const offsetTop = el.getBoundingClientRect().top;
-        const height = Math.max(viewportHeight - offsetTop, 0);
-        this.tableHeight = `${height}px`;
-      });
-    },
-    async fetchTraceHistory() {
-      try {
-        const res = await axios.get('/api/log-history');
-        const logs = res.data?.data?.logs || [];
-        const traces = logs.filter((item) => item.type === 'trace');
-        this.processNewTraces(traces);
-      } catch (err) {
-        console.error('Failed to fetch trace history:', err);
-      }
-    },
-    connectSSE() {
-      if (this.eventSource) {
-        this.eventSource.close();
-        this.eventSource = null;
-      }
-
-      const token = localStorage.getItem('token');
-
-      this.eventSource = new EventSourcePolyfill('/api/live-log', {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : ''
-        },
-        heartbeatTimeout: 300000,
-        withCredentials: true
-      });
-
-      this.eventSource.onopen = () => {
-        this.retryAttempts = 0;
-        if (!this.lastEventId) {
-          this.fetchTraceHistory();
-        }
-      };
-
-      this.eventSource.onmessage = (event) => {
-        try {
-          if (event.lastEventId) {
-            this.lastEventId = event.lastEventId;
-          }
-
-          const payload = JSON.parse(event.data);
-          if (payload?.type !== 'trace') {
-            return;
-          }
-          this.processNewTraces([payload]);
-        } catch (e) {
-          console.error('Failed to parse trace payload:', e);
-        }
-      };
-
-      this.eventSource.onerror = (err) => {
-        if (this.eventSource) {
-          this.eventSource.close();
-          this.eventSource = null;
-        }
-
-        if (this.retryAttempts >= this.maxRetryAttempts) {
-          console.error('Trace stream reached max retry attempts.');
-          return;
-        }
-
-        const delay = Math.min(
-          this.baseRetryDelay * Math.pow(2, this.retryAttempts),
-          30000
-        );
-
-        if (this.retryTimer) {
-          clearTimeout(this.retryTimer);
-          this.retryTimer = null;
-        }
-
-        this.retryTimer = setTimeout(async () => {
-          this.retryAttempts++;
-          if (!this.lastEventId) {
-            await this.fetchTraceHistory();
-          }
-          this.connectSSE();
-        }, delay);
-      };
-    },
-    processNewTraces(newTraces) {
-      if (!newTraces || newTraces.length === 0) return;
-
-      let hasUpdate = false;
-      const touched = new Set();
-      newTraces.forEach((trace) => {
-        if (!trace.span_id) return;
-        const recordKey = `${trace.time}-${trace.span_id}-${trace.action}`;
-        let event = this.eventIndex[trace.span_id];
-        if (!event) {
-          event = {
-            span_id: trace.span_id,
-            name: trace.name,
-            umo: trace.umo,
-            sender_name: trace.sender_name,
-            message_outline: trace.message_outline,
-            first_time: trace.time,
-            last_time: trace.time,
-            collapsed: true,
-            visibleCount: 20,
-            records: [],
-            hasAgentPrepare: trace.action === 'astr_agent_prepare'
-          };
-          this.eventIndex[trace.span_id] = event;
-          this.events.push(event);
-          hasUpdate = true;
-        }
-
-        const exists = event.records.some((item) => item.key === recordKey);
-        if (exists) return;
-
-        event.records.push({
-          time: trace.time,
-          action: trace.action,
-          fieldsText: this.formatFields(trace.fields),
-          timeLabel: this.formatTime(trace.time),
-          key: recordKey
-        });
-        if (trace.action === 'astr_agent_prepare') {
-          event.hasAgentPrepare = true;
-        }
-        if (!event.first_time || trace.time < event.first_time) {
-          event.first_time = trace.time;
-        }
-        if (!event.last_time || trace.time > event.last_time) {
-          event.last_time = trace.time;
-        }
-        if (!event.sender_name && trace.sender_name) {
-          event.sender_name = trace.sender_name;
-        }
-        if (!event.message_outline && trace.message_outline) {
-          event.message_outline = trace.message_outline;
-        }
-        touched.add(trace.span_id);
-        hasUpdate = true;
-      });
-
-      if (hasUpdate) {
-        this.events.forEach((event) => {
-          event.records.sort((a, b) => b.time - a.time);
-        });
-        this.events.sort((a, b) => b.first_time - a.first_time);
-        if (this.events.length > this.maxItems) {
-          const overflow = this.events.length - this.maxItems;
-          const removed = this.events.splice(this.maxItems, overflow);
-          removed.forEach((event) => {
-            delete this.eventIndex[event.span_id];
-          });
-        }
-        touched.forEach((spanId) => {
-          this.pulseEvent(spanId);
-        });
-      }
-    },
-    scrollToBottom() {
-      const el = this.$refs.scrollEl;
-      if (!el) return;
-      el.scrollTop = el.scrollHeight;
-    },
-    toggleEvent(spanId) {
-      const event = this.eventIndex[spanId];
-      if (!event) return;
-      event.collapsed = !event.collapsed;
-    },
-    showMore(spanId) {
-      const event = this.eventIndex[spanId];
-      if (!event) return;
-      event.visibleCount = Math.min(event.records.length, event.visibleCount + 20);
-    },
-    pulseEvent(spanId) {
-      if (!spanId) return;
-      if (this.highlightTimers[spanId]) {
-        clearTimeout(this.highlightTimers[spanId]);
-      }
-      this.highlightMap = { ...this.highlightMap, [spanId]: true };
-      const remove = setTimeout(() => {
-        const next = { ...this.highlightMap };
-        delete next[spanId];
-        this.highlightMap = next;
-        const timers = { ...this.highlightTimers };
-        delete timers[spanId];
-        this.highlightTimers = timers;
-      }, 1200);
-      this.highlightTimers = { ...this.highlightTimers, [spanId]: remove };
-    },
-    getVisibleRecords(event) {
-      if (!event.records.length) return [];
-      return event.records.slice(0, event.visibleCount);
-    },
-    formatTime(ts) {
-      if (!ts) return '';
-      const date = new Date(ts * 1000);
-      const base = date.toLocaleString();
-      const ms = String(date.getMilliseconds()).padStart(3, '0');
-      return `${base}.${ms}`;
-    },
-    shortSpan(spanId) {
-      if (!spanId) return '';
-      return spanId.slice(0, 8);
-    },
-    formatFields(fields) {
-      if (!fields) return '';
-      try {
-        const text = JSON.stringify(fields, null, 2);
-        if (text.length > 2000) {
-          return `${text}`;
-        }
-        return text;
-      } catch (e) {
-        return String(fields);
-      }
-    }
-  }
-};
-</script>
-
 <style scoped>
-.trace-wrapper {
+.trace-displayer {
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  overflow: hidden;
 }
 
-.trace-table {
-  background: transparent;
-  border-radius: 0;
-  padding: 0;
-  height: 100%;
+.trace-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.trace-toolbar-left {
+  display: flex;
+  align-items: center;
+}
+
+.trace-count {
+  font-size: 14px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.trace-disk-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  color: rgba(var(--v-theme-primary), 0.8);
+  background: rgba(var(--v-theme-primary), 0.1);
+  padding: 1px 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(var(--v-theme-primary), 0.2);
+}
+
+.trace-table-wrap {
+  flex: 1;
   overflow-y: auto;
-  color: #2b3340;
-  font-family: 'Fira Code', monospace;
+  min-height: 0;
 }
 
 .trace-row {
-  display: grid;
-  grid-template-columns: 200px 100px 300px 90px 180px 140px 200px 1fr;
-  gap: 12px;
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.05);
+  cursor: pointer;
+  transition: background 0.12s;
+  position: relative;
 }
 
-.trace-group {
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  background: transparent;
-  padding: 8px 0;
+.trace-row:hover {
+  background: rgba(var(--v-theme-primary), 0.04);
 }
 
-.trace-group.highlight {
-  background: rgba(59, 130, 246, 0.08);
-  transition: background 0.6s ease;
+.trace-row.selected {
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-left: 2px solid rgba(var(--v-theme-primary), 0.6);
 }
 
-.trace-event {
-  align-items: start;
+.trace-row.highlight {
+  animation: pulse-bg 1.5s ease;
 }
 
-.trace-header {
-  font-weight: 600;
-  color: #6b7280;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.12);
-  padding-bottom: 10px;
+@keyframes pulse-bg {
+  0% { background: rgba(var(--v-theme-primary), 0.18); }
+  100% { background: transparent; }
 }
 
-.trace-cell {
+.trace-status-bar {
+  width: 4px;
+  flex-shrink: 0;
+  border-radius: 2px 0 0 2px;
+}
+
+.status-ok { background: rgb(var(--v-theme-success)); }
+.status-error { background: rgb(var(--v-theme-error)); }
+.status-filtered { background: rgb(var(--v-theme-warning)); }
+
+.trace-row-content {
+  flex: 1;
+  padding: 10px 14px;
+  min-width: 0;
+}
+
+.trace-row-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.trace-sender {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.trace-outline {
+  font-size: 13px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
 }
 
-.event-title {
-  font-weight: 600;
-  color: #1f2937;
+.trace-duration {
+  font-size: 13px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.event-meta {
-  font-size: 12px;
-  color: #6b7280;
-  margin-top: 4px;
-}
-
-.event-sub {
-  font-size: 12px;
-  color: #4b5563;
-  margin-top: 2px;
-  word-break: break-word;
-}
-
-.event-sub.outline {
-  color: #6b7280;
-}
-
-.event-controls {
+.trace-row-bottom {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
 }
 
-.agent-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #22c55e;
-  margin-left: 6px;
-  vertical-align: middle;
+.trace-time {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  white-space: nowrap;
 }
 
-.trace-cell.fields pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #4b5563;
+.trace-umo {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.35);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+.trace-tokens-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  padding: 1px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.trace-row-arrow {
+  flex-shrink: 0;
+  align-self: center;
+  margin-right: 8px;
 }
 
 .trace-empty {
-  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  font-size: 14px;
   text-align: center;
-  color: #6b7280;
+  gap: 4px;
 }
 
-@media (max-width: 1200px) {
-  .trace-row {
-    grid-template-columns: 140px 160px 300px 70px 140px 180px 1fr;
-  }
-
-  .trace-cell.fields {
-    grid-column: 1 / -1;
-  }
-}
-
-.trace-record {
-  display: grid;
-  grid-template-columns: 200px 120px 1fr;
-  gap: 8px;
-  padding: 2px 0;
-}
-
-.trace-record:last-child {
-  border-bottom: none;
-}
-
-.trace-record-time {
-  color: #6b7280;
-  font-size: 11px;
-}
-
-.trace-record-action {
-  color: #1f2937;
-  font-weight: 600;
-  font-size: 11px;
-}
-
-.trace-record-fields {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #4b5563;
-  font-size: 10px;
-}
-
-.event-more {
+.trace-pagination {
   display: flex;
   justify-content: center;
-  padding: 6px 0 2px;
-}
-
-.trace-records {
-  padding: 4px 0 2px 0;
+  align-items: center;
+  padding: 8px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  flex-shrink: 0;
+  min-height: 56px;
+  overflow: hidden;
 }
 </style>
