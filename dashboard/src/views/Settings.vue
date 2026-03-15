@@ -380,6 +380,11 @@
         </v-row>
       </v-list-item>
 
+      <v-list-item :subtitle="tm('style.autoSync.subtitle')" :title="tm('style.autoSync.title')">
+        <v-switch v-model="autoThemeSwitcher" :label="tm('style.autoSync.label')" color="primary" hide-details
+          class="ml-3" />
+      </v-list-item>
+
       <v-list-subheader>{{ tm("backup.title") }}</v-list-subheader>
 
       <v-list-item
@@ -567,6 +572,22 @@ const applyThemeColors = () => {
 
   toastStore.success(tm("common.saved"));
 };
+
+const autoThemeSwitcher = computed({
+  get: () => customizer.autoSwitchTheme,
+  set: (value) => {
+    customizer.SET_AUTO_SYNC(value);
+    if (value) {
+      // 启用时立即应用系统主题
+      customizer.APPLY_SYSTEM_THEME();
+
+      // 更新Vuetify主题
+      if (theme?.global?.name?.value) {
+        theme.global.name.value = customizer.uiTheme;
+      }
+    }
+  }
+});
 
 const wfr = ref(null);
 const migrationDialog = ref(null);

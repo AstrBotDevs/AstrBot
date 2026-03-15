@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import axios from "axios";
 import Logo from "@/components/shared/Logo.vue";
@@ -429,13 +429,24 @@ function updateDashboard() {
     });
 }
 
-function toggleDarkMode() {
-  const newTheme =
-    customizer.uiTheme === "PurpleThemeDark"
-      ? "PurpleTheme"
-      : "PurpleThemeDark";
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
+// 修改：使用状态管理切换主题
+function toggleTheme() {
+  customizer.TOGGLE_DARK_MODE();
+  theme.global.name.value = customizer.uiTheme;
+}
+
+function autoSwitchTheme() {
+  // 根据浏览器主题同步页面主题
+  customizer.APPLY_SYSTEM_THEME();
+  theme.global.name.value = customizer.uiTheme;
+}
+
+function autoSwitchThemeListener(e: MediaQueryListEvent) {
+  if (customizer.autoSwitchTheme) {
+    const newTheme = e.matches ? 'PurpleThemeDark' : 'PurpleTheme';
+    customizer.SET_UI_THEME(newTheme);
+    theme.global.name.value = newTheme;
+  }
 }
 
 function openReleaseNotesDialog(body: string, tag: string) {
@@ -509,6 +520,24 @@ const isChristmas = computed(() => {
   const month = today.getMonth() + 1; // getMonth() 返回 0-11
   const day = today.getDate();
   return month === 12 && day === 25;
+});
+
+onMounted(() => {
+  if (customizer.autoSwitchTheme) {
+    autoSwitchTheme();
+
+    // 添加监听器
+    if (typeof window !== 'undefined') {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', autoSwitchThemeListener);
+    }
+  }
+});
+
+onBeforeUnmount(() => {
+  // 移除监听器
+  if (typeof window !== 'undefined') {
+    window.matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', autoSwitchThemeListener)
+  }
 });
 </script>
 
@@ -713,14 +742,14 @@ const isChristmas = computed(() => {
 
         <!-- 主题切换 -->
         <v-list-item
-          @click="toggleDarkMode()"
+          @click="toggleTheme()"
           class="styled-menu-item"
           rounded="md"
         >
           <template v-slot:prepend>
             <v-icon>
               {{
-                useCustomizerStore().uiTheme === "PurpleThemeDark"
+                useCustomizerStore().isDarkTheme
                   ? "mdi-weather-night"
                   : "mdi-white-balance-sunny"
               }}
@@ -728,7 +757,7 @@ const isChristmas = computed(() => {
           </template>
           <v-list-item-title>
             {{
-              useCustomizerStore().uiTheme === "PurpleThemeDark"
+              useCustomizerStore().isDarkTheme
                 ? t("core.header.buttons.theme.light")
                 : t("core.header.buttons.theme.dark")
             }}
