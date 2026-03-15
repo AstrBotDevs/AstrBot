@@ -20,6 +20,7 @@ from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.bool_parser import parse_bool
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.io import get_local_ip_addresses
 
@@ -45,9 +46,7 @@ APP: Quart
 
 
 def _parse_env_bool(value: str | None, default: bool) -> bool:
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+    return parse_bool(value, default)
 
 
 class AstrBotJSONProvider(DefaultJSONProvider):

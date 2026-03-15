@@ -101,6 +101,15 @@ class ProviderGoogleGenAI(Provider):
             and threshold_str in self.THRESHOLD_MAPPING
         ]
 
+    def native_tools_enabled(self) -> bool:
+        return any(
+            [
+                self.provider_config.get("gm_native_coderunner", False),
+                self.provider_config.get("gm_native_search", False),
+                self.provider_config.get("gm_url_context", False),
+            ]
+        )
+
     async def _handle_api_error(self, e: APIError, keys: list[str]) -> bool:
         """处理API错误，返回是否需要重试"""
         if e.message is None:

@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import mcp
 import pytest
@@ -294,3 +295,70 @@ async def test_collect_handoff_image_urls_filters_extensionless_file_outside_tem
     )
 
     assert image_urls == []
+
+
+@pytest.mark.asyncio
+async def test_wake_main_agent_for_background_result_native_tools_do_not_inject_send_message_tool():
+    event = SimpleNamespace(
+        unified_msg_origin="test_platform:FriendMessage:session123",
+        role="member",
+    )
+    ctx = SimpleNamespace(
+        get_config=lambda: {"provider_settings": {}}, conversation_manager=MagicMock()
+    )
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=ctx))
+    conversation = SimpleNamespace(history="[]")
+    provider = MagicMock()
+    provider.native_tools_enabled.return_value = True
+    captured_req: dict = {}
+
+    class _AsyncEmptyIter:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise StopAsyncIteration
+
+    runner = SimpleNamespace(
+        step_until_done=lambda _limit: _AsyncEmptyIter(),
+        get_final_llm_resp=lambda: None,
+    )
+
+    async def _fake_build_main_agent(*, event, plugin_context, config, req):
+        captured_req["req"] = req
+        return SimpleNamespace(agent_runner=runner, provider=provider)
+
+    with (
+        patch(
+            "astrbot.core.astr_main_agent._get_session_conv",
+            AsyncMock(return_value=conversation),
+        ),
+        patch(
+            "astrbot.core.astr_main_agent._select_provider",
+            return_value=provider,
+        ),
+        patch(
+            "astrbot.core.astr_main_agent.build_main_agent",
+            AsyncMock(side_effect=_fake_build_main_agent),
+        ),
+        patch(
+            "astrbot.core.astr_agent_tool_exec.persist_agent_history",
+            AsyncMock(),
+        ),
+    ):
+        await FunctionToolExecutor._wake_main_agent_for_background_result(
+            run_context=run_context,
+            task_id="task-id",
+            tool_name="demo",
+            result_text="done",
+            tool_args={},
+            note="background done",
+            summary_name="demo",
+        )
+
+    req = captured_req["req"]
+    assert req.func_tool is None
+    assert "send_message_to_user" not in req.system_prompt
+    assert "send_message_to_user" not in req.prompt
+    assert "Proactive delivery tools are unavailable" in req.system_prompt
+    assert "Proactive delivery tools are unavailable" in req.prompt

@@ -3,6 +3,7 @@ import uuid
 
 from astrbot.core import astrbot_config, logger
 from astrbot.core.config.default import WEBHOOK_SUPPORTED_PLATFORMS
+from astrbot.core.utils.bool_parser import parse_bool
 
 
 def _get_callback_api_base() -> str:
@@ -26,7 +27,7 @@ def _is_dashboard_ssl_enabled() -> bool:
         "ASTRBOT_DASHBOARD_SSL_ENABLE"
     )
     if env_ssl is not None:
-        return env_ssl.strip().lower() in {"1", "true", "yes", "on"}
+        return parse_bool(env_ssl)
 
     try:
         return bool(astrbot_config.get("dashboard", {}).get("ssl", {}).get("enable"))
