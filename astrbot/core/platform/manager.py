@@ -122,8 +122,17 @@ class PlatformManager:
                     )
                     return
 
+            platform_id = platform_config["id"]
+            if platform_id in self._inst_map:
+                logger.warning(
+                    "平台适配器 %s(%s) 已存在，正在先终止旧实例再重新加载。",
+                    platform_config["type"],
+                    platform_id,
+                )
+                await self.terminate_platform(platform_id)
+
             logger.info(
-                f"载入 {platform_config['type']}({platform_config['id']}) 平台适配器 ...",
+                f"载入 {platform_config['type']}({platform_id}) 平台适配器 ...",
             )
             match platform_config["type"]:
                 case "aiocqhttp":
@@ -255,24 +264,29 @@ class PlatformManager:
                 await self.terminate_platform(key)
 
     async def terminate_platform(self, platform_id: str) -> None:
-        if platform_id in self._inst_map:
-            logger.info(f"正在尝试终止 {platform_id} 平台适配器 ...")
+        tracked_inst: Platform | None = None
+        info = self._inst_map.pop(platform_id, None)
+        if info:
+            tracked_inst = info["inst"]
 
-            # client_id = self._inst_map.pop(platform_id, None)
-            info = self._inst_map.pop(platform_id)
-            client_id = info["client_id"]
-            inst: Platform = info["inst"]
-            try:
-                self.platform_insts.remove(
-                    next(
-                        inst
-                        for inst in self.platform_insts
-                        if inst.client_self_id == client_id
-                    ),
-                )
-            except Exception:
-                logger.warning(f"可能未完全移除 {platform_id} 平台适配器")
+        insts_to_terminate: list[Platform] = []
+        if tracked_inst is not None:
+            insts_to_terminate.append(tracked_inst)
 
+        for inst in list(self.platform_insts):
+            if inst in insts_to_terminate:
+                continue
+            if getattr(inst, "config", {}).get("id") == platform_id:
+                insts_to_terminate.append(inst)
+
+        if not insts_to_terminate:
+            return
+
+        logger.info(f"正在尝试终止 {platform_id} 平台适配器 ...")
+
+        for inst in insts_to_terminate:
+            while inst in self.platform_insts:
+                self.platform_insts.remove(inst)
             await self._terminate_inst_and_tasks(inst)
 
     async def terminate(self) -> None:
