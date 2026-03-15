@@ -293,8 +293,15 @@ class ToolSet:
                 if properties:
                     result["properties"] = properties
 
-            if "items" in schema:
-                result["items"] = convert_schema(schema["items"])
+            if target_type == "array":
+                items_schema = schema.get("items")
+                if isinstance(items_schema, dict):
+                    result["items"] = convert_schema(items_schema)
+                else:
+                    # Gemini requires array schemas to include an `items` schema.
+                    # JSON Schema allows omitting it, so fall back to a permissive
+                    # string item schema instead of emitting an invalid declaration.
+                    result["items"] = {"type": "string"}
 
             return result
 
