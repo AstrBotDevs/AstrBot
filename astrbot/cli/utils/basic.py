@@ -45,13 +45,16 @@ async def check_dashboard(astrbot_root: Path) -> None:
                     abort=True,
                 ):
                     click.echo("Installing dashboard...")
-                    await download_dashboard(
-                        path="data/dashboard.zip",
-                        extract_path=str(astrbot_root / "data"),
-                        version=f"v{VERSION}",
-                        latest=False,
-                    )
-                    click.echo("Dashboard installed successfully")
+                    try:
+                        await download_dashboard(
+                            path="data/dashboard.zip",
+                            extract_path=str(astrbot_root / "data"),
+                            version=f"v{VERSION}",
+                            latest=False,
+                        )
+                        click.echo("Dashboard installed successfully")
+                    except Exception as e:
+                        click.echo(f"Failed to install dashboard: {e}")
 
             case str():
                 if VersionComparator.compare_version(VERSION, dashboard_version) <= 0:

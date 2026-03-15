@@ -39,7 +39,9 @@ jobs:
 
       - name: Run smoke tests
         run: |
-          uv run main.py &
+          # uv run main.py &
+          uv tool install -e . --force
+          astrbot run --backend-only
           APP_PID=$!
 
           echo "Waiting for application to start..."
