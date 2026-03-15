@@ -25,6 +25,16 @@ from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
 from astrbot.core.utils.metrics import Metric
 
 
+def _is_gif(path: str) -> bool:
+    if path.lower().endswith(".gif"):
+        return True
+    try:
+        with open(path, "rb") as f:
+            return f.read(6) in (b"GIF87a", b"GIF89a")
+    except OSError:
+        return False
+
+
 class TelegramPlatformEvent(AstrMessageEvent):
     # Telegram 的最大消息长度限制
     MAX_MESSAGE_LENGTH = 4096
@@ -291,7 +301,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         await client.send_message(text=chunk, **cast(Any, payload))
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
-                await client.send_photo(photo=image_path, **cast(Any, payload))
+                if _is_gif(image_path):
+                    send_coro = client.send_animation
+                    media_kwarg = {"animation": image_path}
+                else:
+                    send_coro = client.send_photo
+                    media_kwarg = {"photo": image_path}
+                await send_coro(**media_kwarg, **cast(Any, payload))
             elif isinstance(i, File):
                 path = await i.get_file()
                 name = i.name or os.path.basename(path)
@@ -406,12 +422,20 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 on_text(i.text)
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
+                if _is_gif(image_path):
+                    action = ChatAction.UPLOAD_VIDEO
+                    send_coro = self.client.send_animation
+                    media_kwarg = {"animation": image_path}
+                else:
+                    action = ChatAction.UPLOAD_PHOTO
+                    send_coro = self.client.send_photo
+                    media_kwarg = {"photo": image_path}
                 await self._send_media_with_action(
                     self.client,
-                    ChatAction.UPLOAD_PHOTO,
-                    self.client.send_photo,
+                    action,
+                    send_coro,
                     user_name=user_name,
-                    photo=image_path,
+                    **media_kwarg,
                     **cast(Any, payload),
                 )
             elif isinstance(i, File):
