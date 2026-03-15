@@ -196,7 +196,7 @@ import ItemCard from '@/components/shared/ItemCard.vue';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n, mergeDynamicTranslations } from '@/i18n/composables';
-import { getPlatformIcon, getTutorialLink } from '@/utils/platformUtils';
+import { resolvePlatformIcon, getTutorialLink } from '@/utils/platformUtils';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog
@@ -301,13 +301,7 @@ export default {
 
     // 从工具函数导入
     getPlatformIcon(platform_id) {
-      // 首先检查是否有来自插件的 logo_token
-      const logoToken = this.metadata['platform_group']?.metadata?.platform?.logo_tokens?.[platform_id];
-      if (logoToken) {
-        // 通过文件服务访问插件提供的 logo
-        return `/api/file/${logoToken}`;
-      }
-      return getPlatformIcon(platform_id);
+      return resolvePlatformIcon(this.metadata, platform_id);
     },
 
     getConfig() {

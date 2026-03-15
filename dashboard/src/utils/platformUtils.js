@@ -40,6 +40,20 @@ export function getPlatformIcon(name) {
 }
 
 /**
+ * Resolve platform icon from plugin metadata first, then fallback to built-in icons.
+ * @param {Object} metadata - Config metadata payload
+ * @param {string} platformType - Platform name or type
+ * @returns {string|undefined} Icon URL
+ */
+export function resolvePlatformIcon(metadata, platformType) {
+  const logoToken = metadata?.platform_group?.metadata?.platform?.logo_tokens?.[platformType];
+  if (logoToken) {
+    return `/api/file/${logoToken}`;
+  }
+  return getPlatformIcon(platformType);
+}
+
+/**
  * 获取平台教程链接
  * @param {string} platformType - 平台类型
  * @returns {string} 教程链接
