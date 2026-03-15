@@ -158,6 +158,7 @@ AstrBot をよく使うチャットプラットフォームに接続できます
 | [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | コミュニティ |
 | [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | コミュニティ |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | コミュニティ |
+| [Telethon Userbot](https://github.com/outlook84/astrbot_plugin_telethon_adapter) | コミュニティ |
 
 
 ## サポートされているモデルサービス

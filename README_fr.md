@@ -158,6 +158,7 @@ Connectez AstrBot à vos plateformes de chat préférées.
 | [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | Communauté |
 | [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | Communauté |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | Communauté |
+| [Telethon Userbot](https://github.com/outlook84/astrbot_plugin_telethon_adapter) | Communauté |
 
 ## Services de modèles pris en charge
 

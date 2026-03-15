@@ -97,6 +97,7 @@ export function getPlatformDisplayName(platformId) {
     lark: 'lark (飞书)',
     dingtalk: 'dingtalk (钉钉)',
     telegram: 'telegram (Telegram)',
+    telethon_userbot: 'telethon_userbot (Telegram Userbot)',
     discord: 'discord (Discord)',
     misskey: 'misskey (Misskey)',
     slack: 'slack (Slack)',

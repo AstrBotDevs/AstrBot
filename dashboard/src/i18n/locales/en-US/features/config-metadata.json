@@ -813,6 +813,17 @@
             }
           }
         },
+        "telethon_userbot": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Telethon Userbot] Enable Pre-acknowledgment Emoji"
+            },
+            "emojis": {
+              "description": "Emoji List (Unicode)",
+              "hint": "Telethon Userbot relies on Telegram reactions, so you should usually use the same fixed reaction set supported by Telegram."
+            }
+          }
+        },
         "discord": {
           "pre_ack_emoji": {
             "enable": {

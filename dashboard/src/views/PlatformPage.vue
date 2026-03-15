@@ -302,10 +302,10 @@ export default {
     // 从工具函数导入
     getPlatformIcon(platform_id) {
       // 首先检查是否有来自插件的 logo_token
-      const template = this.metadata['platform_group']?.metadata?.platform?.config_template?.[platform_id];
-      if (template && template.logo_token) {
-          // 通过文件服务访问插件提供的 logo
-        return `/api/file/${template.logo_token}`;
+      const logoToken = this.metadata['platform_group']?.metadata?.platform?.logo_tokens?.[platform_id];
+      if (logoToken) {
+        // 通过文件服务访问插件提供的 logo
+        return `/api/file/${logoToken}`;
       }
       return getPlatformIcon(platform_id);
     },

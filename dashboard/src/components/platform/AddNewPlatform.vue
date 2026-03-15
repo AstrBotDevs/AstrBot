@@ -524,9 +524,9 @@ export default {
   methods: {
     getPlatformIcon(platformType) {
       // Check for plugin-provided logo_token first
-      const template = this.platformTemplates?.[platformType];
-      if (template && template.logo_token) {
-        return `/api/file/${template.logo_token}`;
+      const logoToken = this.metadata?.platform_group?.metadata?.platform?.logo_tokens?.[platformType];
+      if (logoToken) {
+        return `/api/file/${logoToken}`;
       }
       return getPlatformIcon(platformType);
     },

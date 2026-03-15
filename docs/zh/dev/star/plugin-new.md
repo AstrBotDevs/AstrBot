@@ -68,6 +68,7 @@ support_platforms:
 - `aiocqhttp`
 - `qq_official`
 - `telegram`
+- `telethon_userbot`
 - `wecom`
 - `lark`
 - `dingtalk`

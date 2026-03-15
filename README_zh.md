@@ -158,6 +158,7 @@ yay -S astrbot-git
 | [**Matrix**](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | 社区维护 |
 | [**KOOK**](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | 社区维护 |
 | [**VoceChat**](https://github.com/HikariFroya/astrbot_plugin_vocechat) | 社区维护 |
+| [**Telethon Userbot**](https://github.com/outlook84/astrbot_plugin_telethon_adapter) | 社区维护 |
 
 ## 支持的模型提供商
 

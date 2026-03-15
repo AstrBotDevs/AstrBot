@@ -10,6 +10,7 @@ class PlatformAdapterType(enum.Flag):
     AIOCQHTTP = enum.auto()
     QQOFFICIAL = enum.auto()
     TELEGRAM = enum.auto()
+    TELETHON_USERBOT = enum.auto()
     WECOM = enum.auto()
     WECOM_AI_BOT = enum.auto()
     LARK = enum.auto()
@@ -26,6 +27,7 @@ class PlatformAdapterType(enum.Flag):
         AIOCQHTTP
         | QQOFFICIAL
         | TELEGRAM
+        | TELETHON_USERBOT
         | WECOM
         | WECOM_AI_BOT
         | LARK
@@ -45,6 +47,7 @@ ADAPTER_NAME_2_TYPE = {
     "aiocqhttp": PlatformAdapterType.AIOCQHTTP,
     "qq_official": PlatformAdapterType.QQOFFICIAL,
     "telegram": PlatformAdapterType.TELEGRAM,
+    "telethon_userbot": PlatformAdapterType.TELETHON_USERBOT,
     "wecom": PlatformAdapterType.WECOM,
     "wecom_ai_bot": PlatformAdapterType.WECOM_AI_BOT,
     "lark": PlatformAdapterType.LARK,
