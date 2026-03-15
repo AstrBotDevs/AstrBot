@@ -179,7 +179,11 @@ class SessionWaiter:
                     session._handler_task = asyncio.create_task(
                         session.handler(session.session_controller, event),
                     )
-                    await session._handler_task
+                    try:
+                        await session._handler_task
+                    finally:
+                        # 任务完成后重置引用，明确当前没有 handler 在运行
+                        session._handler_task = None
                 except Exception as e:
                     session.session_controller.stop(e)
 
