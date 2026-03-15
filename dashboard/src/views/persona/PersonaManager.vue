@@ -36,6 +36,10 @@
                             rounded="lg">
                             {{ tm('folder.createButton') }}
                         </v-btn>
+                        <v-btn variant="outlined" prepend-icon="mdi-upload" @click="handleImportPersona"
+                            rounded="lg">
+                            {{ tm('buttons.import') }}
+                        </v-btn>
                     </div>
                 </div>
 
@@ -80,7 +84,7 @@
                                 xl="3">
                                 <PersonaCard :persona="persona" @view="viewPersona(persona)"
                                     @edit="editPersona(persona)" @move="openMovePersonaDialog(persona)"
-                                    @delete="confirmDeletePersona(persona)" />
+                                    @export="handleExportPersona(persona)" @delete="confirmDeletePersona(persona)" />
                             </v-col>
                         </v-row>
                     </div>
@@ -406,7 +410,7 @@ export default defineComponent({
         await this.initialize();
     },
     methods: {
-        ...mapActions(usePersonaStore, ['loadFolderTree', 'navigateToFolder', 'updateFolder', 'deleteFolder', 'deletePersona', 'refreshCurrentFolder', 'movePersonaToFolder']),
+        ...mapActions(usePersonaStore, ['loadFolderTree', 'navigateToFolder', 'updateFolder', 'deleteFolder', 'deletePersona', 'refreshCurrentFolder', 'movePersonaToFolder', 'importPersona']),
 
         async initialize() {
             await Promise.all([
@@ -481,6 +485,159 @@ export default defineComponent({
             } catch (error: any) {
                 this.showError(error.message || this.tm('persona.messages.moveError'));
             }
+        },
+
+        // 导出人格数据
+        async handleExportPersona(persona: Persona) {
+            try {
+                console.log(this.tm('persona.messages.exportStart'), persona.persona_id);
+                
+                // 转换为新格式
+                const exportData = {
+                    version: "1.0",
+                    persona: [{
+                        name: persona.persona_id,
+                        prompt: persona.system_prompt,
+                        begin_dialogs: [] as Array<{user: string, assistant: string}>
+                    }]
+                };
+
+                // 处理对话对
+                if (persona.begin_dialogs && persona.begin_dialogs.length > 0) {
+                    const dialogs = persona.begin_dialogs;
+                    // 按顺序配对消息
+                    for (let i = 0; i < dialogs.length; i += 2) {
+                        // 获取用户消息
+                        let userMessage = '';
+                        if (i < dialogs.length) {
+                            if (typeof dialogs[i] === 'string') {
+                                userMessage = dialogs[i];
+                            } else if (typeof dialogs[i] === 'object' && dialogs[i] !== null) {
+                                userMessage = (dialogs[i] as any).user || '';
+                            }
+                        }
+                        
+                        // 获取助手消息
+                        let assistantMessage = '';
+                        if (i + 1 < dialogs.length) {
+                            if (typeof dialogs[i + 1] === 'string') {
+                                assistantMessage = dialogs[i + 1];
+                            } else if (typeof dialogs[i + 1] === 'object' && dialogs[i + 1] !== null) {
+                                assistantMessage = (dialogs[i + 1] as any).assistant || '';
+                            }
+                        }
+                        exportData.persona[0].begin_dialogs.push({
+                            user: userMessage,
+                            assistant: assistantMessage
+                        });
+                    }
+                }
+                
+                // 清理文件名中的特殊字符
+                const safeFileName = persona.persona_id.replace(/[\/\\:*?"<>|]/g, '_');
+                
+                // 创建 JSON 文件并下载
+                const jsonStr = JSON.stringify(exportData, null, 2);
+                const blob = new Blob([jsonStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `${safeFileName}.json`;
+                document.body.appendChild(link);
+                link.click();
+                
+                // 清理
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                this.showSuccess(this.tm('persona.messages.exportSuccess'));
+            } catch (error: any) {
+                console.error(this.tm('persona.messages.exportFailed'), error);
+                
+                // 构建详细的错误消息
+                let errorMessage = this.tm('persona.messages.exportError');
+                if (error.message) {
+                    errorMessage += `: ${error.message}`;
+                }
+                
+                this.showError(errorMessage);
+            }
+        },
+
+        // 导入人格数据
+        async handleImportPersona() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'application/json';
+            
+            input.onchange = async (event: Event) => {
+                const target = event.target as HTMLInputElement;
+                const file = target.files?.[0];
+                if (!file) return;
+                
+                try {
+                    const text = await file.text();
+                    const data = JSON.parse(text);
+                    
+                    let importData: any = {};
+                    
+                    if (data.version && data.persona && Array.isArray(data.persona)) {
+                        const firstPersona = data.persona[0];
+                        importData = {
+                            persona_id: firstPersona.name,
+                            system_prompt: firstPersona.prompt,
+                            begin_dialogs: []
+                        };
+                        
+                        // 转换对话对
+                        if (firstPersona.begin_dialogs && Array.isArray(firstPersona.begin_dialogs)) {
+                            for (const dialog of firstPersona.begin_dialogs) {
+                                if (dialog.user) {
+                                    importData.begin_dialogs.push(dialog.user);
+                                }
+                                if (dialog.assistant) {
+                                    importData.begin_dialogs.push(dialog.assistant);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 验证必需字段
+                    if (!importData.persona_id || !importData.system_prompt) {
+                        throw new Error(this.tm('persona.messages.importMissingFields'));
+                    }
+                    
+                    // 检查ID是否已存在
+                    const existingPersonas = this.currentPersonas.map(p => p.persona_id);
+                    if (existingPersonas.includes(importData.persona_id)) {
+                        throw new Error(this.tm('messages.importExists', { id: importData.persona_id }));
+                    }
+                    
+                    // 执行导入
+                    await this.importPersona(importData);
+                    this.showSuccess(this.tm('persona.messages.importSuccess'));
+                } catch (error: any) {
+                    console.error(this.tm('persona.messages.importFailed'), error);
+                    
+                    // 构建详细的错误消息
+                    let errorMessage = this.tm('persona.messages.importError');
+                    if (error.response) {
+                        // 后端返回的错误
+                        errorMessage += `: ${error.response.data?.message || error.response.statusText}`;
+                    } else if (error.request) {
+                        // 请求发送但没有收到响应
+                        errorMessage += `: ${this.tm('persona.messages.importNetworkError')}`;
+                    } else if (error.message) {
+                        // 其他错误
+                        errorMessage += `: ${error.message}`;
+                    }
+                    
+                    this.showError(errorMessage);
+                }
+            };
+            
+            input.click();
         },
 
         // 文件夹操作

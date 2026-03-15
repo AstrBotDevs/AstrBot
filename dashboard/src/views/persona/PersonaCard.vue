@@ -14,11 +14,17 @@
                         </template>
                         <v-list-item-title>{{ tm('buttons.edit') }}</v-list-item-title>
                     </v-list-item>
-                    <v-list-item @click.stop="$emit('move')">
+                <v-list-item @click.stop="$emit('move')">
                         <template v-slot:prepend>
                             <v-icon size="small">mdi-folder-move</v-icon>
                         </template>
                         <v-list-item-title>{{ tm('persona.contextMenu.moveTo') }}</v-list-item-title>
+                    </v-list-item>
+                    <v-list-item @click.stop="$emit('export')">
+                        <template v-slot:prepend>
+                            <v-icon size="small">mdi-download</v-icon>
+                        </template>
+                        <v-list-item-title>{{ tm('persona.contextMenu.export') }}</v-list-item-title>
                     </v-list-item>
                     <v-divider class="my-1" />
                     <v-list-item @click.stop="$emit('delete')" class="text-error">
@@ -97,7 +103,7 @@ export default defineComponent({
             required: true
         }
     },
-    emits: ['view', 'edit', 'move', 'delete'],
+    emits: ['view', 'edit', 'move', 'export', 'delete'],
     setup() {
         const { tm } = useModuleI18n('features/persona');
         return { tm };
