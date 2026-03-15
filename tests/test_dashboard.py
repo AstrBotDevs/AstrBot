@@ -3,6 +3,7 @@ import io
 import os
 import sys
 import zipfile
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
@@ -15,6 +16,8 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.core.utils.pip_installer import PipInstallError
+from astrbot.dashboard.routes.plugin import PluginRoute
 from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
     MockPluginBuilder,
@@ -104,6 +107,109 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [[], "x"])
+async def test_batch_delete_sessions_rejects_non_object_payload(
+    app: Quart, authenticated_header: dict, payload
+):
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/chat/batch_delete_sessions",
+        json=payload,
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "Invalid JSON body: expected object"
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_sessions_masks_internal_error(
+    app: Quart, authenticated_header: dict, monkeypatch
+):
+    test_client = app.test_client()
+
+    create_session_response = await test_client.get(
+        "/api/chat/new_session", headers=authenticated_header
+    )
+    assert create_session_response.status_code == 200
+    create_session_data = await create_session_response.get_json()
+    session_id = create_session_data["data"]["session_id"]
+
+    async def _raise_error(*args, **kwargs):
+        raise RuntimeError("secret-internal-error")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.chat.ChatRoute._delete_session_internal",
+        _raise_error,
+    )
+
+    response = await test_client.post(
+        "/api/chat/batch_delete_sessions",
+        json={"session_ids": [session_id]},
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["deleted_count"] == 0
+    assert data["data"]["failed_count"] == 1
+    assert data["data"]["failed_items"][0]["session_id"] == session_id
+    assert data["data"]["failed_items"][0]["reason"] == "internal_error"
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_sessions_uses_batch_lookup(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    db = core_lifecycle_td.db
+
+    create_session_response = await test_client.get(
+        "/api/chat/new_session", headers=authenticated_header
+    )
+    assert create_session_response.status_code == 200
+    create_session_data = await create_session_response.get_json()
+    session_id = create_session_data["data"]["session_id"]
+
+    original_batch_lookup = db.get_platform_sessions_by_ids
+    called = {"batch_lookup_count": 0}
+
+    async def _wrapped_batch_lookup(session_ids: list[str]):
+        called["batch_lookup_count"] += 1
+        return await original_batch_lookup(session_ids)
+
+    # 不应单个查询
+    async def _should_not_call_single_lookup(session_id: str):
+        raise AssertionError(
+            f"single-session lookup should not be called: {session_id}"
+        )
+
+    monkeypatch.setattr(db, "get_platform_sessions_by_ids", _wrapped_batch_lookup)
+    monkeypatch.setattr(
+        db, "get_platform_session_by_id", _should_not_call_single_lookup
+    )
+
+    response = await test_client.post(
+        "/api/chat/batch_delete_sessions",
+        json={"session_ids": [session_id]},
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["deleted_count"] == 1
+    assert data["data"]["failed_count"] == 0
+    assert called["batch_lookup_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_plugins(
     app: Quart,
     authenticated_header: dict,
@@ -118,6 +224,13 @@ async def test_plugins(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
+    for plugin in data["data"]:
+        assert "installed_at" in plugin
+        installed_at = plugin["installed_at"]
+        if installed_at is None:
+            continue
+        assert isinstance(installed_at, str)
+        datetime.fromisoformat(installed_at)
 
     # 插件市场
     response = await test_client.get(
@@ -162,6 +275,18 @@ async def test_plugins(
             f"安装失败: {data.get('message', 'unknown error')}"
         )
 
+        response = await test_client.get(
+            f"/api/plugin/get?name={test_plugin_name}",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert len(data["data"]) == 1
+        installed_at = data["data"][0]["installed_at"]
+        assert installed_at is not None
+        datetime.fromisoformat(installed_at)
+
         # 验证插件已注册
         exists = any(md.name == test_plugin_name for md in star_registry)
         assert exists is True, f"插件 {test_plugin_name} 未成功载入"
@@ -201,6 +326,28 @@ async def test_plugins(
     finally:
         # 清理测试插件
         builder.cleanup(test_plugin_name)
+
+
+@pytest.mark.asyncio
+async def test_plugins_when_installed_at_unresolved(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    """Tests plugin payload when installed_at cannot be resolved."""
+    test_client = app.test_client()
+
+    monkeypatch.setattr(PluginRoute, "_get_plugin_installed_at", lambda *_args: None)
+
+    response = await test_client.get("/api/plugin/get", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+
+    for plugin in data["data"]:
+        assert "name" in plugin
+        assert "installed_at" in plugin
+        assert plugin["installed_at"] is None
 
 
 @pytest.mark.asyncio
@@ -314,6 +461,35 @@ async def test_do_update(
     data = await response.get_json()
     assert data["status"] == "ok"
     assert os.path.exists(release_path)
+
+
+@pytest.mark.asyncio
+async def test_install_pip_package_returns_pip_install_error_message(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    test_client = app.test_client()
+
+    async def mock_pip_install(*args, **kwargs):
+        del args, kwargs
+        raise PipInstallError("install failed", code=2)
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.pip_installer.install",
+        mock_pip_install,
+    )
+
+    response = await test_client.post(
+        "/api/update/pip-install",
+        headers=authenticated_header,
+        json={"package": "demo-package"},
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "install failed"
 
 
 class _FakeNeoSkills:

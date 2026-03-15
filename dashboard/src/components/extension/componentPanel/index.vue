@@ -15,6 +15,7 @@
 import { computed, onActivated, onMounted, ref, watch} from 'vue';
 import axios from 'axios';
 import { useModuleI18n } from '@/i18n/composables';
+import { normalizeTextInput } from '@/utils/inputValue';
 
 // Composables
 import { useComponentData } from './composables/useComponentData';
@@ -83,7 +84,7 @@ const {
 } = useCommandActions(toast, () => fetchCommands(tm('messages.loadFailed')));
 
 const filteredTools = computed(() => {
-  const query = toolSearch.value.trim().toLowerCase();
+  const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
   if (!query) return tools.value;
   return tools.value.filter(tool => 
     tool.name?.toLowerCase().includes(query) ||
@@ -253,7 +254,8 @@ watch(viewMode, async (mode) => {
             <div class="d-flex flex-wrap align-center ga-3 mb-4">
               <div style="min-width: 240px; max-width: 380px; flex: 1;">
                 <v-text-field
-                  v-model="toolSearch"
+                  :model-value="toolSearch"
+                  @update:model-value="toolSearch = normalizeTextInput($event)"
                   prepend-inner-icon="mdi-magnify"
                   :label="tmTool('functionTools.search')"
                   variant="outlined"

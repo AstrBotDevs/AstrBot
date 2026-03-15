@@ -78,7 +78,7 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 ```bash
 uv tool install astrbot
 astrbot init # 仅首次执行此命令以初始化环境
-astrbot
+astrbot run
 ```
 
 > 需要安装 [uv](https://docs.astral.sh/uv/)。
@@ -226,7 +226,8 @@ pre-commit install
 - 6 群：753075035
 - 7 群：743746109
 - 8 群：1030353265
-- 开发者群：975206796
+- 开发者群（偏闲聊吹水）：975206796
+- 开发者群（正式）：1039761811
 
 ### Discord 频道
 
