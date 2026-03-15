@@ -134,16 +134,14 @@ class ProviderGoogleGenAI(Provider):
         system_instruction: str | None = None,
         modalities: list[str] | None = None,
         temperature: float = 0.7,
+        streaming: bool = False,
     ) -> types.GenerateContentConfig:
         """准备查询配置"""
         if not modalities:
             modalities = ["TEXT"]
 
         # 流式输出不支持图片模态
-        if (
-            self.provider_settings.get("streaming_response", False)
-            and "IMAGE" in modalities
-        ):
+        if streaming and "IMAGE" in modalities:
             logger.warning("流式输出不支持图片模态，已自动降级为文本模态")
             modalities = ["TEXT"]
 
@@ -538,6 +536,7 @@ class ProviderGoogleGenAI(Provider):
                     system_instruction,
                     modalities,
                     temperature,
+                    streaming=False,
                 )
                 result = await self.client.models.generate_content(
                     model=model,
@@ -617,6 +616,7 @@ class ProviderGoogleGenAI(Provider):
                     payloads,
                     tools,
                     system_instruction,
+                    streaming=True,
                 )
                 result = await self.client.models.generate_content_stream(
                     model=model,

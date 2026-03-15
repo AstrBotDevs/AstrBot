@@ -203,6 +203,7 @@ yay -S astrbot-git
 ### 如何贡献
 
 你可以通过查看问题或帮助审核 PR（拉取请求）来贡献。任何问题或 PR 都欢迎参与，以促进社区贡献。当然，这些只是建议，你可以以任何方式进行贡献。对于新功能的添加，请先通过 Issue 讨论。
+建议将功能性PR合并至dev分支，将在测试修改后合并到主分支并发布新版本。
 
 ### 开发环境
 
@@ -210,11 +211,23 @@ AstrBot 使用 `ruff` 进行代码格式化和检查。
 
 ```bash
 git clone https://github.com/AstrBotDevs/AstrBot
-pip install pre-commit
+git switch dev # 切换到开发分支
+pip install pre-commit # 或者uv tool install pre-commit
 pre-commit install
 ```
-
-## 🌍 社区
+推荐使用uv本地安装，进行测试
+```bash
+uv tool install -e . --force
+astrbot init 
+astrbot run
+```
+调试前端
+```bash
+astrbot run --backend-only
+cd dashboard
+bun install # 或者pnpm 等
+bun dev
+```
 
 ### QQ 群组
 

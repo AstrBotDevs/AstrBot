@@ -164,7 +164,7 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
             "type": "object",
             "properties": {
                 "payload": {
-                    "anyOf": [{"type": "object"}, {"type": "array"}],
+                    "anyOf": [{"type": "object"}, {"type": "array", "items": {}}],
                     "description": (
                         "Skill payload JSON. Typical schema: {skill_markdown, inputs, outputs, meta}. "
                         "This only stores content and returns payload_ref; it does not create a candidate or release."
