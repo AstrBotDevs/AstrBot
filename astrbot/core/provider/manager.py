@@ -357,6 +357,10 @@ class ProviderManager:
                 from .sources.openai_source import (
                     ProviderOpenAIOfficial as ProviderOpenAIOfficial,
                 )
+            case "openai_oauth_chat_completion":
+                from .sources.openai_oauth_source import (
+                    ProviderOpenAIOAuth as ProviderOpenAIOAuth,
+                )
             case "zhipu_chat_completion":
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
             case "groq_chat_completion":
@@ -476,10 +480,23 @@ class ProviderManager:
                     break
 
             if provider_source:
-                # 合并配置，provider 的配置优先级更高
+                # 合并配置，provider 的业务字段优先，但 provider 类型应跟随 source。
                 merged_config = {**provider_source, **pc}
                 # 保持 id 为 provider 的 id，而不是 source 的 id
                 merged_config["id"] = pc["id"]
+                merged_config["type"] = provider_source.get("type", merged_config.get("type"))
+                merged_config["provider"] = provider_source.get("provider", merged_config.get("provider"))
+                merged_config["provider_type"] = provider_source.get(
+                    "provider_type", merged_config.get("provider_type")
+                )
+                if (
+                    merged_config.get("provider") == "openai"
+                    and merged_config.get("type") == "openai_oauth_chat_completion"
+                    and merged_config.get("auth_mode") == "openai_oauth"
+                ):
+                    access_token = (merged_config.get("oauth_access_token") or "").strip()
+                    if access_token:
+                        merged_config["key"] = [access_token]
                 pc = merged_config
         return pc
 

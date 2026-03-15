@@ -183,7 +183,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const basicSourceConfig = computed(() => {
     if (!editableProviderSource.value) return null
 
-    const fields = ['id', 'key', 'api_base']
+    const fields = editableProviderSource.value.auth_mode === 'openai_oauth'
+      ? ['id', 'api_base']
+      : ['id', 'key', 'api_base']
     const basic: Record<string, any> = {}
 
     fields.forEach((field) => {
@@ -204,7 +206,22 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const advancedSourceConfig = computed(() => {
     if (!editableProviderSource.value) return null
 
-    const excluded = ['id', 'key', 'api_base', 'enable', 'type', 'provider_type', 'provider']
+    const excluded = [
+      'id',
+      'key',
+      'api_base',
+      'enable',
+      'type',
+      'provider_type',
+      'provider',
+      'auth_mode',
+      'oauth_provider',
+      'oauth_access_token',
+      'oauth_refresh_token',
+      'oauth_expires_at',
+      'oauth_account_email',
+      'oauth_account_id'
+    ]
     const advanced: Record<string, any> = {}
 
     for (const key of Object.keys(editableProviderSource.value)) {
@@ -315,6 +332,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     const oldVersionProviderTypeMapping: Record<string, string> = {
       openai_chat_completion: 'chat_completion',
+      openai_oauth_chat_completion: 'chat_completion',
       anthropic_chat_completion: 'chat_completion',
       googlegenai_chat_completion: 'chat_completion',
       zhipu_chat_completion: 'chat_completion',
@@ -606,7 +624,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function loadConfig() {
-    loadProviderTemplate()
+    return await loadProviderTemplate()
   }
 
   async function loadProviderTemplate() {

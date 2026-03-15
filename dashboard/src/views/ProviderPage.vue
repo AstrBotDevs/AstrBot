@@ -71,6 +71,70 @@
                         metadataKey="provider" :is-editing="true" />
                     </div>
 
+                    <v-card v-if="isOpenAIOAuthSupportedSource" class="mb-4" variant="tonal" color="primary">
+                      <v-card-title class="text-h6">{{ tm('providerSources.oauth.title') }}</v-card-title>
+                      <v-card-text class="pt-2">
+                        <div class="text-body-2 text-medium-emphasis mb-4">
+                          {{ tm('providerSources.oauth.description') }}
+                        </div>
+
+                        <div class="d-flex flex-wrap ga-2 mb-4">
+                          <v-chip :color="isOpenAIOAuthBound ? 'success' : 'default'" variant="flat">
+                            {{ isOpenAIOAuthBound ? tm('providerSources.oauth.modeOAuth') : tm('providerSources.oauth.modeManual') }}
+                          </v-chip>
+                          <v-chip v-if="openaiOauthAccountEmail" variant="outlined">
+                            {{ tm('providerSources.oauth.boundAs', { email: openaiOauthAccountEmail }) }}
+                          </v-chip>
+                          <v-chip v-if="openaiOauthExpiresAt" variant="outlined">
+                            {{ tm('providerSources.oauth.expiresAtShort', { time: formatOpenAIOAuthTime(openaiOauthExpiresAt) }) }}
+                          </v-chip>
+                        </div>
+
+                        <v-alert v-if="isOpenAIOAuthBound" type="success" variant="tonal" class="mb-4">
+                          {{ tm('providerSources.oauth.connectedHint') }}
+                        </v-alert>
+                        <v-alert v-else type="info" variant="tonal" class="mb-4">
+                          {{ tm('providerSources.oauth.manualHint') }}
+                        </v-alert>
+
+                        <div class="d-flex flex-wrap ga-2 mb-4">
+                          <v-btn color="primary" prepend-icon="mdi-login-variant" :loading="openaiOauthLoading.start"
+                            @click="startOpenAIOAuth">
+                            {{ tm('providerSources.oauth.start') }}
+                          </v-btn>
+                          <v-btn variant="tonal" prepend-icon="mdi-open-in-new" :disabled="!openaiAuthorizeUrl"
+                            @click="openOpenAIAuthorizeUrl">
+                            {{ tm('providerSources.oauth.openAuthorize') }}
+                          </v-btn>
+                          <v-btn variant="text" prepend-icon="mdi-content-copy" :disabled="!openaiAuthorizeUrl"
+                            @click="copyOpenAIAuthorizeUrl">
+                            {{ tm('providerSources.oauth.copyAuthorize') }}
+                          </v-btn>
+                        </div>
+
+                        <v-text-field :model-value="openaiAuthorizeUrl" :label="tm('providerSources.oauth.authorizeUrl')"
+                          readonly variant="solo-filled" flat class="mb-3"></v-text-field>
+
+                        <v-textarea v-model="openaiOauthInput" :label="tm('providerSources.oauth.callbackInput')"
+                          :hint="tm('providerSources.oauth.callbackHint')" persistent-hint rows="3" auto-grow
+                          variant="solo-filled" flat class="mb-3"></v-textarea>
+
+                        <div class="d-flex flex-wrap ga-2">
+                          <v-btn color="primary" :loading="openaiOauthLoading.complete" @click="completeOpenAIOAuth">
+                            {{ tm('providerSources.oauth.complete') }}
+                          </v-btn>
+                          <v-btn variant="tonal" :disabled="!isOpenAIOAuthBound" :loading="openaiOauthLoading.refresh"
+                            @click="refreshOpenAIOAuth">
+                            {{ tm('providerSources.oauth.refresh') }}
+                          </v-btn>
+                          <v-btn color="error" variant="tonal" :disabled="!isOpenAIOAuthBound"
+                            :loading="openaiOauthLoading.disconnect" @click="disconnectOpenAIOAuth">
+                            {{ tm('providerSources.oauth.disconnect') }}
+                          </v-btn>
+                        </div>
+                      </v-card-text>
+                    </v-card>
+
                     <v-expansion-panels variant="accordion" class="mb-2">
                       <v-expansion-panel elevation="0" class="border rounded-lg">
                         <v-expansion-panel-title>
@@ -257,7 +321,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
@@ -291,8 +355,10 @@ function showMessage(message, color = 'success') {
 
 const {
   providers,
+  providerSources,
   selectedProviderType,
   selectedProviderSource,
+  editableProviderSource,
   availableModels,
   loadingModels,
   savingSource,
@@ -349,6 +415,170 @@ const providerEditOriginalId = ref('')
 const showManualModelDialog = ref(false)
 
 const savingProviders = ref([])
+const openaiAuthorizeUrl = ref('')
+const openaiOauthInput = ref('')
+const openaiOauthLoading = ref({
+  start: false,
+  complete: false,
+  refresh: false,
+  disconnect: false
+})
+
+const isOpenAIOAuthSupportedSource = computed(() => {
+  const source = selectedProviderSource.value
+  return source?.provider === 'openai' && source?.type === 'openai_oauth_chat_completion'
+})
+
+const isOpenAIOAuthBound = computed(() => {
+  return Boolean(editableProviderSource.value?.oauth_access_token) && editableProviderSource.value?.auth_mode === 'openai_oauth'
+})
+
+const openaiOauthAccountEmail = computed(() => editableProviderSource.value?.oauth_account_email || '')
+const openaiOauthExpiresAt = computed(() => editableProviderSource.value?.oauth_expires_at || '')
+
+function formatOpenAIOAuthTime(value) {
+  if (!value) return ''
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleString()
+}
+
+async function copyTextToClipboard(text) {
+  if (!text || typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+    return false
+  }
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function refreshSelectedProviderSource(sourceId) {
+  await loadConfig()
+  if (!sourceId) return
+  const matchedSource = providerSources.value.find((source) => source.id === sourceId)
+  if (matchedSource) {
+    selectProviderSource(matchedSource)
+  }
+}
+
+async function ensureSelectedProviderSourceSaved() {
+  const sourceId = editableProviderSource.value?.id || selectedProviderSource.value?.id
+  if (!sourceId) return ''
+  if (isSourceModified.value) {
+    const saved = await saveProviderSource()
+    if (!saved) return ''
+    await refreshSelectedProviderSource(sourceId)
+  }
+  return editableProviderSource.value?.id || selectedProviderSource.value?.id || sourceId
+}
+
+async function startOpenAIOAuth() {
+  const sourceId = await ensureSelectedProviderSourceSaved()
+  if (!sourceId) return
+
+  openaiOauthLoading.value.start = true
+  try {
+    const res = await axios.post('/api/config/provider_sources/openai_oauth/start', { source_id: sourceId, config: editableProviderSource.value })
+    if (res.data?.status !== 'ok') {
+      throw new Error(res.data?.message || tm('providerSources.oauth.startError'))
+    }
+    openaiAuthorizeUrl.value = res.data.data?.authorize_url || ''
+    openaiOauthInput.value = ''
+    if (openaiAuthorizeUrl.value && typeof window !== 'undefined') {
+      window.open(openaiAuthorizeUrl.value, '_blank', 'noopener,noreferrer')
+    }
+    showMessage(res.data?.message || tm('providerSources.oauth.startSuccess'))
+  } catch (err) {
+    showMessage(err.response?.data?.message || err.message || tm('providerSources.oauth.startError'), 'error')
+  } finally {
+    openaiOauthLoading.value.start = false
+  }
+}
+
+async function copyOpenAIAuthorizeUrl() {
+  const ok = await copyTextToClipboard(openaiAuthorizeUrl.value)
+  if (ok) {
+    showMessage(tm('providerSources.oauth.copySuccess'))
+    return
+  }
+  showMessage(tm('providerSources.oauth.copyError'), 'error')
+}
+
+function openOpenAIAuthorizeUrl() {
+  if (!openaiAuthorizeUrl.value || typeof window === 'undefined') return
+  window.open(openaiAuthorizeUrl.value, '_blank', 'noopener,noreferrer')
+}
+
+async function completeOpenAIOAuth() {
+  const sourceId = editableProviderSource.value?.id || selectedProviderSource.value?.id
+  if (!sourceId) return
+  if (!openaiOauthInput.value.trim()) {
+    showMessage(tm('providerSources.oauth.authInputRequired'), 'error')
+    return
+  }
+
+  openaiOauthLoading.value.complete = true
+  try {
+    const res = await axios.post('/api/config/provider_sources/openai_oauth/complete', {
+      source_id: sourceId,
+      input: openaiOauthInput.value.trim()
+    })
+    if (res.data?.status !== 'ok') {
+      throw new Error(res.data?.message || tm('providerSources.oauth.completeError'))
+    }
+    openaiAuthorizeUrl.value = ''
+    openaiOauthInput.value = ''
+    await refreshSelectedProviderSource(sourceId)
+    showMessage(res.data?.message || tm('providerSources.oauth.completeSuccess'))
+  } catch (err) {
+    showMessage(err.response?.data?.message || err.message || tm('providerSources.oauth.completeError'), 'error')
+  } finally {
+    openaiOauthLoading.value.complete = false
+  }
+}
+
+async function refreshOpenAIOAuth() {
+  const sourceId = editableProviderSource.value?.id || selectedProviderSource.value?.id
+  if (!sourceId) return
+
+  openaiOauthLoading.value.refresh = true
+  try {
+    const res = await axios.post('/api/config/provider_sources/openai_oauth/refresh', { source_id: sourceId })
+    if (res.data?.status !== 'ok') {
+      throw new Error(res.data?.message || tm('providerSources.oauth.refreshError'))
+    }
+    await refreshSelectedProviderSource(sourceId)
+    showMessage(res.data?.message || tm('providerSources.oauth.refreshSuccess'))
+  } catch (err) {
+    showMessage(err.response?.data?.message || err.message || tm('providerSources.oauth.refreshError'), 'error')
+  } finally {
+    openaiOauthLoading.value.refresh = false
+  }
+}
+
+async function disconnectOpenAIOAuth() {
+  const sourceId = editableProviderSource.value?.id || selectedProviderSource.value?.id
+  if (!sourceId) return
+
+  openaiOauthLoading.value.disconnect = true
+  try {
+    const res = await axios.post('/api/config/provider_sources/openai_oauth/disconnect', { source_id: sourceId })
+    if (res.data?.status !== 'ok') {
+      throw new Error(res.data?.message || tm('providerSources.oauth.disconnectError'))
+    }
+    openaiAuthorizeUrl.value = ''
+    openaiOauthInput.value = ''
+    await refreshSelectedProviderSource(sourceId)
+    showMessage(res.data?.message || tm('providerSources.oauth.disconnectSuccess'))
+  } catch (err) {
+    showMessage(err.response?.data?.message || err.message || tm('providerSources.oauth.disconnectError'), 'error')
+  } finally {
+    openaiOauthLoading.value.disconnect = false
+  }
+}
 
 function openProviderEdit(provider) {
   providerEditData.value = JSON.parse(JSON.stringify(provider))
@@ -385,6 +615,11 @@ async function confirmManualModel() {
 
 watch(() => props.defaultTab, (val) => {
   updateDefaultTab(val)
+})
+
+watch(() => selectedProviderSource.value?.id, () => {
+  openaiAuthorizeUrl.value = ''
+  openaiOauthInput.value = ''
 })
 
 // ===== 非 chat 类型的方法 =====
