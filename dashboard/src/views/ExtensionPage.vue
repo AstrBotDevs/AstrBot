@@ -33,9 +33,6 @@ const {
   extension_data,
   getInitialShowReserved,
   showReserved,
-  snack_message,
-  snack_show,
-  snack_success,
   configDialog,
   extension_config,
   pluginMarketData,
@@ -390,15 +387,6 @@ const {
       </v-card-actions>
     </v-card>
   </v-dialog>
-
-  <v-snackbar
-    :timeout="2000"
-    elevation="24"
-    :color="snack_success"
-    v-model="snack_show"
-  >
-    {{ snack_message }}
-  </v-snackbar>
 
   <ReadmeDialog
     v-model:show="readmeDialog.show"

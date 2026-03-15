@@ -3,6 +3,7 @@ import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { getPlatformDisplayName } from "@/utils/platformUtils";
 import { resolveErrorMessage } from "@/utils/errorUtils";
+import { useToast } from "@/utils/toast";
 import {
   buildSearchQuery,
   matchesPluginSearch,
@@ -69,6 +70,7 @@ export const useExtensionPage = () => {
   const commonStore = useCommonStore();
   const { t } = useI18n();
   const { tm } = useModuleI18n("features/extension");
+  const { toast } = useToast();
   const router = useRouter();
   const route = useRoute();
   const { width } = useDisplay();
@@ -131,9 +133,6 @@ export const useExtensionPage = () => {
     return false;
   };
   const showReserved = ref(getInitialShowReserved());
-  const snack_message = ref("");
-  const snack_show = ref(false);
-  const snack_success = ref("success");
   const configDialog = ref(false);
   const extension_config = reactive({
     metadata: {},
@@ -543,12 +542,6 @@ export const useExtensionPage = () => {
     if (typeof window !== "undefined" && window.localStorage) {
       localStorage.setItem("showReservedPlugins", showReserved.value.toString());
     }
-  };
-  
-  const toast = (message, success) => {
-    snack_message.value = message;
-    snack_show.value = true;
-    snack_success.value = success;
   };
   
   const resetLoadingDialog = () => {
@@ -1552,9 +1545,6 @@ export const useExtensionPage = () => {
     extension_data,
     getInitialShowReserved,
     showReserved,
-    snack_message,
-    snack_show,
-    snack_success,
     configDialog,
     extension_config,
     pluginMarketData,
