@@ -311,6 +311,7 @@ class ProviderOpenAIOfficial(Provider):
                 state.handle_chunk(chunk)
             except Exception as e:
                 logger.warning("Saving chunk state error: " + str(e))
+
             if len(chunk.choices) == 0:
                 continue
             delta = chunk.choices[0].delta
@@ -507,23 +508,26 @@ class ProviderOpenAIOfficial(Provider):
                     # Should be unreachable
                     raise Exception("工具集未提供")
                 for tool in tools.func_list:
-                    if (
-                        tool_call.type == "function"
-                        and tool.name == tool_call.function.name
-                    ):
+                    # Fix: Both ParsedFunctionToolCall(type=None) and ChatCompletionMessageFunctionToolCall(type='function')
+                    # can be returned by get_final_completion(). Check function.name instead of type.
+                    tool_func = getattr(tool_call, "function", None)
+                    tool_call_id = getattr(tool_call, "id", None)
+                    if tool_func and getattr(tool_func, "name", None) == tool.name:
+                        tool_func_args = getattr(tool_func, "arguments", None)
                         # workaround for #1454
-                        if isinstance(tool_call.function.arguments, str):
-                            args = json.loads(tool_call.function.arguments)
+                        if isinstance(tool_func_args, str):
+                            args = json.loads(tool_func_args)
                         else:
-                            args = tool_call.function.arguments
+                            args = tool_func_args
                         args_ls.append(args)
-                        func_name_ls.append(tool_call.function.name)
-                        tool_call_ids.append(tool_call.id)
+                        func_name_ls.append(tool_func.name)
+                        if tool_call_id is not None:
+                            tool_call_ids.append(tool_call_id)
 
                         # gemini-2.5 / gemini-3 series extra_content handling
                         extra_content = getattr(tool_call, "extra_content", None)
-                        if extra_content is not None:
-                            tool_call_extra_content_dict[tool_call.id] = extra_content
+                        if extra_content is not None and tool_call_id is not None:
+                            tool_call_extra_content_dict[tool_call_id] = extra_content
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls
