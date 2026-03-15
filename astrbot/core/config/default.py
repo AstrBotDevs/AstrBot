@@ -1563,6 +1563,18 @@ CONFIG_METADATA_2 = {
                         "azure_tts_region": "eastus",
                         "proxy": "",
                     },
+                    "MiniMax": {
+                        "id": "minimax",
+                        "provider": "minimax",
+                        "type": "minimax_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.minimaxi.com/v1",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "MiniMax TTS(API)": {
                         "id": "minimax_tts",
                         "type": "minimax_tts_api",
