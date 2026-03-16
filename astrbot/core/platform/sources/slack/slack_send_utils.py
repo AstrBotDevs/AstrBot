@@ -141,7 +141,7 @@ async def parse_slack_blocks(
         )
 
     fallback_text = "".join(fallback_parts).strip() or resolved_fallbacks["safe_text"]
-    return blocks, fallback_text if blocks else text_content
+    return blocks, fallback_text
 
 
 def build_text_fallback_from_chain(
@@ -175,7 +175,6 @@ async def send_with_blocks_and_fallback(
     channel: str,
     thread_ts: str | None,
     message_chain: MessageChain,
-    text_fallbacks: dict[str, str] | None = None,
     fallbacks: dict[str, str] | None = None,
     parse_blocks: ParseSlackBlocksFn = parse_slack_blocks,
     build_text_fallback: BuildTextFallbackFn = build_text_fallback_from_chain,
@@ -183,8 +182,15 @@ async def send_with_blocks_and_fallback(
 ) -> None:
     """Send Slack message with blocks first, then fallback to text-only on failure."""
     resolved_fallbacks = (
-        build_slack_text_fallbacks(text_fallbacks) if fallbacks is None else fallbacks
+        build_slack_text_fallbacks(None) if fallbacks is None else fallbacks
     )
+    if not channel:
+        logger.warning(
+            "Skip Slack send because channel_id is empty. session_id=%s thread_ts=%s",
+            session_id,
+            thread_ts or "",
+        )
+        return
     blocks, text = await parse_blocks(
         message_chain,
         web_client,

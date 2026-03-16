@@ -334,6 +334,42 @@ async def test_parse_slack_blocks_includes_non_empty_fallback_text():
 
 
 @pytest.mark.asyncio
+async def test_parse_slack_blocks_whitespace_plain_returns_safe_fallback_text():
+    custom_fallbacks = build_slack_text_fallbacks({"safe_text": "fallback-message"})
+    blocks, text = await SlackMessageEvent._parse_slack_blocks(
+        MessageChain([Plain(text="   ")]),
+        AsyncMock(),
+        custom_fallbacks,
+    )
+
+    assert blocks == []
+    assert text == "fallback-message"
+
+
+@pytest.mark.asyncio
+async def test_send_with_blocks_and_fallback_skips_when_channel_empty(monkeypatch):
+    web_client = AsyncMock()
+    mocked_warning_logger = MagicMock()
+    monkeypatch.setattr(
+        slack_send_utils_module.logger,
+        "warning",
+        mocked_warning_logger,
+    )
+
+    await slack_send_utils_module.send_with_blocks_and_fallback(
+        web_client=web_client,
+        channel="",
+        thread_ts="1710000000.500",
+        message_chain=MessageChain([Plain(text="reply")]),
+        fallbacks=build_slack_text_fallbacks(None),
+        session_id="C0001__thread__1710000000.500",
+    )
+
+    web_client.chat_postMessage.assert_not_awaited()
+    assert mocked_warning_logger.called
+
+
+@pytest.mark.asyncio
 async def test_send_by_session_uses_configured_safe_text_fallback(monkeypatch):
     adapter = SlackAdapter(
         platform_config={
