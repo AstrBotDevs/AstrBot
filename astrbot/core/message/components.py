@@ -96,10 +96,10 @@ class Plain(BaseMessageComponent):
     def __init__(self, text: str, convert: bool = True, **_) -> None:
         super().__init__(text=text, convert=convert, **_)
 
-    def toDict(self):
-        return {"type": "text", "data": {"text": self.text.strip()}}
+    def toDict(self) -> dict:
+        return {"type": "text", "data": {"text": self.text}}
 
-    async def to_dict(self):
+    async def to_dict(self) -> dict:
         return {"type": "text", "data": {"text": self.text}}
 
 
