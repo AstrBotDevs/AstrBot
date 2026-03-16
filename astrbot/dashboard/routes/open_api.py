@@ -19,6 +19,7 @@ from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
 from .api_key import ALL_OPEN_API_SCOPES
 from .chat import ChatRoute
+from .live_chat import LiveChatRoute
 from .route import Response, Route, RouteContext
 
 
@@ -29,12 +30,14 @@ class OpenApiRoute(Route):
         db: BaseDatabase,
         core_lifecycle: AstrBotCoreLifecycle,
         chat_route: ChatRoute,
+        live_chat_route: LiveChatRoute,
     ) -> None:
         super().__init__(context)
         self.db = db
         self.core_lifecycle = core_lifecycle
         self.platform_manager = core_lifecycle.platform_manager
         self.chat_route = chat_route
+        self.live_chat_route = live_chat_route
 
         self.routes = {
             "/v1/chat": ("POST", self.chat_send),
@@ -46,6 +49,7 @@ class OpenApiRoute(Route):
         }
         self.register_routes()
         self.app.websocket("/api/v1/chat/ws")(self.chat_ws)
+        self.app.websocket("/api/v1/live/ws")(self.live_ws)
 
     @staticmethod
     def _resolve_open_username(
@@ -533,6 +537,39 @@ class OpenApiRoute(Route):
                 await self._handle_chat_ws_send(message)
         except Exception as e:
             logger.debug("Open API WS connection closed: %s", e)
+
+    async def live_ws(self) -> None:
+        authed, auth_err = await self._authenticate_chat_ws_api_key()
+        if not authed:
+            await self._send_chat_ws_error(auth_err or "Unauthorized", "UNAUTHORIZED")
+            await websocket.close(1008, auth_err or "Unauthorized")
+            return
+
+        username, username_err = self._resolve_open_username(
+            websocket.args.get("username")
+        )
+        if username_err or not username:
+            await self._send_chat_ws_error(
+                username_err or "Invalid username",
+                "BAD_USER",
+            )
+            await websocket.close(1008, username_err or "Invalid username")
+            return
+
+        ct = websocket.args.get("ct")
+        force_ct = ct.strip() if isinstance(ct, str) and ct.strip() else "live"
+        if force_ct not in {"live", "chat"}:
+            await self._send_chat_ws_error(
+                "ct must be 'live' or 'chat'",
+                "INVALID_MESSAGE",
+            )
+            await websocket.close(1008, "Invalid ct")
+            return
+
+        await self.live_chat_route.run_ws_session(
+            username=username,
+            force_ct=force_ct,
+        )
 
     async def upload_file(self):
         return await self.chat_route.post_file()

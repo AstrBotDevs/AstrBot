@@ -257,6 +257,56 @@
         }
       }
     },
+    "/api/v1/live/ws": {
+      "get": {
+        "tags": [
+          "Open API"
+        ],
+        "summary": "Live API WebSocket",
+        "description": "WebSocket endpoint for Live API. Authenticate with API Key using query parameter `api_key` or header `Authorization: Bearer <api_key>`, and pass `username` as a query parameter. Use `ct=live` for voice mode or `ct=chat` for unified chat mode. See docs/live-api/README.md for the full frame-level protocol.",
+        "security": [
+          {
+            "ApiKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Target username for the live session."
+          },
+          {
+            "name": "ct",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "live",
+                "chat"
+              ],
+              "default": "live"
+            },
+            "description": "Session mode. `live` for voice conversation, `ct=chat` for the unified chat WebSocket."
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "WebSocket protocol switch"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "x-websocket": true
+      }
+    },
     "/api/v1/im/message": {
       "post": {
         "tags": [

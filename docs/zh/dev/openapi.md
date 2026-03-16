@@ -46,6 +46,7 @@ X-API-Key: abk_xxx
 调用 AstrBot 内建的 Agent 进行对话交互。支持插件调用、工具调用等能力，与 IM 端对话能力一致。
 
 - `POST /api/v1/chat`：发送对话消息（SSE 流式返回，不传 `session_id` 会自动创建 UUID）
+- `GET /api/v1/live/ws`：Live API WebSocket（API Key 鉴权，查询参数必须包含 `username`，可选 `ct=live|chat`）
 - `GET /api/v1/chat/sessions`：分页获取指定 `username` 的会话
 - `GET /api/v1/configs`：获取可用配置文件列表
 
@@ -148,3 +149,7 @@ curl -N 'http://localhost:6185/api/v1/chat' \
 交互式 API 文档请查看：
 
 - https://docs.astrbot.app/scalar.html
+
+Live API 协议说明请查看：
+
+- `docs/live-api/README.md`

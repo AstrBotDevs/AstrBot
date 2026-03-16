@@ -130,16 +130,6 @@ class LiveChatRoute(Route):
 
     async def live_chat_ws(self) -> None:
         """Legacy Live Chat WebSocket 处理器（默认 ct=live）"""
-        await self._unified_ws_loop(force_ct="live")
-
-    async def unified_chat_ws(self) -> None:
-        """Unified Chat WebSocket 处理器（支持 ct=live/chat）"""
-        await self._unified_ws_loop(force_ct=None)
-
-    async def _unified_ws_loop(self, force_ct: str | None = None) -> None:
-        """统一 WebSocket 循环"""
-        # WebSocket 不能通过 header 传递 token，需要从 query 参数获取
-        # 注意：WebSocket 上下文使用 websocket.args 而不是 request.args
         token = websocket.args.get("token")
         if not token:
             await websocket.close(1008, "Missing authentication token")
@@ -156,6 +146,49 @@ class LiveChatRoute(Route):
             await websocket.close(1008, "Invalid token")
             return
 
+        await self.run_ws_session(username=username, force_ct="live")
+
+    async def unified_chat_ws(self) -> None:
+        """Unified Chat WebSocket 处理器（支持 ct=live/chat）"""
+        token = websocket.args.get("token")
+        if not token:
+            await websocket.close(1008, "Missing authentication token")
+            return
+
+        try:
+            jwt_secret = self.config["dashboard"].get("jwt_secret")
+            payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
+            username = payload["username"]
+        except jwt.ExpiredSignatureError:
+            await websocket.close(1008, "Token expired")
+            return
+        except jwt.InvalidTokenError:
+            await websocket.close(1008, "Invalid token")
+            return
+
+        await self.run_ws_session(username=username, force_ct=None)
+
+    async def _unified_ws_loop(self, force_ct: str | None = None) -> None:
+        """统一 WebSocket 循环"""
+        # Keep the legacy entry point for internal call sites.
+        token = websocket.args.get("token")
+        if not token:
+            await websocket.close(1008, "Missing authentication token")
+            return
+        try:
+            jwt_secret = self.config["dashboard"].get("jwt_secret")
+            payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
+            username = payload["username"]
+        except jwt.ExpiredSignatureError:
+            await websocket.close(1008, "Token expired")
+            return
+        except jwt.InvalidTokenError:
+            await websocket.close(1008, "Invalid token")
+            return
+        await self.run_ws_session(username=username, force_ct=force_ct)
+
+    async def run_ws_session(self, username: str, force_ct: str | None = None) -> None:
+        """Run a live/unified websocket session for an authenticated username."""
         session_id = f"webchat_live!{username}!{uuid.uuid4()}"
         live_session = LiveChatSession(session_id, username)
         self.sessions[session_id] = live_session
@@ -805,6 +838,7 @@ class LiveChatRoute(Route):
 
                     result_type = result.get("type")
                     result_chain_type = result.get("chain_type")
+                    result_streaming = bool(result.get("streaming", False))
                     data = result.get("data", "")
 
                     if result_chain_type == "agent_stats":
@@ -837,7 +871,28 @@ class LiveChatRoute(Route):
                             logger.error(f"[Live Chat] 解析 TTSStats 失败: {e}")
                         continue
 
+                    if result_chain_type == "live_text_delta":
+                        if data:
+                            await websocket.send_json(
+                                {
+                                    "t": "bot_delta_chunk",
+                                    "data": {"text": data},
+                                }
+                            )
+                        continue
+
                     if result_type == "plain":
+                        if (
+                            result_streaming
+                            and data
+                            and result_chain_type != "reasoning"
+                        ):
+                            await websocket.send_json(
+                                {
+                                    "t": "bot_delta_chunk",
+                                    "data": {"text": data},
+                                }
+                            )
                         # 普通文本消息
                         bot_text += data
 

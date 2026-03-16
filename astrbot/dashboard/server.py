@@ -115,11 +115,13 @@ class AstrBotDashboard:
         self.ar = AuthRoute(self.context)
         self.api_key_route = ApiKeyRoute(self.context, db)
         self.chat_route = ChatRoute(self.context, db, core_lifecycle)
+        self.live_chat_route = LiveChatRoute(self.context, db, core_lifecycle)
         self.open_api_route = OpenApiRoute(
             self.context,
             db,
             core_lifecycle,
             self.chat_route,
+            self.live_chat_route,
         )
         self.chatui_project_route = ChatUIProjectRoute(self.context, db)
         self.tools_root = ToolsRoute(self.context, core_lifecycle)
@@ -138,7 +140,6 @@ class AstrBotDashboard:
         self.kb_route = KnowledgeBaseRoute(self.context, core_lifecycle)
         self.platform_route = PlatformRoute(self.context, core_lifecycle)
         self.backup_route = BackupRoute(self.context, db, core_lifecycle)
-        self.live_chat_route = LiveChatRoute(self.context, db, core_lifecycle)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
@@ -244,6 +245,7 @@ class AstrBotDashboard:
         scope_map = {
             "/api/v1/chat": "chat",
             "/api/v1/chat/ws": "chat",
+            "/api/v1/live/ws": "chat",
             "/api/v1/chat/sessions": "chat",
             "/api/v1/configs": "config",
             "/api/v1/file": "file",

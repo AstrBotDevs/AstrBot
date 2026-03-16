@@ -29,6 +29,7 @@ X-API-Key: abk_xxx
 ## Common Endpoints
 
 - `POST /api/v1/chat`: send chat message (SSE stream, server generates UUID when `session_id` is omitted)
+- `GET /api/v1/live/ws`: Live API WebSocket (API Key auth, requires `username` query parameter, optional `ct=live|chat`)
 - `GET /api/v1/chat/sessions`: list sessions for a specific `username` with pagination
 - `GET /api/v1/configs`: list available config files
 - `POST /api/v1/file`: upload attachment
@@ -49,3 +50,7 @@ curl -N 'http://localhost:6185/api/v1/chat' \
 Use the interactive docs:
 
 - https://docs.astrbot.app/scalar.html
+
+For the full Live API wire protocol, see:
+
+- `docs/live-api/README.md`

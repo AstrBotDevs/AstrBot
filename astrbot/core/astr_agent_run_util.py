@@ -326,6 +326,7 @@ async def run_live_agent(
 
     # 创建队列
     text_queue: asyncio.Queue[str | None] = asyncio.Queue()
+    delta_queue: asyncio.Queue[str | None] = asyncio.Queue()
     # audio_queue stored bytes or (text, bytes)
     audio_queue: asyncio.Queue[bytes | tuple[str, bytes] | None] = asyncio.Queue()
 
@@ -334,6 +335,7 @@ async def run_live_agent(
         _run_agent_feeder(
             agent_runner,
             text_queue,
+            delta_queue,
             max_step,
             show_tool_use,
             show_tool_call_result,
@@ -353,32 +355,63 @@ async def run_live_agent(
 
     # 3. 主循环：从 audio_queue 读取音频并 yield
     try:
-        while True:
-            queue_item = await audio_queue.get()
+        delta_done = False
+        audio_done = False
+        while not (delta_done and audio_done):
+            task_sources: dict[asyncio.Task, str] = {}
+            if not delta_done:
+                task = asyncio.create_task(delta_queue.get())
+                task_sources[task] = "delta"
+            if not audio_done:
+                task = asyncio.create_task(audio_queue.get())
+                task_sources[task] = "audio"
 
-            if queue_item is None:
-                break
+            done, pending = await asyncio.wait(
+                list(task_sources),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
 
-            text = None
-            if isinstance(queue_item, tuple):
-                text, audio_data = queue_item
-            else:
-                audio_data = queue_item
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
 
-            if not first_chunk_received:
-                # 记录首帧延迟（从开始处理到收到第一个音频块）
-                tts_first_frame_time = time.time() - tts_start_time
-                first_chunk_received = True
+            for task in done:
+                source = task_sources[task]
+                queue_item = task.result()
+                if source == "delta":
+                    if queue_item is None:
+                        delta_done = True
+                        continue
+                    yield MessageChain(
+                        chain=[Plain(queue_item)], type="live_text_delta"
+                    )
+                    continue
 
-            # 将音频数据封装为 MessageChain
-            import base64
+                if queue_item is None:
+                    audio_done = True
+                    continue
 
-            audio_b64 = base64.b64encode(audio_data).decode("utf-8")
-            comps: list[BaseMessageComponent] = [Plain(audio_b64)]
-            if text:
-                comps.append(Json(data={"text": text}))
-            chain = MessageChain(chain=comps, type="audio_chunk")
-            yield chain
+                text = None
+                if isinstance(queue_item, tuple):
+                    text, audio_data = queue_item
+                else:
+                    audio_data = queue_item
+
+                if not first_chunk_received:
+                    # 记录首帧延迟（从开始处理到收到第一个音频块）
+                    tts_first_frame_time = time.time() - tts_start_time
+                    first_chunk_received = True
+
+                # 将音频数据封装为 MessageChain
+                import base64
+
+                audio_b64 = base64.b64encode(audio_data).decode("utf-8")
+                comps: list[BaseMessageComponent] = [Plain(audio_b64)]
+                if text:
+                    comps.append(Json(data={"text": text}))
+                chain = MessageChain(chain=comps, type="audio_chunk")
+                yield chain
 
     except Exception as e:
         logger.error(f"[Live Agent] 运行时发生错误: {e}", exc_info=True)
@@ -421,6 +454,7 @@ async def run_live_agent(
 async def _run_agent_feeder(
     agent_runner: AgentRunner,
     text_queue: asyncio.Queue,
+    delta_queue: asyncio.Queue,
     max_step: int,
     show_tool_use: bool,
     show_tool_call_result: bool,
@@ -440,9 +474,13 @@ async def _run_agent_feeder(
             if chain is None:
                 continue
 
+            if chain.type == "reasoning":
+                continue
+
             # 提取文本
             text = chain.get_plain_text()
             if text:
+                await delta_queue.put(text)
                 buffer += text
 
                 # 分句逻辑：匹配标点符号
@@ -477,6 +515,7 @@ async def _run_agent_feeder(
     finally:
         # 发送结束信号
         await text_queue.put(None)
+        await delta_queue.put(None)
 
 
 async def _safe_tts_stream_wrapper(

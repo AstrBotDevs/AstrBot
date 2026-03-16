@@ -98,14 +98,28 @@ axios.interceptors.request.use((config) => {
 // Some parts of the UI use fetch directly; without this, those requests will 401.
 const _origFetch = window.fetch.bind(window);
 window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+  const requestUrl = (() => {
+    if (typeof input === 'string') return input;
+    if (input instanceof URL) return input.toString();
+    return input.url;
+  })();
+
+  let shouldAttachAuth = false;
+  try {
+    const resolvedUrl = new URL(requestUrl, window.location.origin);
+    shouldAttachAuth = resolvedUrl.origin === window.location.origin;
+  } catch (_) {
+    shouldAttachAuth = requestUrl.startsWith('/');
+  }
+
   const token = localStorage.getItem('token');
-  if (!token) return _origFetch(input, init);
+  const locale = localStorage.getItem('astrbot-locale');
+  if (!token && !locale) return _origFetch(input, init);
 
   const headers = new Headers(init?.headers || (typeof input !== 'string' && 'headers' in input ? (input as Request).headers : undefined));
-  if (!headers.has('Authorization')) {
+  if (shouldAttachAuth && token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  const locale = localStorage.getItem('astrbot-locale');
   if (locale && !headers.has('Accept-Language')) {
     headers.set('Accept-Language', locale);
   }
