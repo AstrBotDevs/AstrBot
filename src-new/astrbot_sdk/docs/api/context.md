@@ -1087,6 +1087,195 @@ await ctx.unregister_llm_tool("my_tool")
 
 ---
 
+## 高级方法
+
+### `tool_loop_agent()`
+
+执行 Agent 工具循环。
+
+**签名**:
+```python
+async def tool_loop_agent(
+    self,
+    request: ProviderRequest | None = None,
+    **kwargs: Any
+) -> LLMResponse
+```
+
+**参数**:
+- `request`: ProviderRequest 对象，包含请求配置
+- `**kwargs`: 额外的请求参数，会自动合并到 request
+
+**返回**: `LLMResponse` - 包含工具调用结果的完整响应
+
+**示例**:
+
+```python
+from astrbot_sdk.llm.entities import ProviderRequest
+
+response = await ctx.tool_loop_agent(
+    request=ProviderRequest(
+        prompt="搜索天气",
+        system_prompt="你是一个助手"
+    )
+)
+print(response.text)
+```
+
+---
+
+### `register_commands()`
+
+注册命令（仅在 `astrbot_loaded` 或 `platform_loaded` 事件中可用）。
+
+**签名**:
+```python
+async def register_commands(
+    self,
+    command_name: str,
+    handler_full_name: str,
+    *,
+    desc: str = "",
+    priority: int = 0,
+    use_regex: bool = False,
+    ignore_prefix: bool = False,
+) -> None
+```
+
+**参数**:
+- `command_name`: 命令名称
+- `handler_full_name`: 处理函数的完整名称（如 `module.handler_name`）
+- `desc`: 命令描述
+- `priority`: 优先级
+- `use_regex`: 是否使用正则匹配
+- `ignore_prefix`: 是否忽略前缀（SDK 中不支持）
+
+**异常**:
+- `AstrBotError`: 如果在非加载事件中调用或设置 `ignore_prefix=True`
+
+**示例**:
+
+```python
+@on_event("astrbot_loaded")
+async def on_load(self, event, ctx: Context):
+    await ctx.register_commands(
+        command_name="my_cmd",
+        handler_full_name="my_module.handle_cmd",
+        desc="我的命令",
+        priority=10
+    )
+```
+
+---
+
+### `get_platform()`
+
+获取指定类型的平台兼容层实例。
+
+**签名**:
+```python
+async def get_platform(self, platform_type: str) -> PlatformCompatFacade | None
+```
+
+**参数**:
+- `platform_type`: 平台类型（如 "qq", "telegram"）
+
+**返回**: `PlatformCompatFacade | None` - 平台兼容层实例
+
+**示例**:
+
+```python
+platform = await ctx.get_platform("qq")
+if platform:
+    await platform.send_by_session("session_id", "消息")
+```
+
+---
+
+### `get_platform_inst()`
+
+获取指定 ID 的平台兼容层实例。
+
+**签名**:
+```python
+async def get_platform_inst(self, platform_id: str) -> PlatformCompatFacade | None
+```
+
+**参数**:
+- `platform_id`: 平台实例 ID
+
+**返回**: `PlatformCompatFacade | None` - 平台兼容层实例
+
+---
+
+## PlatformCompatFacade
+
+平台兼容层类，提供安全的平台元信息和主动发送能力。
+
+### 属性
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `id` | `str` | 平台实例 ID |
+| `name` | `str` | 平台名称 |
+| `type` | `str` | 平台类型 |
+| `status` | `PlatformStatus` | 平台状态 |
+| `errors` | `list[PlatformError]` | 错误列表 |
+| `last_error` | `PlatformError \| None` | 最近错误 |
+| `unified_webhook` | `bool` | 是否统一 webhook |
+
+### 方法
+
+#### `send()`
+
+发送消息。
+
+```python
+await platform.send("session_id", "消息内容")
+```
+
+#### `send_by_session()`
+
+通过会话发送消息。
+
+```python
+await platform.send_by_session("platform:private:123", "消息")
+```
+
+#### `send_by_id()`
+
+通过 ID 发送消息。
+
+```python
+await platform.send_by_id("user123", "消息", message_type="private")
+```
+
+#### `refresh()`
+
+刷新平台状态。
+
+```python
+await platform.refresh()
+```
+
+#### `clear_errors()`
+
+清除平台错误。
+
+```python
+await platform.clear_errors()
+```
+
+#### `get_stats()`
+
+获取平台统计信息。
+
+```python
+stats = await platform.get_stats()
+```
+
+---
+
 ## 使用示例
 
 ### 1. 基本对话流程

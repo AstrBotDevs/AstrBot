@@ -580,6 +580,43 @@ forward = Forward(id="forward_msg_123")
 
 ---
 
+## UnknownComponent - 未知组件
+
+用于表示无法识别的组件类型。
+
+### 类定义
+
+```python
+class UnknownComponent(BaseMessageComponent):
+    type = "unknown"
+
+    def __init__(
+        self,
+        *,
+        raw_type: str = "unknown",
+        raw_data: dict[str, Any] | None = None,
+    ) -> None:
+        self.raw_type = raw_type
+        self.raw_data = raw_data or {}
+```
+
+### 构造方法
+
+```python
+from astrbot_sdk import UnknownComponent
+
+unknown = UnknownComponent(
+    raw_type="custom_type",
+    raw_data={"field": "value"}
+)
+```
+
+### 说明
+
+当 `payload_to_component()` 遇到无法识别的组件类型时，会返回 `UnknownComponent` 实例，保留原始数据以便调试。
+
+---
+
 ## MessageChain - 消息链
 
 用于组合多个消息组件。
@@ -703,6 +740,122 @@ payload = component_to_payload_sync(component)
 from astrbot_sdk.message_components import component_to_payload
 
 payload = await component_to_payload(component)
+```
+
+---
+
+### `is_message_component(value)`
+
+检查值是否为消息组件。
+
+```python
+from astrbot_sdk.message_components import is_message_component
+
+if is_message_component(value):
+    print("是消息组件")
+```
+
+---
+
+### `payloads_to_components(payloads)`
+
+批量将 payload 列表转换为组件列表。
+
+```python
+from astrbot_sdk.message_components import payloads_to_components
+
+components = payloads_to_components(payload_list)
+```
+
+---
+
+### `build_media_component_from_url(url, *, kind)`
+
+从 URL 构建媒体组件。
+
+```python
+from astrbot_sdk.message_components import build_media_component_from_url
+
+# 自动识别类型
+component = build_media_component_from_url("https://example.com/image.jpg")
+
+# 指定类型
+component = build_media_component_from_url("https://example.com/file", kind="image")
+```
+
+---
+
+## MediaHelper - 媒体辅助类
+
+提供媒体处理的静态方法。
+
+### `from_url(url, *, kind)`
+
+从 URL 创建媒体组件。
+
+**签名**:
+```python
+@staticmethod
+async def from_url(
+    url: str,
+    *,
+    kind: str = "auto"
+) -> BaseMessageComponent
+```
+
+**参数**:
+- `url`: 媒体 URL
+- `kind`: 媒体类型（`"auto"`, `"image"`, `"record"`, `"video"`, `"file"`）
+
+**返回**: 对应的媒体组件
+
+**示例**:
+
+```python
+from astrbot_sdk.message_components import MediaHelper
+
+# 自动识别
+img = await MediaHelper.from_url("https://example.com/photo.jpg")
+
+# 指定类型
+video = await MediaHelper.from_url("https://example.com/video.mp4", kind="video")
+```
+
+---
+
+### `download(url, save_dir)`
+
+下载媒体文件到指定目录。
+
+**签名**:
+```python
+@staticmethod
+async def download(url: str, save_dir: Path) -> Path
+```
+
+**参数**:
+- `url`: 媒体 URL（仅支持 http/https）
+- `save_dir`: 保存目录路径
+
+**返回**: `Path` - 下载后的文件路径
+
+**异常**:
+- `AstrBotError`: 下载失败时抛出
+
+**示例**:
+
+```python
+from pathlib import Path
+from astrbot_sdk.message_components import MediaHelper
+
+try:
+    path = await MediaHelper.download(
+        "https://example.com/image.jpg",
+        Path("./downloads")
+    )
+    print(f"下载到: {path}")
+except AstrBotError as e:
+    print(f"下载失败: {e.message}")
 ```
 
 ---

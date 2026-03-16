@@ -725,6 +725,200 @@ class MyPlugin(Star):
 
 ---
 
+## 其他装饰器
+
+### @admin_only
+
+`@require_admin` 的别名，功能完全相同。
+
+**签名**:
+```python
+def admin_only(func: HandlerCallable) -> HandlerCallable
+```
+
+---
+
+### @priority
+
+设置 handler 执行优先级。
+
+**签名**:
+```python
+def priority(value: int) -> Callable[[HandlerCallable], HandlerCallable]
+```
+
+**参数**:
+- `value`: 优先级数值，越大越先执行
+
+**示例**:
+
+```python
+@on_command("high")
+@priority(100)
+async def high_priority(self, event: MessageEvent):
+    await event.reply("我优先执行")
+
+@on_command("low")
+@priority(1)
+async def low_priority(self, event: MessageEvent):
+    await event.reply("我后执行")
+```
+
+---
+
+### @conversation_command
+
+会话命令装饰器，支持会话超时和模式控制。
+
+**签名**:
+```python
+def conversation_command(
+    command: str | Sequence[str],
+    *,
+    aliases: list[str] | None = None,
+    description: str | None = None,
+    timeout: int = 60,
+    mode: ConversationMode = "replace",
+    busy_message: str | None = None,
+    grace_period: float = 1.0,
+) -> Callable[[HandlerCallable], HandlerCallable]
+```
+
+**参数**:
+- `command`: 命令名称
+- `aliases`: 命令别名列表
+- `description`: 命令描述
+- `timeout`: 会话超时时间（秒）
+- `mode`: 会话模式（`"replace"` 或 `"reject"`）
+- `busy_message`: 会话忙时的提示消息
+- `grace_period`: 宽限期（秒）
+
+**示例**:
+
+```python
+@conversation_command(
+    "survey",
+    description="问卷调查",
+    timeout=300,
+    mode="replace",
+    busy_message="当前有进行中的问卷"
+)
+async def survey(self, event: MessageEvent, ctx: Context):
+    await event.reply("请输入您的姓名:")
+```
+
+---
+
+## 元数据辅助函数
+
+### `get_handler_meta(func)`
+
+获取方法的 handler 元数据。
+
+**签名**:
+```python
+def get_handler_meta(func: HandlerCallable) -> HandlerMeta | None
+```
+
+**参数**:
+- `func`: 要检查的方法
+
+**返回**: `HandlerMeta | None` - 元数据对象，如果没有则返回 None
+
+**示例**:
+
+```python
+from astrbot_sdk.decorators import get_handler_meta
+
+@on_command("test")
+async def test_handler(self, event: MessageEvent):
+    pass
+
+meta = get_handler_meta(test_handler)
+if meta:
+    print(f"命令: {meta.trigger.command}")
+```
+
+---
+
+### `get_capability_meta(func)`
+
+获取方法的 capability 元数据。
+
+**签名**:
+```python
+def get_capability_meta(func: HandlerCallable) -> CapabilityMeta | None
+```
+
+**参数**:
+- `func`: 要检查的方法
+
+**返回**: `CapabilityMeta | None` - 元数据对象
+
+---
+
+### `get_llm_tool_meta(func)`
+
+获取方法的 LLM 工具元数据。
+
+**签名**:
+```python
+def get_llm_tool_meta(func: HandlerCallable) -> LLMToolMeta | None
+```
+
+**参数**:
+- `func`: 要检查的方法
+
+**返回**: `LLMToolMeta | None` - 元数据对象
+
+---
+
+### `get_agent_meta(obj)`
+
+获取 Agent 类的元数据。
+
+**签名**:
+```python
+def get_agent_meta(obj: Any) -> AgentMeta | None
+```
+
+**参数**:
+- `obj`: 要检查的类或对象
+
+**返回**: `AgentMeta | None` - 元数据对象
+
+---
+
+### `append_filter_meta(func, *, specs, local_bindings)`
+
+追加过滤器元数据到方法。
+
+**签名**:
+```python
+def append_filter_meta(
+    func: HandlerCallable,
+    *,
+    specs: list[FilterSpec] | None = None,
+    local_bindings: list[Any] | None = None
+) -> HandlerCallable
+```
+
+---
+
+### `set_command_route_meta(func, route)`
+
+设置命令路由元数据。
+
+**签名**:
+```python
+def set_command_route_meta(
+    func: HandlerCallable,
+    route: CommandRouteSpec
+) -> HandlerCallable
+```
+
+---
+
 ## 使用示例
 
 ### 示例 1: 基础命令

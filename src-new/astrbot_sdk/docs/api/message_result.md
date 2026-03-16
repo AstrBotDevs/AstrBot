@@ -652,6 +652,47 @@ async def user_info(self, event: MessageEvent):
 
 ---
 
+## 辅助函数
+
+### `coerce_message_chain(value)`
+
+将多种输入格式统一转换为 MessageChain。
+
+**签名**:
+```python
+def coerce_message_chain(value: Any) -> MessageChain | None
+```
+
+**参数**:
+- `value`: 要转换的值，支持以下类型：
+  - `MessageEventResult`: 提取其中的 chain
+  - `MessageChain`: 直接返回
+  - `BaseMessageComponent`: 包装为单元素链
+  - `list[BaseMessageComponent]`: 包装为链
+
+**返回**: `MessageChain | None` - 转换后的消息链，无法转换则返回 None
+
+**示例**:
+
+```python
+from astrbot_sdk.message_result import coerce_message_chain, MessageChain
+from astrbot_sdk.message_components import Plain, Image
+
+# 从 MessageEventResult 提取
+chain = coerce_message_chain(result)
+
+# 从 MessageChain 返回
+chain = coerce_message_chain(existing_chain)
+
+# 从单个组件创建
+chain = coerce_message_chain(Plain("文本"))
+
+# 从组件列表创建
+chain = coerce_message_chain([Plain("文本"), Image.fromURL("url")])
+```
+
+---
+
 ## 注意事项
 
 1. **MessageChain 可变性**:

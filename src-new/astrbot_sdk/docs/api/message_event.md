@@ -814,6 +814,212 @@ def make_result(self) -> MessageEventResult
 
 ---
 
+## 序列化与反序列化
+
+### `from_payload()`
+
+从协议载荷创建事件实例（类方法）。
+
+**签名**:
+```python
+@classmethod
+def from_payload(
+    cls,
+    payload: dict[str, Any],
+    *,
+    context: Context | None = None,
+    reply_handler: ReplyHandler | None = None
+) -> MessageEvent
+```
+
+**参数**:
+- `payload`: 协议层传递的消息数据字典
+- `context`: 运行时上下文
+- `reply_handler`: 自定义回复处理器
+
+**返回**: `MessageEvent` 实例
+
+---
+
+### `to_payload()`
+
+转换为协议载荷格式。
+
+**签名**:
+```python
+def to_payload(self) -> dict[str, Any]
+```
+
+**返回**: 可序列化的字典
+
+---
+
+## 会话引用属性
+
+### `session_ref`
+
+获取会话引用对象。
+
+**类型**: `SessionRef | None`
+
+**说明**: 包含会话的完整信息，用于跨平台通信。
+
+---
+
+### `target`
+
+`session_ref` 的别名。
+
+**类型**: `SessionRef | None`
+
+---
+
+### `unified_msg_origin`
+
+统一消息来源标识符。
+
+**类型**: `str`
+
+**说明**: 等同于 `session_id`。
+
+---
+
+## LLM 相关方法
+
+### `request_llm()`
+
+请求触发默认 LLM 链处理当前消息。
+
+**签名**:
+```python
+async def request_llm(self) -> bool
+```
+
+**返回**: `bool` - 是否应该调用 LLM
+
+**示例**:
+
+```python
+@on_command("ask")
+async def ask(self, event: MessageEvent):
+    should_call = await event.request_llm()
+    if should_call:
+        await event.reply("已触发 LLM 处理")
+```
+
+---
+
+### `should_call_llm()`
+
+读取当前默认 LLM 决策状态。
+
+**签名**:
+```python
+async def should_call_llm(self) -> bool
+```
+
+**返回**: `bool` - 是否应该调用 LLM
+
+**示例**:
+
+```python
+@on_message()
+async def handle(self, event: MessageEvent):
+    if await event.should_call_llm():
+        response = await ctx.llm.chat(event.text)
+        await event.reply(response)
+```
+
+---
+
+## 结果管理方法
+
+### `set_result()`
+
+存储请求范围的 SDK 结果到主机桥。
+
+**签名**:
+```python
+async def set_result(self, result: MessageEventResult) -> MessageEventResult
+```
+
+**参数**:
+- `result`: 消息事件结果对象
+
+**返回**: 传入的 `result` 对象
+
+**示例**:
+
+```python
+result = event.chain_result([Plain("处理结果")])
+await event.set_result(result)
+```
+
+---
+
+### `get_result()`
+
+从主机桥读取当前请求范围的 SDK 结果。
+
+**签名**:
+```python
+async def get_result(self) -> MessageEventResult | None
+```
+
+**返回**: `MessageEventResult | None` - 结果对象，不存在则返回 None
+
+---
+
+### `clear_result()`
+
+清除当前请求范围的 SDK 结果。
+
+**签名**:
+```python
+async def clear_result(self) -> None
+```
+
+---
+
+## 其他方法
+
+### `get_message_outline()`
+
+获取规范化的消息摘要。
+
+**签名**:
+```python
+def get_message_outline(self) -> str
+```
+
+**返回**: 消息摘要文本
+
+---
+
+### `bind_reply_handler()`
+
+绑定自定义回复处理器。
+
+**签名**:
+```python
+def bind_reply_handler(self, reply_handler: ReplyHandler) -> None
+```
+
+**参数**:
+- `reply_handler`: 回复处理函数，接收文本参数
+
+**示例**:
+
+```python
+def custom_reply(text: str):
+    print(f"回复: {text}")
+
+event.bind_reply_handler(custom_reply)
+await event.reply("测试")  # 会调用 custom_reply
+```
+
+---
+
 ## 完整使用示例
 
 ### 示例 1: 基础消息处理
