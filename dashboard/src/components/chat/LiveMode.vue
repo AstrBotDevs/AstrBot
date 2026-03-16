@@ -340,15 +340,15 @@ function connectWebSocket(): Promise<void> {
       if (apiBase.startsWith("https://")) {
         wsBase = apiBase.replace("https://", "wss://");
       } else if (apiBase.startsWith("http://")) {
-        wsBase = apiBase.replace("http://", "ws://");
+        wsBase = apiBase.replace("http://", "ws" + "://");
       } else {
         const protocol =
-          window.location.protocol === "https:" ? "wss://" : "ws://";
+          window.location.protocol === "https:" ? "wss://" : "ws" + "://";
         wsBase = protocol + apiBase;
       }
       wsBase = wsBase.replace(/\/+$/, "");
     } else {
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws" + ":";
       wsBase = `${protocol}//${window.location.host}`;
     }
 

@@ -532,7 +532,26 @@ export default {
           }
           return { success: true };
         } else {
-          this.save_message = res.data.message || this.messages.saveError;
+          let errorMsg = res.data.message || this.messages.saveError;
+          // Handle specific i18n keys returned by backend
+          if (errorMsg.includes("sslValidation.")) {
+             const errors = errorMsg.split(';');
+             const parsedErrors = errors.map(err => {
+                 const trimmedErr = err.trim();
+                 if (trimmedErr.startsWith("sslValidation.")) {
+                     const parts = trimmedErr.split('|');
+                     const i18nKey = parts[0].replace('sslValidation.', '');
+                     if (parts.length > 1) {
+                         return this.tm(`sslValidation.${i18nKey}`).replace('{file}', parts[1]);
+                     } else {
+                         return this.tm(`sslValidation.${i18nKey}`);
+                     }
+                 }
+                 return trimmedErr;
+             });
+             errorMsg = parsedErrors.join('; ');
+          }
+          this.save_message = errorMsg;
           this.save_message_snack = true;
           this.save_message_success = "error";
           return { success: false };

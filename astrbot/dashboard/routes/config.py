@@ -206,6 +206,56 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
     return errors, data
 
 
+def validate_ssl_config(post_config: dict) -> list[str]:
+    """验证 SSL 配置的有效性。
+
+    当 dashboard.ssl.enable 为 true 时，必须配置 cert_file 和 key_file，
+    并且文件必须存在。
+
+    Returns:
+        错误信息列表，为空表示验证通过。
+    """
+    from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+    errors = []
+    dashboard_config = post_config.get("dashboard", {})
+    if not isinstance(dashboard_config, dict):
+        return errors
+
+    ssl_config = dashboard_config.get("ssl", {})
+    if not isinstance(ssl_config, dict):
+        return errors
+
+    ssl_enable = ssl_config.get("enable", False)
+    if not ssl_enable:
+        return errors
+
+    cert_file = ssl_config.get("cert_file", "")
+    key_file = ssl_config.get("key_file", "")
+
+    if not cert_file or not cert_file.strip():
+        errors.append("sslValidation.required")
+    elif not os.path.isabs(cert_file):
+        # 相对路径，基于 data 目录解析
+        cert_path = os.path.join(get_astrbot_data_path(), cert_file)
+        if not os.path.isfile(cert_path):
+            errors.append(f"sslValidation.certNotFound|{cert_file}")
+    elif not os.path.isfile(cert_file):
+        errors.append(f"sslValidation.certNotFound|{cert_file}")
+
+    if not key_file or not key_file.strip():
+        errors.append("sslValidation.required")
+    elif not os.path.isabs(key_file):
+        # 相对路径，基于 data 目录解析
+        key_path = os.path.join(get_astrbot_data_path(), key_file)
+        if not os.path.isfile(key_path):
+            errors.append(f"sslValidation.keyNotFound|{key_file}")
+    elif not os.path.isfile(key_file):
+        errors.append(f"sslValidation.keyNotFound|{key_file}")
+
+    # Remove duplicates
+    return list(set(errors))
+
 def _log_computer_config_changes(old_config: dict, new_config: dict) -> None:
     """Compare and log Computer/sandbox configuration changes."""
     old_ps = old_config.get("provider_settings", {})
@@ -298,7 +348,6 @@ async def _validate_neo_connectivity(
 
     return None
 
-
 def save_config(
     post_config: dict, config: AstrBotConfig, is_core: bool = False
 ) -> None:
@@ -327,6 +376,11 @@ def save_config(
         raise ValueError(f"验证配置时出现异常: {e}")
     if errors:
         raise ValueError(f"格式校验未通过: {errors}")
+
+    # 验证 SSL 配置
+    ssl_errors = validate_ssl_config(post_config)
+    if ssl_errors:
+        raise ValueError("; ".join(ssl_errors))
 
     config.save_config(post_config)
 
