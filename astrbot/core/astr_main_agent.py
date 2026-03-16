@@ -4,11 +4,15 @@ import asyncio
 import base64
 import copy
 import datetime
+import io
 import json
 import os
+import uuid
 import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
+
+from PIL import Image as PILImage
 
 from astrbot.core import logger, sp
 from astrbot.core.agent.handoff import HandoffTool
@@ -459,8 +463,8 @@ async def _ensure_img_caption(
             req.image_urls = []
     except Exception as exc:  # noqa: BLE001
         logger.error("处理图片描述失败: %s", exc)
-    finally:
         req.extra_user_content_parts.append(TextPart(text="图片解析失败"))
+    finally:
         req.image_urls = []
 
 
@@ -1190,9 +1194,6 @@ async def _compress_image_internal(url_or_path: str) -> str:
                 data = f.read()
         if not data:
             return url_or_path
-        import io
-
-        from PIL import Image as PILImage
 
         img = PILImage.open(io.BytesIO(data))
         if img.mode in ("RGBA", "P"):
@@ -1202,17 +1203,14 @@ async def _compress_image_internal(url_or_path: str) -> str:
             img.thumbnail((max_size, max_size), PILImage.LANCZOS)
         out_io = io.BytesIO()
         img.save(out_io, format="JPEG", quality=75, optimize=True)
-        temp_dir = "/www/server/python_project/AstrBot/data/temp"
+        temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data/temp")
         if not os.path.exists(temp_dir):
             os.makedirs(temp_dir)
-        import uuid
 
         temp_path = os.path.join(temp_dir, f"compressed_{uuid.uuid4().hex}.jpg")
         with open(temp_path, "wb") as f:
             f.write(out_io.getvalue())
         return temp_path
     except Exception as e:
-        from astrbot.core import logger
-
         logger.warning(f"图片压缩失败: {e}")
         return url_or_path
