@@ -13,7 +13,6 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Conversation, ConversationV2
 from astrbot.core.utils.datetime_utils import to_utc_timestamp
 
-
 # 人格特殊标记：表示用户明确清除人格
 PERSONA_NONE_MARKER = "[%None]"
 
