@@ -859,6 +859,15 @@ def test_tool_args_signature_normalization_is_stable_for_non_json_values(runner)
     assert "0x" not in sig_one
 
 
+def test_tool_args_signature_normalization_handles_recursive_structures(runner):
+    recursive: list[object] = []
+    recursive.append(recursive)
+
+    signature = runner._normalize_tool_args_for_signature({"obj": recursive})
+
+    assert "__recursive__" in signature
+
+
 def test_prepare_tool_call_params_keeps_args_when_schema_has_no_properties(runner):
     tool = FunctionTool(
         name="schema_less_tool",

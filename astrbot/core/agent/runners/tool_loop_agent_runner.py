@@ -1,18 +1,10 @@
 import asyncio
 import copy
-import datetime as dt
-import hashlib
-import json
-import re
 import sys
 import time
 import traceback
 import typing as T
-from dataclasses import dataclass, field, is_dataclass
-from decimal import Decimal
-from enum import Enum
-from pathlib import Path
-from uuid import UUID
+from dataclasses import dataclass, field
 
 from mcp.types import (
     BlobResourceContents,
@@ -31,6 +23,7 @@ from astrbot.core.config.tool_loop_defaults import (
     DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
     DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
     DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+    normalize_positive_int_or_none,
 )
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
@@ -56,6 +49,8 @@ from ..response import AgentResponseData, AgentStats
 from ..run_context import ContextWrapper, TContext
 from ..tool_executor import BaseFunctionToolExecutor
 from .base import AgentResponse, AgentState, BaseAgentRunner
+from .tool_param_preparer import PreparedToolCall, ToolParamPreparer
+from .tool_result_guard import ToolResultGuard, ToolResultGuardConfig
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -93,307 +88,11 @@ class FollowUpTicket:
     resolved: asyncio.Event = field(default_factory=asyncio.Event)
 
 
-@dataclass(slots=True)
-class _ToolResultDedupState:
-    result_hash: str
-    repeat_count: int = 0
-
-
-@dataclass(slots=True)
-class _PreparedToolCall:
-    valid_params: dict[str, T.Any]
-    ignored_params: set[str]
-    error: str | None = None
-
-
-_DEDUP_PREVIEW_LIMIT = 180
-_DEDUP_PREVIEW_MIN_LIMIT = 3
-_DEDUP_MESSAGE_TEMPLATE = (
-    "[tool-result-deduplicated] Tool `{tool_name}` returned unchanged output for "
-    "{repeat_total} consecutive calls with the same arguments. Full repeated output "
-    "is omitted to reduce context growth. Latest preview: {preview}"
-)
-_TOOL_ERROR_PREFIX_RE = re.compile(
-    r"^(error|err|failed|failure|exception|traceback|错误|异常|失败)\s*[:：\-]?",
-    re.IGNORECASE,
-)
-_TOOL_ERROR_CONTAINS_MARKERS = (
-    "traceback (most recent call last)",
-    "tool handler parameter mismatch",
-    "argument contract violation",
-    "missing required tool arguments",
-    "no compatible arguments for this tool",
-)
-
-
-def _stable_type_name(value: T.Any) -> str:
-    cls = value.__class__
-    return f"{cls.__module__}.{cls.__qualname__}"
-
-
-def _canonicalize_tool_arg_value(
-    value: T.Any,
-    *,
-    _seen: set[int] | None = None,
-) -> T.Any:
-    if _seen is None:
-        _seen = set()
-
-    if value is None or isinstance(value, bool | int | float | str):
-        return value
-
-    if isinstance(value, bytes | bytearray | memoryview):
-        return {
-            "__type__": _stable_type_name(value),
-            "hex": bytes(value).hex(),
-        }
-
-    if isinstance(value, dt.datetime | dt.date | dt.time):
-        return {
-            "__type__": _stable_type_name(value),
-            "iso": value.isoformat(),
-        }
-
-    if isinstance(value, Path):
-        return {
-            "__type__": _stable_type_name(value),
-            "path": str(value),
-        }
-
-    if isinstance(value, UUID | Decimal):
-        return {
-            "__type__": _stable_type_name(value),
-            "value": str(value),
-        }
-
-    if isinstance(value, Enum):
-        return {
-            "__type__": _stable_type_name(value),
-            "name": value.name,
-            "value": _canonicalize_tool_arg_value(value.value, _seen=_seen),
-        }
-
-    obj_id = id(value)
-    if obj_id in _seen:
-        return {
-            "__type__": _stable_type_name(value),
-            "__recursive__": True,
-        }
-    _seen.add(obj_id)
-    try:
-        if isinstance(value, dict):
-            normalized_items: list[tuple[str, T.Any]] = []
-            for key, item in value.items():
-                normalized_key = json.dumps(
-                    _canonicalize_tool_arg_value(key, _seen=_seen),
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                )
-                normalized_items.append(
-                    (
-                        normalized_key,
-                        _canonicalize_tool_arg_value(item, _seen=_seen),
-                    )
-                )
-            normalized_items.sort(key=lambda kv: kv[0])
-            return {k: v for k, v in normalized_items}
-
-        if isinstance(value, list | tuple):
-            return [
-                _canonicalize_tool_arg_value(item, _seen=_seen)
-                for item in value
-            ]
-
-        if isinstance(value, set | frozenset):
-            normalized_items = [
-                _canonicalize_tool_arg_value(item, _seen=_seen)
-                for item in value
-            ]
-            normalized_items.sort(
-                key=lambda item: json.dumps(
-                    item,
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                )
-            )
-            return normalized_items
-
-        model_dump = getattr(value, "model_dump", None)
-        if callable(model_dump):
-            dumped = model_dump()
-            return {
-                "__type__": _stable_type_name(value),
-                "value": _canonicalize_tool_arg_value(dumped, _seen=_seen),
-            }
-
-        dict_dump = getattr(value, "dict", None)
-        if callable(dict_dump):
-            dumped = dict_dump()
-            return {
-                "__type__": _stable_type_name(value),
-                "value": _canonicalize_tool_arg_value(dumped, _seen=_seen),
-            }
-
-        if is_dataclass(value) and not isinstance(value, type):
-            attrs: dict[str, T.Any] = {}
-            for key in sorted(vars(value)):
-                if key.startswith("_"):
-                    continue
-                attrs[key] = _canonicalize_tool_arg_value(
-                    getattr(value, key),
-                    _seen=_seen,
-                )
-            return {
-                "__type__": _stable_type_name(value),
-                "attrs": attrs,
-            }
-
-        if hasattr(value, "__dict__"):
-            attrs: dict[str, T.Any] = {}
-            for key in sorted(vars(value)):
-                if key.startswith("_"):
-                    continue
-                attrs[key] = _canonicalize_tool_arg_value(
-                    getattr(value, key),
-                    _seen=_seen,
-                )
-            return {
-                "__type__": _stable_type_name(value),
-                "attrs": attrs,
-            }
-
-        slots = getattr(value, "__slots__", ())
-        if isinstance(slots, str):
-            slots = (slots,)
-        if slots:
-            attrs = {}
-            for slot_name in sorted(slots):
-                if not isinstance(slot_name, str):
-                    continue
-                if hasattr(value, slot_name):
-                    attrs[slot_name] = _canonicalize_tool_arg_value(
-                        getattr(value, slot_name),
-                        _seen=_seen,
-                    )
-            return {
-                "__type__": _stable_type_name(value),
-                "attrs": attrs,
-            }
-
-        return {"__type__": _stable_type_name(value)}
-    finally:
-        _seen.remove(obj_id)
-
-
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
-    @staticmethod
-    def _normalize_tool_param_name_for_matching(name: str) -> str:
-        """Normalize common arg-name variants (camelCase/kebab-case) to snake_case."""
-        normalized = name.replace("-", "_")
-        normalized = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", normalized)
-        normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", normalized)
-        return normalized.lower()
-
-    @staticmethod
-    def _is_missing_like(value: T.Any) -> bool:
-        if value is None:
-            return True
-        if isinstance(value, str):
-            return not value.strip()
-        return False
-
-    @staticmethod
-    def _schema_type_tokens(schema: dict[str, T.Any] | None) -> set[str]:
-        if not isinstance(schema, dict):
-            return set()
-        type_val = schema.get("type")
-        if isinstance(type_val, str):
-            return {type_val}
-        if isinstance(type_val, list):
-            return {str(t) for t in type_val if isinstance(t, str)}
-        return set()
-
-    @classmethod
-    def _coerce_tool_value_by_schema(
-        cls,
-        *,
-        value: T.Any,
-        schema: dict[str, T.Any] | None,
-    ) -> T.Any:
-        tokens = cls._schema_type_tokens(schema)
-        if not tokens:
-            return value
-
-        if "boolean" in tokens:
-            if isinstance(value, bool):
-                return value
-            if isinstance(value, int | float):
-                return bool(value)
-            if isinstance(value, str):
-                lowered = value.strip().lower()
-                if lowered in {"true", "1", "yes", "y", "on"}:
-                    return True
-                if lowered in {"false", "0", "no", "n", "off", ""}:
-                    return False
-
-        if "integer" in tokens:
-            if isinstance(value, bool):
-                return int(value)
-            if isinstance(value, int):
-                return value
-            if isinstance(value, float) and value.is_integer():
-                return int(value)
-            if isinstance(value, str):
-                stripped = value.strip()
-                if re.fullmatch(r"[+-]?\d+", stripped):
-                    try:
-                        return int(stripped)
-                    except ValueError:
-                        pass
-
-        if "number" in tokens:
-            if isinstance(value, int | float) and not isinstance(value, bool):
-                return value
-            if isinstance(value, str):
-                stripped = value.strip()
-                if stripped:
-                    try:
-                        return float(stripped)
-                    except ValueError:
-                        pass
-
-        if "string" in tokens and not isinstance(value, str):
-            if isinstance(value, bool | int | float):
-                return str(value)
-
-        return value
-
-    @classmethod
-    def _coerce_tool_params_by_schema(
-        cls,
-        *,
-        params: dict[str, T.Any],
-        params_schema: dict[str, T.Any] | None,
-    ) -> tuple[dict[str, T.Any], dict[str, tuple[T.Any, T.Any]]]:
-        if not isinstance(params_schema, dict):
-            return params, {}
-        properties = params_schema.get("properties")
-        if not isinstance(properties, dict):
-            return params, {}
-
-        coerced_params = dict(params)
-        changed: dict[str, tuple[T.Any, T.Any]] = {}
-        for key, value in params.items():
-            schema = properties.get(key)
-            if not isinstance(schema, dict):
-                continue
-            coerced = cls._coerce_tool_value_by_schema(value=value, schema=schema)
-            if coerced is not value and coerced != value:
-                changed[key] = (value, coerced)
-                coerced_params[key] = coerced
-        return coerced_params, changed
+    def __init__(self, *args: T.Any, **kwargs: T.Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._tool_param_preparer = ToolParamPreparer()
+        self._tool_result_guard: ToolResultGuard | None = None
 
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
@@ -475,22 +174,31 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._aborted = False
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
-        # This cache tracks repeated tool results. Bound it to keep long-running
-        # sessions from accumulating stale signatures indefinitely.
-        self._tool_result_dedup: dict[str, _ToolResultDedupState] = {}
         self._deduplicate_repeated_tool_results = deduplicate_repeated_tool_results
-        self._tool_result_dedup_max_entries = (
-            self._normalize_tool_result_dedup_max_entries(
-                tool_result_dedup_max_entries
+        self._tool_result_dedup_max_entries = normalize_positive_int_or_none(
+            tool_result_dedup_max_entries,
+            default=DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+            setting_name="tool_result_dedup_max_entries",
+        )
+        self._tool_error_repeat_guard_threshold = normalize_positive_int_or_none(
+            tool_error_repeat_guard_threshold,
+            default=DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+            setting_name="tool_error_repeat_guard_threshold",
+        )
+        self._tool_result_guard = ToolResultGuard(
+            ToolResultGuardConfig(
+                deduplicate_repeated_tool_results=self._deduplicate_repeated_tool_results,
+                tool_result_dedup_max_entries=self._tool_result_dedup_max_entries,
+                tool_error_repeat_guard_threshold=self._tool_error_repeat_guard_threshold,
             )
         )
-        self._tool_error_repeat_guard_threshold = (
-            self._normalize_tool_error_repeat_guard_threshold(
-                tool_error_repeat_guard_threshold
-            )
+        # Keep compatibility with existing tests and callers that still inspect these
+        # private fields directly.
+        self._tool_result_dedup = self._tool_result_guard.dedup_map
+        self._tool_error_repeat_counts = self._tool_result_guard.error_repeat_counts
+        self._tool_error_repeat_guard_triggered = (
+            self._tool_result_guard.error_repeat_guard_triggered
         )
-        self._tool_error_repeat_counts: dict[str, int] = {}
-        self._tool_error_repeat_guard_triggered = False
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -679,186 +387,56 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         return f"{content}{notice}"
 
     @staticmethod
-    def _compact_tool_result_preview(
-        content: str,
-        limit: int = _DEDUP_PREVIEW_LIMIT,
-    ) -> str:
-        normalized = " ".join(content.strip().split())
-        if len(normalized) <= limit:
-            return normalized
-        if limit <= _DEDUP_PREVIEW_MIN_LIMIT:
-            return normalized[:limit]
-        return f"{normalized[: limit - _DEDUP_PREVIEW_MIN_LIMIT]}..."
-
-    @staticmethod
     def _normalize_tool_result_dedup_max_entries(
         max_entries: int | None,
     ) -> int | None:
-        if max_entries is None:
-            return None
-        if isinstance(max_entries, bool):
-            logger.warning(
-                "Invalid tool_result_dedup_max_entries=%s, fallback to %s.",
-                max_entries,
-                DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
-            )
-            return DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
-        try:
-            normalized = int(max_entries)
-        except (TypeError, ValueError):
-            logger.warning(
-                "Invalid tool_result_dedup_max_entries=%s, fallback to %s.",
-                max_entries,
-                DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
-            )
-            return DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
-        if normalized <= 0:
-            return None
-        return normalized
+        return normalize_positive_int_or_none(
+            max_entries,
+            default=DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+            setting_name="tool_result_dedup_max_entries",
+        )
 
     @staticmethod
     def _normalize_tool_error_repeat_guard_threshold(
         threshold: int | None,
     ) -> int | None:
-        if threshold is None:
-            return None
-        if isinstance(threshold, bool):
-            logger.warning(
-                "Invalid tool_error_repeat_guard_threshold=%s, fallback to %s.",
-                threshold,
-                DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
-            )
-            return DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD
-        try:
-            normalized = int(threshold)
-        except (TypeError, ValueError):
-            logger.warning(
-                "Invalid tool_error_repeat_guard_threshold=%s, fallback to %s.",
-                threshold,
-                DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
-            )
-            return DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD
-        if normalized <= 0:
-            return None
-        return normalized
+        return normalize_positive_int_or_none(
+            threshold,
+            default=DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+            setting_name="tool_error_repeat_guard_threshold",
+        )
 
-    @staticmethod
-    def _normalize_tool_args_for_signature(tool_args: dict[str, T.Any]) -> str:
-        normalized_args = _canonicalize_tool_arg_value(tool_args)
-        try:
-            return json.dumps(
-                normalized_args,
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
+    def _ensure_tool_result_guard(self) -> ToolResultGuard:
+        if self._tool_result_guard is None:
+            self._tool_result_guard = ToolResultGuard(
+                ToolResultGuardConfig(
+                    deduplicate_repeated_tool_results=DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
+                    tool_result_dedup_max_entries=DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+                    tool_error_repeat_guard_threshold=DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+                )
             )
-        except (TypeError, ValueError):
-            logger.warning(
-                "Failed to normalize tool args for signature, fallback to type-only marker. args_type=%s",
-                _stable_type_name(tool_args),
+            self._tool_result_dedup = self._tool_result_guard.dedup_map
+            self._tool_error_repeat_counts = self._tool_result_guard.error_repeat_counts
+            self._tool_error_repeat_guard_triggered = (
+                self._tool_result_guard.error_repeat_guard_triggered
             )
-            return json.dumps(
-                {
-                    "__type__": _stable_type_name(tool_args),
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
-            )
+        return self._tool_result_guard
 
-    def _build_tool_signature(
-        self,
-        *,
-        tool_name: str,
-        tool_args: dict[str, T.Any],
-    ) -> str:
-        return f"{tool_name}:{self._normalize_tool_args_for_signature(tool_args=tool_args)}"
+    def _sync_tool_result_guard_state(self) -> None:
+        guard = self._ensure_tool_result_guard()
+        self._tool_result_dedup = guard.dedup_map
+        self._tool_error_repeat_counts = guard.error_repeat_counts
+        self._tool_error_repeat_guard_triggered = guard.error_repeat_guard_triggered
+
+    # Backward-compatible private wrappers for tests and callers.
+    def _normalize_tool_args_for_signature(self, tool_args: dict[str, T.Any]) -> str:
+        return self._ensure_tool_result_guard().normalize_tool_args_for_signature(
+            tool_args
+        )
 
     @staticmethod
     def _is_tool_error_content(content: str) -> bool:
-        normalized = content.strip()
-        if not normalized:
-            return False
-
-        if _TOOL_ERROR_PREFIX_RE.match(normalized):
-            return True
-
-        lowered = normalized.lower()
-        return any(marker in lowered for marker in _TOOL_ERROR_CONTAINS_MARKERS)
-
-    def _prune_tool_result_dedup_if_needed(self) -> None:
-        """Bound dedup cache size for long-running sessions."""
-        max_entries = self._tool_result_dedup_max_entries
-        if max_entries is None:
-            return
-
-        while len(self._tool_result_dedup) > max_entries:
-            try:
-                oldest_key = next(iter(self._tool_result_dedup))
-            except StopIteration:
-                break
-            self._tool_result_dedup.pop(oldest_key, None)
-
-    def _prune_tool_error_repeat_counts_if_needed(self) -> None:
-        max_entries = self._tool_result_dedup_max_entries
-        if max_entries is None:
-            max_entries = DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
-
-        while len(self._tool_error_repeat_counts) > max_entries:
-            try:
-                oldest_key = next(iter(self._tool_error_repeat_counts))
-            except StopIteration:
-                break
-            self._tool_error_repeat_counts.pop(oldest_key, None)
-
-    def _check_and_apply_tool_error_repeat_guard(
-        self,
-        *,
-        tool_name: str,
-        tool_args: dict[str, T.Any],
-        content: str,
-    ) -> None:
-        if self._tool_error_repeat_guard_triggered:
-            return
-        threshold = self._tool_error_repeat_guard_threshold
-        if threshold is None:
-            return
-
-        signature = self._build_tool_signature(tool_name=tool_name, tool_args=tool_args)
-        if not self._is_tool_error_content(content):
-            self._tool_error_repeat_counts.pop(signature, None)
-            return
-
-        repeat_count = self._tool_error_repeat_counts.get(signature, 0) + 1
-        self._tool_error_repeat_counts[signature] = repeat_count
-        self._prune_tool_error_repeat_counts_if_needed()
-        if repeat_count < threshold:
-            return
-
-        self._tool_error_repeat_guard_triggered = True
-        self._tool_error_repeat_counts.clear()
-        if self.req:
-            self.req.func_tool = None
-
-        preview = self._compact_tool_result_preview(content, limit=_DEDUP_PREVIEW_LIMIT)
-        logger.warning(
-            "Tool error repeat guard activated: tool=%s repeats=%s",
-            tool_name,
-            repeat_count,
-        )
-        self.run_context.messages.append(
-            Message(
-                role="user",
-                content=(
-                    "[SYSTEM NOTICE] Tool call error loop detected. "
-                    f"Tool `{tool_name}` with the same arguments has failed "
-                    f"{repeat_count} times consecutively. "
-                    "To prevent context bloat and wasted tool calls, all tools are now disabled for this run. "
-                    "Do not call tools again; provide the best possible answer to the user based on current information. "
-                    f"Latest error preview: {preview}"
-                ),
-            )
-        )
+        return ToolResultGuard.is_tool_error_content(content)
 
     def _deduplicate_tool_result_content(
         self,
@@ -867,123 +445,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_args: dict[str, T.Any],
         content: str,
     ) -> str:
-        if not content:
-            return content
-
-        signature = self._build_tool_signature(tool_name=tool_name, tool_args=tool_args)
-        content_hash = hashlib.sha256(
-            content.encode("utf-8", errors="replace")
-        ).hexdigest()
-
-        state = self._tool_result_dedup.get(signature)
-        if state is None or state.result_hash != content_hash:
-            self._tool_result_dedup[signature] = _ToolResultDedupState(
-                result_hash=content_hash,
-                repeat_count=0,
-            )
-            self._prune_tool_result_dedup_if_needed()
-            return content
-
-        state.repeat_count += 1
-        repeat_total = state.repeat_count + 1
-        preview = self._compact_tool_result_preview(
-            content,
-            limit=_DEDUP_PREVIEW_LIMIT,
-        )
-        logger.info(
-            "Deduplicated repeated tool output: tool=%s repeats=%s",
-            tool_name,
-            repeat_total,
-        )
-        return _DEDUP_MESSAGE_TEMPLATE.format(
+        output = self._ensure_tool_result_guard().deduplicate_tool_result_content(
             tool_name=tool_name,
-            repeat_total=repeat_total,
-            preview=preview,
+            tool_args=tool_args,
+            content=content,
         )
-
-    @staticmethod
-    def _find_missing_required_tool_params(
-        *,
-        tool: T.Any,
-        provided_params: dict[str, T.Any],
-    ) -> list[str]:
-        params_schema = getattr(tool, "parameters", None)
-        if not isinstance(params_schema, dict):
-            return []
-        required = params_schema.get("required")
-        if not isinstance(required, list):
-            return []
-
-        missing: list[str] = []
-        for field_name in required:
-            if not isinstance(field_name, str):
-                continue
-            if field_name not in provided_params:
-                missing.append(field_name)
-                continue
-            value = provided_params.get(field_name)
-            if ToolLoopAgentRunner._is_missing_like(value):
-                missing.append(field_name)
-        return missing
-
-    @staticmethod
-    def _validate_anyof_oneof_contract(
-        *,
-        tool: T.Any,
-        provided_params: dict[str, T.Any],
-    ) -> str | None:
-        params_schema = getattr(tool, "parameters", None)
-        if not isinstance(params_schema, dict):
-            return None
-
-        def _extract_required_groups(key: str) -> list[list[str]]:
-            groups_raw = params_schema.get(key)
-            if not isinstance(groups_raw, list):
-                return []
-            groups: list[list[str]] = []
-            for item in groups_raw:
-                if not isinstance(item, dict):
-                    continue
-                req = item.get("required")
-                if not isinstance(req, list):
-                    continue
-                normalized = [f for f in req if isinstance(f, str) and f]
-                if normalized:
-                    groups.append(normalized)
-            return groups
-
-        def _is_group_satisfied(group: list[str]) -> bool:
-            for field in group:
-                if field not in provided_params:
-                    return False
-                if ToolLoopAgentRunner._is_missing_like(provided_params.get(field)):
-                    return False
-            return True
-
-        anyof_groups = _extract_required_groups("anyOf")
-        if anyof_groups and not any(_is_group_satisfied(g) for g in anyof_groups):
-            group_text = " or ".join(
-                "[" + ", ".join(group) + "]" for group in anyof_groups
-            )
-            return (
-                "error: Argument contract violation (anyOf). "
-                f"At least one argument group is required: {group_text}."
-            )
-
-        oneof_groups = _extract_required_groups("oneOf")
-        if oneof_groups:
-            satisfied = sum(1 for g in oneof_groups if _is_group_satisfied(g))
-            if satisfied != 1:
-                group_text = " | ".join(
-                    "[" + ", ".join(group) + "]" for group in oneof_groups
-                )
-                return (
-                    "error: Argument contract violation (oneOf). "
-                    "Exactly one argument group must be provided. "
-                    f"Available groups: {group_text}."
-                )
-
-        return None
+        self._sync_tool_result_guard_state()
+        return output
 
     def _record_tool_result(
         self,
@@ -996,17 +464,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> None:
         output = content
         if tool_name:
-            normalized_args = tool_args or {}
-            self._check_and_apply_tool_error_repeat_guard(
+            guard_result = self._ensure_tool_result_guard().process(
                 tool_name=tool_name,
-                tool_args=normalized_args,
+                tool_args=tool_args or {},
                 content=content,
             )
-            if self._deduplicate_repeated_tool_results:
-                output = self._deduplicate_tool_result_content(
-                    tool_name=tool_name,
-                    tool_args=normalized_args,
-                    content=content,
+            output = guard_result.content
+            self._sync_tool_result_guard_state()
+            if guard_result.tools_disabled and self.req:
+                self.req.func_tool = None
+            if guard_result.notice_message:
+                self.run_context.messages.append(
+                    Message(role="user", content=guard_result.notice_message)
                 )
 
         tool_call_result_blocks.append(
@@ -1023,108 +492,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool: T.Any,
         tool_name: str,
         raw_args: dict[str, T.Any],
-    ) -> _PreparedToolCall:
-        if not tool.handler:
-            # Non-handler tools (e.g., MCP) should receive raw args unchanged.
-            return _PreparedToolCall(valid_params=raw_args, ignored_params=set())
-
-        params_schema = tool.parameters if isinstance(tool.parameters, dict) else None
-        properties = (params_schema or {}).get("properties") or {}
-        expected_params = set(properties.keys())
-
-        valid_params: dict[str, T.Any] = {}
-        alias_mapped_params: dict[str, str] = {}
-
-        if expected_params:
-            for raw_key, value in raw_args.items():
-                if raw_key in expected_params:
-                    valid_params[raw_key] = value
-                    continue
-                normalized_key = self._normalize_tool_param_name_for_matching(raw_key)
-                if normalized_key in expected_params and normalized_key not in valid_params:
-                    valid_params[normalized_key] = value
-                    alias_mapped_params[raw_key] = normalized_key
-        else:
-            # When schema does not expose properties, keep backward compatibility.
-            valid_params = dict(raw_args)
-
-        if alias_mapped_params:
-            logger.info("工具 %s 参数名称已自动映射: %s", tool_name, alias_mapped_params)
-
-        valid_params, changed_types = self._coerce_tool_params_by_schema(
-            params=valid_params,
-            params_schema=params_schema,
-        )
-        if changed_types:
-            logger.info(
-                "工具 %s 参数类型已自动纠正: %s",
-                tool_name,
-                {k: {"from": repr(v[0]), "to": repr(v[1])} for k, v in changed_types.items()},
-            )
-
-        ignored_params = set(raw_args.keys()) - set(valid_params.keys())
-        if expected_params:
-            ignored_params = {
-                key
-                for key in ignored_params
-                if self._normalize_tool_param_name_for_matching(key) not in valid_params
-            }
-        else:
-            ignored_params = set()
-
-        if ignored_params:
-            logger.warning("工具 %s 忽略非期望参数: %s", tool_name, ignored_params)
-
-        if expected_params and raw_args and not valid_params:
-            return _PreparedToolCall(
-                valid_params={},
-                ignored_params=ignored_params,
-                error=(
-                    "error: No compatible arguments for this tool. "
-                    f"Provided arguments={sorted(raw_args.keys())}. "
-                    "This may indicate a wrong tool selection; "
-                    "please re-check tool name and argument schema."
-                ),
-            )
-
-        missing_required = self._find_missing_required_tool_params(
+    ) -> PreparedToolCall:
+        return self._tool_param_preparer.prepare(
             tool=tool,
-            provided_params=valid_params,
-        )
-        if missing_required:
-            missing_text = ", ".join(missing_required)
-            logger.warning(
-                "工具 %s 缺少必填参数: %s。原始参数: %s",
-                tool_name,
-                missing_text,
-                raw_args,
-            )
-            return _PreparedToolCall(
-                valid_params={},
-                ignored_params=ignored_params,
-                error=(
-                    "error: Missing required tool arguments: "
-                    f"{missing_text}. "
-                    "Please call this tool again with all required arguments."
-                ),
-            )
-
-        contract_error = self._validate_anyof_oneof_contract(
-            tool=tool,
-            provided_params=valid_params,
-        )
-        if contract_error:
-            logger.warning("工具 %s 参数契约校验失败: %s", tool_name, contract_error)
-            return _PreparedToolCall(
-                valid_params={},
-                ignored_params=ignored_params,
-                error=contract_error,
-            )
-
-        return _PreparedToolCall(
-            valid_params=valid_params,
-            ignored_params=ignored_params,
-            error=None,
+            tool_name=tool_name,
+            raw_args=raw_args,
         )
 
     @override

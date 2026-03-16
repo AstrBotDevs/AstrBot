@@ -17,6 +17,7 @@ from astrbot.core.config.tool_loop_defaults import (
     DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
     DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
     DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+    normalize_positive_int_or_none,
 )
 from astrbot.core.message.components import File, Image
 from astrbot.core.message.message_event_result import (
@@ -49,34 +50,6 @@ from ...follow_up import (
 )
 
 
-def _normalize_positive_int_or_none(
-    raw_value,
-    default: int,
-    setting_name: str,
-) -> int | None:
-    if isinstance(raw_value, bool):
-        logger.warning(
-            "Invalid provider_settings.%s=%s, fallback to %s.",
-            setting_name,
-            raw_value,
-            default,
-        )
-        raw_value = default
-    try:
-        value = None if raw_value is None else int(raw_value)
-    except (TypeError, ValueError):
-        logger.warning(
-            "Invalid provider_settings.%s=%s, fallback to %s.",
-            setting_name,
-            raw_value,
-            default,
-        )
-        value = default
-    if value is not None and value <= 0:
-        return None
-    return value
-
-
 class InternalAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
@@ -93,21 +66,21 @@ class InternalAgentSubStage(Stage):
             "deduplicate_repeated_tool_results",
             DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
         )
-        self.tool_result_dedup_max_entries = _normalize_positive_int_or_none(
+        self.tool_result_dedup_max_entries = normalize_positive_int_or_none(
             settings.get(
                 "tool_result_dedup_max_entries",
                 DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
             ),
             default=DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
-            setting_name="tool_result_dedup_max_entries",
+            setting_name="provider_settings.tool_result_dedup_max_entries",
         )
-        self.tool_error_repeat_guard_threshold = _normalize_positive_int_or_none(
+        self.tool_error_repeat_guard_threshold = normalize_positive_int_or_none(
             settings.get(
                 "tool_error_repeat_guard_threshold",
                 DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
             ),
             default=DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
-            setting_name="tool_error_repeat_guard_threshold",
+            setting_name="provider_settings.tool_error_repeat_guard_threshold",
         )
         if self.tool_schema_mode not in ("skills_like", "full"):
             logger.warning(
