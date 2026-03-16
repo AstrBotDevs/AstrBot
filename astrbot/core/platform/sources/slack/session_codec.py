@@ -49,43 +49,6 @@ def decode_slack_session_id(session_id: str) -> tuple[str, str | None]:
     return session_id, None
 
 
-def _extract_raw_target(raw_message: dict | None) -> tuple[str, str | None]:
-    if not isinstance(raw_message, dict):
-        return "", None
-
-    raw_channel_id = ""
-    raw_thread_ts = None
-
-    raw_channel = raw_message.get("channel")
-    if raw_channel is not None and raw_channel != "":
-        raw_channel_id = str(raw_channel)
-
-    raw_thread = raw_message.get("thread_ts")
-    if raw_thread is not None and raw_thread != "":
-        raw_thread_ts = str(raw_thread)
-
-    return raw_channel_id, raw_thread_ts
-
-
-def _resolve_target_with_precedence(
-    *,
-    session_id: str,
-    raw_message: dict | None = None,
-    group_id: str = "",
-    fallback_channel_id: str = "",
-) -> tuple[str, str | None]:
-    """Resolve Slack target with a single precedence chain.
-
-    Precedence for channel: `group_id > raw_message.channel > parsed(session_id) > fallback_channel_id`.
-    Precedence for thread: `raw_message.thread_ts > parsed(session_id)`.
-    """
-    parsed_channel_id, parsed_thread_ts = decode_slack_session_id(session_id)
-    raw_channel_id, raw_thread_ts = _extract_raw_target(raw_message)
-
-    channel_id = group_id or raw_channel_id or parsed_channel_id or fallback_channel_id
-    return channel_id, raw_thread_ts or parsed_thread_ts
-
-
 def resolve_target_from_event(
     *,
     session_id: str,
@@ -93,7 +56,7 @@ def resolve_target_from_event(
     group_id: str = "",
 ) -> tuple[str, str | None]:
     """Resolve target for received Slack events (uses event raw payload)."""
-    return _resolve_target_with_precedence(
+    return resolve_slack_message_target(
         session_id=session_id,
         raw_message=raw_message,
         group_id=group_id,
@@ -107,10 +70,10 @@ def resolve_target_from_session(
     fallback_channel_id: str = "",
 ) -> tuple[str, str | None]:
     """Resolve target when only session metadata is available (no raw event)."""
-    return _resolve_target_with_precedence(
+    return resolve_slack_message_target(
         session_id=session_id,
         group_id=group_id,
-        fallback_channel_id=fallback_channel_id,
+        sender_id=fallback_channel_id,
     )
 
 
@@ -121,10 +84,24 @@ def resolve_slack_message_target(
     group_id: str = "",
     sender_id: str = "",
 ) -> tuple[str, str | None]:
-    """Backward-compatible resolver shared by legacy and new Slack call sites."""
-    return _resolve_target_with_precedence(
-        session_id=session_id,
-        raw_message=raw_message,
-        group_id=group_id,
-        fallback_channel_id=sender_id,
-    )
+    """Backward-compatible resolver shared by legacy and new Slack call sites.
+
+    Precedence for channel: group_id > raw_message.channel > parsed(session_id) > sender_id
+    Precedence for thread: raw_message.thread_ts > parsed(session_id)
+    """
+    parsed_channel_id, parsed_thread_ts = decode_slack_session_id(session_id)
+
+    raw_channel_id = ""
+    raw_thread_ts = None
+    if isinstance(raw_message, dict):
+        raw_channel = raw_message.get("channel")
+        if raw_channel not in (None, ""):
+            raw_channel_id = str(raw_channel)
+
+        raw_thread = raw_message.get("thread_ts")
+        if raw_thread not in (None, ""):
+            raw_thread_ts = str(raw_thread)
+
+    channel_id = group_id or raw_channel_id or parsed_channel_id or sender_id
+    thread_ts = raw_thread_ts or parsed_thread_ts
+    return channel_id, thread_ts

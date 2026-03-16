@@ -370,6 +370,37 @@ async def test_send_with_blocks_and_fallback_skips_when_channel_empty(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_send_with_blocks_and_fallback_uses_safe_text_when_custom_builder_empty():
+    web_client = AsyncMock()
+    web_client.chat_postMessage = AsyncMock(side_effect=[RuntimeError("boom"), None])
+
+    async def _parse_blocks(_message_chain, _web_client, _fallbacks):
+        return (
+            [{"type": "section", "text": {"type": "mrkdwn", "text": "reply"}}],
+            "reply",
+        )
+
+    def _empty_builder(_message_chain, _fallbacks):
+        return ""
+
+    await slack_send_utils_module.send_with_blocks_and_fallback(
+        web_client=web_client,
+        channel="C0001",
+        thread_ts="1710000000.500",
+        message_chain=MessageChain([Plain(text="reply")]),
+        fallbacks=build_slack_text_fallbacks({"safe_text": "fallback-message"}),
+        parse_blocks=_parse_blocks,
+        build_text_fallback=_empty_builder,
+        session_id="C0001__thread__1710000000.500",
+    )
+
+    assert web_client.chat_postMessage.await_count == 2
+    second_call_kwargs = web_client.chat_postMessage.await_args_list[1].kwargs
+    assert second_call_kwargs["text"] == "fallback-message"
+    assert "blocks" not in second_call_kwargs
+
+
+@pytest.mark.asyncio
 async def test_send_by_session_uses_configured_safe_text_fallback(monkeypatch):
     adapter = SlackAdapter(
         platform_config={
