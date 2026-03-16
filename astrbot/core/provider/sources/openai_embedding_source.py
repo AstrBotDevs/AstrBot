@@ -40,21 +40,30 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     async def get_embedding(self, text: str) -> list[float]:
         """获取文本的嵌入"""
+        kwargs = self._embedding_kwargs()
         embedding = await self.client.embeddings.create(
             input=text,
             model=self.model,
-            dimensions=self.get_dim(),
+            **kwargs,
         )
         return embedding.data[0].embedding
 
     async def get_embeddings(self, text: list[str]) -> list[list[float]]:
         """批量获取文本的嵌入"""
+        kwargs = self._embedding_kwargs()
         embeddings = await self.client.embeddings.create(
             input=text,
             model=self.model,
-            dimensions=self.get_dim(),
+            **kwargs,
         )
         return [item.embedding for item in embeddings.data]
+
+    def _embedding_kwargs(self) -> dict:
+        """构建嵌入请求的可选参数"""
+        kwargs = {}
+        if "embedding_dimensions" in self.provider_config:
+            kwargs["dimensions"] = int(self.provider_config["embedding_dimensions"])
+        return kwargs
 
     def get_dim(self) -> int:
         """获取向量的维度"""
