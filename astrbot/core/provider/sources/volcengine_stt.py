@@ -193,9 +193,9 @@ class ProviderVolcengineSTT(STTProvider):
                         return "火山引擎stt服务内部处理错误"
 
         except asyncio.TimeoutError:
-            error_msg = "火山引擎 STT 请求超时 (超过 300 秒)"
+            error_msg = "火山引擎 STT 请求超时 (超过 30 秒)"
             logger.error(error_msg)
-            return "火山引擎 STT 请求超时 (超过 300 秒)"
+            return "火山引擎 STT 请求超时 (超过 30 秒)"
 
         except aiohttp.ClientError as e:
             error_msg = f"火山引擎 STT 网络请求错误: {e}"
