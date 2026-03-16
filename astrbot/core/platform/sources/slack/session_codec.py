@@ -9,21 +9,74 @@ def encode_thread_session_id(channel_id: str, thread_ts: str) -> str:
     return f"{channel_id}{THREAD_SESSION_MARKER}{thread_ts}"
 
 
+def _decode_thread_session_id(session_id: str) -> tuple[str, str | None] | None:
+    if THREAD_SESSION_MARKER not in session_id:
+        return None
+    channel_id, thread_ts = session_id.split(THREAD_SESSION_MARKER, 1)
+    return channel_id, thread_ts or None
+
+
+def _decode_legacy_session_id(session_id: str) -> tuple[str, str | None] | None:
+    if not session_id.startswith(LEGACY_GROUP_SESSION_PREFIX):
+        return None
+    return session_id[len(LEGACY_GROUP_SESSION_PREFIX) :], None
+
+
 def decode_slack_session_id(session_id: str) -> tuple[str, str | None]:
     if not session_id:
         return "", None
 
-    if THREAD_SESSION_MARKER in session_id:
-        channel_id, thread_ts = session_id.split(THREAD_SESSION_MARKER, 1)
-        # Do not fallback to legacy parsing once thread marker is detected.
-        # Keep decoded channel_id even if thread_ts is missing.
-        return channel_id, thread_ts or None
+    decoded_thread_session = _decode_thread_session_id(session_id)
+    if decoded_thread_session is not None:
+        return decoded_thread_session
 
-    # Backward compatibility for historical IDs like "group_<channel_id>".
-    if session_id.startswith(LEGACY_GROUP_SESSION_PREFIX):
-        return session_id[len(LEGACY_GROUP_SESSION_PREFIX) :], None
+    decoded_legacy_session = _decode_legacy_session_id(session_id)
+    if decoded_legacy_session is not None:
+        return decoded_legacy_session
 
     return session_id, None
+
+
+def _extract_raw_target(raw_message: dict | None) -> tuple[str, str | None]:
+    if not isinstance(raw_message, dict):
+        return "", None
+
+    raw_channel_id = ""
+    raw_thread_ts = None
+
+    raw_channel = raw_message.get("channel")
+    if raw_channel is not None and raw_channel != "":
+        raw_channel_id = str(raw_channel)
+
+    raw_thread = raw_message.get("thread_ts")
+    if raw_thread is not None and raw_thread != "":
+        raw_thread_ts = str(raw_thread)
+
+    return raw_channel_id, raw_thread_ts
+
+
+def resolve_target_from_event(
+    *,
+    session_id: str,
+    raw_message: dict,
+    group_id: str = "",
+) -> tuple[str, str | None]:
+    parsed_channel_id, parsed_thread_ts = decode_slack_session_id(session_id)
+    raw_channel_id, raw_thread_ts = _extract_raw_target(raw_message)
+
+    channel_id = group_id or raw_channel_id or parsed_channel_id
+    return channel_id, raw_thread_ts or parsed_thread_ts
+
+
+def resolve_target_from_session(
+    *,
+    session_id: str,
+    group_id: str = "",
+    fallback_channel_id: str = "",
+) -> tuple[str, str | None]:
+    parsed_channel_id, parsed_thread_ts = decode_slack_session_id(session_id)
+    channel_id = group_id or parsed_channel_id or fallback_channel_id
+    return channel_id, parsed_thread_ts
 
 
 def resolve_slack_message_target(
@@ -34,16 +87,7 @@ def resolve_slack_message_target(
     sender_id: str = "",
 ) -> tuple[str, str | None]:
     parsed_channel_id, parsed_thread_ts = decode_slack_session_id(session_id)
-
-    raw_channel_id = ""
-    raw_thread_ts = None
-    if isinstance(raw_message, dict):
-        raw_channel = raw_message.get("channel")
-        if raw_channel is not None and raw_channel != "":
-            raw_channel_id = str(raw_channel)
-        raw_thread = raw_message.get("thread_ts")
-        if raw_thread is not None and raw_thread != "":
-            raw_thread_ts = str(raw_thread)
+    raw_channel_id, raw_thread_ts = _extract_raw_target(raw_message)
 
     channel_id = group_id or raw_channel_id or parsed_channel_id or sender_id
     return channel_id, raw_thread_ts or parsed_thread_ts

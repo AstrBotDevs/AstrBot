@@ -15,7 +15,7 @@ from astrbot.api.message_components import (
 )
 from astrbot.api.platform import Group, MessageMember
 
-from .session_codec import SLACK_SAFE_TEXT_FALLBACK, resolve_slack_message_target
+from .session_codec import SLACK_SAFE_TEXT_FALLBACK, resolve_target_from_event
 
 SLACK_IMAGE_FALLBACK_TEXT = "[image]"
 SLACK_FILE_FALLBACK_TEMPLATE = "[file:{name}]"
@@ -148,11 +148,11 @@ class SlackMessageEvent(AstrMessageEvent):
         return blocks, fallback_text if blocks else text_content
 
     def _resolve_target(self) -> tuple[str, str | None]:
-        return resolve_slack_message_target(
+        raw_message = getattr(self.message_obj, "raw_message", None)
+        return resolve_target_from_event(
             session_id=self.session_id,
-            raw_message=getattr(self.message_obj, "raw_message", None),
+            raw_message=raw_message if isinstance(raw_message, dict) else {},
             group_id=self.get_group_id(),
-            sender_id=self.get_sender_id(),
         )
 
     async def send(self, message: MessageChain) -> None:

@@ -27,7 +27,7 @@ from .client import SlackSocketClient, SlackWebhookClient
 from .session_codec import (
     SLACK_SAFE_TEXT_FALLBACK,
     encode_thread_session_id,
-    resolve_slack_message_target,
+    resolve_target_from_session,
 )
 from .slack_event import SlackMessageEvent
 
@@ -94,10 +94,7 @@ class SlackAdapter(Platform):
         safe_text = text or SLACK_SAFE_TEXT_FALLBACK
 
         try:
-            channel_id, thread_ts = resolve_slack_message_target(
-                session_id=session.session_id,
-                sender_id=session.session_id,
-            )
+            channel_id, thread_ts = self._session_to_slack_target(session)
             message_payload = {
                 "channel": channel_id,
                 "text": safe_text,
@@ -112,9 +109,13 @@ class SlackAdapter(Platform):
         await super().send_by_session(session, message_chain)
 
     @staticmethod
-    def _normalize_event_payload(event: dict) -> dict:
-        # Socket Mode may deliver thread updates as message_replied envelopes.
-        # Unwrap nested "message" payload to preserve user/text/thread_ts fields.
+    def _session_to_slack_target(session: MessageSesion) -> tuple[str, str | None]:
+        """Map an AstrBot session to Slack target fields."""
+        return resolve_target_from_session(session_id=session.session_id)
+
+    @staticmethod
+    def _unwrap_message_replied_event(event: dict) -> dict:
+        """Flatten Slack message_replied envelopes for normal message processing."""
         if event.get("subtype") == "message_replied":
             nested_message = event.get("message")
             if isinstance(nested_message, dict):
@@ -126,7 +127,7 @@ class SlackAdapter(Platform):
         return event
 
     async def convert_message(self, event: dict) -> AstrBotMessage:
-        event = self._normalize_event_payload(event)
+        event = self._unwrap_message_replied_event(event)
         logger.debug(f"[slack] RawMessage {event}")
 
         abm = AstrBotMessage()
@@ -161,6 +162,7 @@ class SlackAdapter(Platform):
 
         # 设置会话ID
         channel_id_for_session = str(channel_id or "")
+        # thread_ts may come from unwrapped `message_replied` payloads.
         thread_ts = str(event.get("thread_ts", "") or "")
         if thread_ts and channel_id_for_session:
             # Slack threads can appear in channels and DMs.

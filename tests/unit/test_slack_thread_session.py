@@ -12,6 +12,8 @@ from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.sources.slack.session_codec import (
     decode_slack_session_id,
     resolve_slack_message_target,
+    resolve_target_from_event,
+    resolve_target_from_session,
 )
 from astrbot.core.platform.sources.slack.slack_adapter import SlackAdapter
 from astrbot.core.platform.sources.slack.slack_event import SlackMessageEvent
@@ -289,3 +291,23 @@ def test_resolve_slack_message_target_prefers_raw_message_thread_ts():
 
     assert channel_id == "C123"
     assert thread_ts == "333.444"
+
+
+def test_resolve_target_from_event_prefers_raw_thread_and_group_precedence():
+    channel_id, thread_ts = resolve_target_from_event(
+        session_id="C123__thread__111.222",
+        raw_message={"channel": "C333", "thread_ts": "333.444"},
+        group_id="C999",
+    )
+
+    assert channel_id == "C999"
+    assert thread_ts == "333.444"
+
+
+def test_resolve_target_from_session_uses_parsed_thread():
+    channel_id, thread_ts = resolve_target_from_session(
+        session_id="D123__thread__1710000000.500",
+    )
+
+    assert channel_id == "D123"
+    assert thread_ts == "1710000000.500"
