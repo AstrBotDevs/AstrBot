@@ -540,10 +540,11 @@ export default {
                  const trimmedErr = err.trim();
                  if (trimmedErr.startsWith("sslValidation.")) {
                      const parts = trimmedErr.split('|');
+                     const i18nKey = parts[0].replace('sslValidation.', '');
                      if (parts.length > 1) {
-                         return this.tm(parts[0]).replace('{file}', parts[1]);
+                         return this.tm(`sslValidation.${i18nKey}`).replace('{file}', parts[1]);
                      } else {
-                         return this.tm(trimmedErr);
+                         return this.tm(`sslValidation.${i18nKey}`);
                      }
                  }
                  return trimmedErr;
