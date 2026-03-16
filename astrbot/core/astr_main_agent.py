@@ -48,6 +48,7 @@ from astrbot.core.tools.prompts import (
     WEBCHAT_TITLE_GENERATOR_USER_PROMPT,
 )
 from astrbot.core.tools.send_message import SEND_MESSAGE_TO_USER_TOOL
+from astrbot.core.utils.context_sanitizer import strip_tool_use_from_context
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.quoted_message.settings import (
@@ -654,39 +655,10 @@ def _provider_uses_native_tools(provider: Provider) -> bool:
         return False
 
 
-def _strip_tool_use_from_context(messages: list[dict] | None) -> list[dict]:
-    if not messages:
-        return []
-
-    sanitized_messages: list[dict] = []
-    for message in messages:
-        if not isinstance(message, dict):
-            continue
-
-        role = message.get("role")
-        if role == "tool":
-            continue
-
-        sanitized_message = dict(message)
-        if role == "assistant" and "tool_calls" in sanitized_message:
-            sanitized_message.pop("tool_calls", None)
-            sanitized_message.pop("tool_call_id", None)
-
-            content = sanitized_message.get("content")
-            if content is None:
-                continue
-            if isinstance(content, str) and not content.strip():
-                continue
-            if isinstance(content, list) and not content:
-                continue
-
-        sanitized_messages.append(sanitized_message)
-
-    return sanitized_messages
-
-
-def _enforce_native_tool_exclusivity(provider: Provider, req: ProviderRequest) -> None:
-    if not _provider_uses_native_tools(provider):
+def _enforce_native_tool_exclusivity(
+    req: ProviderRequest, *, native_tools_enabled: bool
+) -> None:
+    if not native_tools_enabled:
         return
 
     if req.func_tool:
@@ -702,7 +674,12 @@ def _enforce_native_tool_exclusivity(provider: Provider, req: ProviderRequest) -
         req.tool_calls_result = None
 
     if isinstance(req.contexts, list):
-        req.contexts = _strip_tool_use_from_context(req.contexts)
+        req.contexts = strip_tool_use_from_context(req.contexts)
+
+
+def _normalize_func_tool(req: ProviderRequest) -> None:
+    if req.func_tool is not None and req.func_tool.empty():
+        req.func_tool = None
 
 
 def _sanitize_context_by_modalities(
@@ -1115,12 +1092,12 @@ async def build_main_agent(
     _modalities_fix(provider, req)
     _plugin_tool_fix(event, req)
     _sanitize_context_by_modalities(config, provider, req)
-    _enforce_native_tool_exclusivity(provider, req)
+    native_tools_enabled = _provider_uses_native_tools(provider)
+    _enforce_native_tool_exclusivity(req, native_tools_enabled=native_tools_enabled)
 
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
 
-    native_tools_enabled = _provider_uses_native_tools(provider)
     if native_tools_enabled:
         logger.info(
             "Provider native tools are enabled; skipping AstrBot tool provider injection."
@@ -1163,8 +1140,7 @@ async def build_main_agent(
         if not native_tools_enabled:
             req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
 
-    if req.func_tool is not None and req.func_tool.empty():
-        req.func_tool = None
+    _normalize_func_tool(req)
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()

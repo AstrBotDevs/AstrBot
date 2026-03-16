@@ -30,6 +30,7 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.bool_parser import parse_bool
+from astrbot.core.utils.context_sanitizer import strip_tool_use_from_context
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
@@ -501,36 +502,6 @@ class ProviderOpenAIOfficial(Provider):
                 payload["description"] = tool.description
             result.append(payload)
         return result
-
-    @staticmethod
-    def _strip_tool_use_from_context(
-        messages: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-        sanitized_messages: list[dict[str, Any]] = []
-
-        for message in messages:
-            if not isinstance(message, dict):
-                continue
-
-            role = message.get("role")
-            if role == "tool":
-                continue
-
-            sanitized_message = dict(message)
-            if role == "assistant" and "tool_calls" in sanitized_message:
-                sanitized_message.pop("tool_calls", None)
-
-                content = sanitized_message.get("content")
-                if content is None:
-                    continue
-                if isinstance(content, str) and not content.strip():
-                    continue
-                if isinstance(content, list) and not content:
-                    continue
-
-            sanitized_messages.append(sanitized_message)
-
-        return sanitized_messages
 
     def _normalize_message_content_to_list(
         self, raw_content: Any, role: str
@@ -1378,7 +1349,7 @@ class ProviderOpenAIOfficial(Provider):
                 f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。",
             )
             payloads.pop("tools", None)
-            sanitized_context = self._strip_tool_use_from_context(context_query)
+            sanitized_context = strip_tool_use_from_context(context_query)
             payloads["messages"] = sanitized_context
             return (
                 False,
