@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -9,6 +9,7 @@ from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
+from astrbot.core.platform.sources.slack import slack_event as slack_event_module
 from astrbot.core.platform.sources.slack.session_codec import (
     build_slack_text_fallbacks,
     decode_slack_session_id,
@@ -258,6 +259,64 @@ async def test_slack_event_send_friend_thread_posts_with_thread_ts(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_slack_event_send_logs_exception_before_text_fallback(monkeypatch):
+    message_obj = AstrBotMessage()
+    message_obj.type = MessageType.GROUP_MESSAGE
+    message_obj.group_id = "C0001"
+    message_obj.session_id = "C0001__thread__1710000000.500"
+    message_obj.message_id = "m-err-1"
+    message_obj.sender = MessageMember(user_id="U0001", nickname="Alice")
+    message_obj.message = [Plain(text="hello")]
+    message_obj.message_str = "hello"
+    message_obj.raw_message = {"channel": "C0001", "thread_ts": "1710000000.500"}
+
+    web_client = AsyncMock()
+    web_client.chat_postMessage = AsyncMock(side_effect=[RuntimeError("boom"), None])
+    monkeypatch.setattr(
+        SlackMessageEvent,
+        "_parse_slack_blocks",
+        AsyncMock(
+            return_value=(
+                [{"type": "section", "text": {"type": "mrkdwn", "text": "reply"}}],
+                "reply",
+            )
+        ),
+    )
+    mocked_exception_logger = MagicMock()
+    monkeypatch.setattr(slack_event_module.logger, "exception", mocked_exception_logger)
+
+    event = SlackMessageEvent(
+        message_str=message_obj.message_str,
+        message_obj=message_obj,
+        platform_meta=PlatformMetadata(
+            name="slack",
+            description="Slack test",
+            id="slack_test",
+        ),
+        session_id=message_obj.session_id,
+        web_client=web_client,
+    )
+
+    await event.send(MessageChain([Plain(text="reply")]))
+
+    assert web_client.chat_postMessage.await_count == 2
+    first_call_kwargs = web_client.chat_postMessage.await_args_list[0].kwargs
+    second_call_kwargs = web_client.chat_postMessage.await_args_list[1].kwargs
+    assert first_call_kwargs["channel"] == "C0001"
+    assert first_call_kwargs["thread_ts"] == "1710000000.500"
+    assert first_call_kwargs["blocks"]
+    assert second_call_kwargs["channel"] == "C0001"
+    assert second_call_kwargs["thread_ts"] == "1710000000.500"
+    assert second_call_kwargs["text"] == "reply"
+    assert "blocks" not in second_call_kwargs
+
+    assert mocked_exception_logger.called
+    assert mocked_exception_logger.call_args.args[1] == "C0001__thread__1710000000.500"
+    assert mocked_exception_logger.call_args.args[2] == "C0001"
+    assert mocked_exception_logger.call_args.args[3] == "1710000000.500"
+
+
+@pytest.mark.asyncio
 async def test_parse_slack_blocks_includes_non_empty_fallback_text():
     blocks, text = await SlackMessageEvent._parse_slack_blocks(
         MessageChain([Plain(text="hello")]),
@@ -364,3 +423,25 @@ def test_resolve_target_from_session_uses_parsed_thread():
 
     assert channel_id == "D123"
     assert thread_ts == "1710000000.500"
+
+
+def test_target_resolution_helpers_share_same_precedence():
+    event_resolved = resolve_target_from_event(
+        session_id="C123__thread__111.222",
+        raw_message={"channel": "C333", "thread_ts": "333.444"},
+        group_id="C999",
+    )
+    legacy_resolved = resolve_slack_message_target(
+        session_id="C123__thread__111.222",
+        raw_message={"channel": "C333", "thread_ts": "333.444"},
+        group_id="C999",
+        sender_id="U123",
+    )
+    session_resolved = resolve_target_from_session(
+        session_id="",
+        group_id="",
+        fallback_channel_id="U123",
+    )
+
+    assert event_resolved == legacy_resolved
+    assert session_resolved == ("U123", None)

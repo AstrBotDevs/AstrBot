@@ -176,9 +176,9 @@ class SlackMessageEvent(AstrMessageEvent):
             "safe_text",
             SLACK_SAFE_TEXT_FALLBACK,
         )
+        channel_id, thread_ts = self._resolve_target()
 
         try:
-            channel_id, thread_ts = self._resolve_target()
             message_payload = {
                 "channel": channel_id,
                 "text": safe_text,
@@ -188,6 +188,13 @@ class SlackMessageEvent(AstrMessageEvent):
                 message_payload["thread_ts"] = thread_ts
             await self.web_client.chat_postMessage(**message_payload)
         except Exception:
+            logger.exception(
+                "Slack block send failed, falling back to text-only payload. "
+                "session_id=%s channel_id=%s thread_ts=%s",
+                self.session_id,
+                channel_id,
+                thread_ts or "",
+            )
             # 如果块发送失败，尝试只发送文本
             parts = []
             for segment in message.chain:
@@ -206,7 +213,6 @@ class SlackMessageEvent(AstrMessageEvent):
                 SLACK_SAFE_TEXT_FALLBACK,
             )
 
-            channel_id, thread_ts = self._resolve_target()
             fallback_payload = {
                 "channel": channel_id,
                 "text": fallback_text,
