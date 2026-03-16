@@ -177,10 +177,16 @@ async def _get_session_conv(
     umo = event.unified_msg_origin
     cid = await conv_mgr.get_curr_conversation_id(umo)
     if not cid:
-        cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
+        persona_id = await conv_mgr.get_current_persona_id(umo)
+        cid = await conv_mgr.new_conversation(
+            umo, event.get_platform_id(), persona_id=persona_id
+        )
     conversation = await conv_mgr.get_conversation(umo, cid)
     if not conversation:
-        cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
+        persona_id = await conv_mgr.get_current_persona_id(umo)
+        cid = await conv_mgr.new_conversation(
+            umo, event.get_platform_id(), persona_id=persona_id
+        )
         conversation = await conv_mgr.get_conversation(umo, cid)
     if not conversation:
         raise RuntimeError("无法创建新的对话。")

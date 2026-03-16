@@ -146,9 +146,11 @@ class ConversationCommands:
         session_curr_cid = await conv_mgr.get_curr_conversation_id(umo)
 
         if not session_curr_cid:
+            persona_id = await conv_mgr.get_current_persona_id(umo)
             session_curr_cid = await conv_mgr.new_conversation(
                 umo,
                 message.get_platform_id(),
+                persona_id=persona_id,
             )
 
         contexts, total_pages = await conv_mgr.get_human_readable_context(
