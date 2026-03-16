@@ -778,9 +778,14 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
                 continue
             mp = tool.handler_module_path
             if not mp:
+                # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
+                # 不应受到会话插件过滤影响。
+                new_tool_set.add_tool(tool)
                 continue
             plugin = star_map.get(mp)
             if not plugin:
+                # 无法解析插件归属时，保守保留工具，避免误过滤。
+                new_tool_set.add_tool(tool)
                 continue
             if plugin.name in event.plugins_name or plugin.reserved:
                 new_tool_set.add_tool(tool)

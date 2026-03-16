@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.19.5"
+VERSION = "4.20.0"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -1129,6 +1129,18 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://api.moonshot.cn/v1",
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
+                    "MiniMax": {
+                        "id": "minimax",
+                        "provider": "minimax",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.minimaxi.com/v1",
+                        "timeout": 120,
                         "proxy": "",
                         "custom_headers": {},
                     },
