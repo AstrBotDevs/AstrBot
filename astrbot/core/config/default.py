@@ -224,9 +224,6 @@ DEFAULT_CONFIG = {
         "telegram": {
             "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
         },
-        "telethon_userbot": {
-            "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
-        },
         "discord": {
             "pre_ack_emoji": {"enable": False, "emojis": ["🤔"]},
         },
@@ -3574,22 +3571,9 @@ CONFIG_METADATA_3 = {
                         "description": "表情列表（Unicode）",
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "Telegram 仅支持固定反应集合，参考：https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9",
+                        "hint": "Telegram 和 Telethon Userbot 共用此配置，且仅支持 Telegram 固定反应集合，参考：https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9",
                         "condition": {
                             "platform_specific.telegram.pre_ack_emoji.enable": True,
-                        },
-                    },
-                    "platform_specific.telethon_userbot.pre_ack_emoji.enable": {
-                        "description": "[Telethon Userbot] 启用预回应表情",
-                        "type": "bool",
-                    },
-                    "platform_specific.telethon_userbot.pre_ack_emoji.emojis": {
-                        "description": "表情列表（Unicode）",
-                        "type": "list",
-                        "items": {"type": "string"},
-                        "hint": "Telethon Userbot 依赖 Telegram 反应能力，通常应使用 Telegram 支持的固定反应集合。",
-                        "condition": {
-                            "platform_specific.telethon_userbot.pre_ack_emoji.enable": True,
                         },
                     },
                     "platform_specific.discord.pre_ack_emoji.enable": {

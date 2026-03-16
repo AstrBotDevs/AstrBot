@@ -809,18 +809,7 @@
                         },
                         "emojis": {
                             "description": "Список эмодзи (Unicode)",
-                            "hint": "Telegram поддерживает ограниченный набор реакций."
-                        }
-                    }
-                },
-                "telethon_userbot": {
-                    "pre_ack_emoji": {
-                        "enable": {
-                            "description": "[Telethon Userbot] Пре-эмодзи подтверждения"
-                        },
-                        "emojis": {
-                            "description": "Список эмодзи (Unicode)",
-                            "hint": "Telethon Userbot опирается на реакции Telegram, поэтому обычно следует использовать тот же фиксированный набор реакций."
+                            "hint": "Telegram и Telethon Userbot используют эту общую настройку; доступен только фиксированный набор реакций Telegram."
                         }
                     }
                 },
