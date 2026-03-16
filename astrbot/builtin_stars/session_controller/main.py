@@ -64,7 +64,7 @@ class Main(Star):
                                 )
                             else:
                                 # 创建新对话
-                                persona_id = await self.context.conversation_manager.get_current_persona_id(
+                                persona_id = await self.context.conversation_manager.get_curr_persona_id(
                                     event.unified_msg_origin
                                 )
                                 curr_cid = await self.context.conversation_manager.new_conversation(

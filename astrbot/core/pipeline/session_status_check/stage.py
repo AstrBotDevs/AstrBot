@@ -29,7 +29,7 @@ class SessionStatusCheckStage(Stage):
                 event.unified_msg_origin,
             )
             if not conv_id:
-                persona_id = await self.conv_mgr.get_current_persona_id(
+                persona_id = await self.conv_mgr.get_curr_persona_id(
                     event.unified_msg_origin
                 )
                 await self.conv_mgr.new_conversation(

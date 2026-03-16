@@ -14,6 +14,10 @@ from astrbot.core.db.po import Conversation, ConversationV2
 from astrbot.core.utils.datetime_utils import to_utc_timestamp
 
 
+# 人格特殊标记：表示用户明确清除人格
+PERSONA_NONE_MARKER = "[%None]"
+
+
 class ConversationManager:
     """负责管理会话与 LLM 的对话，某个会话当前正在用哪个对话。"""
 
@@ -173,19 +177,19 @@ class ConversationManager:
                 self.session_conversations[unified_msg_origin] = ret
         return ret
 
-    async def get_current_persona_id(self, unified_msg_origin: str) -> str | None:
+    async def get_curr_persona_id(self, unified_msg_origin: str) -> str | None:
         """获取当前对话的persona_id，用于创建新对话时继承。
 
         Args:
             unified_msg_origin: 统一的消息来源字符串
 
         Returns:
-            当前对话的persona_id，如果没有或为"[%None]"则返回None
+            当前对话的persona_id，如果没有或为PERSONA_NONE_MARKER则返回None
         """
         curr_cid = await self.get_curr_conversation_id(unified_msg_origin)
         if curr_cid:
             conv = await self.db.get_conversation_by_id(cid=curr_cid)
-            if conv and conv.persona_id and conv.persona_id != "[%None]":
+            if conv and conv.persona_id and conv.persona_id != PERSONA_NONE_MARKER:
                 return conv.persona_id
         return None
 
@@ -208,7 +212,7 @@ class ConversationManager:
         conv = await self.db.get_conversation_by_id(cid=conversation_id)
         if not conv and create_if_not_exists:
             # 如果对话不存在且需要创建，则新建一个对话
-            persona_id = await self.get_current_persona_id(unified_msg_origin)
+            persona_id = await self.get_curr_persona_id(unified_msg_origin)
             conversation_id = await self.new_conversation(
                 unified_msg_origin, persona_id=persona_id
             )
