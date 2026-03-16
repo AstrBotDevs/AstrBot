@@ -65,11 +65,17 @@ class ExecuteShellTool(FunctionTool):
                 result = await sb.shell.exec(command, background=background, env=env)
                 return json.dumps(result)
             except Exception as e:
-                return f"Error executing background command: {str(e)}"
+                return json.dumps(
+                    {
+                        "stdout": None,
+                        "stderr": f"Error executing background command: {str(e)}",
+                        "exit_code": -1,
+                    }
+                )
 
         # For foreground sync commands, handle locally with proper encoding
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             def run_subprocess():
                 proc = subprocess.Popen(
@@ -80,8 +86,18 @@ class ExecuteShellTool(FunctionTool):
                     text=True,
                     encoding="utf-8",
                     errors="replace",  # Handle encoding errors gracefully
+                    env=env if env else None,
                 )
-                stdout, stderr = proc.communicate()
+                try:
+                    stdout, stderr = proc.communicate(timeout=300)  # 5 minute timeout
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    stdout, stderr = proc.communicate()
+                    return {
+                        "stdout": stdout,
+                        "stderr": f"{stderr}\nCommand timed out after 300 seconds",
+                        "exit_code": -1,
+                    }
                 return {
                     "stdout": stdout,
                     "stderr": stderr,
