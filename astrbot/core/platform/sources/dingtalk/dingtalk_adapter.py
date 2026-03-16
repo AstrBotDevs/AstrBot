@@ -78,7 +78,16 @@ class _PatchedStreamClient(dingtalk_stream.DingTalkStreamClient):
                     self.websocket = ws
                     asyncio.create_task(self.keepalive(ws))
                     async for raw_message in ws:
-                        json_message = json.loads(raw_message)
+                        try:
+                            json_message = json.loads(raw_message)
+                        except json.JSONDecodeError as e:
+                            self.logger.warning(
+                                "[start] failed to decode websocket message as JSON, error=%s, raw_message=%r",
+                                e,
+                                raw_message,
+                            )
+                            continue
+
                         asyncio.create_task(self.background_task(json_message))
             except KeyboardInterrupt:
                 break
@@ -89,9 +98,9 @@ class _PatchedStreamClient(dingtalk_stream.DingTalkStreamClient):
                 self.logger.error("[start] network exception, error=%s", e)
                 await asyncio.sleep(10)
                 continue
-            except Exception as e:
+            except Exception:
                 await asyncio.sleep(3)
-                self.logger.exception("unknown exception: %s", e)
+                self.logger.exception("钉钉流式客户端循环中发生未知异常")
                 continue
 
 
