@@ -1,0 +1,151 @@
+﻿{
+    "title": "Давай пообщаемся!",
+    "subtitle": "Общение с AI-помощником",
+    "input": {
+        "placeholder": "Введите сообщение...",
+        "send": "Отправить",
+        "clear": "Очистить",
+        "upload": "Загрузить файл",
+        "voice": "Голосовой ввод",
+        "recordingPrompt": "Запись... говорите",
+        "chatPrompt": "Давай пообщаемся!",
+        "dropToUpload": "Отпустите, чтобы загрузить файл",
+        "stopGenerating": "Остановить генерацию"
+    },
+    "message": {
+        "user": "Вы",
+        "assistant": "Ассистент",
+        "system": "Система",
+        "error": "Ошибка в сообщении",
+        "loading": "Думаю..."
+    },
+    "voice": {
+        "start": "Начать запись",
+        "stop": "Стоп",
+        "recording": "Запись",
+        "processing": "Обработка...",
+        "error": "Ошибка записи",
+        "listening": "Слушаю...",
+        "speaking": "Говорю",
+        "startRecording": "Начать голосовой ввод",
+        "liveMode": "Общение в реальном времени"
+    },
+    "welcome": {
+        "title": "Добро пожаловать в AstrBot",
+        "subtitle": "Ваш умный помощник",
+        "quickActions": "Быстрые действия",
+        "examples": "Примеры вопросов"
+    },
+    "actions": {
+        "copy": "Копировать",
+        "regenerate": "Перегенерировать",
+        "like": "Нравится",
+        "dislike": "Не нравится",
+        "share": "Поделиться",
+        "newChat": "Новый чат",
+        "deleteChat": "Удалить чат",
+        "editTitle": "Изменить заголовок",
+        "fullscreen": "На весь экран",
+        "exitFullscreen": "Выход из полноэкранного режима",
+        "reply": "Ответить",
+        "providerConfig": "Настройки AI",
+        "toolsUsed": "Использованные инструменты",
+        "toolCallUsed": "Использован инструмент {name}",
+        "pythonCodeAnalysis": "Использован анализ кода Python"
+    },
+    "ipython": {
+        "output": "Вывод"
+    },
+    "conversation": {
+        "newConversation": "Новый чат",
+        "noHistory": "История диалогов пуста",
+        "systemStatus": "Статус системы",
+        "llmService": "Сервис LLM",
+        "speechToText": "Преобразование речи",
+        "editDisplayName": "Изменить имя чата",
+        "displayName": "Имя чата",
+        "displayNameUpdated": "Имя чата обновлено",
+        "displayNameUpdateFailed": "Не удалось обновить имя чата",
+        "confirmDelete": "Вы уверены, что хотите удалить «{name}»? Это действие необратимо."
+    },
+    "modes": {
+        "darkMode": "Темная тема",
+        "lightMode": "Светлая тема"
+    },
+    "shortcuts": {
+        "help": "Справка",
+        "voiceRecord": "Запись голоса",
+        "pasteImage": "Вставить изображение",
+        "sendKey": {
+            "title": "Клавиша отправки",
+            "enterToSend": "Enter для отправки",
+            "shiftEnterToSend": "Shift+Enter для отправки"
+        }
+    },
+    "streaming": {
+        "enabled": "Потоковый ответ включен",
+        "disabled": "Потоковый ответ выключен",
+        "on": "Поток",
+        "off": "Обычный"
+    },
+    "transport": {
+        "title": "Протокол передачи",
+        "sse": "SSE",
+        "websocket": "WebSocket"
+    },
+    "config": {
+        "title": "Конфигурация"
+    },
+    "reasoning": {
+        "thinking": "Рассуждение"
+    },
+    "reply": {
+        "replyTo": "В ответ на",
+        "notFound": "Сообщение не найдено"
+    },
+    "project": {
+        "title": "Проект",
+        "create": "Создать проект",
+        "edit": "Изменить проект",
+        "name": "Имя проекта",
+        "emoji": "Иконка (Emoji)",
+        "description": "Описание проекта (опционально)",
+        "noSessions": "В этом проекте пока нет диалогов",
+        "confirmDelete": "Вы уверены, что хотите удалить проект «{title}»? Диалоги внутри проекта не будут удалены."
+    },
+    "time": {
+        "today": "Сегодня",
+        "yesterday": "Вчера"
+    },
+    "stats": {
+        "tokens": "Токены",
+        "inputTokens": "Входящие",
+        "outputTokens": "Исходящие",
+        "cachedTokens": "Кэшированные",
+        "duration": "Время",
+        "ttft": "Время до первого токена"
+    },
+    "refs": {
+        "title": "Ссылки",
+        "sources": "Источники"
+    },
+    "connection": {
+        "title": "Статус подключения",
+        "message": "Системе необходимо переустановить соединение с чатом.",
+        "reasons": "Это может быть вызвано следующими причинами:",
+        "reasonWindowResize": "Изменение размера окна (нормально)",
+        "reasonMultipleTabs": "Страница чата открыта в другой вкладке",
+        "reasonNetworkIssue": "Временная проблема с сетью",
+        "notice": "Примечание: для стабильной работы допускается только одно активное соединение. Если вы используете чат в нескольких вкладках, рекомендуем оставить только одну.",
+        "understand": "Понятно",
+        "status": {
+            "reconnecting": "Переподключение...",
+            "reconnected": "Соединение восстановлено",
+            "failed": "Ошибка подключения, обновите страницу"
+        }
+    },
+    "errors": {
+        "sendMessageFailed": "Ошибка отправки сообщения, попробуйте еще раз",
+        "createSessionFailed": "Ошибка создания сессии, обновите страницу"
+    }
+}

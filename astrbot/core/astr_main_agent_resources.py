@@ -188,7 +188,12 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
 @dataclass
 class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     name: str = "send_message_to_user"
-    description: str = "Directly send message to the user. Only use this tool when you need to proactively message the user. Otherwise you can directly output the reply in the conversation."
+    description: str = (
+        "Send message to the user. "
+        "Supports various message types including `plain`, `image`, `record`, `video`, `file`, and `mention_user`. "
+        "Use this tool to send media files (`image`, `record`, `video`, `file`), "
+        "or when you need to proactively message the user(such as cron job). For normal text replies, you can output directly."
+    )
 
     parameters: dict = Field(
         default_factory=lambda: {

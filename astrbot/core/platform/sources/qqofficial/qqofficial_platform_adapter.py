@@ -212,6 +212,7 @@ class QQOfficialPlatformAdapter(Platform):
                     if media:
                         payload["media"] = media
                         payload["msg_type"] = 7
+                        payload.pop("msg_id", None)
                 if file_source:
                     media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
                         send_helper,  # type: ignore
@@ -223,6 +224,7 @@ class QQOfficialPlatformAdapter(Platform):
                     if media:
                         payload["media"] = media
                         payload["msg_type"] = 7
+                        payload.pop("msg_id", None)
                 ret = await self.client.api.post_group_message(
                     group_openid=session.session_id,
                     **payload,
@@ -266,6 +268,9 @@ class QQOfficialPlatformAdapter(Platform):
                 if media:
                     payload["media"] = media
                     payload["msg_type"] = 7
+                    # QQ API rejects msg_id for media (video/file) messages sent
+                    # via the proactive tool-call path; remove it to avoid 越权 error.
+                    payload.pop("msg_id", None)
             if file_source:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
                     send_helper,  # type: ignore
@@ -277,6 +282,7 @@ class QQOfficialPlatformAdapter(Platform):
                 if media:
                     payload["media"] = media
                     payload["msg_type"] = 7
+                    payload.pop("msg_id", None)
 
             ret = await QQOfficialMessageEvent.post_c2c_message(
                 send_helper,  # type: ignore
@@ -386,6 +392,47 @@ class QQOfficialPlatformAdapter(Platform):
                     msg.append(File(name=filename, file=url, url=url))
 
     @staticmethod
+    def _parse_face_message(content: str) -> str:
+        """Parse QQ official face message format and convert to readable text.
+
+        QQ official face message format:
+        <faceType=4,faceId="",ext="eyJ0ZXh0IjoiW+a7oeWktOmXruWPt10ifQ==">
+
+        The ext field contains base64-encoded JSON with a 'text' field
+        describing the emoji (e.g., '[满头问号]').
+
+        Args:
+            content: The message content that may contain face tags.
+
+        Returns:
+            Content with face tags replaced by readable emoji descriptions.
+        """
+        import base64
+        import json
+        import re
+
+        def replace_face(match):
+            face_tag = match.group(0)
+            # Extract ext field from the face tag
+            ext_match = re.search(r'ext="([^"]*)"', face_tag)
+            if ext_match:
+                try:
+                    ext_encoded = ext_match.group(1)
+                    # Decode base64 and parse JSON
+                    ext_decoded = base64.b64decode(ext_encoded).decode("utf-8")
+                    ext_data = json.loads(ext_decoded)
+                    emoji_text = ext_data.get("text", "")
+                    if emoji_text:
+                        return f"[表情:{emoji_text}]"
+                except Exception:
+                    pass
+            # Fallback if parsing fails
+            return "[表情]"
+
+        # Match face tags: <faceType=...>
+        return re.sub(r"<faceType=\d+[^>]*>", replace_face, content)
+
+    @staticmethod
     def _parse_from_qqofficial(
         message: botpy.message.Message
         | botpy.message.GroupMessage
@@ -410,7 +457,10 @@ class QQOfficialPlatformAdapter(Platform):
                 abm.group_id = message.group_openid
             else:
                 abm.sender = MessageMember(message.author.user_openid, "")
-            abm.message_str = message.content.strip()
+            # Parse face messages to readable text
+            abm.message_str = QQOfficialPlatformAdapter._parse_face_message(
+                message.content.strip()
+            )
             abm.self_id = "unknown_selfid"
             msg.append(At(qq="qq_official"))
             msg.append(Plain(abm.message_str))
@@ -426,10 +476,12 @@ class QQOfficialPlatformAdapter(Platform):
             else:
                 abm.self_id = ""
 
-            plain_content = message.content.replace(
-                "<@!" + str(abm.self_id) + ">",
-                "",
-            ).strip()
+            plain_content = QQOfficialPlatformAdapter._parse_face_message(
+                message.content.replace(
+                    "<@!" + str(abm.self_id) + ">",
+                    "",
+                ).strip()
+            )
 
             QQOfficialPlatformAdapter._append_attachments(msg, message.attachments)
             abm.message = msg

@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest # 运行环境
     steps:
       - name: checkout
-        uses: actions/checkout@master
+        uses: actions/checkout@v6
       - name: nodejs installation
         uses: actions/setup-node@v6
         with:
@@ -23,7 +23,7 @@ jobs:
         run: npm run docs:build
         working-directory: './docs'
       - name: scp
-        uses: appleboy/scp-action@master
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.HOST_NEKO }}
           username: ${{ secrets.USERNAME }}
@@ -31,7 +31,7 @@ jobs:
           source: 'docs/.vitepress/dist/*'
           target: '/tmp/'
       - name: script
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.HOST_NEKO }}
           username: ${{ secrets.USERNAME }}
