@@ -218,7 +218,7 @@ def parse_description(text: str) -> str:
     try:
         import yaml
 
-        payload = yaml.safe_load(frontmatter) or {}
+        payload = yaml.safe_load(frontmatter) or dict()
     except Exception:
         return ""
     if not isinstance(payload, dict):
