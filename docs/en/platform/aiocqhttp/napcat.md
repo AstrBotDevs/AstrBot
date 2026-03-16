@@ -117,11 +117,11 @@ Switch back to NapCat's management panel, click `Network Configuration->New->Web
 In the newly opened window:
 
 - Check `Enable`.
-- Fill in `URL` with `ws://HostIP:Port/ws`. For example, `ws://localhost:6199/ws` or `ws://127.0.0.1:6199/ws`.
+- Fill in `URL` with <code>ws<!-- -->://HostIP:Port/ws</code>. For example, <code>ws<!-- -->://localhost:6199/ws</code> or <code>ws<!-- -->://127.0.0.1:6199/ws</code>.
 
 > [!IMPORTANT]
-> 1. If deploying with Docker and both AstrBot and NapCat containers are connected to the same network, use `ws://astrbot:6199/ws` (refer to the Docker script in this documentation).
-> 2. Due to Docker network isolation, when not on the same network, please use the internal network IP address or public network IP address ***(unsafe)*** to connect, i.e., `ws://(internal/public IP):6199/ws`.
+> 1. If deploying with Docker and both AstrBot and NapCat containers are connected to the same network, use <code>ws<!-- -->://astrbot:6199/ws</code> (refer to the Docker script in this documentation).
+> 2. Due to Docker network isolation, when not on the same network, please use the internal network IP address or public network IP address ***(unsafe)*** to connect, i.e., <code>ws<!-- -->://(internal/public IP):6199/ws</code>.
 
 - Message Format: `Array`
 - Heartbeat Interval: `5000`

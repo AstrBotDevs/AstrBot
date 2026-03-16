@@ -220,7 +220,9 @@ def run_rclone_upload(
         else:
             print(f"Uploading to: {target}")
 
-        subprocess.run(cmd, check=True)
+        import shlex
+        safe_cmd = [shlex.quote(c) for c in cmd]
+        subprocess.run(cmd, check=True, shell=False) # type: ignore
     finally:
         tmp_path.unlink(missing_ok=True)
 
