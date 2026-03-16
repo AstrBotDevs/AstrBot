@@ -3,7 +3,7 @@ import urllib.parse
 import pytest
 from bs4 import Tag
 
-from astrbot.builtin_stars.web_searcher.engines import SearchEngine
+from astrbot.builtin_stars.web_searcher.engines import SearchEngine, SearchResult
 from astrbot.builtin_stars.web_searcher.engines.comet import Comet
 from astrbot.builtin_stars.web_searcher.engines.duckduckgo import DuckDuckGo
 from astrbot.builtin_stars.web_searcher.engines.google import Google
@@ -93,3 +93,36 @@ async def test_google_get_next_page_urlencodes_query(monkeypatch: pytest.MonkeyP
     assert params["q"] == ["hello world+v2"]
     assert params["hl"] == ["en"]
     assert params["gl"] == ["us"]
+
+
+@pytest.mark.asyncio
+async def test_search_with_result_filter_skips_fetch_on_non_positive_num_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = EngineWithoutTextSelector()
+    called = {"value": False}
+
+    async def fake_search(
+        self: SearchEngine,
+        query: str,
+        num_results: int,
+    ) -> list[SearchResult]:
+        called["value"] = True
+        return [SearchResult(title="t", url="https://example.com", snippet="s")]
+
+    monkeypatch.setattr(SearchEngine, "search", fake_search)
+
+    results_zero = await engine._search_with_result_filter(
+        query="hello",
+        num_results=0,
+        predicate=lambda _: True,
+    )
+    results_negative = await engine._search_with_result_filter(
+        query="hello",
+        num_results=-3,
+        predicate=lambda _: True,
+    )
+
+    assert results_zero == []
+    assert results_negative == []
+    assert called["value"] is False

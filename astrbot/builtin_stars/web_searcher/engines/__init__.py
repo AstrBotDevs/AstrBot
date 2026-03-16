@@ -132,6 +132,9 @@ class SearchEngine:
         num_results: int,
         predicate: Callable[[SearchResult], bool],
     ) -> list[SearchResult]:
+        if num_results <= 0:
+            return []
+
         rough_results = await SearchEngine.search(self, query, max(num_results * 2, 10))
         final_results: list[SearchResult] = []
         for result in rough_results:
