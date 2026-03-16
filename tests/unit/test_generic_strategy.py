@@ -46,6 +46,37 @@ def _make_tool(
     )
 
 
+_DEFERRED_TOOL_DEFS = {
+    "deferred_x": {
+        "description": "Get the current weather forecast for a location including temperature and humidity",
+        "params": {
+            "type": "object",
+            "properties": {
+                "location": {"type": "string", "description": "The city and state for weather"},
+            },
+        },
+    },
+    "deferred_y": {
+        "description": "Send email messages to recipients with subject and body content",
+        "params": {
+            "type": "object",
+            "properties": {
+                "recipient": {"type": "string", "description": "The email address of the recipient"},
+            },
+        },
+    },
+    "deferred_z": {
+        "description": "Create calendar events with title date and time scheduling information",
+        "params": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "The calendar event title"},
+            },
+        },
+    },
+}
+
+
 def _build_catalog(
     core_names: list[str],
     deferred_names: list[str],
@@ -59,20 +90,13 @@ def _build_catalog(
     for name in core_names:
         tools.append(_make_tool(name))  # builtin -> core
     for name in deferred_names:
+        defn = _DEFERRED_TOOL_DEFS.get(name, {})
         tools.append(
             _make_tool(
                 name,
-                description=f"Deferred tool that provides {name} functionality",
+                description=defn.get("description", f"Deferred tool that provides {name} functionality"),
                 handler_module_path=f"plugins.{name}",
-                params={
-                    "type": "object",
-                    "properties": {
-                        "input": {
-                            "type": "string",
-                            "description": f"Input for {name}",
-                        },
-                    },
-                },
+                params=defn.get("params", {"type": "object", "properties": {}}),
             )
         )  # plugin -> deferred
     ts = ToolSet(tools=tools)
@@ -168,7 +192,7 @@ class TestToolSearchResult:
         strategy = _build_strategy()
         tool = strategy.get_tool_search_tool()
         raw = asyncio.get_event_loop().run_until_complete(
-            tool.call(None, query="deferred functionality")
+            tool.call(None, query="weather forecast temperature")
         )
         parsed = json.loads(raw)
 
@@ -181,7 +205,7 @@ class TestToolSearchResult:
         strategy = _build_strategy()
         tool = strategy.get_tool_search_tool()
         raw = asyncio.get_event_loop().run_until_complete(
-            tool.call(None, query="deferred functionality")
+            tool.call(None, query="weather forecast temperature")
         )
         parsed = json.loads(raw)
 
@@ -221,7 +245,7 @@ class TestMultiTurnDiscovery:
         # Simulate tool_search call during turn 1
         tool = strategy.get_tool_search_tool()
         raw = asyncio.get_event_loop().run_until_complete(
-            tool.call(None, query="deferred functionality")
+            tool.call(None, query="weather forecast temperature")
         )
         parsed = json.loads(raw)
         assert len(parsed["matches"]) > 0
@@ -254,7 +278,7 @@ class TestMultiTurnDiscovery:
         # Search (causes discovery)
         tool = strategy.get_tool_search_tool()
         asyncio.get_event_loop().run_until_complete(
-            tool.call(None, query="deferred functionality")
+            tool.call(None, query="weather forecast temperature")
         )
 
         # The initial ToolSet object remains unchanged
@@ -285,7 +309,7 @@ class TestNoProviderSpecificFields:
         strategy = _build_strategy()
         tool = strategy.get_tool_search_tool()
         raw = asyncio.get_event_loop().run_until_complete(
-            tool.call(None, query="deferred functionality")
+            tool.call(None, query="weather forecast temperature")
         )
 
         assert "tool_reference" not in raw
