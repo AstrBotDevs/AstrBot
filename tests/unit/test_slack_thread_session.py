@@ -10,6 +10,7 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.sources.slack.session_codec import (
+    build_slack_text_fallbacks,
     decode_slack_session_id,
     resolve_slack_message_target,
     resolve_target_from_event,
@@ -265,6 +266,58 @@ async def test_parse_slack_blocks_includes_non_empty_fallback_text():
 
     assert blocks
     assert text == "hello"
+
+
+@pytest.mark.asyncio
+async def test_send_by_session_uses_configured_safe_text_fallback(monkeypatch):
+    adapter = SlackAdapter(
+        platform_config={
+            "id": "slack_test",
+            "bot_token": "xoxb-test",
+            "app_token": "xapp-test",
+            "text_fallbacks": {"safe_text": "fallback-message"},
+        },
+        platform_settings={},
+        event_queue=asyncio.Queue(),
+    )
+    adapter.bot_self_id = "B0001"
+    adapter.web_client = AsyncMock()
+    monkeypatch.setattr(
+        SlackMessageEvent,
+        "_parse_slack_blocks",
+        AsyncMock(return_value=([], "")),
+    )
+    session = MessageSession(
+        platform_name="slack_test",
+        message_type=MessageType.GROUP_MESSAGE,
+        session_id="C0001",
+    )
+
+    await adapter.send_by_session(
+        session=session,
+        message_chain=MessageChain([Plain(text="ignored")]),
+    )
+
+    adapter.web_client.chat_postMessage.assert_awaited_once_with(
+        channel="C0001",
+        text="fallback-message",
+        blocks=None,
+    )
+
+
+def test_build_slack_text_fallbacks_accepts_overrides():
+    fallbacks = build_slack_text_fallbacks(
+        {
+            "safe_text": "msg",
+            "image": "[img]",
+            "file_template": "[doc:{name}]",
+        }
+    )
+
+    assert fallbacks["safe_text"] == "msg"
+    assert fallbacks["image"] == "[img]"
+    assert fallbacks["file_template"] == "[doc:{name}]"
+    assert "generic" in fallbacks
 
 
 def test_decode_slack_session_id_thread_marker_does_not_fallback_to_legacy():

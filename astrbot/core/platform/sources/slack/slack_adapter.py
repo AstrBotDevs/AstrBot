@@ -26,6 +26,7 @@ from ...register import register_platform_adapter
 from .client import SlackSocketClient, SlackWebhookClient
 from .session_codec import (
     SLACK_SAFE_TEXT_FALLBACK,
+    build_slack_text_fallbacks,
     encode_thread_session_id,
     resolve_target_from_session,
 )
@@ -81,6 +82,9 @@ class SlackAdapter(Platform):
         self.webhook_client = None
 
         self.bot_self_id = None
+        self.text_fallbacks = build_slack_text_fallbacks(
+            platform_config.get("text_fallbacks"),
+        )
 
     async def send_by_session(
         self,
@@ -90,8 +94,12 @@ class SlackAdapter(Platform):
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
             message_chain=message_chain,
             web_client=self.web_client,
+            text_fallbacks=self.text_fallbacks,
         )
-        safe_text = text or SLACK_SAFE_TEXT_FALLBACK
+        safe_text = text or self.text_fallbacks.get(
+            "safe_text",
+            SLACK_SAFE_TEXT_FALLBACK,
+        )
 
         try:
             channel_id, thread_ts = self._session_to_slack_target(session)
@@ -439,6 +447,7 @@ class SlackAdapter(Platform):
             platform_meta=self.meta(),
             session_id=message.session_id,
             web_client=self.web_client,
+            text_fallbacks=self.text_fallbacks,
         )
 
         self.commit_event(message_event)

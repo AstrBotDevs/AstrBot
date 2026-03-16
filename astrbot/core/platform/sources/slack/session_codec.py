@@ -1,6 +1,26 @@
 THREAD_SESSION_MARKER = "__thread__"
 LEGACY_GROUP_SESSION_PREFIX = "group_"
-SLACK_SAFE_TEXT_FALLBACK = "message"
+SLACK_DEFAULT_TEXT_FALLBACKS = {
+    "safe_text": "message",
+    "image": "[image]",
+    "file_template": "[file:{name}]",
+    "generic": "[message]",
+    "image_upload_failed": "Image upload failed",
+    "file_upload_failed": "File upload failed",
+}
+SLACK_SAFE_TEXT_FALLBACK = SLACK_DEFAULT_TEXT_FALLBACKS["safe_text"]
+
+
+def build_slack_text_fallbacks(overrides: dict | None = None) -> dict[str, str]:
+    text_fallbacks = dict(SLACK_DEFAULT_TEXT_FALLBACKS)
+    if not isinstance(overrides, dict):
+        return text_fallbacks
+
+    for key in text_fallbacks:
+        candidate = overrides.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            text_fallbacks[key] = candidate
+    return text_fallbacks
 
 
 def encode_thread_session_id(channel_id: str, thread_ts: str) -> str:

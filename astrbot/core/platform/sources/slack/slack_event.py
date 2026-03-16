@@ -15,13 +15,11 @@ from astrbot.api.message_components import (
 )
 from astrbot.api.platform import Group, MessageMember
 
-from .session_codec import SLACK_SAFE_TEXT_FALLBACK, resolve_target_from_event
-
-SLACK_IMAGE_FALLBACK_TEXT = "[image]"
-SLACK_FILE_FALLBACK_TEMPLATE = "[file:{name}]"
-SLACK_GENERIC_FALLBACK_TEXT = "[message]"
-SLACK_IMAGE_UPLOAD_FAILED_TEXT = "Image upload failed"
-SLACK_FILE_UPLOAD_FAILED_TEXT = "File upload failed"
+from .session_codec import (
+    SLACK_SAFE_TEXT_FALLBACK,
+    build_slack_text_fallbacks,
+    resolve_target_from_event,
+)
 
 
 class SlackMessageEvent(AstrMessageEvent):
@@ -32,16 +30,20 @@ class SlackMessageEvent(AstrMessageEvent):
         platform_meta,
         session_id,
         web_client: AsyncWebClient,
+        text_fallbacks: dict[str, str] | None = None,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.web_client = web_client
+        self.text_fallbacks = build_slack_text_fallbacks(text_fallbacks)
 
     @staticmethod
     async def _from_segment_to_slack_block(
         segment: BaseMessageComponent,
         web_client: AsyncWebClient,
+        text_fallbacks: dict[str, str] | None = None,
     ) -> dict | None:
         """将消息段转换为 Slack 块格式"""
+        fallbacks = build_slack_text_fallbacks(text_fallbacks)
         if isinstance(segment, Plain):
             return {"type": "section", "text": {"type": "mrkdwn", "text": segment.text}}
         if isinstance(segment, Image):
@@ -62,7 +64,10 @@ class SlackMessageEvent(AstrMessageEvent):
                 logger.error(f"Slack file upload failed: {response['error']}")
                 return {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": SLACK_IMAGE_UPLOAD_FAILED_TEXT},
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": fallbacks["image_upload_failed"],
+                    },
                 }
             image_url = cast(list, response["files"])[0]["url_private"]
             logger.debug(f"Slack file upload response: {response}")
@@ -84,7 +89,10 @@ class SlackMessageEvent(AstrMessageEvent):
                 logger.error(f"Slack file upload failed: {response['error']}")
                 return {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": SLACK_FILE_UPLOAD_FAILED_TEXT},
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": fallbacks["file_upload_failed"],
+                    },
                 }
             file_url = cast(list, response["files"])[0]["permalink"]
             return {
@@ -99,8 +107,10 @@ class SlackMessageEvent(AstrMessageEvent):
     async def _parse_slack_blocks(
         message_chain: MessageChain,
         web_client: AsyncWebClient,
+        text_fallbacks: dict[str, str] | None = None,
     ):
         """解析成 Slack 块格式"""
+        fallbacks = build_slack_text_fallbacks(text_fallbacks)
         blocks = []
         text_content = ""
         fallback_parts = []
@@ -124,19 +134,20 @@ class SlackMessageEvent(AstrMessageEvent):
                 block = await SlackMessageEvent._from_segment_to_slack_block(
                     segment,
                     web_client,
+                    text_fallbacks=fallbacks,
                 )
                 if block:
                     blocks.append(block)
                     if isinstance(segment, Image):
-                        fallback_parts.append(SLACK_IMAGE_FALLBACK_TEXT)
+                        fallback_parts.append(fallbacks["image"])
                     elif isinstance(segment, File):
                         fallback_parts.append(
-                            SLACK_FILE_FALLBACK_TEMPLATE.format(
+                            fallbacks["file_template"].format(
                                 name=segment.name or "file",
                             ),
                         )
                     else:
-                        fallback_parts.append(SLACK_GENERIC_FALLBACK_TEXT)
+                        fallback_parts.append(fallbacks["generic"])
 
         # 如果最后还有文本内容
         if text_content.strip():
@@ -144,7 +155,7 @@ class SlackMessageEvent(AstrMessageEvent):
                 {"type": "section", "text": {"type": "mrkdwn", "text": text_content}},
             )
 
-        fallback_text = "".join(fallback_parts).strip() or SLACK_SAFE_TEXT_FALLBACK
+        fallback_text = "".join(fallback_parts).strip() or fallbacks["safe_text"]
         return blocks, fallback_text if blocks else text_content
 
     def _resolve_target(self) -> tuple[str, str | None]:
@@ -159,8 +170,12 @@ class SlackMessageEvent(AstrMessageEvent):
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
             message,
             self.web_client,
+            text_fallbacks=self.text_fallbacks,
         )
-        safe_text = text or SLACK_SAFE_TEXT_FALLBACK
+        safe_text = text or self.text_fallbacks.get(
+            "safe_text",
+            SLACK_SAFE_TEXT_FALLBACK,
+        )
 
         try:
             channel_id, thread_ts = self._resolve_target()
@@ -180,13 +195,16 @@ class SlackMessageEvent(AstrMessageEvent):
                     parts.append(segment.text)
                 elif isinstance(segment, File):
                     parts.append(
-                        SLACK_FILE_FALLBACK_TEMPLATE.format(
+                        self.text_fallbacks["file_template"].format(
                             name=segment.name or "file",
                         ),
                     )
                 elif isinstance(segment, Image):
-                    parts.append(SLACK_IMAGE_FALLBACK_TEXT)
-            fallback_text = "".join(parts) or SLACK_SAFE_TEXT_FALLBACK
+                    parts.append(self.text_fallbacks["image"])
+            fallback_text = "".join(parts) or self.text_fallbacks.get(
+                "safe_text",
+                SLACK_SAFE_TEXT_FALLBACK,
+            )
 
             channel_id, thread_ts = self._resolve_target()
             fallback_payload = {
