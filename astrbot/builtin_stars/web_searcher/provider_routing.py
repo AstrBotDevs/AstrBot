@@ -46,18 +46,28 @@ _WEB_SEARCH_PROVIDER_ALIASES = {
 }
 
 
+def _normalize_raw_provider(provider: object) -> str:
+    return str(provider or "").strip().lower().replace(" ", "")
+
+
 def normalize_websearch_provider(provider: object) -> str:
-    raw = str(provider or "").strip().lower().replace(" ", "")
+    raw = _normalize_raw_provider(provider)
     if not raw:
         return DEFAULT_WEB_SEARCH_PROVIDER
     return _WEB_SEARCH_PROVIDER_ALIASES.get(raw, raw)
 
 
-def resolve_tool_branch_provider(provider: object) -> str:
+def normalize_websearch_provider_for_tools(provider: object) -> tuple[str, bool]:
     normalized = normalize_websearch_provider(provider)
+    is_known = normalized in _TOOL_BRANCH_PROVIDER_SET or normalized in _ENGINE_PROVIDER_SET
     if normalized in _TOOL_BRANCH_PROVIDER_SET:
-        return normalized
-    return DEFAULT_WEB_SEARCH_PROVIDER
+        return normalized, is_known
+    return DEFAULT_WEB_SEARCH_PROVIDER, is_known
+
+
+def resolve_tool_branch_provider(provider: object) -> str:
+    branch_provider, _ = normalize_websearch_provider_for_tools(provider)
+    return branch_provider
 
 
 def build_default_engine_order(provider: object) -> tuple[str, ...]:
@@ -71,5 +81,5 @@ def build_default_engine_order(provider: object) -> tuple[str, ...]:
 
 
 def is_known_websearch_provider(provider: object) -> bool:
-    normalized = normalize_websearch_provider(provider)
-    return normalized in _TOOL_BRANCH_PROVIDER_SET or normalized in _ENGINE_PROVIDER_SET
+    _, is_known = normalize_websearch_provider_for_tools(provider)
+    return is_known

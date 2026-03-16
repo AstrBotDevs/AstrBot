@@ -2,6 +2,7 @@ from astrbot.builtin_stars.web_searcher.provider_routing import (
     DEFAULT_ENGINE_ORDER,
     build_default_engine_order,
     normalize_websearch_provider,
+    normalize_websearch_provider_for_tools,
     resolve_tool_branch_provider,
 )
 
@@ -43,3 +44,28 @@ def test_build_default_engine_order_keeps_dev_compatible_default_chain() -> None
 
     order = build_default_engine_order("tavily")
     assert order == DEFAULT_ENGINE_ORDER
+
+
+def test_build_default_engine_order_covers_all_engines_unknown_and_no_duplicates() -> None:
+    order = build_default_engine_order("sogo")
+    assert order[0] == "sogo"
+    assert set(order) == set(DEFAULT_ENGINE_ORDER)
+
+    order = build_default_engine_order("comet")
+    assert order[0] == "comet"
+    assert set(order) == set(DEFAULT_ENGINE_ORDER)
+
+    order = build_default_engine_order("xxx")
+    assert order == DEFAULT_ENGINE_ORDER
+
+    order = build_default_engine_order("bing")
+    assert len(order) == len(set(order))
+
+
+def test_normalize_websearch_provider_for_tools_returns_branch_and_known() -> None:
+    assert normalize_websearch_provider_for_tools("tavily") == ("tavily", True)
+    assert normalize_websearch_provider_for_tools("ddg") == ("default", True)
+    assert normalize_websearch_provider_for_tools("unknown_provider") == (
+        "default",
+        False,
+    )

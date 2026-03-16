@@ -24,7 +24,14 @@ class Google(SearchEngine):
         return selectors[selector]
 
     async def _get_next_page(self, query: str) -> str:
-        url = f"{self.base_url}/search?q={query}&hl=en&gl=us&pws=0&num=10"
+        params = {
+            "q": urllib.parse.unquote(query),
+            "hl": "en",
+            "gl": "us",
+            "pws": "0",
+            "num": "10",
+        }
+        url = f"{self.base_url}/search?{urllib.parse.urlencode(params)}"
         return await self._get_html(url, None)
 
     def _get_url(self, tag: Tag) -> str:

@@ -21,9 +21,8 @@ from .engines.sogo import Sogo
 from .provider_routing import (
     DEFAULT_WEB_SEARCH_PROVIDER,
     build_default_engine_order,
-    is_known_websearch_provider,
     normalize_websearch_provider,
-    resolve_tool_branch_provider,
+    normalize_websearch_provider_for_tools,
 )
 
 
@@ -72,15 +71,15 @@ class Main(star.Star):
         self.ddg_search = DuckDuckGo()
         self.comet_search = Comet()
         self.sogo_search = Sogo()
-        self.all_search_engines = [
-            self.google_search,
-            self.bing_search,
-            self.ddg_search,
-            self.comet_search,
-            self.sogo_search,
-        ]
         self.default_search_engines = {
-            engine.NAME: engine for engine in self.all_search_engines
+            engine.NAME: engine
+            for engine in (
+                self.google_search,
+                self.bing_search,
+                self.ddg_search,
+                self.comet_search,
+                self.sogo_search,
+            )
         }
         self.baidu_initialized = False
 
@@ -589,8 +588,9 @@ class Main(star.Star):
             "websearch_provider",
             DEFAULT_WEB_SEARCH_PROVIDER,
         )
-        provider = normalize_websearch_provider(raw_provider)
-        branch_provider = resolve_tool_branch_provider(provider)
+        branch_provider, is_known_provider = normalize_websearch_provider_for_tools(
+            raw_provider
+        )
 
         tool_set = req.func_tool
         if isinstance(tool_set, FunctionToolManager):
@@ -608,7 +608,7 @@ class Main(star.Star):
 
         func_tool_mgr = self.context.get_llm_tool_manager()
         if branch_provider == "default":
-            if not is_known_websearch_provider(provider):
+            if not is_known_provider:
                 logger.warning(
                     "Unsupported websearch_provider `%s`, fallback to default search tool branch.",
                     raw_provider,

@@ -6,6 +6,7 @@ from bs4 import Tag
 from astrbot.builtin_stars.web_searcher.engines import SearchEngine
 from astrbot.builtin_stars.web_searcher.engines.comet import Comet
 from astrbot.builtin_stars.web_searcher.engines.duckduckgo import DuckDuckGo
+from astrbot.builtin_stars.web_searcher.engines.google import Google
 
 
 class EngineWithoutTextSelector(SearchEngine):
@@ -73,3 +74,22 @@ async def test_comet_get_next_page_urlencodes_query(monkeypatch: pytest.MonkeyPa
     parsed = urllib.parse.urlparse(captured["url"])
     params = urllib.parse.parse_qs(parsed.query)
     assert params["q"] == ["astrbot rtk scrapling+test"]
+
+
+@pytest.mark.asyncio
+async def test_google_get_next_page_urlencodes_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = Google()
+    captured: dict[str, str] = {}
+
+    async def fake_get_html(url: str, data: dict | None = None) -> str:
+        captured["url"] = url
+        return ""
+
+    monkeypatch.setattr(engine, "_get_html", fake_get_html)
+    await engine._get_next_page("hello%20world%2Bv2")
+
+    parsed = urllib.parse.urlparse(captured["url"])
+    params = urllib.parse.parse_qs(parsed.query)
+    assert params["q"] == ["hello world+v2"]
+    assert params["hl"] == ["en"]
+    assert params["gl"] == ["us"]
