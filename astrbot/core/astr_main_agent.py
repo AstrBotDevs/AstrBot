@@ -7,7 +7,7 @@ import datetime
 import io
 import json
 import os
-import time
+import uuid
 import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
@@ -53,6 +53,7 @@ from astrbot.core.tools.prompts import (
     WEBCHAT_TITLE_GENERATOR_USER_PROMPT,
 )
 from astrbot.core.tools.send_message import SEND_MESSAGE_TO_USER_TOOL
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.quoted_message.settings import (
@@ -529,12 +530,12 @@ async def _process_quote_message(
                 prov = plugin_context.get_using_provider(event.unified_msg_origin)
 
             if prov and isinstance(prov, Provider):
+                path = await image_seg.convert_to_file_path()
+                image_path = await _compress_image_internal(path)
                 llm_resp = await prov.text_chat(
                     prompt=IMAGE_CAPTION_DEFAULT_PROMPT,
                     image_urls=[
-                        await _compress_image_internal(
-                            await image_seg.convert_to_file_path()
-                        )
+                        image_path
                     ],
                 )
                 if llm_resp.completion_text:
@@ -948,9 +949,8 @@ async def build_main_agent(
             # media files attachments
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
-                    image_path = await _compress_image_internal(
-                            await comp.convert_to_file_path()
-                        )
+                    path = await comp.convert_to_file_path()
+                    image_path = await _compress_image_internal(path)
                     req.image_urls.append(image_path)
                     req.extra_user_content_parts.append(
                         TextPart(text=f"[Image Attachment: path {image_path}]")
@@ -977,9 +977,8 @@ async def build_main_agent(
                     for reply_comp in comp.chain:
                         if isinstance(reply_comp, Image):
                             has_embedded_image = True
-                            image_path = await _compress_image_internal(
-                                await reply_comp.convert_to_file_path()
-                            )
+                            path = await reply_comp.convert_to_file_path()
+                            image_path = await _compress_image_internal(path)
                             req.image_urls.append(image_path)
                             _append_quoted_image_attachment(req, image_path)
                         elif isinstance(reply_comp, File):
@@ -1181,6 +1180,7 @@ async def build_main_agent(
         reset_coro=reset_coro if not apply_reset else None,
     )
 
+
 # 异步图片压缩
 def _do_compress_sync(data: bytes, temp_dir: str) -> str:
     """同步执行图片压缩逻辑，由 asyncio.to_thread 调用"""
@@ -1192,10 +1192,11 @@ def _do_compress_sync(data: bytes, temp_dir: str) -> str:
     if max(img.size) > max_size:
         img.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
 
-    timestamp = int(time.time() * 1000)
-    save_path = os.path.join(temp_dir, f"compressed_{timestamp}.jpg")
+    new_uuid = uuid.uuid4().hex
+    save_path = os.path.join(temp_dir, f"compressed_{new_uuid}.jpg")
     img.save(save_path, "JPEG", quality=85, optimize=True)
     return save_path
+
 
 # 压缩用户上传的大体积图片 未来可以提取为通用工具
 async def _compress_image_internal(url_or_path: str) -> str:
@@ -1216,7 +1217,8 @@ async def _compress_image_internal(url_or_path: str) -> str:
         if not data:
             return url_or_path
 
-        temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data/temp")
+        temp_dir = get_astrbot_temp_path()
+        os.makedirs(temp_dir, exist_ok=True)
 
         # 使用 asyncio.to_thread 将同步阻塞的图片处理任务交给线程池
         return await asyncio.to_thread(_do_compress_sync, data, temp_dir)
