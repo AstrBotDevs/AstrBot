@@ -62,12 +62,20 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         """构建嵌入请求的可选参数"""
         kwargs = {}
         if "embedding_dimensions" in self.provider_config:
-            kwargs["dimensions"] = int(self.provider_config["embedding_dimensions"])
+            try:
+                kwargs["dimensions"] = int(self.provider_config["embedding_dimensions"])
+            except (ValueError, TypeError):
+                logger.warning(f"配置中的 embedding_dimensions 值无效: '{self.provider_config['embedding_dimensions']}'，已忽略。")
         return kwargs
 
     def get_dim(self) -> int:
         """获取向量的维度"""
-        return int(self.provider_config.get("embedding_dimensions", 1024))
+        if "embedding_dimensions" in self.provider_config:
+            try:
+                return int(self.provider_config["embedding_dimensions"])
+            except (ValueError, TypeError):
+                logger.warning(f"配置中的 embedding_dimensions 值无效: '{self.provider_config['embedding_dimensions']}'")
+        return 0
 
     async def terminate(self):
         if self.client:
