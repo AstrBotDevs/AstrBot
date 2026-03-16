@@ -4,11 +4,14 @@ import asyncio
 import base64
 import copy
 import datetime
+import io
 import json
 import os
 import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
+
+from PIL import Image as PILImage
 
 from astrbot.core import logger, sp
 from astrbot.core.agent.handoff import HandoffTool
@@ -1190,9 +1193,6 @@ async def _compress_image_internal(url_or_path: str) -> str:
                 data = f.read()
         if not data:
             return url_or_path
-        import io
-
-        from PIL import Image as PILImage
 
         img = PILImage.open(io.BytesIO(data))
         if img.mode in ("RGBA", "P"):
