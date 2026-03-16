@@ -276,7 +276,7 @@ class ResultDecorateStage(Stage):
             ):
                 # inject reasoning content to chain
                 reasoning_content = event.get_extra("_llm_reasoning_content")
-                result.chain.insert(0, Plain(f"🤔 思考: {reasoning_content}\n"))
+                result.chain.insert(0, Plain(f"🤔 思考: {reasoning_content}\n\u200b-------\n"))
 
             if should_tts and tts_provider:
                 new_chain = []

@@ -19,7 +19,7 @@ from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
-from astrbot.core.message.components import Json
+from astrbot.core.message.components import Json, Plain
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
@@ -371,6 +371,30 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         )
         self._simple_print_message_role("[AftCompact]")
 
+        reasoning_prefix_added = False
+        content_prefix_added = False
+
+        def _add_prefix(
+            chain: MessageChain, prefix: str, is_reasoning: bool
+        ) -> MessageChain:
+            nonlocal reasoning_prefix_added, content_prefix_added
+            if is_reasoning:
+                if not reasoning_prefix_added:
+                    reasoning_prefix_added = True
+                    if chain.chain and isinstance(chain.chain[0], Plain):
+                        chain.chain[0].text = f"{prefix}{chain.chain[0].text}"
+                    else:
+                        chain.chain.insert(0, Plain(prefix))
+                return chain
+            else:
+                if not content_prefix_added:
+                    content_prefix_added = True
+                    if chain.chain and isinstance(chain.chain[0], Plain):
+                        chain.chain[0].text = f"{prefix}{chain.chain[0].text}"
+                    else:
+                        chain.chain.insert(0, Plain(prefix))
+                return chain
+
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:
                 # update ttft
@@ -378,23 +402,36 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     self.stats.time_to_first_token = time.time() - self.stats.start_time
 
                 if llm_response.result_chain:
+                    chain = llm_response.result_chain
+                    is_reasoning = chain.type == "reasoning"
+                    prefix = "🤔 思考: " if is_reasoning else "\n\u200b-------\n"
                     yield AgentResponse(
                         type="streaming_delta",
-                        data=AgentResponseData(chain=llm_response.result_chain),
+                        data=AgentResponseData(
+                            chain=_add_prefix(chain, prefix, is_reasoning),
+                        ),
                     )
                 elif llm_response.completion_text:
                     yield AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(
-                            chain=MessageChain().message(llm_response.completion_text),
+                            chain=_add_prefix(
+                                MessageChain().message(llm_response.completion_text),
+                                "\n\u200b-------\n",
+                                False,
+                            ),
                         ),
                     )
                 elif llm_response.reasoning_content:
                     yield AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(
-                            chain=MessageChain(type="reasoning").message(
-                                llm_response.reasoning_content,
+                            chain=_add_prefix(
+                                MessageChain(type="reasoning").message(
+                                    llm_response.reasoning_content
+                                ),
+                                "🤔 思考: ",
+                                True,
                             ),
                         ),
                     )
