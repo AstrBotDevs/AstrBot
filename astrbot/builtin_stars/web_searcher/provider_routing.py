@@ -2,11 +2,12 @@ from __future__ import annotations
 
 DEFAULT_WEB_SEARCH_PROVIDER = "default"
 DEFAULT_ENGINE_ORDER: tuple[str, ...] = (
-    "google",
     "bing",
-    "duckduckgo",
-    "comet",
     "sogo",
+    # Keep DDG as a secondary fallback for compatibility with the original default chain.
+    "duckduckgo",
+    "google",
+    "comet",
 )
 
 _ENGINE_PROVIDER_SET = set(DEFAULT_ENGINE_ORDER)
@@ -57,6 +58,9 @@ def resolve_tool_branch_provider(provider: object) -> str:
 
 def build_default_engine_order(provider: object) -> tuple[str, ...]:
     normalized = normalize_websearch_provider(provider)
+    if normalized == "duckduckgo":
+        # Compatibility first: selecting DDG should not override the original default primary engine.
+        return DEFAULT_ENGINE_ORDER
     if normalized not in _ENGINE_PROVIDER_SET:
         return DEFAULT_ENGINE_ORDER
     return (normalized, *tuple(name for name in DEFAULT_ENGINE_ORDER if name != normalized))

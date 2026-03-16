@@ -26,13 +26,19 @@ def test_resolve_tool_branch_provider_uses_default_branch_for_engine_aliases() -
     assert resolve_tool_branch_provider("unknown_provider") == "default"
 
 
-def test_build_default_engine_order_prefers_requested_engine() -> None:
+def test_build_default_engine_order_keeps_dev_compatible_default_chain() -> None:
+    assert DEFAULT_ENGINE_ORDER[:2] == ("bing", "sogo")
+
     order = build_default_engine_order("duckduckgo")
-    assert order[0] == "duckduckgo"
-    assert set(order) == set(DEFAULT_ENGINE_ORDER)
+    assert order == DEFAULT_ENGINE_ORDER
+    assert order[0] == "bing"
 
     order = build_default_engine_order("bing")
     assert order[0] == "bing"
+    assert set(order) == set(DEFAULT_ENGINE_ORDER)
+
+    order = build_default_engine_order("google")
+    assert order[0] == "google"
     assert set(order) == set(DEFAULT_ENGINE_ORDER)
 
     order = build_default_engine_order("tavily")
