@@ -51,6 +51,7 @@ from ..protocol.messages import EventMessage, InitializeOutput, PeerInfo
 from .capability_router import CapabilityRouter, StreamExecution
 from .environment_groups import EnvironmentGroup
 from .loader import (
+    PluginDiscoveryIssue,
     PluginEnvironmentManager,
     PluginSpec,
     discover_plugins,
@@ -142,9 +143,7 @@ class WorkerSession:
             list(group_ref.plugins) if group_ref is not None else [primary_plugin]
         )
         self.plugin = primary_plugin
-        self.group_id = (
-            group_ref.id if group_ref is not None else primary_plugin.name
-        )
+        self.group_id = group_ref.id if group_ref is not None else primary_plugin.name
         self.repo_root = repo_root.resolve()
         self.env_manager = env_manager
         self.capability_router = capability_router
@@ -154,6 +153,7 @@ class WorkerSession:
         self.provided_capabilities: list[CapabilityDescriptor] = []
         self.loaded_plugins: list[str] = []
         self.skipped_plugins: dict[str, str] = {}
+        self.issues: list[PluginDiscoveryIssue] = []
         self.capability_sources: dict[str, str] = {}
         self.llm_tools: list[dict[str, Any]] = []
         self.agents: list[dict[str, Any]] = []
@@ -228,6 +228,20 @@ class WorkerSession:
                     str(capability_name): str(plugin_name)
                     for capability_name, plugin_name in remote_capability_sources.items()
                 }
+            remote_issues = metadata.get("issues")
+            if isinstance(remote_issues, list):
+                self.issues = [
+                    PluginDiscoveryIssue(
+                        severity=str(item.get("severity", "error")),  # type: ignore[arg-type]
+                        phase=str(item.get("phase", "load")),  # type: ignore[arg-type]
+                        plugin_id=str(item.get("plugin_id", self.plugin.name)),
+                        message=str(item.get("message", "")),
+                        details=str(item.get("details", "")),
+                        hint=str(item.get("hint", "")),
+                    )
+                    for item in remote_issues
+                    if isinstance(item, dict)
+                ]
             remote_llm_tools = metadata.get("llm_tools")
             if isinstance(remote_llm_tools, list):
                 self.llm_tools = [
@@ -391,6 +405,7 @@ class WorkerSession:
             "plugins": [plugin.name for plugin in self.plugins],
             "loaded_plugins": list(self.loaded_plugins),
             "skipped_plugins": dict(self.skipped_plugins),
+            "issues": [issue.to_payload() for issue in self.issues],
         }
 
 
@@ -422,6 +437,7 @@ class SupervisorRuntime:
         self.active_requests: dict[str, WorkerSession] = {}
         self.loaded_plugins: list[str] = []
         self.skipped_plugins: dict[str, str] = {}
+        self.issues: list[PluginDiscoveryIssue] = []
         self._register_internal_capabilities()
 
     def _sync_plugin_registry(self, plugins: list[PluginSpec]) -> None:
@@ -634,8 +650,19 @@ class SupervisorRuntime:
     async def start(self) -> None:
         discovery = discover_plugins(self.plugins_dir)
         self.skipped_plugins = dict(discovery.skipped_plugins)
+        self.issues = list(discovery.issues)
         plan_result = self.env_manager.plan(discovery.plugins)
         self.skipped_plugins.update(plan_result.skipped_plugins)
+        self.issues.extend(
+            PluginDiscoveryIssue(
+                severity="error",
+                phase="load",
+                plugin_id=plugin_name,
+                message="插件环境规划失败",
+                details=str(reason),
+            )
+            for plugin_name, reason in plan_result.skipped_plugins.items()
+        )
         self._sync_plugin_registry(discovery.plugins)
         try:
             planned_sessions: list[WorkerSession] = []
@@ -672,10 +699,20 @@ class SupervisorRuntime:
                 except Exception as exc:
                     for plugin in session.plugins:
                         self.skipped_plugins[plugin.name] = str(exc)
+                        self.issues.append(
+                            PluginDiscoveryIssue(
+                                severity="error",
+                                phase="load",
+                                plugin_id=plugin.name,
+                                message="插件 worker 启动失败",
+                                details=str(exc),
+                            )
+                        )
                     await session.stop()
                     continue
                 self.worker_sessions[session.group_id] = session
                 self.skipped_plugins.update(session.skipped_plugins)
+                self.issues.extend(session.issues)
                 for plugin_name in session.loaded_plugins:
                     self.plugin_to_worker_session[plugin_name] = session
                     if plugin_name not in self.loaded_plugins:
@@ -713,6 +750,7 @@ class SupervisorRuntime:
                 metadata={
                     "plugins": sorted(self.loaded_plugins),
                     "skipped_plugins": self.skipped_plugins,
+                    "issues": [issue.to_payload() for issue in self.issues],
                     "aggregated_handler_ids": aggregated_handlers,
                     "worker_groups": [
                         session.describe() for session in self.worker_sessions.values()

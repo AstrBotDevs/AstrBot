@@ -53,13 +53,24 @@
         provider.list_all_tts: 列出 TTS Providers
         provider.list_all_stt: 列出 STT Providers
         provider.list_all_embedding: 列出 Embedding Providers
+        provider.list_all_rerank: 列出 Rerank Providers
         provider.get_using_tts: 获取当前 TTS Provider
         provider.get_using_stt: 获取当前 STT Provider
+        provider.get_by_id: 按 ID 获取 Provider
+        provider.stt.get_text: STT 转写
+        provider.tts.get_audio: TTS 合成音频
+        provider.tts.support_stream: 检查 TTS 原生流式支持
+        provider.tts.get_audio_stream: 流式 TTS 音频输出
+        provider.embedding.get_embedding: 获取单条向量
+        provider.embedding.get_embeddings: 批量获取向量
+        provider.embedding.get_dim: 获取向量维度
+        provider.rerank.rerank: 文档重排序
     LLM Tool:
         llm_tool.manager.get: 获取 LLM 工具状态
         llm_tool.manager.activate: 激活 LLM 工具
         llm_tool.manager.deactivate: 停用 LLM 工具
         llm_tool.manager.add: 动态添加 LLM 工具
+        llm_tool.manager.remove: 动态移除 LLM 工具
     Agent:
         agent.tool_loop.run: 运行 tool loop
         agent.registry.list: 列出 Agent 元数据
@@ -67,6 +78,11 @@
     Registry:
         registry.get_handlers_by_event_type: 按事件类型列出 handler 元数据
         registry.get_handler_by_full_name: 按 full name 查询 handler 元数据
+    Managers:
+        persona.get / persona.list / persona.create / persona.update / persona.delete
+        conversation.new / conversation.switch / conversation.delete
+        conversation.get / conversation.list / conversation.update
+        kb.get / kb.create / kb.delete
 
 能力命名规范：
     - 格式: {namespace}.{action} 或 {namespace}.{sub_namespace}.{action}
@@ -115,6 +131,7 @@ import inspect
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -203,11 +220,27 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
                     "provider_type": "embedding",
                 }
             ],
+            "rerank": [
+                {
+                    "id": "mock-rerank-provider",
+                    "model": "mock-rerank-model",
+                    "type": "mock",
+                    "provider_type": "rerank",
+                }
+            ],
+        }
+        self._provider_configs: dict[str, dict[str, Any]] = {
+            str(item["id"]): {**item, "enable": True}
+            for providers in self._provider_catalog.values()
+            for item in providers
         }
         self._active_provider_ids: dict[str, str | None] = {
             kind: providers[0]["id"] if providers else None
             for kind, providers in self._provider_catalog.items()
         }
+        self._provider_change_subscriptions: dict[
+            str, asyncio.Queue[dict[str, Any]]
+        ] = {}
         self._system_data_root = Path.cwd() / ".astrbot_sdk_testing" / "plugin_data"
         self._session_waiters: dict[str, set[str]] = {}
         self._db_watch_subscriptions: dict[
@@ -215,6 +248,20 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         ] = {}
         self._session_plugin_configs: dict[str, dict[str, Any]] = {}
         self._session_service_configs: dict[str, dict[str, Any]] = {}
+        self._dynamic_command_routes: dict[str, list[dict[str, Any]]] = {}
+        self._file_token_store: dict[str, str] = {}
+        self._persona_store: dict[str, dict[str, Any]] = {}
+        self._conversation_store: dict[str, dict[str, Any]] = {}
+        self._session_current_conversation_ids: dict[str, str] = {}
+        self._kb_store: dict[str, dict[str, Any]] = {}
+        self._platform_instances: list[dict[str, Any]] = [
+            {
+                "id": "mock-platform",
+                "name": "Mock Platform",
+                "type": "mock",
+                "status": "running",
+            }
+        ]
         self._register_builtin_capabilities()
 
     def upsert_plugin(
@@ -232,6 +279,9 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         normalized_metadata.setdefault("author", "")
         normalized_metadata.setdefault("version", "0.0.0")
         normalized_metadata.setdefault("enabled", True)
+        normalized_metadata.setdefault("reserved", False)
+        normalized_metadata.setdefault("support_platforms", [])
+        normalized_metadata.setdefault("astrbot_version", None)
         self._plugins[name] = _RegisteredPlugin(
             metadata=normalized_metadata,
             config=dict(config or {}),
@@ -247,12 +297,128 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         if plugin is None:
             return
         plugin.handlers = [dict(item) for item in handlers]
+        valid_handlers = {
+            str(item.get("handler_full_name", "")).strip()
+            for item in plugin.handlers
+            if isinstance(item, dict)
+        }
+        if not valid_handlers:
+            self._dynamic_command_routes.pop(name, None)
+            return
+        routes = self._dynamic_command_routes.get(name)
+        if routes is None:
+            return
+        self._dynamic_command_routes[name] = [
+            dict(item)
+            for item in routes
+            if str(item.get("handler_full_name", "")).strip() in valid_handlers
+        ]
+        if not self._dynamic_command_routes[name]:
+            self._dynamic_command_routes.pop(name, None)
 
     def set_plugin_enabled(self, name: str, enabled: bool) -> None:
         plugin = self._plugins.get(name)
         if plugin is None:
             return
         plugin.metadata["enabled"] = enabled
+
+    def register_dynamic_command_route(
+        self,
+        *,
+        plugin_id: str,
+        command_name: str,
+        handler_full_name: str,
+        desc: str = "",
+        priority: int = 0,
+        use_regex: bool = False,
+    ) -> None:
+        command_text = str(command_name).strip()
+        if not command_text:
+            raise AstrBotError.invalid_input("command_name must not be empty")
+        handler_text = str(handler_full_name).strip()
+        if not handler_text:
+            raise AstrBotError.invalid_input("handler_full_name must not be empty")
+        plugin = self._plugins.get(plugin_id)
+        if plugin is None:
+            raise AstrBotError.invalid_input(f"Unknown plugin: {plugin_id}")
+        if not self._plugin_has_handler(plugin_id, handler_text):
+            raise AstrBotError.invalid_input(
+                "handler_full_name must belong to the caller plugin and exist"
+            )
+        route = {
+            "plugin_name": plugin_id,
+            "command_name": command_text,
+            "handler_full_name": handler_text,
+            "desc": str(desc),
+            "priority": int(priority),
+            "use_regex": bool(use_regex),
+        }
+        routes = [
+            item
+            for item in self._dynamic_command_routes.get(plugin_id, [])
+            if str(item.get("command_name", "")).strip() != command_text
+            or bool(item.get("use_regex", False)) != bool(use_regex)
+        ]
+        routes.append(route)
+        self._dynamic_command_routes[plugin_id] = routes
+
+    def list_dynamic_command_routes(self, plugin_id: str) -> list[dict[str, Any]]:
+        return [dict(item) for item in self._dynamic_command_routes.get(plugin_id, [])]
+
+    def remove_dynamic_command_routes_for_plugin(self, plugin_id: str) -> None:
+        self._dynamic_command_routes.pop(plugin_id, None)
+
+    def set_platform_instances(self, instances: list[dict[str, Any]]) -> None:
+        normalized: list[dict[str, Any]] = []
+        for item in instances:
+            if not isinstance(item, dict):
+                continue
+            platform_id = str(item.get("id", "")).strip()
+            platform_type = str(item.get("type", "")).strip()
+            if not platform_id or not platform_type:
+                continue
+            errors = item.get("errors")
+            last_error = item.get("last_error")
+            stats = item.get("stats")
+            meta = item.get("meta")
+            normalized.append(
+                {
+                    "id": platform_id,
+                    "name": str(item.get("name", platform_id)),
+                    "type": platform_type,
+                    "status": str(item.get("status", "unknown")),
+                    "errors": [
+                        dict(error) for error in errors if isinstance(error, dict)
+                    ]
+                    if isinstance(errors, list)
+                    else [],
+                    "last_error": (
+                        dict(last_error) if isinstance(last_error, dict) else None
+                    ),
+                    "unified_webhook": bool(item.get("unified_webhook", False)),
+                    "stats": dict(stats) if isinstance(stats, dict) else None,
+                    "meta": dict(meta) if isinstance(meta, dict) else {},
+                    "started_at": item.get("started_at"),
+                }
+            )
+        self._platform_instances = normalized
+
+    def get_platform_instances(self) -> list[dict[str, Any]]:
+        return [dict(item) for item in self._platform_instances]
+
+    def _plugin_has_handler(self, plugin_id: str, handler_full_name: str) -> bool:
+        plugin = self._plugins.get(plugin_id)
+        if plugin is None:
+            return False
+        handler_name = str(handler_full_name).strip()
+        if not handler_name:
+            return False
+        for handler in plugin.handlers:
+            if not isinstance(handler, dict):
+                continue
+            if str(handler.get("handler_full_name", "")).strip() == handler_name:
+                return True
+        return False
 
     def set_plugin_llm_tools(
         self,
@@ -299,11 +465,59 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
             for item in providers
             if isinstance(item, dict) and str(item.get("id", "")).strip()
         ]
+        for item in self._provider_catalog[kind]:
+            provider_id = str(item.get("id", "")).strip()
+            if not provider_id:
+                continue
+            self._provider_configs[provider_id] = {**item, "enable": True}
         if active_id is not None:
             self._active_provider_ids[kind] = active_id
         else:
             catalog = self._provider_catalog[kind]
             self._active_provider_ids[kind] = catalog[0]["id"] if catalog else None
+
+    def emit_provider_change(
+        self,
+        provider_id: str,
+        provider_type: str,
+        umo: str | None = None,
+    ) -> None:
+        event = {
+            "provider_id": str(provider_id),
+            "provider_type": str(provider_type),
+            "umo": str(umo) if umo is not None else None,
+        }
+        for queue in list(self._provider_change_subscriptions.values()):
+            queue.put_nowait(dict(event))
+
+    def record_platform_error(
+        self,
+        platform_id: str,
+        message: str,
+        *,
+        traceback: str | None = None,
+    ) -> None:
+        for item in self._platform_instances:
+            if str(item.get("id", "")) != str(platform_id):
+                continue
+            error = {
+                "message": str(message),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "traceback": str(traceback) if traceback is not None else None,
+            }
+            errors = item.setdefault("errors", [])
+            if isinstance(errors, list):
+                errors.append(error)
+            item["last_error"] = error
+            item["status"] = "error"
+            return
+
+    def set_platform_stats(self, platform_id: str, stats: dict[str, Any]) -> None:
+        for item in self._platform_instances:
+            if str(item.get("id", "")) != str(platform_id):
+                continue
+            item["stats"] = dict(stats)
+            return
 
     def set_session_plugin_config(
         self,

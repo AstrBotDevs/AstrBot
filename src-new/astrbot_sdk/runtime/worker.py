@@ -34,12 +34,15 @@ from typing import Any
 from loguru import logger
 
 from .._invocation_context import caller_plugin_scope
+from .._star_runtime import bind_star_runtime
 from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
 from ..protocol.messages import PeerInfo
+from ..star import Star
 from .handler_dispatcher import CapabilityDispatcher, HandlerDispatcher
 from .loader import (
     LoadedPlugin,
+    PluginDiscoveryIssue,
     PluginSpec,
     load_plugin,
     load_plugin_spec,
@@ -108,9 +111,11 @@ async def run_plugin_lifecycle(
         if method is None:
             continue
         with caller_plugin_scope(context.plugin_id):
-            result = method(context)
-            if inspect.isawaitable(result):
-                await result
+            owner = instance if isinstance(instance, Star) else None
+            with bind_star_runtime(owner, context):
+                result = method(context)
+                if inspect.isawaitable(result):
+                    await result
 
 
 class GroupWorkerRuntime:
@@ -123,6 +128,7 @@ class GroupWorkerRuntime:
             peer_info=PeerInfo(name=self.group_id, role="plugin", version="v4"),
         )
         self.skipped_plugins: dict[str, str] = {}
+        self.issues: list[PluginDiscoveryIssue] = []
         self._plugin_states: list[GroupPluginRuntimeState] = []
         self._active_plugin_states: list[GroupPluginRuntimeState] = []
         self._load_plugins()
@@ -136,6 +142,15 @@ class GroupWorkerRuntime:
                 loaded_plugin = load_plugin(plugin)
             except Exception as exc:
                 self.skipped_plugins[plugin.name] = str(exc)
+                self.issues.append(
+                    PluginDiscoveryIssue(
+                        severity="error",
+                        phase="load",
+                        plugin_id=plugin.name,
+                        message="插件加载失败",
+                        details=str(exc),
+                    )
+                )
                 logger.exception(
                     "组 {} 中插件 {} 加载失败，启动时将跳过",
                     self.group_id,
@@ -190,6 +205,15 @@ class GroupWorkerRuntime:
                     await self._run_lifecycle(state, "on_start")
                 except Exception as exc:
                     self.skipped_plugins[state.plugin.name] = str(exc)
+                    self.issues.append(
+                        PluginDiscoveryIssue(
+                            severity="error",
+                            phase="lifecycle",
+                            plugin_id=state.plugin.name,
+                            message="插件 on_start 失败",
+                            details=str(exc),
+                        )
+                    )
                     logger.exception(
                         "组 {} 中插件 {} on_start 失败，启动时将跳过",
                         self.group_id,
@@ -276,6 +300,7 @@ class GroupWorkerRuntime:
                 for state in self._active_plugin_states
                 for capability in state.loaded_plugin.capabilities
             },
+            "issues": [issue.to_payload() for issue in self.issues],
             "llm_tools": [
                 {
                     **tool.spec.to_payload(),
@@ -327,6 +352,7 @@ class PluginWorkerRuntime:
         self._lifecycle_context = RuntimeContext(
             peer=self.peer, plugin_id=self.plugin.name
         )
+        self.issues: list[PluginDiscoveryIssue] = []
         self.peer.set_invoke_handler(self._handle_invoke)
         self.peer.set_cancel_handler(self._handle_cancel)
 
@@ -346,6 +372,7 @@ class PluginWorkerRuntime:
                     "plugins": [self.plugin.name],
                     "loaded_plugins": [self.plugin.name],
                     "skipped_plugins": {},
+                    "issues": [issue.to_payload() for issue in self.issues],
                     "capability_sources": {
                         item.descriptor.name: self.plugin.name
                         for item in self.loaded_plugin.capabilities

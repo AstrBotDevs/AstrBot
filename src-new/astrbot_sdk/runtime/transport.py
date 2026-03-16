@@ -83,7 +83,8 @@ def _frame_stdio_payload(payload: str) -> str:
         raise ValueError("STDIO payload 不允许包含原始换行符")
     return f"{body}\n"
 
-#TODO 一个更好的解决方案？
+
+# TODO 一个更好的解决方案？
 def _is_windows_access_denied(error: BaseException) -> bool:
     return (
         sys.platform == "win32"

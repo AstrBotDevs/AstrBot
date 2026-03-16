@@ -110,10 +110,14 @@ def _run_async_entrypoint(
         asyncio.run(entrypoint)
     except Exception as exc:
         exit_code, error_code, hint = _classify_cli_exception(exc)
+        docs_url = exc.docs_url if isinstance(exc, AstrBotError) else ""
+        details = exc.details if isinstance(exc, AstrBotError) else None
         _render_cli_error(
             error_code=error_code,
             message=str(exc),
             hint=hint,
+            docs_url=docs_url,
+            details=details,
             context=context,
         )
         if exit_code == EXIT_UNEXPECTED:
@@ -134,10 +138,14 @@ def _run_sync_entrypoint(
         entrypoint()
     except Exception as exc:
         exit_code, error_code, hint = _classify_cli_exception(exc)
+        docs_url = exc.docs_url if isinstance(exc, AstrBotError) else ""
+        details = exc.details if isinstance(exc, AstrBotError) else None
         _render_cli_error(
             error_code=error_code,
             message=str(exc),
             hint=hint,
+            docs_url=docs_url,
+            details=details,
             context=context,
         )
         if exit_code == EXIT_UNEXPECTED:
@@ -191,11 +199,17 @@ def _render_cli_error(
     error_code: str,
     message: str,
     hint: str = "",
+    docs_url: str = "",
+    details: dict[str, Any] | None = None,
     context: dict[str, Any] | None = None,
 ) -> None:
     click.echo(f"Error[{error_code}]: {message}", err=True)
     if hint:
         click.echo(f"Suggestion: {hint}", err=True)
+    if docs_url:
+        click.echo(f"Docs: {docs_url}", err=True)
+    if details:
+        click.echo(f"Details: {details}", err=True)
     if not context:
         return
     for key, value in context.items():

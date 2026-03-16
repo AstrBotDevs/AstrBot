@@ -27,11 +27,27 @@ import inspect
 import re
 import shlex
 from collections.abc import Sequence
-from typing import Any, get_type_hints
+from dataclasses import dataclass
+from typing import Any, cast, get_type_hints
 
+from loguru import logger
+
+from .._command_model import (
+    parse_command_model_remainder,
+    resolve_command_model_param,
+)
 from .._invocation_context import caller_plugin_scope
+from .._plugin_logger import PluginLogger
+from .._star_runtime import bind_star_runtime
 from .._typing_utils import unwrap_optional
 from ..context import CancelToken, Context
+from ..conversation import (
+    DEFAULT_BUSY_MESSAGE,
+    ConversationClosed,
+    ConversationReplaced,
+    ConversationSession,
+    ConversationState,
+)
 from ..events import MessageEvent
 from ..filters import LocalFilterBinding
 from ..message_components import BaseMessageComponent
@@ -46,7 +62,14 @@ from ..schedule import ScheduleContext
 from ..session_waiter import SessionWaiterManager
 from ..star import Star
 from .capability_dispatcher import CapabilityDispatcher
+from .limiter import LimiterEngine
 from .loader import LoadedHandler
+
+
+@dataclass(slots=True)
+class _ActiveConversation:
+    session: ConversationSession
+    task: asyncio.Task[Any]
 
 
 class HandlerDispatcher:
@@ -58,7 +81,15 @@ class HandlerDispatcher:
         self._handlers = {item.descriptor.id: item for item in handlers}
         self._active: dict[str, tuple[asyncio.Task[Any], CancelToken]] = {}
         self._session_waiters = SessionWaiterManager(plugin_id=plugin_id, peer=peer)
-        setattr(peer, "_session_waiter_manager", self._session_waiters)
+        self._limiter = LimiterEngine()
+        self._conversations: dict[str, _ActiveConversation] = {}
+        try:
+            setattr(peer, "_session_waiter_manager", self._session_waiters)
+        except AttributeError:
+            logger.warning(
+                f"Failed to attach _session_waiter_manager to peer {peer}, "
+                "some features may not work as expected"
+            )
 
     async def invoke(self, message, cancel_token: CancelToken) -> dict[str, Any]:
         handler_id = str(message.input.get("handler_id", ""))
@@ -88,13 +119,25 @@ class HandlerDispatcher:
             peer=self._peer,
             plugin_id=plugin_id,
             cancel_token=cancel_token,
-            source_event_payload=event_payload if isinstance(event_payload, dict) else None,
+            source_event_payload=event_payload
+            if isinstance(event_payload, dict)
+            else None,
         )
         event = MessageEvent.from_payload(event_payload, context=ctx)
-        event.bind_reply_handler(self._create_reply_handler(ctx, event))
-        schedule_context = self._build_schedule_context(
-            loaded, event_payload
+        bound_logger = cast(PluginLogger, ctx.logger).bind(
+            plugin_id=plugin_id,
+            request_id=message.id,
+            handler_ref=handler_id,
+            session_id=event.session_id,
+            event_type=str(
+                event_payload.get("event_type")
+                or event_payload.get("type")
+                or event.message_type
+            ),
         )
+        ctx.logger = bound_logger
+        event.bind_reply_handler(self._create_reply_handler(ctx, event))
+        schedule_context = self._build_schedule_context(loaded, event_payload)
 
         # 提取 args 用于兼容 handler 签名
         raw_args = message.input.get("args") or {}
@@ -159,43 +202,71 @@ class HandlerDispatcher:
     ) -> dict[str, Any]:
         summary = {"sent_message": False, "stop": False, "call_llm": False}
         try:
+            limiter = loaded.limiter
+            if limiter is not None:
+                decision = self._limiter.evaluate(
+                    plugin_id=self._resolve_plugin_id(loaded),
+                    handler_id=loaded.descriptor.id,
+                    limiter=limiter,
+                    event=event,
+                )
+                if not decision.allowed:
+                    if decision.error is not None:
+                        raise decision.error
+                    if decision.hint:
+                        await event.reply(decision.hint)
+                        summary["sent_message"] = True
+                    return summary
             if not self._run_local_filters(
                 loaded.local_filters,
                 event=event,
                 ctx=ctx,
             ):
                 return summary
-            parsed_args = (
-                self._parse_handler_args(loaded.descriptor.param_specs, args or {})
-                if loaded.descriptor.param_specs
-                else dict(args or {})
+            parsed_args, help_text = self._prepare_handler_args(
+                loaded,
+                args or {},
             )
-            result = loaded.callable(
-                *self._build_args(
-                    loaded.callable,
+            if help_text is not None:
+                await event.reply(help_text)
+                summary["sent_message"] = True
+                return summary
+            if loaded.conversation is not None:
+                return await self._start_conversation(
+                    loaded,
                     event,
                     ctx,
                     parsed_args,
-                    plugin_id=self._resolve_plugin_id(loaded),
-                    handler_ref=loaded.descriptor.id,
                     schedule_context=schedule_context,
                 )
-            )
-            if inspect.isasyncgen(result):
-                async for item in result:
+            owner = loaded.owner if isinstance(loaded.owner, Star) else None
+            with bind_star_runtime(owner, ctx):
+                result = loaded.callable(
+                    *self._build_args(
+                        loaded.callable,
+                        event,
+                        ctx,
+                        parsed_args,
+                        plugin_id=self._resolve_plugin_id(loaded),
+                        handler_ref=loaded.descriptor.id,
+                        schedule_context=schedule_context,
+                    )
+                )
+                if inspect.isasyncgen(result):
+                    async for item in result:
+                        self._merge_handler_summary(
+                            summary,
+                            await self._handle_result_item(item, event, ctx),
+                        )
+                    summary["stop"] = bool(summary.get("stop")) or event.is_stopped()
+                    return summary
+                if inspect.isawaitable(result):
+                    result = await result
+                if result is not None:
                     self._merge_handler_summary(
                         summary,
-                        await self._handle_result_item(item, event, ctx),
+                        await self._handle_result_item(result, event, ctx),
                     )
-                summary["stop"] = bool(summary.get("stop")) or event.is_stopped()
-                return summary
-            if inspect.isawaitable(result):
-                result = await result
-            if result is not None:
-                self._merge_handler_summary(
-                    summary,
-                    await self._handle_result_item(result, event, ctx),
-                )
             summary["stop"] = bool(summary.get("stop")) or event.is_stopped()
             return summary
         except Exception as exc:
@@ -220,6 +291,12 @@ class HandlerDispatcher:
             for command_name in [trigger.command, *trigger.aliases]:
                 remainder = self._match_command_name(event.text, command_name)
                 if remainder is not None:
+                    model_param = resolve_command_model_param(loaded.callable)
+                    if model_param is not None:
+                        return {
+                            "__command_model_remainder__": remainder,
+                            "__command_name__": command_name,
+                        }
                     if param_specs:
                         return self._build_command_args(param_specs, remainder)
                     return self._build_command_args(
@@ -257,6 +334,7 @@ class HandlerDispatcher:
         plugin_id: str | None = None,
         handler_ref: str | None = None,
         schedule_context: ScheduleContext | None = None,
+        conversation_session: ConversationSession | None = None,
     ) -> list[Any]:
         """构建 handler 参数列表。"""
         from loguru import logger
@@ -284,7 +362,11 @@ class HandlerDispatcher:
             param_type = type_hints.get(parameter.name)
             if param_type is not None:
                 injected = self._inject_by_type(
-                    param_type, event, ctx, schedule_context
+                    param_type,
+                    event,
+                    ctx,
+                    schedule_context,
+                    conversation_session,
                 )
 
             # 2. Fallback 按名字注入
@@ -295,6 +377,8 @@ class HandlerDispatcher:
                     injected = ctx
                 elif parameter.name in {"sched", "schedule"}:
                     injected = schedule_context
+                elif parameter.name in {"conversation", "conv"}:
+                    injected = conversation_session
                 elif parameter.name in args:
                     injected = args[parameter.name]
 
@@ -321,12 +405,181 @@ class HandlerDispatcher:
 
         return injected_args
 
+    def _prepare_handler_args(
+        self,
+        loaded: LoadedHandler,
+        args: dict[str, Any],
+    ) -> tuple[dict[str, Any], str | None]:
+        parsed_args = (
+            self._parse_handler_args(loaded.descriptor.param_specs, args)
+            if loaded.descriptor.param_specs
+            else {
+                key: value
+                for key, value in dict(args).items()
+                if not str(key).startswith("__command_")
+            }
+        )
+        model_param = resolve_command_model_param(loaded.callable)
+        if model_param is None:
+            return parsed_args, None
+        if "__command_model_remainder__" not in args:
+            return parsed_args, None
+        trigger = loaded.descriptor.trigger
+        command_name = str(args.get("__command_name__", "")) or (
+            trigger.command
+            if isinstance(trigger, CommandTrigger)
+            else loaded.descriptor.id.rsplit(".", 1)[-1]
+        )
+        result = parse_command_model_remainder(
+            remainder=str(args.get("__command_model_remainder__", "")),
+            model_param=model_param,
+            command_name=command_name,
+        )
+        if result.help_text is not None:
+            return parsed_args, result.help_text
+        if result.model is not None:
+            parsed_args[model_param.name] = result.model
+        return parsed_args, None
+
+    async def _start_conversation(
+        self,
+        loaded: LoadedHandler,
+        event: MessageEvent,
+        ctx: Context,
+        parsed_args: dict[str, Any],
+        *,
+        schedule_context: ScheduleContext | None,
+    ) -> dict[str, Any]:
+        assert loaded.conversation is not None
+        conversation_meta = loaded.conversation
+        summary = {"sent_message": False, "stop": False, "call_llm": False}
+        key = f"{self._resolve_plugin_id(loaded)}:{event.session_id}"
+        active = self._conversations.get(key)
+        if active is not None and not active.task.done():
+            if conversation_meta.mode == "reject":
+                await event.reply(
+                    conversation_meta.busy_message or DEFAULT_BUSY_MESSAGE
+                )
+                summary["sent_message"] = True
+                return summary
+            active.session.mark_replaced()
+            await self._session_waiters.fail(
+                active.session.session_key,
+                ConversationReplaced("conversation replaced by a newer session"),
+            )
+            await asyncio.sleep(0)
+            active.task.cancel()
+            try:
+                await asyncio.wait_for(
+                    asyncio.shield(active.task),
+                    timeout=conversation_meta.grace_period,
+                )
+            except asyncio.TimeoutError:
+                cast(PluginLogger, ctx.logger).warning(
+                    "Conversation replacement grace period exceeded for handler {}",
+                    loaded.descriptor.id,
+                )
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
+            finally:
+                if self._conversations.get(key) is active:
+                    self._conversations.pop(key, None)
+
+        conversation = ConversationSession(
+            ctx=ctx,
+            event=event,
+            waiter_manager=self._session_waiters,
+            timeout=conversation_meta.timeout,
+        )
+
+        async def _runner() -> None:
+            try:
+                await self._run_conversation_task(
+                    loaded,
+                    event,
+                    ctx,
+                    parsed_args,
+                    conversation,
+                    schedule_context=schedule_context,
+                )
+            finally:
+                if conversation.state == ConversationState.ACTIVE:
+                    conversation.close(ConversationState.COMPLETED)
+                current = self._conversations.get(key)
+                if current is not None and current.session is conversation:
+                    self._conversations.pop(key, None)
+
+        task = await ctx.register_task(
+            _runner(),
+            f"conversation:{loaded.descriptor.id}",
+        )
+        conversation.bind_owner_task(task)
+        self._conversations[key] = _ActiveConversation(
+            session=conversation,
+            task=task,
+        )
+        return summary
+
+    async def _run_conversation_task(
+        self,
+        loaded: LoadedHandler,
+        event: MessageEvent,
+        ctx: Context,
+        parsed_args: dict[str, Any],
+        conversation: ConversationSession,
+        *,
+        schedule_context: ScheduleContext | None,
+    ) -> None:
+        owner = loaded.owner if isinstance(loaded.owner, Star) else None
+        args_with_conversation = dict(parsed_args)
+        args_with_conversation.setdefault("conversation", conversation)
+        try:
+            with bind_star_runtime(owner, ctx):
+                result = loaded.callable(
+                    *self._build_args(
+                        loaded.callable,
+                        event,
+                        ctx,
+                        args_with_conversation,
+                        plugin_id=self._resolve_plugin_id(loaded),
+                        handler_ref=loaded.descriptor.id,
+                        schedule_context=schedule_context,
+                        conversation_session=conversation,
+                    )
+                )
+                if inspect.isasyncgen(result):
+                    async for item in result:
+                        await self._handle_result_item(item, event, ctx)
+                    return
+                if inspect.isawaitable(result):
+                    result = await result
+                if result is not None:
+                    await self._handle_result_item(result, event, ctx)
+        except asyncio.CancelledError:
+            if conversation.state == ConversationState.ACTIVE:
+                conversation.close(ConversationState.CANCELLED)
+            raise
+        except (ConversationReplaced, ConversationClosed):
+            return
+        except Exception as exc:
+            await self._handle_error(
+                loaded.owner,
+                exc,
+                event,
+                ctx,
+                handler_name=loaded.callable.__name__,
+                plugin_id=self._resolve_plugin_id(loaded),
+            )
+
     def _inject_by_type(
         self,
         param_type: Any,
         event: MessageEvent,
         ctx: Context,
         schedule_context: ScheduleContext | None,
+        conversation_session: ConversationSession | None,
     ) -> Any:
         """根据类型注解注入参数。"""
         param_type, _is_optional = unwrap_optional(param_type)
@@ -351,6 +604,10 @@ class HandlerDispatcher:
             isinstance(param_type, type) and issubclass(param_type, ScheduleContext)
         ):
             return schedule_context
+        if param_type is ConversationSession or (
+            isinstance(param_type, type) and issubclass(param_type, ConversationSession)
+        ):
+            return conversation_session
 
         return None
 
@@ -596,16 +853,16 @@ class HandlerDispatcher:
 
     @classmethod
     def _is_injected_parameter(cls, name: str, annotation: Any) -> bool:
-        if name in {"event", "ctx", "context"}:
+        if name in {"event", "ctx", "context", "conversation", "conv"}:
             return True
         normalized, _is_optional = unwrap_optional(annotation)
         if normalized is None:
             return False
-        if normalized is Context or normalized is MessageEvent:
+        if normalized in {Context, MessageEvent, ConversationSession}:
             return True
         if isinstance(normalized, type) and issubclass(
             normalized,
-            (Context, MessageEvent),
+            (Context, MessageEvent, ConversationSession),
         ):
             return True
         return False
@@ -621,9 +878,11 @@ class HandlerDispatcher:
         plugin_id: str | None = None,
     ) -> None:
         if hasattr(owner, "on_error") and callable(owner.on_error):
-            result = owner.on_error(exc, event, ctx)
-            if inspect.isawaitable(result):
-                await result
+            bound_owner = owner if isinstance(owner, Star) else None
+            with bind_star_runtime(bound_owner, ctx):
+                result = owner.on_error(exc, event, ctx)
+                if inspect.isawaitable(result):
+                    await result
             return
         await Star().on_error(exc, event, ctx)
 

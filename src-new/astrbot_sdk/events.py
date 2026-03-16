@@ -17,7 +17,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from .message_components import (
+    At,
     BaseMessageComponent,
+    File,
     Image,
     Plain,
     component_to_payload_sync,
@@ -238,6 +240,11 @@ class MessageEvent:
             return self.message_type == "private"
         return not bool(self.group_id)
 
+    def is_group_chat(self) -> bool:
+        if self.message_type:
+            return self.message_type == "group"
+        return bool(self.group_id)
+
     def get_platform_id(self) -> str:
         """Get the platform instance identifier."""
         return self.platform_id
@@ -257,6 +264,41 @@ class MessageEvent:
     def get_messages(self) -> list[BaseMessageComponent]:
         """Return SDK message components for the current event."""
         return list(self._messages)
+
+    def has_component(self, type_: type[BaseMessageComponent]) -> bool:
+        return any(isinstance(component, type_) for component in self._messages)
+
+    def get_components(
+        self,
+        type_: type[BaseMessageComponent],
+    ) -> list[BaseMessageComponent]:
+        return [
+            component for component in self._messages if isinstance(component, type_)
+        ]
+
+    def get_images(self) -> list[Image]:
+        return [
+            component for component in self._messages if isinstance(component, Image)
+        ]
+
+    def get_files(self) -> list[File]:
+        return [
+            component for component in self._messages if isinstance(component, File)
+        ]
+
+    def extract_plain_text(self) -> str:
+        return " ".join(
+            component.text
+            for component in self._messages
+            if isinstance(component, Plain)
+        )
+
+    def get_at_users(self) -> list[str]:
+        return [
+            str(component.qq)
+            for component in self._messages
+            if isinstance(component, At) and str(component.qq).lower() != "all"
+        ]
 
     def get_message_outline(self) -> str:
         """Return the normalized message outline."""

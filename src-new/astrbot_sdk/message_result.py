@@ -19,8 +19,13 @@ from enum import Enum
 from typing import Any
 
 from .message_components import (
+    At,
+    AtAll,
     BaseMessageComponent,
+    File,
     Plain,
+    Reply,
+    build_media_component_from_url,
     component_to_payload,
     component_to_payload_sync,
     is_message_component,
@@ -37,6 +42,20 @@ class EventResultType(str, Enum):
 class MessageChain:
     components: list[BaseMessageComponent] = field(default_factory=list)
 
+    def append(self, component: BaseMessageComponent) -> MessageChain:
+        self.components.append(component)
+        return self
+
+    def extend(self, components: list[BaseMessageComponent]) -> MessageChain:
+        self.components.extend(components)
+        return self
+
+    def __iter__(self):
+        return iter(self.components)
+
+    def __len__(self) -> int:
+        return len(self.components)
+
     def to_payload(self) -> list[dict[str, Any]]:
         return [component_to_payload_sync(component) for component in self.components]
 
@@ -51,6 +70,9 @@ class MessageChain:
             elif with_other_comps_mark:
                 texts.append(f"[{component.__class__.__name__}]")
         return " ".join(texts)
+
+    def plain_text(self, with_other_comps_mark: bool = False) -> str:
+        return self.get_plain_text(with_other_comps_mark=with_other_comps_mark)
 
 
 @dataclass(slots=True)
@@ -80,6 +102,54 @@ class MessageEventResult:
         return cls(type=result_type, chain=MessageChain(components))
 
 
+@dataclass(slots=True)
+class MessageBuilder:
+    components: list[BaseMessageComponent] = field(default_factory=list)
+
+    def text(self, content: str) -> MessageBuilder:
+        self.components.append(Plain(content, convert=False))
+        return self
+
+    def at(self, user_id: str) -> MessageBuilder:
+        self.components.append(At(user_id))
+        return self
+
+    def at_all(self) -> MessageBuilder:
+        self.components.append(AtAll())
+        return self
+
+    def image(self, url: str) -> MessageBuilder:
+        self.components.append(build_media_component_from_url(url, kind="image"))
+        return self
+
+    def record(self, url: str) -> MessageBuilder:
+        self.components.append(build_media_component_from_url(url, kind="record"))
+        return self
+
+    def video(self, url: str) -> MessageBuilder:
+        self.components.append(build_media_component_from_url(url, kind="video"))
+        return self
+
+    def file(self, name: str, *, file: str = "", url: str = "") -> MessageBuilder:
+        self.components.append(File(name=name, file=file, url=url))
+        return self
+
+    def reply(self, **kwargs: Any) -> MessageBuilder:
+        self.components.append(Reply(**kwargs))
+        return self
+
+    def append(self, component: BaseMessageComponent) -> MessageBuilder:
+        self.components.append(component)
+        return self
+
+    def extend(self, components: list[BaseMessageComponent]) -> MessageBuilder:
+        self.components.extend(components)
+        return self
+
+    def build(self) -> MessageChain:
+        return MessageChain(list(self.components))
+
+
 def coerce_message_chain(value: Any) -> MessageChain | None:
     if isinstance(value, MessageEventResult):
         return value.chain
@@ -97,6 +167,7 @@ def coerce_message_chain(value: Any) -> MessageChain | None:
 __all__ = [
     "EventResultType",
     "MessageChain",
+    "MessageBuilder",
     "MessageEventResult",
     "coerce_message_chain",
 ]

@@ -14,17 +14,31 @@ if TYPE_CHECKING:
         RerankResult,
         ToolCallsResult,
     )
+    from .providers import (
+        EmbeddingProvider,
+        ProviderProxy,
+        RerankProvider,
+        STTProvider,
+        TTSAudioChunk,
+        TTSProvider,
+    )
     from .tools import LLMToolManager
 
 __all__ = [
     "AgentSpec",
     "BaseAgentRunner",
+    "EmbeddingProvider",
     "LLMToolManager",
     "LLMToolSpec",
     "ProviderMeta",
+    "ProviderProxy",
     "ProviderRequest",
     "ProviderType",
+    "RerankProvider",
     "RerankResult",
+    "STTProvider",
+    "TTSAudioChunk",
+    "TTSProvider",
     "ToolCallsResult",
 ]
 
@@ -58,6 +72,31 @@ def __getattr__(name: str) -> Any:
             "ProviderType": ProviderType,
             "RerankResult": RerankResult,
             "ToolCallsResult": ToolCallsResult,
+        }[name]
+    if name in {
+        "EmbeddingProvider",
+        "ProviderProxy",
+        "RerankProvider",
+        "STTProvider",
+        "TTSAudioChunk",
+        "TTSProvider",
+    }:
+        from .providers import (
+            EmbeddingProvider,
+            ProviderProxy,
+            RerankProvider,
+            STTProvider,
+            TTSAudioChunk,
+            TTSProvider,
+        )
+
+        return {
+            "EmbeddingProvider": EmbeddingProvider,
+            "ProviderProxy": ProviderProxy,
+            "RerankProvider": RerankProvider,
+            "STTProvider": STTProvider,
+            "TTSAudioChunk": TTSAudioChunk,
+            "TTSProvider": TTSProvider,
         }[name]
     if name == "LLMToolManager":
         from .tools import LLMToolManager

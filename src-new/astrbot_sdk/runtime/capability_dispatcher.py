@@ -19,13 +19,18 @@ import inspect
 import json
 import typing
 from collections.abc import AsyncIterator, Sequence
-from typing import Any, get_type_hints
+from typing import Any, cast, get_type_hints
+
+from loguru import logger
 
 from .._invocation_context import caller_plugin_scope
+from .._plugin_logger import PluginLogger
+from .._star_runtime import bind_star_runtime
 from .._typing_utils import unwrap_optional
 from ..context import CancelToken, Context
 from ..errors import AstrBotError
 from ..events import MessageEvent
+from ..star import Star
 from ._streaming import StreamExecution
 from .loader import LoadedCapability, LoadedLLMTool
 
@@ -43,12 +48,55 @@ class CapabilityDispatcher:
         self._peer = peer
         self._capabilities = {item.descriptor.name: item for item in capabilities}
         self._llm_tools: dict[tuple[str, str], LoadedLLMTool] = {}
+        try:
+            setattr(peer, "_sdk_capability_dispatcher", self)
+        except AttributeError:
+            logger.warning(
+                f"Failed to attach _sdk_capability_dispatcher to peer {peer}, "
+                "dynamic LLM tool registration may not work"
+            )
         for item in llm_tools or []:
-            owner_plugin = item.plugin_id or plugin_id
-            self._llm_tools[(owner_plugin, item.spec.name)] = item
-            if item.spec.handler_ref and item.spec.handler_ref != item.spec.name:
-                self._llm_tools[(owner_plugin, item.spec.handler_ref)] = item
+            self._register_llm_tool(item, item.plugin_id or plugin_id)
         self._active: dict[str, tuple[asyncio.Task[Any], CancelToken]] = {}
+
+    def _register_llm_tool(
+        self,
+        loaded: LoadedLLMTool,
+        owner_plugin: str,
+    ) -> None:
+        self._llm_tools[(owner_plugin, loaded.spec.name)] = loaded
+        if loaded.spec.handler_ref and loaded.spec.handler_ref != loaded.spec.name:
+            self._llm_tools[(owner_plugin, loaded.spec.handler_ref)] = loaded
+
+    def add_dynamic_llm_tool(
+        self,
+        *,
+        plugin_id: str,
+        spec,
+        callable_obj,
+        owner: Any | None = None,
+    ) -> None:
+        self.remove_llm_tool(plugin_id, spec.name)
+        loaded = LoadedLLMTool(
+            spec=spec.model_copy(deep=True),
+            callable=callable_obj,
+            owner=owner,
+            plugin_id=plugin_id,
+        )
+        self._register_llm_tool(loaded, plugin_id)
+
+    def remove_llm_tool(self, plugin_id: str, name: str) -> bool:
+        removed = False
+        for key, value in list(self._llm_tools.items()):
+            if key[0] != plugin_id:
+                continue
+            spec_name = str(getattr(value.spec, "name", "")).strip()
+            handler_ref = str(getattr(value.spec, "handler_ref", "") or "").strip()
+            if name not in {spec_name, handler_ref}:
+                continue
+            self._llm_tools.pop(key, None)
+            removed = True
+        return removed
 
     async def invoke(
         self,
@@ -68,6 +116,14 @@ class CapabilityDispatcher:
             plugin_id=plugin_id,
             cancel_token=cancel_token,
         )
+        bound_logger = cast(PluginLogger, ctx.logger).bind(
+            plugin_id=plugin_id,
+            request_id=message.id,
+            capability=message.capability,
+            session_id=self._logger_session_id(dict(message.input)),
+            event_type=self._logger_event_type(dict(message.input)),
+        )
+        ctx.logger = bound_logger
 
         with caller_plugin_scope(plugin_id):
             task = asyncio.create_task(
@@ -109,6 +165,14 @@ class CapabilityDispatcher:
             if isinstance(event_payload, dict)
             else None,
         )
+        bound_logger = cast(PluginLogger, ctx.logger).bind(
+            plugin_id=plugin_id,
+            request_id=message.id,
+            capability="internal.llm_tool.execute",
+            session_id=self._logger_session_id(payload),
+            event_type=self._logger_event_type(payload),
+        )
+        ctx.logger = bound_logger
         event = MessageEvent.from_payload(
             event_payload if isinstance(event_payload, dict) else {},
             context=ctx,
@@ -148,20 +212,22 @@ class CapabilityDispatcher:
         ctx: Context,
         tool_args: dict[str, Any],
     ) -> dict[str, Any]:
-        result = loaded.callable(
-            *self._build_tool_args(
-                loaded.callable,
-                event,
-                ctx,
-                tool_args,
+        owner = loaded.owner if isinstance(loaded.owner, Star) else None
+        with bind_star_runtime(owner, ctx):
+            result = loaded.callable(
+                *self._build_tool_args(
+                    loaded.callable,
+                    event,
+                    ctx,
+                    tool_args,
+                )
             )
-        )
-        if inspect.isasyncgen(result):
-            raise AstrBotError.protocol_error(
-                "SDK LLM tool must return awaitable result, async generator is unsupported"
-            )
-        if inspect.isawaitable(result):
-            result = await result
+            if inspect.isasyncgen(result):
+                raise AstrBotError.protocol_error(
+                    "SDK LLM tool must return awaitable result, async generator is unsupported"
+                )
+            if inspect.isawaitable(result):
+                result = await result
         if result is None:
             # content=None means the tool completed successfully but produced no
             # textual payload. The core bridge preserves this as a real None.
@@ -237,6 +303,26 @@ class CapabilityDispatcher:
         if loaded.plugin_id:
             return loaded.plugin_id
         return self._plugin_id
+
+    @staticmethod
+    def _logger_session_id(payload: dict[str, Any]) -> str:
+        if isinstance(payload.get("event"), dict):
+            return str(payload["event"].get("session_id", ""))
+        return str(payload.get("session", ""))
+
+    @staticmethod
+    def _logger_event_type(payload: dict[str, Any]) -> str:
+        if isinstance(payload.get("event"), dict):
+            event_payload = payload["event"]
+            return str(
+                event_payload.get("event_type")
+                or event_payload.get("type")
+                or event_payload.get("message_type")
+                or "message"
+            )
+        if payload.get("session") is not None:
+            return "capability"
+        return "capability"
 
     async def cancel(self, request_id: str) -> None:
         active = self._active.get(request_id)

@@ -32,7 +32,7 @@ import inspect
 import typing
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel
 
@@ -59,6 +59,28 @@ CAPABILITY_META_ATTR = "__astrbot_capability_meta__"
 LLM_TOOL_META_ATTR = "__astrbot_llm_tool_meta__"
 AGENT_META_ATTR = "__astrbot_agent_meta__"
 
+LimiterScope = Literal["session", "user", "group", "global"]
+LimiterBehavior = Literal["hint", "silent", "error"]
+ConversationMode = Literal["replace", "reject"]
+
+
+@dataclass(slots=True)
+class LimiterMeta:
+    kind: Literal["rate_limit", "cooldown"]
+    limit: int
+    window: float
+    scope: LimiterScope = "session"
+    behavior: LimiterBehavior = "hint"
+    message: str | None = None
+
+
+@dataclass(slots=True)
+class ConversationMeta:
+    timeout: int = 60
+    mode: ConversationMode = "replace"
+    busy_message: str | None = None
+    grace_period: float = 1.0
+
 
 @dataclass(slots=True)
 class HandlerMeta:
@@ -84,6 +106,9 @@ class HandlerMeta:
     filters: list[FilterSpec] = field(default_factory=list)
     local_filters: list[Any] = field(default_factory=list)
     command_route: CommandRouteSpec | None = None
+    limiter: LimiterMeta | None = None
+    conversation: ConversationMeta | None = None
+    decorator_sources: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -150,6 +175,94 @@ def get_agent_meta(obj: Any) -> AgentMeta | None:
     return getattr(obj, AGENT_META_ATTR, None)
 
 
+def _replace_filter(meta: HandlerMeta, spec: FilterSpec) -> None:
+    kind = getattr(spec, "kind", None)
+    meta.filters = [
+        item for item in meta.filters if getattr(item, "kind", None) != kind
+    ]
+    meta.filters.append(spec)
+
+
+def _set_platform_filter(
+    meta: HandlerMeta,
+    values: list[str],
+    *,
+    source: str,
+) -> None:
+    normalized = [
+        value for value in dict.fromkeys(str(item).strip() for item in values) if value
+    ]
+    if not normalized:
+        return
+    existing = meta.decorator_sources.get("platforms")
+    if existing is not None and existing != source:
+        raise ValueError("platforms(...) 不能与 on_message(platforms=...) 混用")
+    meta.decorator_sources["platforms"] = source
+    _replace_filter(meta, PlatformFilterSpec(platforms=normalized))
+
+
+def _set_message_type_filter(
+    meta: HandlerMeta,
+    values: list[str],
+    *,
+    source: str,
+) -> None:
+    normalized = [
+        value
+        for value in dict.fromkeys(str(item).strip().lower() for item in values)
+        if value
+    ]
+    if not normalized:
+        return
+    existing = meta.decorator_sources.get("message_types")
+    if existing is not None and existing != source:
+        raise ValueError(
+            "group_only()/private_only()/message_types(...) 不能与已有消息类型约束混用"
+        )
+    meta.decorator_sources["message_types"] = source
+    _replace_filter(meta, MessageTypeFilterSpec(message_types=normalized))
+
+
+def _validate_message_trigger_compatibility(meta: HandlerMeta) -> None:
+    if meta.limiter is None or meta.trigger is None:
+        return
+    trigger_type = getattr(meta.trigger, "type", None)
+    if trigger_type not in {"command", "message"}:
+        raise ValueError(
+            "rate_limit(...) 和 cooldown(...) 只适用于 on_command/on_message"
+        )
+
+
+def _validate_limiter_args(
+    *,
+    kind: str,
+    limit: int,
+    window: float,
+    scope: LimiterScope,
+    behavior: LimiterBehavior,
+) -> None:
+    if isinstance(limit, bool) or int(limit) <= 0:
+        raise ValueError(f"{kind} requires a positive limit")
+    if float(window) <= 0:
+        raise ValueError(f"{kind} requires a positive window")
+    if scope not in {"session", "user", "group", "global"}:
+        raise ValueError(f"unsupported limiter scope: {scope}")
+    if behavior not in {"hint", "silent", "error"}:
+        raise ValueError(f"unsupported limiter behavior: {behavior}")
+
+
+def _set_limiter(
+    func: HandlerCallable,
+    limiter: LimiterMeta,
+) -> HandlerCallable:
+    meta = _get_or_create_meta(func)
+    if meta.limiter is not None:
+        raise ValueError("rate_limit(...) 和 cooldown(...) 不能叠加在同一个 handler 上")
+    meta.limiter = limiter
+    _validate_message_trigger_compatibility(meta)
+    return func
+
+
 def _model_to_schema(
     model: type[BaseModel] | None,
     *,
@@ -175,7 +288,7 @@ def _model_to_schema(
 
 
 def on_command(
-    command: str,
+    command: str | typing.Sequence[str],
     *,
     aliases: list[str] | None = None,
     description: str | None = None,
@@ -199,13 +312,29 @@ def on_command(
             await event.reply(event.text)
     """
 
+    commands = (
+        [str(command).strip()]
+        if isinstance(command, str)
+        else [str(item).strip() for item in command]
+    )
+    commands = [item for item in commands if item]
+    if not commands:
+        raise ValueError("on_command requires at least one non-empty command name")
+    canonical = commands[0]
+    merged_aliases: list[str] = [
+        item
+        for item in dict.fromkeys([*commands[1:], *(aliases or [])])
+        if isinstance(item, str) and item and item != canonical
+    ]
+
     def decorator(func: HandlerCallable) -> HandlerCallable:
         meta = _get_or_create_meta(func)
         meta.trigger = CommandTrigger(
-            command=command,
-            aliases=aliases or [],
+            command=canonical,
+            aliases=merged_aliases,
             description=description,
         )
+        _validate_message_trigger_compatibility(meta)
         return func
 
     return decorator
@@ -252,11 +381,14 @@ def on_message(
             message_types=message_types or [],
         )
         if platforms:
-            meta.filters.append(PlatformFilterSpec(platforms=list(platforms)))
+            _set_platform_filter(meta, list(platforms), source="trigger.platforms")
         if message_types:
-            meta.filters.append(
-                MessageTypeFilterSpec(message_types=list(message_types))
+            _set_message_type_filter(
+                meta,
+                list(message_types),
+                source="trigger.message_types",
             )
+        _validate_message_trigger_compatibility(meta)
         return func
 
     return decorator
@@ -308,6 +440,7 @@ def on_event(event_type: str) -> Callable[[HandlerCallable], HandlerCallable]:
     def decorator(func: HandlerCallable) -> HandlerCallable:
         meta = _get_or_create_meta(func)
         meta.trigger = EventTrigger(event_type=event_type)
+        _validate_message_trigger_compatibility(meta)
         return func
 
     return decorator
@@ -345,6 +478,7 @@ def on_schedule(
     def decorator(func: HandlerCallable) -> HandlerCallable:
         meta = _get_or_create_meta(func)
         meta.trigger = ScheduleTrigger(cron=cron, interval_seconds=interval_seconds)
+        _validate_message_trigger_compatibility(meta)
         return func
 
     return decorator
@@ -370,6 +504,162 @@ def require_admin(func: HandlerCallable) -> HandlerCallable:
     meta = _get_or_create_meta(func)
     meta.permissions.require_admin = True
     return func
+
+
+def admin_only(func: HandlerCallable) -> HandlerCallable:
+    return require_admin(func)
+
+
+def platforms(*names: str) -> Callable[[HandlerCallable], HandlerCallable]:
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        meta = _get_or_create_meta(func)
+        _set_platform_filter(meta, list(names), source="decorator.platforms")
+        return func
+
+    return decorator
+
+
+def message_types(*types: str) -> Callable[[HandlerCallable], HandlerCallable]:
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        meta = _get_or_create_meta(func)
+        _set_message_type_filter(
+            meta,
+            list(types),
+            source="decorator.message_types",
+        )
+        return func
+
+    return decorator
+
+
+def group_only() -> Callable[[HandlerCallable], HandlerCallable]:
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        meta = _get_or_create_meta(func)
+        _set_message_type_filter(meta, ["group"], source="decorator.group_only")
+        return func
+
+    return decorator
+
+
+def private_only() -> Callable[[HandlerCallable], HandlerCallable]:
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        meta = _get_or_create_meta(func)
+        _set_message_type_filter(meta, ["private"], source="decorator.private_only")
+        return func
+
+    return decorator
+
+
+def priority(value: int) -> Callable[[HandlerCallable], HandlerCallable]:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("priority(...) requires an integer")
+
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        meta = _get_or_create_meta(func)
+        meta.priority = value
+        return func
+
+    return decorator
+
+
+def rate_limit(
+    limit: int,
+    window: float,
+    *,
+    scope: LimiterScope = "session",
+    behavior: LimiterBehavior = "hint",
+    message: str | None = None,
+) -> Callable[[HandlerCallable], HandlerCallable]:
+    _validate_limiter_args(
+        kind="rate_limit",
+        limit=limit,
+        window=window,
+        scope=scope,
+        behavior=behavior,
+    )
+
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        return _set_limiter(
+            func,
+            LimiterMeta(
+                kind="rate_limit",
+                limit=int(limit),
+                window=float(window),
+                scope=scope,
+                behavior=behavior,
+                message=message,
+            ),
+        )
+
+    return decorator
+
+
+def cooldown(
+    seconds: float,
+    *,
+    scope: LimiterScope = "session",
+    behavior: LimiterBehavior = "hint",
+    message: str | None = None,
+) -> Callable[[HandlerCallable], HandlerCallable]:
+    _validate_limiter_args(
+        kind="cooldown",
+        limit=1,
+        window=seconds,
+        scope=scope,
+        behavior=behavior,
+    )
+
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        return _set_limiter(
+            func,
+            LimiterMeta(
+                kind="cooldown",
+                limit=1,
+                window=float(seconds),
+                scope=scope,
+                behavior=behavior,
+                message=message,
+            ),
+        )
+
+    return decorator
+
+
+def conversation_command(
+    command: str | typing.Sequence[str],
+    *,
+    aliases: list[str] | None = None,
+    description: str | None = None,
+    timeout: int = 60,
+    mode: ConversationMode = "replace",
+    busy_message: str | None = None,
+    grace_period: float = 1.0,
+) -> Callable[[HandlerCallable], HandlerCallable]:
+    if mode not in {"replace", "reject"}:
+        raise ValueError("conversation_command mode must be 'replace' or 'reject'")
+    if isinstance(timeout, bool) or int(timeout) <= 0:
+        raise ValueError("conversation_command timeout must be a positive integer")
+    if float(grace_period) <= 0:
+        raise ValueError("conversation_command grace_period must be positive")
+
+    command_decorator = on_command(
+        command,
+        aliases=aliases,
+        description=description,
+    )
+
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        decorated = command_decorator(func)
+        meta = _get_or_create_meta(decorated)
+        meta.conversation = ConversationMeta(
+            timeout=int(timeout),
+            mode=mode,
+            busy_message=busy_message,
+            grace_period=float(grace_period),
+        )
+        return decorated
+
+    return decorator
 
 
 def provide_capability(
@@ -512,7 +802,8 @@ def register_llm_tool(
             LLMToolMeta(
                 spec=LLMToolSpec(
                     name=tool_name,
-                    description=description or (inspect.getdoc(func) or "").splitlines()[0]
+                    description=description
+                    or (inspect.getdoc(func) or "").splitlines()[0]
                     if inspect.getdoc(func)
                     else "",
                     parameters_schema=parameters_schema

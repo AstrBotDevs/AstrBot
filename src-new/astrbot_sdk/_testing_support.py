@@ -202,6 +202,32 @@ class MockCapabilityRouter(CapabilityRouter):
         self.db = InMemoryDB(self.db_store)
         self.memory = InMemoryMemory(self.memory_store)
 
+    def list_dynamic_command_routes(self, plugin_id: str) -> list[dict[str, Any]]:
+        return super().list_dynamic_command_routes(plugin_id)
+
+    def remove_dynamic_command_routes_for_plugin(self, plugin_id: str) -> None:
+        super().remove_dynamic_command_routes_for_plugin(plugin_id)
+
+    def emit_provider_change(
+        self,
+        provider_id: str,
+        provider_type: str,
+        umo: str | None = None,
+    ) -> None:
+        super().emit_provider_change(provider_id, provider_type, umo)
+
+    def record_platform_error(
+        self,
+        platform_id: str,
+        message: str,
+        *,
+        traceback: str | None = None,
+    ) -> None:
+        super().record_platform_error(platform_id, message, traceback=traceback)
+
+    def set_platform_stats(self, platform_id: str, stats: dict[str, Any]) -> None:
+        super().set_platform_stats(platform_id, stats)
+
     def enqueue_llm_response(self, text: str) -> None:
         self._llm_responses.append(text)
 
@@ -382,6 +408,19 @@ def _normalize_plugin_metadata(
         "author": str(plugin_metadata.get("author") or ""),
         "version": str(plugin_metadata.get("version") or "0.0.0"),
         "enabled": bool(plugin_metadata.get("enabled", True)),
+        "reserved": bool(plugin_metadata.get("reserved", False)),
+        "support_platforms": [
+            str(item)
+            for item in plugin_metadata.get("support_platforms", [])
+            if isinstance(item, str)
+        ]
+        if isinstance(plugin_metadata.get("support_platforms"), list)
+        else [],
+        "astrbot_version": (
+            str(plugin_metadata.get("astrbot_version"))
+            if plugin_metadata.get("astrbot_version") is not None
+            else None
+        ),
     }
 
 

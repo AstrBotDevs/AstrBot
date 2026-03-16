@@ -29,6 +29,7 @@ ParamTypeName: TypeAlias = Literal[
 ]
 OptionalInnerType: TypeAlias = Literal["str", "int", "float", "bool"] | None
 
+
 def is_injected_parameter(annotation: Any, parameter_name: str) -> bool:
     if parameter_name in {"event", "ctx", "context", "sched", "schedule"}:
         return True

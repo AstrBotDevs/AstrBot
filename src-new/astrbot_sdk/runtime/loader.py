@@ -67,8 +67,11 @@ from typing import Any, Literal, TypeAlias, cast
 
 import yaml
 
+from .._command_model import resolve_command_model_param
 from .._typing_utils import unwrap_optional
 from ..decorators import (
+    ConversationMeta,
+    LimiterMeta,
     get_agent_meta,
     get_capability_meta,
     get_handler_meta,
@@ -100,6 +103,8 @@ ParamTypeName: TypeAlias = Literal[
 ]
 OptionalInnerType: TypeAlias = Literal["str", "int", "float", "bool"] | None
 HandlerKind: TypeAlias = Literal["handler", "hook", "tool", "session"]
+DiscoverySeverity: TypeAlias = Literal["warning", "error"]
+DiscoveryPhase: TypeAlias = Literal["discovery", "load", "lifecycle", "reload"]
 
 
 def _default_python_version() -> str:
@@ -126,6 +131,27 @@ class PluginSpec:
 class PluginDiscoveryResult:
     plugins: list[PluginSpec]
     skipped_plugins: dict[str, str]
+    issues: list[PluginDiscoveryIssue] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class PluginDiscoveryIssue:
+    severity: DiscoverySeverity
+    phase: DiscoveryPhase
+    plugin_id: str
+    message: str
+    details: str = ""
+    hint: str = ""
+
+    def to_payload(self) -> dict[str, str]:
+        return {
+            "severity": self.severity,
+            "phase": self.phase,
+            "plugin_id": self.plugin_id,
+            "message": self.message,
+            "details": self.details,
+            "hint": self.hint,
+        }
 
 
 @dataclass(slots=True)
@@ -135,6 +161,8 @@ class LoadedHandler:
     owner: Any
     plugin_id: str = ""
     local_filters: list[Any] = field(default_factory=list)
+    limiter: LimiterMeta | None = None
+    conversation: ConversationMeta | None = None
 
 
 @dataclass(slots=True)
@@ -193,7 +221,15 @@ def _iter_discoverable_names(instance: Any) -> list[str]:
 
 
 def _is_injected_parameter(annotation: Any, parameter_name: str) -> bool:
-    if parameter_name in {"event", "ctx", "context", "sched", "schedule"}:
+    if parameter_name in {
+        "event",
+        "ctx",
+        "context",
+        "sched",
+        "schedule",
+        "conversation",
+        "conv",
+    }:
         return True
     normalized, _is_optional = unwrap_optional(annotation)
     if normalized is None:
@@ -202,9 +238,13 @@ def _is_injected_parameter(annotation: Any, parameter_name: str) -> bool:
         return True
     if isinstance(normalized, type):
         from ..context import Context
+        from ..conversation import ConversationSession
         from ..events import MessageEvent
 
-        return issubclass(normalized, (Context, MessageEvent, ScheduleContext))
+        return issubclass(
+            normalized,
+            (Context, MessageEvent, ScheduleContext, ConversationSession),
+        )
     return False
 
 
@@ -225,6 +265,9 @@ def _param_type_name(annotation: Any) -> tuple[ParamTypeName, OptionalInnerType,
 
 
 def _build_param_specs(handler: Any) -> list[ParamSpec]:
+    model_param = resolve_command_model_param(handler)
+    if model_param is not None:
+        return []
     try:
         signature = inspect.signature(handler)
     except (TypeError, ValueError):
@@ -605,11 +648,12 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
     """扫描目录发现所有插件。"""
     plugins_root = plugins_dir.resolve()
     skipped_plugins: dict[str, str] = {}
+    issues: list[PluginDiscoveryIssue] = []
     plugins: list[PluginSpec] = []
     seen_names: set[str] = set()
 
     if not plugins_root.exists():
-        return PluginDiscoveryResult([], {})
+        return PluginDiscoveryResult([], {}, [])
 
     for entry in sorted(plugins_root.iterdir()):
         if not entry.is_dir() or entry.name.startswith("."):
@@ -628,20 +672,57 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
                 raw_name = plugin.manifest_data.get("name")
                 if isinstance(raw_name, str) and raw_name:
                     skip_key = raw_name
-            skipped_plugins[skip_key] = f"failed to parse plugin manifest: {exc}"
+            details = str(exc)
+            skipped_plugins[skip_key] = f"failed to parse plugin manifest: {details}"
+            issues.append(
+                PluginDiscoveryIssue(
+                    severity="error",
+                    phase="discovery",
+                    plugin_id=skip_key,
+                    message="插件发现失败",
+                    details=details,
+                    hint=(
+                        "即使没有依赖，也需要创建一个空的 requirements.txt 文件。"
+                        if "requirements.txt" in details
+                        else ""
+                    ),
+                )
+            )
             continue
 
         plugin_name = plugin.name
         if not isinstance(plugin_name, str) or not plugin_name:
             skipped_plugins[entry.name] = "plugin name is required"
+            issues.append(
+                PluginDiscoveryIssue(
+                    severity="error",
+                    phase="discovery",
+                    plugin_id=entry.name,
+                    message="插件缺少名称",
+                    details="plugin name is required",
+                )
+            )
             continue
         if plugin_name in seen_names:
             skipped_plugins[plugin_name] = "duplicate plugin name"
+            issues.append(
+                PluginDiscoveryIssue(
+                    severity="error",
+                    phase="discovery",
+                    plugin_id=plugin_name,
+                    message="插件名称重复",
+                    details="duplicate plugin name",
+                )
+            )
             continue
         seen_names.add(plugin_name)
         plugins.append(plugin)
 
-    return PluginDiscoveryResult(plugins=plugins, skipped_plugins=skipped_plugins)
+    return PluginDiscoveryResult(
+        plugins=plugins,
+        skipped_plugins=skipped_plugins,
+        issues=issues,
+    )
 
 
 class PluginEnvironmentManager:
@@ -842,7 +923,9 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                             contract=meta.contract,
                             priority=meta.priority,
                             permissions=meta.permissions.model_copy(deep=True),
-                            filters=[item.model_copy(deep=True) for item in meta.filters],
+                            filters=[
+                                item.model_copy(deep=True) for item in meta.filters
+                            ],
                             param_specs=[
                                 item.model_copy(deep=True) for item in param_specs
                             ],
@@ -856,6 +939,28 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                         owner=instance,
                         plugin_id=plugin.name,
                         local_filters=list(meta.local_filters),
+                        limiter=(
+                            None
+                            if meta.limiter is None
+                            else LimiterMeta(
+                                kind=meta.limiter.kind,
+                                limit=meta.limiter.limit,
+                                window=meta.limiter.window,
+                                scope=meta.limiter.scope,
+                                behavior=meta.limiter.behavior,
+                                message=meta.limiter.message,
+                            )
+                        ),
+                        conversation=(
+                            None
+                            if meta.conversation is None
+                            else ConversationMeta(
+                                timeout=meta.conversation.timeout,
+                                mode=meta.conversation.mode,
+                                busy_message=meta.conversation.busy_message,
+                                grace_period=meta.conversation.grace_period,
+                            )
+                        ),
                     )
                 )
 

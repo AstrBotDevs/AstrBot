@@ -11,14 +11,73 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from enum import Enum
 from typing import Any, cast
 
-from ..message_components import BaseMessageComponent
-from ..message_components import Plain
+from pydantic import BaseModel, ConfigDict, Field
+
+from ..message_components import BaseMessageComponent, Plain
 from ..message_result import MessageChain
 from ..message_session import MessageSession
 from ..protocol.descriptors import SessionRef
 from ._proxy import CapabilityProxy
+
+
+class _PlatformModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class PlatformStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    ERROR = "error"
+    STOPPED = "stopped"
+
+    @classmethod
+    def from_value(cls, value: Any) -> PlatformStatus:
+        if isinstance(value, cls):
+            return value
+        try:
+            return cls(str(value).strip().lower())
+        except ValueError:
+            return cls.PENDING
+
+
+class PlatformError(_PlatformModel):
+    message: str
+    timestamp: str
+    traceback: str | None = None
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any] | None) -> PlatformError | None:
+        if not isinstance(payload, dict):
+            return None
+        return cls.model_validate(payload)
+
+
+class PlatformStats(_PlatformModel):
+    id: str
+    type: str
+    display_name: str
+    status: PlatformStatus
+    started_at: str | None = None
+    error_count: int
+    last_error: PlatformError | None = None
+    unified_webhook: bool
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any] | None) -> PlatformStats | None:
+        if not isinstance(payload, dict):
+            return None
+        normalized = dict(payload)
+        normalized["status"] = PlatformStatus.from_value(payload.get("status"))
+        normalized["last_error"] = PlatformError.from_payload(
+            payload.get("last_error") if isinstance(payload, dict) else None
+        )
+        meta = payload.get("meta")
+        normalized["meta"] = dict(meta) if isinstance(meta, dict) else {}
+        return cls.model_validate(normalized)
 
 
 class PlatformClient:
@@ -58,16 +117,22 @@ class PlatformClient:
         ),
     ) -> list[dict[str, Any]]:
         if isinstance(content, str):
-            return await MessageChain([Plain(content, convert=False)]).to_payload_async()
+            return await MessageChain(
+                [Plain(content, convert=False)]
+            ).to_payload_async()
         if isinstance(content, MessageChain):
             return await content.to_payload_async()
-        if isinstance(content, Sequence) and not isinstance(content, (str, bytes)) and all(
-            isinstance(item, BaseMessageComponent) for item in content
+        if (
+            isinstance(content, Sequence)
+            and not isinstance(content, (str, bytes))
+            and all(isinstance(item, BaseMessageComponent) for item in content)
         ):
             components = cast(Sequence[BaseMessageComponent], content)
             return await MessageChain(list(components)).to_payload_async()
-        if isinstance(content, Sequence) and not isinstance(content, (str, bytes)) and all(
-            isinstance(item, dict) for item in content
+        if (
+            isinstance(content, Sequence)
+            and not isinstance(content, (str, bytes))
+            and all(isinstance(item, dict) for item in content)
         ):
             payload_items = cast(Sequence[dict[str, Any]], content)
             return [dict(item) for item in payload_items]
@@ -225,3 +290,11 @@ class PlatformClient:
         if not isinstance(members, (list, tuple)):
             return []
         return list(members)
+
+
+__all__ = [
+    "PlatformClient",
+    "PlatformError",
+    "PlatformStats",
+    "PlatformStatus",
+]

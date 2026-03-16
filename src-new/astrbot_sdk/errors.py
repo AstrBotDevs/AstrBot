@@ -28,6 +28,7 @@ Example:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
 class ErrorCodes:
@@ -53,6 +54,8 @@ class ErrorCodes:
     PROTOCOL_VERSION_MISMATCH = "protocol_version_mismatch"
     PROTOCOL_ERROR = "protocol_error"
     INTERNAL_ERROR = "internal_error"
+    RATE_LIMITED = "rate_limited"
+    COOLDOWN_ACTIVE = "cooldown_active"
 
     # 可重试错误 - 临时故障
     CAPABILITY_TIMEOUT = "capability_timeout"
@@ -89,6 +92,8 @@ class AstrBotError(Exception):
     message: str
     hint: str = ""
     retryable: bool = False
+    docs_url: str = ""
+    details: dict[str, Any] | None = None
 
     def __str__(self) -> str:
         return self.message
@@ -133,6 +138,8 @@ class AstrBotError(Exception):
         message: str,
         *,
         hint: str = "请检查调用参数",
+        docs_url: str = "",
+        details: dict[str, Any] | None = None,
     ) -> AstrBotError:
         """创建输入无效错误。
 
@@ -148,6 +155,8 @@ class AstrBotError(Exception):
             message=message,
             hint=hint,
             retryable=False,
+            docs_url=docs_url,
+            details=details,
         )
 
     @classmethod
@@ -190,6 +199,8 @@ class AstrBotError(Exception):
         message: str,
         *,
         hint: str = "请联系插件作者",
+        docs_url: str = "",
+        details: dict[str, Any] | None = None,
     ) -> AstrBotError:
         """创建内部错误。
 
@@ -205,6 +216,56 @@ class AstrBotError(Exception):
             message=message,
             hint=hint,
             retryable=False,
+            docs_url=docs_url,
+            details=details,
+        )
+
+    @classmethod
+    def network_error(
+        cls,
+        message: str,
+        *,
+        hint: str = "网络请求失败，请稍后重试",
+        docs_url: str = "",
+        details: dict[str, Any] | None = None,
+    ) -> AstrBotError:
+        return cls(
+            code=ErrorCodes.NETWORK_ERROR,
+            message=message,
+            hint=hint,
+            retryable=True,
+            docs_url=docs_url,
+            details=details,
+        )
+
+    @classmethod
+    def rate_limited(
+        cls,
+        *,
+        hint: str = "操作过于频繁，请稍后再试。",
+        details: dict[str, Any] | None = None,
+    ) -> AstrBotError:
+        return cls(
+            code=ErrorCodes.RATE_LIMITED,
+            message="handler invocation is rate limited",
+            hint=hint,
+            retryable=False,
+            details=details,
+        )
+
+    @classmethod
+    def cooldown_active(
+        cls,
+        *,
+        hint: str,
+        details: dict[str, Any] | None = None,
+    ) -> AstrBotError:
+        return cls(
+            code=ErrorCodes.COOLDOWN_ACTIVE,
+            message="handler cooldown is active",
+            hint=hint,
+            retryable=False,
+            details=details,
         )
 
     def to_payload(self) -> dict[str, object]:
@@ -220,6 +281,8 @@ class AstrBotError(Exception):
             "message": self.message,
             "hint": self.hint,
             "retryable": self.retryable,
+            "docs_url": self.docs_url,
+            "details": dict(self.details) if isinstance(self.details, dict) else None,
         }
 
     @classmethod
@@ -232,9 +295,17 @@ class AstrBotError(Exception):
         Returns:
             AstrBotError 实例
         """
+        details_payload = payload.get("details")
+        details = (
+            {str(key): value for key, value in details_payload.items()}
+            if isinstance(details_payload, dict)
+            else None
+        )
         return cls(
             code=str(payload.get("code", ErrorCodes.UNKNOWN_ERROR)),
             message=str(payload.get("message", "未知错误")),
             hint=str(payload.get("hint", "")),
             retryable=bool(payload.get("retryable", False)),
+            docs_url=str(payload.get("docs_url", "")),
+            details=details,
         )
