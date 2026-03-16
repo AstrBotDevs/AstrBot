@@ -5,7 +5,7 @@ import sys
 import click
 
 from . import __version__
-from .commands import conf, init, plug, run
+from .commands import conf, init, plug, run, uninstall
 
 logo_tmpl = r"""
      ___           _______.___________..______      .______     ______   .___________.
@@ -54,6 +54,7 @@ cli.add_command(run)
 cli.add_command(help)
 cli.add_command(plug)
 cli.add_command(conf)
+cli.add_command(uninstall)
 
 if __name__ == "__main__":
     cli()

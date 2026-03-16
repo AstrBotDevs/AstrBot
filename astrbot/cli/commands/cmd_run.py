@@ -15,7 +15,10 @@ async def run_astrbot(astrbot_root: Path) -> None:
     from astrbot.core import LogBroker, LogManager, db_helper, logger
     from astrbot.core.initial_loader import InitialLoader
 
-    if os.environ.get("DASHBOARD_ENABLE") == "True":
+    if (
+        os.environ.get("ASTRBOT_DASHBOARD_ENABLE", os.environ.get("DASHBOARD_ENABLE"))
+        == "True"
+    ):
         await check_dashboard(astrbot_root)
 
     log_broker = LogBroker()
@@ -36,8 +39,15 @@ async def run_astrbot(astrbot_root: Path) -> None:
     default=False,
     help="Disable WebUI, run backend only",
 )
+@click.option(
+    "--log-level",
+    help="Log level",
+    required=False,
+    type=str,
+    default="INFO",
+)
 @click.command()
-def run(reload: bool, host: str, port: str, backend_only: bool) -> None:
+def run(reload: bool, host: str, port: str, backend_only: bool, log_level: str) -> None:
     """Run AstrBot"""
     try:
         os.environ["ASTRBOT_CLI"] = "1"
@@ -52,10 +62,14 @@ def run(reload: bool, host: str, port: str, backend_only: bool) -> None:
         sys.path.insert(0, str(astrbot_root))
 
         if port is not None:
-            os.environ["DASHBOARD_PORT"] = port
+            os.environ["ASTRBOT_DASHBOARD_PORT"] = port
+            os.environ["DASHBOARD_PORT"] = port  # 今后应该移除
         if host is not None:
-            os.environ["DASHBOARD_HOST"] = host
-        os.environ["DASHBOARD_ENABLE"] = str(not backend_only)
+            os.environ["ASTRBOT_DASHBOARD_HOST"] = host
+            os.environ["DASHBOARD_HOST"] = host  # 今后应该移除
+        os.environ["ASTRBOT_DASHBOARD_ENABLE"] = str(not backend_only)
+        os.environ["DASHBOARD_ENABLE"] = str(not backend_only)  # 今后应该移除
+        os.environ["ASTRBOT_LOG_LEVEL"] = log_level
 
         if reload:
             click.echo("Plugin auto-reload enabled")
