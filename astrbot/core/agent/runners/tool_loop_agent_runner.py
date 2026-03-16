@@ -93,6 +93,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         super().__init__(*args, **kwargs)
         self._tool_param_preparer = ToolParamPreparer()
         self._tool_result_guard: ToolResultGuard | None = None
+        self._tool_result_guard_config: ToolResultGuardConfig | None = None
 
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
@@ -185,23 +186,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             default=DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
             setting_name="tool_error_repeat_guard_threshold",
         )
-        self._tool_result_guard = ToolResultGuard(
-            ToolResultGuardConfig(
-                deduplicate_repeated_tool_results=self._deduplicate_repeated_tool_results,
-                tool_result_dedup_max_entries=self._tool_result_dedup_max_entries,
-                tool_error_repeat_guard_threshold=self._tool_error_repeat_guard_threshold,
-                # Keep a single bound by default; guard config supports independent
-                # tuning via `tool_error_repeat_count_max_entries` when needed.
-                tool_error_repeat_count_max_entries=self._tool_result_dedup_max_entries,
-            )
+        self._tool_result_guard_config = ToolResultGuardConfig(
+            deduplicate_repeated_tool_results=self._deduplicate_repeated_tool_results,
+            tool_result_dedup_max_entries=self._tool_result_dedup_max_entries,
+            tool_error_repeat_guard_threshold=self._tool_error_repeat_guard_threshold,
+            # Keep a single bound by default; guard config supports independent
+            # tuning via `tool_error_repeat_count_max_entries` when needed.
+            tool_error_repeat_count_max_entries=self._tool_result_dedup_max_entries,
         )
-        # Keep compatibility with existing tests and callers that still inspect these
-        # private fields directly.
-        self._tool_result_dedup = self._tool_result_guard.dedup_map
-        self._tool_error_repeat_counts = self._tool_result_guard.error_repeat_counts
-        self._tool_error_repeat_guard_triggered = (
-            self._tool_result_guard.error_repeat_guard_triggered
-        )
+        self._tool_result_guard = None
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -391,33 +384,56 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     def _ensure_tool_result_guard(self) -> ToolResultGuard:
         if self._tool_result_guard is None:
-            self._tool_result_guard = ToolResultGuard(
-                ToolResultGuardConfig(
-                    deduplicate_repeated_tool_results=DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
-                    tool_result_dedup_max_entries=DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
-                    tool_error_repeat_guard_threshold=DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
-                    # Default fallback keeps previous behavior.
-                    tool_error_repeat_count_max_entries=DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
-                )
+            config = self._tool_result_guard_config or ToolResultGuardConfig(
+                deduplicate_repeated_tool_results=DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
+                tool_result_dedup_max_entries=DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+                tool_error_repeat_guard_threshold=DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+                # Default fallback keeps previous behavior.
+                tool_error_repeat_count_max_entries=DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
             )
-            self._tool_result_dedup = self._tool_result_guard.dedup_map
-            self._tool_error_repeat_counts = self._tool_result_guard.error_repeat_counts
-            self._tool_error_repeat_guard_triggered = (
-                self._tool_result_guard.error_repeat_guard_triggered
-            )
+            self._tool_result_guard = ToolResultGuard(config)
         return self._tool_result_guard
 
-    def _sync_tool_result_guard_state(self) -> None:
-        guard = self._ensure_tool_result_guard()
-        self._tool_result_dedup = guard.dedup_map
-        self._tool_error_repeat_counts = guard.error_repeat_counts
-        self._tool_error_repeat_guard_triggered = guard.error_repeat_guard_triggered
+    # Backward-compatible read-only views for tests/callers still accessing
+    # private runner internals directly.
+    @property
+    def _tool_result_dedup(self) -> dict[str, T.Any]:
+        return self._ensure_tool_result_guard().dedup_map
 
-    # Backward-compatible private wrappers for tests and callers.
-    def _normalize_tool_args_for_signature(self, tool_args: dict[str, T.Any]) -> str:
+    @property
+    def _tool_error_repeat_counts(self) -> dict[str, int]:
+        return self._ensure_tool_result_guard().error_repeat_counts
+
+    @property
+    def _tool_error_repeat_guard_triggered(self) -> bool:
+        return self._ensure_tool_result_guard().error_repeat_guard_triggered
+
+    # Preferred public helpers for tests/extensions.
+    @property
+    def tool_result_dedup(self) -> dict[str, T.Any]:
+        return dict(self._tool_result_dedup)
+
+    def normalize_tool_args_for_signature(self, tool_args: dict[str, T.Any]) -> str:
         return self._ensure_tool_result_guard().normalize_tool_args_for_signature(
             tool_args
         )
+
+    def deduplicate_tool_result_content(
+        self,
+        *,
+        tool_name: str,
+        tool_args: dict[str, T.Any],
+        content: str,
+    ) -> str:
+        return self._ensure_tool_result_guard().deduplicate_tool_result_content(
+            tool_name=tool_name,
+            tool_args=tool_args,
+            content=content,
+        )
+
+    # Backward-compatible private wrappers for tests and callers.
+    def _normalize_tool_args_for_signature(self, tool_args: dict[str, T.Any]) -> str:
+        return self.normalize_tool_args_for_signature(tool_args)
 
     @staticmethod
     def _is_tool_error_content(content: str) -> bool:
@@ -430,13 +446,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_args: dict[str, T.Any],
         content: str,
     ) -> str:
-        output = self._ensure_tool_result_guard().deduplicate_tool_result_content(
+        return self.deduplicate_tool_result_content(
             tool_name=tool_name,
             tool_args=tool_args,
             content=content,
         )
-        self._sync_tool_result_guard_state()
-        return output
 
     def _record_tool_result(
         self,
@@ -455,7 +469,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 content=content,
             )
             output = guard_result.content
-            self._sync_tool_result_guard_state()
             if guard_result.tools_disabled and self.req:
                 self.req.func_tool = None
             if guard_result.notice_message:

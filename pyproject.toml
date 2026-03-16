@@ -111,6 +111,11 @@ reportMissingImports = false
 include = ["astrbot"]
 exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
 
+[tool.pytest.ini_options]
+markers = [
+  "tool_dedup: tool-loop dedup, guard, and contract validation tests",
+]
+
 [tool.hatch.metadata]
 allow-direct-references = true
 

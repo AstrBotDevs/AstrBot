@@ -137,6 +137,26 @@ class MockAnyOfViolationProvider(MockProvider):
         )
 
 
+class MockOneOfViolationProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="这是我的最终回答",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="我需要使用工具来帮助您",
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"note": "only note"}],
+            tools_call_ids=["call_oneof_violation"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
 class MockIncompatibleArgsProvider(MockProvider):
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
@@ -426,6 +446,7 @@ async def test_normal_completion_without_max_step(
 
 
 @pytest.mark.asyncio
+@pytest.mark.tool_dedup
 async def test_repeated_tool_output_is_deduplicated_in_context(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
@@ -464,6 +485,7 @@ async def test_repeated_tool_output_is_deduplicated_in_context(
 
 
 @pytest.mark.asyncio
+@pytest.mark.tool_dedup
 async def test_repeated_tool_output_dedup_can_be_disabled(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
@@ -501,6 +523,7 @@ async def test_repeated_tool_output_dedup_can_be_disabled(
 
 
 @pytest.mark.asyncio
+@pytest.mark.tool_dedup
 async def test_missing_required_tool_args_are_reported_without_handler_typeerror(
     runner, provider_request_required_query, mock_tool_executor, mock_hooks
 ):
@@ -531,6 +554,7 @@ async def test_missing_required_tool_args_are_reported_without_handler_typeerror
 
 
 @pytest.mark.asyncio
+@pytest.mark.tool_dedup
 async def test_camel_case_tool_args_are_mapped_to_snake_case_and_executed(
     runner, mock_hooks
 ):
@@ -587,6 +611,7 @@ async def test_camel_case_tool_args_are_mapped_to_snake_case_and_executed(
 
 
 @pytest.mark.asyncio
+@pytest.mark.tool_dedup
 async def test_anyof_contract_violation_is_reported_without_executing_tool(
     runner, mock_hooks
 ):
@@ -651,9 +676,80 @@ async def test_anyof_contract_violation_is_reported_without_executing_tool(
         for seg in tcr.tool_calls_result
     ]
     assert any("Argument contract violation (anyOf)" in c for c in contents)
+    assert any("cron_expression" in c and "run_at" in c for c in contents)
 
 
 @pytest.mark.asyncio
+@pytest.mark.tool_dedup
+async def test_oneof_contract_violation_is_reported_without_executing_tool(
+    runner, mock_hooks
+):
+    provider = MockOneOfViolationProvider()
+    executed = {"called": False}
+
+    class CaptureToolExecutor:
+        @classmethod
+        def execute(cls, tool, run_context, **tool_args):
+            executed["called"] = True
+
+            async def generator():
+                from mcp.types import CallToolResult, TextContent
+
+                yield CallToolResult(
+                    content=[TextContent(type="text", text="工具执行结果")]
+                )
+
+            return generator()
+
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={
+            "type": "object",
+            "properties": {
+                "note": {"type": "string"},
+                "group1_field": {"type": "string"},
+                "group2_field": {"type": "string"},
+            },
+            "required": ["note"],
+            "oneOf": [
+                {"required": ["group1_field"]},
+                {"required": ["group2_field"]},
+            ],
+        },
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="请帮我创建未来任务",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=CaptureToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(4):
+        pass
+
+    assert executed["called"] is False
+    assert request.tool_calls_result is not None
+    contents = [
+        str(seg.content)
+        for tcr in request.tool_calls_result
+        for seg in tcr.tool_calls_result
+    ]
+    assert any("Argument contract violation (oneOf)" in c for c in contents)
+    assert any("group1_field" in c and "group2_field" in c for c in contents)
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool_dedup
 async def test_incompatible_tool_args_are_rejected_early(
     runner, mock_hooks
 ):
@@ -713,6 +809,7 @@ async def test_incompatible_tool_args_are_rejected_early(
 
 
 @pytest.mark.asyncio
+@pytest.mark.tool_dedup
 async def test_tool_error_repeat_guard_disables_tools_and_forces_direct_answer(
     runner, mock_provider, provider_request, mock_error_tool_executor, mock_hooks
 ):
@@ -744,6 +841,7 @@ async def test_tool_error_repeat_guard_disables_tools_and_forces_direct_answer(
 
 
 @pytest.mark.asyncio
+@pytest.mark.tool_dedup
 async def test_tool_error_repeat_guard_can_be_disabled(
     runner, mock_provider, provider_request, mock_error_tool_executor, mock_hooks
 ):
@@ -774,6 +872,7 @@ async def test_tool_error_repeat_guard_can_be_disabled(
 
 
 @pytest.mark.asyncio
+@pytest.mark.tool_dedup
 async def test_tool_result_dedup_cache_is_pruned_when_exceeding_limit(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
@@ -787,28 +886,30 @@ async def test_tool_result_dedup_cache_is_pruned_when_exceeding_limit(
         tool_result_dedup_max_entries=2,
     )
 
-    runner._deduplicate_tool_result_content(
+    runner.deduplicate_tool_result_content(
         tool_name="tool_a",
         tool_args={"arg": 1},
         content="same-result",
     )
-    runner._deduplicate_tool_result_content(
+    runner.deduplicate_tool_result_content(
         tool_name="tool_b",
         tool_args={"arg": 2},
         content="same-result",
     )
-    runner._deduplicate_tool_result_content(
+    runner.deduplicate_tool_result_content(
         tool_name="tool_c",
         tool_args={"arg": 3},
         content="same-result",
     )
 
-    assert len(runner._tool_result_dedup) == 2
-    sig_a = "tool_a:" + runner._normalize_tool_args_for_signature({"arg": 1})
-    assert sig_a not in runner._tool_result_dedup
+    dedup_map = runner.tool_result_dedup
+    assert len(dedup_map) == 2
+    sig_a = "tool_a:" + runner.normalize_tool_args_for_signature({"arg": 1})
+    assert sig_a not in dedup_map
 
 
 @pytest.mark.asyncio
+@pytest.mark.tool_dedup
 async def test_tool_result_dedup_cache_allows_unbounded_when_limit_disabled(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
@@ -822,37 +923,38 @@ async def test_tool_result_dedup_cache_allows_unbounded_when_limit_disabled(
         tool_result_dedup_max_entries=None,
     )
 
-    runner._deduplicate_tool_result_content(
+    runner.deduplicate_tool_result_content(
         tool_name="tool_a",
         tool_args={"arg": 1},
         content="same-result",
     )
-    runner._deduplicate_tool_result_content(
+    runner.deduplicate_tool_result_content(
         tool_name="tool_b",
         tool_args={"arg": 2},
         content="same-result",
     )
-    runner._deduplicate_tool_result_content(
+    runner.deduplicate_tool_result_content(
         tool_name="tool_c",
         tool_args={"arg": 3},
         content="same-result",
     )
 
-    assert len(runner._tool_result_dedup) == 3
+    assert len(runner.tool_result_dedup) == 3
 
 
+@pytest.mark.tool_dedup
 def test_tool_args_signature_normalization_is_stable_for_non_json_values(runner):
     class NonJsonArg:
         def __init__(self, payload: str):
             self.payload = payload
 
-    sig_one = runner._normalize_tool_args_for_signature(
+    sig_one = runner.normalize_tool_args_for_signature(
         {
             "obj": NonJsonArg("v1"),
             "tags": {"b", "a"},
         }
     )
-    sig_two = runner._normalize_tool_args_for_signature(
+    sig_two = runner.normalize_tool_args_for_signature(
         {
             "tags": {"a", "b"},
             "obj": NonJsonArg("v1"),
@@ -863,15 +965,17 @@ def test_tool_args_signature_normalization_is_stable_for_non_json_values(runner)
     assert "0x" not in sig_one
 
 
+@pytest.mark.tool_dedup
 def test_tool_args_signature_normalization_handles_recursive_structures(runner):
     recursive: list[object] = []
     recursive.append(recursive)
 
-    signature = runner._normalize_tool_args_for_signature({"obj": recursive})
+    signature = runner.normalize_tool_args_for_signature({"obj": recursive})
 
     assert "__recursive__" in signature
 
 
+@pytest.mark.tool_dedup
 def test_prepare_tool_call_params_keeps_args_when_schema_has_no_properties(runner):
     tool = FunctionTool(
         name="schema_less_tool",
@@ -890,6 +994,7 @@ def test_prepare_tool_call_params_keeps_args_when_schema_has_no_properties(runne
     assert prepared.valid_params == {"query": "hello"}
 
 
+@pytest.mark.tool_dedup
 def test_prepare_tool_call_params_maps_snake_case_to_camel_case_schema(runner):
     tool = FunctionTool(
         name="camel_schema_tool",
@@ -915,12 +1020,14 @@ def test_prepare_tool_call_params_maps_snake_case_to_camel_case_schema(runner):
     assert prepared.ignored_params == set()
 
 
+@pytest.mark.tool_dedup
 def test_tool_error_detection_supports_non_english_and_traceback_markers(runner):
     assert runner._is_tool_error_content("错误：参数缺失")
     assert runner._is_tool_error_content("Traceback (most recent call last): ...")
     assert not runner._is_tool_error_content("工具执行成功")
 
 
+@pytest.mark.tool_dedup
 def test_tool_result_guard_error_count_pruning_can_use_independent_limit():
     guard = ToolResultGuard(
         ToolResultGuardConfig(

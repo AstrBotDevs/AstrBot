@@ -3,7 +3,7 @@ import hashlib
 import json
 import re
 import typing as T
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
@@ -35,6 +35,26 @@ _TOOL_ERROR_CONTAINS_MARKERS = (
 def _stable_type_name(value: T.Any) -> str:
     cls = value.__class__
     return f"{cls.__module__}.{cls.__qualname__}"
+
+
+def _public_attrs(
+    value: T.Any,
+    attr_names: T.Iterable[str],
+    *,
+    _seen: set[int],
+) -> dict[str, T.Any]:
+    attrs: dict[str, T.Any] = {}
+    for name in sorted(attr_names):
+        if not isinstance(name, str):
+            continue
+        if name.startswith("_"):
+            continue
+        if hasattr(value, name):
+            attrs[name] = _canonicalize_tool_arg_value(
+                getattr(value, name),
+                _seen=_seen,
+            )
+    return attrs
 
 
 def _canonicalize_tool_arg_value(
@@ -142,22 +162,18 @@ def _canonicalize_tool_arg_value(
             }
 
         if is_dataclass(value) and not isinstance(value, type):
-            attrs: dict[str, T.Any] = {}
-            for key in sorted(vars(value)):
-                if key.startswith("_"):
-                    continue
-                attrs[key] = _canonicalize_tool_arg_value(getattr(value, key), _seen=_seen)
+            attrs = _public_attrs(
+                value,
+                (f.name for f in fields(value)),
+                _seen=_seen,
+            )
             return {
                 "__type__": _stable_type_name(value),
                 "attrs": attrs,
             }
 
         if hasattr(value, "__dict__"):
-            attrs = {}
-            for key in sorted(vars(value)):
-                if key.startswith("_"):
-                    continue
-                attrs[key] = _canonicalize_tool_arg_value(getattr(value, key), _seen=_seen)
+            attrs = _public_attrs(value, vars(value).keys(), _seen=_seen)
             return {
                 "__type__": _stable_type_name(value),
                 "attrs": attrs,
@@ -167,15 +183,7 @@ def _canonicalize_tool_arg_value(
         if isinstance(slots, str):
             slots = (slots,)
         if slots:
-            attrs = {}
-            for slot_name in sorted(slots):
-                if not isinstance(slot_name, str):
-                    continue
-                if hasattr(value, slot_name):
-                    attrs[slot_name] = _canonicalize_tool_arg_value(
-                        getattr(value, slot_name),
-                        _seen=_seen,
-                    )
+            attrs = _public_attrs(value, slots, _seen=_seen)
             return {
                 "__type__": _stable_type_name(value),
                 "attrs": attrs,
@@ -284,17 +292,23 @@ class ToolResultGuard:
             return normalized[:limit]
         return f"{normalized[: limit - _DEDUP_PREVIEW_MIN_LIMIT]}..."
 
-    def _prune_tool_result_dedup_if_needed(self) -> None:
-        max_entries = self._config.tool_result_dedup_max_entries
+    @staticmethod
+    def _prune_lru(mapping: dict[str, T.Any], max_entries: int | None) -> None:
         if max_entries is None:
             return
 
-        while len(self._tool_result_dedup) > max_entries:
+        while len(mapping) > max_entries:
             try:
-                oldest_key = next(iter(self._tool_result_dedup))
+                oldest_key = next(iter(mapping))
             except StopIteration:
                 break
-            self._tool_result_dedup.pop(oldest_key, None)
+            mapping.pop(oldest_key, None)
+
+    def _prune_tool_result_dedup_if_needed(self) -> None:
+        self._prune_lru(
+            self._tool_result_dedup,
+            self._config.tool_result_dedup_max_entries,
+        )
 
     def _prune_tool_error_repeat_counts_if_needed(self) -> None:
         max_entries = self._config.tool_error_repeat_count_max_entries
@@ -302,13 +316,7 @@ class ToolResultGuard:
             max_entries = self._config.tool_result_dedup_max_entries
         if max_entries is None:
             max_entries = DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
-
-        while len(self._tool_error_repeat_counts) > max_entries:
-            try:
-                oldest_key = next(iter(self._tool_error_repeat_counts))
-            except StopIteration:
-                break
-            self._tool_error_repeat_counts.pop(oldest_key, None)
+        self._prune_lru(self._tool_error_repeat_counts, max_entries)
 
     def deduplicate_tool_result_content(
         self,
@@ -414,5 +422,11 @@ class ToolResultGuard:
                 content=output,
             )
 
-        guard_result.content = output
-        return guard_result
+        if output == guard_result.content:
+            return guard_result
+
+        return GuardedToolResult(
+            content=output,
+            tools_disabled=guard_result.tools_disabled,
+            notice_message=guard_result.notice_message,
+        )
