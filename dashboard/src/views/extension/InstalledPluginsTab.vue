@@ -102,6 +102,15 @@ const {
   totalPages,
   paginatedPlugins,
   updatableExtensions,
+  isShareMode,
+  selectedSharePluginCount,
+  toggleShareMode,
+  cancelShareMode,
+  confirmShareSelection,
+  toggleShareSelectAll,
+  areAllSharePluginsSelected,
+  toggleSharePluginSelection,
+  isSharePluginSelected,
   toggleShowReserved,
   toast,
   resetLoadingDialog,
@@ -155,6 +164,29 @@ const {
   handleLocaleChange,
   searchDebounceTimer,
 } = props.state;
+
+const handleShareRowClick = (item) => {
+  if (!isShareMode.value || !item?.name) {
+    return;
+  }
+  const selectedText = window.getSelection?.()?.toString() || "";
+  if (selectedText.trim().length > 0) {
+    return;
+  }
+  toggleSharePluginSelection(item.name);
+};
+
+const getShareRowProps = ({ item }) => {
+  if (!item?.name || !isShareMode.value) {
+    return {};
+  }
+  return {
+    class: isSharePluginSelected(item.name)
+      ? "share-row-selected"
+      : "share-row-unselected",
+    onClick: () => handleShareRowClick(item),
+  };
+};
 </script>
 
 <template>
@@ -218,6 +250,15 @@ const {
                       <v-icon>mdi-update</v-icon>
                       {{ tm("buttons.updateAll") }}
                     </v-btn>
+
+                    <v-btn
+                      variant="tonal"
+                      color="primary"
+                      @click="toggleShareMode"
+                    >
+                      <v-icon>mdi-share-variant</v-icon>
+                      {{ tm("buttons.sharePlugin") }}
+                    </v-btn>
                   </div>
 
                   <div class="installed-toolbar__controls">
@@ -252,6 +293,53 @@ const {
                     />
                   </div>
                 </div>
+              </v-col>
+            </v-row>
+
+            <v-row v-if="isShareMode" class="mb-4">
+              <v-col cols="12">
+                <v-card class="rounded-lg" variant="tonal" color="primary">
+                  <v-card-text class="d-flex align-center justify-space-between flex-wrap ga-2">
+                    <div class="text-body-1 font-weight-medium">
+                      {{ tm("share.selectedCount", { count: selectedSharePluginCount }) }}
+                    </div>
+                    <div class="d-flex align-center ga-2">
+                      <v-btn
+                        variant="outlined"
+                        @click="
+                          toggleShareSelectAll(
+                            filteredPlugins.map((plugin) => plugin.name),
+                          )
+                        "
+                      >
+                        {{
+                          areAllSharePluginsSelected(
+                            filteredPlugins.map((plugin) => plugin.name),
+                          )
+                            ? tm('buttons.deselectAll')
+                            : tm('buttons.selectAll')
+                        }}
+                      </v-btn>
+                      <v-btn variant="outlined" @click="cancelShareMode">
+                        {{ tm("buttons.cancel") }}
+                      </v-btn>
+                      <v-btn
+                        color="primary"
+                        variant="flat"
+                        :disabled="selectedSharePluginCount === 0"
+                        @click="confirmShareSelection"
+                      >
+                        {{
+                          selectedSharePluginCount > 0
+                            ? tm("buttons.confirmShareWithCount", {
+                                count: selectedSharePluginCount,
+                              })
+                            : tm("buttons.confirmShare")
+                        }}
+                      </v-btn>
+                    </div>
+                  </v-card-text>
+                </v-card>
               </v-col>
             </v-row>
 
@@ -334,12 +422,16 @@ const {
               <div v-if="isListView">
                 <v-card class="rounded-lg overflow-hidden elevation-0">
                   <v-data-table
-                    class="plugin-list-table"
+                    :class="[
+                      'plugin-list-table',
+                      { 'plugin-list-share-mode': isShareMode },
+                    ]"
                     :headers="pluginHeaders"
                     :items="filteredPlugins"
                     :loading="loading_"
                     item-key="name"
                     hover
+                    :row-props="getShareRowProps"
                   >
                     <template v-slot:loader>
                       <v-row class="py-8 d-flex align-center justify-center">
@@ -499,13 +591,31 @@ const {
                     </template>
 
                     <template v-slot:item.author="{ item }">
-                      <div class="text-body-2">{{ item.author }}</div>
+                      <div class="d-flex align-center text-body-2 h-100">
+                        {{ item.author }}
+                      </div>
                     </template>
 
                     <template v-slot:item.actions="{ item }">
                       <div class="table-action-row d-flex align-center flex-nowrap justify-start ga-2 py-1">
+                        <div
+                          v-if="isShareMode"
+                          class="share-select-switch d-flex align-center h-100"
+                          @click.stop
+                        >
+                          <v-switch
+                            :model-value="isSharePluginSelected(item.name)"
+                            color="primary"
+                            density="compact"
+                            hide-details
+                            inset
+                            @click.stop
+                            @update:model-value="toggleSharePluginSelection(item.name)"
+                          ></v-switch>
+                        </div>
+
                         <v-btn
-                          v-if="!item.activated"
+                          v-if="!isShareMode && !item.activated"
                           size="small"
                           variant="tonal"
                           color="success"
@@ -516,7 +626,7 @@ const {
                           {{ tm("buttons.enable") }}
                         </v-btn>
                         <v-btn
-                          v-else
+                          v-else-if="!isShareMode"
                           size="small"
                           variant="tonal"
                           color="error"
@@ -528,6 +638,7 @@ const {
                         </v-btn>
 
                         <v-btn
+                          v-if="!isShareMode"
                           size="small"
                           variant="tonal"
                           color="primary"
@@ -539,6 +650,7 @@ const {
                         </v-btn>
 
                         <v-btn
+                          v-if="!isShareMode"
                           size="small"
                           variant="tonal"
                           color="primary"
@@ -550,6 +662,7 @@ const {
                         </v-btn>
 
                         <v-btn
+                          v-if="!isShareMode"
                           size="small"
                           variant="tonal"
                           color="info"
@@ -561,7 +674,7 @@ const {
                           {{ tm("buttons.viewDocs") }}
                         </v-btn>
 
-                        <StyledMenu location="bottom end" offset="8">
+                        <StyledMenu v-if="!isShareMode" location="bottom end" offset="8">
                           <template #activator="{ props: menuProps }">
                             <v-btn
                               v-bind="menuProps"
@@ -643,8 +756,11 @@ const {
                   >
                     <ExtensionCard
                       :extension="extension"
+                      :share-mode="isShareMode"
+                      :selected="isSharePluginSelected(extension.name)"
                       class="rounded-lg"
                       style="background-color: rgb(var(--v-theme-mcpCardBg))"
+                      @select="toggleSharePluginSelection(extension.name)"
                       @configure="openExtensionConfig(extension.name)"
                       @uninstall="
                         (ext, options) => uninstallExtension(ext.name, options)
@@ -744,6 +860,35 @@ const {
 
 .plugin-list-table :deep(td) {
   vertical-align: top;
+}
+
+.plugin-list-table :deep(td:nth-child(3)) {
+  vertical-align: middle;
+}
+
+.plugin-list-share-mode :deep(td:last-child) {
+  vertical-align: middle;
+}
+
+.plugin-list-share-mode :deep(.v-data-table__td),
+.plugin-list-share-mode :deep(.v-data-table__th),
+.plugin-list-share-mode :deep(.v-data-table__tr),
+.plugin-list-share-mode :deep(.v-data-table__td *) {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.plugin-list-table :deep(.share-row-unselected) {
+  opacity: 0.55;
+}
+
+.plugin-list-table :deep(.share-row-selected) {
+  opacity: 1;
+  background-color: rgba(var(--v-theme-primary), 0.08);
+}
+
+.share-select-switch :deep(.v-switch) {
+  margin: 0;
 }
 
 @media (max-width: 1400px) {

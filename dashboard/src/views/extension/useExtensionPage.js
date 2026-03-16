@@ -17,6 +17,10 @@ import {
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
+import { useExtensionShareCode } from "./useExtensionShareCode";
+import { useShareSelection } from "./useShareSelection";
+import { runBatchWithProgress } from "./useBatchWithProgress";
+import { useLoadingDialog } from "./useLoadingDialog";
 
 const useRandomPluginsDisplay = ({ activeTab, marketSearch, currentPage }) => {
   const showRandomPlugins = ref(true);
@@ -64,14 +68,14 @@ const buildFailedPluginItems = (raw) => {
 };
 
 export const useExtensionPage = () => {
-  
-  
   const commonStore = useCommonStore();
   const { t } = useI18n();
   const { tm } = useModuleI18n("features/extension");
   const router = useRouter();
   const route = useRoute();
   const { width } = useDisplay();
+  const { encode: encodeShareCode, decode: decodeShareCode } =
+    useExtensionShareCode();
   
   const getSelectedGitHubProxy = () => {
     if (typeof window === "undefined" || !window.localStorage) return "";
@@ -131,6 +135,52 @@ export const useExtensionPage = () => {
     return false;
   };
   const showReserved = ref(getInitialShowReserved());
+  const {
+    isActive: isShareMode,
+    selected: selectedSharePluginNames,
+    toggleMode: toggleShareMode,
+    clear: cancelShareMode,
+    toggleItem: toggleSharePluginSelection,
+    toggleAll: toggleShareSelectAll,
+    isSelected: isSharePluginSelected,
+    areAllSelected: areAllSharePluginsSelected,
+    count: selectedSharePluginCount,
+  } = useShareSelection();
+  const confirmShareSelection = async () => {
+    const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+    const selectedNames = selectedSharePluginNames.value;
+    const repos = data
+      .filter((extension) => selectedNames.has(extension.name))
+      .map((extension) => (extension.repo ?? "").trim())
+      .filter((repo) => repo.length > 0);
+    const uniqueRepos = [...new Set(repos)].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" }),
+    );
+
+    if (uniqueRepos.length === 0) {
+      toast(tm("messages.noShareableRepos"), "warning");
+      cancelShareMode();
+      return;
+    }
+
+    const shareCode = encodeShareCode(uniqueRepos);
+
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+        throw new Error("Clipboard API unavailable");
+      }
+      await navigator.clipboard.writeText(shareCode);
+      toast(tm("messages.shareCodeCopied"), "success");
+    } catch (error) {
+      toast(
+        `${tm("messages.shareCodeCopyFailed")} ${shareCode}`,
+        "warning",
+      );
+      console.error("Failed to copy share code:", error);
+    } finally {
+      cancelShareMode();
+    }
+  };
   const snack_message = ref("");
   const snack_show = ref(false);
   const snack_success = ref("success");
@@ -142,10 +192,23 @@ export const useExtensionPage = () => {
   const pluginMarketData = ref([]);
   const loadingDialog = reactive({
     show: false,
-    title: "",
+    title: tm("dialogs.loading.title"),
     statusCode: 0, // 0: loading, 1: success, 2: error,
     result: "",
+    progress: {
+      enabled: false,
+      current: 0,
+      total: 0,
+      label: "",
+    },
   });
+  const {
+    reset: resetLoadingDialog,
+    start: startLoadingDialog,
+    startProgress: startLoadingDialogProgress,
+    updateProgress: updateLoadingDialogProgress,
+    finish: onLoadingDialogResult,
+  } = useLoadingDialog(loadingDialog, tm);
   const showPluginInfoDialog = ref(false);
   const selectedPlugin = ref({});
   const curr_namespace = ref("");
@@ -230,6 +293,7 @@ export const useExtensionPage = () => {
   const dialog = ref(false);
   const upload_file = ref(null);
   const uploadTab = ref("file");
+  const shareCodeInput = ref("");
   const showPluginFullName = ref(false);
   const marketSearch = ref("");
   const debouncedMarketSearch = ref("");
@@ -551,20 +615,6 @@ export const useExtensionPage = () => {
     snack_success.value = success;
   };
   
-  const resetLoadingDialog = () => {
-    loadingDialog.show = false;
-    loadingDialog.title = tm("dialogs.loading.title");
-    loadingDialog.statusCode = 0;
-    loadingDialog.result = "";
-  };
-  
-  const onLoadingDialogResult = (statusCode, result, timeToClose = 2000) => {
-    loadingDialog.statusCode = statusCode;
-    loadingDialog.result = result;
-    if (timeToClose === -1) return;
-    setTimeout(resetLoadingDialog, timeToClose);
-  };
-  
   const failedPluginsDict = ref({});
   const failedPluginItems = computed(() =>
     buildFailedPluginItems(failedPluginsDict.value),
@@ -759,8 +809,7 @@ export const useExtensionPage = () => {
       return;
     }
   
-    loadingDialog.title = tm("status.loading");
-    loadingDialog.show = true;
+    startLoadingDialog(tm("status.loading"));
     try {
       const res = await axios.post("/api/plugin/update", {
         name: extension_name,
@@ -824,10 +873,7 @@ export const useExtensionPage = () => {
   const updateAllExtensions = async () => {
     if (updatingAll.value || updatableExtensions.value.length === 0) return;
     updatingAll.value = true;
-    loadingDialog.title = tm("status.loading");
-    loadingDialog.statusCode = 0;
-    loadingDialog.result = "";
-    loadingDialog.show = true;
+    startLoadingDialog(tm("status.loading"));
   
     const targets = updatableExtensions.value.map((ext) => ext.name);
     try {
@@ -1279,7 +1325,7 @@ export const useExtensionPage = () => {
     return true;
   };
 
-  const performInstallRequest = async ({ source, ignoreVersionCheck }) => {
+  const performInstallRequest = async ({ source, ignoreVersionCheck, url }) => {
     if (source === "file") {
       const formData = new FormData();
       formData.append("file", upload_file.value);
@@ -1291,11 +1337,136 @@ export const useExtensionPage = () => {
       });
     }
 
+    const targetUrl =
+      typeof url === "string" && url.trim().length > 0 ? url : extension_url.value;
     return axios.post("/api/plugin/install", {
-      url: extension_url.value,
+      url: targetUrl,
       proxy: getSelectedGitHubProxy(),
       ignore_version_check: ignoreVersionCheck,
     });
+  };
+
+  const installReposBatch = async (
+    repos,
+    { ignoreVersionCheck, onProgress } = {},
+  ) => {
+    const { results } = await runBatchWithProgress(
+      repos,
+      async (repoUrl) => {
+        const res = await performInstallRequest({
+          source: "url",
+          ignoreVersionCheck,
+          url: repoUrl,
+        });
+        const resData = res.data || {};
+        if (resData.status === "ok") {
+          return { success: true, url: repoUrl };
+        }
+        return {
+          success: false,
+          url: repoUrl,
+          message: resData.message || tm("messages.installFailed"),
+        };
+      },
+      ({ current, total, item }) => {
+        onProgress?.({ current, total, repoUrl: item });
+      },
+    );
+
+    const failedItems = [];
+    let successCount = 0;
+    results.forEach((result) => {
+      if (result.status === "fulfilled") {
+        if (result.value.success) {
+          successCount += 1;
+        } else {
+          failedItems.push({
+            url: result.value.url,
+            message: result.value.message || tm("messages.installFailed"),
+          });
+        }
+        return;
+      }
+
+      failedItems.push({
+        url: tm("status.unknown"),
+        message: resolveErrorMessage(result.reason, tm("messages.installFailed")),
+      });
+    });
+
+    return {
+      successCount,
+      failedItems,
+    };
+  };
+
+  const installFromShareCode = async (ignoreVersionCheck = false) => {
+    const rawCode = (shareCodeInput.value ?? "").trim();
+    if (!rawCode) {
+      toast(tm("messages.fillShareCode"), "error");
+      return;
+    }
+
+    let repos = [];
+    try {
+      repos = decodeShareCode(rawCode);
+    } catch (error) {
+      toast(tm("messages.invalidShareCode"), "error");
+      return;
+    }
+
+    const uniqueRepos = [...new Set(repos)];
+    if (uniqueRepos.length === 0) {
+      toast(tm("messages.noRepoInShareCode"), "error");
+      return;
+    }
+
+    loading_.value = true;
+    startLoadingDialogProgress(tm("status.loading"), uniqueRepos.length);
+
+    let successCount = 0;
+    let failedItems = [];
+    try {
+      const batchResult = await installReposBatch(uniqueRepos, {
+        ignoreVersionCheck,
+        onProgress: ({ current, total, repoUrl }) => {
+          updateLoadingDialogProgress(current, total, repoUrl);
+        },
+      });
+      successCount = batchResult.successCount;
+      failedItems = batchResult.failedItems;
+    } finally {
+      loading_.value = false;
+    }
+
+    if (successCount > 0) {
+      await getExtensions();
+      await checkAndPromptConflicts();
+    }
+
+    const failedCount = failedItems.length;
+    if (failedCount === 0) {
+      onLoadingDialogResult(
+        1,
+        tm("messages.shareImportSuccess", { count: successCount }),
+      );
+      dialog.value = false;
+      shareCodeInput.value = "";
+      return;
+    }
+
+    const failureSummary = failedItems
+      .map((item) => `${item.url}: ${item.message}`)
+      .join("\n");
+    onLoadingDialogResult(
+      2,
+      tm("messages.shareImportPartial", {
+        success: successCount,
+        failed: failedCount,
+      }),
+      -1,
+    );
+    toast(failureSummary, "warning");
   };
 
   const finalizeSuccessfulInstall = async (resData, source) => {
@@ -1329,8 +1500,7 @@ export const useExtensionPage = () => {
       return;
     }
     loading_.value = true;
-    loadingDialog.title = tm("status.loading");
-    loadingDialog.show = true;
+    startLoadingDialog(tm("status.loading"));
 
     const source = upload_file.value !== null ? "file" : "url";
     toast(
@@ -1515,6 +1685,11 @@ export const useExtensionPage = () => {
       await checkInstallCompatibility();
     },
   );
+
+  const openShareCodeImportDialog = () => {
+    dialog.value = true;
+    uploadTab.value = "shareCode";
+  };
   
   watch(
     () => route.hash,
@@ -1596,6 +1771,7 @@ export const useExtensionPage = () => {
     dialog,
     upload_file,
     uploadTab,
+    shareCodeInput,
     showPluginFullName,
     marketSearch,
     debouncedMarketSearch,
@@ -1625,6 +1801,15 @@ export const useExtensionPage = () => {
     totalPages,
     paginatedPlugins,
     updatableExtensions,
+    isShareMode,
+    selectedSharePluginCount,
+    toggleShareMode,
+    cancelShareMode,
+    confirmShareSelection,
+    toggleShareSelectAll,
+    areAllSharePluginsSelected,
+    toggleSharePluginSelection,
+    isSharePluginSelected,
     toggleShowReserved,
     toast,
     resetLoadingDialog,
@@ -1672,6 +1857,8 @@ export const useExtensionPage = () => {
     continueInstallIgnoringVersionWarning,
     cancelInstallOnVersionWarning,
     newExtension,
+    installFromShareCode,
+    openShareCodeImportDialog,
     normalizePlatformList,
     getPlatformDisplayList,
     resolveSelectedInstallPlugin,
