@@ -217,9 +217,12 @@ def parse_description(text: str) -> str:
     frontmatter = "\n".join(lines[1:end_idx])
     try:
         import yaml
+    except ImportError:
+        return ""
 
+    try:
         payload = yaml.safe_load(frontmatter) or dict()
-    except Exception:
+    except yaml.YAMLError:
         return ""
     if not isinstance(payload, dict):
         return ""

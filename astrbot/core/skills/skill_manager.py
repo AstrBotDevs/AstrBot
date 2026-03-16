@@ -7,11 +7,11 @@ import shlex
 import shutil
 import tempfile
 import zipfile
-
-import yaml
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
+
+import yaml
 
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
