@@ -393,7 +393,9 @@ class ResultDecorateStage(Stage):
                 if (
                     self.reply_with_mention
                     and event.get_message_type() != MessageType.FRIEND_MESSAGE
-                    and not isinstance(event, CronMessageEvent)  # Skip @ mention for cron events
+                    and not isinstance(
+                        event, CronMessageEvent
+                    )  # Skip @ mention for cron events
                 ):
                     result.chain.insert(
                         0,
