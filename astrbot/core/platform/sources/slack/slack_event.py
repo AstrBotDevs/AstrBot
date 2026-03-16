@@ -5,20 +5,22 @@ from typing import cast
 
 from slack_sdk.web.async_client import AsyncWebClient
 
-from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     BaseMessageComponent,
-    File,
-    Image,
     Plain,
 )
 from astrbot.api.platform import Group, MessageMember
 
 from .session_codec import (
-    SLACK_SAFE_TEXT_FALLBACK,
     build_slack_text_fallbacks,
     resolve_target_from_event,
+)
+from .slack_send_utils import (
+    build_text_fallback_from_chain,
+    from_segment_to_slack_block,
+    parse_slack_blocks,
+    send_with_blocks_and_fallback,
 )
 
 
@@ -44,64 +46,11 @@ class SlackMessageEvent(AstrMessageEvent):
     ) -> dict | None:
         """将消息段转换为 Slack 块格式"""
         fallbacks = build_slack_text_fallbacks(text_fallbacks)
-        if isinstance(segment, Plain):
-            return {"type": "section", "text": {"type": "mrkdwn", "text": segment.text}}
-        if isinstance(segment, Image):
-            # upload file
-            url = segment.url or segment.file
-            if url and url.startswith("http"):
-                return {
-                    "type": "image",
-                    "image_url": url,
-                    "alt_text": "图片",
-                }
-            path = await segment.convert_to_file_path()
-            response = await web_client.files_upload_v2(
-                file=path,
-                filename="image.jpg",
-            )
-            if not response["ok"]:
-                logger.error(f"Slack file upload failed: {response['error']}")
-                return {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": fallbacks["image_upload_failed"],
-                    },
-                }
-            image_url = cast(list, response["files"])[0]["url_private"]
-            logger.debug(f"Slack file upload response: {response}")
-            return {
-                "type": "image",
-                "slack_file": {
-                    "url": image_url,
-                },
-                "alt_text": "图片",
-            }
-        if isinstance(segment, File):
-            # upload file
-            url = segment.url or segment.file
-            response = await web_client.files_upload_v2(
-                file=url,
-                filename=segment.name or "file",
-            )
-            if not response["ok"]:
-                logger.error(f"Slack file upload failed: {response['error']}")
-                return {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": fallbacks["file_upload_failed"],
-                    },
-                }
-            file_url = cast(list, response["files"])[0]["permalink"]
-            return {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"file: <{file_url}|{segment.name or 'file'}>",
-                },
-            }
+        return await from_segment_to_slack_block(
+            segment=segment,
+            web_client=web_client,
+            fallbacks=fallbacks,
+        )
 
     @staticmethod
     async def _parse_slack_blocks(
@@ -110,53 +59,11 @@ class SlackMessageEvent(AstrMessageEvent):
         text_fallbacks: dict[str, str] | None = None,
     ):
         """解析成 Slack 块格式"""
-        fallbacks = build_slack_text_fallbacks(text_fallbacks)
-        blocks = []
-        text_content = ""
-        fallback_parts = []
-
-        for segment in message_chain.chain:
-            if isinstance(segment, Plain):
-                text_content += segment.text
-                fallback_parts.append(segment.text)
-            else:
-                # 如果有文本内容，先添加文本块
-                if text_content.strip():
-                    blocks.append(
-                        {
-                            "type": "section",
-                            "text": {"type": "mrkdwn", "text": text_content},
-                        },
-                    )
-                    text_content = ""
-
-                # 添加其他类型的块
-                block = await SlackMessageEvent._from_segment_to_slack_block(
-                    segment,
-                    web_client,
-                    text_fallbacks=fallbacks,
-                )
-                if block:
-                    blocks.append(block)
-                    if isinstance(segment, Image):
-                        fallback_parts.append(fallbacks["image"])
-                    elif isinstance(segment, File):
-                        fallback_parts.append(
-                            fallbacks["file_template"].format(
-                                name=segment.name or "file",
-                            ),
-                        )
-                    else:
-                        fallback_parts.append(fallbacks["generic"])
-
-        # 如果最后还有文本内容
-        if text_content.strip():
-            blocks.append(
-                {"type": "section", "text": {"type": "mrkdwn", "text": text_content}},
-            )
-
-        fallback_text = "".join(fallback_parts).strip() or fallbacks["safe_text"]
-        return blocks, fallback_text if blocks else text_content
+        return await parse_slack_blocks(
+            message_chain=message_chain,
+            web_client=web_client,
+            text_fallbacks=text_fallbacks,
+        )
 
     @staticmethod
     def _build_text_fallback_from_chain(
@@ -164,22 +71,10 @@ class SlackMessageEvent(AstrMessageEvent):
         text_fallbacks: dict[str, str] | None = None,
     ) -> str:
         """Build a safe text fallback for retries when block payload is rejected."""
-        fallbacks = build_slack_text_fallbacks(text_fallbacks)
-        parts = []
-        for segment in message_chain.chain:
-            if isinstance(segment, Plain):
-                parts.append(segment.text)
-            elif isinstance(segment, File):
-                parts.append(
-                    fallbacks["file_template"].format(
-                        name=segment.name or "file",
-                    )
-                )
-            elif isinstance(segment, Image):
-                parts.append(fallbacks["image"])
-            else:
-                parts.append(fallbacks["generic"])
-        return "".join(parts).strip() or fallbacks["safe_text"]
+        return build_text_fallback_from_chain(
+            message_chain=message_chain,
+            text_fallbacks=text_fallbacks,
+        )
 
     def _resolve_target(self) -> tuple[str, str | None]:
         raw_message = getattr(self.message_obj, "raw_message", None)
@@ -190,47 +85,17 @@ class SlackMessageEvent(AstrMessageEvent):
         )
 
     async def send(self, message: MessageChain) -> None:
-        blocks, text = await SlackMessageEvent._parse_slack_blocks(
-            message,
-            self.web_client,
-            text_fallbacks=self.text_fallbacks,
-        )
-        safe_text = text or self.text_fallbacks.get(
-            "safe_text",
-            SLACK_SAFE_TEXT_FALLBACK,
-        )
         channel_id, thread_ts = self._resolve_target()
-
-        try:
-            message_payload = {
-                "channel": channel_id,
-                "text": safe_text,
-                "blocks": blocks or None,
-            }
-            if thread_ts:
-                message_payload["thread_ts"] = thread_ts
-            await self.web_client.chat_postMessage(**message_payload)
-        except Exception:
-            logger.exception(
-                "Slack block send failed, falling back to text-only payload. "
-                "session_id=%s channel_id=%s thread_ts=%s",
-                self.session_id,
-                channel_id,
-                thread_ts or "",
-            )
-            # 如果块发送失败，尝试只发送文本
-            fallback_text = self._build_text_fallback_from_chain(
-                message_chain=message,
-                text_fallbacks=self.text_fallbacks,
-            )
-
-            fallback_payload = {
-                "channel": channel_id,
-                "text": fallback_text,
-            }
-            if thread_ts:
-                fallback_payload["thread_ts"] = thread_ts
-            await self.web_client.chat_postMessage(**fallback_payload)
+        await send_with_blocks_and_fallback(
+            web_client=self.web_client,
+            channel=channel_id,
+            thread_ts=thread_ts,
+            message_chain=message,
+            text_fallbacks=self.text_fallbacks,
+            parse_blocks=SlackMessageEvent._parse_slack_blocks,
+            build_text_fallback=SlackMessageEvent._build_text_fallback_from_chain,
+            session_id=self.session_id,
+        )
 
         await super().send(message)
 

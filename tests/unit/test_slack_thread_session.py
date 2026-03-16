@@ -9,8 +9,9 @@ from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
-from astrbot.core.platform.sources.slack import slack_adapter as slack_adapter_module
-from astrbot.core.platform.sources.slack import slack_event as slack_event_module
+from astrbot.core.platform.sources.slack import (
+    slack_send_utils as slack_send_utils_module,
+)
 from astrbot.core.platform.sources.slack.session_codec import (
     build_slack_text_fallbacks,
     decode_slack_session_id,
@@ -284,7 +285,11 @@ async def test_slack_event_send_logs_exception_before_text_fallback(monkeypatch)
         ),
     )
     mocked_exception_logger = MagicMock()
-    monkeypatch.setattr(slack_event_module.logger, "exception", mocked_exception_logger)
+    monkeypatch.setattr(
+        slack_send_utils_module.logger,
+        "exception",
+        mocked_exception_logger,
+    )
 
     event = SlackMessageEvent(
         message_str=message_obj.message_str,
@@ -393,7 +398,7 @@ async def test_send_by_session_retries_text_only_when_block_send_fails(monkeypat
     )
     mocked_exception_logger = MagicMock()
     monkeypatch.setattr(
-        slack_adapter_module.logger,
+        slack_send_utils_module.logger,
         "exception",
         mocked_exception_logger,
     )

@@ -12,6 +12,11 @@ SLACK_SAFE_TEXT_FALLBACK = SLACK_DEFAULT_TEXT_FALLBACKS["safe_text"]
 
 
 def build_slack_text_fallbacks(overrides: dict | None = None) -> dict[str, str]:
+    """Build Slack text fallback rules.
+
+    Only keys defined in `SLACK_DEFAULT_TEXT_FALLBACKS` are honored; unknown
+    override keys are intentionally ignored.
+    """
     text_fallbacks = dict(SLACK_DEFAULT_TEXT_FALLBACKS)
     if not isinstance(overrides, dict):
         return text_fallbacks
@@ -29,30 +34,17 @@ def encode_thread_session_id(channel_id: str, thread_ts: str) -> str:
     return f"{channel_id}{THREAD_SESSION_MARKER}{thread_ts}"
 
 
-def _decode_thread_session_id(session_id: str) -> tuple[str, str | None] | None:
-    if THREAD_SESSION_MARKER not in session_id:
-        return None
-    channel_id, thread_ts = session_id.split(THREAD_SESSION_MARKER, 1)
-    return channel_id, thread_ts or None
-
-
-def _decode_legacy_session_id(session_id: str) -> tuple[str, str | None] | None:
-    if not session_id.startswith(LEGACY_GROUP_SESSION_PREFIX):
-        return None
-    return session_id[len(LEGACY_GROUP_SESSION_PREFIX) :], None
-
-
 def decode_slack_session_id(session_id: str) -> tuple[str, str | None]:
+    """Decode a Slack session id into (channel_id, thread_ts|None)."""
     if not session_id:
         return "", None
 
-    decoded_thread_session = _decode_thread_session_id(session_id)
-    if decoded_thread_session is not None:
-        return decoded_thread_session
+    if THREAD_SESSION_MARKER in session_id:
+        channel_id, thread_ts = session_id.split(THREAD_SESSION_MARKER, 1)
+        return channel_id, thread_ts or None
 
-    decoded_legacy_session = _decode_legacy_session_id(session_id)
-    if decoded_legacy_session is not None:
-        return decoded_legacy_session
+    if session_id.startswith(LEGACY_GROUP_SESSION_PREFIX):
+        return session_id[len(LEGACY_GROUP_SESSION_PREFIX) :], None
 
     return session_id, None
 
