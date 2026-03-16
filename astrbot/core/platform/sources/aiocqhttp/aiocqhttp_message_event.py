@@ -1,6 +1,10 @@
 import asyncio
 import re
+import hashlib
+import uuid
+import base64
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
 from aiocqhttp import CQHttp, Event
 
@@ -31,6 +35,115 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
+
+    @staticmethod
+    def _is_local_file_path(file_str: str) -> bool:
+        """判断是否为本地文件路径（非 base64/URL）"""
+        if not file_str:
+            return False
+        # 已经是 base64 编码
+        if file_str.startswith("base64://"):
+            return False
+        # 远程 URL
+        if file_str.startswith(("http://", "https://")):
+            return False
+        # 包含协议头但不是以上几种，如 file://，仍视为本地
+        if "://" in file_str:
+            # file:// 开头认为是本地
+            return file_str.startswith("file://")
+        # 无协议头，视为本地路径
+        return True
+
+    @classmethod
+    async def _upload_file_via_stream(cls, bot: CQHttp, file_path: str) -> str:
+        """使用 OneBot 流式上传接口上传文件，返回服务端文件路径"""
+        # 处理 file:// URI 协议头
+        if file_path.startswith("file://"):
+            from urllib.parse import urlparse
+            parsed = urlparse(file_path)
+            path = parsed.path
+            if parsed.netloc and not path:
+                path = parsed.netloc
+            # 去除开头的 / 如果是 Windows 盘符路径(如 /D:/ -> D:/)
+            if path.startswith('/') and ':' in path:
+                path = path.lstrip('/')
+            file_path = path
+
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"文件不存在: {file_path}")
+
+        # 分片大小 64KB
+        chunk_size = 64 * 1024
+        chunks = []
+        hasher = hashlib.sha256()
+        total_size = 0
+
+        with open(path, "rb") as f:
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                hasher.update(chunk)
+                total_size += len(chunk)
+
+        sha256_hash = hasher.hexdigest()
+        stream_id = str(uuid.uuid4())
+        total_chunks = len(chunks)
+
+        # 上传每个分片
+        for i, chunk in enumerate(chunks):
+            chunk_b64 = base64.b64encode(chunk).decode("utf-8")
+            params = {
+                "stream_id": stream_id,
+                "chunk_data": chunk_b64,
+                "chunk_index": i,
+                "total_chunks": total_chunks,
+                "file_size": total_size,
+                "expected_sha256": sha256_hash,
+                "filename": path.name,
+                "file_retention": 30 * 1000,  # 30秒
+            }
+            resp = await bot.call_action("upload_file_stream", **params)
+
+            # 判断分片是否成功上传（允许 status=ok 或 type=stream 且 status in ('chunk_received','file_complete')）
+            if not cls._is_upload_success_response(resp, expected_statuses=("chunk_received", "file_complete")):
+                raise Exception(f"上传分片 {i} 失败: {resp}")
+
+        # 发送完成信号
+        complete_params = {"stream_id": stream_id, "is_complete": True}
+        resp = await bot.call_action("upload_file_stream", **complete_params)
+
+        # 判断合并是否成功（允许 status=ok 或 type in ('stream','response') 且 status='file_complete'）
+        if not cls._is_upload_success_response(resp, expected_statuses=("file_complete",)):
+            raise Exception(f"文件合并失败: {resp}")
+
+        # 提取最终文件路径
+        file_path_result = None
+        # NapCat 通常将路径放在 data.file_path
+        data = resp.get("data")
+        if data and isinstance(data, dict):
+            file_path_result = data.get("file_path")
+        if not file_path_result:
+            file_path_result = resp.get("file_path")
+        if not file_path_result:
+            raise Exception(f"无法从响应中获取文件路径: {resp}")
+
+        return file_path_result
+
+    @classmethod
+    def _is_upload_success_response(cls, resp: dict, expected_statuses: tuple) -> bool:
+        """判断流式上传的响应是否为成功"""
+        # 标准 OneBot 响应
+        if resp.get("status") == "ok":
+            return True
+        # NapCat 流式响应
+        resp_type = resp.get("type", "").lower()
+        resp_status = resp.get("status", "")
+        if resp_type in ("stream", "response") and resp_status in expected_statuses:
+            return True
+        return False
 
     @staticmethod
     async def _from_segment_to_dict(segment: BaseMessageComponent) -> dict:
@@ -122,6 +235,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         session_id: str | None = None,
     ) -> None:
         """发送消息至 QQ 协议端（aiocqhttp）。
+        如果普通发送失败且消息中包含本地文件，会尝试使用流式上传后重发。
 
         Args:
             bot (CQHttp): aiocqhttp 机器人实例
@@ -136,11 +250,48 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             isinstance(seg, Node | Nodes | File) for seg in message_chain.chain
         )
         if not send_one_by_one:
-            ret = await cls._parse_onebot_json(message_chain)
-            if not ret:
+            # 尝试普通发送
+            try:
+                ret = await cls._parse_onebot_json(message_chain)
+                if not ret:
+                    return
+                await cls._dispatch_send(bot, event, is_group, session_id, ret)
                 return
-            await cls._dispatch_send(bot, event, is_group, session_id, ret)
-            return
+            except Exception as e:
+                # 发送失败，进入重试流程（仅处理包含本地文件的组件）
+                # 构建新消息链，替换文件路径
+                new_chain = MessageChain([])
+                modified = False
+                for seg in message_chain.chain:
+                    if isinstance(seg, (Image, Record, File, Video)):
+                        # 检查是否为本地文件路径
+                        file_val = getattr(seg, "file", None)
+                        if file_val and cls._is_local_file_path(file_val):
+                            try:
+                                logger.warn(f"文件上传失败,尝试Napcat流式传输,读取文件路径: {file_val}")
+                                # 上传文件
+                                new_path = await cls._upload_file_via_stream(
+                                    bot, file_val
+                                )
+                                # 更新组件
+                                seg.file = new_path
+                                modified = True
+                            except Exception as upload_err:
+                                # 可以选择抛出，这里简单打印警告
+                                logger.error(f"流式上传失败: {upload_err}")
+                    new_chain.chain.append(seg)
+                if modified:
+                    # 使用新链重试一次
+                    ret = await cls._parse_onebot_json(new_chain)
+                    if ret:
+                        await cls._dispatch_send(
+                            bot, event, is_group, session_id, ret
+                        )
+                        return
+                # 如果没有修改任何组件或重试仍失败，则抛出原始异常
+                raise e
+
+        # 原有逐条发送逻辑（处理 Node/Nodes/File 等）
         for seg in message_chain.chain:
             if isinstance(seg, Node | Nodes):
                 # 合并转发消息
