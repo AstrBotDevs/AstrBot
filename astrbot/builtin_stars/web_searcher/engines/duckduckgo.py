@@ -7,6 +7,8 @@ from . import SearchEngine, SearchResult
 
 
 class DuckDuckGo(SearchEngine):
+    NAME = "duckduckgo"
+
     def __init__(self) -> None:
         super().__init__()
         self.base_url = "https://html.duckduckgo.com/html"
@@ -22,7 +24,8 @@ class DuckDuckGo(SearchEngine):
         return selectors[selector]
 
     async def _get_next_page(self, query: str) -> str:
-        url = f"{self.base_url}/?q={query}&kl=us-en"
+        params = {"q": urllib.parse.unquote(query), "kl": "us-en"}
+        url = f"{self.base_url}/?{urllib.parse.urlencode(params)}"
         return await self._get_html(url, None)
 
     def _get_url(self, tag: Tag) -> str:
@@ -34,12 +37,8 @@ class DuckDuckGo(SearchEngine):
         return href
 
     async def search(self, query: str, num_results: int) -> list[SearchResult]:
-        rough_results = await super().search(query, max(num_results * 2, 10))
-        final_results: list[SearchResult] = []
-        for result in rough_results:
-            if not result.url.startswith("http"):
-                continue
-            final_results.append(result)
-            if len(final_results) >= num_results:
-                break
-        return final_results
+        return await self._search_with_result_filter(
+            query=query,
+            num_results=num_results,
+            predicate=lambda result: result.url.startswith("http"),
+        )

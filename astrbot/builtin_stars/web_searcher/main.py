@@ -72,12 +72,15 @@ class Main(star.Star):
         self.ddg_search = DuckDuckGo()
         self.comet_search = Comet()
         self.sogo_search = Sogo()
+        self.all_search_engines = [
+            self.google_search,
+            self.bing_search,
+            self.ddg_search,
+            self.comet_search,
+            self.sogo_search,
+        ]
         self.default_search_engines = {
-            "google": self.google_search,
-            "bing": self.bing_search,
-            "duckduckgo": self.ddg_search,
-            "comet": self.comet_search,
-            "sogo": self.sogo_search,
+            engine.NAME: engine for engine in self.all_search_engines
         }
         self.baidu_initialized = False
 

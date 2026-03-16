@@ -7,6 +7,8 @@ from . import SearchEngine, SearchResult
 
 
 class Google(SearchEngine):
+    NAME = "google"
+
     def __init__(self) -> None:
         super().__init__()
         self.base_url = "https://www.google.com"
@@ -34,15 +36,9 @@ class Google(SearchEngine):
         return href
 
     async def search(self, query: str, num_results: int) -> list[SearchResult]:
-        # Request a few extra candidates and then filter invalid Google internal links.
-        rough_results = await super().search(query, max(num_results * 2, 10))
-        final_results: list[SearchResult] = []
-        for result in rough_results:
-            if not result.url.startswith("http"):
-                continue
-            if "google.com/search?" in result.url:
-                continue
-            final_results.append(result)
-            if len(final_results) >= num_results:
-                break
-        return final_results
+        return await self._search_with_result_filter(
+            query=query,
+            num_results=num_results,
+            predicate=lambda result: result.url.startswith("http")
+            and "google.com/search?" not in result.url,
+        )

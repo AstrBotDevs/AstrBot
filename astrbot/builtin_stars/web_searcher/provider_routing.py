@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from .engines.bing import Bing
+from .engines.comet import Comet
+from .engines.duckduckgo import DuckDuckGo
+from .engines.google import Google
+from .engines.sogo import Sogo
+
 DEFAULT_WEB_SEARCH_PROVIDER = "default"
 DEFAULT_ENGINE_ORDER: tuple[str, ...] = (
-    "bing",
-    "sogo",
+    Bing.NAME,
+    Sogo.NAME,
     # Keep DDG as a secondary fallback for compatibility with the original default chain.
-    "duckduckgo",
-    "google",
-    "comet",
+    DuckDuckGo.NAME,
+    Google.NAME,
+    Comet.NAME,
 )
 
 _ENGINE_PROVIDER_SET = set(DEFAULT_ENGINE_ORDER)
@@ -21,14 +27,14 @@ _WEB_SEARCH_PROVIDER_ALIASES = {
     "": DEFAULT_WEB_SEARCH_PROVIDER,
     "default": DEFAULT_WEB_SEARCH_PROVIDER,
     "native": DEFAULT_WEB_SEARCH_PROVIDER,
-    "duckduckgo": "duckduckgo",
-    "duckduck_go": "duckduckgo",
-    "duckduck-go": "duckduckgo",
-    "ddg": "duckduckgo",
-    "google": "google",
-    "bing": "bing",
-    "comet": "comet",
-    "sogo": "sogo",
+    "duckduckgo": DuckDuckGo.NAME,
+    "duckduck_go": DuckDuckGo.NAME,
+    "duckduck-go": DuckDuckGo.NAME,
+    "ddg": DuckDuckGo.NAME,
+    "google": Google.NAME,
+    "bing": Bing.NAME,
+    "comet": Comet.NAME,
+    "sogo": Sogo.NAME,
     "tavily": "tavily",
     "baidu_ai_search": "baidu_ai_search",
     "baidu_ai": "baidu_ai_search",
@@ -51,14 +57,12 @@ def resolve_tool_branch_provider(provider: object) -> str:
     normalized = normalize_websearch_provider(provider)
     if normalized in _TOOL_BRANCH_PROVIDER_SET:
         return normalized
-    if normalized in _ENGINE_PROVIDER_SET:
-        return DEFAULT_WEB_SEARCH_PROVIDER
     return DEFAULT_WEB_SEARCH_PROVIDER
 
 
 def build_default_engine_order(provider: object) -> tuple[str, ...]:
     normalized = normalize_websearch_provider(provider)
-    if normalized == "duckduckgo":
+    if normalized == DuckDuckGo.NAME:
         # Compatibility first: selecting DDG should not override the original default primary engine.
         return DEFAULT_ENGINE_ORDER
     if normalized not in _ENGINE_PROVIDER_SET:

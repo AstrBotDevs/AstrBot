@@ -2,6 +2,8 @@ from . import USER_AGENT_BING, SearchEngine
 
 
 class Bing(SearchEngine):
+    NAME = "bing"
+
     def __init__(self) -> None:
         super().__init__()
         # Prefer international Bing first, keep cn endpoint as compatibility fallback.
