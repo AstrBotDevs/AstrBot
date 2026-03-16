@@ -80,7 +80,9 @@ def _get_core_constraints(core_dist_name: str | None) -> tuple[str, ...]:
                 continue
             name = canonicalize_distribution_name(req.name)
             if name in installed:
-                constraints.append(f"{name}=={installed[name]}")
+                # Use >= instead of == so plugins can pull in newer compatible
+                # versions while still preventing downgrades below what's installed.
+                constraints.append(f"{name}>={installed[name]}")
         except Exception:
             continue
 
