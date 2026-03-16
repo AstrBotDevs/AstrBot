@@ -42,10 +42,9 @@ class SlackMessageEvent(AstrMessageEvent):
     async def _from_segment_to_slack_block(
         segment: BaseMessageComponent,
         web_client: AsyncWebClient,
-        text_fallbacks: dict[str, str] | None = None,
+        fallbacks: dict[str, str] | None = None,
     ) -> dict | None:
         """将消息段转换为 Slack 块格式"""
-        fallbacks = build_slack_text_fallbacks(text_fallbacks)
         return await from_segment_to_slack_block(
             segment=segment,
             web_client=web_client,
@@ -56,24 +55,24 @@ class SlackMessageEvent(AstrMessageEvent):
     async def _parse_slack_blocks(
         message_chain: MessageChain,
         web_client: AsyncWebClient,
-        text_fallbacks: dict[str, str] | None = None,
+        fallbacks: dict[str, str] | None = None,
     ):
         """解析成 Slack 块格式"""
         return await parse_slack_blocks(
             message_chain=message_chain,
             web_client=web_client,
-            text_fallbacks=text_fallbacks,
+            fallbacks=fallbacks,
         )
 
     @staticmethod
     def _build_text_fallback_from_chain(
         message_chain: MessageChain,
-        text_fallbacks: dict[str, str] | None = None,
+        fallbacks: dict[str, str] | None = None,
     ) -> str:
         """Build a safe text fallback for retries when block payload is rejected."""
         return build_text_fallback_from_chain(
             message_chain=message_chain,
-            text_fallbacks=text_fallbacks,
+            fallbacks=fallbacks,
         )
 
     def _resolve_target(self) -> tuple[str, str | None]:
@@ -91,7 +90,7 @@ class SlackMessageEvent(AstrMessageEvent):
             channel=channel_id,
             thread_ts=thread_ts,
             message_chain=message,
-            text_fallbacks=self.text_fallbacks,
+            fallbacks=self.text_fallbacks,
             parse_blocks=SlackMessageEvent._parse_slack_blocks,
             build_text_fallback=SlackMessageEvent._build_text_fallback_from_chain,
             session_id=self.session_id,

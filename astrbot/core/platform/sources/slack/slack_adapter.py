@@ -101,7 +101,7 @@ class SlackAdapter(Platform):
             channel=channel_id,
             thread_ts=thread_ts,
             message_chain=message_chain,
-            text_fallbacks=self.text_fallbacks,
+            fallbacks=self.text_fallbacks,
             parse_blocks=SlackMessageEvent._parse_slack_blocks,
             build_text_fallback=SlackMessageEvent._build_text_fallback_from_chain,
             session_id=session.session_id,

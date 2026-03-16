@@ -24,7 +24,9 @@ async def from_segment_to_slack_block(
     """Convert a message segment into a Slack block."""
     # Use caller-provided, pre-normalized fallbacks when available to avoid
     # repeated normalization per segment.
-    resolved_fallbacks = fallbacks or build_slack_text_fallbacks(None)
+    resolved_fallbacks = (
+        build_slack_text_fallbacks(None) if fallbacks is None else fallbacks
+    )
     if isinstance(segment, Plain):
         return {"type": "section", "text": {"type": "mrkdwn", "text": segment.text}}
     if isinstance(segment, Image):
@@ -88,10 +90,12 @@ async def from_segment_to_slack_block(
 async def parse_slack_blocks(
     message_chain: MessageChain,
     web_client: AsyncWebClient,
-    text_fallbacks: dict[str, str] | None = None,
+    fallbacks: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
     """Parse a message chain into Slack blocks and fallback text."""
-    fallbacks = build_slack_text_fallbacks(text_fallbacks)
+    resolved_fallbacks = (
+        build_slack_text_fallbacks(None) if fallbacks is None else fallbacks
+    )
     blocks: list[dict[str, Any]] = []
     text_content = ""
     fallback_parts = []
@@ -114,53 +118,55 @@ async def parse_slack_blocks(
         block = await from_segment_to_slack_block(
             segment,
             web_client,
-            fallbacks=fallbacks,
+            fallbacks=resolved_fallbacks,
         )
         if not block:
             continue
 
         blocks.append(block)
         if isinstance(segment, Image):
-            fallback_parts.append(fallbacks["image"])
+            fallback_parts.append(resolved_fallbacks["image"])
         elif isinstance(segment, File):
             fallback_parts.append(
-                fallbacks["file_template"].format(
+                resolved_fallbacks["file_template"].format(
                     name=segment.name or "file",
                 ),
             )
         else:
-            fallback_parts.append(fallbacks["generic"])
+            fallback_parts.append(resolved_fallbacks["generic"])
 
     if text_content.strip():
         blocks.append(
             {"type": "section", "text": {"type": "mrkdwn", "text": text_content}},
         )
 
-    fallback_text = "".join(fallback_parts).strip() or fallbacks["safe_text"]
+    fallback_text = "".join(fallback_parts).strip() or resolved_fallbacks["safe_text"]
     return blocks, fallback_text if blocks else text_content
 
 
 def build_text_fallback_from_chain(
     message_chain: MessageChain,
-    text_fallbacks: dict[str, str] | None = None,
+    fallbacks: dict[str, str] | None = None,
 ) -> str:
     """Build safe text fallback when block payload is rejected."""
-    fallbacks = build_slack_text_fallbacks(text_fallbacks)
+    resolved_fallbacks = (
+        build_slack_text_fallbacks(None) if fallbacks is None else fallbacks
+    )
     parts = []
     for segment in message_chain.chain:
         if isinstance(segment, Plain):
             parts.append(segment.text)
         elif isinstance(segment, File):
             parts.append(
-                fallbacks["file_template"].format(
+                resolved_fallbacks["file_template"].format(
                     name=segment.name or "file",
                 ),
             )
         elif isinstance(segment, Image):
-            parts.append(fallbacks["image"])
+            parts.append(resolved_fallbacks["image"])
         else:
-            parts.append(fallbacks["generic"])
-    return "".join(parts).strip() or fallbacks["safe_text"]
+            parts.append(resolved_fallbacks["generic"])
+    return "".join(parts).strip() or resolved_fallbacks["safe_text"]
 
 
 async def send_with_blocks_and_fallback(
@@ -170,18 +176,21 @@ async def send_with_blocks_and_fallback(
     thread_ts: str | None,
     message_chain: MessageChain,
     text_fallbacks: dict[str, str] | None = None,
+    fallbacks: dict[str, str] | None = None,
     parse_blocks: ParseSlackBlocksFn = parse_slack_blocks,
     build_text_fallback: BuildTextFallbackFn = build_text_fallback_from_chain,
     session_id: str = "",
 ) -> None:
     """Send Slack message with blocks first, then fallback to text-only on failure."""
-    fallbacks = build_slack_text_fallbacks(text_fallbacks)
+    resolved_fallbacks = (
+        build_slack_text_fallbacks(text_fallbacks) if fallbacks is None else fallbacks
+    )
     blocks, text = await parse_blocks(
         message_chain,
         web_client,
-        fallbacks,
+        resolved_fallbacks,
     )
-    safe_text = text or fallbacks.get("safe_text", SLACK_SAFE_TEXT_FALLBACK)
+    safe_text = text or resolved_fallbacks.get("safe_text", SLACK_SAFE_TEXT_FALLBACK)
 
     message_payload: dict[str, Any] = {
         "channel": channel,
@@ -203,7 +212,7 @@ async def send_with_blocks_and_fallback(
             thread_ts or "",
         )
 
-    fallback_text = build_text_fallback(message_chain, fallbacks)
+    fallback_text = build_text_fallback(message_chain, resolved_fallbacks)
     fallback_payload: dict[str, Any] = {
         "channel": channel,
         "text": fallback_text,
