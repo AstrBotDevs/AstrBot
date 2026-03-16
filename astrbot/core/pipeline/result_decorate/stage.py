@@ -5,6 +5,7 @@ import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
+from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import At, Image, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
@@ -392,6 +393,7 @@ class ResultDecorateStage(Stage):
                 if (
                     self.reply_with_mention
                     and event.get_message_type() != MessageType.FRIEND_MESSAGE
+                    and not isinstance(event, CronMessageEvent)  # Skip @ mention for cron events
                 ):
                     result.chain.insert(
                         0,
