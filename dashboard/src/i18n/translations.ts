@@ -110,8 +110,47 @@ const PATH_SEGMENT_ALIASES: Record<string, string> = {
   'tool-use': 'tooluse'
 };
 
-function normalizePathSegment(segment: string): string {
+function getSchemaNode(pathSegments: string[]): any {
+  let node: any = translationSchema;
+  for (const segment of pathSegments) {
+    if (!node || typeof node !== 'object') {
+      return null;
+    }
+    node = node[segment];
+  }
+  return node;
+}
+
+function normalizePathSegment(segment: string, normalizedParentPath: string[]): string {
+  // Prefer schema-driven normalization: only map when the target key exists under the same parent.
+  const parentNode = getSchemaNode(normalizedParentPath);
+  if (parentNode && typeof parentNode === 'object') {
+    if (segment in parentNode) {
+      return segment;
+    }
+
+    const alias = PATH_SEGMENT_ALIASES[segment];
+    if (alias && alias in parentNode) {
+      return alias;
+    }
+
+    // Heuristic: if file uses kebab-case but schema key is collapsed (e.g. tool-use -> tooluse)
+    const collapsed = segment.replace(/-/g, '');
+    if (collapsed !== segment && collapsed in parentNode) {
+      return collapsed;
+    }
+  }
+
+  // Fallback to explicit aliases to keep backward compatibility.
   return PATH_SEGMENT_ALIASES[segment] ?? segment;
+}
+
+function normalizePathSegments(segments: string[]): string[] {
+  const normalized: string[] = [];
+  for (const segment of segments) {
+    normalized.push(normalizePathSegment(segment, normalized));
+  }
+  return normalized;
 }
 
 function setNestedValue(target: Record<string, any>, pathSegments: string[], value: Record<string, any>): void {
@@ -143,7 +182,7 @@ function extractLocaleAndPath(modulePath: string): { locale: string; pathSegment
   }
 
   const [, locale, relativePath] = match;
-  const pathSegments = relativePath.split('/').map(normalizePathSegment);
+  const pathSegments = normalizePathSegments(relativePath.split('/'));
 
   return {
     locale,
