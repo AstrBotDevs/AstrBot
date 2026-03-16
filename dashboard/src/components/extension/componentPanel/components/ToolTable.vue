@@ -25,6 +25,7 @@ const toolHeaders = computed(() => [
 ]);
 
 const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.properties || {});
+const isInternal = (tool: ToolItem) => tool.source === 'internal';
 </script>
 
 <template>
@@ -39,9 +40,9 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
       :loading="props.loading"
     >
       <template #item.name="{ item }">
-        <div class="d-flex align-center py-2">
-          <v-icon color="primary" class="mr-2" size="18">
-            {{ item.name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant' }}
+        <div class="d-flex align-center py-2" :class="{ 'internal-tool-row': isInternal(item) }">
+          <v-icon :color="isInternal(item) ? 'grey' : 'primary'" class="mr-2" size="18">
+            {{ isInternal(item) ? 'mdi-lock-outline' : (item.name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant') }}
           </v-icon>
           <div>
             <div class="text-subtitle-1 font-weight-medium">{{ item.name }}</div>
@@ -68,13 +69,17 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
       </template>
 
       <template #item.active="{ item }">
-        <v-chip :color="item.active ? 'success' : 'error'" size="small" class="font-weight-medium" :variant="item.active ? 'flat' : 'outlined'">
+        <v-chip v-if="isInternal(item)" color="grey" size="small" class="font-weight-medium" variant="tonal">
+          内置
+        </v-chip>
+        <v-chip v-else :color="item.active ? 'success' : 'error'" size="small" class="font-weight-medium" :variant="item.active ? 'flat' : 'outlined'">
           {{ item.active ? tmCommand('status.enabled') : tmCommand('status.disabled') }}
         </v-chip>
       </template>
 
       <template #item.actions="{ item }">
         <v-switch
+          v-if="!isInternal(item)"
           :model-value="item.active"
           color="primary"
           density="compact"
@@ -82,6 +87,7 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
           inset
           @update:model-value="emit('toggle-tool', item)"
         />
+        <span v-else class="text-caption text-grey">—</span>
       </template>
 
       <template #no-data>
@@ -140,5 +146,9 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
 
 .tool-table :deep(.v-data-table__td) {
   vertical-align: middle;
+}
+
+.internal-tool-row {
+  opacity: 0.65;
 }
 </style>

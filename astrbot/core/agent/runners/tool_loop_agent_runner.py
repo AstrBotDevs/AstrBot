@@ -665,6 +665,31 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
 
+        def _handle_image_content(
+            base64_data: str,
+            mime_type: str,
+            tool_call_id: str,
+            tool_name: str,
+            content_index: int,
+        ) -> _HandleFunctionToolsResult:
+            """Helper to cache image and return result for LLM visibility."""
+            cached_img = tool_image_cache.save_image(
+                base64_data=base64_data,
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                index=content_index,
+                mime_type=mime_type,
+            )
+            _append_tool_call_result(
+                tool_call_id,
+                (
+                    f"Image returned and cached at path='{cached_img.file_path}'. "
+                    f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
+                    f"with type='image' and path='{cached_img.file_path}'."
+                ),
+            )
+            return _HandleFunctionToolsResult.from_cached_image(cached_img)
+
         # 执行函数调用
         for func_tool_name, func_tool_args, func_tool_id in zip(
             llm_response.tools_call_name,
@@ -758,69 +783,47 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     if isinstance(resp, CallToolResult):
                         res = resp
                         _final_resp = resp
-                        if isinstance(res.content[0], TextContent):
-                            _append_tool_call_result(
-                                func_tool_id,
-                                res.content[0].text,
-                            )
-                        elif isinstance(res.content[0], ImageContent):
-                            # Cache the image instead of sending directly
-                            cached_img = tool_image_cache.save_image(
-                                base64_data=res.content[0].data,
-                                tool_call_id=func_tool_id,
-                                tool_name=func_tool_name,
-                                index=0,
-                                mime_type=res.content[0].mimeType or "image/png",
-                            )
-                            _append_tool_call_result(
-                                func_tool_id,
-                                (
-                                    f"Image returned and cached at path='{cached_img.file_path}'. "
-                                    f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
-                                    f"with type='image' and path='{cached_img.file_path}'."
-                                ),
-                            )
-                            # Yield image info for LLM visibility (will be handled in step())
-                            yield _HandleFunctionToolsResult.from_cached_image(
-                                cached_img
-                            )
-                        elif isinstance(res.content[0], EmbeddedResource):
-                            resource = res.content[0].resource
-                            if isinstance(resource, TextResourceContents):
+                        # Process all content items in the result
+                        for content_index, content in enumerate(res.content):
+                            if isinstance(content, TextContent):
                                 _append_tool_call_result(
                                     func_tool_id,
-                                    resource.text,
+                                    content.text,
                                 )
-                            elif (
-                                isinstance(resource, BlobResourceContents)
-                                and resource.mimeType
-                                and resource.mimeType.startswith("image/")
-                            ):
+                            elif isinstance(content, ImageContent):
                                 # Cache the image instead of sending directly
-                                cached_img = tool_image_cache.save_image(
-                                    base64_data=resource.blob,
+                                yield _handle_image_content(
+                                    base64_data=content.data,
+                                    mime_type=content.mimeType or "image/png",
                                     tool_call_id=func_tool_id,
                                     tool_name=func_tool_name,
-                                    index=0,
-                                    mime_type=resource.mimeType,
+                                    content_index=content_index,
                                 )
-                                _append_tool_call_result(
-                                    func_tool_id,
-                                    (
-                                        f"Image returned and cached at path='{cached_img.file_path}'. "
-                                        f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
-                                        f"with type='image' and path='{cached_img.file_path}'."
-                                    ),
-                                )
-                                # Yield image info for LLM visibility
-                                yield _HandleFunctionToolsResult.from_cached_image(
-                                    cached_img
-                                )
-                            else:
-                                _append_tool_call_result(
-                                    func_tool_id,
-                                    "The tool has returned a data type that is not supported.",
-                                )
+                            elif isinstance(content, EmbeddedResource):
+                                resource = content.resource
+                                if isinstance(resource, TextResourceContents):
+                                    _append_tool_call_result(
+                                        func_tool_id,
+                                        resource.text,
+                                    )
+                                elif (
+                                    isinstance(resource, BlobResourceContents)
+                                    and resource.mimeType
+                                    and resource.mimeType.startswith("image/")
+                                ):
+                                    # Cache the image instead of sending directly
+                                    yield _handle_image_content(
+                                        base64_data=resource.blob,
+                                        mime_type=resource.mimeType,
+                                        tool_call_id=func_tool_id,
+                                        tool_name=func_tool_name,
+                                        content_index=content_index,
+                                    )
+                                else:
+                                    _append_tool_call_result(
+                                        func_tool_id,
+                                        "The tool has returned a data type that is not supported.",
+                                    )
 
                     elif resp is None:
                         # Tool 直接请求发送消息给用户

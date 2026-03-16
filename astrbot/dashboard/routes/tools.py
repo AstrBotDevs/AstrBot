@@ -437,9 +437,15 @@ class ToolsRoute(Route):
             tools = self.tool_mgr.func_list
             tools_dict = []
             for tool in tools:
-                if isinstance(tool, MCPTool) or getattr(tool, "mcp_server_name", None):
+                # Use the source field added to FunctionTool
+                source = getattr(tool, "source", "plugin")
+
+                if source == "mcp" and isinstance(tool, MCPTool):
                     origin = "mcp"
                     origin_name = tool.mcp_server_name
+                elif source == "internal":
+                    origin = "internal"
+                    origin_name = "AstrBot"
                 elif tool.handler_module_path and star_map.get(
                     tool.handler_module_path
                 ):
@@ -457,6 +463,7 @@ class ToolsRoute(Route):
                     "active": tool.active,
                     "origin": origin,
                     "origin_name": origin_name,
+                    "source": source,
                 }
                 tools_dict.append(tool_info)
             return Response().ok(data=tools_dict).__dict__
@@ -477,6 +484,11 @@ class ToolsRoute(Route):
                     .error("Missing required parameters: name or activate")
                     .__dict__
                 )
+
+            # Internal tools cannot be toggled by users
+            for t in self.tool_mgr.func_list:
+                if t.name == tool_name and getattr(t, "source", "") == "internal":
+                    return Response().error("内置工具不支持手动启用/停用").__dict__
 
             if action:
                 try:

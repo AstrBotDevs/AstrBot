@@ -663,6 +663,7 @@ class MCPTool(FunctionTool, Generic[TContext]):
         self.mcp_tool = mcp_tool
         self.mcp_client = mcp_client
         self.mcp_server_name = mcp_server_name
+        self.source = "mcp"
 
     async def call(
         self, context: ContextWrapper[TContext], **kwargs

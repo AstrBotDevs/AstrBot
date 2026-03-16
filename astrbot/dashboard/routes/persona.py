@@ -23,6 +23,7 @@ class PersonaRoute(Route):
             "/persona/create": ("POST", self.create_persona),
             "/persona/update": ("POST", self.update_persona),
             "/persona/delete": ("POST", self.delete_persona),
+            "/persona/clone": ("POST", self.clone_persona),
             "/persona/move": ("POST", self.move_persona),
             "/persona/reorder": ("POST", self.reorder_items),
             # Folder routes
@@ -261,6 +262,55 @@ class PersonaRoute(Route):
         except Exception as e:
             logger.error(f"删除人格失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"删除人格失败: {e!s}").__dict__
+
+    async def clone_persona(self):
+        """克隆人格"""
+        try:
+            data = await request.get_json()
+            source_persona_id = data.get("source_persona_id")
+            new_persona_id = data.get("new_persona_id", "").strip()
+
+            if not source_persona_id:
+                return Response().error("缺少必要参数: source_persona_id").__dict__
+
+            if not new_persona_id:
+                return Response().error("新人格ID不能为空").__dict__
+
+            persona = await self.persona_mgr.clone_persona(
+                source_persona_id=source_persona_id,
+                new_persona_id=new_persona_id,
+            )
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "message": "人格克隆成功",
+                        "persona": {
+                            "persona_id": persona.persona_id,
+                            "system_prompt": persona.system_prompt,
+                            "begin_dialogs": persona.begin_dialogs or [],
+                            "tools": persona.tools or [],
+                            "skills": persona.skills or [],
+                            "custom_error_message": persona.custom_error_message,
+                            "folder_id": persona.folder_id,
+                            "sort_order": persona.sort_order,
+                            "created_at": persona.created_at.isoformat()
+                            if persona.created_at
+                            else None,
+                            "updated_at": persona.updated_at.isoformat()
+                            if persona.updated_at
+                            else None,
+                        },
+                    },
+                )
+                .__dict__
+            )
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception as e:
+            logger.error(f"克隆人格失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"克隆人格失败: {e!s}").__dict__
 
     async def move_persona(self):
         """移动人格到指定文件夹"""
