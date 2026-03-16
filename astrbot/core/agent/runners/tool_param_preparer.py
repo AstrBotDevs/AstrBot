@@ -201,6 +201,110 @@ class ToolParamPreparer:
 
         return None
 
+    @classmethod
+    def _build_normalized_expected_param_map(
+        cls,
+        *,
+        expected_param_order: tuple[str, ...],
+    ) -> dict[str, str]:
+        normalized_expected: dict[str, str] = {}
+        for expected in expected_param_order:
+            normalized_key = cls._normalize_tool_param_name_for_matching(expected)
+            normalized_expected.setdefault(normalized_key, expected)
+        return normalized_expected
+
+    def _map_raw_to_valid_params(
+        self,
+        *,
+        tool_name: str,
+        raw_args: dict[str, T.Any],
+        expected_params: set[str],
+        normalized_expected_params: dict[str, str],
+    ) -> tuple[dict[str, T.Any], dict[str, str]]:
+        valid_params: dict[str, T.Any] = {}
+        alias_mapped_params: dict[str, str] = {}
+
+        if not expected_params:
+            return dict(raw_args), alias_mapped_params
+
+        for raw_key, value in raw_args.items():
+            if raw_key in expected_params:
+                # Exact schema key always takes precedence.
+                valid_params[raw_key] = value
+                continue
+
+            normalized_key = self._normalize_tool_param_name_for_matching(raw_key)
+            canonical_key = normalized_expected_params.get(normalized_key)
+            if canonical_key and canonical_key not in valid_params:
+                valid_params[canonical_key] = value
+                alias_mapped_params[raw_key] = canonical_key
+
+        if alias_mapped_params:
+            logger.info("工具 %s 参数名称已自动映射: %s", tool_name, alias_mapped_params)
+
+        return valid_params, alias_mapped_params
+
+    def _compute_ignored_params(
+        self,
+        *,
+        expected_params: set[str],
+        raw_args: dict[str, T.Any],
+        valid_params: dict[str, T.Any],
+        tool_name: str,
+    ) -> set[str]:
+        if not expected_params:
+            return set()
+
+        normalized_valid_keys = {
+            self._normalize_tool_param_name_for_matching(key) for key in valid_params
+        }
+        ignored = set(raw_args.keys()) - set(valid_params.keys())
+        ignored = {
+            key
+            for key in ignored
+            if self._normalize_tool_param_name_for_matching(key)
+            not in normalized_valid_keys
+        }
+
+        if ignored:
+            logger.warning("工具 %s 忽略非期望参数: %s", tool_name, ignored)
+        return ignored
+
+    def _validate_contract(
+        self,
+        *,
+        tool: T.Any,
+        tool_name: str,
+        raw_args: dict[str, T.Any],
+        provided_params: dict[str, T.Any],
+    ) -> str | None:
+        missing_required = self._find_missing_required_tool_params(
+            tool=tool,
+            provided_params=provided_params,
+        )
+        if missing_required:
+            missing_text = ", ".join(missing_required)
+            logger.warning(
+                "工具 %s 缺少必填参数: %s。原始参数: %s",
+                tool_name,
+                missing_text,
+                raw_args,
+            )
+            return (
+                "error: Missing required tool arguments: "
+                f"{missing_text}. "
+                "Please call this tool again with all required arguments."
+            )
+
+        contract_error = self._validate_anyof_oneof_contract(
+            tool=tool,
+            provided_params=provided_params,
+        )
+        if contract_error:
+            logger.warning("工具 %s 参数契约校验失败: %s", tool_name, contract_error)
+            return contract_error
+        return None
+
     def prepare(
         self,
         *,
@@ -213,25 +317,18 @@ class ToolParamPreparer:
 
         params_schema = tool.parameters if isinstance(tool.parameters, dict) else None
         properties = (params_schema or {}).get("properties") or {}
-        expected_params = set(properties.keys())
+        expected_param_order = tuple(properties.keys())
+        expected_params = set(expected_param_order)
+        normalized_expected_params = self._build_normalized_expected_param_map(
+            expected_param_order=expected_param_order
+        )
 
-        valid_params: dict[str, T.Any] = {}
-        alias_mapped_params: dict[str, str] = {}
-
-        if expected_params:
-            for raw_key, value in raw_args.items():
-                if raw_key in expected_params:
-                    valid_params[raw_key] = value
-                    continue
-                normalized_key = self._normalize_tool_param_name_for_matching(raw_key)
-                if normalized_key in expected_params and normalized_key not in valid_params:
-                    valid_params[normalized_key] = value
-                    alias_mapped_params[raw_key] = normalized_key
-        else:
-            valid_params = dict(raw_args)
-
-        if alias_mapped_params:
-            logger.info("工具 %s 参数名称已自动映射: %s", tool_name, alias_mapped_params)
+        valid_params, _ = self._map_raw_to_valid_params(
+            tool_name=tool_name,
+            raw_args=raw_args,
+            expected_params=expected_params,
+            normalized_expected_params=normalized_expected_params,
+        )
 
         valid_params, changed_types = self._coerce_tool_params_by_schema(
             params=valid_params,
@@ -244,18 +341,12 @@ class ToolParamPreparer:
                 {k: {"from": repr(v[0]), "to": repr(v[1])} for k, v in changed_types.items()},
             )
 
-        ignored_params = set(raw_args.keys()) - set(valid_params.keys())
-        if expected_params:
-            ignored_params = {
-                key
-                for key in ignored_params
-                if self._normalize_tool_param_name_for_matching(key) not in valid_params
-            }
-        else:
-            ignored_params = set()
-
-        if ignored_params:
-            logger.warning("工具 %s 忽略非期望参数: %s", tool_name, ignored_params)
+        ignored_params = self._compute_ignored_params(
+            expected_params=expected_params,
+            raw_args=raw_args,
+            valid_params=valid_params,
+            tool_name=tool_name,
+        )
 
         if expected_params and raw_args and not valid_params:
             return PreparedToolCall(
@@ -269,34 +360,13 @@ class ToolParamPreparer:
                 ),
             )
 
-        missing_required = self._find_missing_required_tool_params(
+        contract_error = self._validate_contract(
             tool=tool,
-            provided_params=valid_params,
-        )
-        if missing_required:
-            missing_text = ", ".join(missing_required)
-            logger.warning(
-                "工具 %s 缺少必填参数: %s。原始参数: %s",
-                tool_name,
-                missing_text,
-                raw_args,
-            )
-            return PreparedToolCall(
-                valid_params={},
-                ignored_params=ignored_params,
-                error=(
-                    "error: Missing required tool arguments: "
-                    f"{missing_text}. "
-                    "Please call this tool again with all required arguments."
-                ),
-            )
-
-        contract_error = self._validate_anyof_oneof_contract(
-            tool=tool,
+            tool_name=tool_name,
+            raw_args=raw_args,
             provided_params=valid_params,
         )
         if contract_error:
-            logger.warning("工具 %s 参数契约校验失败: %s", tool_name, contract_error)
             return PreparedToolCall(
                 valid_params={},
                 ignored_params=ignored_params,

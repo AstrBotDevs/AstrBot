@@ -198,6 +198,9 @@ class ToolResultGuardConfig:
     deduplicate_repeated_tool_results: bool
     tool_result_dedup_max_entries: int | None
     tool_error_repeat_guard_threshold: int | None
+    # Max entries for error-repeat counters.
+    # None means: fallback to `tool_result_dedup_max_entries`, then module default.
+    tool_error_repeat_count_max_entries: int | None = None
 
 
 @dataclass(slots=True)
@@ -294,7 +297,9 @@ class ToolResultGuard:
             self._tool_result_dedup.pop(oldest_key, None)
 
     def _prune_tool_error_repeat_counts_if_needed(self) -> None:
-        max_entries = self._config.tool_result_dedup_max_entries
+        max_entries = self._config.tool_error_repeat_count_max_entries
+        if max_entries is None:
+            max_entries = self._config.tool_result_dedup_max_entries
         if max_entries is None:
             max_entries = DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
 

@@ -190,6 +190,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 deduplicate_repeated_tool_results=self._deduplicate_repeated_tool_results,
                 tool_result_dedup_max_entries=self._tool_result_dedup_max_entries,
                 tool_error_repeat_guard_threshold=self._tool_error_repeat_guard_threshold,
+                # Keep a single bound by default; guard config supports independent
+                # tuning via `tool_error_repeat_count_max_entries` when needed.
+                tool_error_repeat_count_max_entries=self._tool_result_dedup_max_entries,
             )
         )
         # Keep compatibility with existing tests and callers that still inspect these
@@ -386,26 +389,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return content
         return f"{content}{notice}"
 
-    @staticmethod
-    def _normalize_tool_result_dedup_max_entries(
-        max_entries: int | None,
-    ) -> int | None:
-        return normalize_positive_int_or_none(
-            max_entries,
-            default=DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
-            setting_name="tool_result_dedup_max_entries",
-        )
-
-    @staticmethod
-    def _normalize_tool_error_repeat_guard_threshold(
-        threshold: int | None,
-    ) -> int | None:
-        return normalize_positive_int_or_none(
-            threshold,
-            default=DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
-            setting_name="tool_error_repeat_guard_threshold",
-        )
-
     def _ensure_tool_result_guard(self) -> ToolResultGuard:
         if self._tool_result_guard is None:
             self._tool_result_guard = ToolResultGuard(
@@ -413,6 +396,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     deduplicate_repeated_tool_results=DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
                     tool_result_dedup_max_entries=DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
                     tool_error_repeat_guard_threshold=DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+                    # Default fallback keeps previous behavior.
+                    tool_error_repeat_count_max_entries=DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
                 )
             )
             self._tool_result_dedup = self._tool_result_guard.dedup_map

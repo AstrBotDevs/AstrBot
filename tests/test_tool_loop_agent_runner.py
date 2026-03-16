@@ -10,6 +10,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
+from astrbot.core.agent.runners.tool_result_guard import (
+    ToolResultGuard,
+    ToolResultGuardConfig,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
@@ -886,10 +890,55 @@ def test_prepare_tool_call_params_keeps_args_when_schema_has_no_properties(runne
     assert prepared.valid_params == {"query": "hello"}
 
 
+def test_prepare_tool_call_params_maps_snake_case_to_camel_case_schema(runner):
+    tool = FunctionTool(
+        name="camel_schema_tool",
+        description="camel schema tool",
+        parameters={
+            "type": "object",
+            "properties": {
+                "userId": {"type": "string"},
+            },
+            "required": ["userId"],
+        },
+        handler=AsyncMock(),
+    )
+
+    prepared = runner._prepare_tool_call_params(
+        tool=tool,
+        tool_name="camel_schema_tool",
+        raw_args={"user_id": 1001},
+    )
+
+    assert prepared.error is None
+    assert prepared.valid_params == {"userId": "1001"}
+    assert prepared.ignored_params == set()
+
+
 def test_tool_error_detection_supports_non_english_and_traceback_markers(runner):
     assert runner._is_tool_error_content("错误：参数缺失")
     assert runner._is_tool_error_content("Traceback (most recent call last): ...")
     assert not runner._is_tool_error_content("工具执行成功")
+
+
+def test_tool_result_guard_error_count_pruning_can_use_independent_limit():
+    guard = ToolResultGuard(
+        ToolResultGuardConfig(
+            deduplicate_repeated_tool_results=True,
+            tool_result_dedup_max_entries=10,
+            tool_error_repeat_guard_threshold=99,
+            tool_error_repeat_count_max_entries=2,
+        )
+    )
+
+    for i in range(3):
+        guard.process(
+            tool_name="test_tool",
+            tool_args={"index": i},
+            content="error: failed to execute",
+        )
+
+    assert len(guard.error_repeat_counts) == 2
 
 
 @pytest.mark.asyncio
