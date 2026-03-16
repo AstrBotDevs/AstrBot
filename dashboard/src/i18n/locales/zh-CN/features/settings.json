@@ -1,6 +1,24 @@
 {
   "network": {
     "title": "网络",
+    "proxy": {
+      "title": "代理设置",
+      "subtitle": "配置网络请求代理"
+    },
+    "server": {
+      "title": "服务器地址",
+      "subtitle": "配置后端 API 地址",
+      "label": "API 基础地址",
+      "placeholder": "例如：http://localhost:6185",
+      "hint": "留空以使用默认设置（相对路径）",
+      "save": "保存并刷新",
+      "presets": "预设列表",
+      "preset": {
+        "add": "添加预设",
+        "name": "名称",
+        "url": "URL"
+      }
+    },
     "githubProxy": {
       "title": "GitHub 加速地址",
       "subtitle": "设置下载插件或者更新 AstrBot 时所用的 GitHub 加速地址。这在中国大陆的网络环境有效。可以自定义，输入结果实时生效。所有地址均不保证稳定性，如果在更新插件/项目时出现报错，请首先检查加速地址是否能正常使用。",
@@ -26,12 +44,31 @@
       "reset": "恢复默认"
     }
   },
+  "style": {
+    "title": "主题",
+    "color": {
+      "title": "主题颜色",
+      "subtitle": "自定义主题主色与辅助色。修改后立即生效，并保存在浏览器本地。",
+      "primary": "主色",
+      "secondary": "辅助色"
+    }
+  },
+  "reset": {
+    "title": "恢复默认",
+    "subtitle": "恢复主题颜色为默认设置",
+    "button": "恢复默认"
+  },
   "system": {
     "title": "系统",
     "restart": {
       "title": "重启",
       "subtitle": "重启 AstrBot",
       "button": "重启"
+    },
+    "logout": {
+      "title": "退出登录",
+      "subtitle": "退出当前账号，回到登录界面",
+      "button": "退出登录"
     },
     "migration": {
       "title": "数据迁移到 v4.0.0 格式",
@@ -55,6 +92,10 @@
     }
   },
   "backup": {
+    "title": "备份",
+    "subtitle": "管理数据备份",
+    "operate": "备份操作",
+    "open": "打开备份管理",
     "dialog": {
       "title": "备份管理"
     },
@@ -135,11 +176,12 @@
     "subtitle": "为外部开发者创建 API Key，用于调用开放 HTTP API。",
     "name": "Key 名称",
     "expiresInDays": "有效期",
-    "expiryOptions": {
-      "day1": "1 天",
-      "day7": "7 天",
-      "day30": "30 天",
-      "day90": "90 天",
+    "expiry": {
+      "7days": "7 天",
+      "30days": "30 天",
+      "90days": "90 天",
+      "180days": "180 天",
+      "365days": "365 天",
       "permanent": "永久"
     },
     "permanentWarning": "永久有效的 API Key 风险较高，请妥善保存并建议仅在必要场景使用。",

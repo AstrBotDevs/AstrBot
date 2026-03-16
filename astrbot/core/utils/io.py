@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import logging
 import os
@@ -7,6 +8,7 @@ import ssl
 import time
 import uuid
 import zipfile
+from ipaddress import IPv4Address, IPv6Address, ip_address
 from pathlib import Path
 
 import aiohttp
@@ -206,16 +208,51 @@ def file_to_base64(file_path: str) -> str:
     return "base64://" + base64_str
 
 
-def get_local_ip_addresses():
+def get_local_ip_addresses() -> list[IPv4Address | IPv6Address]:
     net_interfaces = psutil.net_if_addrs()
-    network_ips = []
+    network_ips: list[IPv4Address | IPv6Address] = []
 
-    for interface, addrs in net_interfaces.items():
+    for _, addrs in net_interfaces.items():
         for addr in addrs:
-            if addr.family == socket.AF_INET:  # 使用 socket.AF_INET 代替 psutil.AF_INET
-                network_ips.append(addr.address)
+            if addr.family == socket.AF_INET:
+                network_ips.append(ip_address(addr.address))
+            elif addr.family == socket.AF_INET6:
+                # 过滤掉 IPv6 的 link-local 地址（fe80:...）
+                ip = ip_address(addr.address.split("%")[0])  # 处理带 zone index 的情况
+                if not ip.is_link_local:
+                    network_ips.append(ip)
 
     return network_ips
+
+
+async def get_public_ip_address() -> list[IPv4Address | IPv6Address]:
+    urls = [
+        "https://api64.ipify.org",
+        "https://ident.me",
+        "https://ifconfig.me",
+        "https://icanhazip.com",
+    ]
+    found_ips: dict[int, IPv4Address | IPv6Address] = {}
+
+    async def fetch(session: aiohttp.ClientSession, url: str):
+        try:
+            async with session.get(url, timeout=3) as resp:
+                if resp.status == 200:
+                    raw_ip = (await resp.text()).strip()
+                    ip = ip_address(raw_ip)
+                    if ip.version not in found_ips:
+                        found_ips[ip.version] = ip
+        except Exception as e:
+            # Ignore errors from individual services so that a single failing
+            # endpoint does not prevent discovering the public IP from others.
+            logger.debug("Failed to fetch public IP from %s: %s", url, e)
+
+    async with aiohttp.ClientSession() as session:
+        tasks = [fetch(session, url) for url in urls]
+        await asyncio.gather(*tasks)
+
+    # 返回找到的所有 IP 对象列表
+    return list(found_ips.values())
 
 
 async def get_dashboard_version():
@@ -248,35 +285,107 @@ async def download_dashboard(
     else:
         zip_path = Path(path).absolute()
 
-    if latest or len(str(version)) != 40:
-        ver_name = "latest" if latest else version
-        dashboard_release_url = f"https://astrbot-registry.soulter.top/download/astrbot-dashboard/{ver_name}/dist.zip"
-        logger.info(
-            f"准备下载指定发行版本的 AstrBot WebUI 文件: {dashboard_release_url}",
-        )
-        try:
-            await download_file(
-                dashboard_release_url,
-                str(zip_path),
-                show_progress=True,
+    # 缓存机制
+    cache_dir = Path(get_astrbot_data_path()).absolute() / "cache"
+    if not cache_dir.exists():
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+    use_cache = False
+
+    # Only use cache if not requesting "latest" (we don't know the version yet)
+    if not latest and version:
+        cache_name = f"dashboard_{version}.zip"
+        cache_path = cache_dir / cache_name
+
+        if cache_path.exists():
+            logger.info(f"发现本地缓存的管理面板文件: {cache_path}")
+            try:
+                with zipfile.ZipFile(cache_path, "r") as z:
+                    if z.testzip() is None:
+                        logger.info("缓存文件校验通过，将直接使用缓存。")
+                        if str(cache_path) != str(zip_path):
+                            shutil.copy(cache_path, zip_path)
+                        use_cache = True
+                    else:
+                        logger.warning("缓存文件损坏，将重新下载。")
+                        os.remove(cache_path)
+            except zipfile.BadZipFile:
+                logger.warning("缓存文件损坏 (BadZipFile)，将重新下载。")
+                os.remove(cache_path)
+
+    if not use_cache:
+        if latest or len(str(version)) != 40:
+            ver_name = "latest" if latest else version
+            dashboard_release_url = f"https://astrbot-registry.soulter.top/download/astrbot-dashboard/{ver_name}/dist.zip"
+            logger.info(
+                f"准备下载指定发行版本的 AstrBot WebUI 文件: {dashboard_release_url}",
             )
-        except BaseException as _:
-            if latest:
-                dashboard_release_url = "https://github.com/AstrBotDevs/AstrBot/releases/latest/download/dist.zip"
-            else:
-                dashboard_release_url = f"https://github.com/AstrBotDevs/AstrBot/releases/download/{version}/dist.zip"
+            try:
+                await download_file(
+                    dashboard_release_url,
+                    str(zip_path),
+                    show_progress=True,
+                )
+            except BaseException as _:
+                try:
+                    if latest:
+                        dashboard_release_url = "https://github.com/AstrBotDevs/AstrBot/releases/latest/download/dist.zip"
+                    else:
+                        dashboard_release_url = f"https://github.com/AstrBotDevs/AstrBot/releases/download/{version}/dist.zip"
+                    if proxy:
+                        dashboard_release_url = f"{proxy}/{dashboard_release_url}"
+                    await download_file(
+                        dashboard_release_url,
+                        str(zip_path),
+                        show_progress=True,
+                    )
+                except Exception as e:
+                    if not latest:
+                        logger.warning(
+                            f"下载指定版本({version})失败: {e}，尝试下载最新版本。"
+                        )
+                        await download_dashboard(
+                            path=path,
+                            extract_path=extract_path,
+                            latest=True,
+                            proxy=proxy,
+                        )
+                        return
+                    raise e
+        else:
+            url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"
+            logger.info(f"准备下载指定版本的 AstrBot WebUI: {url}")
             if proxy:
-                dashboard_release_url = f"{proxy}/{dashboard_release_url}"
-            await download_file(
-                dashboard_release_url,
-                str(zip_path),
-                show_progress=True,
-            )
-    else:
-        url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"
-        logger.info(f"准备下载指定版本的 AstrBot WebUI: {url}")
-        if proxy:
-            url = f"{proxy}/{url}"
-        await download_file(url, str(zip_path), show_progress=True)
+                url = f"{proxy}/{url}"
+            await download_file(url, str(zip_path), show_progress=True)
+
+        # 下载完成后存入缓存
+        try:
+            save_cache_name = None
+            if not latest and version:
+                save_cache_name = f"dashboard_{version}.zip"
+            else:
+                # 尝试从下载的文件中读取版本号
+                try:
+                    with zipfile.ZipFile(zip_path, "r") as z:
+                        for v_path in ["dist/assets/version", "assets/version"]:
+                            try:
+                                with z.open(v_path) as f:
+                                    v = f.read().decode("utf-8").strip()
+                                    save_cache_name = f"dashboard_{v}.zip"
+                                    break
+                            except KeyError:
+                                continue
+                except Exception:
+                    pass
+
+            if save_cache_name:
+                cache_save_path = cache_dir / save_cache_name
+                if str(zip_path) != str(cache_save_path):
+                    shutil.copy(zip_path, cache_save_path)
+                    logger.info(f"已缓存管理面板文件至: {cache_save_path}")
+        except Exception as e:
+            logger.warning(f"缓存管理面板文件失败: {e}")
+
     with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(extract_path)

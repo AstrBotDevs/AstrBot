@@ -113,6 +113,14 @@ class InternalAgentSubStage(Stage):
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
+        # Build decoupled tool providers
+        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
+        from astrbot.core.cron.cron_tool_provider import CronToolProvider
+
+        _tool_providers = [ComputerToolProvider()]
+        if self.add_cron_tools:
+            _tool_providers.append(CronToolProvider())
+
         self.main_agent_cfg = MainAgentBuildConfig(
             tool_call_timeout=self.tool_call_timeout,
             tool_schema_mode=self.tool_schema_mode,
@@ -131,6 +139,7 @@ class InternalAgentSubStage(Stage):
             safety_mode_strategy=self.safety_mode_strategy,
             computer_use_runtime=self.computer_use_runtime,
             sandbox_cfg=self.sandbox_cfg,
+            tool_providers=_tool_providers,
             add_cron_tools=self.add_cron_tools,
             provider_settings=settings,
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
@@ -230,6 +239,8 @@ class InternalAgentSubStage(Stage):
                     if reset_coro:
                         await reset_coro
 
+                    effective_streaming_response = bool(agent_runner.streaming)
+
                     register_active_runner(event.unified_msg_origin, agent_runner)
                     runner_registered = True
                     action_type = event.get_extra("action_type")
@@ -238,7 +249,7 @@ class InternalAgentSubStage(Stage):
                         "astr_agent_prepare",
                         system_prompt=req.system_prompt,
                         tools=req.func_tool.names() if req.func_tool else [],
-                        stream=streaming_response,
+                        stream=effective_streaming_response,
                         chat_provider={
                             "id": provider.provider_config.get("id", ""),
                             "model": provider.get_model(),
@@ -292,7 +303,7 @@ class InternalAgentSubStage(Stage):
                                 user_aborted=agent_runner.was_aborted(),
                             )
 
-                    elif streaming_response and not stream_to_general:
+                    elif effective_streaming_response and not stream_to_general:
                         # 流式响应
                         event.set_result(
                             MessageEventResult()
