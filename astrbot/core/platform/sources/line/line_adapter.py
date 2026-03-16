@@ -65,15 +65,6 @@ LINE_I18N_RESOURCES = {
     "line",
     "LINE Messaging API 适配器",
     support_streaming_message=False,
-    default_config_tmpl={
-        "id": "line",
-        "type": "line",
-        "enable": False,
-        "channel_access_token": "",
-        "channel_secret": "",
-        "unified_webhook_mode": True,
-        "webhook_uuid": "",
-    },
     config_metadata=LINE_CONFIG_METADATA,
     i18n_resources=LINE_I18N_RESOURCES,
 )

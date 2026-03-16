@@ -10,7 +10,8 @@
     "theme": {
       "light": "浅色模式",
       "dark": "深色模式"
-    }
+    },
+    "logout": "退出登录"
   },
   "updateDialog": {
     "title": "更新 AstrBot",
@@ -57,6 +58,18 @@
       "guideStep1": "根据你的系统架构下载对应安装包。",
       "guideStep2": "完成安装后重启 AstrBot。",
       "guideStep3": "如果你使用 Docker，请优先使用镜像更新方式。"
+    },
+    "desktopApp": {
+      "title": "更新桌面应用",
+      "message": "将检查并升级 AstrBot 桌面端程序。",
+      "currentVersion": "当前版本：",
+      "latestVersion": "最新版本：",
+      "checking": "正在检查桌面应用更新...",
+      "hasNewVersion": "发现新版本，可点击确认升级。",
+      "isLatest": "已经是最新版本",
+      "installing": "正在下载并安装更新，完成后将自动重启应用...",
+      "checkFailed": "检查更新失败，请稍后重试。",
+      "installFailed": "升级失败，请稍后重试。"
     },
     "dashboardUpdate": {
       "title": "单独更新管理面板到最新版本",

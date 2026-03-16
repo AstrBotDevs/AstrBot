@@ -15,7 +15,7 @@
             <transition name="fade">
                 <div v-if="isDragging" class="drop-overlay">
                     <div class="drop-overlay-content">
-                        <v-icon size="48" color="deep-purple">mdi-cloud-upload</v-icon>
+                        <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
                         <span class="drop-text">{{ tm('input.dropToUpload') }}</span>
                     </div>
                 </div>
@@ -32,15 +32,16 @@
                 </div>
             </transition>
             <textarea ref="inputField" v-model="localPrompt" @keydown="handleKeyDown" :disabled="disabled"
-                placeholder="Ask AstrBot..."
-                style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 12px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
+                placeholder="Ask AstrBot..." class="chat-textarea"
+                autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false"
+                style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 16px 20px; min-height: 40px; max-height: 200px; overflow-y: auto; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 14px;">
                 <div
-                    style="display: flex; justify-content: flex-start; margin-top: 4px; align-items: center; gap: 8px;">
+                    style="display: flex; justify-content: flex-start; margin-top: 4px; align-items: center; gap: 8px; min-width: 0; flex: 1; overflow: hidden;">
                     <!-- Settings Menu -->
                     <StyledMenu offset="8" location="top start" :close-on-content-click="false">
                         <template v-slot:activator="{ props: activatorProps }">
-                            <v-btn v-bind="activatorProps" icon="mdi-plus" variant="text" color="deep-purple" />
+                            <v-btn v-bind="activatorProps" icon="mdi-plus" variant="text" color="primary" />
                         </template>
 
                         <!-- Upload Files -->
@@ -72,9 +73,9 @@
                     <!-- Provider/Model Selector Menu -->
                     <ProviderModelMenu v-if="showProviderSelector" ref="providerModelMenuRef" />
                 </div>
-                <div style="display: flex; justify-content: flex-end; margin-top: 8px; align-items: center;">
+                <div style="display: flex; justify-content: flex-end; margin-top: 8px; align-items: center; flex-shrink: 0;">
                     <input type="file" ref="imageInputRef" @change="handleFileSelect" style="display: none" multiple />
-                    <v-progress-circular v-if="disabled" indeterminate size="16" class="mr-1" width="1.5" />
+                    <v-progress-circular v-if="disabled && !mobile" indeterminate size="16" class="mr-1" width="1.5" />
                     <!-- <v-btn @click="$emit('openLiveMode')"
                         icon
                         variant="text"
@@ -86,37 +87,22 @@
                             {{ tm('voice.liveMode') }}
                         </v-tooltip>
                     </v-btn> -->
-                    <v-btn @click="handleRecordClick" icon variant="text" :color="isRecording ? 'error' : 'deep-purple'"
-                        class="record-btn" size="small">
+                    <v-btn @click="handleRecordClick" icon variant="text" :color="isRecording ? 'error' : 'primary'"
+                        class="record-btn">
                         <v-icon :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
                             plain></v-icon>
                         <v-tooltip activator="parent" location="top">
                             {{ isRecording ? tm('voice.speaking') : tm('voice.startRecording') }}
                         </v-tooltip>
                     </v-btn>
-                    <v-btn
-                        icon
-                        v-if="isRunning"
-                        @click="$emit('stop')"
-                        variant="text"
-                        class="send-btn"
-                        size="small"
-                    >
+                    <v-btn icon v-if="isRunning && !canSend" @click="$emit('stop')" variant="tonal" color="primary" class="send-btn">
                         <v-icon icon="mdi-stop" variant="text" plain></v-icon>
                         <v-tooltip activator="parent" location="top">
                             {{ tm('input.stopGenerating') }}
                         </v-tooltip>
                     </v-btn>
-                    <v-btn
-                        v-else
-                        @click="$emit('send')"
-                        icon="mdi-send"
-                        variant="text"
-                        color="deep-purple"
-                        :disabled="!canSend"
-                        class="send-btn"
-                        size="small"
-                    />
+                    <v-btn v-else @click="$emit('send')" icon="mdi-send" variant="tonal" color="primary"
+                        :disabled="!canSend" class="send-btn" />
                 </div>
             </div>
         </div>
@@ -131,7 +117,7 @@
             </div>
 
             <div v-if="stagedAudioUrl" class="audio-preview">
-                <v-chip color="deep-purple-lighten-4" class="audio-chip">
+                <v-chip color="primary" variant="tonal" class="audio-chip">
                     <v-icon start icon="mdi-microphone" size="small"></v-icon>
                     {{ tm('voice.recording') }}
                 </v-chip>
@@ -140,7 +126,7 @@
             </div>
 
             <div v-for="(file, index) in stagedFiles" :key="'file-' + index" class="file-preview">
-                <v-chip color="blue-grey-lighten-4" class="file-chip">
+                <v-chip color="primary" variant="tonal" class="file-chip">
                     <v-icon start icon="mdi-file-document-outline" size="small"></v-icon>
                     <span class="file-name-preview">{{ file.original_name }}</span>
                 </v-chip>
@@ -152,7 +138,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
+import { useDisplay } from 'vuetify';
 import { useModuleI18n } from '@/i18n/composables';
 import { useCustomizerStore } from '@/stores/customizer';
 import ConfigSelector from './ConfigSelector.vue';
@@ -186,6 +173,7 @@ interface Props {
     currentSession?: Session | null;
     configId?: string | null;
     replyTo?: ReplyInfo | null;
+    sendShortcut?: 'enter' | 'shift_enter';
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -193,7 +181,8 @@ const props = withDefaults(defineProps<Props>(), {
     currentSession: null,
     configId: null,
     stagedFiles: () => [],
-    replyTo: null
+    replyTo: null,
+    sendShortcut: 'shift_enter'
 });
 
 const emit = defineEmits<{
@@ -251,34 +240,54 @@ function handleReplyAfterLeave() {
     isReplyClosing.value = false;
 }
 
-function handleKeyDown(e: KeyboardEvent) {
-    // Enter 发送消息或触发命令
-    if (e.keyCode === 13 && !e.shiftKey) {
-        e.preventDefault();
+const { mobile } = useDisplay();
 
-        // 检查是否是 /astr_live_dev 命令
+// Auto-resize textarea
+function autoResize() {
+    const el = inputField.value;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+}
+
+watch(localPrompt, () => {
+    nextTick(autoResize);
+});
+
+function handleKeyDown(e: KeyboardEvent) {
+    const isEnter = e.key === 'Enter';
+    if (!isEnter) {
+        // Ctrl+B 录音
+        if (e.ctrlKey && e.keyCode === 66) {
+            e.preventDefault();
+            if (ctrlKeyDown.value) return;
+
+            ctrlKeyDown.value = true;
+            ctrlKeyTimer.value = window.setTimeout(() => {
+                if (ctrlKeyDown.value && !props.isRecording) {
+                    emit('startRecording');
+                }
+            }, ctrlKeyLongPressThreshold);
+        }
+        return;
+    }
+
+    const isSendHotkey =
+        e.ctrlKey ||
+        e.metaKey ||
+        (props.sendShortcut === 'enter' ? !e.shiftKey : e.shiftKey);
+
+    if (isSendHotkey) {
+        e.preventDefault();
         if (localPrompt.value.trim() === '/astr_live_dev') {
             emit('openLiveMode');
             localPrompt.value = '';
             return;
         }
-
         if (canSend.value) {
             emit('send');
         }
-    }
-
-    // Ctrl+B 录音
-    if (e.ctrlKey && e.keyCode === 66) {
-        e.preventDefault();
-        if (ctrlKeyDown.value) return;
-
-        ctrlKeyDown.value = true;
-        ctrlKeyTimer.value = window.setTimeout(() => {
-            if (ctrlKeyDown.value && !props.isRecording) {
-                emit('startRecording');
-            }
-        }, ctrlKeyLongPressThreshold);
+        return;
     }
 }
 
@@ -364,6 +373,11 @@ function getCurrentSelection() {
     return providerModelMenuRef.value?.getCurrentSelection();
 }
 
+function focusInput() {
+    if (!inputField.value) return;
+    inputField.value.focus();
+}
+
 onMounted(() => {
     if (inputField.value) {
         inputField.value.addEventListener('paste', handlePaste);
@@ -379,7 +393,8 @@ onBeforeUnmount(() => {
 });
 
 defineExpose({
-    getCurrentSelection
+    getCurrentSelection,
+    focusInput
 });
 </script>
 
@@ -399,8 +414,8 @@ defineExpose({
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(103, 58, 183, 0.15);
-    border: 2px dashed rgba(103, 58, 183, 0.5);
+    background-color: rgba(var(--v-theme-primary), 0.12);
+    border: 2px dashed rgba(var(--v-theme-primary), 0.45);
     border-radius: 24px;
     display: flex;
     align-items: center;
@@ -419,7 +434,7 @@ defineExpose({
 .drop-text {
     font-size: 16px;
     font-weight: 500;
-    color: #673ab7;
+    color: rgb(var(--v-theme-primary));
 }
 
 /* Fade transition for drop overlay */
@@ -439,7 +454,7 @@ defineExpose({
     justify-content: space-between;
     padding: 8px 16px;
     margin: 8px 8px 0 8px;
-    background-color: rgba(103, 58, 183, 0.06);
+    background-color: rgba(var(--v-theme-primary), 0.06);
     border-radius: 12px;
     gap: 8px;
     max-height: 500px;
@@ -588,11 +603,20 @@ defineExpose({
 @media (max-width: 768px) {
     .input-area {
         padding: 0 !important;
+        padding-bottom: 10px !important;
     }
 
     .input-container {
         width: 100% !important;
         max-width: 100% !important;
+    }
+
+    .input-area textarea,
+    .chat-textarea {
+        min-height: 32px !important;
+        max-height: 160px !important;
+        font-size: 16px !important;
+        padding: 16px 16px 12px 16px !important;
     }
 }
 </style>

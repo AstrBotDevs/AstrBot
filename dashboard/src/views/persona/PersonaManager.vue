@@ -137,6 +137,11 @@
                         <pre class="system-prompt-content">{{ viewingPersona.system_prompt }}</pre>
                     </div>
 
+                    <div v-if="viewingPersona.custom_error_message" class="mb-4">
+                        <h4 class="text-h6 mb-2">{{ tm('form.customErrorMessage') }}</h4>
+                        <pre class="system-prompt-content">{{ viewingPersona.custom_error_message }}</pre>
+                    </div>
+
                     <div v-if="viewingPersona.begin_dialogs && viewingPersona.begin_dialogs.length > 0" class="mb-4">
                         <h4 class="text-h6 mb-2">{{ tm('form.presetDialogs') }}</h4>
                         <div v-for="(dialog, index) in viewingPersona.begin_dialogs" :key="index" class="mb-2">
@@ -281,6 +286,7 @@ import type { Folder, FolderTreeNode } from '@/components/folder/types';
 interface Persona {
     persona_id: string;
     system_prompt: string;
+    custom_error_message?: string | null;
     begin_dialogs?: string[] | null;
     tools?: string[] | null;
     skills?: string[] | null;

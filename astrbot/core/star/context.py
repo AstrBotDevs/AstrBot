@@ -47,8 +47,6 @@ logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
     from astrbot.core.cron.manager import CronJobManager
-else:
-    CronJobManager = Any
 
 
 class PlatformManagerProtocol(Protocol):
@@ -102,6 +100,11 @@ class Context:
         self.cron_manager = cron_manager
         """Cron job manager, initialized by core lifecycle."""
         self.subagent_orchestrator = subagent_orchestrator
+
+        # Register built-in tools so they appear in WebUI and can be
+        # assigned to subagents.  Done here (not at module-import time)
+        # to avoid circular imports.
+        self.provider_manager.llm_tools.register_internal_tools()
 
     async def llm_generate(
         self,

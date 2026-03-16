@@ -1,1 +1,6 @@
-__version__ = "4.18.2"
+from importlib import metadata
+
+try:
+    __version__ = metadata.version("AstrBot")
+except metadata.PackageNotFoundError:
+    __version__ = "unknown"

@@ -40,6 +40,7 @@ import type { FolderTreeNode, SelectableItem } from '@/components/folder/types'
 interface Persona {
   persona_id: string
   system_prompt: string
+  custom_error_message?: string | null
   folder_id?: string | null
   [key: string]: any
 }

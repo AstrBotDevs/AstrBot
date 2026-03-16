@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import builtins
 import copy
 import datetime
 import json
@@ -10,8 +9,7 @@ import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 
-from astrbot.api import sp
-from astrbot.core import logger
+from astrbot.core import logger, sp
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
@@ -20,36 +18,36 @@ from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContex
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-from astrbot.core.astr_main_agent_resources import (
-    CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
-    EXECUTE_SHELL_TOOL,
-    FILE_DOWNLOAD_TOOL,
-    FILE_UPLOAD_TOOL,
-    KNOWLEDGE_BASE_QUERY_TOOL,
-    LIVE_MODE_SYSTEM_PROMPT,
-    LLM_SAFETY_MODE_SYSTEM_PROMPT,
-    LOCAL_EXECUTE_SHELL_TOOL,
-    LOCAL_PYTHON_TOOL,
-    PYTHON_TOOL,
-    SANDBOX_MODE_PROMPT,
-    SEND_MESSAGE_TO_USER_TOOL,
-    TOOL_CALL_PROMPT,
-    TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
-    retrieve_knowledge_base,
-)
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Reply
+from astrbot.core.persona_error_reply import (
+    extract_persona_custom_error_message_from_persona,
+    set_persona_custom_error_message_on_event,
+)
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import star_map
-from astrbot.core.tools.cron_tools import (
-    CREATE_CRON_JOB_TOOL,
-    DELETE_CRON_JOB_TOOL,
-    LIST_CRON_JOBS_TOOL,
+from astrbot.core.tool_provider import ToolProvider, ToolProviderContext
+from astrbot.core.tools.kb_query import (
+    KNOWLEDGE_BASE_QUERY_TOOL,
+    retrieve_knowledge_base,
 )
+from astrbot.core.tools.prompts import (
+    CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
+    COMPUTER_USE_DISABLED_PROMPT,
+    FILE_EXTRACT_CONTEXT_TEMPLATE,
+    IMAGE_CAPTION_DEFAULT_PROMPT,
+    LIVE_MODE_SYSTEM_PROMPT,
+    LLM_SAFETY_MODE_SYSTEM_PROMPT,
+    TOOL_CALL_PROMPT,
+    TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
+    WEBCHAT_TITLE_GENERATOR_SYSTEM_PROMPT,
+    WEBCHAT_TITLE_GENERATOR_USER_PROMPT,
+)
+from astrbot.core.tools.send_message import SEND_MESSAGE_TO_USER_TOOL
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.quoted_message.settings import (
@@ -114,6 +112,9 @@ class MainAgentBuildConfig:
     computer_use_runtime: str = "local"
     """The runtime for agent computer use: none, local, or sandbox."""
     sandbox_cfg: dict = field(default_factory=dict)
+    tool_providers: list[ToolProvider] = field(default_factory=list)
+    """Decoupled tool providers injected by the caller.
+    Each provider is queried for tools and system-prompt addons at build time."""
     add_cron_tools: bool = True
     """This will add cron job management tools to the main agent for proactive cron job execution."""
     provider_settings: dict = field(default_factory=dict)
@@ -240,9 +241,9 @@ async def _apply_file_extract(
         req.contexts.append(
             {
                 "role": "system",
-                "content": (
-                    "File Extract Results of user uploaded files:\n"
-                    f"{file_content}\nFile Name: {file_name or 'Unknown'}"
+                "content": FILE_EXTRACT_CONTEXT_TEMPLATE.format(
+                    file_content=file_content,
+                    file_name=file_name or "Unknown",
                 ),
             },
         )
@@ -258,11 +259,8 @@ def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
         req.prompt = f"{prefix}{req.prompt}"
 
 
-def _apply_local_env_tools(req: ProviderRequest) -> None:
-    if req.func_tool is None:
-        req.func_tool = ToolSet()
-    req.func_tool.add_tool(LOCAL_EXECUTE_SHELL_TOOL)
-    req.func_tool.add_tool(LOCAL_PYTHON_TOOL)
+# Computer-use tools are now provided by ComputerToolProvider.
+# See astrbot.core.computer.computer_tool_provider for details.
 
 
 async def _ensure_persona_and_skills(
@@ -275,47 +273,30 @@ async def _ensure_persona_and_skills(
     if not req.conversation:
         return
 
-    # get persona ID
-
-    # 1. from session service config - highest priority
-    persona_id = (
-        await sp.get_async(
-            scope="umo",
-            scope_id=event.unified_msg_origin,
-            key="session_service_config",
-            default={},
-        )
-    ).get("persona_id")
-
-    if not persona_id:
-        # 2. from conversation setting - second priority
-        persona_id = req.conversation.persona_id
-
-        if persona_id == "[%None]":
-            # explicitly set to no persona
-            pass
-        elif persona_id is None:
-            # 3. from config default persona setting - last priority
-            persona_id = cfg.get("default_personality")
-
-    persona = next(
-        builtins.filter(
-            lambda persona: persona["name"] == persona_id,
-            plugin_context.persona_manager.personas_v3,
-        ),
-        None,
+    (
+        persona_id,
+        persona,
+        _,
+        use_webchat_special_default,
+    ) = await plugin_context.persona_manager.resolve_selected_persona(
+        umo=event.unified_msg_origin,
+        conversation_persona_id=req.conversation.persona_id,
+        platform_name=event.get_platform_name(),
+        provider_settings=cfg,
     )
+
+    set_persona_custom_error_message_on_event(
+        event, extract_persona_custom_error_message_from_persona(persona)
+    )
+
     if persona:
         # Inject persona system prompt
         if prompt := persona["prompt"]:
             req.system_prompt += f"\n# Persona Instructions\n\n{prompt}\n"
         if begin_dialogs := copy.deepcopy(persona.get("_begin_dialogs_processed")):
             req.contexts[:0] = begin_dialogs
-    else:
-        # special handling for webchat persona
-        if event.get_platform_name() == "webchat" and persona_id != "[%None]":
-            persona_id = "_chatui_default_"
-            req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
+    elif use_webchat_special_default:
+        req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
     # Inject skills prompt
     runtime = cfg.get("computer_use_runtime", "local")
@@ -332,11 +313,7 @@ async def _ensure_persona_and_skills(
         if skills:
             req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
             if runtime == "none":
-                req.system_prompt += (
-                    "User has not enabled the Computer Use feature. "
-                    "You cannot use shell or Python to perform skills. "
-                    "If you need to use these capabilities, ask the user to enable Computer Use in the AstrBot WebUI -> Config."
-                )
+                req.system_prompt += COMPUTER_USE_DISABLED_PROMPT
     tmgr = plugin_context.get_llm_tool_manager()
 
     # inject toolset in the persona
@@ -451,7 +428,7 @@ async def _request_img_caption(
 
     img_cap_prompt = cfg.get(
         "image_caption_prompt",
-        "Please describe the image.",
+        IMAGE_CAPTION_DEFAULT_PROMPT,
     )
     logger.debug("Processing image caption with provider: %s", provider_id)
     llm_resp = await prov.text_chat(
@@ -545,7 +522,7 @@ async def _process_quote_message(
 
             if prov and isinstance(prov, Provider):
                 llm_resp = await prov.text_chat(
-                    prompt="Please describe the image content.",
+                    prompt=IMAGE_CAPTION_DEFAULT_PROMPT,
                     image_urls=[await image_seg.convert_to_file_path()],
                 )
                 if llm_resp.completion_text:
@@ -747,6 +724,38 @@ def _sanitize_context_by_modalities(
     req.contexts = sanitized_contexts
 
 
+def _model_outputs_image(provider: Provider, req: ProviderRequest) -> bool:
+    model = req.model or provider.get_model()
+    if not model:
+        return False
+    model_info = LLM_METADATAS.get(model)
+    if not model_info:
+        return False
+    output_modalities = model_info.get("modalities", {}).get("output", [])
+    return "image" in output_modalities
+
+
+def _should_disable_streaming_for_webchat_output(
+    event: AstrMessageEvent,
+    provider: Provider,
+    req: ProviderRequest,
+) -> bool:
+    if event.get_platform_name() != "webchat":
+        return False
+
+    provider_cfg = provider.provider_config
+    provider_type = provider_cfg.get("type", "")
+    if provider_type == "googlegenai_chat_completion" and provider_cfg.get(
+        "gm_resp_image_modal", False
+    ):
+        return True
+
+    if _model_outputs_image(provider, req):
+        return not bool(provider_cfg.get("supports_streaming_output_modalities", False))
+
+    return False
+
+
 def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
     """根据事件中的插件设置，过滤请求中的工具列表。
 
@@ -762,9 +771,14 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
                 continue
             mp = tool.handler_module_path
             if not mp:
+                # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
+                # 不应受到会话插件过滤影响。
+                new_tool_set.add_tool(tool)
                 continue
             plugin = star_map.get(mp)
             if not plugin:
+                # 无法解析插件归属时，保守保留工具，避免误过滤。
+                new_tool_set.add_tool(tool)
                 continue
             if plugin.name in event.plugins_name or plugin.reserved:
                 new_tool_set.add_tool(tool)
@@ -783,17 +797,18 @@ async def _handle_webchat(
     if not user_prompt or not chatui_session_id or not session or session.display_name:
         return
 
-    llm_resp = await prov.text_chat(
-        system_prompt=(
-            "You are a conversation title generator. "
-            "Generate a concise title in the same language as the user’s input, "
-            "no more than 10 words, capturing only the core topic."
-            "If the input is a greeting, small talk, or has no clear topic, "
-            "(e.g., “hi”, “hello”, “haha”), return <None>. "
-            "Output only the title itself or <None>, with no explanations."
-        ),
-        prompt=f"Generate a concise title for the following user query:\n{user_prompt}",
-    )
+    try:
+        llm_resp = await prov.text_chat(
+            system_prompt=WEBCHAT_TITLE_GENERATOR_SYSTEM_PROMPT,
+            prompt=WEBCHAT_TITLE_GENERATOR_USER_PROMPT.format(user_prompt=user_prompt),
+        )
+    except Exception as e:
+        logger.exception(
+            "Failed to generate webchat title for session %s: %s",
+            chatui_session_id,
+            e,
+        )
+        return
     if llm_resp and llm_resp.completion_text:
         title = llm_resp.completion_text.strip()
         if not title or "<None>" in title:
@@ -809,9 +824,7 @@ async def _handle_webchat(
 
 def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -> None:
     if config.safety_mode_strategy == "system_prompt":
-        req.system_prompt = (
-            f"{LLM_SAFETY_MODE_SYSTEM_PROMPT}\n\n{req.system_prompt or ''}"
-        )
+        req.system_prompt = f"{LLM_SAFETY_MODE_SYSTEM_PROMPT}\n\n{req.system_prompt}"
     else:
         logger.warning(
             "Unsupported llm_safety_mode strategy: %s.",
@@ -819,32 +832,8 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
         )
 
 
-def _apply_sandbox_tools(
-    config: MainAgentBuildConfig, req: ProviderRequest, session_id: str
-) -> None:
-    if req.func_tool is None:
-        req.func_tool = ToolSet()
-    if config.sandbox_cfg.get("booter") == "shipyard":
-        ep = config.sandbox_cfg.get("shipyard_endpoint", "")
-        at = config.sandbox_cfg.get("shipyard_access_token", "")
-        if not ep or not at:
-            logger.error("Shipyard sandbox configuration is incomplete.")
-            return
-        os.environ["SHIPYARD_ENDPOINT"] = ep
-        os.environ["SHIPYARD_ACCESS_TOKEN"] = at
-    req.func_tool.add_tool(EXECUTE_SHELL_TOOL)
-    req.func_tool.add_tool(PYTHON_TOOL)
-    req.func_tool.add_tool(FILE_UPLOAD_TOOL)
-    req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
-    req.system_prompt += f"\n{SANDBOX_MODE_PROMPT}\n"
-
-
-def _proactive_cron_job_tools(req: ProviderRequest) -> None:
-    if req.func_tool is None:
-        req.func_tool = ToolSet()
-    req.func_tool.add_tool(CREATE_CRON_JOB_TOOL)
-    req.func_tool.add_tool(DELETE_CRON_JOB_TOOL)
-    req.func_tool.add_tool(LIST_CRON_JOBS_TOOL)
+# _apply_sandbox_tools has been moved to ComputerToolProvider.
+# See astrbot.core.computer.computer_tool_provider for details.
 
 
 def _get_compress_provider(
@@ -1071,19 +1060,37 @@ async def build_main_agent(
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
 
-    if config.computer_use_runtime == "sandbox":
-        _apply_sandbox_tools(config, req, req.session_id)
-    elif config.computer_use_runtime == "local":
-        _apply_local_env_tools(req)
+    # Decoupled tool providers — each provider injects its tools and prompt addons
+    if config.tool_providers:
+        _provider_ctx = ToolProviderContext(
+            computer_use_runtime=config.computer_use_runtime,
+            sandbox_cfg=config.sandbox_cfg,
+            session_id=req.session_id or "",
+        )
+        # Respect WebUI tool enable/disable settings.
+        # Internal tools (source='internal') bypass this check — they are
+        # not user-togglable in the WebUI, so legacy entries must not block them.
+        _inactivated: set[str] = set(
+            sp.get("inactivated_llm_tools", [], scope="global", scope_id="global")
+        )
+        for _tp in config.tool_providers:
+            _tp_tools = _tp.get_tools(_provider_ctx)
+            if _tp_tools:
+                if req.func_tool is None:
+                    req.func_tool = ToolSet()
+                for _tool in _tp_tools:
+                    is_internal = getattr(_tool, "source", "") == "internal"
+                    if is_internal or _tool.name not in _inactivated:
+                        req.func_tool.add_tool(_tool)
+            _tp_addon = _tp.get_system_prompt_addon(_provider_ctx)
+            if _tp_addon:
+                req.system_prompt = f"{req.system_prompt or ''}{_tp_addon}"
 
     agent_runner = AgentRunner()
     astr_agent_ctx = AstrAgentContext(
         context=plugin_context,
         event=event,
     )
-
-    if config.add_cron_tools:
-        _proactive_cron_job_tools(req)
 
     if event.platform_meta.support_proactive_message:
         if req.func_tool is None:
@@ -1101,6 +1108,10 @@ async def build_main_agent(
         asyncio.create_task(_handle_webchat(event, req, provider))
 
     if req.func_tool and req.func_tool.tools:
+        # Sort tools by name for deterministic serialization so that
+        # LLM provider prefix caching can match across requests.
+        req.func_tool.normalize()
+
         tool_prompt = (
             TOOL_CALL_PROMPT
             if config.tool_schema_mode == "full"
@@ -1112,6 +1123,17 @@ async def build_main_agent(
     if action_type == "live":
         req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
 
+    streaming_response = config.streaming_response
+    if streaming_response and _should_disable_streaming_for_webchat_output(
+        event, provider, req
+    ):
+        logger.info(
+            "Disable streaming for webchat direct media output. provider=%s model=%s",
+            provider.provider_config.get("id", "unknown"),
+            req.model or provider.get_model(),
+        )
+        streaming_response = False
+
     reset_coro = agent_runner.reset(
         provider=provider,
         request=req,
@@ -1121,7 +1143,7 @@ async def build_main_agent(
         ),
         tool_executor=FunctionToolExecutor(),
         agent_hooks=MAIN_AGENT_HOOKS,
-        streaming=config.streaming_response,
+        streaming=streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent=config.llm_compress_keep_recent,
         llm_compress_provider=_get_compress_provider(config, plugin_context),

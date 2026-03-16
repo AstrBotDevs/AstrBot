@@ -5,7 +5,8 @@ import os
 import ssl
 import traceback
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 
 import aiohttp
 import certifi
@@ -58,6 +59,7 @@ class PluginRoute(Route):
             "/plugin/update": ("POST", self.update_plugin),
             "/plugin/update-all": ("POST", self.update_all_plugins),
             "/plugin/uninstall": ("POST", self.uninstall_plugin),
+            "/plugin/uninstall-failed": ("POST", self.uninstall_failed_plugin),
             "/plugin/market_list": ("GET", self.get_online_plugins),
             "/plugin/off": ("POST", self.off_plugin),
             "/plugin/on": ("POST", self.on_plugin),
@@ -351,6 +353,34 @@ class PluginRoute(Route):
             logger.warning(f"获取插件 Logo 失败: {e}")
             return None
 
+    def _resolve_plugin_dir(self, plugin) -> Path | None:
+        if not plugin.root_dir_name:
+            return None
+
+        base_dir = Path(
+            self.plugin_manager.reserved_plugin_path
+            if plugin.reserved
+            else self.plugin_manager.plugin_store_path
+        )
+        plugin_dir = base_dir / plugin.root_dir_name
+        if not plugin_dir.is_dir():
+            return None
+        return plugin_dir
+
+    def _get_plugin_installed_at(self, plugin) -> str | None:
+        plugin_dir = self._resolve_plugin_dir(plugin)
+        if plugin_dir is None:
+            return None
+
+        try:
+            return datetime.fromtimestamp(
+                plugin_dir.stat().st_mtime,
+                timezone.utc,
+            ).isoformat()
+        except OSError as exc:
+            logger.warning(f"获取插件安装时间失败 {plugin.name}: {exc!s}")
+            return None
+
     async def get_plugins(self):
         _plugin_resp = []
         plugin_name = request.args.get("name")
@@ -376,6 +406,7 @@ class PluginRoute(Route):
                 "logo": f"/api/file/{logo_url}" if logo_url else None,
                 "support_platforms": plugin.support_platforms,
                 "astrbot_version": plugin.astrbot_version,
+                "installed_at": self._get_plugin_installed_at(plugin),
             }
             # 检查是否为全空的幽灵插件
             if not any(
@@ -560,6 +591,34 @@ class PluginRoute(Route):
                 delete_data=delete_data,
             )
             logger.info(f"卸载插件 {plugin_name} 成功")
+            return Response().ok(None, "卸载成功").__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
+
+    async def uninstall_failed_plugin(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+
+        post_data = await request.get_json()
+        dir_name = post_data.get("dir_name", "")
+        delete_config = post_data.get("delete_config", False)
+        delete_data = post_data.get("delete_data", False)
+        if not dir_name:
+            return Response().error("缺少失败插件目录名").__dict__
+
+        try:
+            logger.info(f"正在卸载失败插件 {dir_name}")
+            await self.plugin_manager.uninstall_failed_plugin(
+                dir_name,
+                delete_config=delete_config,
+                delete_data=delete_data,
+            )
+            logger.info(f"卸载失败插件 {dir_name} 成功")
             return Response().ok(None, "卸载成功").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())

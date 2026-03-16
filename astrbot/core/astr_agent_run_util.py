@@ -14,6 +14,9 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
+from astrbot.core.persona_error_reply import (
+    extract_persona_custom_error_message_from_event,
+)
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.provider import TTSProvider
 
@@ -82,6 +85,21 @@ def _build_tool_result_status_message(
     if tool_result:
         status_msg = f"{status_msg}\n📎 返回结果: {tool_result}"
     return status_msg
+
+
+def _extract_final_streaming_chain(msg_chain: MessageChain) -> MessageChain | None:
+    if not msg_chain.chain:
+        return None
+
+    final_chain: list[BaseMessageComponent] = []
+    for comp in msg_chain.chain:
+        if isinstance(comp, Plain):
+            continue
+        final_chain.append(comp)
+
+    if not final_chain:
+        return None
+    return MessageChain(chain=final_chain, type=msg_chain.type)
 
 
 async def run_agent(
@@ -208,6 +226,11 @@ async def run_agent(
                         # display the reasoning content only when configured
                         continue
                     yield resp.data["chain"]  # MessageChain
+                elif resp.type == "llm_result":
+                    if final_chain := _extract_final_streaming_chain(
+                        resp.data["chain"]
+                    ):
+                        yield final_chain
             if not stop_watcher.done():
                 stop_watcher.cancel()
                 try:
@@ -235,7 +258,17 @@ async def run_agent(
                     pass
             logger.error(traceback.format_exc())
 
-            err_msg = f"\n\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {e!s}\n\n请在平台日志查看和分享错误详情。\n"
+            custom_error_message = extract_persona_custom_error_message_from_event(
+                astr_event
+            )
+            if custom_error_message:
+                err_msg = custom_error_message
+            else:
+                err_msg = (
+                    f"Error occurred during AI execution.\n"
+                    f"Error Type: {type(e).__name__}\n"
+                    f"Error Message: {str(e)}"
+                )
 
             error_llm_response = LLMResponse(
                 role="err",

@@ -1,7 +1,7 @@
 import builtins
 from typing import TYPE_CHECKING
 
-from astrbot.api import sp, star
+from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
 if TYPE_CHECKING:
@@ -59,12 +59,7 @@ class PersonaCommands:
         default_persona = await self.context.persona_manager.get_default_persona_v3(
             umo=umo,
         )
-
-        force_applied_persona_id = (
-            await sp.get_async(
-                scope="umo", scope_id=umo, key="session_service_config", default={}
-            )
-        ).get("persona_id")
+        force_applied_persona_id = None
 
         curr_cid_title = "无"
         if cid:
@@ -80,10 +75,27 @@ class PersonaCommands:
                     ),
                 )
                 return
-            if not conv.persona_id and conv.persona_id != "[%None]":
-                curr_persona_name = default_persona["name"]
-            else:
-                curr_persona_name = conv.persona_id
+
+            provider_settings = self.context.get_config(umo=umo).get(
+                "provider_settings",
+                {},
+            )
+            (
+                persona_id,
+                _,
+                force_applied_persona_id,
+                _,
+            ) = await self.context.persona_manager.resolve_selected_persona(
+                umo=umo,
+                conversation_persona_id=conv.persona_id,
+                platform_name=message.get_platform_name(),
+                provider_settings=provider_settings,
+            )
+
+            if persona_id == "[%None]":
+                curr_persona_name = "无"
+            elif persona_id:
+                curr_persona_name = persona_id
 
             if force_applied_persona_id:
                 curr_persona_name = f"{curr_persona_name} (自定义规则)"

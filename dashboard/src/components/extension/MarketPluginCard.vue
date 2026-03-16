@@ -34,6 +34,7 @@ const platformDisplayList = computed(() =>
 const handleInstall = (plugin) => {
   emit("install", plugin);
 };
+
 </script>
 
 <template>
@@ -123,6 +124,7 @@ const handleInstall = (plugin) => {
             v-if="plugin?.social_link"
             :href="plugin.social_link"
             target="_blank"
+            @click.stop
             class="text-subtitle-2 font-weight-medium"
             style="
               text-decoration: none;
@@ -213,7 +215,10 @@ const handleInstall = (plugin) => {
       </div>
     </v-card-text>
 
-    <v-card-actions style="gap: 6px; padding: 8px 12px; padding-top: 0">
+    <v-card-actions
+      style="gap: 6px; padding: 8px 12px; padding-top: 0"
+      @click.stop
+    >
       <v-chip
         v-for="tag in plugin.tags?.slice(0, 2)"
         :key="tag"
@@ -248,22 +253,24 @@ const handleInstall = (plugin) => {
       <v-btn
         v-if="plugin?.repo"
         color="secondary"
-        size="x-small"
+        size="small"
         variant="tonal"
+        class="market-action-btn"
         :href="plugin.repo"
         target="_blank"
-        style="height: 24px"
+        style="height: 32px"
       >
-        <v-icon icon="mdi-github" start size="x-small"></v-icon>
+        <v-icon icon="mdi-github" start size="small"></v-icon>
         {{ tm("buttons.viewRepo") }}
       </v-btn>
       <v-btn
         v-if="!plugin?.installed"
         color="primary"
-        size="x-small"
+        size="small"
         @click="handleInstall(plugin)"
         variant="flat"
-        style="height: 24px"
+        class="market-action-btn"
+        style="height: 32px"
       >
         {{ tm("buttons.install") }}
       </v-btn>
@@ -305,5 +312,10 @@ const handleInstall = (plugin) => {
 
 .plugin-description::-webkit-scrollbar-thumb:hover {
   background-color: rgba(var(--v-theme-primary-rgb), 0.6);
+}
+
+.market-action-btn {
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 </style>

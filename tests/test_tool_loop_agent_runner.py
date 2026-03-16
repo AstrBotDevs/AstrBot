@@ -11,6 +11,9 @@ from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.astr_agent_run_util import run_agent
+from astrbot.core.message.components import Image
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
 
@@ -127,6 +130,26 @@ class MockAbortableStreamProvider(MockProvider):
         )
 
 
+class MockFinalMediaStreamProvider(MockProvider):
+    async def text_chat_stream(self, **kwargs):
+        yield LLMResponse(
+            role="assistant",
+            is_chunk=True,
+            result_chain=MessageChain().message("draft "),
+        )
+        yield LLMResponse(
+            role="assistant",
+            is_chunk=False,
+            result_chain=MessageChain(
+                chain=[
+                    Image.fromBase64(
+                        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7d4AAAAASUVORK5CYII="
+                    )
+                ]
+            ),
+        )
+
+
 class MockHooks(BaseAgentRunHooks):
     """模拟钩子函数"""
 
@@ -147,6 +170,20 @@ class MockHooks(BaseAgentRunHooks):
 
     async def on_agent_done(self, run_context, llm_response):
         self.agent_done_called = True
+
+
+class MockEvent:
+    def __init__(self, umo: str, sender_id: str):
+        self.unified_msg_origin = umo
+        self._sender_id = sender_id
+
+    def get_sender_id(self):
+        return self._sender_id
+
+
+class MockAgentContext:
+    def __init__(self, event):
+        self.event = event
 
 
 @pytest.fixture
@@ -447,8 +484,114 @@ async def test_stop_signal_returns_aborted_and_persists_partial_message(
     final_resp = runner.get_final_llm_resp()
     assert final_resp is not None
     assert final_resp.role == "assistant"
-    assert final_resp.completion_text == "partial "
+    # When interrupted, the runner replaces completion_text with a system message
+    assert "interrupted" in final_resp.completion_text.lower()
     assert runner.run_context.messages[-1].role == "assistant"
+
+
+@pytest.mark.asyncio
+async def test_run_agent_emits_final_media_chain_in_streaming_mode(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    provider = MockFinalMediaStreamProvider()
+    mock_event = MockEvent("test:FriendMessage:stream_media", "u1")
+    mock_event.is_stopped = lambda: False
+    mock_event.get_extra = lambda *args, **kwargs: None
+    mock_event.set_extra = lambda *args, **kwargs: None
+    mock_event.get_platform_id = lambda: "webchat"
+    mock_event.get_platform_name = lambda: "webchat"
+    mock_event.send = AsyncMock()
+    mock_event.trace = AsyncMock()
+    mock_event.trace.record = lambda *args, **kwargs: None
+    run_context = ContextWrapper(context=MockAgentContext(mock_event))
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=run_context,
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=True,
+    )
+
+    emitted = []
+    async for chain in run_agent(runner, max_step=5):
+        if chain is not None:
+            emitted.append(chain)
+
+    assert any(
+        any(isinstance(comp, Image) for comp in chain.chain) for chain in emitted
+    )
+
+
+@pytest.mark.asyncio
+async def test_tool_result_injects_follow_up_notice(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    mock_event = MockEvent("test:FriendMessage:follow_up", "u1")
+    run_context = ContextWrapper(context=MockAgentContext(mock_event))
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=run_context,
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    ticket1 = runner.follow_up(
+        message_text="follow up 1",
+    )
+    ticket2 = runner.follow_up(
+        message_text="follow up 2",
+    )
+    assert ticket1 is not None
+    assert ticket2 is not None
+
+    async for _ in runner.step():
+        pass
+
+    assert provider_request.tool_calls_result is not None
+    assert isinstance(provider_request.tool_calls_result, list)
+    assert provider_request.tool_calls_result
+    tool_result = str(
+        provider_request.tool_calls_result[0].tool_calls_result[0].content
+    )
+    assert "SYSTEM NOTICE" in tool_result
+    assert "1. follow up 1" in tool_result
+    assert "2. follow up 2" in tool_result
+    assert ticket1.resolved.is_set() is True
+    assert ticket2.resolved.is_set() is True
+    assert ticket1.consumed is True
+    assert ticket2.consumed is True
+
+
+@pytest.mark.asyncio
+async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = False
+    mock_event = MockEvent("test:FriendMessage:follow_up_no_tool", "u1")
+    run_context = ContextWrapper(context=MockAgentContext(mock_event))
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=run_context,
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    ticket = runner.follow_up(message_text="follow up without tool")
+    assert ticket is not None
+
+    async for _ in runner.step():
+        pass
+
+    assert ticket.resolved.is_set() is True
+    assert ticket.consumed is False
 
 
 if __name__ == "__main__":

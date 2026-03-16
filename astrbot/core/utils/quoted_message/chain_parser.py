@@ -19,7 +19,7 @@ from astrbot.core.message.components import (
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
-from .image_refs import looks_like_image_file_name, normalize_file_like_url
+from .image_refs import looks_like_image_file_name
 from .settings import SETTINGS, QuotedMessageParserSettings
 
 _FORWARD_PLACEHOLDER_PATTERN = re.compile(
@@ -296,11 +296,11 @@ def _parse_onebot_segments(
                 or "file"
             )
             text_parts.append(f"[File:{file_name}]")
-            candidate_url = seg_data.get("url")
+            candidate_url = seg_data.get("url", "")
             if (
                 isinstance(candidate_url, str)
                 and candidate_url.strip()
-                and looks_like_image_file_name(normalize_file_like_url(candidate_url))
+                and looks_like_image_file_name(candidate_url)
             ):
                 image_refs.append(candidate_url.strip())
             candidate_file = seg_data.get("file")
@@ -308,11 +308,7 @@ def _parse_onebot_segments(
                 isinstance(candidate_file, str)
                 and candidate_file.strip()
                 and looks_like_image_file_name(
-                    normalize_file_like_url(
-                        seg_data.get("name")
-                        or seg_data.get("file_name")
-                        or candidate_file
-                    )
+                    seg_data.get("name") or seg_data.get("file_name") or candidate_file
                 )
             ):
                 image_refs.append(candidate_file.strip())
@@ -368,7 +364,9 @@ def _extract_text_forward_ids_and_images_from_forward_nodes(
         if not isinstance(node, dict):
             continue
 
-        sender = node.get("sender") if isinstance(node.get("sender"), dict) else {}
+        sender = node.get("sender")
+        if not isinstance(sender, dict):
+            sender = {}
         sender_name = (
             sender.get("nickname")
             or sender.get("card")

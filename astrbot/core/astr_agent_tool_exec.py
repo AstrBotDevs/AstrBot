@@ -4,6 +4,8 @@ import json
 import traceback
 import typing as T
 import uuid
+from collections.abc import Sequence
+from collections.abc import Set as AbstractSet
 
 import mcp
 
@@ -15,17 +17,8 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.astr_main_agent_resources import (
-    BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
-    EXECUTE_SHELL_TOOL,
-    FILE_DOWNLOAD_TOOL,
-    FILE_UPLOAD_TOOL,
-    LOCAL_EXECUTE_SHELL_TOOL,
-    LOCAL_PYTHON_TOOL,
-    PYTHON_TOOL,
-    SEND_MESSAGE_TO_USER_TOOL,
-)
 from astrbot.core.cron.events import CronMessageEvent
+from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
     CommandResult,
     MessageChain,
@@ -34,10 +27,92 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.tools.prompts import (
+    BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
+    BACKGROUND_TASK_WOKE_USER_PROMPT,
+    CONVERSATION_HISTORY_INJECT_PREFIX,
+)
+from astrbot.core.tools.send_message import SEND_MESSAGE_TO_USER_TOOL
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.history_saver import persist_agent_history
+from astrbot.core.utils.image_ref_utils import is_supported_image_ref
+from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
+    @classmethod
+    def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
+        if image_urls_raw is None:
+            return []
+
+        if isinstance(image_urls_raw, str):
+            return [image_urls_raw]
+
+        if isinstance(image_urls_raw, (Sequence, AbstractSet)) and not isinstance(
+            image_urls_raw, (str, bytes, bytearray)
+        ):
+            return [item for item in image_urls_raw if isinstance(item, str)]
+
+        logger.debug(
+            "Unsupported image_urls type in handoff tool args: %s",
+            type(image_urls_raw).__name__,
+        )
+        return []
+
+    @classmethod
+    async def _collect_image_urls_from_message(
+        cls, run_context: ContextWrapper[AstrAgentContext]
+    ) -> list[str]:
+        urls: list[str] = []
+        event = getattr(run_context.context, "event", None)
+        message_obj = getattr(event, "message_obj", None)
+        message = getattr(message_obj, "message", None)
+        if message:
+            for idx, component in enumerate(message):
+                if not isinstance(component, Image):
+                    continue
+                try:
+                    path = await component.convert_to_file_path()
+                    if path:
+                        urls.append(path)
+                except Exception as e:
+                    logger.error(
+                        "Failed to convert handoff image component at index %d: %s",
+                        idx,
+                        e,
+                        exc_info=True,
+                    )
+        return urls
+
+    @classmethod
+    async def _collect_handoff_image_urls(
+        cls,
+        run_context: ContextWrapper[AstrAgentContext],
+        image_urls_raw: T.Any,
+    ) -> list[str]:
+        candidates: list[str] = []
+        candidates.extend(cls._collect_image_urls_from_args(image_urls_raw))
+        candidates.extend(await cls._collect_image_urls_from_message(run_context))
+
+        normalized = normalize_and_dedupe_strings(candidates)
+        extensionless_local_roots = (get_astrbot_temp_path(),)
+        sanitized = [
+            item
+            for item in normalized
+            if is_supported_image_ref(
+                item,
+                allow_extensionless_existing_local_file=True,
+                extensionless_local_roots=extensionless_local_roots,
+            )
+        ]
+        dropped_count = len(normalized) - len(sanitized)
+        if dropped_count > 0:
+            logger.debug(
+                "Dropped %d invalid image_urls entries in handoff image inputs.",
+                dropped_count,
+            )
+        return sanitized
+
     @classmethod
     async def execute(cls, tool, run_context, **tool_args):
         """执行函数调用。
@@ -93,25 +168,90 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
             return
         else:
+            # Guard: reject sandbox tools whose capability is unavailable.
+            # Tools are always injected (for schema stability / prefix caching),
+            # but execution is blocked when the sandbox lacks the capability.
+            rejection = cls._check_sandbox_capability(tool, run_context)
+            if rejection is not None:
+                yield rejection
+                return
+
             async for r in cls._execute_local(tool, run_context, **tool_args):
                 yield r
             return
 
+    # Browser tool names that require the "browser" sandbox capability.
+    _BROWSER_TOOL_NAMES: frozenset[str] = frozenset(
+        {
+            "astrbot_execute_browser",
+            "astrbot_execute_browser_batch",
+            "astrbot_run_browser_skill",
+        }
+    )
+
     @classmethod
-    def _get_runtime_computer_tools(cls, runtime: str) -> dict[str, FunctionTool]:
-        if runtime == "sandbox":
-            return {
-                EXECUTE_SHELL_TOOL.name: EXECUTE_SHELL_TOOL,
-                PYTHON_TOOL.name: PYTHON_TOOL,
-                FILE_UPLOAD_TOOL.name: FILE_UPLOAD_TOOL,
-                FILE_DOWNLOAD_TOOL.name: FILE_DOWNLOAD_TOOL,
-            }
-        if runtime == "local":
-            return {
-                LOCAL_EXECUTE_SHELL_TOOL.name: LOCAL_EXECUTE_SHELL_TOOL,
-                LOCAL_PYTHON_TOOL.name: LOCAL_PYTHON_TOOL,
-            }
-        return {}
+    def _check_sandbox_capability(
+        cls,
+        tool: FunctionTool,
+        run_context: ContextWrapper[AstrAgentContext],
+    ) -> mcp.types.CallToolResult | None:
+        """Return a rejection result if the tool requires a sandbox capability
+        that is not available, or None if the tool may proceed."""
+        if tool.name not in cls._BROWSER_TOOL_NAMES:
+            return None
+
+        from astrbot.core.computer.computer_client import get_sandbox_capabilities
+
+        session_id = run_context.context.event.unified_msg_origin
+        caps = get_sandbox_capabilities(session_id)
+
+        # Sandbox not yet booted — allow through (boot will happen on first
+        # shell/python call; browser tools will fail naturally if truly unavailable).
+        if caps is None:
+            return None
+
+        if "browser" not in caps:
+            msg = (
+                f"Tool '{tool.name}' requires browser capability, but the current "
+                f"sandbox profile does not include it (capabilities: {list(caps)}). "
+                "Please ask the administrator to switch to a sandbox profile with "
+                "browser support, or use shell/python tools instead."
+            )
+            logger.warning(
+                "[ToolExec] capability_rejected tool=%s caps=%s", tool.name, list(caps)
+            )
+            return mcp.types.CallToolResult(
+                content=[mcp.types.TextContent(type="text", text=msg)],
+                isError=True,
+            )
+
+        return None
+
+    @classmethod
+    def _get_runtime_computer_tools(
+        cls,
+        runtime: str,
+        sandbox_cfg: dict | None = None,
+        session_id: str = "",
+    ) -> dict[str, FunctionTool]:
+        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
+        from astrbot.core.tool_provider import ToolProviderContext
+
+        provider = ComputerToolProvider()
+        ctx = ToolProviderContext(
+            computer_use_runtime=runtime,
+            sandbox_cfg=sandbox_cfg,
+            session_id=session_id,
+        )
+        tools = provider.get_tools(ctx)
+        result = {tool.name: tool for tool in tools}
+        logger.info(
+            "[Computer] sandbox_tool_binding target=subagent runtime=%s tools=%d session=%s",
+            runtime,
+            len(result),
+            session_id,
+        )
+        return result
 
     @classmethod
     def _build_handoff_toolset(
@@ -124,7 +264,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
-        runtime_computer_tools = cls._get_runtime_computer_tools(runtime)
+        sandbox_cfg = provider_settings.get("sandbox", {})
+        runtime_computer_tools = cls._get_runtime_computer_tools(
+            runtime,
+            sandbox_cfg=sandbox_cfg,
+            session_id=event.unified_msg_origin,
+        )
 
         # Keep persona semantics aligned with the main agent: tools=None means
         # "all tools", including runtime computer-use tools.
@@ -161,10 +306,28 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cls,
         tool: HandoffTool,
         run_context: ContextWrapper[AstrAgentContext],
-        **tool_args,
+        *,
+        image_urls_prepared: bool = False,
+        **tool_args: T.Any,
     ):
+        tool_args = dict(tool_args)
         input_ = tool_args.get("input")
-        image_urls = tool_args.get("image_urls")
+        if image_urls_prepared:
+            prepared_image_urls = tool_args.get("image_urls")
+            if isinstance(prepared_image_urls, list):
+                image_urls = prepared_image_urls
+            else:
+                logger.debug(
+                    "Expected prepared handoff image_urls as list[str], got %s.",
+                    type(prepared_image_urls).__name__,
+                )
+                image_urls = []
+        else:
+            image_urls = await cls._collect_handoff_image_urls(
+                run_context,
+                tool_args.get("image_urls"),
+            )
+        tool_args["image_urls"] = image_urls
 
         # Build handoff toolset from registered tools plus runtime computer tools.
         toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
@@ -194,6 +357,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 except Exception:
                     continue
 
+        prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
+        agent_max_step = int(prov_settings.get("max_agent_step", 30))
+        stream = prov_settings.get("streaming_response", False)
         llm_resp = await ctx.tool_loop_agent(
             event=event,
             chat_provider_id=prov_id,
@@ -202,9 +368,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             system_prompt=tool.agent.instructions,
             tools=toolset,
             contexts=contexts,
-            max_steps=30,
-            run_hooks=tool.agent.run_hooks,
-            stream=ctx.get_config().get("provider_settings", {}).get("stream", False),
+            max_steps=agent_max_step,
+            stream=stream,
         )
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
@@ -247,7 +412,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             type="text",
             text=(
                 f"Background task dedicated to subagent '{tool.agent.name}' submitted. task_id={task_id}. "
-                f"The subagent '{tool.agent.name}' is working on the task on hehalf you. "
+                f"The subagent '{tool.agent.name}' is working on the task on behalf of you. "
                 f"You will be notified when it finishes."
             ),
         )
@@ -263,8 +428,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ) -> None:
         """Run the subagent handoff and, on completion, wake the main agent."""
         result_text = ""
+        tool_args = dict(tool_args)
+        tool_args["image_urls"] = await cls._collect_handoff_image_urls(
+            run_context,
+            tool_args.get("image_urls"),
+        )
         try:
-            async for r in cls._execute_handoff(tool, run_context, **tool_args):
+            async for r in cls._execute_handoff(
+                tool,
+                run_context,
+                image_urls_prepared=True,
+                **tool_args,
+            ):
                 if isinstance(r, mcp.types.CallToolResult):
                     for content in r.content:
                         if isinstance(content, mcp.types.TextContent):
@@ -371,11 +546,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             message_type=session.message_type,
         )
         cron_event.role = event.role
+        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
+
         config = MainAgentBuildConfig(
             tool_call_timeout=3600,
             streaming_response=ctx.get_config()
             .get("provider_settings", {})
             .get("stream", False),
+            tool_providers=[ComputerToolProvider()],
         )
 
         req = ProviderRequest()
@@ -386,23 +564,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             req.contexts = context
             context_dump = req._print_friendly_context()
             req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"{context_dump}"
-            )
+            req.system_prompt += CONVERSATION_HISTORY_INJECT_PREFIX + context_dump
 
         bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
         req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
             background_task_result=bg
         )
-        req.prompt = (
-            "Proceed according to your system instructions. "
-            "Output using same language as previous conversation. "
-            "If you need to deliver the result to the user immediately, "
-            "you MUST use `send_message_to_user` tool to send the message directly to the user, "
-            "otherwise the user will not see the result. "
-            "After completing your task, summarize and output your actions and results. "
-        )
+        req.prompt = BACKGROUND_TASK_WOKE_USER_PROMPT
         if not req.func_tool:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
