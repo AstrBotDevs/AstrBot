@@ -82,7 +82,11 @@ class ExecuteShellTool(FunctionTool):
                     errors="replace",  # Handle encoding errors gracefully
                 )
                 stdout, stderr = proc.communicate()
-                return {"stdout": stdout, "stderr": stderr, "exit_code": proc.returncode}
+                return {
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "exit_code": proc.returncode,
+                }
 
             # Run in thread pool to avoid blocking event loop
             result = await loop.run_in_executor(None, run_subprocess)
@@ -90,5 +94,9 @@ class ExecuteShellTool(FunctionTool):
 
         except Exception as e:
             return json.dumps(
-                {"stdout": None, "stderr": f"Error executing command: {str(e)}", "exit_code": -1}
+                {
+                    "stdout": None,
+                    "stderr": f"Error executing command: {str(e)}",
+                    "exit_code": -1,
+                }
             )
