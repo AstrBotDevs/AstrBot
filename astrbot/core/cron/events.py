@@ -63,5 +63,9 @@ class CronMessageEvent(AstrMessageEvent):
         async for chain in generator:
             await self.send(chain)
 
+    def can_be_mentioned(self) -> bool:
+        """Cron events have a synthetic sender and cannot be @-mentioned."""
+        return False
+
 
 __all__ = ["CronMessageEvent"]

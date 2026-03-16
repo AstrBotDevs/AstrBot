@@ -467,3 +467,12 @@ class AstrMessageEvent(abc.ABC):
 
         - aiocqhttp(OneBotv11)
         """
+
+    def can_be_mentioned(self) -> bool:
+        """Whether the sender of this event can be @-mentioned in a reply.
+
+        Returns:
+            True if the sender can be mentioned (default), False otherwise.
+            Override in subclasses for events with synthetic senders.
+        """
+        return True
