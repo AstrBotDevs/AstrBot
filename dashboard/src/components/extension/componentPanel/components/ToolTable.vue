@@ -26,6 +26,10 @@ const toolHeaders = computed(() => [
 
 const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.properties || {});
 const getRawTool = (item: any): ToolItem => (item?.raw ?? item) as ToolItem;
+const isInternal = (item: ToolItem | any) => {
+  const tool = getRawTool(item);
+  return tool.source === 'internal' || tool.is_system === true;
+};
 </script>
 
 <template>
@@ -40,31 +44,31 @@ const getRawTool = (item: any): ToolItem => (item?.raw ?? item) as ToolItem;
       :loading="props.loading"
     >
       <template #item.name="{ item }">
-        <div class="d-flex align-center py-2">
-          <v-icon color="primary" class="mr-2" size="18">
-            {{ item.name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant' }}
+        <div class="d-flex align-center py-2" :class="{ 'internal-tool-row': isInternal(item) }">
+          <v-icon :color="isInternal(item) ? 'grey' : 'primary'" class="mr-2" size="18">
+            {{ isInternal(item) ? 'mdi-lock-outline' : (getRawTool(item).name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant') }}
           </v-icon>
           <div>
-            <div class="text-subtitle-1 font-weight-medium">{{ item.name }}</div>
+            <div class="text-subtitle-1 font-weight-medium">{{ getRawTool(item).name }}</div>
           </div>
         </div>
       </template>
 
       <template #item.description="{ item }">
         <div class="text-body-2 text-medium-emphasis" style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-          {{ item.description || '-' }}
+          {{ getRawTool(item).description || '-' }}
         </div>
       </template>
 
       <template #item.origin="{ item }">
         <v-chip size="small" variant="tonal" color="info" class="text-caption font-weight-medium">
-          {{ item.origin || '-' }}
+          {{ getRawTool(item).origin || '-' }}
         </v-chip>
       </template>
 
       <template #item.origin_name="{ item }">
         <div class="text-body-2 text-medium-emphasis" style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-          {{ item.origin_name || '-' }}
+          {{ getRawTool(item).origin_name || '-' }}
         </div>
       </template>
 
@@ -157,5 +161,9 @@ const getRawTool = (item: any): ToolItem => (item?.raw ?? item) as ToolItem;
 
 .tool-table :deep(.v-data-table__td) {
   vertical-align: middle;
+}
+
+.internal-tool-row {
+  opacity: 0.65;
 }
 </style>

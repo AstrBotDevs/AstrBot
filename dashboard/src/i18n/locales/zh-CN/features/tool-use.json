@@ -39,6 +39,10 @@
     "description": "功能描述",
     "parameters": "参数列表",
     "noParameters": "此工具没有参数",
+    "summary": {
+      "enabledConfigurable": "已启用(可配置)",
+      "systemTools": "系统工具"
+    },
     "status": {
       "notConfigurable": "不可配置"
     },

@@ -39,6 +39,10 @@
     "description": "Function Description",
     "parameters": "Parameter List",
     "noParameters": "This tool has no parameters",
+    "summary": {
+      "enabledConfigurable": "Enabled (Configurable)",
+      "systemTools": "System Tools"
+    },
     "status": {
       "notConfigurable": "Not configurable"
     },

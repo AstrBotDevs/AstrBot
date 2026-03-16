@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import os
@@ -5,6 +6,14 @@ import uuid
 from io import BytesIO
 
 import lark_oapi as lark
+from lark_oapi.api.cardkit.v1 import (
+    ContentCardElementRequest,
+    ContentCardElementRequestBody,
+    CreateCardRequest,
+    CreateCardRequestBody,
+    SettingsCardRequest,
+    SettingsCardRequestBody,
+)
 from lark_oapi.api.im.v1 import (
     CreateFileRequest,
     CreateFileRequestBody,
@@ -28,6 +37,7 @@ from astrbot.core.utils.media_utils import (
     convert_video_format,
     get_media_duration,
 )
+from astrbot.core.utils.metrics import Metric
 
 
 class LarkMessageEvent(AstrMessageEvent):
@@ -555,15 +565,257 @@ class LarkMessageEvent(AstrMessageEvent):
             logger.error(f"发送飞书表情回应失败({response.code}): {response.msg}")
             return
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def _create_streaming_card(self) -> str | None:
+        """创建一个开启流式更新模式的卡片实体，返回 card_id。"""
+        if self.bot.cardkit is None:
+            logger.error("[Lark] API Client cardkit 模块未初始化")
+            return None
+
+        card_json = {
+            "schema": "2.0",
+            "header": {
+                "title": {"content": "", "tag": "plain_text"},
+            },
+            "config": {
+                "streaming_mode": True,
+                "summary": {"content": ""},
+                "streaming_config": {
+                    "print_frequency_ms": {"default": 50},
+                    "print_step": {"default": 2},
+                    "print_strategy": "fast",
+                },
+            },
+            "body": {
+                "elements": [
+                    {
+                        "tag": "markdown",
+                        "content": "",
+                        "element_id": "markdown_1",
+                    }
+                ]
+            },
+        }
+
+        request = (
+            CreateCardRequest.builder()
+            .request_body(
+                CreateCardRequestBody.builder()
+                .type("card_json")
+                .data(json.dumps(card_json, ensure_ascii=False))
+                .build()
+            )
+            .build()
+        )
+
+        try:
+            response = await self.bot.cardkit.v1.card.acreate(request)
+        except Exception as e:
+            logger.error(f"[Lark] 创建流式卡片实体失败: {e}")
+            return None
+
+        if not response.success():
+            logger.error(
+                f"[Lark] 创建流式卡片实体失败({response.code}): {response.msg}"
+            )
+            return None
+
+        if response.data is None or not response.data.card_id:
+            logger.error("[Lark] 创建流式卡片实体成功但未返回 card_id")
+            return None
+
+        card_id = response.data.card_id
+        logger.debug(f"[Lark] 创建流式卡片实体成功: {card_id}")
+        return card_id
+
+    async def _send_card_message(
+        self,
+        card_id: str,
+        reply_message_id: str | None = None,
+        receive_id: str | None = None,
+        receive_id_type: str | None = None,
+    ) -> bool:
+        """将卡片实体作为 interactive 消息发送。"""
+        content = json.dumps(
+            {"type": "card", "data": {"card_id": card_id}},
+            ensure_ascii=False,
+        )
+        return await self._send_im_message(
+            self.bot,
+            content=content,
+            msg_type="interactive",
+            reply_message_id=reply_message_id,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+        )
+
+    async def _update_streaming_text(
+        self,
+        card_id: str,
+        content: str,
+        sequence: int,
+    ) -> bool:
+        """调用 CardKit 流式更新文本接口，向 markdown_1 组件推送全量文本。"""
+        if self.bot.cardkit is None:
+            logger.error("[Lark] API Client cardkit 模块未初始化")
+            return False
+
+        request = (
+            ContentCardElementRequest.builder()
+            .card_id(card_id)
+            .element_id("markdown_1")
+            .request_body(
+                ContentCardElementRequestBody.builder()
+                .content(content)
+                .sequence(sequence)
+                .uuid(str(uuid.uuid4()))
+                .build()
+            )
+            .build()
+        )
+
+        try:
+            response = await self.bot.cardkit.v1.card_element.acontent(request)
+        except Exception as e:
+            logger.debug(f"[Lark] 流式更新文本失败 (ignored): {e}")
+            return False
+
+        if not response.success():
+            logger.debug(f"[Lark] 流式更新文本失败({response.code}): {response.msg}")
+            return False
+
+        return True
+
+    async def _close_streaming_mode(
+        self,
+        card_id: str,
+        sequence: int,
+    ) -> None:
+        """关闭卡片的流式更新模式，使其可正常转发、摘要恢复。"""
+        if self.bot.cardkit is None:
+            logger.error("[Lark] API Client cardkit 模块未初始化")
+            return
+
+        settings_json = json.dumps(
+            {"config": {"streaming_mode": False}},
+            ensure_ascii=False,
+        )
+
+        request = (
+            SettingsCardRequest.builder()
+            .card_id(card_id)
+            .request_body(
+                SettingsCardRequestBody.builder()
+                .settings(settings_json)
+                .sequence(sequence)
+                .uuid(str(uuid.uuid4()))
+                .build()
+            )
+            .build()
+        )
+
+        try:
+            response = await self.bot.cardkit.v1.card.asettings(request)
+        except Exception as e:
+            logger.error(f"[Lark] 关闭流式模式失败: {e}")
+            return
+
+        if not response.success():
+            logger.error(f"[Lark] 关闭流式模式失败({response.code}): {response.msg}")
+        else:
+            logger.debug(f"[Lark] 流式模式已关闭: {card_id}")
+
+    async def _fallback_send_streaming(self, generator, use_fallback: bool = False):
+        """回退到非流式发送：缓冲全部文本后一次性发送，并保留父类副作用。"""
         buffer = None
         async for chain in generator:
             if not buffer:
                 buffer = chain
             else:
                 buffer.chain.extend(chain.chain)
-        if not buffer:
-            return None
-        buffer.squash_plain()
-        await self.send(buffer)
-        return await super().send_streaming(generator, use_fallback)
+
+        if buffer:
+            buffer.squash_plain()
+            await self.send(buffer)
+
+        await Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+        self._has_send_oper = True
+
+    async def send_streaming(self, generator, use_fallback: bool = False):
+        """使用 CardKit 流式卡片实现打字机效果。
+
+        流程：创建卡片实体 → 发送消息 → 流式更新文本 → 关闭流式模式。
+        使用解耦发送循环，LLM token 到达时只更新 buffer 并唤醒发送协程，
+        发送频率由网络 RTT 自然限流。
+        """
+        # Step 1: 创建流式卡片实体
+        card_id = await self._create_streaming_card()
+        if not card_id:
+            logger.warning("[Lark] 无法创建流式卡片，回退到非流式发送")
+            await self._fallback_send_streaming(generator, use_fallback)
+            return
+
+        # Step 2: 发送卡片消息
+        sent = await self._send_card_message(
+            card_id,
+            reply_message_id=self.message_obj.message_id,
+        )
+        if not sent:
+            logger.error("[Lark] 发送流式卡片消息失败，回退到非流式发送")
+            await self._fallback_send_streaming(generator, use_fallback)
+            return
+
+        logger.info("[Lark] 流式输出: 使用 CardKit 流式卡片")
+
+        # Step 3: 解耦发送循环 (Event-driven, 参考 Telegram Draft 路径)
+        sequence = 0
+        delta = ""
+        last_sent = ""
+        done = False
+        text_changed = asyncio.Event()
+
+        async def _sender_loop() -> None:
+            """信号驱动的文本发送循环，有新内容就发，RTT 自然限流。"""
+            nonlocal sequence, last_sent
+            while not done:
+                await text_changed.wait()
+                text_changed.clear()
+                snapshot = delta
+                if snapshot and snapshot != last_sent:
+                    sequence += 1
+                    ok = await self._update_streaming_text(card_id, snapshot, sequence)
+                    if ok:
+                        last_sent = snapshot
+                    if delta != snapshot:
+                        text_changed.set()
+
+        sender_task = asyncio.create_task(_sender_loop())
+
+        try:
+            async for chain in generator:
+                if not isinstance(chain, MessageChain):
+                    continue
+
+                if chain.type == "break":
+                    # 飞书卡片不支持分段，忽略 break
+                    continue
+
+                for comp in chain.chain:
+                    if isinstance(comp, Plain):
+                        delta += comp.text
+                        text_changed.set()
+        finally:
+            done = True
+            text_changed.set()
+            await sender_task
+
+        # Step 4: 必要时补发最终文本 + 关闭流式模式
+        if delta and delta != last_sent:
+            sequence += 1
+            await self._update_streaming_text(card_id, delta, sequence)
+
+        sequence += 1
+        await self._close_streaming_mode(card_id, sequence)
+
+        # Step 5: 内联父类 send_streaming 的副作用
+        await Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+        self._has_send_oper = True

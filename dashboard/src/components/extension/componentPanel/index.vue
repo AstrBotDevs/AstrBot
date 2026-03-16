@@ -15,6 +15,7 @@
 import { computed, onActivated, onMounted, ref, watch} from 'vue';
 import axios from 'axios';
 import { useModuleI18n } from '@/i18n/composables';
+import { normalizeTextInput } from '@/utils/inputValue';
 
 // Composables
 import { useComponentData } from './composables/useComponentData';
@@ -91,7 +92,7 @@ const {
 } = useCommandActions(toast, () => fetchCommands(tm('messages.loadFailed')));
 
 const filteredTools = computed(() => {
-  const query = toolSearch.value.trim().toLowerCase();
+  const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
   let filtered = tools.value;
   if (query) {
     filtered = filtered.filter(tool =>
@@ -102,8 +103,20 @@ const filteredTools = computed(() => {
   if (!showSystemTools.value) {
     filtered = filtered.filter(tool => tool.is_system !== true);
   }
-  return filtered;
+  return [...filtered].sort((left, right) => {
+    const leftRank = left.toggleable === false ? 1 : 0;
+    const rightRank = right.toggleable === false ? 1 : 0;
+    return leftRank - rightRank;
+  });
 });
+
+const visibleSystemToolCount = computed(() =>
+  filteredTools.value.filter(tool => tool.is_system === true).length
+);
+
+const visibleEnabledConfigurableToolCount = computed(() =>
+  filteredTools.value.filter(tool => tool.toggleable !== false && tool.active).length
+);
 
 // 处理切换指令状态
 const handleToggleCommand = async (cmd: CommandItem) => {
@@ -281,7 +294,8 @@ watch(viewMode, async (mode) => {
             <div class="d-flex flex-wrap align-center ga-3 mb-4">
               <div style="min-width: 240px; max-width: 380px; flex: 1;">
                 <v-text-field
-                  v-model="toolSearch"
+                  :model-value="toolSearch"
+                  @update:model-value="toolSearch = normalizeTextInput($event)"
                   prepend-inner-icon="mdi-magnify"
                   :label="tmTool('functionTools.search')"
                   variant="outlined"
@@ -299,8 +313,14 @@ watch(viewMode, async (mode) => {
                 <v-divider vertical class="mx-1" style="height: 20px;" />
                 <div class="d-flex align-center">
                   <v-icon size="18" color="success" class="mr-1">mdi-check-circle-outline</v-icon>
-                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('status.enabled') }}:</span>
-                  <span class="text-body-1 font-weight-bold text-success">{{ filteredTools.filter(t => t.active).length }}</span>
+                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tmTool('functionTools.summary.enabledConfigurable') }}:</span>
+                  <span class="text-body-1 font-weight-bold text-success">{{ visibleEnabledConfigurableToolCount }}</span>
+                </div>
+                <v-divider vertical class="mx-1" style="height: 20px;" />
+                <div class="d-flex align-center">
+                  <v-icon size="18" color="grey" class="mr-1">mdi-lock-outline</v-icon>
+                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tmTool('functionTools.summary.systemTools') }}:</span>
+                  <span class="text-body-1 font-weight-bold text-grey-darken-1">{{ visibleSystemToolCount }}</span>
                 </div>
                 <v-divider vertical class="mx-1" style="height: 20px;" />
                 <v-checkbox

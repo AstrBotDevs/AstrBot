@@ -121,11 +121,12 @@ class BayContainerManager:
     async def wait_healthy(self, timeout: int = HEALTH_TIMEOUT_S) -> None:
         """Block until Bay's ``/health`` endpoint returns 200."""
         url = f"http://127.0.0.1:{self._host_port}/health"
-        deadline = asyncio.get_event_loop().time() + timeout
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
         last_error: str = ""
 
         async with aiohttp.ClientSession() as session:
-            while asyncio.get_event_loop().time() < deadline:
+            while loop.time() < deadline:
                 try:
                     async with session.get(
                         url, timeout=aiohttp.ClientTimeout(total=3)

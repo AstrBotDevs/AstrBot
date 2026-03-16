@@ -30,7 +30,7 @@ class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
             "properties": {
                 "cron_expression": {
                     "type": "string",
-                    "description": "Cron expression defining recurring schedule (e.g., '0 8 * * *').",
+                    "description": "Cron expression defining recurring schedule (e.g., '0 8 * * *' or '0 23 * * mon-fri'). Prefer named weekdays like 'mon-fri' or 'sat,sun' instead of numeric day-of-week ranges such as '1-5' to avoid ambiguity across cron implementations.",
                 },
                 "run_at": {
                     "type": "string",
@@ -184,6 +184,12 @@ CREATE_CRON_JOB_TOOL = CreateActiveCronTool()
 DELETE_CRON_JOB_TOOL = DeleteCronJobTool()
 LIST_CRON_JOBS_TOOL = ListCronJobsTool()
 
+
+def get_all_tools() -> list[FunctionTool]:
+    """Return all cron-related tools for registration."""
+    return [CREATE_CRON_JOB_TOOL, DELETE_CRON_JOB_TOOL, LIST_CRON_JOBS_TOOL]
+
+
 __all__ = [
     "CREATE_CRON_JOB_TOOL",
     "DELETE_CRON_JOB_TOOL",
@@ -191,4 +197,5 @@ __all__ = [
     "CreateActiveCronTool",
     "DeleteCronJobTool",
     "ListCronJobsTool",
+    "get_all_tools",
 ]
