@@ -1,16 +1,18 @@
 import asyncio
 import base64
+import copy
 import importlib
 import inspect
 import json
 import mimetypes
+import os
 import random
 import re
-import threading
 import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 import httpx
 
@@ -23,7 +25,11 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_image_by_url
-from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
+from astrbot.core.utils.network_utils import (
+    create_proxy_client,
+    is_connection_error,
+    log_connection_failure,
+)
 
 from ..register import register_provider_adapter
 
@@ -50,7 +56,7 @@ class ProviderVolcengineArk(Provider):
 
         self.api_base = str(provider_config.get("api_base", "") or "").strip()
         self.proxy = str(provider_config.get("proxy", "") or "").strip()
-        self._sync_http_client: httpx.Client | None = None
+        self._async_http_client: httpx.AsyncClient | None = None
         self._sdk_client: Any | None = None
         self._ark_cls: Any | None = None
         self._current_key: str = self.api_keys[0] if self.api_keys else ""
@@ -72,33 +78,27 @@ class ProviderVolcengineArk(Provider):
             return self._ark_cls
         try:
             module = importlib.import_module("volcenginesdkarkruntime")
-            self._ark_cls = getattr(module, "Ark")
+            self._ark_cls = getattr(module, "AsyncArk")
         except (ImportError, AttributeError) as exc:
             raise self._sdk_import_error() from exc
         return self._ark_cls
 
-    def _build_sync_http_client(self) -> httpx.Client | None:
-        if not self.proxy:
-            return None
-        logger.info(f"[Volcengine Ark] Using proxy: {self.proxy}")
-        return httpx.Client(proxy=self.proxy, timeout=self.timeout)
-
-    def _close_client_resources(self) -> None:
+    async def _close_client_resources(self) -> None:
         sdk_client = self._sdk_client
         self._sdk_client = None
         if sdk_client is not None:
             close = getattr(sdk_client, "close", None)
             if callable(close):
                 try:
-                    close()
+                    await close()
                 except Exception:
                     logger.debug("Failed to close Volcengine Ark SDK client cleanly.")
 
-        http_client = self._sync_http_client
-        self._sync_http_client = None
+        http_client = self._async_http_client
+        self._async_http_client = None
         if http_client is not None:
             try:
-                http_client.close()
+                await http_client.aclose()
             except Exception:
                 logger.debug("Failed to close Volcengine Ark proxy client cleanly.")
 
@@ -116,16 +116,45 @@ class ProviderVolcengineArk(Provider):
         if "default_headers" in sig.parameters and self.custom_headers:
             kwargs["default_headers"] = self.custom_headers
         if "http_client" in sig.parameters:
-            self._sync_http_client = self._build_sync_http_client()
-            if self._sync_http_client is not None:
-                kwargs["http_client"] = self._sync_http_client
+            self._async_http_client = create_proxy_client("Volcengine Ark", self.proxy)
+            if self._async_http_client is not None:
+                kwargs["http_client"] = self._async_http_client
 
         return ark_cls(**kwargs)
 
     def _set_up_client(self, api_key: str) -> None:
-        self._close_client_resources()
+        old_client = self._sdk_client
+        old_http_client = self._async_http_client
+        self._sdk_client = None
+        self._async_http_client = None
         self._current_key = api_key
         self._sdk_client = self._build_sdk_client(api_key)
+        if old_client is not None or old_http_client is not None:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop is not None and loop.is_running():
+
+                async def _cleanup() -> None:
+                    if old_client is not None:
+                        close = getattr(old_client, "close", None)
+                        if callable(close):
+                            try:
+                                await close()
+                            except Exception:
+                                logger.debug(
+                                    "Failed to close previous Volcengine Ark SDK client cleanly."
+                                )
+                    if old_http_client is not None:
+                        try:
+                            await old_http_client.aclose()
+                        except Exception:
+                            logger.debug(
+                                "Failed to close previous Volcengine Ark proxy client cleanly."
+                            )
+
+                loop.create_task(_cleanup())
 
     @staticmethod
     def _obj_get(value: Any, key: str, default: Any = None) -> Any:
@@ -261,11 +290,24 @@ class ProviderVolcengineArk(Provider):
         temp_dir.mkdir(parents=True, exist_ok=True)
         file_path = temp_dir / f"ark_img_{uuid.uuid4().hex}{suffix}"
         await asyncio.to_thread(file_path.write_bytes, image_data)
-        return file_path.as_uri()
+        return self._to_ark_file_reference(file_path)
+
+    @staticmethod
+    def _to_ark_file_reference(file_path: str | Path) -> str:
+        path = Path(file_path).expanduser().resolve()
+        return f"file://{path.as_posix()}"
+
+    @classmethod
+    def _normalize_file_uri(cls, image_url: str) -> str:
+        local_path = unquote(image_url.removeprefix("file://"))
+        local_path = local_path.replace("\\", os.sep)
+        if re.match(r"^/[A-Za-z]:[/\\]", local_path):
+            local_path = local_path[1:]
+        return cls._to_ark_file_reference(local_path)
 
     async def _convert_image_to_file_uri(self, image_url: str) -> str:
         if image_url.startswith("file://"):
-            return image_url
+            return self._normalize_file_uri(image_url)
         if image_url.startswith("data:"):
             return await self._write_data_url_to_temp_file(image_url)
         if image_url.startswith("base64://"):
@@ -281,7 +323,41 @@ class ProviderVolcengineArk(Provider):
             if image_url.startswith("file:///")
             else image_url
         )
-        return Path(local_path).expanduser().resolve().as_uri()
+        return self._to_ark_file_reference(local_path)
+
+    @staticmethod
+    def _is_invalid_scheme_error(exc: Exception) -> bool:
+        text = str(exc).lower()
+        return "invalid scheme" in text and "'param': 'url'" in text
+
+    @staticmethod
+    def _input_contains_file_images(input_items: list[dict[str, Any]]) -> bool:
+        for item in input_items:
+            for content in ProviderVolcengineArk._as_list(item.get("content")):
+                if ProviderVolcengineArk._obj_get(content, "type") != "input_image":
+                    continue
+                image_url = ProviderVolcengineArk._obj_get(content, "image_url", "")
+                if isinstance(image_url, str) and image_url.startswith("file://"):
+                    return True
+        return False
+
+    async def _convert_payload_file_images_to_data_urls(
+        self, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        converted_payload = copy.deepcopy(payload)
+        for item in converted_payload.get("input", []):
+            for content in self._as_list(item.get("content")):
+                if self._obj_get(content, "type") != "input_image":
+                    continue
+                image_url = self._obj_get(content, "image_url", "")
+                if not isinstance(image_url, str) or not image_url.startswith("file://"):
+                    continue
+                local_path = unquote(image_url.removeprefix("file://"))
+                local_path = local_path.replace("\\", os.sep)
+                if re.match(r"^/[A-Za-z]:[/\\]", local_path):
+                    local_path = local_path[1:]
+                content["image_url"] = await self._encode_image_to_data_url(local_path)
+        return converted_payload
 
     async def _resolve_image_part(self, image_url: str) -> dict[str, Any]:
         resolved_uri = await self._convert_image_to_file_uri(image_url)
@@ -315,7 +391,12 @@ class ProviderVolcengineArk(Provider):
                 image_url = self._obj_get(part, "image_url", "")
                 if isinstance(image_url, str) and image_url.strip():
                     items.append(
-                        {"type": "input_image", "image_url": image_url.strip()}
+                        {
+                            "type": "input_image",
+                            "image_url": await self._convert_image_to_file_uri(
+                                image_url.strip()
+                            ),
+                        }
                     )
             elif part_type == "image_url":
                 image_payload = self._obj_get(part, "image_url")
@@ -484,14 +565,6 @@ class ProviderVolcengineArk(Provider):
         payload.update(kwargs)
         return payload
 
-    def _run_create(self, payload: dict[str, Any], *, stream: bool) -> Any:
-        if self._sdk_client is None:
-            self._set_up_client(self._current_key)
-        return self._sdk_client.responses.create(**payload, stream=stream)
-
-    async def _create_response(self, payload: dict[str, Any], *, stream: bool) -> Any:
-        return await asyncio.to_thread(self._run_create, payload, stream=stream)
-
     def _extract_text_from_message_item(self, item: Any) -> str:
         text_parts: list[str] = []
         for content_part in self._as_list(self._obj_get(item, "content", [])):
@@ -577,41 +650,15 @@ class ProviderVolcengineArk(Provider):
     async def _stream_response(
         self, payload: dict[str, Any], tools: ToolSet | None = None
     ) -> AsyncGenerator[LLMResponse, None]:
-        queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
-        loop = asyncio.get_running_loop()
-
-        def worker() -> None:
-            try:
-                stream = self._run_create(payload, stream=True)
-                for event in stream:
-                    asyncio.run_coroutine_threadsafe(
-                        queue.put(("event", event)),
-                        loop,
-                    ).result()
-            except Exception as exc:
-                asyncio.run_coroutine_threadsafe(
-                    queue.put(("error", exc)), loop
-                ).result()
-            finally:
-                asyncio.run_coroutine_threadsafe(
-                    queue.put(("done", None)), loop
-                ).result()
-
-        thread = threading.Thread(target=worker, daemon=True)
-        thread.start()
+        if self._sdk_client is None:
+            self._set_up_client(self._current_key)
+        stream = await self._sdk_client.responses.create(**payload, stream=True)
 
         accumulated_text = ""
         accumulated_reasoning = ""
         final_response: Any = None
 
-        while True:
-            kind, value = await queue.get()
-            if kind == "error":
-                raise value
-            if kind == "done":
-                break
-
-            event = value
+        async for event in stream:
             event_type = str(self._obj_get(event, "type", ""))
             if event_type.endswith("output_text.delta"):
                 delta = self._obj_get(event, "delta", "")
@@ -721,10 +768,18 @@ class ProviderVolcengineArk(Provider):
         for _ in range(10):
             try:
                 self.set_key(chosen_key)
-                response = await self._create_response(payload, stream=False)
+                response = await self._sdk_client.responses.create(**payload, stream=False)
                 return self._parse_response(response, func_tool)
             except Exception as exc:
                 last_exception = exc
+                if self._is_invalid_scheme_error(exc) and self._input_contains_file_images(
+                    payload.get("input", [])
+                ):
+                    logger.warning(
+                        "Volcengine Ark rejected file:// image input, retrying with data URLs."
+                    )
+                    payload = await self._convert_payload_file_images_to_data_urls(payload)
+                    continue
                 if "429" in str(exc) and len(available_api_keys) > 1:
                     logger.warning(
                         "Volcengine Ark rate limit hit, rotating API key. "
@@ -785,6 +840,14 @@ class ProviderVolcengineArk(Provider):
                 return
             except Exception as exc:
                 last_exception = exc
+                if self._is_invalid_scheme_error(exc) and self._input_contains_file_images(
+                    payload.get("input", [])
+                ):
+                    logger.warning(
+                        "Volcengine Ark rejected file:// image input during streaming, retrying with data URLs."
+                    )
+                    payload = await self._convert_payload_file_images_to_data_urls(payload)
+                    continue
                 if "429" in str(exc) and len(available_api_keys) > 1:
                     logger.warning(
                         "Volcengine Ark rate limit hit during streaming, rotating API key. "
@@ -803,4 +866,4 @@ class ProviderVolcengineArk(Provider):
         raise last_exception
 
     async def terminate(self) -> None:
-        await asyncio.to_thread(self._close_client_resources)
+        await self._close_client_resources()

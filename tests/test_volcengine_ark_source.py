@@ -21,14 +21,29 @@ def _make_provider_config() -> dict:
 
 
 def _install_fake_sdk(monkeypatch: pytest.MonkeyPatch) -> type:
+    class _FakeAsyncStream:
+        def __init__(self, events) -> None:
+            self._events = events
+
+        def __aiter__(self):
+            self._iter = iter(self._events)
+            return self
+
+        async def __anext__(self):
+            try:
+                return next(self._iter)
+            except StopIteration as exc:
+                raise StopAsyncIteration from exc
+
     class FakeResponses:
         def __init__(self, owner) -> None:
             self.owner = owner
 
-        def create(self, **kwargs):
+        async def create(self, **kwargs):
             self.owner.last_kwargs = kwargs
             if kwargs.get("stream"):
-                return [
+                return _FakeAsyncStream(
+                    [
                     types.SimpleNamespace(
                         type="response.output_text.delta",
                         delta="Hel",
@@ -73,7 +88,8 @@ def _install_fake_sdk(monkeypatch: pytest.MonkeyPatch) -> type:
                             ),
                         ),
                     ),
-                ]
+                    ]
+                )
             return types.SimpleNamespace(
                 id="resp_sync",
                 output=[
@@ -104,7 +120,7 @@ def _install_fake_sdk(monkeypatch: pytest.MonkeyPatch) -> type:
                 ),
             )
 
-    class FakeArk:
+    class FakeAsyncArk:
         last_instance = None
 
         def __init__(
@@ -122,15 +138,16 @@ def _install_fake_sdk(monkeypatch: pytest.MonkeyPatch) -> type:
             self.http_client = http_client
             self.responses = FakeResponses(self)
             self.last_kwargs = None
-            FakeArk.last_instance = self
+            FakeAsyncArk.last_instance = self
 
-        def close(self) -> None:
+        async def close(self) -> None:
             return None
 
     fake_module = types.ModuleType("volcenginesdkarkruntime")
-    fake_module.Ark = FakeArk
+    fake_module.AsyncArk = FakeAsyncArk
+    fake_module.Ark = FakeAsyncArk
     monkeypatch.setitem(sys.modules, "volcenginesdkarkruntime", fake_module)
-    return FakeArk
+    return FakeAsyncArk
 
 
 def test_volcengine_ark_provider_requires_sdk(monkeypatch: pytest.MonkeyPatch):
@@ -294,5 +311,24 @@ async def test_volcengine_ark_data_url_is_materialized_to_local_file(
         part = await provider._resolve_image_part("data:image/png;base64,aGVsbG8=")
         assert part["type"] == "input_image"
         assert part["image_url"].startswith("file://")
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_volcengine_ark_normalizes_windows_style_file_uri(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    _install_fake_sdk(monkeypatch)
+    provider = ProviderVolcengineArk(_make_provider_config(), {})
+    image_path = tmp_path / "sample.jpg"
+    image_path.write_bytes(b"fake-image-bytes")
+    windows_style_path = str(image_path).replace("/", "\\")
+    windows_style_uri = f"file:///{windows_style_path}"
+
+    try:
+        resolved = await provider._convert_image_to_file_uri(windows_style_uri)
+        assert resolved.startswith("file://")
+        assert "\\" not in resolved
     finally:
         await provider.terminate()
