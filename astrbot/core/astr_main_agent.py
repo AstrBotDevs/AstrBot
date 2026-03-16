@@ -1202,7 +1202,7 @@ async def _compress_image_internal(url_or_path: str) -> str:
             img.thumbnail((max_size, max_size), PILImage.LANCZOS)
         out_io = io.BytesIO()
         img.save(out_io, format="JPEG", quality=75, optimize=True)
-        temp_dir = "./data/temp"
+        temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data/temp")
         if not os.path.exists(temp_dir):
             os.makedirs(temp_dir)
         import uuid
