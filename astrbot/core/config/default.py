@@ -2951,7 +2951,17 @@ CONFIG_METADATA_3 = {
                     "provider_settings.websearch_provider": {
                         "description": "网页搜索提供商",
                         "type": "string",
-                        "options": ["default", "tavily", "baidu_ai_search", "bocha"],
+                        "options": [
+                            "default",
+                            "duckduckgo",
+                            "google",
+                            "bing",
+                            "comet",
+                            "sogo",
+                            "tavily",
+                            "baidu_ai_search",
+                            "bocha",
+                        ],
                         "condition": {
                             "provider_settings.web_search": True,
                         },

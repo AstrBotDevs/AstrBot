@@ -95,6 +95,7 @@ class SearchEngine:
             soup = BeautifulSoup(resp, "html.parser")
             links = soup.select(self._set_selector("links"))
             results = []
+            text_selector = self._set_selector("text")
             for link in links:
                 # Safely get the title text (select_one may return None)
                 title_elem = link.select_one(self._set_selector("title"))
@@ -104,8 +105,16 @@ class SearchEngine:
 
                 url_tag = link.select_one(self._set_selector("url"))
                 snippet = ""
+                if text_selector:
+                    text_elem = link.select_one(text_selector)
+                    if text_elem is not None:
+                        snippet = self.tidy_text(text_elem.get_text())
                 if title and url_tag:
                     url = self._get_url(url_tag)
+                    if not url:
+                        continue
+                    if url.startswith("//"):
+                        url = f"https:{url}"
                     results.append(SearchResult(title=title, url=url, snippet=snippet))
             return results[:num_results] if len(results) > num_results else results
         except Exception as e:
