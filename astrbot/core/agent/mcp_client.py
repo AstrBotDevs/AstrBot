@@ -23,6 +23,7 @@ from .mcp_subcapability_bridge import (
     MCPClientSubCapabilityBridge,
     normalize_mcp_server_config,
 )
+from .mcp_elicitation_registry import cleanup_elicitation_periodically
 from .run_context import TContext
 from .tool import FunctionTool
 
@@ -143,6 +144,18 @@ class MCPClient:
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False  # For logging and debugging
         self.subcapability_bridge = MCPClientSubCapabilityBridge[Any]()
+        
+        # Elicitation cleanup task
+        self._elicitation_cleanup_task: asyncio.Task[None] | None = None
+        self._start_elicitation_cleanup()
+    
+    def _start_elicitation_cleanup(self) -> None:
+        """启动后台 elicitation 清理任务。"""
+        self._elicitation_cleanup_task = asyncio.create_task(
+            cleanup_elicitation_periodically(interval=60),
+            name="mcp-elicitation-cleanup",
+        )
+        logger.debug("已启动 MCP elicitation 后台清理任务")
 
     async def connect_to_server(self, mcp_server_config: dict, name: str) -> None:
         """Connect to MCP server
@@ -639,6 +652,14 @@ class MCPClient:
             await self.exit_stack.aclose()
         except Exception as e:
             logger.debug(f"Error closing current exit stack: {e}")
+
+        # Cancel elicitation cleanup task
+        if self._elicitation_cleanup_task:
+            self._elicitation_cleanup_task.cancel()
+            try:
+                await self._elicitation_cleanup_task
+            except asyncio.CancelledError:
+                logger.debug("Elicitation cleanup task cancelled")
 
         # Don't close old exit stacks as they may be in different task contexts
         # They will be garbage collected naturally

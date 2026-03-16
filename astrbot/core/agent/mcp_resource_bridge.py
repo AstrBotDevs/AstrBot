@@ -356,6 +356,17 @@ def _format_resource_template_metadata(
     return lines
 
 
-def _sanitize_tool_name_fragment(name: str) -> str:
+def _sanitize_tool_name_fragment(name: str, server_config_hash: str | None = None) -> str:
+    """Sanitize server name to be used in tool names.
+    
+    Args:
+        name: Server name to sanitize
+        server_config_hash: Optional hash to append for uniqueness
+    
+    Returns:
+        Sanitized server name suitable for tool names
+    """
     sanitized = re.sub(r"[^a-zA-Z0-9]+", "_", name).strip("_").lower()
+    if server_config_hash:
+        sanitized += f"_{server_config_hash[:8]}"
     return sanitized or "server"

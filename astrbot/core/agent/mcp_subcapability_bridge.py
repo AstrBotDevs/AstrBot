@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import logging
 import re
+import time
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,6 +27,13 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_root,
     get_astrbot_skills_path,
     get_astrbot_temp_path,
+)
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
 )
 
 if TYPE_CHECKING:
@@ -92,6 +102,22 @@ class UnsupportedSamplingRequestError(ValueError):
 
 class UnsupportedElicitationRequestError(ValueError):
     """Raised when an elicitation request cannot be safely mapped."""
+
+
+class MCPElicitationError(Exception):
+    """Base exception for elicitation failures."""
+
+
+class ElicitationParseError(MCPElicitationError):
+    """用户输入解析失败。"""
+
+
+class ElicitationTimeoutError(MCPElicitationError):
+    """elicitation 超时。"""
+
+
+class ElicitationValidationError(MCPElicitationError):
+    """schema 验证失败。"""
 
 
 @dataclass(slots=True)
@@ -236,7 +262,9 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
     def __init__(self, server_name: str | None = None) -> None:
         self._server_name = server_name or "<unknown>"
         self._capabilities = MCPClientCapabilitiesConfig.from_server_config({})
-        self._interaction_lock = asyncio.Lock()
+        # Per-UMO locks for better concurrency
+        self._interaction_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self._lock_last_used: dict[str, float] = {}
         self._active_run_context: ContextWrapper[TContext] | None = None
 
     def configure_from_server_config(self, server_config: dict[str, Any]) -> None:
@@ -259,6 +287,35 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
     @property
     def elicitation_timeout_seconds(self) -> int:
         return self._capabilities.elicitation.timeout_seconds
+    
+    def _compute_elicitation_timeout(self, properties: dict[str, dict[str, Any]]) -> int:
+        """根据表单复杂度动态计算超时时间。
+        
+        公式：
+        - 基础时间：60 秒
+        - 普通字段：每个 30 秒
+        - Enum 字段：每个 15 秒（用户只需选择）
+        
+        如果用户配置了显式超时，则使用配置值。
+        """
+        # 如果用户配置了显式超时，优先使用配置
+        configured = self._capabilities.elicitation.timeout_seconds
+        if configured != DEFAULT_MCP_ELICITATION_TIMEOUT_SECONDS:
+            return configured
+        
+        base = 60  # 基础 1 分钟
+        per_field = 30  # 每个字段 30 秒
+        per_enum_field = 15  # enum 字段减少时间
+        
+        enum_count = sum(
+            1 for f in properties.values()
+            if f.get("enum") and isinstance(f.get("enum"), list)
+        )
+        field_count = len(properties)
+        
+        timeout = base + (field_count - enum_count) * per_field + enum_count * per_enum_field
+        # 限制最小 60 秒，最大 600 秒
+        return max(60, min(600, timeout))
 
     @property
     def roots_enabled(self) -> bool:
@@ -301,17 +358,42 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
 
     def clear_runtime_state(self) -> None:
         self._active_run_context = None
+    
+    def _cleanup_unused_locks(self, max_age_seconds: int = 300) -> None:
+        """清理超过指定时间未使用的锁（LRU 清理）。"""
+        now = time.time()
+        expired = [
+            umo for umo, last_used in self._lock_last_used.items()
+            if now - last_used > max_age_seconds
+        ]
+        for umo in expired:
+            self._interaction_locks.pop(umo, None)
+            self._lock_last_used.pop(umo, None)
+        if expired:
+            logger.debug(f"清理了 {len(expired)} 个未使用的 per-umo 锁")
 
     @asynccontextmanager
     async def interactive_call(
         self,
         run_context: ContextWrapper[TContext] | None,
+        umo: str | None = None,
     ):
         if not (self.sampling_enabled or self.elicitation_enabled):
             yield
             return
 
-        async with self._interaction_lock:
+        # 使用 per-umo 锁，如果没有提供 umo 则使用全局锁（向后兼容）
+        if umo:
+            lock = self._interaction_locks[umo]
+            self._lock_last_used[umo] = time.time()
+            # 定期清理未使用的锁
+            if len(self._interaction_locks) > 100:
+                self._cleanup_unused_locks()
+        else:
+            # 向后兼容：如果没有 umo，创建一个临时锁
+            lock = asyncio.Lock()
+        
+        async with lock:
             self._active_run_context = run_context
             try:
                 yield
@@ -575,7 +657,9 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
         import mcp
 
         properties = self._get_elicitation_properties(params.requestedSchema)
-        deadline = asyncio.get_running_loop().time() + self.elicitation_timeout_seconds
+        # 使用动态超时计算
+        timeout_seconds = self._compute_elicitation_timeout(properties)
+        deadline = asyncio.get_running_loop().time() + timeout_seconds
         await self._send_elicitation_message(
             event,
             self._build_form_elicitation_prompt(params, properties),
@@ -624,6 +708,12 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
                 content=content,
             )
 
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=0.5, min=0.5, max=2),
+        before_sleep=before_sleep_log(logger, logging.DEBUG),
+        reraise=True,
+    )
     async def _try_llm_form_reply_fallback(
         self,
         *,
@@ -927,17 +1017,17 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
 
         normalized_reply = reply_text.strip()
         if not normalized_reply:
-            raise UnsupportedElicitationRequestError("The reply is empty.")
+            raise ElicitationParseError("The reply is empty.")
 
         if normalized_reply.startswith("{"):
             try:
                 payload = json.loads(normalized_reply)
             except json.JSONDecodeError as exc:
-                raise UnsupportedElicitationRequestError(
+                raise ElicitationParseError(
                     "The JSON reply could not be parsed."
                 ) from exc
             if not isinstance(payload, dict):
-                raise UnsupportedElicitationRequestError(
+                raise ElicitationParseError(
                     "The JSON reply must be an object."
                 )
         elif len(properties) == 1:
@@ -951,7 +1041,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
                     requested_schema=requested_schema,
                 )
             if not payload:
-                raise UnsupportedElicitationRequestError(
+                raise ElicitationParseError(
                     "Please reply with JSON, natural language, or `field: value` lines."
                 )
 
@@ -1007,7 +1097,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
             field_name for field_name in required_fields if field_name not in coerced
         ]
         if missing_required:
-            raise UnsupportedElicitationRequestError(
+            raise ElicitationValidationError(
                 "Missing required field(s): " + ", ".join(missing_required)
             )
         return coerced
@@ -1027,24 +1117,24 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
             value = str(raw_value).strip()
         elif field_type == "integer":
             if isinstance(raw_value, bool):
-                raise UnsupportedElicitationRequestError(
+                raise ElicitationValidationError(
                     f"Field `{field_name}` must be an integer."
                 )
             try:
                 value = int(str(raw_value).strip())
             except (TypeError, ValueError) as exc:
-                raise UnsupportedElicitationRequestError(
+                raise ElicitationValidationError(
                     f"Field `{field_name}` must be an integer."
                 ) from exc
         elif field_type == "number":
             if isinstance(raw_value, bool):
-                raise UnsupportedElicitationRequestError(
+                raise ElicitationValidationError(
                     f"Field `{field_name}` must be a number."
                 )
             try:
                 value = float(str(raw_value).strip())
             except (TypeError, ValueError) as exc:
-                raise UnsupportedElicitationRequestError(
+                raise ElicitationValidationError(
                     f"Field `{field_name}` must be a number."
                 ) from exc
         elif field_type == "boolean":
@@ -1052,13 +1142,13 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
         elif field_type == "array":
             value = self._coerce_string_array_value(field_name, raw_value)
         else:
-            raise UnsupportedElicitationRequestError(
+            raise ElicitationValidationError(
                 f"Field `{field_name}` uses unsupported type `{field_type}`."
             )
 
         enum_values = schema.get("enum")
         if isinstance(enum_values, list) and value not in enum_values:
-            raise UnsupportedElicitationRequestError(
+            raise ElicitationValidationError(
                 f"Field `{field_name}` must be one of: {', '.join(map(str, enum_values))}."
             )
         return value
@@ -1075,7 +1165,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
             return True
         if normalized in falsy:
             return False
-        raise UnsupportedElicitationRequestError(
+        raise ElicitationValidationError(
             f"Field `{field_name}` must be a boolean."
         )
 
@@ -1094,7 +1184,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
             if part.strip()
         ]
         if not parts:
-            raise UnsupportedElicitationRequestError(
+            raise ElicitationValidationError(
                 f"Field `{field_name}` must be a string array."
             )
         return parts
@@ -1173,7 +1263,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
     ) -> dict[str, dict[str, Any]]:
         properties = requested_schema.get("properties", {})
         if not isinstance(properties, dict):
-            raise UnsupportedElicitationRequestError(
+            raise ElicitationParseError(
                 "Form-mode elicitation requires a top-level properties object."
             )
         normalized_properties: dict[str, dict[str, Any]] = {}
@@ -1198,7 +1288,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
             for candidate in field_type:
                 if candidate in {"string", "integer", "number", "boolean", "array"}:
                     return candidate
-            raise UnsupportedElicitationRequestError(
+            raise ElicitationParseError(
                 "Unsupported multi-type elicitation field."
             )
         if not isinstance(field_type, str):
@@ -1291,12 +1381,63 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
             path = candidate_path.resolve()
             display_name = path.name or normalized_entry
 
-        if not path.exists():
+        # 安全检查 1: 符号链接检查
+        if path.is_symlink():
             logger.warning(
-                "Skipping missing MCP root path for server %s: %s",
+                "Skipping symlinked MCP root path for server %s: %s (symlinks are not allowed for security)",
+                self._server_name,
+                path,
+            )
+            return None
+
+        # 安全检查 2: 目录验证
+        if not path.is_dir():
+            logger.warning(
+                "Skipping non-directory MCP root path for server %s: %s (must be a directory)",
+                self._server_name,
+                path,
+            )
+            return None
+
+        # 安全检查 3: 白名单验证
+        if not self._is_root_path_in_allowlist(path):
+            logger.warning(
+                "Skipping MCP root path for server %s: %s (not in allowlist)",
                 self._server_name,
                 path,
             )
             return None
 
         return display_name, path
+    
+    def _is_root_path_in_allowlist(self, path: Path) -> bool:
+        """检查路径是否在允许的白名单内。
+        
+        白名单包括：
+        1. AstrBot 标准目录（data, temp, config 等）
+        2. 用户显式配置的其他目录
+        """
+        # 获取所有允许的根路径解析器
+        alias_resolvers = get_root_path_alias_resolvers()
+        allowed_paths = set()
+        
+        # 添加所有别名解析的路径
+        for resolver_func in alias_resolvers.values():
+            try:
+                allowed_path = Path(resolver_func()).resolve()
+                allowed_paths.add(allowed_path)
+            except Exception:
+                continue
+        
+        # 检查路径是否是允许路径的子目录或本身
+        for allowed_path in allowed_paths:
+            try:
+                # 使用 relative_to 检查路径关系
+                path.relative_to(allowed_path)
+                return True
+            except ValueError:
+                # 不是子目录，继续检查
+                continue
+        
+        # 检查是否完全匹配
+        return path in allowed_paths
