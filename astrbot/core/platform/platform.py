@@ -43,6 +43,9 @@ class Platform(abc.ABC):
         self._event_queue = event_queue
         self.client_self_id = uuid.uuid4().hex
 
+        # 全局配置引用，由 PlatformManager 注入
+        self._astrbot_config: dict | None = None
+
         # 平台运行状态
         self._status: PlatformStatus = PlatformStatus.PENDING
         self._errors: list[PlatformError] = []
@@ -174,6 +177,11 @@ class Platform(abc.ABC):
     ) -> bool:
         """发射平台原始事件到框架级 hook。"""
         from astrbot.core.pipeline.context_utils import call_raw_platform_event_hook
+
+        if plugins_name is None and self._astrbot_config is not None:
+            plugin_set = self._astrbot_config.get("plugin_set", ["*"])
+            if plugin_set != ["*"]:
+                plugins_name = plugin_set
 
         event = RawPlatformEvent(
             payload=payload,
