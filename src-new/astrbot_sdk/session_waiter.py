@@ -21,13 +21,45 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
-from typing import Any
+from functools import wraps
+from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar, cast, overload
 
 from loguru import logger
 
 from .events import MessageEvent
+
+_OwnerT = TypeVar("_OwnerT")
+_P = ParamSpec("_P")
+_ResultT = TypeVar("_ResultT")
+
+
+class _SessionWaiterDecorator(Protocol):
+    @overload
+    def __call__(
+        self,
+        func: Callable[
+            Concatenate[SessionController, MessageEvent, _P],
+            Awaitable[_ResultT],
+        ],
+        /,
+    ) -> Callable[Concatenate[MessageEvent, _P], Coroutine[Any, Any, _ResultT]]:
+        ...
+
+    @overload
+    def __call__(
+        self,
+        func: Callable[
+            Concatenate[_OwnerT, SessionController, MessageEvent, _P],
+            Awaitable[_ResultT],
+        ],
+        /,
+    ) -> Callable[
+        Concatenate[_OwnerT, MessageEvent, _P],
+        Coroutine[Any, Any, _ResultT],
+    ]:
+        ...
 
 
 @dataclass(slots=True)
@@ -178,14 +210,15 @@ def session_waiter(
     timeout: int = 30,
     *,
     record_history_chains: bool = False,
-):
+) -> _SessionWaiterDecorator:
     def decorator(
-        func: Callable[[SessionController, MessageEvent], Awaitable[Any]],
-    ):
-        async def wrapper(*args, **kwargs):
+        func: Callable[..., Awaitable[Any]],
+    ) -> Callable[..., Coroutine[Any, Any, Any]]:
+        @wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             owner = None
             event: MessageEvent | None = None
-            trailing_args = ()
+            trailing_args: tuple[Any, ...] = ()
             if args and isinstance(args[0], MessageEvent):
                 event = args[0]
                 trailing_args = args[1:]
@@ -202,24 +235,26 @@ def session_waiter(
                 raise RuntimeError("session_waiter manager is unavailable")
 
             if owner is None:
+                free_func = cast(Callable[..., Awaitable[Any]], func)
 
                 async def bound_handler(
                     controller: SessionController,
                     waiter_event: MessageEvent,
                 ) -> Any:
-                    return await func(
+                    return await free_func(
                         controller,
                         waiter_event,
                         *trailing_args,
                         **kwargs,
                     )
             else:
+                method_func = cast(Callable[..., Awaitable[Any]], func)
 
                 async def bound_handler(
                     controller: SessionController,
                     waiter_event: MessageEvent,
                 ) -> Any:
-                    return await func(
+                    return await method_func(
                         owner,
                         controller,
                         waiter_event,
@@ -236,4 +271,4 @@ def session_waiter(
 
         return wrapper
 
-    return decorator
+    return cast(_SessionWaiterDecorator, decorator)

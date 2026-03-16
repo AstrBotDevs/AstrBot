@@ -22,6 +22,8 @@ from .llm import ChatMessage, LLMClient, LLMResponse
 from .memory import MemoryClient
 from .metadata import MetadataClient, PluginMetadata
 from .platform import PlatformClient
+from .registry import HandlerMetadata, RegistryClient
+from .session import SessionPluginManager, SessionServiceManager
 
 __all__ = [
     "ChatMessage",
@@ -33,4 +35,8 @@ __all__ = [
     "MetadataClient",
     "PlatformClient",
     "PluginMetadata",
+    "HandlerMetadata",
+    "RegistryClient",
+    "SessionPluginManager",
+    "SessionServiceManager",
 ]

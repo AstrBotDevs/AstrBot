@@ -23,10 +23,6 @@ class _MessageBase(BaseModel):
 class ErrorPayload(_MessageBase):
     """错误载荷，用于 ResultMessage 和 EventMessage 中传递错误信息。
 
-    与旧版 JSON-RPC 错误对比：
-        旧版: code 为整数，如 -32000
-        新版: code 为字符串，如 "internal_error"
-
     Attributes:
         code: 错误码，字符串类型，便于语义化错误分类
         message: 错误消息，人类可读的错误描述
@@ -43,10 +39,6 @@ class ErrorPayload(_MessageBase):
 class PeerInfo(_MessageBase):
     """对等节点信息，标识消息发送方的身份。
 
-    与旧版对比：
-        旧版: 通过 handshake params 中的 plugin_name 隐式传递
-        新版: 显式的 PeerInfo 结构，支持 plugin 和 core 两种角色
-
     Attributes:
         name: 节点名称，通常是插件 ID 或核心标识
         role: 节点角色，"plugin" 或 "core"
@@ -60,27 +52,6 @@ class PeerInfo(_MessageBase):
 
 class InitializeMessage(_MessageBase):
     """初始化消息，用于建立连接时交换信息。
-
-    与旧版 JSON-RPC handshake 对比：
-        旧版:
-            {
-                "jsonrpc": "2.0",
-                "id": "xxx",
-                "method": "handshake",
-                "params": {}
-            }
-            响应包含插件元信息和处理器列表
-
-        新版:
-            {
-                "type": "initialize",
-                "id": "xxx",
-                "protocol_version": "1.0",
-                "peer": {"name": "...", "role": "plugin", "version": "..."},
-                "handlers": [...],
-                "provided_capabilities": [...],
-                "metadata": {...}
-            }
 
     Attributes:
         type: 消息类型，固定为 "initialize"
@@ -104,10 +75,6 @@ class InitializeMessage(_MessageBase):
 class InitializeOutput(_MessageBase):
     """初始化输出，作为 InitializeMessage 的响应数据。
 
-    与旧版对比：
-        旧版: handshake 响应中包含完整的插件信息
-        新版: 仅返回对等方信息和能力列表，更简洁
-
     Attributes:
         peer: 接收方（核心）节点信息
         protocol_version: 协商后的协议版本；未协商时可为空
@@ -123,17 +90,6 @@ class InitializeOutput(_MessageBase):
 
 class ResultMessage(_MessageBase):
     """结果消息，用于返回能力调用的结果。
-
-    与旧版 JSON-RPC 响应对比：
-        旧版成功响应:
-            {"jsonrpc": "2.0", "id": "xxx", "result": {...}}
-        旧版错误响应:
-            {"jsonrpc": "2.0", "id": "xxx", "error": {"code": -32000, "message": "..."}}
-
-        新版成功结果:
-            {"type": "result", "id": "xxx", "success": true, "output": {...}}
-        新版失败结果:
-            {"type": "result", "id": "xxx", "success": false, "error": {...}}
 
     Attributes:
         type: 消息类型，固定为 "result"
@@ -168,24 +124,6 @@ class ResultMessage(_MessageBase):
 class InvokeMessage(_MessageBase):
     """调用消息，用于请求执行远程能力。
 
-    与旧版 JSON-RPC 请求对比：
-        旧版:
-            {
-                "jsonrpc": "2.0",
-                "id": "xxx",
-                "method": "call_handler",
-                "params": {"handler_full_name": "...", "event": {...}}
-            }
-
-        新版:
-            {
-                "type": "invoke",
-                "id": "xxx",
-                "capability": "handler.invoke",
-                "input": {"handler_id": "...", "event": {...}},
-                "stream": false
-            }
-
     Attributes:
         type: 消息类型，固定为 "invoke"
         id: 请求 ID，用于关联响应
@@ -211,15 +149,6 @@ class EventMessage(_MessageBase):
         2. delta: 数据增量更新，包含 data 字段
         3. completed: 调用完成，包含 output 字段
         4. failed: 调用失败，包含 error 字段
-
-    与旧版 JSON-RPC 通知对比：
-        旧版使用独立的 method 区分：
-            - handler_stream_start
-            - handler_stream_update
-            - handler_stream_end
-
-        新版使用统一的 EventMessage，通过 phase 字段区分：
-            {"type": "event", "id": "xxx", "phase": "delta", "data": {...}}
 
     Attributes:
         type: 消息类型，固定为 "event"
@@ -270,10 +199,6 @@ class EventMessage(_MessageBase):
 
 class CancelMessage(_MessageBase):
     """取消消息，用于取消正在进行的调用。
-
-    与旧版对比：
-        旧版: 使用 {"jsonrpc": "2.0", "method": "cancel", "params": {"reason": "..."}}
-        新版: 专门的 CancelMessage 类型，语义更明确
 
     Attributes:
         type: 消息类型，固定为 "cancel"

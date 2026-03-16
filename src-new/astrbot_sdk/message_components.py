@@ -45,7 +45,7 @@ async def _register_file_to_service(path: str) -> str:
     if not callback_host:
         raise RuntimeError("未配置 callback_api_base，文件服务不可用")
     register_file = getattr(file_token_service, "register_file", None)
-    if not callable(register_file):
+    if not inspect.iscoroutinefunction(register_file):
         raise RuntimeError("文件服务未正确初始化，register_file 不可用")
     token = await register_file(path)
     return f"{str(callback_host).rstrip('/')}/api/file/{token}"

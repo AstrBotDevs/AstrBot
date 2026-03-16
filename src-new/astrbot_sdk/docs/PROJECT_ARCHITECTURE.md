@@ -701,66 +701,9 @@ class LLMClient:
 |--------|---------|-----------------|
 | `MemoryClient` | `search()`, `save()`, `save_with_ttl()`, `get()`, `get_many()`, `delete()`, `delete_many()`, `stats()` | `memory.*` |
 | `DBClient` | `get()`, `set()`, `delete()`, `list()`, `get_many()`, `set_many()`, `watch()` | `db.*` |
-| `PlatformClient` | `send()`, `send_image()`, `send_chain()`, `get_members()` | `platform.*` |
+| `PlatformClient` | `send()`, `send_image()`, `send_chain()`, `send_by_session()`, `send_by_id()`, `get_members()` | `platform.*` |
 | `HTTPClient` | `register_api()`, `unregister_api()`, `list_apis()` | `http.*` |
 | `MetadataClient` | `get_plugin()`, `list_plugins()`, `get_current_plugin()`, `get_plugin_config()` | `metadata.*` |
-
----
-
-## 新旧架构对比
-
-### 协议对比
-
-| 特性 | 旧版 JSON-RPC | 新版 v4 协议 |
-|------|---------------|--------------|
-| 消息格式 | `{"jsonrpc": "2.0", ...}` | `{"type": "invoke", ...}` |
-| 方法区分 | `method` 字段 | `type` 字段 |
-| 错误码 | 整数 (`-32000`) | 字符串 (`"internal_error"`) |
-| 流式支持 | 独立 notification 方法 | 统一 `EventMessage` phase |
-| 握手 | `handshake` method | `InitializeMessage` type |
-| 能力声明 | 隐式（method 名称） | 显式 `CapabilityDescriptor` |
-
-### 运行时对比
-
-| 特性 | 旧版 | 新版 |
-|------|------|------|
-| Peer 抽象 | 分离 `JSONRPCClient/Server` | 统一 `Peer` |
-| Handler 分发 | 直接调用 `handler(event)` | `HandlerDispatcher` 参数注入 |
-| 能力路由 | 无显式路由 | `CapabilityRouter` |
-| 环境管理 | 无 | `PluginEnvironmentManager` 分组 |
-| 传输层 | 每个实现处理 JSON-RPC | 传输层只处理字符串 |
-
-### 代码对比
-
-#### 旧版 Handler
-
-```python
-from astrbot.api.star import Star
-from astrbot.api.event import AstrMessageEvent
-
-class MyPlugin(Star):
-    @command_handler("hello", aliases=["hi"])
-    def hello_handler(self, event: AstrMessageEvent):
-        reply = self.call_context_function("llm_generate", prompt=event.message_plain)
-        event.reply(reply)
-```
-
-#### 新版 Handler
-
-```python
-from astrbot_sdk import Star, Context, MessageEvent
-from astrbot_sdk.decorators import on_command
-
-class MyPlugin(Star):
-    @on_command("hello", aliases=["hi"])
-    async def hello(self, event: MessageEvent, ctx: Context) -> None:
-        reply = await ctx.llm.chat(event.text)
-        await event.reply(reply)
-```
-
----
-
-## 新旧架构对比
 
 ---
 

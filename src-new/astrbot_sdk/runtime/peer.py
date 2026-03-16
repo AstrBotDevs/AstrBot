@@ -24,21 +24,6 @@
         invoke_stream() -> InvokeMessage(stream=True)
         cancel() -> CancelMessage
 
-与旧版对比：
-    旧版 JSON-RPC:
-        - 分离的 JSONRPCClient 和 JSONRPCServer
-        - 通过 method 字段区分操作类型
-        - 使用 JSONRPCRequest/Response 消息类型
-        - 流式通过独立的 notification 实现
-        - 无统一的取消机制
-
-    新版 Peer:
-        - 统一的 Peer 抽象，既是客户端也是服务端
-        - 通过 type 字段区分消息类型
-        - 使用 InitializeMessage/InvokeMessage/EventMessage 等
-        - 流式通过 EventMessage(phase=delta) 实现
-        - 统一的 CancelMessage 取消机制
-
 使用示例：
     # 作为客户端发起调用
     peer = Peer(transport=transport, peer_info=PeerInfo(...))

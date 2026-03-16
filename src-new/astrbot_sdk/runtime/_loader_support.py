@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import inspect
 import typing
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal, TypeAlias, cast
 
+from .._typing_utils import unwrap_optional
 from ..decorators import get_capability_meta, get_handler_meta
 from ..protocol.descriptors import ParamSpec
 from ..schedule import ScheduleContext
@@ -27,16 +28,6 @@ ParamTypeName: TypeAlias = Literal[
     "str", "int", "float", "bool", "optional", "greedy_str"
 ]
 OptionalInnerType: TypeAlias = Literal["str", "int", "float", "bool"] | None
-
-
-def unwrap_optional(annotation: Any) -> tuple[Any, bool]:
-    origin = typing.get_origin(annotation)
-    if origin is typing.Union:
-        args = [item for item in typing.get_args(annotation) if item is not type(None)]
-        if len(args) == 1:
-            return args[0], True
-    return annotation, False
-
 
 def is_injected_parameter(annotation: Any, parameter_name: str) -> bool:
     if parameter_name in {"event", "ctx", "context", "sched", "schedule"}:
@@ -59,9 +50,12 @@ def param_type_name(annotation: Any) -> tuple[ParamTypeName, OptionalInnerType, 
     if normalized is GreedyStr:
         return "greedy_str", None, False
     if normalized in {int, float, bool, str}:
+        normalized_name = cast(
+            Literal["str", "int", "float", "bool"], normalized.__name__
+        )
         if is_optional:
-            return "optional", normalized.__name__, False
-        return normalized.__name__, None, True
+            return "optional", normalized_name, False
+        return normalized_name, None, True
     if is_optional:
         return "optional", "str", False
     return "str", None, True

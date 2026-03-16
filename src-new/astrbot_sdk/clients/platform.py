@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from typing import Any, cast
 
 from ..message_components import BaseMessageComponent
+from ..message_components import Plain
 from ..message_result import MessageChain
 from ..message_session import MessageSession
 from ..protocol.descriptors import SessionRef
@@ -46,6 +47,34 @@ class PlatformClient:
         if isinstance(session, MessageSession):
             return str(session), {}
         return str(session), {}
+
+    async def _coerce_chain_payload(
+        self,
+        content: (
+            str
+            | MessageChain
+            | Sequence[BaseMessageComponent]
+            | Sequence[dict[str, Any]]
+        ),
+    ) -> list[dict[str, Any]]:
+        if isinstance(content, str):
+            return await MessageChain([Plain(content, convert=False)]).to_payload_async()
+        if isinstance(content, MessageChain):
+            return await content.to_payload_async()
+        if isinstance(content, Sequence) and not isinstance(content, (str, bytes)) and all(
+            isinstance(item, BaseMessageComponent) for item in content
+        ):
+            components = cast(Sequence[BaseMessageComponent], content)
+            return await MessageChain(list(components)).to_payload_async()
+        if isinstance(content, Sequence) and not isinstance(content, (str, bytes)) and all(
+            isinstance(item, dict) for item in content
+        ):
+            payload_items = cast(Sequence[dict[str, Any]], content)
+            return [dict(item) for item in payload_items]
+        raise TypeError(
+            "content must be str, MessageChain, sequence of message components, "
+            "or sequence of platform.send_chain payload dicts"
+        )
 
     async def send(
         self,
@@ -116,20 +145,54 @@ class PlatformClient:
             发送结果
         """
         session_id, extra = self._build_target_payload(session)
-        if isinstance(chain, MessageChain):
-            chain_payload = await chain.to_payload_async()
-        elif isinstance(chain, Sequence) and all(
-            isinstance(item, BaseMessageComponent) for item in chain
-        ):
-            components = cast(Sequence[BaseMessageComponent], chain)
-            chain_payload = await MessageChain(list(components)).to_payload_async()
-        else:
-            payload_items = cast(Sequence[dict[str, Any]], chain)
-            chain_payload = [dict(item) for item in payload_items]
+        chain_payload = await self._coerce_chain_payload(chain)
         return await self._proxy.call(
             "platform.send_chain",
             {"session": session_id, "chain": chain_payload, **extra},
         )
+
+    async def send_by_session(
+        self,
+        session: str | MessageSession,
+        content: (
+            str
+            | MessageChain
+            | Sequence[BaseMessageComponent]
+            | Sequence[dict[str, Any]]
+        ),
+    ) -> dict[str, Any]:
+        """主动向指定会话发送消息链。
+
+        `Sequence[dict]` 的结构与 `platform.send_chain` 完全一致：
+        每一项都应是 `{"type": "...", "data": {...}}`。
+        """
+        chain_payload = await self._coerce_chain_payload(content)
+        session_id = str(session)
+        return await self._proxy.call(
+            "platform.send_by_session",
+            {"session": session_id, "chain": chain_payload},
+        )
+
+    async def send_by_id(
+        self,
+        platform_id: str,
+        session_id: str,
+        content: (
+            str
+            | MessageChain
+            | Sequence[BaseMessageComponent]
+            | Sequence[dict[str, Any]]
+        ),
+        *,
+        message_type: str = "private",
+    ) -> dict[str, Any]:
+        """主动向指定平台会话发送消息。"""
+        session = MessageSession(
+            platform_id=str(platform_id),
+            message_type=str(message_type),
+            session_id=str(session_id),
+        )
+        return await self.send_by_session(session, content)
 
     async def get_members(
         self,

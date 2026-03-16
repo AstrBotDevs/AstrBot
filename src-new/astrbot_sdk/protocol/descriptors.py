@@ -281,6 +281,57 @@ SYSTEM_EVENT_SEND_STREAMING_CLOSE_OUTPUT_SCHEMA = _object_schema(
     required=("supported",),
     supported={"type": "boolean"},
 )
+SYSTEM_EVENT_LLM_GET_STATE_INPUT_SCHEMA = _object_schema(
+    target=_nullable(SESSION_REF_SCHEMA),
+)
+SYSTEM_EVENT_LLM_GET_STATE_OUTPUT_SCHEMA = _object_schema(
+    required=("should_call_llm", "requested_llm"),
+    should_call_llm={"type": "boolean"},
+    requested_llm={"type": "boolean"},
+)
+SYSTEM_EVENT_LLM_REQUEST_INPUT_SCHEMA = _object_schema(
+    target=_nullable(SESSION_REF_SCHEMA),
+)
+SYSTEM_EVENT_LLM_REQUEST_OUTPUT_SCHEMA = _object_schema(
+    required=("should_call_llm", "requested_llm"),
+    should_call_llm={"type": "boolean"},
+    requested_llm={"type": "boolean"},
+)
+SYSTEM_EVENT_RESULT_GET_INPUT_SCHEMA = _object_schema(
+    target=_nullable(SESSION_REF_SCHEMA),
+)
+SYSTEM_EVENT_RESULT_GET_OUTPUT_SCHEMA = _object_schema(
+    required=("result",),
+    result=_nullable({"type": "object"}),
+)
+SYSTEM_EVENT_RESULT_SET_INPUT_SCHEMA = _object_schema(
+    required=("result",),
+    target=_nullable(SESSION_REF_SCHEMA),
+    result={"type": "object"},
+)
+SYSTEM_EVENT_RESULT_SET_OUTPUT_SCHEMA = _object_schema(
+    required=("result",),
+    result={"type": "object"},
+)
+SYSTEM_EVENT_RESULT_CLEAR_INPUT_SCHEMA = _object_schema(
+    target=_nullable(SESSION_REF_SCHEMA),
+)
+SYSTEM_EVENT_RESULT_CLEAR_OUTPUT_SCHEMA = _object_schema()
+SYSTEM_EVENT_HANDLER_WHITELIST_GET_INPUT_SCHEMA = _object_schema(
+    target=_nullable(SESSION_REF_SCHEMA),
+)
+SYSTEM_EVENT_HANDLER_WHITELIST_GET_OUTPUT_SCHEMA = _object_schema(
+    required=("plugin_names",),
+    plugin_names=_nullable({"type": "array", "items": {"type": "string"}}),
+)
+SYSTEM_EVENT_HANDLER_WHITELIST_SET_INPUT_SCHEMA = _object_schema(
+    target=_nullable(SESSION_REF_SCHEMA),
+    plugin_names=_nullable({"type": "array", "items": {"type": "string"}}),
+)
+SYSTEM_EVENT_HANDLER_WHITELIST_SET_OUTPUT_SCHEMA = _object_schema(
+    required=("plugin_names",),
+    plugin_names=_nullable({"type": "array", "items": {"type": "string"}}),
+)
 PLATFORM_SEND_INPUT_SCHEMA = _object_schema(
     required=("session", "text"),
     session={"type": "string"},
@@ -311,6 +362,24 @@ PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA = _object_schema(
     required=("message_id",),
     message_id={"type": "string"},
 )
+PLATFORM_SEND_BY_SESSION_INPUT_SCHEMA = _object_schema(
+    required=("session", "chain"),
+    session={"type": "string"},
+    chain={"type": "array", "items": {"type": "object"}},
+)
+PLATFORM_SEND_BY_SESSION_OUTPUT_SCHEMA = _object_schema(
+    required=("message_id",),
+    message_id={"type": "string"},
+)
+PLATFORM_GET_GROUP_INPUT_SCHEMA = _object_schema(
+    required=("session",),
+    session={"type": "string"},
+    target=_nullable(SESSION_REF_SCHEMA),
+)
+PLATFORM_GET_GROUP_OUTPUT_SCHEMA = _object_schema(
+    required=("group",),
+    group=_nullable({"type": "object"}),
+)
 PLATFORM_GET_MEMBERS_INPUT_SCHEMA = _object_schema(
     required=("session",),
     session={"type": "string"},
@@ -320,6 +389,52 @@ PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA = _object_schema(
     required=("members",),
     members={"type": "array", "items": {"type": "object"}},
 )
+SESSION_PLUGIN_IS_ENABLED_INPUT_SCHEMA = _object_schema(
+    required=("session", "plugin_name"),
+    session={"type": "string"},
+    plugin_name={"type": "string"},
+)
+SESSION_PLUGIN_IS_ENABLED_OUTPUT_SCHEMA = _object_schema(
+    required=("enabled",),
+    enabled={"type": "boolean"},
+)
+SESSION_PLUGIN_FILTER_HANDLERS_INPUT_SCHEMA = _object_schema(
+    required=("session", "handlers"),
+    session={"type": "string"},
+    handlers={"type": "array", "items": {"type": "object"}},
+)
+SESSION_PLUGIN_FILTER_HANDLERS_OUTPUT_SCHEMA = _object_schema(
+    required=("handlers",),
+    handlers={"type": "array", "items": {"type": "object"}},
+)
+SESSION_SERVICE_IS_LLM_ENABLED_INPUT_SCHEMA = _object_schema(
+    required=("session",),
+    session={"type": "string"},
+)
+SESSION_SERVICE_IS_LLM_ENABLED_OUTPUT_SCHEMA = _object_schema(
+    required=("enabled",),
+    enabled={"type": "boolean"},
+)
+SESSION_SERVICE_SET_LLM_STATUS_INPUT_SCHEMA = _object_schema(
+    required=("session", "enabled"),
+    session={"type": "string"},
+    enabled={"type": "boolean"},
+)
+SESSION_SERVICE_SET_LLM_STATUS_OUTPUT_SCHEMA = _object_schema()
+SESSION_SERVICE_IS_TTS_ENABLED_INPUT_SCHEMA = _object_schema(
+    required=("session",),
+    session={"type": "string"},
+)
+SESSION_SERVICE_IS_TTS_ENABLED_OUTPUT_SCHEMA = _object_schema(
+    required=("enabled",),
+    enabled={"type": "boolean"},
+)
+SESSION_SERVICE_SET_TTS_STATUS_INPUT_SCHEMA = _object_schema(
+    required=("session", "enabled"),
+    session={"type": "string"},
+    enabled={"type": "boolean"},
+)
+SESSION_SERVICE_SET_TTS_STATUS_OUTPUT_SCHEMA = _object_schema()
 HTTP_REGISTER_API_INPUT_SCHEMA = _object_schema(
     required=("route", "methods", "handler_capability"),
     route={"type": "string"},
@@ -359,6 +474,120 @@ METADATA_GET_PLUGIN_CONFIG_INPUT_SCHEMA = _object_schema(
 METADATA_GET_PLUGIN_CONFIG_OUTPUT_SCHEMA = _object_schema(
     required=("config",),
     config=_nullable({"type": "object"}),
+)
+REGISTRY_GET_HANDLERS_BY_EVENT_TYPE_INPUT_SCHEMA = _object_schema(
+    required=("event_type",),
+    event_type={"type": "string"},
+)
+REGISTRY_GET_HANDLERS_BY_EVENT_TYPE_OUTPUT_SCHEMA = _object_schema(
+    required=("handlers",),
+    handlers={"type": "array", "items": {"type": "object"}},
+)
+REGISTRY_GET_HANDLER_BY_FULL_NAME_INPUT_SCHEMA = _object_schema(
+    required=("full_name",),
+    full_name={"type": "string"},
+)
+REGISTRY_GET_HANDLER_BY_FULL_NAME_OUTPUT_SCHEMA = _object_schema(
+    required=("handler",),
+    handler=_nullable({"type": "object"}),
+)
+PROVIDER_META_SCHEMA = _object_schema(
+    required=("id", "type", "provider_type"),
+    id={"type": "string"},
+    model=_nullable({"type": "string"}),
+    type={"type": "string"},
+    provider_type={"type": "string"},
+)
+LLM_TOOL_SPEC_SCHEMA = _object_schema(
+    required=("name", "description", "parameters_schema", "active"),
+    name={"type": "string"},
+    description={"type": "string"},
+    parameters_schema={"type": "object"},
+    handler_ref=_nullable({"type": "string"}),
+    handler_capability=_nullable({"type": "string"}),
+    active={"type": "boolean"},
+)
+AGENT_SPEC_SCHEMA = _object_schema(
+    required=("name", "description", "tool_names", "runner_class"),
+    name={"type": "string"},
+    description={"type": "string"},
+    tool_names={"type": "array", "items": {"type": "string"}},
+    runner_class={"type": "string"},
+)
+PROVIDER_GET_USING_INPUT_SCHEMA = _object_schema(umo=_nullable({"type": "string"}))
+PROVIDER_GET_USING_OUTPUT_SCHEMA = _object_schema(
+    required=("provider",),
+    provider=_nullable(PROVIDER_META_SCHEMA),
+)
+PROVIDER_GET_CURRENT_CHAT_PROVIDER_ID_INPUT_SCHEMA = _object_schema(
+    umo=_nullable({"type": "string"}),
+)
+PROVIDER_GET_CURRENT_CHAT_PROVIDER_ID_OUTPUT_SCHEMA = _object_schema(
+    required=("provider_id",),
+    provider_id=_nullable({"type": "string"}),
+)
+PROVIDER_LIST_ALL_INPUT_SCHEMA = _object_schema()
+PROVIDER_LIST_ALL_OUTPUT_SCHEMA = _object_schema(
+    required=("providers",),
+    providers={"type": "array", "items": PROVIDER_META_SCHEMA},
+)
+LLM_TOOL_MANAGER_GET_INPUT_SCHEMA = _object_schema()
+LLM_TOOL_MANAGER_GET_OUTPUT_SCHEMA = _object_schema(
+    required=("registered", "active"),
+    registered={"type": "array", "items": LLM_TOOL_SPEC_SCHEMA},
+    active={"type": "array", "items": LLM_TOOL_SPEC_SCHEMA},
+)
+LLM_TOOL_MANAGER_ACTIVATE_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+)
+LLM_TOOL_MANAGER_ACTIVATE_OUTPUT_SCHEMA = _object_schema(
+    required=("activated",),
+    activated={"type": "boolean"},
+)
+LLM_TOOL_MANAGER_DEACTIVATE_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+)
+LLM_TOOL_MANAGER_DEACTIVATE_OUTPUT_SCHEMA = _object_schema(
+    required=("deactivated",),
+    deactivated={"type": "boolean"},
+)
+LLM_TOOL_MANAGER_ADD_INPUT_SCHEMA = _object_schema(
+    required=("tools",),
+    tools={"type": "array", "items": LLM_TOOL_SPEC_SCHEMA},
+)
+LLM_TOOL_MANAGER_ADD_OUTPUT_SCHEMA = _object_schema(
+    required=("names",),
+    names={"type": "array", "items": {"type": "string"}},
+)
+AGENT_TOOL_LOOP_RUN_INPUT_SCHEMA = _object_schema(
+    prompt=_nullable({"type": "string"}),
+    system_prompt=_nullable({"type": "string"}),
+    session_id=_nullable({"type": "string"}),
+    contexts={"type": "array", "items": {"type": "object"}},
+    image_urls={"type": "array", "items": {"type": "string"}},
+    tool_names=_nullable({"type": "array", "items": {"type": "string"}}),
+    tool_calls_result={"type": "array", "items": {"type": "object"}},
+    provider_id=_nullable({"type": "string"}),
+    model=_nullable({"type": "string"}),
+    temperature={"type": "number"},
+    max_steps={"type": "integer"},
+    tool_call_timeout={"type": "integer"},
+)
+AGENT_TOOL_LOOP_RUN_OUTPUT_SCHEMA = LLM_CHAT_RAW_OUTPUT_SCHEMA
+AGENT_REGISTRY_LIST_INPUT_SCHEMA = _object_schema()
+AGENT_REGISTRY_LIST_OUTPUT_SCHEMA = _object_schema(
+    required=("agents",),
+    agents={"type": "array", "items": AGENT_SPEC_SCHEMA},
+)
+AGENT_REGISTRY_GET_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+)
+AGENT_REGISTRY_GET_OUTPUT_SCHEMA = _object_schema(
+    required=("agent",),
+    agent=_nullable(AGENT_SPEC_SCHEMA),
 )
 
 BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
@@ -446,9 +675,41 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": PLATFORM_SEND_CHAIN_INPUT_SCHEMA,
         "output": PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA,
     },
+    "platform.send_by_session": {
+        "input": PLATFORM_SEND_BY_SESSION_INPUT_SCHEMA,
+        "output": PLATFORM_SEND_BY_SESSION_OUTPUT_SCHEMA,
+    },
+    "platform.get_group": {
+        "input": PLATFORM_GET_GROUP_INPUT_SCHEMA,
+        "output": PLATFORM_GET_GROUP_OUTPUT_SCHEMA,
+    },
     "platform.get_members": {
         "input": PLATFORM_GET_MEMBERS_INPUT_SCHEMA,
         "output": PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA,
+    },
+    "session.plugin.is_enabled": {
+        "input": SESSION_PLUGIN_IS_ENABLED_INPUT_SCHEMA,
+        "output": SESSION_PLUGIN_IS_ENABLED_OUTPUT_SCHEMA,
+    },
+    "session.plugin.filter_handlers": {
+        "input": SESSION_PLUGIN_FILTER_HANDLERS_INPUT_SCHEMA,
+        "output": SESSION_PLUGIN_FILTER_HANDLERS_OUTPUT_SCHEMA,
+    },
+    "session.service.is_llm_enabled": {
+        "input": SESSION_SERVICE_IS_LLM_ENABLED_INPUT_SCHEMA,
+        "output": SESSION_SERVICE_IS_LLM_ENABLED_OUTPUT_SCHEMA,
+    },
+    "session.service.set_llm_status": {
+        "input": SESSION_SERVICE_SET_LLM_STATUS_INPUT_SCHEMA,
+        "output": SESSION_SERVICE_SET_LLM_STATUS_OUTPUT_SCHEMA,
+    },
+    "session.service.is_tts_enabled": {
+        "input": SESSION_SERVICE_IS_TTS_ENABLED_INPUT_SCHEMA,
+        "output": SESSION_SERVICE_IS_TTS_ENABLED_OUTPUT_SCHEMA,
+    },
+    "session.service.set_tts_status": {
+        "input": SESSION_SERVICE_SET_TTS_STATUS_INPUT_SCHEMA,
+        "output": SESSION_SERVICE_SET_TTS_STATUS_OUTPUT_SCHEMA,
     },
     "http.register_api": {
         "input": HTTP_REGISTER_API_INPUT_SCHEMA,
@@ -473,6 +734,74 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
     "metadata.get_plugin_config": {
         "input": METADATA_GET_PLUGIN_CONFIG_INPUT_SCHEMA,
         "output": METADATA_GET_PLUGIN_CONFIG_OUTPUT_SCHEMA,
+    },
+    "registry.get_handlers_by_event_type": {
+        "input": REGISTRY_GET_HANDLERS_BY_EVENT_TYPE_INPUT_SCHEMA,
+        "output": REGISTRY_GET_HANDLERS_BY_EVENT_TYPE_OUTPUT_SCHEMA,
+    },
+    "registry.get_handler_by_full_name": {
+        "input": REGISTRY_GET_HANDLER_BY_FULL_NAME_INPUT_SCHEMA,
+        "output": REGISTRY_GET_HANDLER_BY_FULL_NAME_OUTPUT_SCHEMA,
+    },
+    "provider.get_using": {
+        "input": PROVIDER_GET_USING_INPUT_SCHEMA,
+        "output": PROVIDER_GET_USING_OUTPUT_SCHEMA,
+    },
+    "provider.get_current_chat_provider_id": {
+        "input": PROVIDER_GET_CURRENT_CHAT_PROVIDER_ID_INPUT_SCHEMA,
+        "output": PROVIDER_GET_CURRENT_CHAT_PROVIDER_ID_OUTPUT_SCHEMA,
+    },
+    "provider.list_all": {
+        "input": PROVIDER_LIST_ALL_INPUT_SCHEMA,
+        "output": PROVIDER_LIST_ALL_OUTPUT_SCHEMA,
+    },
+    "provider.list_all_tts": {
+        "input": PROVIDER_LIST_ALL_INPUT_SCHEMA,
+        "output": PROVIDER_LIST_ALL_OUTPUT_SCHEMA,
+    },
+    "provider.list_all_stt": {
+        "input": PROVIDER_LIST_ALL_INPUT_SCHEMA,
+        "output": PROVIDER_LIST_ALL_OUTPUT_SCHEMA,
+    },
+    "provider.list_all_embedding": {
+        "input": PROVIDER_LIST_ALL_INPUT_SCHEMA,
+        "output": PROVIDER_LIST_ALL_OUTPUT_SCHEMA,
+    },
+    "provider.get_using_tts": {
+        "input": PROVIDER_GET_USING_INPUT_SCHEMA,
+        "output": PROVIDER_GET_USING_OUTPUT_SCHEMA,
+    },
+    "provider.get_using_stt": {
+        "input": PROVIDER_GET_USING_INPUT_SCHEMA,
+        "output": PROVIDER_GET_USING_OUTPUT_SCHEMA,
+    },
+    "llm_tool.manager.get": {
+        "input": LLM_TOOL_MANAGER_GET_INPUT_SCHEMA,
+        "output": LLM_TOOL_MANAGER_GET_OUTPUT_SCHEMA,
+    },
+    "llm_tool.manager.activate": {
+        "input": LLM_TOOL_MANAGER_ACTIVATE_INPUT_SCHEMA,
+        "output": LLM_TOOL_MANAGER_ACTIVATE_OUTPUT_SCHEMA,
+    },
+    "llm_tool.manager.deactivate": {
+        "input": LLM_TOOL_MANAGER_DEACTIVATE_INPUT_SCHEMA,
+        "output": LLM_TOOL_MANAGER_DEACTIVATE_OUTPUT_SCHEMA,
+    },
+    "llm_tool.manager.add": {
+        "input": LLM_TOOL_MANAGER_ADD_INPUT_SCHEMA,
+        "output": LLM_TOOL_MANAGER_ADD_OUTPUT_SCHEMA,
+    },
+    "agent.tool_loop.run": {
+        "input": AGENT_TOOL_LOOP_RUN_INPUT_SCHEMA,
+        "output": AGENT_TOOL_LOOP_RUN_OUTPUT_SCHEMA,
+    },
+    "agent.registry.list": {
+        "input": AGENT_REGISTRY_LIST_INPUT_SCHEMA,
+        "output": AGENT_REGISTRY_LIST_OUTPUT_SCHEMA,
+    },
+    "agent.registry.get": {
+        "input": AGENT_REGISTRY_GET_INPUT_SCHEMA,
+        "output": AGENT_REGISTRY_GET_OUTPUT_SCHEMA,
     },
     "system.get_data_dir": {
         "input": SYSTEM_GET_DATA_DIR_INPUT_SCHEMA,
@@ -514,6 +843,34 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": SYSTEM_EVENT_SEND_STREAMING_CLOSE_INPUT_SCHEMA,
         "output": SYSTEM_EVENT_SEND_STREAMING_CLOSE_OUTPUT_SCHEMA,
     },
+    "system.event.llm.get_state": {
+        "input": SYSTEM_EVENT_LLM_GET_STATE_INPUT_SCHEMA,
+        "output": SYSTEM_EVENT_LLM_GET_STATE_OUTPUT_SCHEMA,
+    },
+    "system.event.llm.request": {
+        "input": SYSTEM_EVENT_LLM_REQUEST_INPUT_SCHEMA,
+        "output": SYSTEM_EVENT_LLM_REQUEST_OUTPUT_SCHEMA,
+    },
+    "system.event.result.get": {
+        "input": SYSTEM_EVENT_RESULT_GET_INPUT_SCHEMA,
+        "output": SYSTEM_EVENT_RESULT_GET_OUTPUT_SCHEMA,
+    },
+    "system.event.result.set": {
+        "input": SYSTEM_EVENT_RESULT_SET_INPUT_SCHEMA,
+        "output": SYSTEM_EVENT_RESULT_SET_OUTPUT_SCHEMA,
+    },
+    "system.event.result.clear": {
+        "input": SYSTEM_EVENT_RESULT_CLEAR_INPUT_SCHEMA,
+        "output": SYSTEM_EVENT_RESULT_CLEAR_OUTPUT_SCHEMA,
+    },
+    "system.event.handler_whitelist.get": {
+        "input": SYSTEM_EVENT_HANDLER_WHITELIST_GET_INPUT_SCHEMA,
+        "output": SYSTEM_EVENT_HANDLER_WHITELIST_GET_OUTPUT_SCHEMA,
+    },
+    "system.event.handler_whitelist.set": {
+        "input": SYSTEM_EVENT_HANDLER_WHITELIST_SET_INPUT_SCHEMA,
+        "output": SYSTEM_EVENT_HANDLER_WHITELIST_SET_OUTPUT_SCHEMA,
+    },
 }
 
 
@@ -523,11 +880,6 @@ class _DescriptorBase(BaseModel):
 
 class Permissions(_DescriptorBase):
     """权限配置，控制处理器的访问权限。
-
-    与旧版对比：
-        旧版: 通过 extras_configs 字典配置
-            {"require_admin": true, "level": 1}
-        新版: 使用 Permissions 模型，类型安全
 
     Attributes:
         require_admin: 是否需要管理员权限
@@ -563,10 +915,6 @@ class SessionRef(_DescriptorBase):
 class CommandTrigger(_DescriptorBase):
     """命令触发器，响应特定命令。
 
-    与旧版对比：
-        旧版: 使用 @command_handler("help") 装饰器注册
-        新版: 使用 CommandTrigger 声明式定义，支持别名
-
     Attributes:
         type: 触发器类型，固定为 "command"
         command: 命令名称（不含前缀，如 "help"）
@@ -587,10 +935,6 @@ class CommandTrigger(_DescriptorBase):
 class MessageTrigger(_DescriptorBase):
     """消息触发器，描述消息类处理器的订阅条件。
 
-    与旧版对比：
-        旧版: 使用 @regex_handler(r"pattern") 或 @message_handler 装饰器
-        新版: 使用 MessageTrigger 声明式定义，支持正则、关键词和平台过滤
-
     Attributes:
         type: 触发器类型，固定为 "message"
         regex: 正则表达式模式，匹配消息文本
@@ -599,7 +943,7 @@ class MessageTrigger(_DescriptorBase):
         message_types: 限定的消息类型列表，为空表示不限
 
     Note:
-        `regex` 和 `keywords` 可以同时为空，此时表示“任意消息均可触发”，
+        `regex` 和 `keywords` 可以同时为空，此时表示 "任意消息均可触发"，
         仅由平台过滤或上层运行时进一步筛选。
     """
 
@@ -613,10 +957,6 @@ class MessageTrigger(_DescriptorBase):
 class EventTrigger(_DescriptorBase):
     """事件触发器，响应特定类型的事件。
 
-    与旧版对比：
-        旧版: 使用整数 event_type，如 3 表示消息事件
-        新版: 使用字符串 event_type，如 "message" 或 "3"，更灵活
-
     Attributes:
         type: 触发器类型，固定为 "event"
         event_type: 事件类型，字符串形式（如 "message"、"notice"）
@@ -628,10 +968,6 @@ class EventTrigger(_DescriptorBase):
 
 class ScheduleTrigger(_DescriptorBase):
     """定时触发器，按 cron 表达式或固定间隔执行。
-
-    与旧版对比：
-        旧版: 使用 @scheduled("0 * * * *") 装饰器
-        新版: 使用 ScheduleTrigger 声明式定义
 
     Attributes:
         type: 触发器类型，固定为 "schedule"
@@ -718,25 +1054,6 @@ Trigger = Annotated[
 class HandlerDescriptor(_DescriptorBase):
     """处理器描述符，描述一个事件处理函数的元信息。
 
-    与旧版对比：
-        旧版 handshake 响应中的处理器信息:
-            {
-                "event_type": 3,
-                "handler_full_name": "plugin.handler",
-                "handler_name": "handler",
-                "handler_module_path": "plugin",
-                "desc": "描述",
-                "extras_configs": {"priority": 0, "require_admin": false}
-            }
-
-        新版 HandlerDescriptor:
-            {
-                "id": "plugin.handler",
-                "trigger": {"type": "event", "event_type": "message"},
-                "priority": 0,
-                "permissions": {"require_admin": false, "level": 0}
-            }
-
     Attributes:
         id: 处理器唯一标识，通常是 "模块.函数名" 格式
         trigger: 触发器配置，决定何时执行该处理器
@@ -768,10 +1085,6 @@ class HandlerDescriptor(_DescriptorBase):
 
 class CapabilityDescriptor(_DescriptorBase):
     """能力描述符，描述一个可调用的远程能力。
-
-    与旧版对比：
-        旧版: 无独立的能力描述，通过 method 名称隐式定义
-        新版: 使用 CapabilityDescriptor 显式声明能力，支持 JSON Schema 验证
 
     能力命名规范：
         - 使用 "namespace.action" 格式，如 "llm.chat"、"db.set"
@@ -875,8 +1188,12 @@ __all__ = [
     "ParamSpec",
     "PLATFORM_GET_MEMBERS_INPUT_SCHEMA",
     "PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA",
+    "PLATFORM_GET_GROUP_INPUT_SCHEMA",
+    "PLATFORM_GET_GROUP_OUTPUT_SCHEMA",
     "PLATFORM_SEND_CHAIN_INPUT_SCHEMA",
     "PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA",
+    "PLATFORM_SEND_BY_SESSION_INPUT_SCHEMA",
+    "PLATFORM_SEND_BY_SESSION_OUTPUT_SCHEMA",
     "PLATFORM_SEND_IMAGE_INPUT_SCHEMA",
     "PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA",
     "PLATFORM_SEND_INPUT_SCHEMA",
@@ -885,8 +1202,20 @@ __all__ = [
     "RESERVED_CAPABILITY_NAMESPACES",
     "RESERVED_CAPABILITY_PREFIXES",
     "ScheduleTrigger",
+    "SESSION_PLUGIN_FILTER_HANDLERS_INPUT_SCHEMA",
+    "SESSION_PLUGIN_FILTER_HANDLERS_OUTPUT_SCHEMA",
+    "SESSION_PLUGIN_IS_ENABLED_INPUT_SCHEMA",
+    "SESSION_PLUGIN_IS_ENABLED_OUTPUT_SCHEMA",
     "SESSION_REF_SCHEMA",
     "SessionRef",
+    "SESSION_SERVICE_IS_LLM_ENABLED_INPUT_SCHEMA",
+    "SESSION_SERVICE_IS_LLM_ENABLED_OUTPUT_SCHEMA",
+    "SESSION_SERVICE_IS_TTS_ENABLED_INPUT_SCHEMA",
+    "SESSION_SERVICE_IS_TTS_ENABLED_OUTPUT_SCHEMA",
+    "SESSION_SERVICE_SET_LLM_STATUS_INPUT_SCHEMA",
+    "SESSION_SERVICE_SET_LLM_STATUS_OUTPUT_SCHEMA",
+    "SESSION_SERVICE_SET_TTS_STATUS_INPUT_SCHEMA",
+    "SESSION_SERVICE_SET_TTS_STATUS_OUTPUT_SCHEMA",
     "SYSTEM_EVENT_REACT_INPUT_SCHEMA",
     "SYSTEM_EVENT_REACT_OUTPUT_SCHEMA",
     "SYSTEM_EVENT_SEND_STREAMING_CHUNK_INPUT_SCHEMA",

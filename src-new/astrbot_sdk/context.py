@@ -21,6 +21,7 @@ Attributes:
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -34,8 +35,14 @@ from .clients import (
     MemoryClient,
     MetadataClient,
     PlatformClient,
+    RegistryClient,
+    SessionPluginManager,
+    SessionServiceManager,
 )
 from .clients._proxy import CapabilityProxy
+from .clients.llm import LLMResponse
+from .llm.entities import LLMToolSpec, ProviderMeta, ProviderRequest
+from .llm.tools import LLMToolManager
 
 
 @dataclass(slots=True)
@@ -106,6 +113,7 @@ class Context:
         plugin_id: str,
         cancel_token: CancelToken | None = None,
         logger: Any | None = None,
+        source_event_payload: dict[str, Any] | None = None,
     ) -> None:
         """初始化上下文。
 
@@ -124,9 +132,27 @@ class Context:
         self.platform = PlatformClient(proxy)
         self.http = HTTPClient(proxy)
         self.metadata = MetadataClient(proxy, plugin_id)
+        self.registry = RegistryClient(proxy)
+        self.session_plugins = SessionPluginManager(proxy)
+        self.session_services = SessionServiceManager(proxy)
+        self._llm_tool_manager = LLMToolManager(proxy)
         self.plugin_id = plugin_id
         self.logger = logger or base_logger.bind(plugin_id=plugin_id)
         self.cancel_token = cancel_token or CancelToken()
+        self._source_event_payload = (
+            dict(source_event_payload) if isinstance(source_event_payload, dict) else {}
+        )
+
+    @staticmethod
+    def _provider_meta_list(items: Iterable[Any]) -> list[ProviderMeta]:
+        providers: list[ProviderMeta] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            provider = ProviderMeta.from_payload(item)
+            if provider is not None:
+                providers.append(provider)
+        return providers
 
     async def get_data_dir(self) -> Path:
         """Return the plugin-scoped data directory path."""
@@ -165,3 +191,74 @@ class Context:
             },
         )
         return str(output.get("result", ""))
+
+    async def get_using_provider(self, umo: str | None = None) -> ProviderMeta | None:
+        output = await self._proxy.call("provider.get_using", {"umo": umo})
+        return ProviderMeta.from_payload(output.get("provider"))
+
+    async def get_current_chat_provider_id(self, umo: str | None = None) -> str | None:
+        output = await self._proxy.call(
+            "provider.get_current_chat_provider_id",
+            {"umo": umo},
+        )
+        value = output.get("provider_id")
+        return str(value) if value else None
+
+    async def get_all_providers(self) -> list[ProviderMeta]:
+        output = await self._proxy.call("provider.list_all", {})
+        return self._provider_meta_list(output.get("providers", []))
+
+    async def get_all_tts_providers(self) -> list[ProviderMeta]:
+        output = await self._proxy.call("provider.list_all_tts", {})
+        return self._provider_meta_list(output.get("providers", []))
+
+    async def get_all_stt_providers(self) -> list[ProviderMeta]:
+        output = await self._proxy.call("provider.list_all_stt", {})
+        return self._provider_meta_list(output.get("providers", []))
+
+    async def get_all_embedding_providers(self) -> list[ProviderMeta]:
+        output = await self._proxy.call("provider.list_all_embedding", {})
+        return self._provider_meta_list(output.get("providers", []))
+
+    async def get_using_tts_provider(
+        self, umo: str | None = None
+    ) -> ProviderMeta | None:
+        output = await self._proxy.call("provider.get_using_tts", {"umo": umo})
+        return ProviderMeta.from_payload(output.get("provider"))
+
+    async def get_using_stt_provider(
+        self, umo: str | None = None
+    ) -> ProviderMeta | None:
+        output = await self._proxy.call("provider.get_using_stt", {"umo": umo})
+        return ProviderMeta.from_payload(output.get("provider"))
+
+    def get_llm_tool_manager(self) -> LLMToolManager:
+        return self._llm_tool_manager
+
+    async def activate_llm_tool(self, name: str) -> bool:
+        return await self._llm_tool_manager.activate(name)
+
+    async def deactivate_llm_tool(self, name: str) -> bool:
+        return await self._llm_tool_manager.deactivate(name)
+
+    async def add_llm_tools(self, *tools: LLMToolSpec) -> list[str]:
+        return await self._llm_tool_manager.add(*tools)
+
+    async def tool_loop_agent(
+        self,
+        request: ProviderRequest | None = None,
+        **kwargs: Any,
+    ) -> LLMResponse:
+        provider_request = request or ProviderRequest()
+        if kwargs:
+            merged = provider_request.model_dump()
+            merged.update(kwargs)
+            provider_request = ProviderRequest.model_validate(merged)
+        payload = provider_request.to_payload()
+        target_payload = self._source_event_payload.get("target")
+        if isinstance(target_payload, dict):
+            # Preserve the original message target so core can recover the
+            # dispatch token for message-bound tool loop execution.
+            payload["target"] = dict(target_payload)
+        output = await self._proxy.call("agent.tool_loop.run", payload)
+        return LLMResponse.model_validate(output)

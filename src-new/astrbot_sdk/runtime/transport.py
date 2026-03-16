@@ -16,29 +16,6 @@
         - 通过 port 属性获取实际监听端口
         - 自动重连需要外部实现
 
-与旧版对比：
-    旧版传输层:
-        - 分离的 client/ 和 server/ 目录
-        - JSONRPCClient 基类
-            - StdioClient: 子进程通信
-            - WebSocketClient: WebSocket 客户端
-        - JSONRPCServer 基类
-            - StdioServer: 标准输入输出
-            - WebSocketServer: WebSocket 服务端
-        - 每个实现都处理 JSON-RPC 消息序列化
-
-    新版传输层:
-        - 统一的 Transport 抽象
-        - StdioTransport:
-            - 支持启动子进程模式 (command 参数)
-            - 支持文件描述符模式 (stdin/stdout 参数)
-        - WebSocketServerTransport:
-            - 单连接限制
-            - 支持心跳配置
-        - WebSocketClientTransport:
-            - 自动重连需要外部实现
-        - 传输层只处理字符串，协议由 Peer 层处理
-
 使用示例：
     # 子进程模式
     transport = StdioTransport(
@@ -177,6 +154,7 @@ class StdioTransport(Transport):
         self._reader_task = asyncio.create_task(self._read_file_loop())
 
     async def _start_subprocess_with_retry(self) -> asyncio.subprocess.Process:
+        assert self._command is not None  # 类型收窄：start() 已确保非空
         delays = [0.15, 0.35, 0.75]
         last_error: BaseException | None = None
         for attempt, delay in enumerate([0.0, *delays], start=1):

@@ -28,12 +28,17 @@ Example:
 
 from __future__ import annotations
 
+import inspect
+import typing
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
 from pydantic import BaseModel
 
+from ._typing_utils import unwrap_optional
+from .llm.agents import AgentSpec, BaseAgentRunner
+from .llm.entities import LLMToolSpec
 from .protocol.descriptors import (
     RESERVED_CAPABILITY_PREFIXES,
     CapabilityDescriptor,
@@ -51,6 +56,8 @@ from .protocol.descriptors import (
 HandlerCallable = Callable[..., Any]
 HANDLER_META_ATTR = "__astrbot_handler_meta__"
 CAPABILITY_META_ATTR = "__astrbot_capability_meta__"
+LLM_TOOL_META_ATTR = "__astrbot_llm_tool_meta__"
+AGENT_META_ATTR = "__astrbot_agent_meta__"
 
 
 @dataclass(slots=True)
@@ -92,6 +99,16 @@ class CapabilityMeta:
     descriptor: CapabilityDescriptor
 
 
+@dataclass(slots=True)
+class LLMToolMeta:
+    spec: LLMToolSpec
+
+
+@dataclass(slots=True)
+class AgentMeta:
+    spec: AgentSpec
+
+
 def _get_or_create_meta(func: HandlerCallable) -> HandlerMeta:
     """获取或创建 handler 元数据。"""
     meta = getattr(func, HANDLER_META_ATTR, None)
@@ -123,6 +140,14 @@ def get_capability_meta(func: HandlerCallable) -> CapabilityMeta | None:
         CapabilityMeta 实例，如果没有则返回 None
     """
     return getattr(func, CAPABILITY_META_ATTR, None)
+
+
+def get_llm_tool_meta(func: HandlerCallable) -> LLMToolMeta | None:
+    return getattr(func, LLM_TOOL_META_ATTR, None)
+
+
+def get_agent_meta(obj: Any) -> AgentMeta | None:
+    return getattr(obj, AGENT_META_ATTR, None)
 
 
 def _model_to_schema(
@@ -415,5 +440,114 @@ def provide_capability(
         )
         setattr(func, CAPABILITY_META_ATTR, CapabilityMeta(descriptor=descriptor))
         return func
+
+    return decorator
+
+
+def _annotation_to_schema(annotation: Any) -> dict[str, Any]:
+    normalized, _is_optional = unwrap_optional(annotation)
+    origin = typing.get_origin(normalized)
+    if normalized is str:
+        return {"type": "string"}
+    if normalized is int:
+        return {"type": "integer"}
+    if normalized is float:
+        return {"type": "number"}
+    if normalized is bool:
+        return {"type": "boolean"}
+    if normalized is dict or origin is dict:
+        return {"type": "object"}
+    if normalized is list or origin is list:
+        args = typing.get_args(normalized)
+        item_schema = _annotation_to_schema(args[0]) if args else {}
+        return {"type": "array", "items": item_schema}
+    return {"type": "string"}
+
+
+def _callable_parameters_schema(func: HandlerCallable) -> dict[str, Any]:
+    signature = inspect.signature(func)
+    type_hints: dict[str, Any] = {}
+    try:
+        type_hints = typing.get_type_hints(func)
+    except Exception:
+        type_hints = {}
+
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+    for parameter in signature.parameters.values():
+        if parameter.kind not in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ):
+            continue
+        if parameter.name == "self":
+            continue
+        annotation = type_hints.get(parameter.name)
+        normalized, _is_optional = unwrap_optional(annotation)
+        if parameter.name in {"event", "ctx", "context"}:
+            continue
+        properties[parameter.name] = _annotation_to_schema(normalized)
+        if parameter.default is inspect.Parameter.empty and not _is_optional:
+            required.append(parameter.name)
+    schema: dict[str, Any] = {"type": "object", "properties": properties}
+    if required:
+        schema["required"] = required
+    return schema
+
+
+def register_llm_tool(
+    name: str | None = None,
+    *,
+    description: str | None = None,
+    parameters_schema: dict[str, Any] | None = None,
+    active: bool = True,
+) -> Callable[[HandlerCallable], HandlerCallable]:
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        tool_name = str(name or func.__name__).strip()
+        if not tool_name:
+            raise ValueError("LLM tool name must not be empty")
+        setattr(
+            func,
+            LLM_TOOL_META_ATTR,
+            LLMToolMeta(
+                spec=LLMToolSpec(
+                    name=tool_name,
+                    description=description or (inspect.getdoc(func) or "").splitlines()[0]
+                    if inspect.getdoc(func)
+                    else "",
+                    parameters_schema=parameters_schema
+                    or _callable_parameters_schema(func),
+                    handler_ref=tool_name,
+                    active=active,
+                )
+            ),
+        )
+        return func
+
+    return decorator
+
+
+def register_agent(
+    name: str,
+    *,
+    description: str = "",
+    tool_names: list[str] | None = None,
+) -> Callable[[type[BaseAgentRunner]], type[BaseAgentRunner]]:
+    def decorator(cls: type[BaseAgentRunner]) -> type[BaseAgentRunner]:
+        if not inspect.isclass(cls) or not issubclass(cls, BaseAgentRunner):
+            raise TypeError("@register_agent() 只接受 BaseAgentRunner 子类")
+        setattr(
+            cls,
+            AGENT_META_ATTR,
+            AgentMeta(
+                spec=AgentSpec(
+                    name=name,
+                    description=description,
+                    tool_names=list(tool_names or []),
+                    runner_class=f"{cls.__module__}.{cls.__qualname__}",
+                )
+            ),
+        )
+        return cls
 
     return decorator

@@ -63,11 +63,19 @@ import typing
 from dataclasses import dataclass, field
 from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, TypeAlias, cast
 
 import yaml
 
-from ..decorators import get_capability_meta, get_handler_meta
+from .._typing_utils import unwrap_optional
+from ..decorators import (
+    get_agent_meta,
+    get_capability_meta,
+    get_handler_meta,
+    get_llm_tool_meta,
+)
+from ..llm.agents import AgentSpec
+from ..llm.entities import LLMToolSpec
 from ..protocol.descriptors import (
     CapabilityDescriptor,
     HandlerDescriptor,
@@ -87,6 +95,11 @@ PLUGIN_MANIFEST_FILE = "plugin.yaml"
 STATE_FILE_NAME = ".astrbot-worker-state.json"
 CONFIG_SCHEMA_FILE = "_conf_schema.json"
 PLUGIN_METADATA_ATTR = "__astrbot_plugin_metadata__"
+ParamTypeName: TypeAlias = Literal[
+    "str", "int", "float", "bool", "optional", "greedy_str"
+]
+OptionalInnerType: TypeAlias = Literal["str", "int", "float", "bool"] | None
+HandlerKind: TypeAlias = Literal["handler", "hook", "tool", "session"]
 
 
 def _default_python_version() -> str:
@@ -133,10 +146,28 @@ class LoadedCapability:
 
 
 @dataclass(slots=True)
+class LoadedLLMTool:
+    spec: LLMToolSpec
+    callable: Any
+    owner: Any
+    plugin_id: str = ""
+
+
+@dataclass(slots=True)
+class LoadedAgent:
+    spec: AgentSpec
+    runner_class: type[Any]
+    owner: Any | None = None
+    plugin_id: str = ""
+
+
+@dataclass(slots=True)
 class LoadedPlugin:
     plugin: PluginSpec
     handlers: list[LoadedHandler]
     capabilities: list[LoadedCapability] = field(default_factory=list)
+    llm_tools: list[LoadedLLMTool] = field(default_factory=list)
+    agents: list[LoadedAgent] = field(default_factory=list)
     instances: list[Any] = field(default_factory=list)
 
 
@@ -161,19 +192,10 @@ def _iter_discoverable_names(instance: Any) -> list[str]:
     return [*handler_names, *extra_names]
 
 
-def _unwrap_optional(annotation: Any) -> tuple[Any, bool]:
-    origin = typing.get_origin(annotation)
-    if origin is typing.Union:
-        args = [item for item in typing.get_args(annotation) if item is not type(None)]
-        if len(args) == 1:
-            return args[0], True
-    return annotation, False
-
-
 def _is_injected_parameter(annotation: Any, parameter_name: str) -> bool:
     if parameter_name in {"event", "ctx", "context", "sched", "schedule"}:
         return True
-    normalized, _is_optional = _unwrap_optional(annotation)
+    normalized, _is_optional = unwrap_optional(annotation)
     if normalized is None:
         return False
     if normalized in {ScheduleContext}:
@@ -186,14 +208,17 @@ def _is_injected_parameter(annotation: Any, parameter_name: str) -> bool:
     return False
 
 
-def _param_type_name(annotation: Any) -> tuple[str, str | None, bool]:
-    normalized, is_optional = _unwrap_optional(annotation)
+def _param_type_name(annotation: Any) -> tuple[ParamTypeName, OptionalInnerType, bool]:
+    normalized, is_optional = unwrap_optional(annotation)
     if normalized is GreedyStr:
         return "greedy_str", None, False
     if normalized in {int, float, bool, str}:
+        normalized_name = cast(
+            Literal["str", "int", "float", "bool"], normalized.__name__
+        )
         if is_optional:
-            return "optional", normalized.__name__, False
-        return normalized.__name__, None, True
+            return "optional", normalized_name, False
+        return normalized_name, None, True
     if is_optional:
         return "optional", "str", False
     return "str", None, True
@@ -305,6 +330,48 @@ def _resolve_capability_candidate(instance: Any, name: str) -> tuple[Any, Any] |
         if meta is not None:
             return getattr(instance, name), meta
     return None
+
+
+def _resolve_llm_tool_candidate(instance: Any, name: str) -> tuple[Any, Any] | None:
+    try:
+        raw = inspect.getattr_static(instance, name)
+    except AttributeError:
+        return None
+
+    candidates = [raw]
+    wrapped = getattr(raw, "__func__", None)
+    if wrapped is not None:
+        candidates.append(wrapped)
+
+    for candidate in candidates:
+        meta = get_llm_tool_meta(candidate)
+        if meta is not None:
+            return getattr(instance, name), meta
+    return None
+
+
+def _iter_agent_candidates(component_cls: type[Any]) -> list[tuple[type[Any], Any]]:
+    module = import_module(component_cls.__module__)
+    seen: set[str] = set()
+    resolved: list[tuple[type[Any], Any]] = []
+
+    def _collect(candidate: Any) -> None:
+        if not inspect.isclass(candidate):
+            return
+        meta = get_agent_meta(candidate)
+        if meta is None:
+            return
+        key = f"{candidate.__module__}.{candidate.__qualname__}"
+        if key in seen:
+            return
+        seen.add(key)
+        resolved.append((candidate, meta))
+
+    for candidate in vars(module).values():
+        _collect(candidate)
+    for candidate in vars(component_cls).values():
+        _collect(candidate)
+    return resolved
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -699,6 +766,9 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
     instances: list[Any] = []
     handlers: list[LoadedHandler] = []
     capabilities: list[LoadedCapability] = []
+    llm_tools: list[LoadedLLMTool] = []
+    agents: list[LoadedAgent] = []
+    seen_agents: set[str] = set()
 
     for resolved_component in _plugin_component_classes(plugin):
         component_cls = resolved_component.cls
@@ -717,12 +787,27 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
             ) from exc
         instances.append(instance)
 
+        for runner_class, meta in _iter_agent_candidates(component_cls):
+            runner_key = f"{runner_class.__module__}.{runner_class.__qualname__}"
+            if runner_key in seen_agents:
+                continue
+            seen_agents.add(runner_key)
+            agents.append(
+                LoadedAgent(
+                    spec=meta.spec.model_copy(deep=True),
+                    runner_class=runner_class,
+                    owner=None,
+                    plugin_id=plugin.name,
+                )
+            )
+
         for name in _iter_discoverable_names(instance):
             resolved = _resolve_handler_candidate(instance, name)
-            if resolved is None:
-                capability = _resolve_capability_candidate(instance, name)
-                if capability is None:
-                    continue
+            capability = _resolve_capability_candidate(instance, name)
+            llm_tool = _resolve_llm_tool_candidate(instance, name)
+            if resolved is None and capability is None and llm_tool is None:
+                continue
+            if capability is not None:
                 bound, meta = capability
                 capabilities.append(
                     LoadedCapability(
@@ -732,43 +817,54 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                         plugin_id=plugin.name,
                     )
                 )
-                continue
-
-            bound, meta = resolved
-            handler_id = f"{plugin.name}:{instance.__class__.__module__}.{instance.__class__.__name__}.{name}"
-            if isinstance(meta.trigger, ScheduleTrigger):
-                _validate_schedule_signature(bound)
-            param_specs = _build_param_specs(bound)
-            handlers.append(
-                LoadedHandler(
-                    descriptor=HandlerDescriptor(
-                        id=handler_id,
-                        trigger=meta.trigger,
-                        kind=str(meta.kind),
-                        contract=meta.contract,
-                        priority=meta.priority,
-                        permissions=meta.permissions.model_copy(deep=True),
-                        filters=[item.model_copy(deep=True) for item in meta.filters],
-                        param_specs=[
-                            item.model_copy(deep=True) for item in param_specs
-                        ],
-                        command_route=(
-                            meta.command_route.model_copy(deep=True)
-                            if meta.command_route is not None
-                            else None
-                        ),
+            if llm_tool is not None:
+                bound_tool, tool_meta = llm_tool
+                llm_tools.append(
+                    LoadedLLMTool(
+                        spec=tool_meta.spec.model_copy(deep=True),
+                        callable=bound_tool,
+                        owner=instance,
+                        plugin_id=plugin.name,
                     ),
-                    callable=bound,
-                    owner=instance,
-                    plugin_id=plugin.name,
-                    local_filters=list(meta.local_filters),
                 )
-            )
+            if resolved is not None:
+                bound, meta = resolved
+                handler_id = f"{plugin.name}:{instance.__class__.__module__}.{instance.__class__.__name__}.{name}"
+                if isinstance(meta.trigger, ScheduleTrigger):
+                    _validate_schedule_signature(bound)
+                param_specs = _build_param_specs(bound)
+                handlers.append(
+                    LoadedHandler(
+                        descriptor=HandlerDescriptor(
+                            id=handler_id,
+                            trigger=meta.trigger,
+                            kind=cast(HandlerKind, meta.kind),
+                            contract=meta.contract,
+                            priority=meta.priority,
+                            permissions=meta.permissions.model_copy(deep=True),
+                            filters=[item.model_copy(deep=True) for item in meta.filters],
+                            param_specs=[
+                                item.model_copy(deep=True) for item in param_specs
+                            ],
+                            command_route=(
+                                meta.command_route.model_copy(deep=True)
+                                if meta.command_route is not None
+                                else None
+                            ),
+                        ),
+                        callable=bound,
+                        owner=instance,
+                        plugin_id=plugin.name,
+                        local_filters=list(meta.local_filters),
+                    )
+                )
 
     return LoadedPlugin(
         plugin=plugin,
         handlers=handlers,
         capabilities=capabilities,
+        llm_tools=llm_tools,
+        agents=agents,
         instances=instances,
     )
 

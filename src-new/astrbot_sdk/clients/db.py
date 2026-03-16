@@ -2,21 +2,6 @@
 
 提供键值存储能力，用于持久化插件数据。
 
-与旧版对比：
-    旧版 (src/astrbot_sdk/api/star/context.py):
-        Context.put_kv_data(key, value)
-        Context.get_kv_data(key)
-        Context.delete_kv_data(key)
-
-    新版:
-        Context.db.set(key, value)
-        Context.db.get(key)
-        Context.db.delete(key)
-        Context.db.list(prefix)      # 列出键
-        Context.db.get_many(keys)    # 批量读取
-        Context.db.set_many(items)   # 批量写入
-        Context.db.watch(prefix)     # 订阅变更流
-
 功能说明：
     - 数据永久存储，除非用户显式删除
     - 值类型支持任意 JSON 数据

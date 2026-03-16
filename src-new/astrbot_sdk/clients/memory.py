@@ -2,19 +2,6 @@
 
 提供 AI 记忆存储能力，用于存储和检索对话记忆、用户偏好等语义数据。
 
-与旧版对比：
-    旧版: 无独立记忆模块，KV 存储用于简单数据持久化
-
-    新版: 新增 MemoryClient，提供语义搜索能力
-        - search(): 语义搜索记忆项
-        - save(): 保存记忆项
-        - save_with_ttl(): 保存带过期时间的记忆项
-        - get(): 精确获取单个记忆项
-        - get_many(): 批量获取多个记忆项
-        - delete(): 删除记忆项
-        - delete_many(): 批量删除多个记忆项
-        - stats(): 获取记忆统计信息
-
 设计说明：
     MemoryClient 与 DBClient 的区别：
     - DBClient: 简单的键值存储，精确匹配

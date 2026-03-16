@@ -24,6 +24,7 @@ from .message_components import (
     component_to_payload,
     component_to_payload_sync,
     is_message_component,
+    payloads_to_components,
 )
 
 
@@ -56,6 +57,27 @@ class MessageChain:
 class MessageEventResult:
     type: EventResultType = EventResultType.EMPTY
     chain: MessageChain = field(default_factory=MessageChain)
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "type": self.type.value,
+            "chain": self.chain.to_payload(),
+        }
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any]) -> MessageEventResult:
+        result_type_raw = str(payload.get("type", EventResultType.EMPTY.value))
+        try:
+            result_type = EventResultType(result_type_raw)
+        except ValueError:
+            result_type = EventResultType.EMPTY
+        chain_payload = payload.get("chain")
+        components = (
+            payloads_to_components(chain_payload)
+            if isinstance(chain_payload, list)
+            else []
+        )
+        return cls(type=result_type, chain=MessageChain(components))
 
 
 def coerce_message_chain(value: Any) -> MessageChain | None:

@@ -17,7 +17,6 @@ import asyncio
 import inspect
 import re
 import shlex
-import typing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, get_type_hints
@@ -34,6 +33,7 @@ from ._testing_support import (
     RecordedSend,
     StdoutPlatformSink,
 )
+from ._typing_utils import unwrap_optional
 from .context import CancelToken
 from .context import Context as RuntimeContext
 from .errors import AstrBotError
@@ -84,6 +84,29 @@ def _plugin_metadata_from_spec(
         "author": str(manifest.get("author") or ""),
         "version": str(manifest.get("version") or "0.0.0"),
         "enabled": enabled,
+    }
+
+
+def _handler_metadata_from_loaded(
+    plugin_id: str, loaded: LoadedHandler
+) -> dict[str, Any]:
+    event_types: list[str] = []
+    trigger = loaded.descriptor.trigger
+    if isinstance(trigger, EventTrigger):
+        event_types.append(trigger.type)
+    return {
+        "plugin_name": plugin_id,
+        "handler_full_name": loaded.descriptor.id,
+        "trigger_type": trigger.type
+        if isinstance(trigger, EventTrigger)
+        else str(getattr(trigger, "kind", trigger.type)),
+        "event_types": event_types,
+        "enabled": True,
+        "group_path": list(
+            loaded.descriptor.command_route.group_path
+            if loaded.descriptor.command_route is not None
+            else []
+        ),
     }
 
 
@@ -182,6 +205,7 @@ class PluginHarness:
             plugin_id=self.plugin.name,
             peer=self.peer,
             capabilities=self.loaded_plugin.capabilities,
+            llm_tools=self.loaded_plugin.llm_tools,
         )
         self.lifecycle_context = RuntimeContext(
             peer=self.peer,
@@ -190,6 +214,21 @@ class PluginHarness:
         self.router.upsert_plugin(
             metadata=_plugin_metadata_from_spec(self.plugin, enabled=True),
             config=load_plugin_config(self.plugin),
+        )
+        self.router.set_plugin_handlers(
+            self.plugin.name,
+            [
+                _handler_metadata_from_loaded(self.plugin.name, handler)
+                for handler in self.loaded_plugin.handlers
+            ],
+        )
+        self.router.set_plugin_llm_tools(
+            self.plugin.name,
+            [tool.spec.to_payload() for tool in self.loaded_plugin.llm_tools],
+        )
+        self.router.set_plugin_agents(
+            self.plugin.name,
+            [agent.spec.to_payload() for agent in self.loaded_plugin.agents],
         )
         try:
             await self._run_lifecycle("on_start")
@@ -211,6 +250,7 @@ class PluginHarness:
         finally:
             if self.plugin is not None:
                 self.router.set_plugin_enabled(self.plugin.name, False)
+                self.router.set_plugin_handlers(self.plugin.name, [])
                 self.router.remove_http_apis_for_plugin(self.plugin.name)
             self._started = False
 
@@ -659,7 +699,7 @@ class PluginHarness:
     def _is_injected_parameter(self, name: str, annotation: Any) -> bool:
         if name in {"event", "ctx", "context"}:
             return True
-        normalized = self._unwrap_optional(annotation)
+        normalized, _is_optional = unwrap_optional(annotation)
         if normalized is None:
             return False
         if normalized is RuntimeContext:
@@ -671,19 +711,6 @@ class PluginHarness:
         ):
             return True
         return False
-
-    @staticmethod
-    def _unwrap_optional(annotation: Any) -> Any:
-        if annotation is None:
-            return None
-        origin = typing.get_origin(annotation)
-        if origin is typing.Union:
-            options = [
-                item for item in typing.get_args(annotation) if item is not type(None)
-            ]
-            if len(options) == 1:
-                return options[0]
-        return annotation
 
     def _next_request_id(self, prefix: str) -> str:
         self._request_counter += 1

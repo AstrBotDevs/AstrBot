@@ -45,6 +45,7 @@ from .message_components import (
 from .message_result import EventResultType, MessageChain, MessageEventResult
 from .message_session import MessageSession
 from .schedule import ScheduleContext
+from .clients.session import SessionPluginManager, SessionServiceManager
 from .session_waiter import SessionController, session_waiter
 from .star import Star
 from .types import GreedyStr
@@ -72,6 +73,8 @@ __all__ = [
     "Record",
     "Reply",
     "ScheduleContext",
+    "SessionPluginManager",
+    "SessionServiceManager",
     "SessionController",
     "Star",
     "UnknownComponent",

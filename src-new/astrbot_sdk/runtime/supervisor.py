@@ -41,7 +41,7 @@ import signal
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, cast
 
 from loguru import logger
 
@@ -131,10 +131,20 @@ class WorkerSession:
     ) -> None:
         if plugin is None and group is None:
             raise ValueError("WorkerSession requires either plugin or group")
+        group_ref = group
+        if group_ref is not None:
+            primary_plugin = group_ref.plugins[0]
+        else:
+            assert plugin is not None
+            primary_plugin = plugin
         self.group = group
-        self.plugins = list(group.plugins) if group is not None else [plugin]
-        self.plugin = plugin or self.plugins[0]
-        self.group_id = group.id if group is not None else self.plugin.name
+        self.plugins = (
+            list(group_ref.plugins) if group_ref is not None else [primary_plugin]
+        )
+        self.plugin = primary_plugin
+        self.group_id = (
+            group_ref.id if group_ref is not None else primary_plugin.name
+        )
         self.repo_root = repo_root.resolve()
         self.env_manager = env_manager
         self.capability_router = capability_router
@@ -145,6 +155,8 @@ class WorkerSession:
         self.loaded_plugins: list[str] = []
         self.skipped_plugins: dict[str, str] = {}
         self.capability_sources: dict[str, str] = {}
+        self.llm_tools: list[dict[str, Any]] = []
+        self.agents: list[dict[str, Any]] = []
         self._connection_watch_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
@@ -216,6 +228,16 @@ class WorkerSession:
                     str(capability_name): str(plugin_name)
                     for capability_name, plugin_name in remote_capability_sources.items()
                 }
+            remote_llm_tools = metadata.get("llm_tools")
+            if isinstance(remote_llm_tools, list):
+                self.llm_tools = [
+                    dict(item) for item in remote_llm_tools if isinstance(item, dict)
+                ]
+            remote_agents = metadata.get("agents")
+            if isinstance(remote_agents, list):
+                self.agents = [
+                    dict(item) for item in remote_agents if isinstance(item, dict)
+                ]
 
         except Exception:
             await self.stop()
@@ -225,7 +247,7 @@ class WorkerSession:
         if self.group is not None:
             prepare_group = getattr(self.env_manager, "prepare_group_environment", None)
             if callable(prepare_group):
-                python_path = prepare_group(self.group)
+                python_path = cast(Path, prepare_group(self.group))
             else:
                 python_path = self.env_manager.prepare_environment(self.plugins[0])
             return (
@@ -241,7 +263,8 @@ class WorkerSession:
                 str(self.repo_root),
             )
 
-        python_path = self.env_manager.prepare_environment(self.plugin)
+        plugin = self.plugin
+        python_path = self.env_manager.prepare_environment(plugin)
         return (
             python_path,
             [
@@ -250,9 +273,9 @@ class WorkerSession:
                 "astrbot_sdk",
                 "worker",
                 "--plugin-dir",
-                str(self.plugin.plugin_dir),
+                str(plugin.plugin_dir),
             ],
-            str(self.plugin.plugin_dir),
+            str(plugin.plugin_dir),
         )
 
     def start_close_watch(self) -> None:

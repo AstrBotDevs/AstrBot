@@ -291,6 +291,24 @@ PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA = _object_schema(
     required=("message_id",),
     message_id={"type": "string"},
 )
+PLATFORM_SEND_BY_SESSION_INPUT_SCHEMA = _object_schema(
+    required=("session", "chain"),
+    session={"type": "string"},
+    chain={"type": "array", "items": {"type": "object"}},
+)
+PLATFORM_SEND_BY_SESSION_OUTPUT_SCHEMA = _object_schema(
+    required=("message_id",),
+    message_id={"type": "string"},
+)
+PLATFORM_GET_GROUP_INPUT_SCHEMA = _object_schema(
+    required=("session",),
+    session={"type": "string"},
+    target=_nullable(SESSION_REF_SCHEMA),
+)
+PLATFORM_GET_GROUP_OUTPUT_SCHEMA = _object_schema(
+    required=("group",),
+    group=_nullable({"type": "object"}),
+)
 PLATFORM_GET_MEMBERS_INPUT_SCHEMA = _object_schema(
     required=("session",),
     session={"type": "string"},
@@ -300,6 +318,52 @@ PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA = _object_schema(
     required=("members",),
     members={"type": "array", "items": {"type": "object"}},
 )
+SESSION_PLUGIN_IS_ENABLED_INPUT_SCHEMA = _object_schema(
+    required=("session", "plugin_name"),
+    session={"type": "string"},
+    plugin_name={"type": "string"},
+)
+SESSION_PLUGIN_IS_ENABLED_OUTPUT_SCHEMA = _object_schema(
+    required=("enabled",),
+    enabled={"type": "boolean"},
+)
+SESSION_PLUGIN_FILTER_HANDLERS_INPUT_SCHEMA = _object_schema(
+    required=("session", "handlers"),
+    session={"type": "string"},
+    handlers={"type": "array", "items": {"type": "object"}},
+)
+SESSION_PLUGIN_FILTER_HANDLERS_OUTPUT_SCHEMA = _object_schema(
+    required=("handlers",),
+    handlers={"type": "array", "items": {"type": "object"}},
+)
+SESSION_SERVICE_IS_LLM_ENABLED_INPUT_SCHEMA = _object_schema(
+    required=("session",),
+    session={"type": "string"},
+)
+SESSION_SERVICE_IS_LLM_ENABLED_OUTPUT_SCHEMA = _object_schema(
+    required=("enabled",),
+    enabled={"type": "boolean"},
+)
+SESSION_SERVICE_SET_LLM_STATUS_INPUT_SCHEMA = _object_schema(
+    required=("session", "enabled"),
+    session={"type": "string"},
+    enabled={"type": "boolean"},
+)
+SESSION_SERVICE_SET_LLM_STATUS_OUTPUT_SCHEMA = _object_schema()
+SESSION_SERVICE_IS_TTS_ENABLED_INPUT_SCHEMA = _object_schema(
+    required=("session",),
+    session={"type": "string"},
+)
+SESSION_SERVICE_IS_TTS_ENABLED_OUTPUT_SCHEMA = _object_schema(
+    required=("enabled",),
+    enabled={"type": "boolean"},
+)
+SESSION_SERVICE_SET_TTS_STATUS_INPUT_SCHEMA = _object_schema(
+    required=("session", "enabled"),
+    session={"type": "string"},
+    enabled={"type": "boolean"},
+)
+SESSION_SERVICE_SET_TTS_STATUS_OUTPUT_SCHEMA = _object_schema()
 HTTP_REGISTER_API_INPUT_SCHEMA = _object_schema(
     required=("route", "methods", "handler_capability"),
     route={"type": "string"},
@@ -408,9 +472,41 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": PLATFORM_SEND_CHAIN_INPUT_SCHEMA,
         "output": PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA,
     },
+    "platform.send_by_session": {
+        "input": PLATFORM_SEND_BY_SESSION_INPUT_SCHEMA,
+        "output": PLATFORM_SEND_BY_SESSION_OUTPUT_SCHEMA,
+    },
+    "platform.get_group": {
+        "input": PLATFORM_GET_GROUP_INPUT_SCHEMA,
+        "output": PLATFORM_GET_GROUP_OUTPUT_SCHEMA,
+    },
     "platform.get_members": {
         "input": PLATFORM_GET_MEMBERS_INPUT_SCHEMA,
         "output": PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA,
+    },
+    "session.plugin.is_enabled": {
+        "input": SESSION_PLUGIN_IS_ENABLED_INPUT_SCHEMA,
+        "output": SESSION_PLUGIN_IS_ENABLED_OUTPUT_SCHEMA,
+    },
+    "session.plugin.filter_handlers": {
+        "input": SESSION_PLUGIN_FILTER_HANDLERS_INPUT_SCHEMA,
+        "output": SESSION_PLUGIN_FILTER_HANDLERS_OUTPUT_SCHEMA,
+    },
+    "session.service.is_llm_enabled": {
+        "input": SESSION_SERVICE_IS_LLM_ENABLED_INPUT_SCHEMA,
+        "output": SESSION_SERVICE_IS_LLM_ENABLED_OUTPUT_SCHEMA,
+    },
+    "session.service.set_llm_status": {
+        "input": SESSION_SERVICE_SET_LLM_STATUS_INPUT_SCHEMA,
+        "output": SESSION_SERVICE_SET_LLM_STATUS_OUTPUT_SCHEMA,
+    },
+    "session.service.is_tts_enabled": {
+        "input": SESSION_SERVICE_IS_TTS_ENABLED_INPUT_SCHEMA,
+        "output": SESSION_SERVICE_IS_TTS_ENABLED_OUTPUT_SCHEMA,
+    },
+    "session.service.set_tts_status": {
+        "input": SESSION_SERVICE_SET_TTS_STATUS_INPUT_SCHEMA,
+        "output": SESSION_SERVICE_SET_TTS_STATUS_OUTPUT_SCHEMA,
     },
     "http.register_api": {
         "input": HTTP_REGISTER_API_INPUT_SCHEMA,
@@ -532,13 +628,29 @@ __all__ = [
     "METADATA_LIST_PLUGINS_OUTPUT_SCHEMA",
     "PLATFORM_GET_MEMBERS_INPUT_SCHEMA",
     "PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA",
+    "PLATFORM_GET_GROUP_INPUT_SCHEMA",
+    "PLATFORM_GET_GROUP_OUTPUT_SCHEMA",
     "PLATFORM_SEND_CHAIN_INPUT_SCHEMA",
     "PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA",
+    "PLATFORM_SEND_BY_SESSION_INPUT_SCHEMA",
+    "PLATFORM_SEND_BY_SESSION_OUTPUT_SCHEMA",
     "PLATFORM_SEND_IMAGE_INPUT_SCHEMA",
     "PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA",
     "PLATFORM_SEND_INPUT_SCHEMA",
     "PLATFORM_SEND_OUTPUT_SCHEMA",
+    "SESSION_PLUGIN_FILTER_HANDLERS_INPUT_SCHEMA",
+    "SESSION_PLUGIN_FILTER_HANDLERS_OUTPUT_SCHEMA",
+    "SESSION_PLUGIN_IS_ENABLED_INPUT_SCHEMA",
+    "SESSION_PLUGIN_IS_ENABLED_OUTPUT_SCHEMA",
     "SESSION_REF_SCHEMA",
+    "SESSION_SERVICE_IS_LLM_ENABLED_INPUT_SCHEMA",
+    "SESSION_SERVICE_IS_LLM_ENABLED_OUTPUT_SCHEMA",
+    "SESSION_SERVICE_IS_TTS_ENABLED_INPUT_SCHEMA",
+    "SESSION_SERVICE_IS_TTS_ENABLED_OUTPUT_SCHEMA",
+    "SESSION_SERVICE_SET_LLM_STATUS_INPUT_SCHEMA",
+    "SESSION_SERVICE_SET_LLM_STATUS_OUTPUT_SCHEMA",
+    "SESSION_SERVICE_SET_TTS_STATUS_INPUT_SCHEMA",
+    "SESSION_SERVICE_SET_TTS_STATUS_OUTPUT_SCHEMA",
     "SYSTEM_EVENT_REACT_INPUT_SCHEMA",
     "SYSTEM_EVENT_REACT_OUTPUT_SCHEMA",
     "SYSTEM_EVENT_SEND_STREAMING_CHUNK_INPUT_SCHEMA",

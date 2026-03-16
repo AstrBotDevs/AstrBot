@@ -57,8 +57,13 @@ class _CapabilityRouterHost:
     http_api_store: list[dict[str, Any]]
     _event_streams: dict[str, dict[str, Any]]
     _plugins: dict[str, Any]
+    _request_overlays: dict[str, dict[str, Any]]
+    _provider_catalog: dict[str, list[dict[str, Any]]]
+    _active_provider_ids: dict[str, str | None]
     _system_data_root: Path
     _session_waiters: dict[str, set[str]]
+    _session_plugin_configs: dict[str, dict[str, Any]]
+    _session_service_configs: dict[str, dict[str, Any]]
     _db_watch_subscriptions: dict[str, tuple[str | None, asyncio.Queue[dict[str, Any]]]]
 
     def register(
@@ -88,6 +93,8 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
         self._register_platform_capabilities()
         self._register_http_capabilities()
         self._register_metadata_capabilities()
+        self._register_p0_5_capabilities()
+        self._register_p0_6_capabilities()
         self._register_system_capabilities()
 
     def _builtin_descriptor(
@@ -116,6 +123,44 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
             target = SessionRef.model_validate(target_payload)
             return target.session, target.to_payload()
         return str(payload.get("session", "")), None
+
+    @staticmethod
+    def _is_group_session(session: str) -> bool:
+        normalized = str(session).lower()
+        return ":group:" in normalized or ":groupmessage:" in normalized
+
+    @staticmethod
+    def _mock_group_payload(session: str) -> dict[str, Any] | None:
+        if not BuiltinCapabilityRouterMixin._is_group_session(session):
+            return None
+        members = [
+            {
+                "user_id": f"{session}:member-1",
+                "nickname": "Member 1",
+                "role": "member",
+            },
+            {
+                "user_id": f"{session}:member-2",
+                "nickname": "Member 2",
+                "role": "admin",
+            },
+        ]
+        return {
+            "group_id": session.rsplit(":", maxsplit=1)[-1],
+            "group_name": f"Mock Group {session.rsplit(':', maxsplit=1)[-1]}",
+            "group_avatar": "",
+            "group_owner": members[0]["user_id"],
+            "group_admins": [members[1]["user_id"]],
+            "members": members,
+        }
+
+    def _session_plugin_config(self, session: str) -> dict[str, Any]:
+        config = self._session_plugin_configs.get(str(session), {})
+        return dict(config) if isinstance(config, dict) else {}
+
+    def _session_service_config(self, session: str) -> dict[str, Any]:
+        config = self._session_service_configs.get(str(session), {})
+        return dict(config) if isinstance(config, dict) else {}
 
     async def _llm_chat(
         self, _request_id: str, payload: dict[str, Any], _token
@@ -477,16 +522,41 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
         self.sent_messages.append(sent)
         return {"message_id": message_id}
 
+    async def _platform_send_by_session(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        chain = payload.get("chain")
+        if not isinstance(chain, list) or not all(
+            isinstance(item, dict) for item in chain
+        ):
+            raise AstrBotError.invalid_input(
+                "platform.send_by_session 的 chain 必须是 object 数组"
+            )
+        session = str(payload.get("session", ""))
+        message_id = f"proactive_{len(self.sent_messages) + 1}"
+        self.sent_messages.append(
+            {
+                "message_id": message_id,
+                "session": session,
+                "chain": [dict(item) for item in chain],
+            }
+        )
+        return {"message_id": message_id}
+
+    async def _platform_get_group(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        session, _target = self._resolve_target(payload)
+        return {"group": self._mock_group_payload(session)}
+
     async def _platform_get_members(
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
         session, _target = self._resolve_target(payload)
-        return {
-            "members": [
-                {"user_id": f"{session}:member-1", "nickname": "Member 1"},
-                {"user_id": f"{session}:member-2", "nickname": "Member 2"},
-            ]
-        }
+        group = self._mock_group_payload(session)
+        if group is None:
+            return {"members": []}
+        return {"members": list(group.get("members", []))}
 
     def _register_platform_capabilities(self) -> None:
         self.register(
@@ -500,6 +570,16 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
         self.register(
             self._builtin_descriptor("platform.send_chain", "发送消息链"),
             call_handler=self._platform_send_chain,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "platform.send_by_session", "按会话主动发送消息链"
+            ),
+            call_handler=self._platform_send_by_session,
+        )
+        self.register(
+            self._builtin_descriptor("platform.get_group", "获取当前群信息"),
+            call_handler=self._platform_get_group,
         )
         self.register(
             self._builtin_descriptor("platform.get_members", "获取群成员"),
@@ -645,6 +725,378 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
             call_handler=self._metadata_get_plugin_config,
         )
 
+    def _provider_payload(
+        self, kind: str, provider_id: str | None
+    ) -> dict[str, Any] | None:
+        if not provider_id:
+            return None
+        for item in self._provider_catalog.get(kind, []):
+            if str(item.get("id", "")) == provider_id:
+                return dict(item)
+        return None
+
+    async def _provider_get_using(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        provider_id = self._active_provider_ids.get("chat")
+        return {"provider": self._provider_payload("chat", provider_id)}
+
+    async def _provider_get_current_chat_provider_id(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        return {"provider_id": self._active_provider_ids.get("chat")}
+
+    def _provider_list_payload(self, kind: str) -> dict[str, Any]:
+        return {
+            "providers": [dict(item) for item in self._provider_catalog.get(kind, [])]
+        }
+
+    async def _provider_list_all(
+        self, _request_id: str, _payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        return self._provider_list_payload("chat")
+
+    async def _provider_list_all_tts(
+        self, _request_id: str, _payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        return self._provider_list_payload("tts")
+
+    async def _provider_list_all_stt(
+        self, _request_id: str, _payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        return self._provider_list_payload("stt")
+
+    async def _provider_list_all_embedding(
+        self, _request_id: str, _payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        return self._provider_list_payload("embedding")
+
+    async def _provider_get_using_tts(
+        self, _request_id: str, _payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        provider_id = self._active_provider_ids.get("tts")
+        return {"provider": self._provider_payload("tts", provider_id)}
+
+    async def _provider_get_using_stt(
+        self, _request_id: str, _payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        provider_id = self._active_provider_ids.get("stt")
+        return {"provider": self._provider_payload("stt", provider_id)}
+
+    async def _llm_tool_manager_get(
+        self, _request_id: str, _payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        plugin_id = self._require_caller_plugin_id("llm_tool.manager.get")
+        plugin = self._plugins.get(plugin_id)
+        if plugin is None:
+            return {"registered": [], "active": []}
+        registered = [dict(item) for item in plugin.llm_tools.values()]
+        active = [
+            dict(item)
+            for name, item in plugin.llm_tools.items()
+            if name in plugin.active_llm_tools
+        ]
+        return {"registered": registered, "active": active}
+
+    async def _llm_tool_manager_activate(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        plugin_id = self._require_caller_plugin_id("llm_tool.manager.activate")
+        plugin = self._plugins.get(plugin_id)
+        if plugin is None:
+            return {"activated": False}
+        name = str(payload.get("name", ""))
+        spec = plugin.llm_tools.get(name)
+        if spec is None:
+            return {"activated": False}
+        spec["active"] = True
+        plugin.active_llm_tools.add(name)
+        return {"activated": True}
+
+    async def _llm_tool_manager_deactivate(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        plugin_id = self._require_caller_plugin_id("llm_tool.manager.deactivate")
+        plugin = self._plugins.get(plugin_id)
+        if plugin is None:
+            return {"deactivated": False}
+        name = str(payload.get("name", ""))
+        spec = plugin.llm_tools.get(name)
+        if spec is None:
+            return {"deactivated": False}
+        spec["active"] = False
+        plugin.active_llm_tools.discard(name)
+        return {"deactivated": True}
+
+    async def _llm_tool_manager_add(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        plugin_id = self._require_caller_plugin_id("llm_tool.manager.add")
+        plugin = self._plugins.get(plugin_id)
+        if plugin is None:
+            return {"names": []}
+        tools_payload = payload.get("tools")
+        if not isinstance(tools_payload, list):
+            raise AstrBotError.invalid_input("llm_tool.manager.add 的 tools 必须是数组")
+        names: list[str] = []
+        for item in tools_payload:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name", "")).strip()
+            if not name:
+                continue
+            plugin.llm_tools[name] = dict(item)
+            if bool(item.get("active", True)):
+                plugin.active_llm_tools.add(name)
+            else:
+                plugin.active_llm_tools.discard(name)
+            names.append(name)
+        return {"names": names}
+
+    async def _agent_registry_list(
+        self, _request_id: str, _payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        plugin_id = self._require_caller_plugin_id("agent.registry.list")
+        plugin = self._plugins.get(plugin_id)
+        if plugin is None:
+            return {"agents": []}
+        return {"agents": [dict(item) for item in plugin.agents.values()]}
+
+    async def _agent_registry_get(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        plugin_id = self._require_caller_plugin_id("agent.registry.get")
+        plugin = self._plugins.get(plugin_id)
+        if plugin is None:
+            return {"agent": None}
+        agent = plugin.agents.get(str(payload.get("name", "")))
+        return {"agent": dict(agent) if isinstance(agent, dict) else None}
+
+    async def _agent_tool_loop_run(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        plugin_id = self._require_caller_plugin_id("agent.tool_loop.run")
+        plugin = self._plugins.get(plugin_id)
+        requested_tools = payload.get("tool_names")
+        active_tools: list[str] = []
+        if plugin is not None:
+            if isinstance(requested_tools, list) and requested_tools:
+                active_tools = [
+                    name
+                    for name in (str(item) for item in requested_tools)
+                    if name in plugin.active_llm_tools
+                ]
+            else:
+                active_tools = sorted(plugin.active_llm_tools)
+        prompt = str(payload.get("prompt", "") or "")
+        suffix = ""
+        if active_tools:
+            suffix = f" tools={','.join(active_tools)}"
+        return {
+            "text": f"Mock tool loop: {prompt}{suffix}".strip(),
+            "usage": {
+                "input_tokens": len(prompt),
+                "output_tokens": len(prompt) + len(suffix),
+            },
+            "finish_reason": "stop",
+            "tool_calls": [],
+            "role": "assistant",
+            "reasoning_content": None,
+            "reasoning_signature": None,
+        }
+
+    def _register_p0_5_capabilities(self) -> None:
+        self.register(
+            self._builtin_descriptor("provider.get_using", "获取当前聊天 Provider"),
+            call_handler=self._provider_get_using,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "provider.get_current_chat_provider_id",
+                "获取当前聊天 Provider ID",
+            ),
+            call_handler=self._provider_get_current_chat_provider_id,
+        )
+        self.register(
+            self._builtin_descriptor("provider.list_all", "列出聊天 Providers"),
+            call_handler=self._provider_list_all,
+        )
+        self.register(
+            self._builtin_descriptor("provider.list_all_tts", "列出 TTS Providers"),
+            call_handler=self._provider_list_all_tts,
+        )
+        self.register(
+            self._builtin_descriptor("provider.list_all_stt", "列出 STT Providers"),
+            call_handler=self._provider_list_all_stt,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "provider.list_all_embedding",
+                "列出 Embedding Providers",
+            ),
+            call_handler=self._provider_list_all_embedding,
+        )
+        self.register(
+            self._builtin_descriptor("provider.get_using_tts", "获取当前 TTS Provider"),
+            call_handler=self._provider_get_using_tts,
+        )
+        self.register(
+            self._builtin_descriptor("provider.get_using_stt", "获取当前 STT Provider"),
+            call_handler=self._provider_get_using_stt,
+        )
+        self.register(
+            self._builtin_descriptor("llm_tool.manager.get", "获取 LLM 工具状态"),
+            call_handler=self._llm_tool_manager_get,
+        )
+        self.register(
+            self._builtin_descriptor("llm_tool.manager.activate", "激活 LLM 工具"),
+            call_handler=self._llm_tool_manager_activate,
+        )
+        self.register(
+            self._builtin_descriptor("llm_tool.manager.deactivate", "停用 LLM 工具"),
+            call_handler=self._llm_tool_manager_deactivate,
+        )
+        self.register(
+            self._builtin_descriptor("llm_tool.manager.add", "动态添加 LLM 工具"),
+            call_handler=self._llm_tool_manager_add,
+        )
+        self.register(
+            self._builtin_descriptor("agent.tool_loop.run", "运行 mock tool loop"),
+            call_handler=self._agent_tool_loop_run,
+        )
+        self.register(
+            self._builtin_descriptor("agent.registry.list", "列出 Agent 元数据"),
+            call_handler=self._agent_registry_list,
+        )
+        self.register(
+            self._builtin_descriptor("agent.registry.get", "获取 Agent 元数据"),
+            call_handler=self._agent_registry_get,
+        )
+
+    async def _session_plugin_is_enabled(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        session = str(payload.get("session", ""))
+        plugin_name = str(payload.get("plugin_name", ""))
+        config = self._session_plugin_config(session)
+        enabled_plugins = {
+            str(item) for item in config.get("enabled_plugins", []) if str(item).strip()
+        }
+        disabled_plugins = {
+            str(item)
+            for item in config.get("disabled_plugins", [])
+            if str(item).strip()
+        }
+        if plugin_name in enabled_plugins:
+            return {"enabled": True}
+        return {"enabled": plugin_name not in disabled_plugins}
+
+    async def _session_plugin_filter_handlers(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        session = str(payload.get("session", ""))
+        handlers = payload.get("handlers")
+        if not isinstance(handlers, list):
+            raise AstrBotError.invalid_input(
+                "session.plugin.filter_handlers 的 handlers 必须是 object 数组"
+            )
+        disabled_plugins = {
+            str(item)
+            for item in self._session_plugin_config(session).get("disabled_plugins", [])
+            if str(item).strip()
+        }
+        reserved_plugins = {
+            str(plugin.metadata.get("name", ""))
+            for plugin in self._plugins.values()
+            if bool(plugin.metadata.get("reserved", False))
+        }
+        filtered = []
+        for item in handlers:
+            if not isinstance(item, dict):
+                continue
+            plugin_name = str(item.get("plugin_name", ""))
+            if (
+                plugin_name
+                and plugin_name in disabled_plugins
+                and plugin_name not in reserved_plugins
+            ):
+                continue
+            filtered.append(dict(item))
+        return {"handlers": filtered}
+
+    async def _session_service_is_llm_enabled(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        session = str(payload.get("session", ""))
+        config = self._session_service_config(session)
+        return {"enabled": bool(config.get("llm_enabled", True))}
+
+    async def _session_service_set_llm_status(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        session = str(payload.get("session", ""))
+        config = self._session_service_config(session)
+        config["llm_enabled"] = bool(payload.get("enabled", False))
+        self._session_service_configs[session] = config
+        return {}
+
+    async def _session_service_is_tts_enabled(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        session = str(payload.get("session", ""))
+        config = self._session_service_config(session)
+        return {"enabled": bool(config.get("tts_enabled", True))}
+
+    async def _session_service_set_tts_status(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        session = str(payload.get("session", ""))
+        config = self._session_service_config(session)
+        config["tts_enabled"] = bool(payload.get("enabled", False))
+        self._session_service_configs[session] = config
+        return {}
+
+    def _register_p0_6_capabilities(self) -> None:
+        self.register(
+            self._builtin_descriptor("session.plugin.is_enabled", "获取会话级插件开关"),
+            call_handler=self._session_plugin_is_enabled,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "session.plugin.filter_handlers",
+                "按会话过滤 handler 元数据",
+            ),
+            call_handler=self._session_plugin_filter_handlers,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "session.service.is_llm_enabled",
+                "获取会话级 LLM 开关",
+            ),
+            call_handler=self._session_service_is_llm_enabled,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "session.service.set_llm_status",
+                "写入会话级 LLM 开关",
+            ),
+            call_handler=self._session_service_set_llm_status,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "session.service.is_tts_enabled",
+                "获取会话级 TTS 开关",
+            ),
+            call_handler=self._session_service_is_tts_enabled,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "session.service.set_tts_status",
+                "写入会话级 TTS 开关",
+            ),
+            call_handler=self._session_service_set_tts_status,
+        )
+
     def _register_system_capabilities(self) -> None:
         self.register(
             self._builtin_descriptor("system.get_data_dir", "获取插件数据目录"),
@@ -711,6 +1163,79 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
             call_handler=self._system_event_send_streaming_close,
             exposed=False,
         )
+        self.register(
+            self._builtin_descriptor(
+                "system.event.llm.get_state",
+                "读取当前请求的默认 LLM 状态",
+            ),
+            call_handler=self._system_event_llm_get_state,
+            exposed=False,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "system.event.llm.request",
+                "请求当前事件继续进入默认 LLM 链路",
+            ),
+            call_handler=self._system_event_llm_request,
+            exposed=False,
+        )
+        self.register(
+            self._builtin_descriptor("system.event.result.get", "读取当前请求结果"),
+            call_handler=self._system_event_result_get,
+            exposed=False,
+        )
+        self.register(
+            self._builtin_descriptor("system.event.result.set", "写入当前请求结果"),
+            call_handler=self._system_event_result_set,
+            exposed=False,
+        )
+        self.register(
+            self._builtin_descriptor("system.event.result.clear", "清理当前请求结果"),
+            call_handler=self._system_event_result_clear,
+            exposed=False,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "system.event.handler_whitelist.get",
+                "读取当前请求 handler 白名单",
+            ),
+            call_handler=self._system_event_handler_whitelist_get,
+            exposed=False,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "system.event.handler_whitelist.set",
+                "写入当前请求 handler 白名单",
+            ),
+            call_handler=self._system_event_handler_whitelist_set,
+            exposed=False,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "registry.get_handlers_by_event_type",
+                "按事件类型列出 handler 元数据",
+            ),
+            call_handler=self._registry_get_handlers_by_event_type,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "registry.get_handler_by_full_name",
+                "按 full name 查询 handler 元数据",
+            ),
+            call_handler=self._registry_get_handler_by_full_name,
+        )
+
+    def _ensure_request_overlay(self, request_id: str) -> dict[str, Any]:
+        overlay = self._request_overlays.get(request_id)
+        if overlay is None:
+            overlay = {
+                "should_call_llm": False,
+                "requested_llm": False,
+                "result": None,
+                "handler_whitelist": None,
+            }
+            self._request_overlays[request_id] = overlay
+        return overlay
 
     async def _system_get_data_dir(
         self, _request_id: str, _payload: dict[str, Any], _token
@@ -738,6 +1263,100 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
         if bool(payload.get("return_url", True)):
             return {"result": f"mock://html_render/{tmpl}"}
         return {"result": json.dumps({"tmpl": tmpl, "data": data}, ensure_ascii=False)}
+
+    async def _system_event_llm_get_state(
+        self, request_id: str, _payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        overlay = self._ensure_request_overlay(request_id)
+        return {
+            "should_call_llm": bool(overlay["should_call_llm"]),
+            "requested_llm": bool(overlay["requested_llm"]),
+        }
+
+    async def _system_event_llm_request(
+        self, request_id: str, _payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        overlay = self._ensure_request_overlay(request_id)
+        overlay["requested_llm"] = True
+        overlay["should_call_llm"] = True
+        return await self._system_event_llm_get_state(request_id, {}, _token)
+
+    async def _system_event_result_get(
+        self, request_id: str, _payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        overlay = self._ensure_request_overlay(request_id)
+        result = overlay.get("result")
+        return {"result": dict(result) if isinstance(result, dict) else None}
+
+    async def _system_event_result_set(
+        self, request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        result = payload.get("result")
+        if not isinstance(result, dict):
+            raise AstrBotError.invalid_input(
+                "system.event.result.set 的 result 必须是 object"
+            )
+        overlay = self._ensure_request_overlay(request_id)
+        overlay["result"] = dict(result)
+        return {"result": dict(result)}
+
+    async def _system_event_result_clear(
+        self, request_id: str, _payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        overlay = self._ensure_request_overlay(request_id)
+        overlay["result"] = None
+        return {}
+
+    async def _system_event_handler_whitelist_get(
+        self, request_id: str, _payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        overlay = self._ensure_request_overlay(request_id)
+        whitelist = overlay.get("handler_whitelist")
+        if whitelist is None:
+            return {"plugin_names": None}
+        return {"plugin_names": sorted(str(item) for item in whitelist)}
+
+    async def _system_event_handler_whitelist_set(
+        self, request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        overlay = self._ensure_request_overlay(request_id)
+        plugin_names_payload = payload.get("plugin_names")
+        if plugin_names_payload is None:
+            overlay["handler_whitelist"] = None
+        elif isinstance(plugin_names_payload, list):
+            overlay["handler_whitelist"] = {
+                str(item) for item in plugin_names_payload if str(item).strip()
+            }
+        else:
+            raise AstrBotError.invalid_input(
+                "system.event.handler_whitelist.set 的 plugin_names 必须是数组或 null"
+            )
+        return await self._system_event_handler_whitelist_get(request_id, {}, _token)
+
+    async def _registry_get_handlers_by_event_type(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        event_type = str(payload.get("event_type", "")).strip()
+        handlers: list[dict[str, Any]] = []
+        for plugin in self._plugins.values():
+            handlers.extend(
+                [
+                    dict(handler)
+                    for handler in plugin.handlers
+                    if event_type in handler.get("event_types", [])
+                ]
+            )
+        return {"handlers": handlers}
+
+    async def _registry_get_handler_by_full_name(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        full_name = str(payload.get("full_name", "")).strip()
+        for plugin in self._plugins.values():
+            for handler in plugin.handlers:
+                if handler.get("handler_full_name") == full_name:
+                    return {"handler": dict(handler)}
+        return {"handler": None}
 
     async def _system_session_waiter_register(
         self, _request_id: str, payload: dict[str, Any], _token

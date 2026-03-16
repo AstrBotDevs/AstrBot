@@ -16,15 +16,18 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import typing
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Any, get_type_hints
 
 from .._invocation_context import caller_plugin_scope
+from .._typing_utils import unwrap_optional
 from ..context import CancelToken, Context
 from ..errors import AstrBotError
+from ..events import MessageEvent
 from ._streaming import StreamExecution
-from .loader import LoadedCapability
+from .loader import LoadedCapability, LoadedLLMTool
 
 
 class CapabilityDispatcher:
@@ -33,11 +36,18 @@ class CapabilityDispatcher:
         *,
         plugin_id: str,
         peer,
-        capabilities: list[LoadedCapability],
+        capabilities: Sequence[LoadedCapability],
+        llm_tools: Sequence[LoadedLLMTool] | None = None,
     ) -> None:
         self._plugin_id = plugin_id
         self._peer = peer
         self._capabilities = {item.descriptor.name: item for item in capabilities}
+        self._llm_tools: dict[tuple[str, str], LoadedLLMTool] = {}
+        for item in llm_tools or []:
+            owner_plugin = item.plugin_id or plugin_id
+            self._llm_tools[(owner_plugin, item.spec.name)] = item
+            if item.spec.handler_ref and item.spec.handler_ref != item.spec.name:
+                self._llm_tools[(owner_plugin, item.spec.handler_ref)] = item
         self._active: dict[str, tuple[asyncio.Task[Any], CancelToken]] = {}
 
     async def invoke(
@@ -45,6 +55,9 @@ class CapabilityDispatcher:
         message,
         cancel_token: CancelToken,
     ) -> dict[str, Any] | StreamExecution:
+        if message.capability == "internal.llm_tool.execute":
+            return await self._invoke_registered_llm_tool(message, cancel_token)
+
         loaded = self._capabilities.get(message.capability)
         if loaded is None:
             raise LookupError(f"capability not found: {message.capability}")
@@ -71,6 +84,154 @@ class CapabilityDispatcher:
             return await task
         finally:
             self._active.pop(message.id, None)
+
+    async def _invoke_registered_llm_tool(
+        self,
+        message,
+        cancel_token: CancelToken,
+    ) -> dict[str, Any]:
+        payload = dict(message.input)
+        plugin_id = str(payload.get("plugin_id") or self._plugin_id)
+        tool_name = str(payload.get("tool_name", ""))
+        handler_ref = str(payload.get("handler_ref") or tool_name)
+        loaded = self._llm_tools.get((plugin_id, handler_ref))
+        if loaded is None:
+            loaded = self._llm_tools.get((plugin_id, tool_name))
+        if loaded is None:
+            raise LookupError(f"llm tool not found: {plugin_id}:{tool_name}")
+
+        event_payload = payload.get("event")
+        ctx = Context(
+            peer=self._peer,
+            plugin_id=plugin_id,
+            cancel_token=cancel_token,
+            source_event_payload=event_payload
+            if isinstance(event_payload, dict)
+            else None,
+        )
+        event = MessageEvent.from_payload(
+            event_payload if isinstance(event_payload, dict) else {},
+            context=ctx,
+        )
+        self._bind_event_reply_handler(ctx, event)
+        tool_args = payload.get("tool_args")
+        normalized_args = dict(tool_args) if isinstance(tool_args, dict) else {}
+
+        with caller_plugin_scope(plugin_id):
+            task = asyncio.create_task(
+                self._run_registered_llm_tool(loaded, event, ctx, normalized_args)
+            )
+        self._active[message.id] = (task, cancel_token)
+        try:
+            return await task
+        finally:
+            self._active.pop(message.id, None)
+
+    def _bind_event_reply_handler(self, ctx: Context, event: MessageEvent) -> None:
+        async def reply(text: str) -> None:
+            try:
+                await ctx.platform.send(event.session_ref or event.session_id, text)
+            except TypeError:
+                send = getattr(self._peer, "send", None)
+                if not callable(send):
+                    raise
+                result = send(event.session_id, text)
+                if inspect.isawaitable(result):
+                    await result
+
+        event.bind_reply_handler(reply)
+
+    async def _run_registered_llm_tool(
+        self,
+        loaded: LoadedLLMTool,
+        event: MessageEvent,
+        ctx: Context,
+        tool_args: dict[str, Any],
+    ) -> dict[str, Any]:
+        result = loaded.callable(
+            *self._build_tool_args(
+                loaded.callable,
+                event,
+                ctx,
+                tool_args,
+            )
+        )
+        if inspect.isasyncgen(result):
+            raise AstrBotError.protocol_error(
+                "SDK LLM tool must return awaitable result, async generator is unsupported"
+            )
+        if inspect.isawaitable(result):
+            result = await result
+        if result is None:
+            # content=None means the tool completed successfully but produced no
+            # textual payload. The core bridge preserves this as a real None.
+            return {"content": None, "success": True}
+        if isinstance(result, dict):
+            return {
+                "content": json.dumps(result, ensure_ascii=False, default=str),
+                "success": True,
+            }
+        return {"content": str(result), "success": True}
+
+    def _build_tool_args(
+        self,
+        handler,
+        event: MessageEvent,
+        ctx: Context,
+        tool_args: dict[str, Any],
+    ) -> list[Any]:
+        signature = inspect.signature(handler)
+        args: list[Any] = []
+        type_hints: dict[str, Any] = {}
+        try:
+            type_hints = get_type_hints(handler)
+        except Exception:
+            type_hints = {}
+
+        for parameter in signature.parameters.values():
+            if parameter.kind not in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            ):
+                continue
+
+            injected = None
+            param_type = type_hints.get(parameter.name)
+            if param_type is not None:
+                injected = self._inject_tool_by_type(param_type, event, ctx)
+            if injected is None:
+                if parameter.name == "event":
+                    injected = event
+                elif parameter.name in {"ctx", "context"}:
+                    injected = ctx
+                elif parameter.name in tool_args:
+                    injected = tool_args[parameter.name]
+            if injected is None:
+                if parameter.default is not parameter.empty:
+                    continue
+                raise TypeError(
+                    f"SDK LLM tool '{getattr(handler, '__name__', repr(handler))}' missing required argument '{parameter.name}'"
+                )
+            args.append(injected)
+        return args
+
+    def _inject_tool_by_type(
+        self,
+        param_type: Any,
+        event: MessageEvent,
+        ctx: Context,
+    ) -> Any:
+        param_type, _is_optional = unwrap_optional(param_type)
+
+        if param_type is Context or (
+            isinstance(param_type, type) and issubclass(param_type, Context)
+        ):
+            return ctx
+        if param_type is MessageEvent or (
+            isinstance(param_type, type) and issubclass(param_type, MessageEvent)
+        ):
+            return event
+        return None
 
     def _resolve_plugin_id(self, loaded: LoadedCapability) -> str:
         if loaded.plugin_id:
@@ -188,13 +349,8 @@ class CapabilityDispatcher:
         ctx: Context,
         cancel_token: CancelToken,
     ) -> Any:
+        param_type, _is_optional = unwrap_optional(param_type)
         origin = typing.get_origin(param_type)
-        if origin is typing.Union:
-            type_args = typing.get_args(param_type)
-            non_none_types = [item for item in type_args if item is not type(None)]
-            if len(non_none_types) == 1:
-                param_type = non_none_types[0]
-                origin = typing.get_origin(param_type)
 
         if param_type is Context or (
             isinstance(param_type, type) and issubclass(param_type, Context)

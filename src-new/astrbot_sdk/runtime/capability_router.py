@@ -10,53 +10,67 @@
     FinalizeHandler: 流式结果聚合器，签名 (chunks) -> dict
 
 内置能力：
-    llm.chat: 同步 LLM 聊天（内置 echo 实现）
-    llm.chat_raw: 同步 LLM 聊天（完整响应）
-    llm.stream_chat: 流式 LLM 聊天
-    memory.search: 搜索记忆
-    memory.save: 保存记忆
-    memory.save_with_ttl: 保存带过期时间的记忆
-    memory.get: 读取单条记忆
-    memory.get_many: 批量获取多条记忆
-    memory.delete: 删除记忆
-    memory.delete_many: 批量删除多条记忆
-    memory.stats: 获取记忆统计信息
-    db.get: 读取 KV 存储
-    db.set: 写入 KV 存储
-    db.delete: 删除 KV 存储
-    db.list: 列出 KV 键
-    db.get_many: 批量读取多个 KV 键
-    db.set_many: 批量写入多个 KV 键
-    db.watch: 订阅 KV 变更事件
-    platform.send: 发送消息
-    platform.send_image: 发送图片
-    platform.send_chain: 发送消息链
-    platform.get_members: 获取群成员
-    http.register_api: 注册 HTTP 路由到插件 capability
-    http.unregister_api: 注销 HTTP 路由
-    http.list_apis: 查询已注册的 HTTP 路由
-    metadata.get_plugin: 获取单个插件元数据
-    metadata.list_plugins: 列出所有插件元数据
-    metadata.get_plugin_config: 获取当前调用插件自己的配置
-
-与旧版对比：
-    旧版:
-        - 无显式的能力声明系统
-        - 通过 call_context_function 调用核心功能
-        - 上下文函数名硬编码
-        - 无输入输出 Schema 验证
-        - 不支持流式能力
-
-    新版 CapabilityRouter:
-        - 使用 CapabilityDescriptor 声明能力
-        - JSON Schema 验证输入输出
-        - 支持同步和流式两种调用模式
-        - 统一的错误处理
-        - 能力命名规范: namespace.action
+    LLM:
+        llm.chat: 同步 LLM 聊天
+        llm.chat_raw: 同步 LLM 聊天（完整响应）
+        llm.stream_chat: 流式 LLM 聊天
+    Memory:
+        memory.search: 搜索记忆
+        memory.save: 保存记忆
+        memory.save_with_ttl: 保存带过期时间的记忆
+        memory.get: 读取单条记忆
+        memory.get_many: 批量获取多条记忆
+        memory.delete: 删除记忆
+        memory.delete_many: 批量删除多条记忆
+        memory.stats: 获取记忆统计信息
+    DB:
+        db.get: 读取 KV 存储
+        db.set: 写入 KV 存储
+        db.delete: 删除 KV 存储
+        db.list: 列出 KV 键
+        db.get_many: 批量读取多个 KV 键
+        db.set_many: 批量写入多个 KV 键
+        db.watch: 订阅 KV 变更事件
+    Platform:
+        platform.send: 发送消息
+        platform.send_image: 发送图片
+        platform.send_chain: 发送消息链
+        platform.send_by_session: 主动按会话发送消息链
+        platform.get_group: 获取当前群信息
+        platform.get_members: 获取群成员
+    HTTP:
+        http.register_api: 注册 HTTP 路由到插件 capability
+        http.unregister_api: 注销 HTTP 路由
+        http.list_apis: 查询已注册的 HTTP 路由
+    Metadata:
+        metadata.get_plugin: 获取单个插件元数据
+        metadata.list_plugins: 列出所有插件元数据
+        metadata.get_plugin_config: 获取当前调用插件自己的配置
+    Provider:
+        provider.get_using: 获取当前聊天 Provider
+        provider.get_current_chat_provider_id: 获取当前聊天 Provider ID
+        provider.list_all: 列出聊天 Providers
+        provider.list_all_tts: 列出 TTS Providers
+        provider.list_all_stt: 列出 STT Providers
+        provider.list_all_embedding: 列出 Embedding Providers
+        provider.get_using_tts: 获取当前 TTS Provider
+        provider.get_using_stt: 获取当前 STT Provider
+    LLM Tool:
+        llm_tool.manager.get: 获取 LLM 工具状态
+        llm_tool.manager.activate: 激活 LLM 工具
+        llm_tool.manager.deactivate: 停用 LLM 工具
+        llm_tool.manager.add: 动态添加 LLM 工具
+    Agent:
+        agent.tool_loop.run: 运行 tool loop
+        agent.registry.list: 列出 Agent 元数据
+        agent.registry.get: 获取 Agent 元数据
+    Registry:
+        registry.get_handlers_by_event_type: 按事件类型列出 handler 元数据
+        registry.get_handler_by_full_name: 按 full name 查询 handler 元数据
 
 能力命名规范：
-    - 格式: {namespace}.{action}
-    - 内置能力命名空间: llm, memory, db, platform
+    - 格式: {namespace}.{action} 或 {namespace}.{sub_namespace}.{action}
+    - 内置能力命名空间: llm, memory, db, platform, http, metadata, provider, llm_tool, agent, registry
     - 保留命名空间前缀: handler., system., internal.
 
 使用示例：
@@ -100,7 +114,7 @@ import asyncio
 import inspect
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -115,7 +129,7 @@ from ._streaming import StreamExecution
 
 CallHandler = Callable[[str, dict[str, Any], object], Awaitable[dict[str, Any]]]
 FinalizeHandler = Callable[[list[dict[str, Any]]], dict[str, Any]]
-CAPABILITY_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
+CAPABILITY_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 
 
 StreamHandler = Callable[
@@ -139,6 +153,10 @@ class _CapabilityRegistration:
 class _RegisteredPlugin:
     metadata: dict[str, Any]
     config: dict[str, Any]
+    handlers: list[dict[str, Any]]
+    llm_tools: dict[str, dict[str, Any]] = field(default_factory=dict)
+    active_llm_tools: set[str] = field(default_factory=set)
+    agents: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class CapabilityRouter(BuiltinCapabilityRouterMixin):
@@ -151,11 +169,52 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         self._event_streams: dict[str, dict[str, Any]] = {}
         self.http_api_store: list[dict[str, Any]] = []
         self._plugins: dict[str, _RegisteredPlugin] = {}
+        self._request_overlays: dict[str, dict[str, Any]] = {}
+        self._provider_catalog: dict[str, list[dict[str, Any]]] = {
+            "chat": [
+                {
+                    "id": "mock-chat-provider",
+                    "model": "mock-chat-model",
+                    "type": "mock",
+                    "provider_type": "chat_completion",
+                }
+            ],
+            "tts": [
+                {
+                    "id": "mock-tts-provider",
+                    "model": "mock-tts-model",
+                    "type": "mock",
+                    "provider_type": "text_to_speech",
+                }
+            ],
+            "stt": [
+                {
+                    "id": "mock-stt-provider",
+                    "model": "mock-stt-model",
+                    "type": "mock",
+                    "provider_type": "speech_to_text",
+                }
+            ],
+            "embedding": [
+                {
+                    "id": "mock-embedding-provider",
+                    "model": "mock-embedding-model",
+                    "type": "mock",
+                    "provider_type": "embedding",
+                }
+            ],
+        }
+        self._active_provider_ids: dict[str, str | None] = {
+            kind: providers[0]["id"] if providers else None
+            for kind, providers in self._provider_catalog.items()
+        }
         self._system_data_root = Path.cwd() / ".astrbot_sdk_testing" / "plugin_data"
         self._session_waiters: dict[str, set[str]] = {}
         self._db_watch_subscriptions: dict[
             str, tuple[str | None, asyncio.Queue[dict[str, Any]]]
         ] = {}
+        self._session_plugin_configs: dict[str, dict[str, Any]] = {}
+        self._session_service_configs: dict[str, dict[str, Any]] = {}
         self._register_builtin_capabilities()
 
     def upsert_plugin(
@@ -176,13 +235,103 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         self._plugins[name] = _RegisteredPlugin(
             metadata=normalized_metadata,
             config=dict(config or {}),
+            handlers=[],
         )
+
+    def set_plugin_handlers(
+        self,
+        name: str,
+        handlers: list[dict[str, Any]],
+    ) -> None:
+        plugin = self._plugins.get(name)
+        if plugin is None:
+            return
+        plugin.handlers = [dict(item) for item in handlers]
 
     def set_plugin_enabled(self, name: str, enabled: bool) -> None:
         plugin = self._plugins.get(name)
         if plugin is None:
             return
         plugin.metadata["enabled"] = enabled
+
+    def set_plugin_llm_tools(
+        self,
+        name: str,
+        tools: list[dict[str, Any]],
+    ) -> None:
+        plugin = self._plugins.get(name)
+        if plugin is None:
+            return
+        plugin.llm_tools = {
+            str(item.get("name", "")): dict(item)
+            for item in tools
+            if isinstance(item, dict) and str(item.get("name", "")).strip()
+        }
+        plugin.active_llm_tools = {
+            tool_name
+            for tool_name, item in plugin.llm_tools.items()
+            if bool(item.get("active", True))
+        }
+
+    def set_plugin_agents(
+        self,
+        name: str,
+        agents: list[dict[str, Any]],
+    ) -> None:
+        plugin = self._plugins.get(name)
+        if plugin is None:
+            return
+        plugin.agents = {
+            str(item.get("name", "")): dict(item)
+            for item in agents
+            if isinstance(item, dict) and str(item.get("name", "")).strip()
+        }
+
+    def set_provider_catalog(
+        self,
+        kind: str,
+        providers: list[dict[str, Any]],
+        *,
+        active_id: str | None = None,
+    ) -> None:
+        self._provider_catalog[kind] = [
+            dict(item)
+            for item in providers
+            if isinstance(item, dict) and str(item.get("id", "")).strip()
+        ]
+        if active_id is not None:
+            self._active_provider_ids[kind] = active_id
+        else:
+            catalog = self._provider_catalog[kind]
+            self._active_provider_ids[kind] = catalog[0]["id"] if catalog else None
+
+    def set_session_plugin_config(
+        self,
+        session_id: str,
+        *,
+        enabled_plugins: list[str] | None = None,
+        disabled_plugins: list[str] | None = None,
+    ) -> None:
+        config: dict[str, Any] = {}
+        if enabled_plugins is not None:
+            config["enabled_plugins"] = [str(item) for item in enabled_plugins]
+        if disabled_plugins is not None:
+            config["disabled_plugins"] = [str(item) for item in disabled_plugins]
+        self._session_plugin_configs[str(session_id)] = config
+
+    def set_session_service_config(
+        self,
+        session_id: str,
+        *,
+        llm_enabled: bool | None = None,
+        tts_enabled: bool | None = None,
+    ) -> None:
+        config: dict[str, Any] = {}
+        if llm_enabled is not None:
+            config["llm_enabled"] = bool(llm_enabled)
+        if tts_enabled is not None:
+            config["tts_enabled"] = bool(tts_enabled)
+        self._session_service_configs[str(session_id)] = config
 
     def remove_http_apis_for_plugin(self, plugin_id: str) -> None:
         self.http_api_store = [
@@ -289,7 +438,9 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
             )
 
         if registration.call_handler is None:
-            raise AstrBotError.invalid_input(f"{capability} 只能以 stream=true 调用")
+            raise AstrBotError.invalid_input(
+                f"{capability} 只能以 stream=true 调用，registration.call_handler 为 None"
+            )
         output = await registration.call_handler(request_id, payload, cancel_token)
         self._validate_schema_with_context(
             capability=capability,

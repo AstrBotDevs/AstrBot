@@ -262,6 +262,25 @@ class MessageEvent:
         """Return the normalized message outline."""
         return self._message_outline
 
+    async def get_group(self) -> dict[str, Any] | None:
+        """Get current-group metadata for the bound message request."""
+        context = self._require_runtime_context("get_group")
+        output = await context._proxy.call(  # noqa: SLF001
+            "platform.get_group",
+            {
+                "session": self.session_id,
+                "target": (
+                    self.session_ref.to_payload()
+                    if self.session_ref is not None
+                    else None
+                ),
+            },
+        )
+        payload = output.get("group")
+        if not isinstance(payload, dict):
+            return None
+        return dict(payload)
+
     def set_extra(self, key: str, value: Any) -> None:
         """Store SDK-local transient event data."""
         self._extras[key] = value
@@ -275,6 +294,84 @@ class MessageEvent:
     def clear_extra(self) -> None:
         """Clear SDK-local transient event data."""
         self._extras.clear()
+
+    async def request_llm(self) -> bool:
+        """Request the default LLM chain for the current message request."""
+        context = self._require_runtime_context("request_llm")
+        output = await context._proxy.call(  # noqa: SLF001
+            "system.event.llm.request",
+            {
+                "target": (
+                    self.session_ref.to_payload()
+                    if self.session_ref is not None
+                    else None
+                ),
+            },
+        )
+        return bool(output.get("should_call_llm", False))
+
+    async def should_call_llm(self) -> bool:
+        """Read the current default-LLM decision from the host bridge."""
+        context = self._require_runtime_context("should_call_llm")
+        output = await context._proxy.call(  # noqa: SLF001
+            "system.event.llm.get_state",
+            {
+                "target": (
+                    self.session_ref.to_payload()
+                    if self.session_ref is not None
+                    else None
+                ),
+            },
+        )
+        return bool(output.get("should_call_llm", False))
+
+    async def set_result(self, result: MessageEventResult) -> MessageEventResult:
+        """Store a request-scoped SDK result in the host bridge."""
+        context = self._require_runtime_context("set_result")
+        await context._proxy.call(  # noqa: SLF001
+            "system.event.result.set",
+            {
+                "target": (
+                    self.session_ref.to_payload()
+                    if self.session_ref is not None
+                    else None
+                ),
+                "result": result.to_payload(),
+            },
+        )
+        return result
+
+    async def get_result(self) -> MessageEventResult | None:
+        """Read the current request-scoped SDK result from the host bridge."""
+        context = self._require_runtime_context("get_result")
+        output = await context._proxy.call(  # noqa: SLF001
+            "system.event.result.get",
+            {
+                "target": (
+                    self.session_ref.to_payload()
+                    if self.session_ref is not None
+                    else None
+                ),
+            },
+        )
+        payload = output.get("result")
+        if not isinstance(payload, dict):
+            return None
+        return MessageEventResult.from_payload(payload)
+
+    async def clear_result(self) -> None:
+        """Clear the current request-scoped SDK result."""
+        context = self._require_runtime_context("clear_result")
+        await context._proxy.call(  # noqa: SLF001
+            "system.event.result.clear",
+            {
+                "target": (
+                    self.session_ref.to_payload()
+                    if self.session_ref is not None
+                    else None
+                ),
+            },
+        )
 
     def stop_event(self) -> None:
         """Mark the SDK-local event as stopped."""

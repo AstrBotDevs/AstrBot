@@ -173,6 +173,11 @@ class GroupWorkerRuntime:
             plugin_id=self.group_id,
             peer=self.peer,
             capabilities=capabilities,
+            llm_tools=[
+                tool
+                for state in self._active_plugin_states
+                for tool in state.loaded_plugin.llm_tools
+            ],
         )
 
     async def start(self) -> None:
@@ -271,6 +276,22 @@ class GroupWorkerRuntime:
                 for state in self._active_plugin_states
                 for capability in state.loaded_plugin.capabilities
             },
+            "llm_tools": [
+                {
+                    **tool.spec.to_payload(),
+                    "plugin_id": state.plugin.name,
+                }
+                for state in self._active_plugin_states
+                for tool in state.loaded_plugin.llm_tools
+            ],
+            "agents": [
+                {
+                    **agent.spec.to_payload(),
+                    "plugin_id": state.plugin.name,
+                }
+                for state in self._active_plugin_states
+                for agent in state.loaded_plugin.agents
+            ],
         }
 
     async def _run_lifecycle(
@@ -301,6 +322,7 @@ class PluginWorkerRuntime:
             plugin_id=self.plugin.name,
             peer=self.peer,
             capabilities=self.loaded_plugin.capabilities,
+            llm_tools=self.loaded_plugin.llm_tools,
         )
         self._lifecycle_context = RuntimeContext(
             peer=self.peer, plugin_id=self.plugin.name
@@ -328,6 +350,20 @@ class PluginWorkerRuntime:
                         item.descriptor.name: self.plugin.name
                         for item in self.loaded_plugin.capabilities
                     },
+                    "llm_tools": [
+                        {
+                            **item.spec.to_payload(),
+                            "plugin_id": self.plugin.name,
+                        }
+                        for item in self.loaded_plugin.llm_tools
+                    ],
+                    "agents": [
+                        {
+                            **item.spec.to_payload(),
+                            "plugin_id": self.plugin.name,
+                        }
+                        for item in self.loaded_plugin.agents
+                    ],
                 },
             )
         except Exception:
