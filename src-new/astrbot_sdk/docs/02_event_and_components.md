@@ -397,9 +397,197 @@ async def check_handler(event: MessageEvent):
 ```python
 @on_command("info")
 async def info_handler(event: MessageEvent):
-    return event.chain_result([
-        Plain(f"用户: {event.sender_name}\n"),
-        Plain(f"ID: {event.user_id}\n"),
-        Plain(f"平台: {event.platform}"),
-    ])
-```
+     return event.chain_result([
+         Plain(f"用户: {event.sender_name}\n"),
+         Plain(f"ID: {event.user_id}\n"),
+         Plain(f"平台: {event.platform}"),
+     ])
+ ```
+
+ ---
+
+ ## 媒体辅助类
+
+ ### MediaHelper
+
+ 媒体辅助类，提供从 URL 检测媒体类型和下载功能。
+
+ ```python
+ from astrbot_sdk.message_components import MediaHelper
+ ```
+
+ #### from_url - 从 URL 创建组件
+
+ 自动检测 URL 的媒体类型并创建对应的消息组件。
+
+ ```python
+ from astrbot_sdk.message_components import MediaHelper
+
+ # 自动检测媒体类型
+ component = await MediaHelper.from_url("https://example.com/video.mp4")
+ # 返回 Video 组件
+
+ component = await MediaHelper.from_url("https://example.com/image.jpg")
+ # 返回 Image 组件
+
+ component = await MediaHelper.from_url("https://example.com/audio.mp3")
+ # 返回 Record 组件
+ ```
+
+ **参数**：
+ - `url`: 媒体文件 URL
+ - `headers`: 可选的请求头
+
+ **返回值**：
+ - `Image` / `Video` / `Record` / `File` 组件实例
+
+ #### download - 下载媒体文件
+
+ 下载媒体文件到本地。
+
+ ```python
+ from astrbot_sdk.message_components import MediaHelper
+ from pathlib import Path
+
+ # 下载到指定目录
+ path = await MediaHelper.download(
+     url="https://example.com/video.mp4",
+     save_dir=Path("/tmp/downloads")
+ )
+ print(f"下载到: {path}")  # /tmp/downloads/video.mp4
+
+ # 下载到当前目录
+ path = await MediaHelper.download(
+     url="https://example.com/image.png"
+ )
+ ```
+
+ **参数**：
+ - `url`: 文件 URL
+ - `save_dir`: 保存目录（可选，默认为当前目录）
+ - `filename`: 指定文件名（可选，自动从 URL 或响应头推断）
+ - `headers`: 请求头（可选）
+
+ **返回值**：
+ - `Path`: 下载文件的本地路径
+
+ **示例：完整媒体处理流程**
+
+ ```python
+ from astrbot_sdk import Star, Context, MessageEvent
+ from astrbot_sdk.decorators import on_command
+ from astrbot_sdk.message_components import MediaHelper, Plain
+
+ class MediaPlugin(Star):
+     @on_command("download")
+     async def download_media(self, event: MessageEvent, ctx: Context, url: str):
+         """下载媒体文件"""
+         try:
+             # 发送下载中提示
+             await event.reply(f"正在下载: {url}")
+
+             # 下载文件
+             path = await MediaHelper.download(url)
+
+             # 创建对应组件并发送
+             component = await MediaHelper.from_url(url)
+             component.file = str(path)  # 使用本地文件
+
+             await event.reply([Plain("下载完成！"), component])
+         except Exception as e:
+             await event.reply(f"下载失败: {e}")
+
+     @on_command("mirror")
+     async def mirror_media(self, event: MessageEvent, ctx: Context):
+         """转发收到的媒体"""
+         images = event.get_images()
+         if images:
+             for img in images:
+                 # 下载并重新发送
+                 if img.url:
+                     local_path = await MediaHelper.download(img.url)
+                     await event.reply(f"已镜像保存: {local_path}")
+ ```
+
+ ---
+
+ ## 未知组件
+
+ ### UnknownComponent
+
+ 未知消息组件，用于表示 SDK 无法识别的平台特定组件。
+
+ ```python
+ from astrbot_sdk.message_components import UnknownComponent
+ ```
+
+ **说明**：
+ - 当收到 SDK 不支持的消息类型时，会返回此组件
+ - 保留原始数据供插件自行处理
+ - 通常出现在新平台或平台新功能中
+
+ **属性**：
+ - `raw_data`: 原始组件数据（dict）
+ - `type`: 组件类型字符串
+
+ ```python
+ @on_message()
+ async def handle_unknown(self, event: MessageEvent, ctx: Context):
+     components = event.get_messages()
+     for comp in components:
+         if isinstance(comp, UnknownComponent):
+             ctx.logger.warning(f"未知组件类型: {comp.type}")
+             ctx.logger.debug(f"原始数据: {comp.raw_data}")
+             # 插件可以尝试自行处理 raw_data
+ ```
+
+ ---
+
+ ## 特殊消息组件
+
+ ### Forward - 合并转发消息
+
+ 合并转发消息组件（仅部分平台支持，如 QQ）。
+
+ ```python
+ from astrbot_sdk.message_components import Forward, ForwardNode
+
+ # 创建转发消息（需要平台支持）
+ nodes = [
+     ForwardNode(
+         user_id="123456",
+         nickname="用户A",
+         content=[Plain("消息内容1")]
+     ),
+     ForwardNode(
+         user_id="789012",
+         nickname="用户B",
+         content=[Plain("消息内容2")]
+     ),
+ ]
+ forward = Forward(nodes=nodes)
+ ```
+
+ **注意**：Forward 组件的支持程度取决于具体平台适配器。
+
+ ### Poke - 戳一戳/拍一拍
+
+ 戳一戳消息组件（QQ 等平台支持）。
+
+ ```python
+ from astrbot_sdk.message_components import Poke
+
+ # 发送戳一戳
+ poke = Poke(user_id="123456")
+ await event.reply(poke)
+
+ # 检测戳一戳
+ @on_message()
+ async def on_poke(self, event: MessageEvent, ctx: Context):
+     for comp in event.get_messages():
+         if isinstance(comp, Poke):
+             await event.reply(f"{event.sender_name} 戳了你一下！")
+ ```
+
+ **属性**：
+ - `user_id`: 被戳的用户 ID

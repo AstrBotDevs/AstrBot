@@ -286,6 +286,154 @@ async def cast_skill_command(self, event: MessageEvent, ctx: Context):
 
 ---
 
+### @admin_only
+
+管理员权限装饰器（`@require_admin` 的别名）。
+
+**签名：**
+```python
+def admin_only(func: HandlerCallable) -> HandlerCallable
+```
+
+**示例：**
+
+```python
+from astrbot_sdk.decorators import on_command, admin_only
+
+@on_command("admin")
+@admin_only
+async def admin_cmd(self, event: MessageEvent, ctx: Context):
+    await event.reply("管理员命令")
+```
+
+**说明：**
+- 功能与 `@require_admin` 完全相同
+- 更简洁的语法，无需括号
+- 适合快速标记管理员命令
+
+---
+
+## 优先级装饰器
+
+### @priority
+
+设置 handler 执行优先级。
+
+**签名：**
+```python
+def priority(value: int) -> Callable[[HandlerCallable], HandlerCallable]
+```
+
+**参数：**
+- `value`: 优先级数值，**越大越先执行**
+- 默认优先级为 0
+
+**示例：**
+
+```python
+from astrbot_sdk.decorators import on_command, priority
+
+@on_command("hello")
+@priority(10)  # 高优先级，先执行
+async def hello_high(self, event: MessageEvent, ctx: Context):
+    await event.reply("高优先级处理器")
+
+@on_command("hello")
+@priority(5)   # 较低优先级，后执行
+async def hello_low(self, event: MessageEvent, ctx: Context):
+    await event.reply("低优先级处理器")
+```
+
+**使用场景：**
+- 多个插件注册了相同命令时控制执行顺序
+- 确保核心处理器先于扩展处理器执行
+- 实现插件间的协作处理链
+
+**注意事项：**
+- 相同优先级的 handler 执行顺序不确定
+- 高优先级 handler 不会阻止低优先级 handler 执行（除非显式阻止）
+
+---
+
+## 对话装饰器
+
+### @conversation_command
+
+对话命令装饰器，用于创建交互式对话流程。
+
+**签名：**
+```python
+def conversation_command(
+    command: str,
+    *,
+    timeout: float = 300.0,
+    description: str | None = None,
+) -> Callable
+```
+
+**参数：**
+- `command`: 命令名称
+- `timeout`: 对话超时时间（秒），默认 300
+- `description`: 命令描述
+
+**示例：**
+
+```python
+from astrbot_sdk.decorators import conversation_command
+from astrbot_sdk.conversation import ConversationSession
+
+@conversation_command("survey", timeout=600)
+async def survey(self, event: MessageEvent, ctx: Context, session: ConversationSession):
+    """交互式调查问卷"""
+    # 第一轮对话
+    await event.reply("请输入您的姓名：")
+    
+    # 等待用户回复（在下一个处理器中处理）
+    session.state["step"] = "name"
+
+@conversation_command("survey")
+async def survey_step2(self, event: MessageEvent, ctx: Context, session: ConversationSession):
+    """问卷第二步"""
+    step = session.state.get("step")
+    
+    if step == "name":
+        session.state["name"] = event.text
+        session.state["step"] = "age"
+        await event.reply("请输入您的年龄：")
+    elif step == "age":
+        session.state["age"] = event.text
+        # 完成问卷
+        await event.reply(f"感谢您的参与！姓名：{session.state['name']}, 年龄：{event.text}")
+        session.close()  # 关闭对话会话
+```
+
+**工作流程：**
+1. 用户发送 `/survey` 触发第一个处理器
+2. 处理器使用 `ConversationSession` 维护对话状态
+3. 后续消息在同一会话中路由到相同命令的处理器
+4. 超时或调用 `session.close()` 结束对话
+
+**异常处理：**
+
+```python
+from astrbot_sdk.conversation import ConversationClosed, ConversationReplaced
+
+@conversation_command("demo")
+async def demo(self, event: MessageEvent, ctx: Context, session: ConversationSession):
+    try:
+        await event.reply("输入 'exit' 结束对话")
+        if event.text.lower() == "exit":
+            session.close()
+    except ConversationClosed:
+        # 会话被关闭
+        await event.reply("对话已结束")
+    except ConversationReplaced:
+        # 会话被新会话替换
+        await event.reply("开始新的对话")
+```
+
+---
+
 ## 能力暴露装饰器
 
 ### @provide_capability

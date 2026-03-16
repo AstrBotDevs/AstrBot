@@ -278,6 +278,60 @@ support_platforms:
 astrbot_version: ">=4.13.0,<5.0.0"
 ```
 
+### StarMetadata 类
+
+插件元数据 dataclass，描述插件的基本信息。
+
+```python
+from astrbot_sdk import StarMetadata
+
+@dataclass
+class StarMetadata:
+    name: str                      # 插件名称（唯一标识）
+    display_name: str              # 显示名称
+    description: str               # 插件描述
+    author: str                    # 作者
+    version: str                   # 版本号
+    enabled: bool = True           # 是否启用
+    support_platforms: list[str]   # 支持的平台列表
+    astrbot_version: str | None    # 兼容的 AstrBot 版本范围
+```
+
+**使用示例：**
+
+```python
+from astrbot_sdk import Star, StarMetadata
+
+class MyPlugin(Star):
+    async def on_start(self, ctx):
+        # 获取当前插件元数据
+        metadata: StarMetadata = await ctx.metadata.get_current_plugin()
+        
+        print(f"插件名称: {metadata.name}")
+        print(f"显示名称: {metadata.display_name}")
+        print(f"版本: {metadata.version}")
+        print(f"作者: {metadata.author}")
+        print(f"支持平台: {', '.join(metadata.support_platforms)}")
+        
+        # 检查兼容性
+        if metadata.astrbot_version:
+            print(f"兼容版本: {metadata.astrbot_version}")
+```
+
+### PluginMetadata 类
+
+`StarMetadata` 的别名，功能完全相同。
+
+```python
+from astrbot_sdk import PluginMetadata
+
+# PluginMetadata 是 StarMetadata 的别名
+# 两者可以互换使用
+metadata: PluginMetadata = await ctx.metadata.get_current_plugin()
+```
+
+**建议**：使用 `StarMetadata` 以符合 v4 SDK 的命名规范。
+
 ### 访问元数据
 
 ```python
@@ -286,6 +340,11 @@ class MyPlugin(Star):
         # 获取当前插件元数据
         my_metadata = await ctx.metadata.get_current_plugin()
         print(f"Starting {my_metadata.name} v{my_metadata.version}")
+        
+        # 获取其他插件元数据
+        other_metadata = await ctx.metadata.get_plugin("other_plugin")
+        if other_metadata:
+            print(f"依赖插件版本: {other_metadata.version}")
 ```
 
 ---
