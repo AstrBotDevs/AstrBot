@@ -177,8 +177,7 @@ class ProviderRequest:
             content_blocks.append({"type": "text", "text": self.prompt})
         elif self.image_urls:
             # 如果没有文本但有图片，添加占位文本
-            for image_url in self.image_urls:
-                content_blocks.append({"type": "input_image", "image_url": image_url})
+            content_blocks.append({"type": "text", "text": "[图片]"})
 
         # 2. 额外的内容块（系统提醒、指令等）
         if self.extra_user_content_parts:
