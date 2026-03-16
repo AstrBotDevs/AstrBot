@@ -234,28 +234,27 @@ def validate_ssl_config(post_config: dict) -> list[str]:
     key_file = ssl_config.get("key_file", "")
 
     if not cert_file or not cert_file.strip():
-        errors.append(
-            "启用 HTTPS 时必须配置 SSL 证书文件路径 (dashboard.ssl.cert_file)"
-        )
+        errors.append("sslValidation.required")
     elif not os.path.isabs(cert_file):
         # 相对路径，基于 data 目录解析
         cert_path = os.path.join(get_astrbot_data_path(), cert_file)
         if not os.path.isfile(cert_path):
-            errors.append(f"SSL 证书文件不存在: {cert_file}")
+            errors.append(f"sslValidation.certNotFound|{cert_file}")
     elif not os.path.isfile(cert_file):
-        errors.append(f"SSL 证书文件不存在: {cert_file}")
+        errors.append(f"sslValidation.certNotFound|{cert_file}")
 
     if not key_file or not key_file.strip():
-        errors.append("启用 HTTPS 时必须配置 SSL 私钥文件路径 (dashboard.ssl.key_file)")
+        errors.append("sslValidation.required")
     elif not os.path.isabs(key_file):
         # 相对路径，基于 data 目录解析
         key_path = os.path.join(get_astrbot_data_path(), key_file)
         if not os.path.isfile(key_path):
-            errors.append(f"SSL 私钥文件不存在: {key_file}")
+            errors.append(f"sslValidation.keyNotFound|{key_file}")
     elif not os.path.isfile(key_file):
-        errors.append(f"SSL 私钥文件不存在: {key_file}")
+        errors.append(f"sslValidation.keyNotFound|{key_file}")
 
-    return errors
+    # Remove duplicates
+    return list(set(errors))
 
 def _log_computer_config_changes(old_config: dict, new_config: dict) -> None:
     """Compare and log Computer/sandbox configuration changes."""

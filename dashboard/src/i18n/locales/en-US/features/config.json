@@ -127,6 +127,8 @@
     }
   },
   "sslValidation": {
-    "required": "When WebUI HTTPS is enabled, SSL certificate file path and private key file path must be configured"
+    "required": "When WebUI HTTPS is enabled, SSL certificate file path and private key file path must be configured",
+    "certNotFound": "SSL certificate file not found: {file}",
+    "keyNotFound": "SSL private key file not found: {file}"
   }
 }
