@@ -61,7 +61,7 @@ class ExecuteShellTool(FunctionTool):
             config = context.context.context.get_config(
                 umo=context.context.event.unified_msg_origin
             )
-            timeout = config.get("provider_settings", {}).get("shell_call_timeout", 30)
+            timeout = config.get("provider_settings", {}).get("tool_call_timeout", 30)
             # 将timeout转为int
             timeout = int(timeout)
 

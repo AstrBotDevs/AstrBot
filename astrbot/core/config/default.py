@@ -118,7 +118,6 @@ DEFAULT_CONFIG = {
         "reachability_check": False,
         "max_agent_step": 30,
         "tool_call_timeout": 60,
-        "shell_call_timeout": 30,
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
@@ -2543,9 +2542,6 @@ CONFIG_METADATA_2 = {
                     "tool_call_timeout": {
                         "type": "int",
                     },
-                    "shell_call_timeout": {
-                        "type": "int",
-                    },
                     "tool_schema_mode": {
                         "type": "string",
                     },
@@ -3283,13 +3279,6 @@ CONFIG_METADATA_3 = {
                     },
                     "provider_settings.max_agent_step": {
                         "description": "工具调用轮数上限",
-                        "type": "int",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.shell_call_timeout": {
-                        "description": "Shell 工具调用超时时间（秒）",
                         "type": "int",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
