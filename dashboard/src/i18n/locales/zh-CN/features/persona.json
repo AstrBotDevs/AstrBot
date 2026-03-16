@@ -10,6 +10,7 @@
     "cancel": "取消",
     "save": "保存",
     "move": "移动",
+    "clone": "克隆",
     "addDialogPair": "添加对话对"
   },
   "labels": {
@@ -142,5 +143,17 @@
     "description": "为 \"{name}\" 选择目标文件夹",
     "success": "移动成功",
     "error": "移动失败"
+  },
+  "cloneDialog": {
+    "title": "克隆人格",
+    "description": "为 \"{name}\" 创建一份副本",
+    "newPersonaId": "新人格 ID",
+    "newPersonaIdHint": "输入克隆人格的唯一名称",
+    "success": "人格克隆成功",
+    "error": "克隆人格失败",
+    "validation": {
+      "required": "人格 ID 不能为空",
+      "exists": "该人格 ID 已存在"
+    }
   }
 }

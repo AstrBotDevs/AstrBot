@@ -14,6 +14,12 @@
                         </template>
                         <v-list-item-title>{{ tm('buttons.edit') }}</v-list-item-title>
                     </v-list-item>
+                    <v-list-item @click.stop="$emit('clone')">
+                        <template v-slot:prepend>
+                            <v-icon size="small">mdi-content-copy</v-icon>
+                        </template>
+                        <v-list-item-title>{{ tm('buttons.clone') }}</v-list-item-title>
+                    </v-list-item>
                     <v-list-item @click.stop="$emit('move')">
                         <template v-slot:prepend>
                             <v-icon size="small">mdi-folder-move</v-icon>
@@ -97,7 +103,7 @@ export default defineComponent({
             required: true
         }
     },
-    emits: ['view', 'edit', 'move', 'delete'],
+    emits: ['view', 'edit', 'clone', 'move', 'delete'],
     setup() {
         const { tm } = useModuleI18n('features/persona');
         return { tm };
