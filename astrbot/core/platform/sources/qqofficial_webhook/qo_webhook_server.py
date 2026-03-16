@@ -113,14 +113,14 @@ class QQOfficialWebhook:
             "request_path": getattr(request, "path", ""),
             "request_method": getattr(request, "method", ""),
         }
-        await self.platform.emit_raw_platform_event(msg, meta=context)
+        stopped = await self.platform.emit_raw_platform_event(msg, meta=context)
 
         if opcode == 13:
             # validation
             signed = await self.webhook_validation(cast(dict, data))
             return signed
 
-        if event and opcode == BotWebSocket.WS_DISPATCH_EVENT:
+        if not stopped and event and opcode == BotWebSocket.WS_DISPATCH_EVENT:
             event = msg["t"].lower()
             try:
                 func = self._connection.parser[event]
