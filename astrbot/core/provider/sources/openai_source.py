@@ -529,11 +529,17 @@ class ProviderOpenAIOfficial(Provider):
                         tool_found = True
                         break
                 if not tool_found:
-                    unhandled_tool_calls.append(tool_call.function.name)
-            if unhandled_tool_calls:
+                    # Handle both object and string tool calls
+                    if hasattr(tool_call, "function") and hasattr(tool_call.function, "name"):
+                        unhandled_tool_calls.append(tool_call.function.name)
+                    else:
+                        unhandled_tool_calls.append(str(tool_call))
+            # Only log warning if some tools were processed successfully
+            # (avoid redundant logging when error will be raised shortly)
+            if unhandled_tool_calls and args_ls:
                 logger.warning(
-                    f"Tool calls not found in registered tools: {unhandled_tool_calls}. "
-                    f"This may be a race condition if MCP tools are still loading."
+                    f"Some tool calls were not found in registered tools: {unhandled_tool_calls}. "
+                    f"This may indicate that MCP tools are still loading or failed to load."
                 )
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
@@ -548,11 +554,16 @@ class ProviderOpenAIOfficial(Provider):
         if llm_response.completion_text is None and not llm_response.tools_call_args:
             if choice.message.tool_calls and tools is not None:
                 # Tool calls were present but no matching tools found
-                tool_names = [tc.function.name for tc in choice.message.tool_calls]
+                tool_names = []
+                for tc in choice.message.tool_calls:
+                    if hasattr(tc, "function") and hasattr(tc.function, "name"):
+                        tool_names.append(tc.function.name)
+                    else:
+                        tool_names.append(str(tc))
                 logger.error(
                     f"Tool calls requested but no matching tools found in func_list. "
                     f"Requested: {tool_names}, Available: {[t.name for t in tools.func_list]}. "
-                    f"This may be a race condition - MCP tools may still be loading."
+                    f"MCP tools may still be loading."
                 )
                 raise Exception(
                     f"AI requested tools that are not yet available: {tool_names}. "
