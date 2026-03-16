@@ -1183,7 +1183,7 @@ async def build_main_agent(
 
 # 异步图片压缩
 def _do_compress_sync(data: bytes, temp_dir: str) -> str:
-    """同步执行图片压缩逻辑，由 asyncio.to_thread 调用"""
+    """同步执行图片压缩逻辑，由 _compress_image_internal 调用"""
 
     img = PILImage.open(io.BytesIO(data))
     if img.mode in ("RGBA", "P"):
