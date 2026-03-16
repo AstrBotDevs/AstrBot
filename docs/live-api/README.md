@@ -128,6 +128,17 @@ Finish the current voice capture segment.
 }
 ```
 
+#### `text_input`
+
+Send a plain text input directly while using `ct=live`. The server will still route through Live mode with TTS and interrupt handling.
+
+```json
+{
+  "t": "text_input",
+  "text": "Hello, what is the weather today?"
+}
+```
+
 #### `interrupt`
 
 Interrupt the current model or TTS response.

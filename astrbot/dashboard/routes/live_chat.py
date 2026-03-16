@@ -723,6 +723,16 @@ class LiveChatRoute(Route):
 
         elif msg_type == "end_speaking":
             # 结束说话
+            if session.is_processing:
+                await websocket.send_json(
+                    {
+                        "t": "error",
+                        "data": "Session is busy",
+                        "code": "PROCESSING_ERROR",
+                    }
+                )
+                return
+
             stamp = message.get("stamp")
             if not stamp:
                 logger.warning("[Live Chat] end_speaking 缺少 stamp")
@@ -736,44 +746,58 @@ class LiveChatRoute(Route):
             # 处理音频：STT -> LLM -> TTS
             await self._process_audio(session, audio_path, assemble_duration)
 
+        elif msg_type == "text_input":
+            if session.is_processing:
+                await websocket.send_json(
+                    {
+                        "t": "error",
+                        "data": "Session is busy",
+                        "code": "PROCESSING_ERROR",
+                    }
+                )
+                return
+
+            user_text = message.get("text")
+            if not isinstance(user_text, str):
+                user_text = message.get("message")
+
+            if not isinstance(user_text, str) or not user_text.strip():
+                await websocket.send_json(
+                    {
+                        "t": "error",
+                        "data": "message must be non-empty text",
+                        "code": "INVALID_MESSAGE_FORMAT",
+                    }
+                )
+                return
+
+            await self._process_live_user_text(
+                session,
+                user_text=user_text.strip(),
+                initial_metrics={"input_type": "text"},
+                processing_start_time=time.time(),
+            )
+
         elif msg_type == "interrupt":
             # 用户打断
             session.should_interrupt = True
             logger.info(f"[Live Chat] 用户打断: {session.username}")
 
-    async def _process_audio(
-        self, session: LiveChatSession, audio_path: str, assemble_duration: float
+    async def _process_live_user_text(
+        self,
+        session: LiveChatSession,
+        user_text: str,
+        initial_metrics: dict[str, Any] | None = None,
+        processing_start_time: float | None = None,
     ) -> None:
-        """处理音频：STT -> LLM -> 流式 TTS"""
+        """处理 Live 用户文本：走 run_live_agent pipeline 并回传流式 TTS."""
         try:
-            # 发送 WAV 组装耗时
-            await websocket.send_json(
-                {"t": "metrics", "data": {"wav_assemble_time": assemble_duration}}
-            )
-            wav_assembly_finish_time = time.time()
+            if initial_metrics:
+                await websocket.send_json({"t": "metrics", "data": initial_metrics})
 
+            processing_start = processing_start_time or time.time()
             session.is_processing = True
             session.should_interrupt = False
-
-            # 1. STT - 语音转文字
-            ctx = self.plugin_manager.context
-            stt_provider = ctx.provider_manager.stt_provider_insts[0]
-
-            if not stt_provider:
-                logger.error("[Live Chat] STT Provider 未配置")
-                await websocket.send_json({"t": "error", "data": "语音识别服务未配置"})
-                return
-
-            await websocket.send_json(
-                {"t": "metrics", "data": {"stt": stt_provider.meta().type}}
-            )
-
-            user_text = await stt_provider.get_text(audio_path)
-            if not user_text:
-                logger.warning("[Live Chat] STT 识别结果为空")
-                return
-
-            logger.info(f"[Live Chat] STT 结果: {user_text}")
 
             await websocket.send_json(
                 {
@@ -794,7 +818,6 @@ class LiveChatRoute(Route):
                 "action_type": "live",  # 标记为 live mode
             }
 
-            # 将消息放入队列
             await queue.put((session.username, cid, payload))
 
             # 3. 等待响应并流式发送 TTS 音频
@@ -809,11 +832,9 @@ class LiveChatRoute(Route):
                         # 用户打断，停止处理
                         logger.info("[Live Chat] 检测到用户打断")
                         await websocket.send_json({"t": "stop_play"})
-                        # 保存消息并标记为被打断
                         await self._save_interrupted_message(
                             session, user_text, bot_text
                         )
-                        # 清空队列中未处理的消息
                         while not back_queue.empty():
                             try:
                                 back_queue.get_nowait()
@@ -861,12 +882,7 @@ class LiveChatRoute(Route):
                     if result_chain_type == "tts_stats":
                         try:
                             stats = json.loads(data)
-                            await websocket.send_json(
-                                {
-                                    "t": "metrics",
-                                    "data": stats,
-                                }
-                            )
+                            await websocket.send_json({"t": "metrics", "data": stats})
                         except Exception as e:
                             logger.error(f"[Live Chat] 解析 TTSStats 失败: {e}")
                         continue
@@ -893,18 +909,14 @@ class LiveChatRoute(Route):
                                     "data": {"text": data},
                                 }
                             )
-                        # 普通文本消息
                         bot_text += data
 
                     elif result_type == "audio_chunk":
-                        # 流式音频数据
                         if not audio_playing:
                             audio_playing = True
                             logger.debug("[Live Chat] 开始播放音频流")
-
-                            # Calculate latency from wav assembly finish to first audio chunk
                             speak_to_first_frame_latency = (
-                                time.time() - wav_assembly_finish_time
+                                time.time() - processing_start
                             )
                             await websocket.send_json(
                                 {
@@ -924,19 +936,15 @@ class LiveChatRoute(Route):
                                 }
                             )
 
-                        # 发送音频数据给前端
                         await websocket.send_json(
                             {
                                 "t": "response",
-                                "data": data,  # base64 编码的音频数据
+                                "data": data,
                             }
                         )
 
                     elif result_type in ["complete", "end"]:
-                        # 处理完成
                         logger.info(f"[Live Chat] Bot 回复完成: {bot_text}")
-
-                        # 如果没有音频流，发送 bot 消息文本
                         if not audio_playing:
                             await websocket.send_json(
                                 {
@@ -948,11 +956,8 @@ class LiveChatRoute(Route):
                                 }
                             )
 
-                        # 发送结束标记
                         await websocket.send_json({"t": "end"})
-
-                        # 发送总耗时
-                        wav_to_tts_duration = time.time() - wav_assembly_finish_time
+                        wav_to_tts_duration = time.time() - processing_start
                         await websocket.send_json(
                             {
                                 "t": "metrics",
@@ -964,12 +969,64 @@ class LiveChatRoute(Route):
                 webchat_queue_mgr.remove_back_queue(message_id)
 
         except Exception as e:
-            logger.error(f"[Live Chat] 处理音频失败: {e}", exc_info=True)
+            logger.error(f"[Live Chat] 处理文本失败: {e}", exc_info=True)
             await websocket.send_json({"t": "error", "data": f"处理失败: {str(e)}"})
 
         finally:
             session.is_processing = False
             session.should_interrupt = False
+
+    async def _process_audio(
+        self, session: LiveChatSession, audio_path: str, assemble_duration: float
+    ) -> None:
+        """处理音频：STT -> LLM -> 流式 TTS"""
+        try:
+            await websocket.send_json(
+                {
+                    "t": "metrics",
+                    "data": {
+                        "wav_assemble_time": assemble_duration,
+                        "input_type": "audio",
+                    },
+                }
+            )
+            wav_assembly_finish_time = time.time()
+
+            # 1. STT - 语音转文字
+            ctx = self.plugin_manager.context
+            stt_provider = ctx.provider_manager.stt_provider_insts[0]
+
+            if not stt_provider:
+                logger.error("[Live Chat] STT Provider 未配置")
+                await websocket.send_json({"t": "error", "data": "语音识别服务未配置"})
+                return
+
+            await websocket.send_json(
+                {
+                    "t": "metrics",
+                    "data": {
+                        "stt": stt_provider.meta().type,
+                    },
+                }
+            )
+
+            user_text = await stt_provider.get_text(audio_path)
+            if not user_text:
+                logger.warning("[Live Chat] STT 识别结果为空")
+                return
+
+            logger.info(f"[Live Chat] STT 结果: {user_text}")
+
+            await self._process_live_user_text(
+                session,
+                user_text=user_text,
+                initial_metrics=None,
+                processing_start_time=wav_assembly_finish_time,
+            )
+
+        except Exception as e:
+            logger.error(f"[Live Chat] 处理音频失败: {e}", exc_info=True)
+            await websocket.send_json({"t": "error", "data": f"处理失败: {str(e)}"})
 
     async def _save_interrupted_message(
         self, session: LiveChatSession, user_text: str, bot_text: str
