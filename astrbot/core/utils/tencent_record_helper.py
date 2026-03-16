@@ -60,15 +60,24 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> int:
         return duration
 
 
-async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
-    """将 MP3 或其他音频格式转换为 PCM 16bit WAV，采样率24000Hz，单声道。
+async def convert_to_pcm_wav(
+    input_path: str, output_path: str, sample_rate: int = 24000
+) -> str:
+    """将音频转换为 PCM 16bit WAV，单声道。
+
+    默认采样率为 24000Hz，以保持现有调用方行为不变；对于 QQ 官方语音等
+    场景，可显式传入更高的受支持采样率，以减少不必要的音质损失。
     若转换失败则抛出异常。
     """
     try:
         from pyffmpeg import FFmpeg
 
         ff = FFmpeg()
-        ff.convert(input_file=input_path, output_file=output_path)
+        ff.options(
+            f"-y -i \"{input_path}\" -acodec pcm_s16le -ar {sample_rate} -ac 1 "
+            f"-af apad=pad_dur=2 -fflags +genpts -hide_banner \"{output_path}\""
+        )
+        ff.run()
     except Exception as e:
         logger.debug(f"pyffmpeg 转换失败: {e}, 尝试使用 ffmpeg 命令行进行转换")
 
@@ -80,7 +89,7 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
             "-acodec",
             "pcm_s16le",
             "-ar",
-            "24000",
+            str(sample_rate),
             "-ac",
             "1",
             "-af",

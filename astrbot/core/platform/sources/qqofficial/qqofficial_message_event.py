@@ -3,6 +3,7 @@ import base64
 import os
 import random
 import uuid
+import wave
 from typing import cast
 
 import aiofiles
@@ -43,6 +44,50 @@ def _patch_qq_botpy_formdata() -> None:
 
 
 _patch_qq_botpy_formdata()
+
+
+_TENCENT_PCM_RATES = (8000, 12000, 16000, 24000, 32000, 44100, 48000)
+
+
+def _normalize_tencent_pcm_rate(rate: int) -> int:
+    """Map an arbitrary sample rate to the nearest Tencent-compatible rate."""
+
+    return min(_TENCENT_PCM_RATES, key=lambda candidate: abs(candidate - rate))
+
+
+def _is_tencent_ready_wav(file_path: str) -> bool:
+    """Return whether a WAV file already matches QQ official voice requirements.
+
+    The Tencent silk encoder can accept several sample rates, but the input still
+    needs to be mono, 16-bit PCM. Merely checking the `.wav` suffix is not
+    sufficient because plugins may export 44.1kHz/stereo WAV files, which can lead
+    to slowed-down, lower-pitched playback after silk conversion.
+    """
+
+    try:
+        with wave.open(file_path, "rb") as wav_file:
+            return (
+                wav_file.getframerate() in _TENCENT_PCM_RATES
+                and wav_file.getnchannels() == 1
+                and wav_file.getsampwidth() == 2
+                and wav_file.getcomptype() == "NONE"
+            )
+    except (OSError, wave.Error) as exc:
+        logger.warning(f"[QQOfficial] 读取 WAV 参数失败，将重新转换: {file_path}, {exc}")
+        return False
+
+
+def _get_tencent_target_rate(file_path: str) -> int:
+    """Choose the least-destructive re-encode sample rate for Tencent voice."""
+
+    try:
+        with wave.open(file_path, "rb") as wav_file:
+            return _normalize_tencent_pcm_rate(wav_file.getframerate())
+    except (OSError, wave.Error) as exc:
+        logger.warning(
+            f"[QQOfficial] 读取 WAV 采样率失败，回退到 24000Hz: {file_path}, {exc}"
+        )
+        return 24000
 
 
 class QQOfficialMessageEvent(AstrMessageEvent):
@@ -604,14 +649,29 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 if i.file:
                     record_audio_path = await i.convert_to_file_path()
                     temp_dir = get_astrbot_temp_path()
-                    # 如果不是 WAV 格式，先转换为 PCM WAV
+                    # 统一确保输入给 silk 编码器的是受支持采样率的单声道 16-bit PCM WAV。
+                    # 仅凭 `.wav` 扩展名无法保证规格正确，立体声 WAV 会导致 QQ 语音变慢变沉。
                     ext = os.path.splitext(record_audio_path)[1].lower()
-                    if ext != ".wav":
+                    if ext != ".wav" or not _is_tencent_ready_wav(record_audio_path):
                         record_wav_path = os.path.join(
                             temp_dir,
                             f"qqofficial_{uuid.uuid4()}.wav",
                         )
-                        await convert_to_pcm_wav(record_audio_path, record_wav_path)
+                        target_rate = (
+                            _get_tencent_target_rate(record_audio_path)
+                            if ext == ".wav"
+                            else 24000
+                        )
+                        if ext == ".wav":
+                            logger.info(
+                                "[QQOfficial] 检测到非标准 WAV，正在重新标准化: "
+                                f"{record_audio_path} -> {target_rate}Hz mono PCM"
+                            )
+                        await convert_to_pcm_wav(
+                            record_audio_path,
+                            record_wav_path,
+                            sample_rate=target_rate,
+                        )
                     else:
                         record_wav_path = record_audio_path
                     record_tecent_silk_path = os.path.join(
