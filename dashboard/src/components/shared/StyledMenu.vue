@@ -24,7 +24,7 @@ withDefaults(defineProps<{
 })
 </script>
 
-<style scoped>
+<style>
 .styled-menu-card {
   min-width: 100px;
   width: fit-content;
@@ -37,7 +37,7 @@ withDefaults(defineProps<{
   background: transparent !important;
 }
 
-:deep(.styled-menu-item) {
+.styled-menu-item {
   margin: 2px 0;
   transition: all 0.2s ease;
   border-radius: 6px;
@@ -61,9 +61,7 @@ withDefaults(defineProps<{
   outline-offset: -2px;
   background: rgba(var(--v-theme-primary), 0.12) !important;
 }
-</style>
 
-<style>
 /* 深色模式下的下拉框样式 - 需要全局样式才能检测主题 */
 .v-theme--dark .styled-menu-card {
   background: rgb(var(--v-theme-surface)) !important;

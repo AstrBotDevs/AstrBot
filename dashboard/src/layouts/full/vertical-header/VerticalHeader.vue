@@ -27,6 +27,7 @@ const customizer = useCustomizerStore();
 const theme = useTheme();
 const { t } = useI18n();
 const route = useRoute();
+const LAST_BOT_ROUTE_KEY = 'astrbot:last_bot_route';
 let dialog = ref(false);
 let accountWarning = ref(false)
 let updateStatusDialog = ref(false);
@@ -398,12 +399,29 @@ const viewMode = computed({
 });
 
 // 监听 viewMode 变化，切换到 bot 模式时跳转到首页
-watch(() => customizer.viewMode, (newMode, oldMode) => {
-  if (newMode === 'bot' && oldMode === 'chat') {
-    // 从 chat 模式切换到 bot 模式时，跳转到首页
-    if (route.path !== '/') {
-      router.push('/');
+// 保存 bot 模式的最後路由
+// 監聽 route 變化，保存最後一次 bot 路由
+watch(() => route.fullPath, (newPath) => {
+  if (customizer.viewMode === 'bot' && typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
+    } catch (e) {
+      console.error('Failed to save last bot route to localStorage:', e);
     }
+  }
+});
+
+// 監聽 viewMode 切換
+watch(() => customizer.viewMode, (newMode, oldMode) => {
+  if (newMode === 'bot' && oldMode === 'chat' && typeof window !== 'undefined') {
+    // 從 chat 切換回 bot，跳轉到最後一次的 bot 路由
+    let lastBotRoute = '/';
+    try {
+      lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+    } catch (e) {
+      console.error('Failed to read last bot route from localStorage:', e);
+    }
+    router.push(lastBotRoute);
   }
 });
 
@@ -454,11 +472,7 @@ onMounted(async () => {
       <v-icon>mdi-menu</v-icon>
     </v-btn>
     <!-- 移动端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" class="hidden-lg-and-up ms-3"
-      icon rounded="sm" variant="flat" @click.stop="customizer.SET_SIDEBAR_DRAWER">
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
-    <v-btn v-else-if="customizer.viewMode === 'bot'" class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
+    <v-btn v-if="customizer.viewMode === 'bot'" class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
       @click.stop="customizer.SET_SIDEBAR_DRAWER">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
@@ -551,21 +565,51 @@ onMounted(async () => {
         <v-divider class="my-1" />
       </template>
 
-      <!-- 语言切换 -->
-      <v-list-item
-        v-for="lang in languages"
-        :key="lang.code"
-        :value="lang.code"
-        @click="changeLanguage(lang.code)"
-        :class="{ 'styled-menu-item-active': currentLocale === lang.code }"
-        class="styled-menu-item"
-        rounded="md"
+      <!-- 语言切换分组 -->
+      <v-menu
+        :open-on-hover="!$vuetify.display.xs"
+        :open-on-click="$vuetify.display.xs"
+        :open-delay="!$vuetify.display.xs ? 60 : 0"
+        :close-delay="!$vuetify.display.xs ? 120 : 0"
+        :location="$vuetify.display.xs ? 'bottom' : 'start center'"
+        offset="8"
       >
-        <template v-slot:prepend>
-          <span class="language-flag">{{ lang.flag }}</span>
+        <template v-slot:activator="{ props: languageMenuProps }">
+          <v-list-item
+            v-bind="languageMenuProps"
+            class="styled-menu-item language-group-trigger"
+            rounded="md"
+          >
+            <template v-slot:prepend>
+              <v-icon>mdi-translate</v-icon>
+            </template>
+            <v-list-item-title>{{ t('core.common.language') }}</v-list-item-title>
+            <template v-slot:append>
+              <span class="language-group-current">{{ currentLanguage?.flag }}</span>
+              <v-icon size="18" class="language-group-arrow">mdi-chevron-right</v-icon>
+            </template>
+          </v-list-item>
         </template>
-        <v-list-item-title>{{ lang.name }}</v-list-item-title>
-      </v-list-item>
+
+        <v-card class="styled-menu-card" style="min-width: 180px;" elevation="8" rounded="lg">
+          <v-list density="compact" class="styled-menu-list pa-1">
+            <v-list-item
+              v-for="lang in languages"
+              :key="lang.code"
+              :value="lang.code"
+              @click="changeLanguage(lang.code)"
+              :class="{ 'styled-menu-item-active': currentLocale === lang.code }"
+              class="styled-menu-item"
+              rounded="md"
+            >
+              <template v-slot:prepend>
+                <span class="language-flag">{{ lang.flag }}</span>
+              </template>
+              <v-list-item-title>{{ lang.name }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-card>
+      </v-menu>
 
 
       <v-list-item
