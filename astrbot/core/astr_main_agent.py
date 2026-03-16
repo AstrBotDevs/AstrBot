@@ -505,6 +505,22 @@ def _append_quoted_image_attachment(req: ProviderRequest, image_path: str) -> No
     )
 
 
+async def _resolve_image_component_ref(comp: Image) -> str:
+    image_ref = (getattr(comp, "url", "") or "").strip()
+    if image_ref:
+        return image_ref
+
+    image_ref = (getattr(comp, "file", "") or "").strip()
+    if image_ref:
+        return image_ref
+
+    image_ref = (getattr(comp, "path", "") or "").strip()
+    if image_ref:
+        return image_ref
+
+    return await comp.convert_to_file_path()
+
+
 def _get_quoted_message_parser_settings(
     provider_settings: dict[str, object] | None,
 ) -> QuotedMessageParserSettings:
@@ -1027,7 +1043,7 @@ async def build_main_agent(
                 req.contexts = json.loads(req.conversation.history)
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
-                    req.image_urls.append(comp.url)
+                    req.image_urls.append(await _resolve_image_component_ref(comp))
                 elif isinstance(comp, File):
                     file_path = await comp.get_file()
                     file_name = comp.name or os.path.basename(file_path)
@@ -1052,9 +1068,10 @@ async def build_main_agent(
             # media files attachments
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
-                    req.image_urls.append(comp.url)
+                    image_ref = await _resolve_image_component_ref(comp)
+                    req.image_urls.append(image_ref)
                     req.extra_user_content_parts.append(
-                        TextPart(text=f"[Image Attachment: url {comp.url}]")
+                        TextPart(text=f"[Image Attachment: url {image_ref}]")
                     )
                 elif isinstance(comp, File):
                     file_path = await comp.get_file()

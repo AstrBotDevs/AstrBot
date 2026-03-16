@@ -638,6 +638,23 @@ class TestModalitiesFix:
 
         assert req.func_tool is None
 
+
+class TestProviderRequestAssembleContext:
+    @pytest.mark.asyncio
+    async def test_provider_request_with_image_only_uses_text_placeholder(
+        self, tmp_path
+    ):
+        image_path = tmp_path / "example.jpg"
+        image_path.write_bytes(b"fake-image")
+        req = ProviderRequest(prompt=None, image_urls=[image_path.as_uri()])
+
+        context = await req.assemble_context()
+
+        assert context["role"] == "user"
+        assert isinstance(context["content"], list)
+        assert context["content"][0] == {"type": "text", "text": "[图片]"}
+        assert context["content"][1]["type"] == "image_url"
+
     def test_modalities_fix_all_supported(self, mock_provider):
         """Test modality fix when all features are supported."""
         module = ama
@@ -937,6 +954,9 @@ class TestBuildMainAgent:
         module = ama
         mock_image = MagicMock(spec=Image)
         mock_image.convert_to_file_path = AsyncMock(return_value="/path/to/image.jpg")
+        mock_image.url = ""
+        mock_image.file = "file:///path/to/image.jpg"
+        mock_image.path = "/path/to/image.jpg"
         mock_event.message_obj.message = [mock_image]
 
         mock_context.get_provider_by_id.return_value = None
@@ -961,6 +981,7 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
+        assert result.provider_request.image_urls == ["file:///path/to/image.jpg"]
 
     @pytest.mark.asyncio
     async def test_build_main_agent_no_prompt_no_images(
