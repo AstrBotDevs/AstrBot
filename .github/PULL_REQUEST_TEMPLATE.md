@@ -36,8 +36,11 @@
 - [ ] ⚠️ 我已认真阅读并理解以上所有内容，确保本次提交符合规范。
   / I have read and understood all the above and confirm this PR follows the rules.
 
-- [ ] 🚀 我确保本次开发**基于 dev 分支**，并将代码合并至**开发分支**（除非极其紧急，才允许合并到主分支）。
-   / I confirm that this development is **based on the dev branch** and will be merged into the **development branch**, unless it is extremely urgent to merge into the main branch.
+- [ ] 🚀 本次开发**基于 dev 分支**，并将代码合并至**开发分支**（如果是功能性、较大的 PR）。
+   / I confirm that this development is **based on the dev branch** and will be merged into the **development branch** (for functional or major PRs).
+
+- [ ] 🛠️ 本次开发**直接提交至 master 分支**（如果是补丁类、修复类、较小的 PR）。
+   / I confirm that this development is **directly submitted to the master branch** (for patches, fixes, or minor PRs).
 
 - [ ] ⚠️ 我**没有**认真阅读以上内容，直接提交。
   / I **did not** read the above carefully before submitting.
