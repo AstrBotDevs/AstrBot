@@ -459,8 +459,8 @@ async def _ensure_img_caption(
             req.image_urls = []
     except Exception as exc:  # noqa: BLE001
         logger.error("处理图片描述失败: %s", exc)
-    finally:
         req.extra_user_content_parts.append(TextPart(text="图片解析失败"))
+    finally:
         req.image_urls = []
 
 
@@ -1202,7 +1202,7 @@ async def _compress_image_internal(url_or_path: str) -> str:
             img.thumbnail((max_size, max_size), PILImage.LANCZOS)
         out_io = io.BytesIO()
         img.save(out_io, format="JPEG", quality=75, optimize=True)
-        temp_dir = "/www/server/python_project/AstrBot/data/temp"
+        temp_dir = "./data/temp"
         if not os.path.exists(temp_dir):
             os.makedirs(temp_dir)
         import uuid
