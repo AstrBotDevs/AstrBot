@@ -37,7 +37,7 @@ def _make_handoff(name: str) -> HandoffTool:
     """Create a HandoffTool with a mocked Agent."""
     agent = MagicMock()
     agent.name = name
-    return HandoffTool(agent=agent)
+    return HandoffTool(agent=agent, tool_description=f"Handoff to {name}")
 
 
 def _make_mcp_tool(name: str) -> MCPTool:
@@ -71,11 +71,13 @@ class TestCatalogImmutableSnapshot:
 
     def test_catalog_immutable(self):
         """Assigning to catalog.core_tools raises FrozenInstanceError."""
+        import dataclasses
+
         ts = ToolSet(tools=[_make_tool("alpha")])
         catalog = ToolCatalog.from_tool_set(ts, DEFAULT_CONFIG)
 
         # pydantic frozen dataclass raises FrozenInstanceError on assignment
-        with __import__("pytest").raises(Exception, match="frozen"):
+        with __import__("pytest").raises(dataclasses.FrozenInstanceError):
             catalog.core_tools = ()  # type: ignore[misc]
 
     def test_source_toolset_unchanged(self):
