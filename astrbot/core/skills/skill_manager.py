@@ -395,7 +395,10 @@ class SkillManager:
                 # For sandbox_only skills, show_sandbox_path is implicitly True
                 # since there is no local path to show. Always prefer the
                 # actual path from sandbox cache.
-                path_str = sandbox_cached_paths.get(skill_name) or f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
+                path_str = (
+                    sandbox_cached_paths.get(skill_name)
+                    or f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
+                )
                 skills_by_name[skill_name] = SkillInfo(
                     name=skill_name,
                     description=description,
