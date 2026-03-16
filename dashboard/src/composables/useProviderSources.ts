@@ -18,14 +18,78 @@ type ProviderSourceLike = {
   [key: string]: any
 }
 
-type ProviderSourceTemplate = ProviderSourceLike & {
+type ProviderSourceIdentity = {
   id: string
   provider: string
   type: string
   provider_type: string
 }
 
+type ProviderSourceTemplate = ProviderSourceLike & ProviderSourceIdentity
+
 type ProviderSourceTemplates = Record<string, ProviderSourceTemplate>
+
+function hasProviderSourceIdentity(value: unknown): value is ProviderSourceIdentity {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const candidate = value as ProviderSourceLike
+  return (
+    typeof candidate.id === 'string'
+    && typeof candidate.provider === 'string'
+    && typeof candidate.type === 'string'
+    && typeof candidate.provider_type === 'string'
+  )
+}
+
+function cloneTemplateValue<T>(value: T): T {
+  if (value === null || typeof value !== 'object') {
+    return value
+  }
+
+  try {
+    return structuredClone(value)
+  } catch {
+    if (Array.isArray(value)) {
+      return [...value] as T
+    }
+    return { ...(value as Record<string, unknown>) } as T
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function matchesProviderSourceTemplate(
+  template: ProviderSourceTemplate,
+  source: ProviderSourceIdentity
+): boolean {
+  return (
+    template.provider === source.provider
+    && template.type === source.type
+    && template.provider_type === source.provider_type
+  )
+}
+
+function matchesGeneratedSourceId(sourceId: string, templateId: string): boolean {
+  return new RegExp(`^${escapeRegExp(templateId)}_\\d+$`).test(sourceId)
+}
+
+function warnTemplateMatchAmbiguity(
+  message: string,
+  source: ProviderSourceIdentity,
+  candidates: ProviderSourceTemplate[]
+) {
+  console.warn(message, {
+    sourceId: source.id,
+    provider: source.provider,
+    type: source.type,
+    providerType: source.provider_type,
+    candidateTemplateIds: candidates.map((candidate) => candidate.id)
+  })
+}
 
 function toProviderSourceTemplates(rawTemplates: unknown): ProviderSourceTemplates {
   if (!rawTemplates || typeof rawTemplates !== 'object') {
@@ -38,18 +102,12 @@ function toProviderSourceTemplates(rawTemplates: unknown): ProviderSourceTemplat
       continue
     }
 
-    const template = value as ProviderSourceLike
-    if (
-      typeof template.id !== 'string'
-      || typeof template.provider !== 'string'
-      || typeof template.type !== 'string'
-      || typeof template.provider_type !== 'string'
-    ) {
+    if (!hasProviderSourceIdentity(value)) {
       console.warn('[ProviderSources] Skip invalid provider template shape', { templateName })
       continue
     }
 
-    templates[templateName] = template as ProviderSourceTemplate
+    templates[templateName] = value as ProviderSourceTemplate
   }
 
   return templates
@@ -412,7 +470,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     for (const [key, value] of Object.entries(template)) {
       if (!sourceTemplateExcludedKeys.has(key)) {
-        sourceFields[key] = value
+        sourceFields[key] = cloneTemplateValue(value)
       }
     }
 
@@ -424,32 +482,46 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     templates: ProviderSourceTemplates
   ): ProviderSourceTemplate | null {
     const templateList = Object.values(templates || {})
-    if (
-      !source
-      || typeof source.id !== 'string'
-      || typeof source.provider !== 'string'
-      || typeof source.type !== 'string'
-      || typeof source.provider_type !== 'string'
-      || templateList.length === 0
-    ) {
+    if (!hasProviderSourceIdentity(source) || templateList.length === 0) {
       return null
     }
 
-    const exactIdMatch = templateList.find((template) => {
-      const idMatches = source.id === template.id || source.id?.startsWith(`${template.id}_`)
-      if (!idMatches) return false
-      return (
-        template.provider === source.provider
-        && template.type === source.type
-        && template.provider_type === source.provider_type
+    const exactIdCandidates = templateList.filter((template) =>
+      source.id === template.id && matchesProviderSourceTemplate(template, source)
+    )
+
+    if (exactIdCandidates.length === 1) {
+      return exactIdCandidates[0]
+    }
+
+    if (exactIdCandidates.length > 1) {
+      warnTemplateMatchAmbiguity(
+        '[ProviderSources] Multiple templates matched provider source by exact id; skip hydration to avoid ambiguity',
+        source,
+        exactIdCandidates
       )
-    })
-    if (exactIdMatch) return exactIdMatch
+      return null
+    }
+
+    const generatedIdCandidates = templateList.filter((template) =>
+      matchesGeneratedSourceId(source.id, template.id) && matchesProviderSourceTemplate(template, source)
+    )
+
+    if (generatedIdCandidates.length === 1) {
+      return generatedIdCandidates[0]
+    }
+
+    if (generatedIdCandidates.length > 1) {
+      warnTemplateMatchAmbiguity(
+        '[ProviderSources] Multiple templates matched provider source by generated id; skip hydration to avoid ambiguity',
+        source,
+        generatedIdCandidates
+      )
+      return null
+    }
 
     const strictCandidates = templateList.filter((template) =>
-      template.provider === source.provider
-      && template.type === source.type
-      && template.provider_type === source.provider_type
+      matchesProviderSourceTemplate(template, source)
     )
 
     if (strictCandidates.length === 1) {
@@ -457,15 +529,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
 
     if (strictCandidates.length > 1) {
-      console.warn(
+      warnTemplateMatchAmbiguity(
         '[ProviderSources] Multiple templates matched provider source; skip hydration to avoid ambiguity',
-        {
-          sourceId: source.id,
-          provider: source.provider,
-          type: source.type,
-          providerType: source.provider_type,
-          candidateTemplateIds: strictCandidates.map((candidate) => candidate.id)
-        }
+        source,
+        strictCandidates
       )
     }
 
@@ -483,7 +550,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     for (const [key, value] of Object.entries(template)) {
       if (sourceTemplateExcludedKeys.has(key)) continue
       if (!(key in hydratedSource)) {
-        hydratedSource[key] = value
+        hydratedSource[key] = cloneTemplateValue(value)
       }
     }
     return hydratedSource
