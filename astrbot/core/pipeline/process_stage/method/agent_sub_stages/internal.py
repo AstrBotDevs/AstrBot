@@ -13,6 +13,11 @@ from astrbot.core.astr_main_agent import (
     MainAgentBuildResult,
     build_main_agent,
 )
+from astrbot.core.config.tool_loop_defaults import (
+    DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
+    DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+    DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+)
 from astrbot.core.message.components import File, Image
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -44,6 +49,34 @@ from ...follow_up import (
 )
 
 
+def _normalize_positive_int_or_none(
+    raw_value,
+    default: int,
+    setting_name: str,
+) -> int | None:
+    if isinstance(raw_value, bool):
+        logger.warning(
+            "Invalid provider_settings.%s=%s, fallback to %s.",
+            setting_name,
+            raw_value,
+            default,
+        )
+        raw_value = default
+    try:
+        value = None if raw_value is None else int(raw_value)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Invalid provider_settings.%s=%s, fallback to %s.",
+            setting_name,
+            raw_value,
+            default,
+        )
+        value = default
+    if value is not None and value <= 0:
+        return None
+    return value
+
+
 class InternalAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
@@ -58,54 +91,24 @@ class InternalAgentSubStage(Stage):
         self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
         self.deduplicate_repeated_tool_results: bool = settings.get(
             "deduplicate_repeated_tool_results",
-            True,
+            DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
         )
-        raw_dedup_max_entries = settings.get("tool_result_dedup_max_entries", 1024)
-        if isinstance(raw_dedup_max_entries, bool):
-            logger.warning(
-                "Invalid provider_settings.tool_result_dedup_max_entries=%s, fallback to 1024.",
-                raw_dedup_max_entries,
-            )
-            raw_dedup_max_entries = 1024
-        try:
-            self.tool_result_dedup_max_entries: int | None = (
-                None
-                if raw_dedup_max_entries is None
-                else int(raw_dedup_max_entries)
-            )
-        except (TypeError, ValueError):
-            logger.warning(
-                "Invalid provider_settings.tool_result_dedup_max_entries=%s, fallback to 1024.",
-                raw_dedup_max_entries,
-            )
-            self.tool_result_dedup_max_entries = 1024
-        if (
-            self.tool_result_dedup_max_entries is not None
-            and self.tool_result_dedup_max_entries <= 0
-        ):
-            self.tool_result_dedup_max_entries = None
-        raw_tool_error_guard = settings.get("tool_error_repeat_guard_threshold", 8)
-        if isinstance(raw_tool_error_guard, bool):
-            logger.warning(
-                "Invalid provider_settings.tool_error_repeat_guard_threshold=%s, fallback to 8.",
-                raw_tool_error_guard,
-            )
-            raw_tool_error_guard = 8
-        try:
-            self.tool_error_repeat_guard_threshold: int | None = (
-                None if raw_tool_error_guard is None else int(raw_tool_error_guard)
-            )
-        except (TypeError, ValueError):
-            logger.warning(
-                "Invalid provider_settings.tool_error_repeat_guard_threshold=%s, fallback to 8.",
-                raw_tool_error_guard,
-            )
-            self.tool_error_repeat_guard_threshold = 8
-        if (
-            self.tool_error_repeat_guard_threshold is not None
-            and self.tool_error_repeat_guard_threshold <= 0
-        ):
-            self.tool_error_repeat_guard_threshold = None
+        self.tool_result_dedup_max_entries = _normalize_positive_int_or_none(
+            settings.get(
+                "tool_result_dedup_max_entries",
+                DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+            ),
+            default=DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+            setting_name="tool_result_dedup_max_entries",
+        )
+        self.tool_error_repeat_guard_threshold = _normalize_positive_int_or_none(
+            settings.get(
+                "tool_error_repeat_guard_threshold",
+                DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+            ),
+            default=DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+            setting_name="tool_error_repeat_guard_threshold",
+        )
         if self.tool_schema_mode not in ("skills_like", "full"):
             logger.warning(
                 "Unsupported tool_schema_mode: %s, fallback to skills_like",

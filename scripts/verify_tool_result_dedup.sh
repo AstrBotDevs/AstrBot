@@ -11,17 +11,37 @@ uv run pytest -q tests/test_tool_loop_agent_runner.py -k \
 echo "[2/3] Verifying default config exposes dedup toggle"
 uv run python - <<'PY'
 from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.config.tool_loop_defaults import (
+    DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
+    DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+    DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+)
 
 provider_settings = DEFAULT_CONFIG.get("provider_settings", {})
 assert "deduplicate_repeated_tool_results" in provider_settings
-assert provider_settings["deduplicate_repeated_tool_results"] is True
+assert (
+    provider_settings["deduplicate_repeated_tool_results"]
+    is DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS
+)
 assert "tool_result_dedup_max_entries" in provider_settings
-assert provider_settings["tool_result_dedup_max_entries"] == 1024
+assert provider_settings["tool_result_dedup_max_entries"] == DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
 assert "tool_error_repeat_guard_threshold" in provider_settings
-assert provider_settings["tool_error_repeat_guard_threshold"] == 8
-print("DEFAULT_CONFIG.provider_settings.deduplicate_repeated_tool_results=True")
-print("DEFAULT_CONFIG.provider_settings.tool_result_dedup_max_entries=1024")
-print("DEFAULT_CONFIG.provider_settings.tool_error_repeat_guard_threshold=8")
+assert (
+    provider_settings["tool_error_repeat_guard_threshold"]
+    == DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD
+)
+print(
+    "DEFAULT_CONFIG.provider_settings.deduplicate_repeated_tool_results="
+    f"{DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS}"
+)
+print(
+    "DEFAULT_CONFIG.provider_settings.tool_result_dedup_max_entries="
+    f"{DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES}"
+)
+print(
+    "DEFAULT_CONFIG.provider_settings.tool_error_repeat_guard_threshold="
+    f"{DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD}"
+)
 PY
 
 echo "[3/3] Optional runtime config check (data/cmd_config.json)"

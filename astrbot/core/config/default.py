@@ -3,6 +3,11 @@
 import os
 from typing import Any, TypedDict
 
+from astrbot.core.config.tool_loop_defaults import (
+    DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
+    DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+    DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 VERSION = "4.20.0"
@@ -119,9 +124,9 @@ DEFAULT_CONFIG = {
         "max_agent_step": 30,
         "tool_call_timeout": 60,
         "tool_schema_mode": "full",
-        "deduplicate_repeated_tool_results": True,
-        "tool_result_dedup_max_entries": 1024,
-        "tool_error_repeat_guard_threshold": 8,
+        "deduplicate_repeated_tool_results": DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
+        "tool_result_dedup_max_entries": DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+        "tool_error_repeat_guard_threshold": DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
         "file_extract": {

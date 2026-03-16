@@ -51,6 +51,11 @@ from astrbot.core.astr_main_agent_resources import (
     retrieve_knowledge_base,
 )
 from astrbot.core.conversation_mgr import Conversation
+from astrbot.core.config.tool_loop_defaults import (
+    DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
+    DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+    DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+)
 from astrbot.core.message.components import File, Image, Reply
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
@@ -138,11 +143,13 @@ class MainAgentBuildConfig:
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
-    deduplicate_repeated_tool_results: bool = True
+    deduplicate_repeated_tool_results: bool = DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS
     """Whether to compact unchanged repeated tool outputs in context."""
-    tool_result_dedup_max_entries: int | None = 1024
+    tool_result_dedup_max_entries: int | None = DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
     """Maximum cached tool signatures for deduplication. None disables pruning."""
-    tool_error_repeat_guard_threshold: int | None = 8
+    tool_error_repeat_guard_threshold: int | None = (
+        DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD
+    )
     """Consecutive error threshold for the same tool signature before disabling tools."""
 
 

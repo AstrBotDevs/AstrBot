@@ -859,6 +859,30 @@ def test_tool_args_signature_normalization_is_stable_for_non_json_values(runner)
     assert "0x" not in sig_one
 
 
+def test_prepare_tool_call_params_keeps_args_when_schema_has_no_properties(runner):
+    tool = FunctionTool(
+        name="schema_less_tool",
+        description="schema less tool",
+        parameters={"type": "object"},
+        handler=AsyncMock(),
+    )
+
+    prepared = runner._prepare_tool_call_params(
+        tool=tool,
+        tool_name="schema_less_tool",
+        raw_args={"query": "hello"},
+    )
+
+    assert prepared.error is None
+    assert prepared.valid_params == {"query": "hello"}
+
+
+def test_tool_error_detection_supports_non_english_and_traceback_markers(runner):
+    assert runner._is_tool_error_content("错误：参数缺失")
+    assert runner._is_tool_error_content("Traceback (most recent call last): ...")
+    assert not runner._is_tool_error_content("工具执行成功")
+
+
 @pytest.mark.asyncio
 async def test_max_step_with_streaming(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks

@@ -27,6 +27,11 @@ from astrbot.core.astr_main_agent_resources import (
     PYTHON_TOOL,
     SEND_MESSAGE_TO_USER_TOOL,
 )
+from astrbot.core.config.tool_loop_defaults import (
+    DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
+    DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+    DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+)
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -296,15 +301,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         stream = prov_settings.get("streaming_response", False)
         deduplicate_repeated_tool_results = prov_settings.get(
             "deduplicate_repeated_tool_results",
-            True,
+            DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
         )
         tool_result_dedup_max_entries = prov_settings.get(
             "tool_result_dedup_max_entries",
-            1024,
+            DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
         )
         tool_error_repeat_guard_threshold = prov_settings.get(
             "tool_error_repeat_guard_threshold",
-            8,
+            DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
         )
         llm_resp = await ctx.tool_loop_agent(
             event=event,

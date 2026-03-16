@@ -27,6 +27,11 @@ from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.config.tool_loop_defaults import (
+    DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
+    DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+    DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+)
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -94,14 +99,30 @@ class _ToolResultDedupState:
     repeat_count: int = 0
 
 
+@dataclass(slots=True)
+class _PreparedToolCall:
+    valid_params: dict[str, T.Any]
+    ignored_params: set[str]
+    error: str | None = None
+
+
 _DEDUP_PREVIEW_LIMIT = 180
 _DEDUP_PREVIEW_MIN_LIMIT = 3
-_DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES = 1024
-_DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD = 8
 _DEDUP_MESSAGE_TEMPLATE = (
     "[tool-result-deduplicated] Tool `{tool_name}` returned unchanged output for "
     "{repeat_total} consecutive calls with the same arguments. Full repeated output "
     "is omitted to reduce context growth. Latest preview: {preview}"
+)
+_TOOL_ERROR_PREFIX_RE = re.compile(
+    r"^(error|err|failed|failure|exception|traceback|错误|异常|失败)\s*[:：\-]?",
+    re.IGNORECASE,
+)
+_TOOL_ERROR_CONTAINS_MARKERS = (
+    "traceback (most recent call last)",
+    "tool handler parameter mismatch",
+    "argument contract violation",
+    "missing required tool arguments",
+    "no compatible arguments for this tool",
 )
 
 
@@ -402,9 +423,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
         fallback_providers: list[Provider] | None = None,
-        deduplicate_repeated_tool_results: bool = True,
-        tool_result_dedup_max_entries: int | None = _DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
-        tool_error_repeat_guard_threshold: int | None = _DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+        deduplicate_repeated_tool_results: bool = DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
+        tool_result_dedup_max_entries: int | None = DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+        tool_error_repeat_guard_threshold: int | None = DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -679,18 +700,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             logger.warning(
                 "Invalid tool_result_dedup_max_entries=%s, fallback to %s.",
                 max_entries,
-                _DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+                DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
             )
-            return _DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
+            return DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
         try:
             normalized = int(max_entries)
         except (TypeError, ValueError):
             logger.warning(
                 "Invalid tool_result_dedup_max_entries=%s, fallback to %s.",
                 max_entries,
-                _DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+                DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
             )
-            return _DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
+            return DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
         if normalized <= 0:
             return None
         return normalized
@@ -705,18 +726,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             logger.warning(
                 "Invalid tool_error_repeat_guard_threshold=%s, fallback to %s.",
                 threshold,
-                _DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+                DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
             )
-            return _DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD
+            return DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD
         try:
             normalized = int(threshold)
         except (TypeError, ValueError):
             logger.warning(
                 "Invalid tool_error_repeat_guard_threshold=%s, fallback to %s.",
                 threshold,
-                _DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+                DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
             )
-            return _DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD
+            return DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD
         if normalized <= 0:
             return None
         return normalized
@@ -755,8 +776,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     @staticmethod
     def _is_tool_error_content(content: str) -> bool:
-        normalized = content.strip().lower()
-        return normalized.startswith("error:")
+        normalized = content.strip()
+        if not normalized:
+            return False
+
+        if _TOOL_ERROR_PREFIX_RE.match(normalized):
+            return True
+
+        lowered = normalized.lower()
+        return any(marker in lowered for marker in _TOOL_ERROR_CONTAINS_MARKERS)
 
     def _prune_tool_result_dedup_if_needed(self) -> None:
         """Bound dedup cache size for long-running sessions."""
@@ -774,7 +802,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def _prune_tool_error_repeat_counts_if_needed(self) -> None:
         max_entries = self._tool_result_dedup_max_entries
         if max_entries is None:
-            max_entries = _DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
+            max_entries = DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
 
         while len(self._tool_error_repeat_counts) > max_entries:
             try:
@@ -956,6 +984,148 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
 
         return None
+
+    def _record_tool_result(
+        self,
+        *,
+        tool_call_result_blocks: list[ToolCallMessageSegment],
+        tool_call_id: str,
+        content: str,
+        tool_name: str | None = None,
+        tool_args: dict[str, T.Any] | None = None,
+    ) -> None:
+        output = content
+        if tool_name:
+            normalized_args = tool_args or {}
+            self._check_and_apply_tool_error_repeat_guard(
+                tool_name=tool_name,
+                tool_args=normalized_args,
+                content=content,
+            )
+            if self._deduplicate_repeated_tool_results:
+                output = self._deduplicate_tool_result_content(
+                    tool_name=tool_name,
+                    tool_args=normalized_args,
+                    content=content,
+                )
+
+        tool_call_result_blocks.append(
+            ToolCallMessageSegment(
+                role="tool",
+                tool_call_id=tool_call_id,
+                content=self._merge_follow_up_notice(output),
+            ),
+        )
+
+    def _prepare_tool_call_params(
+        self,
+        *,
+        tool: T.Any,
+        tool_name: str,
+        raw_args: dict[str, T.Any],
+    ) -> _PreparedToolCall:
+        if not tool.handler:
+            # Non-handler tools (e.g., MCP) should receive raw args unchanged.
+            return _PreparedToolCall(valid_params=raw_args, ignored_params=set())
+
+        params_schema = tool.parameters if isinstance(tool.parameters, dict) else None
+        properties = (params_schema or {}).get("properties") or {}
+        expected_params = set(properties.keys())
+
+        valid_params: dict[str, T.Any] = {}
+        alias_mapped_params: dict[str, str] = {}
+
+        if expected_params:
+            for raw_key, value in raw_args.items():
+                if raw_key in expected_params:
+                    valid_params[raw_key] = value
+                    continue
+                normalized_key = self._normalize_tool_param_name_for_matching(raw_key)
+                if normalized_key in expected_params and normalized_key not in valid_params:
+                    valid_params[normalized_key] = value
+                    alias_mapped_params[raw_key] = normalized_key
+        else:
+            # When schema does not expose properties, keep backward compatibility.
+            valid_params = dict(raw_args)
+
+        if alias_mapped_params:
+            logger.info("工具 %s 参数名称已自动映射: %s", tool_name, alias_mapped_params)
+
+        valid_params, changed_types = self._coerce_tool_params_by_schema(
+            params=valid_params,
+            params_schema=params_schema,
+        )
+        if changed_types:
+            logger.info(
+                "工具 %s 参数类型已自动纠正: %s",
+                tool_name,
+                {k: {"from": repr(v[0]), "to": repr(v[1])} for k, v in changed_types.items()},
+            )
+
+        ignored_params = set(raw_args.keys()) - set(valid_params.keys())
+        if expected_params:
+            ignored_params = {
+                key
+                for key in ignored_params
+                if self._normalize_tool_param_name_for_matching(key) not in valid_params
+            }
+        else:
+            ignored_params = set()
+
+        if ignored_params:
+            logger.warning("工具 %s 忽略非期望参数: %s", tool_name, ignored_params)
+
+        if expected_params and raw_args and not valid_params:
+            return _PreparedToolCall(
+                valid_params={},
+                ignored_params=ignored_params,
+                error=(
+                    "error: No compatible arguments for this tool. "
+                    f"Provided arguments={sorted(raw_args.keys())}. "
+                    "This may indicate a wrong tool selection; "
+                    "please re-check tool name and argument schema."
+                ),
+            )
+
+        missing_required = self._find_missing_required_tool_params(
+            tool=tool,
+            provided_params=valid_params,
+        )
+        if missing_required:
+            missing_text = ", ".join(missing_required)
+            logger.warning(
+                "工具 %s 缺少必填参数: %s。原始参数: %s",
+                tool_name,
+                missing_text,
+                raw_args,
+            )
+            return _PreparedToolCall(
+                valid_params={},
+                ignored_params=ignored_params,
+                error=(
+                    "error: Missing required tool arguments: "
+                    f"{missing_text}. "
+                    "Please call this tool again with all required arguments."
+                ),
+            )
+
+        contract_error = self._validate_anyof_oneof_contract(
+            tool=tool,
+            provided_params=valid_params,
+        )
+        if contract_error:
+            logger.warning("工具 %s 参数契约校验失败: %s", tool_name, contract_error)
+            return _PreparedToolCall(
+                valid_params={},
+                ignored_params=ignored_params,
+                error=contract_error,
+            )
+
+        return _PreparedToolCall(
+            valid_params=valid_params,
+            ignored_params=ignored_params,
+            error=None,
+        )
 
     @override
     async def step(self):
@@ -1268,34 +1438,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_call_result_blocks: list[ToolCallMessageSegment] = []
         logger.info(f"Agent 使用工具: {llm_response.tools_call_name}")
 
-        def _append_tool_call_result(
-            tool_call_id: str,
-            content: str,
-            *,
-            tool_name: str | None = None,
-            tool_args: dict[str, T.Any] | None = None,
-        ) -> None:
-            output = content
-            if tool_name:
-                self._check_and_apply_tool_error_repeat_guard(
-                    tool_name=tool_name,
-                    tool_args=tool_args or {},
-                    content=content,
-                )
-            if self._deduplicate_repeated_tool_results and tool_name:
-                output = self._deduplicate_tool_result_content(
-                    tool_name=tool_name,
-                    tool_args=tool_args or {},
-                    content=content,
-                )
-            tool_call_result_blocks.append(
-                ToolCallMessageSegment(
-                    role="tool",
-                    tool_call_id=tool_call_id,
-                    content=self._merge_follow_up_notice(output),
-                ),
-            )
-
         # 执行函数调用
         for func_tool_name, func_tool_args, func_tool_id in zip(
             llm_response.tools_call_name,
@@ -1335,138 +1477,30 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                 if not func_tool:
                     logger.warning(f"未找到指定的工具: {func_tool_name}，将跳过。")
-                    _append_tool_call_result(
-                        func_tool_id,
-                        f"error: Tool {func_tool_name} not found.",
+                    self._record_tool_result(
+                        tool_call_result_blocks=tool_call_result_blocks,
+                        tool_call_id=func_tool_id,
+                        content=f"error: Tool {func_tool_name} not found.",
                         tool_name=func_tool_name,
                         tool_args=func_tool_args,
                     )
                     continue
 
-                valid_params = {}  # 参数过滤：只传递函数实际需要的参数
-
-                # 获取实际的 handler 函数
-                if func_tool.handler:
-                    logger.debug(
-                        f"工具 {func_tool_name} 期望的参数: {func_tool.parameters}",
-                    )
-                    params_schema = (
-                        func_tool.parameters
-                        if isinstance(func_tool.parameters, dict)
-                        else None
-                    )
-                    if func_tool.parameters and func_tool.parameters.get("properties"):
-                        expected_params = set(func_tool.parameters["properties"].keys())
-                        alias_mapped_params: dict[str, str] = {}
-                        for raw_key, value in func_tool_args.items():
-                            if raw_key in expected_params:
-                                valid_params[raw_key] = value
-                                continue
-                            normalized_key = (
-                                self._normalize_tool_param_name_for_matching(raw_key)
-                            )
-                            if (
-                                normalized_key in expected_params
-                                and normalized_key not in valid_params
-                            ):
-                                valid_params[normalized_key] = value
-                                alias_mapped_params[raw_key] = normalized_key
-
-                        if alias_mapped_params:
-                            logger.info(
-                                "工具 %s 参数名称已自动映射: %s",
-                                func_tool_name,
-                                alias_mapped_params,
-                            )
-
-                        valid_params, changed_types = self._coerce_tool_params_by_schema(
-                            params=valid_params,
-                            params_schema=params_schema,
-                        )
-                        if changed_types:
-                            logger.info(
-                                "工具 %s 参数类型已自动纠正: %s",
-                                func_tool_name,
-                                {
-                                    k: {"from": repr(v[0]), "to": repr(v[1])}
-                                    for k, v in changed_types.items()
-                                },
-                            )
-
-                    # 记录被忽略的参数
-                    ignored_params = set(func_tool_args.keys()) - set(
-                        valid_params.keys()
-                    )
-                    if func_tool.parameters and func_tool.parameters.get("properties"):
-                        ignored_params = {
-                            k
-                            for k in ignored_params
-                            if self._normalize_tool_param_name_for_matching(k)
-                            not in valid_params
-                        }
-                    if ignored_params:
-                        logger.warning(
-                            f"工具 {func_tool_name} 忽略非期望参数: {ignored_params}",
-                        )
-
-                    if func_tool_args and not valid_params:
-                        _append_tool_call_result(
-                            func_tool_id,
-                            (
-                                "error: No compatible arguments for this tool. "
-                                f"Provided arguments={sorted(func_tool_args.keys())}. "
-                                "This may indicate a wrong tool selection; "
-                                "please re-check tool name and argument schema."
-                            ),
-                            tool_name=func_tool_name,
-                            tool_args=func_tool_args,
-                        )
-                        continue
-                else:
-                    # 如果没有 handler（如 MCP 工具），使用所有参数
-                    valid_params = func_tool_args
-
-                missing_required = self._find_missing_required_tool_params(
+                prepared = self._prepare_tool_call_params(
                     tool=func_tool,
-                    provided_params=valid_params,
+                    tool_name=func_tool_name,
+                    raw_args=func_tool_args,
                 )
-                if missing_required:
-                    missing_text = ", ".join(missing_required)
-                    logger.warning(
-                        "工具 %s 缺少必填参数: %s。原始参数: %s",
-                        func_tool_name,
-                        missing_text,
-                        func_tool_args,
-                    )
-                    _append_tool_call_result(
-                        func_tool_id,
-                        (
-                            "error: Missing required tool arguments: "
-                            f"{missing_text}. "
-                            "Please call this tool again with all required arguments."
-                        ),
+                if prepared.error:
+                    self._record_tool_result(
+                        tool_call_result_blocks=tool_call_result_blocks,
+                        tool_call_id=func_tool_id,
+                        content=prepared.error,
                         tool_name=func_tool_name,
                         tool_args=func_tool_args,
                     )
                     continue
-
-                contract_error = self._validate_anyof_oneof_contract(
-                    tool=func_tool,
-                    provided_params=valid_params,
-                )
-                if contract_error:
-                    logger.warning(
-                        "工具 %s 参数契约校验失败: %s",
-                        func_tool_name,
-                        contract_error,
-                    )
-                    _append_tool_call_result(
-                        func_tool_id,
-                        contract_error,
-                        tool_name=func_tool_name,
-                        tool_args=func_tool_args,
-                    )
-                    continue
+                valid_params = prepared.valid_params
 
                 try:
                     await self.agent_hooks.on_tool_start(
@@ -1489,9 +1523,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         res = resp
                         _final_resp = resp
                         if isinstance(res.content[0], TextContent):
-                            _append_tool_call_result(
-                                func_tool_id,
-                                res.content[0].text,
+                            self._record_tool_result(
+                                tool_call_result_blocks=tool_call_result_blocks,
+                                tool_call_id=func_tool_id,
+                                content=res.content[0].text,
                                 tool_name=func_tool_name,
                                 tool_args=valid_params,
                             )
@@ -1504,9 +1539,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 index=0,
                                 mime_type=res.content[0].mimeType or "image/png",
                             )
-                            _append_tool_call_result(
-                                func_tool_id,
-                                (
+                            self._record_tool_result(
+                                tool_call_result_blocks=tool_call_result_blocks,
+                                tool_call_id=func_tool_id,
+                                content=(
                                     f"Image returned and cached at path='{cached_img.file_path}'. "
                                     f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
                                     f"with type='image' and path='{cached_img.file_path}'."
@@ -1521,9 +1557,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         elif isinstance(res.content[0], EmbeddedResource):
                             resource = res.content[0].resource
                             if isinstance(resource, TextResourceContents):
-                                _append_tool_call_result(
-                                    func_tool_id,
-                                    resource.text,
+                                self._record_tool_result(
+                                    tool_call_result_blocks=tool_call_result_blocks,
+                                    tool_call_id=func_tool_id,
+                                    content=resource.text,
                                     tool_name=func_tool_name,
                                     tool_args=valid_params,
                                 )
@@ -1540,9 +1577,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     index=0,
                                     mime_type=resource.mimeType,
                                 )
-                                _append_tool_call_result(
-                                    func_tool_id,
-                                    (
+                                self._record_tool_result(
+                                    tool_call_result_blocks=tool_call_result_blocks,
+                                    tool_call_id=func_tool_id,
+                                    content=(
                                         f"Image returned and cached at path='{cached_img.file_path}'. "
                                         f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
                                         f"with type='image' and path='{cached_img.file_path}'."
@@ -1555,9 +1593,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     cached_img
                                 )
                             else:
-                                _append_tool_call_result(
-                                    func_tool_id,
-                                    "The tool has returned a data type that is not supported.",
+                                self._record_tool_result(
+                                    tool_call_result_blocks=tool_call_result_blocks,
+                                    tool_call_id=func_tool_id,
+                                    content="The tool has returned a data type that is not supported.",
                                     tool_name=func_tool_name,
                                     tool_args=valid_params,
                                 )
@@ -1571,9 +1610,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
                         self._transition_state(AgentState.DONE)
                         self.stats.end_time = time.time()
-                        _append_tool_call_result(
-                            func_tool_id,
-                            "The tool has no return value, or has sent the result directly to the user.",
+                        self._record_tool_result(
+                            tool_call_result_blocks=tool_call_result_blocks,
+                            tool_call_id=func_tool_id,
+                            content="The tool has no return value, or has sent the result directly to the user.",
                             tool_name=func_tool_name,
                             tool_args=valid_params,
                         )
@@ -1582,9 +1622,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         logger.warning(
                             f"Tool 返回了不支持的类型: {type(resp)}。",
                         )
-                        _append_tool_call_result(
-                            func_tool_id,
-                            "*The tool has returned an unsupported type. Please tell the user to check the definition and implementation of this tool.*",
+                        self._record_tool_result(
+                            tool_call_result_blocks=tool_call_result_blocks,
+                            tool_call_id=func_tool_id,
+                            content="*The tool has returned an unsupported type. Please tell the user to check the definition and implementation of this tool.*",
                             tool_name=func_tool_name,
                             tool_args=valid_params,
                         )
@@ -1600,9 +1641,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)
             except Exception as e:
                 logger.warning(traceback.format_exc())
-                _append_tool_call_result(
-                    func_tool_id,
-                    f"error: {e!s}",
+                self._record_tool_result(
+                    tool_call_result_blocks=tool_call_result_blocks,
+                    tool_call_id=func_tool_id,
+                    content=f"error: {e!s}",
                     tool_name=func_tool_name,
                     tool_args=func_tool_args,
                 )
