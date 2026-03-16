@@ -9,6 +9,7 @@ from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
+from astrbot.core.platform.sources.slack import slack_adapter as slack_adapter_module
 from astrbot.core.platform.sources.slack import slack_event as slack_event_module
 from astrbot.core.platform.sources.slack.session_codec import (
     build_slack_text_fallbacks,
@@ -362,6 +363,62 @@ async def test_send_by_session_uses_configured_safe_text_fallback(monkeypatch):
         text="fallback-message",
         blocks=None,
     )
+
+
+@pytest.mark.asyncio
+async def test_send_by_session_retries_text_only_when_block_send_fails(monkeypatch):
+    adapter = SlackAdapter(
+        platform_config={
+            "id": "slack_test",
+            "bot_token": "xoxb-test",
+            "app_token": "xapp-test",
+        },
+        platform_settings={},
+        event_queue=asyncio.Queue(),
+    )
+    adapter.bot_self_id = "B0001"
+    adapter.web_client = AsyncMock()
+    adapter.web_client.chat_postMessage = AsyncMock(
+        side_effect=[RuntimeError("boom"), None]
+    )
+    monkeypatch.setattr(
+        SlackMessageEvent,
+        "_parse_slack_blocks",
+        AsyncMock(
+            return_value=(
+                [{"type": "section", "text": {"type": "mrkdwn", "text": "reply"}}],
+                "reply",
+            )
+        ),
+    )
+    mocked_exception_logger = MagicMock()
+    monkeypatch.setattr(
+        slack_adapter_module.logger,
+        "exception",
+        mocked_exception_logger,
+    )
+
+    session = MessageSession(
+        platform_name="slack_test",
+        message_type=MessageType.GROUP_MESSAGE,
+        session_id="C0001__thread__1710000000.500",
+    )
+    await adapter.send_by_session(
+        session=session,
+        message_chain=MessageChain([Plain(text="reply")]),
+    )
+
+    assert adapter.web_client.chat_postMessage.await_count == 2
+    first_call_kwargs = adapter.web_client.chat_postMessage.await_args_list[0].kwargs
+    second_call_kwargs = adapter.web_client.chat_postMessage.await_args_list[1].kwargs
+    assert first_call_kwargs["channel"] == "C0001"
+    assert first_call_kwargs["thread_ts"] == "1710000000.500"
+    assert first_call_kwargs["blocks"]
+    assert second_call_kwargs["channel"] == "C0001"
+    assert second_call_kwargs["thread_ts"] == "1710000000.500"
+    assert second_call_kwargs["text"] == "reply"
+    assert "blocks" not in second_call_kwargs
+    assert mocked_exception_logger.called
 
 
 def test_build_slack_text_fallbacks_accepts_overrides():

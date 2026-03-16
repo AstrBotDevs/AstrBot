@@ -158,6 +158,29 @@ class SlackMessageEvent(AstrMessageEvent):
         fallback_text = "".join(fallback_parts).strip() or fallbacks["safe_text"]
         return blocks, fallback_text if blocks else text_content
 
+    @staticmethod
+    def _build_text_fallback_from_chain(
+        message_chain: MessageChain,
+        text_fallbacks: dict[str, str] | None = None,
+    ) -> str:
+        """Build a safe text fallback for retries when block payload is rejected."""
+        fallbacks = build_slack_text_fallbacks(text_fallbacks)
+        parts = []
+        for segment in message_chain.chain:
+            if isinstance(segment, Plain):
+                parts.append(segment.text)
+            elif isinstance(segment, File):
+                parts.append(
+                    fallbacks["file_template"].format(
+                        name=segment.name or "file",
+                    )
+                )
+            elif isinstance(segment, Image):
+                parts.append(fallbacks["image"])
+            else:
+                parts.append(fallbacks["generic"])
+        return "".join(parts).strip() or fallbacks["safe_text"]
+
     def _resolve_target(self) -> tuple[str, str | None]:
         raw_message = getattr(self.message_obj, "raw_message", None)
         return resolve_target_from_event(
@@ -196,21 +219,9 @@ class SlackMessageEvent(AstrMessageEvent):
                 thread_ts or "",
             )
             # 如果块发送失败，尝试只发送文本
-            parts = []
-            for segment in message.chain:
-                if isinstance(segment, Plain):
-                    parts.append(segment.text)
-                elif isinstance(segment, File):
-                    parts.append(
-                        self.text_fallbacks["file_template"].format(
-                            name=segment.name or "file",
-                        ),
-                    )
-                elif isinstance(segment, Image):
-                    parts.append(self.text_fallbacks["image"])
-            fallback_text = "".join(parts) or self.text_fallbacks.get(
-                "safe_text",
-                SLACK_SAFE_TEXT_FALLBACK,
+            fallback_text = self._build_text_fallback_from_chain(
+                message_chain=message,
+                text_fallbacks=self.text_fallbacks,
             )
 
             fallback_payload = {

@@ -19,7 +19,7 @@ from astrbot.api.platform import (
     Platform,
     PlatformMetadata,
 )
-from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
@@ -88,7 +88,7 @@ class SlackAdapter(Platform):
 
     async def send_by_session(
         self,
-        session: MessageSesion,
+        session: MessageSession,
         message_chain: MessageChain,
     ) -> None:
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
@@ -100,9 +100,9 @@ class SlackAdapter(Platform):
             "safe_text",
             SLACK_SAFE_TEXT_FALLBACK,
         )
+        channel_id, thread_ts = self._session_to_slack_target(session)
 
         try:
-            channel_id, thread_ts = self._session_to_slack_target(session)
             message_payload = {
                 "channel": channel_id,
                 "text": safe_text,
@@ -111,13 +111,39 @@ class SlackAdapter(Platform):
             if thread_ts:
                 message_payload["thread_ts"] = thread_ts
             await self.web_client.chat_postMessage(**message_payload)
-        except Exception as e:
-            logger.error(f"Slack 发送消息失败: {e}")
+        except Exception:
+            logger.exception(
+                "Slack send_by_session failed, retrying with text-only payload. "
+                "session_id=%s channel_id=%s thread_ts=%s",
+                session.session_id,
+                channel_id,
+                thread_ts or "",
+            )
+            fallback_text = SlackMessageEvent._build_text_fallback_from_chain(
+                message_chain=message_chain,
+                text_fallbacks=self.text_fallbacks,
+            )
+            fallback_payload = {
+                "channel": channel_id,
+                "text": fallback_text,
+            }
+            if thread_ts:
+                fallback_payload["thread_ts"] = thread_ts
+            try:
+                await self.web_client.chat_postMessage(**fallback_payload)
+            except Exception:
+                logger.exception(
+                    "Slack send_by_session text-only fallback failed. "
+                    "session_id=%s channel_id=%s thread_ts=%s",
+                    session.session_id,
+                    channel_id,
+                    thread_ts or "",
+                )
 
         await super().send_by_session(session, message_chain)
 
     @staticmethod
-    def _session_to_slack_target(session: MessageSesion) -> tuple[str, str | None]:
+    def _session_to_slack_target(session: MessageSession) -> tuple[str, str | None]:
         """Map an AstrBot session to Slack target fields."""
         return resolve_target_from_session(session_id=session.session_id)
 
