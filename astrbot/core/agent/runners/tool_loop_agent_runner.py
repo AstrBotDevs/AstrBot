@@ -461,20 +461,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_name: str | None = None,
         tool_args: dict[str, T.Any] | None = None,
     ) -> None:
-        output = content
-        if tool_name:
-            guard_result = self._ensure_tool_result_guard().process(
-                tool_name=tool_name,
-                tool_args=tool_args or {},
-                content=content,
-            )
-            output = guard_result.content
-            if guard_result.tools_disabled and self.req:
-                self.req.func_tool = None
-            if guard_result.notice_message:
-                self.run_context.messages.append(
-                    Message(role="user", content=guard_result.notice_message)
-                )
+        output, notice_message, tools_disabled = self._apply_tool_result_guard(
+            tool_name=tool_name,
+            tool_args=tool_args,
+            content=content,
+        )
+
+        if tools_disabled and self.req:
+            self.req.func_tool = None
+
+        if notice_message:
+            self.run_context.messages.append(Message(role="user", content=notice_message))
 
         tool_call_result_blocks.append(
             ToolCallMessageSegment(
@@ -482,6 +479,28 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 tool_call_id=tool_call_id,
                 content=self._merge_follow_up_notice(output),
             ),
+        )
+
+    def _apply_tool_result_guard(
+        self,
+        *,
+        tool_name: str | None,
+        tool_args: dict[str, T.Any] | None,
+        content: str,
+    ) -> tuple[str, str | None, bool]:
+        """Apply dedup/error guard and return (content, notice, tools_disabled)."""
+        if not tool_name:
+            return content, None, False
+
+        guard_result = self._ensure_tool_result_guard().process(
+            tool_name=tool_name,
+            tool_args=tool_args or {},
+            content=content,
+        )
+        return (
+            guard_result.content,
+            guard_result.notice_message,
+            guard_result.tools_disabled,
         )
 
     def _prepare_tool_call_params(
@@ -856,7 +875,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                     continue
 
-                prepared = self._prepare_tool_call_params(
+                prepared = self._tool_param_preparer.prepare(
                     tool=func_tool,
                     tool_name=func_tool_name,
                     raw_args=func_tool_args,
