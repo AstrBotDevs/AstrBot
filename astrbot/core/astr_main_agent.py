@@ -1179,11 +1179,10 @@ async def build_main_agent(
         asyncio.create_task(_handle_webchat(event, req, provider))
 
     if req.func_tool and req.func_tool.tools:
-        tool_prompt = (
-            TOOL_CALL_PROMPT
-            if config.tool_schema_mode == "full"
-            else TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
-        )
+        if config.tool_schema_mode == "skills_like":
+            tool_prompt = TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
+        else:
+            tool_prompt = TOOL_CALL_PROMPT
         req.system_prompt += f"\n{tool_prompt}\n"
 
     action_type = event.get_extra("action_type")

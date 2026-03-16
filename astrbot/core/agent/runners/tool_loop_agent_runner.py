@@ -159,24 +159,35 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
 
-        # These two are used for tool schema mode handling
-        # We now have two modes:
+        # These are used for tool schema mode handling
+        # Supported modes:
         # - "full": use full tool schema for LLM calls, default.
         # - "skills_like": use light tool schema for LLM calls, and re-query with param-only schema when needed.
         #   Light tool schema does not include tool parameters.
         #   This can reduce token usage when tools have large descriptions.
+        # - "tool_search" / "auto": not yet reimplemented; falls back to "full". See Phases 2-8.
         # See #4681
         self.tool_schema_mode = tool_schema_mode
         self._tool_schema_param_set = None
         self._skill_like_raw_tool_set = None
-        if tool_schema_mode == "skills_like":
+
+        effective_mode = tool_schema_mode
+        if effective_mode in ("tool_search", "auto"):
+            logger.warning(
+                "tool_schema_mode '%s' is not yet reimplemented; falling back to 'full' mode.",
+                tool_schema_mode,
+            )
+            effective_mode = "full"
+        self.tool_schema_mode = effective_mode
+
+        if effective_mode == "skills_like":
             tool_set = self.req.func_tool
             if not tool_set:
                 return
             self._skill_like_raw_tool_set = tool_set
             light_set = tool_set.get_light_tool_set()
             self._tool_schema_param_set = tool_set.get_param_only_tool_set()
-            # MODIFIE the req.func_tool to use light tool schemas
+            # MODIFY the req.func_tool to use light tool schemas
             self.req.func_tool = light_set
 
         messages = []
