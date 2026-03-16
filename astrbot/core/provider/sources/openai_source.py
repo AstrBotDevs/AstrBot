@@ -346,6 +346,11 @@ class ProviderOpenAIOfficial(Provider):
         """Extract reasoning content from OpenAI ChatCompletion if available."""
         reasoning_text = ""
         if not completion.choices:
+            # 当 choices 为空时，尝试从 completion 对象本身提取 reasoning
+            # 某些模型（如 ModelScope MiniMax）可能将 reasoning 放在 completion 的顶层
+            reasoning_attr = getattr(completion, self.reasoning_key, None)
+            if reasoning_attr:
+                return str(reasoning_attr)
             return reasoning_text
         if isinstance(completion, ChatCompletion):
             choice = completion.choices[0]
@@ -469,7 +474,19 @@ class ProviderOpenAIOfficial(Provider):
         llm_response = LLMResponse("assistant")
 
         if not completion.choices:
-            raise Exception("API 返回的 completion 为空。")
+            # 当 choices 为空时，检查是否有 reasoning_content 可用
+            reasoning = self._extract_reasoning_content(completion)
+            if reasoning:
+                llm_response.reasoning_content = reasoning
+                llm_response.result_chain = MessageChain().message("")
+                return llm_response
+            # 如果没有 reasoning，返回空响应而不是抛出异常
+            logger.warning(
+                f"API 返回的 completion choices 为空，可能是因为 max_tokens 太小导致输出被截断。completion: {completion}"
+            )
+            llm_response.completion_text = ""
+            llm_response.result_chain = MessageChain().message("")
+            return llm_response
         choice = completion.choices[0]
 
         # parse the text completion
