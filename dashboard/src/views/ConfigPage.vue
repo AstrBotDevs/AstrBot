@@ -534,13 +534,20 @@ export default {
         } else {
           let errorMsg = res.data.message || this.messages.saveError;
           // Handle specific i18n keys returned by backend
-          if (errorMsg.startsWith("sslValidation.")) {
-             const parts = errorMsg.split('|');
-             if (parts.length > 1) {
-                 errorMsg = this.tm(parts[0]).replace('{file}', parts[1]);
-             } else {
-                 errorMsg = this.tm(errorMsg);
-             }
+          if (errorMsg.includes("sslValidation.")) {
+             const errors = errorMsg.split('; ');
+             const parsedErrors = errors.map(err => {
+                 if (err.startsWith("sslValidation.")) {
+                     const parts = err.split('|');
+                     if (parts.length > 1) {
+                         return this.tm(parts[0]).replace('{file}', parts[1]);
+                     } else {
+                         return this.tm(err);
+                     }
+                 }
+                 return err;
+             });
+             errorMsg = parsedErrors.join('; ');
           }
           this.save_message = errorMsg;
           this.save_message_snack = true;
