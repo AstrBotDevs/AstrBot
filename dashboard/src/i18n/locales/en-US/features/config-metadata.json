@@ -310,11 +310,31 @@
         },
         "tool_schema_mode": {
           "description": "Tool Schema Mode",
-          "hint": "Skills-like sends name/description first and re-queries for parameters; Full sends the complete schema in one step.",
+          "hint": "Full sends the complete schema in one step; Skills-like sends name/description first and re-queries for parameters; Tool Search only sends core tools initially and LLM discovers more via search; Auto selects Full or Tool Search based on tool count. Recommended for 25+ tools; threshold is adjustable.",
           "labels": [
             "Skills-like (two-stage)",
-            "Full schema"
+            "Full schema",
+            "Tool Search",
+            "Auto"
           ]
+        },
+        "tool_search": {
+          "threshold": {
+            "description": "Tool Search Threshold",
+            "hint": "Activates tool search mode when total tools exceed this number (tool_search/auto mode only). Default: 25. Adjust based on your actual tool count."
+          },
+          "max_results": {
+            "description": "Max Search Results",
+            "hint": "Maximum number of matching tools returned per search."
+          },
+          "always_loaded_tools": {
+            "description": "Always Loaded Tools",
+            "hint": "These tools are always visible to LLM regardless of tool search mode. Enter tool names."
+          },
+          "auto_always_load_builtin": {
+            "description": "Auto-load Built-in Tools",
+            "hint": "When enabled, built-in tools (cron, knowledge base, etc.) are always visible to LLM."
+          }
         },
         "streaming_response": {
           "description": "Streaming Output"

@@ -119,6 +119,12 @@ DEFAULT_CONFIG = {
         "max_agent_step": 30,
         "tool_call_timeout": 60,
         "tool_schema_mode": "full",
+        "tool_search": {
+            "threshold": 25,
+            "max_results": 5,
+            "always_loaded_tools": [],
+            "auto_always_load_builtin": True,
+        },
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
         "file_extract": {
@@ -2551,6 +2557,26 @@ CONFIG_METADATA_2 = {
                     "tool_schema_mode": {
                         "type": "string",
                     },
+                    "tool_search": {
+                        "type": "object",
+                        "items": {
+                            "threshold": {
+                                "type": "int",
+                            },
+                            "max_results": {
+                                "type": "int",
+                            },
+                            "always_loaded_tools": {
+                                "type": "list",
+                                "items": {
+                                    "type": "string",
+                                },
+                            },
+                            "auto_always_load_builtin": {
+                                "type": "bool",
+                            },
+                        },
+                    },
                     "file_extract": {
                         "type": "object",
                         "items": {
@@ -3300,9 +3326,51 @@ CONFIG_METADATA_3 = {
                     "provider_settings.tool_schema_mode": {
                         "description": "工具调用模式",
                         "type": "string",
-                        "options": ["skills_like", "full"],
-                        "labels": ["Skills-like（两阶段）", "Full（完整参数）"],
-                        "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
+                        "options": [
+                            "skills_like",
+                            "full",
+                            "tool_search",
+                            "auto",
+                        ],
+                        "labels": [
+                            "Skills-like（两阶段）",
+                            "Full（完整参数）",
+                            "Tool Search（工具搜索）",
+                            "Auto（自动选择）",
+                        ],
+                        "hint": "full 一次性下发完整参数；skills-like 先下发名称与描述，再下发参数；tool_search 仅下发核心工具，LLM 按需搜索发现更多工具；auto 根据工具数量自动选择 full 或 tool_search。25 个工具以上建议开启 tool_search 或 auto 模式，阈值可调。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.tool_search.threshold": {
+                        "description": "工具搜索模式触发阈值",
+                        "type": "int",
+                        "hint": "工具总数超过此阈值时触发工具搜索模式（仅 tool_search/auto 模式生效）。默认 25，可根据实际工具数调整。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.tool_search.max_results": {
+                        "description": "每次搜索返回的最大工具数",
+                        "type": "int",
+                        "hint": "LLM 每次调用 tool_search 时返回的最大匹配工具数。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.tool_search.always_loaded_tools": {
+                        "description": "始终加载的工具列表",
+                        "type": "list",
+                        "hint": "无论是否启用工具搜索模式，这些工具始终对 LLM 可见。填写工具名称。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.tool_search.auto_always_load_builtin": {
+                        "description": "自动始终加载内置工具",
+                        "type": "bool",
+                        "hint": "开启后，框架内置工具（如定时任务、知识库查询等）将始终对 LLM 可见，不进入搜索池。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },

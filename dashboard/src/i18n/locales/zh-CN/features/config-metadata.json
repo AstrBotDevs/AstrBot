@@ -312,11 +312,31 @@
         },
         "tool_schema_mode": {
           "description": "工具调用模式",
-          "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
+          "hint": "full 一次性下发完整参数；skills-like 先下发名称与描述，再下发参数；tool_search 仅下发核心工具，LLM 按需搜索发现更多工具；auto 根据工具数量自动选择 full 或 tool_search。25 个工具以上建议开启 tool_search 或 auto 模式，阈值可调。",
           "labels": [
             "Skills-like（两阶段）",
-            "Full（完整参数）"
+            "Full（完整参数）",
+            "Tool Search（工具搜索）",
+            "Auto（自动选择）"
           ]
+        },
+        "tool_search": {
+          "threshold": {
+            "description": "工具搜索触发阈值",
+            "hint": "工具总数超过此阈值时触发工具搜索模式（仅 tool_search/auto 模式生效）。默认 25，可根据实际工具数调整。"
+          },
+          "max_results": {
+            "description": "每次搜索返回最大工具数",
+            "hint": "LLM 每次调用 tool_search 时返回的最大匹配工具数。"
+          },
+          "always_loaded_tools": {
+            "description": "始终加载的工具列表",
+            "hint": "无论是否启用工具搜索，这些工具始终对 LLM 可见。填写工具名称。"
+          },
+          "auto_always_load_builtin": {
+            "description": "自动始终加载内置工具",
+            "hint": "开启后，框架内置工具（如定时任务、知识库查询等）将始终对 LLM 可见，不进入搜索池。"
+          }
         },
         "streaming_response": {
           "description": "流式输出"
