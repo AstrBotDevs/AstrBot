@@ -22,7 +22,7 @@ from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_image_by_url, file_to_base64
-from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
+from astrbot.core.utils.tencent_record_helper import convert_to_pcm_wav, wav_to_tencent_silk
 
 
 def _patch_qq_botpy_formdata() -> None:
@@ -602,8 +602,18 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 image_base64 = image_base64.removeprefix("base64://")
             elif isinstance(i, Record):
                 if i.file:
-                    record_wav_path = await i.convert_to_file_path()  # wav 路径
+                    record_audio_path = await i.convert_to_file_path()
                     temp_dir = get_astrbot_temp_path()
+                    # 如果不是 WAV 格式，先转换为 PCM WAV
+                    ext = os.path.splitext(record_audio_path)[1].lower()
+                    if ext != ".wav":
+                        record_wav_path = os.path.join(
+                            temp_dir,
+                            f"qqofficial_{uuid.uuid4()}.wav",
+                        )
+                        await convert_to_pcm_wav(record_audio_path, record_wav_path)
+                    else:
+                        record_wav_path = record_audio_path
                     record_tecent_silk_path = os.path.join(
                         temp_dir,
                         f"qqofficial_{uuid.uuid4()}.silk",
