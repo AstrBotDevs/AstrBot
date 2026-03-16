@@ -7,6 +7,8 @@ import shlex
 import shutil
 import tempfile
 import zipfile
+
+import yaml
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -69,13 +71,19 @@ def _parse_frontmatter_description(text: str) -> str:
             break
     if end_idx is None:
         return ""
-    for line in lines[1:end_idx]:
-        if ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        if key.strip().lower() == "description":
-            return value.strip().strip('"').strip("'")
-    return ""
+
+    frontmatter = "\n".join(lines[1:end_idx])
+    try:
+        payload = yaml.safe_load(frontmatter) or {}
+    except yaml.YAMLError:
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+
+    description = payload.get("description", "")
+    if not isinstance(description, str):
+        return ""
+    return description.strip()
 
 
 # Regex for sanitizing paths used in prompt examples — only allow
