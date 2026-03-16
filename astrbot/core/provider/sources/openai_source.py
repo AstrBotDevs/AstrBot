@@ -332,11 +332,7 @@ class ProviderOpenAIOfficial(Provider):
             try:
                 state.handle_chunk(chunk)
             except Exception as e:
-                logger.warning(
-                    f"[{self.get_model()}] Saving chunk state error: {e} "
-                    f"(provider: {self.provider_config.get('id', 'unknown')})"
-                )
-
+                logger.warning("Saving chunk state error: " + str(e))
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
@@ -348,7 +344,7 @@ class ProviderOpenAIOfficial(Provider):
             if reasoning:
                 llm_response.reasoning_content = reasoning
                 _y = True
-            if delta.content:
+            if delta and delta.content:
                 # Don't strip streaming chunks to preserve spaces between words
                 completion_text = self._normalize_content(delta.content, strip=False)
                 llm_response.result_chain = MessageChain(
@@ -371,7 +367,7 @@ class ProviderOpenAIOfficial(Provider):
     ) -> str:
         """Extract reasoning content from OpenAI ChatCompletion if available."""
         reasoning_text = ""
-        if len(completion.choices) == 0:
+        if not completion.choices:
             return reasoning_text
         if isinstance(completion, ChatCompletion):
             choice = completion.choices[0]
@@ -494,7 +490,7 @@ class ProviderOpenAIOfficial(Provider):
         """Parse OpenAI ChatCompletion into LLMResponse"""
         llm_response = LLMResponse("assistant")
 
-        if len(completion.choices) == 0:
+        if not completion.choices:
             raise Exception("API 返回的 completion 为空。")
         choice = completion.choices[0]
 
@@ -655,7 +651,8 @@ class ProviderOpenAIOfficial(Provider):
             # 最后一次不等待
             if retry_cnt < max_retries - 1:
                 await asyncio.sleep(1)
-            available_api_keys.remove(chosen_key)
+            if chosen_key in available_api_keys:
+                available_api_keys.remove(chosen_key)
             if len(available_api_keys) > 0:
                 chosen_key = random.choice(available_api_keys)
                 return (
