@@ -179,7 +179,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 else:
                     await bot.send_private_file(
                         user_id=session_id_int, file=file_path, name=file_name
-                    ) (refactor: improve file sending logic robustness)
+                    )
             else:
                 messages = await cls._parse_onebot_json(MessageChain([seg]))
                 if not messages:
