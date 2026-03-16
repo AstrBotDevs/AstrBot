@@ -7,7 +7,7 @@ import datetime
 import io
 import json
 import os
-import uuid
+import time
 import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
@@ -948,7 +948,9 @@ async def build_main_agent(
             # media files attachments
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
-                    image_path = await comp.convert_to_file_path()
+                    image_path = await _compress_image_internal(
+                            await comp.convert_to_file_path()
+                        )
                     req.image_urls.append(image_path)
                     req.extra_user_content_parts.append(
                         TextPart(text=f"[Image Attachment: path {image_path}]")
@@ -975,7 +977,9 @@ async def build_main_agent(
                     for reply_comp in comp.chain:
                         if isinstance(reply_comp, Image):
                             has_embedded_image = True
-                            image_path = await reply_comp.convert_to_file_path()
+                            image_path = await _compress_image_internal(
+                                await reply_comp.convert_to_file_path()
+                            )
                             req.image_urls.append(image_path)
                             _append_quoted_image_attachment(req, image_path)
                         elif isinstance(reply_comp, File):
@@ -1177,6 +1181,22 @@ async def build_main_agent(
         reset_coro=reset_coro if not apply_reset else None,
     )
 
+# 异步图片压缩
+def _do_compress_sync(data: bytes, temp_dir: str) -> str:
+    """同步执行图片压缩逻辑，由 asyncio.to_thread 调用"""
+
+    img = PILImage.open(io.BytesIO(data))
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+    max_size = 1280
+    if max(img.size) > max_size:
+        img.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
+
+    timestamp = int(time.time() * 1000)
+    save_path = os.path.join(temp_dir, f"compressed_{timestamp}.jpg")
+    img.save(save_path, "JPEG", quality=85, optimize=True)
+    return save_path
+
 # 压缩用户上传的大体积图片 未来可以提取为通用工具
 async def _compress_image_internal(url_or_path: str) -> str:
     try:
@@ -1192,25 +1212,15 @@ async def _compress_image_internal(url_or_path: str) -> str:
                 return url_or_path
             with open(url_or_path, "rb") as f:
                 data = f.read()
+
         if not data:
             return url_or_path
 
-        img = PILImage.open(io.BytesIO(data))
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
-        max_size = 1280
-        if max(img.size) > max_size:
-            img.thumbnail((max_size, max_size), PILImage.LANCZOS)
-        out_io = io.BytesIO()
-        img.save(out_io, format="JPEG", quality=75, optimize=True)
         temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data/temp")
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir)
 
-        temp_path = os.path.join(temp_dir, f"compressed_{uuid.uuid4().hex}.jpg")
-        with open(temp_path, "wb") as f:
-            f.write(out_io.getvalue())
-        return temp_path
+        # 使用 asyncio.to_thread 将同步阻塞的图片处理任务交给线程池
+        return await asyncio.to_thread(_do_compress_sync, data, temp_dir)
+
     except Exception as e:
-        logger.warning(f"图片压缩失败: {e}")
+        logger.error("图片压缩失败: %s", e)
         return url_or_path
