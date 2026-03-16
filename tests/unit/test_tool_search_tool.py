@@ -202,15 +202,23 @@ class TestNoMutation:
     """TST-04: call() does not mutate ToolSearchIndex or hold forbidden references."""
 
     def test_index_not_mutated(self):
-        """id(index.tools) and id(index._bm25) are unchanged after call()."""
-        index = ToolSearchIndex(tools=ALL_TOOLS)
-        tools_id_before = id(index.tools)
-        bm25_id_before = id(index._bm25)
+        """id(index.tools) and id(index._bm25) are unchanged after call().
 
+        Note: ids are captured AFTER ToolSearchTool construction because
+        pydantic revalidates nested models during construction, which triggers
+        ToolSearchIndex._build_index and rebuilds _bm25. The important
+        invariant is that call() itself does not mutate the index.
+        """
+        index = ToolSearchIndex(tools=ALL_TOOLS)
         tool = ToolSearchTool(
             _index=index,
             _discovery_state=DiscoveryState(),
         )
+
+        # Capture ids after construction (pydantic revalidation complete)
+        tools_id_before = id(index.tools)
+        bm25_id_before = id(index._bm25)
+
         asyncio.get_event_loop().run_until_complete(
             tool.call(None, query="weather forecast")
         )
