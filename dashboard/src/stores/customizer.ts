@@ -10,7 +10,7 @@ export const useCustomizerStore = defineStore({
     fontTheme: "Poppins",
     uiTheme: config.uiTheme,
     inputBg: config.inputBg,
-    viewMode: (localStorage.getItem('viewMode') as 'bot' | 'chat') || 'bot', // 'bot' 或 'chat'
+    viewMode: 'bot' as 'bot' | 'chat', // 'bot' 或 'chat'
     chatSidebarOpen: false // chat mode mobile sidebar state
   }),
 
