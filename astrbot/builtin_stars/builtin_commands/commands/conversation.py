@@ -26,20 +26,6 @@ class ConversationCommands:
     def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def _get_current_persona_id(self, session_id):
-        curr = await self.context.conversation_manager.get_curr_conversation_id(
-            session_id,
-        )
-        if not curr:
-            return None
-        conv = await self.context.conversation_manager.get_conversation(
-            session_id,
-            curr,
-        )
-        if not conv:
-            return None
-        return conv.persona_id
-
     async def reset(self, message: AstrMessageEvent) -> None:
         """重置 LLM 会话"""
         umo = message.unified_msg_origin
@@ -284,7 +270,9 @@ class ConversationCommands:
             return
 
         active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
-        cpersona = await self._get_current_persona_id(message.unified_msg_origin)
+        cpersona = await self.context.conversation_manager.get_curr_persona_id(
+            message.unified_msg_origin
+        )
         cid = await self.context.conversation_manager.new_conversation(
             message.unified_msg_origin,
             message.get_platform_id(),
@@ -308,7 +296,9 @@ class ConversationCommands:
                 ),
             )
 
-            cpersona = await self._get_current_persona_id(session)
+            cpersona = await self.context.conversation_manager.get_curr_persona_id(
+                session
+            )
             cid = await self.context.conversation_manager.new_conversation(
                 session,
                 message.get_platform_id(),
