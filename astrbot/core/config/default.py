@@ -4,6 +4,10 @@ import os
 from importlib import metadata
 from typing import Any, TypedDict
 
+from astrbot.builtin_stars.web_searcher.provider_constants import (
+    DEFAULT_WEB_SEARCH_PROVIDER,
+    WEB_SEARCH_PROVIDER_OPTIONS,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 try:
@@ -79,7 +83,7 @@ DEFAULT_CONFIG = {
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
         "wake_prefix": "",
         "web_search": False,
-        "websearch_provider": "default",
+        "websearch_provider": DEFAULT_WEB_SEARCH_PROVIDER,
         "websearch_tavily_key": [],
         "websearch_bocha_key": [],
         "websearch_baidu_app_builder_key": "",
@@ -2951,17 +2955,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.websearch_provider": {
                         "description": "网页搜索提供商",
                         "type": "string",
-                        "options": [
-                            "default",
-                            "duckduckgo",
-                            "google",
-                            "bing",
-                            "comet",
-                            "sogo",
-                            "tavily",
-                            "baidu_ai_search",
-                            "bocha",
-                        ],
+                        "options": list(WEB_SEARCH_PROVIDER_OPTIONS),
                         "condition": {
                             "provider_settings.web_search": True,
                         },

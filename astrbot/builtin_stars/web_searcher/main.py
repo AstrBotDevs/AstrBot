@@ -23,6 +23,7 @@ from .provider_routing import (
     build_default_engine_order,
     normalize_websearch_provider,
     normalize_websearch_provider_for_tools,
+    validate_default_engine_registry,
 )
 
 
@@ -81,6 +82,7 @@ class Main(star.Star):
                 self.sogo_search,
             )
         }
+        validate_default_engine_registry(self.default_search_engines)
         self.baidu_initialized = False
 
     async def _tidy_text(self, text: str) -> str:

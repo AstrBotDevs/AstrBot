@@ -1,9 +1,12 @@
+import pytest
+
 from astrbot.builtin_stars.web_searcher.provider_routing import (
     DEFAULT_ENGINE_ORDER,
     build_default_engine_order,
     normalize_websearch_provider,
     normalize_websearch_provider_for_tools,
     resolve_tool_branch_provider,
+    validate_default_engine_registry,
 )
 
 
@@ -69,3 +72,21 @@ def test_normalize_websearch_provider_for_tools_returns_branch_and_known() -> No
         "default",
         False,
     )
+
+
+def test_validate_default_engine_registry_allows_expected_names() -> None:
+    engines_by_name = {name: object() for name in DEFAULT_ENGINE_ORDER}
+    validate_default_engine_registry(engines_by_name)
+
+
+def test_validate_default_engine_registry_rejects_missing_or_extra() -> None:
+    missing_last = DEFAULT_ENGINE_ORDER[:-1]
+    with_missing = {name: object() for name in missing_last}
+
+    with_extra = {name: object() for name in DEFAULT_ENGINE_ORDER}
+    with_extra["unknown_engine"] = object()
+
+    with pytest.raises(ValueError):
+        validate_default_engine_registry(with_missing)
+    with pytest.raises(ValueError):
+        validate_default_engine_registry(with_extra)

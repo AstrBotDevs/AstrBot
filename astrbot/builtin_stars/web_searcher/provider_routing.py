@@ -1,28 +1,35 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from .engines.bing import Bing
 from .engines.comet import Comet
 from .engines.duckduckgo import DuckDuckGo
 from .engines.google import Google
 from .engines.sogo import Sogo
+from .provider_constants import (
+    DEFAULT_WEB_SEARCH_PROVIDER,
+    WEB_SEARCH_ENGINE_PROVIDERS,
+    WEB_SEARCH_TOOL_BRANCH_PROVIDERS,
+)
 
-DEFAULT_WEB_SEARCH_PROVIDER = "default"
-DEFAULT_ENGINE_ORDER: tuple[str, ...] = (
+DEFAULT_ENGINE_ORDER: tuple[str, ...] = WEB_SEARCH_ENGINE_PROVIDERS
+
+_ENGINE_NAME_SET = {
     Bing.NAME,
     Sogo.NAME,
-    # Keep DDG as a secondary fallback for compatibility with the original default chain.
     DuckDuckGo.NAME,
     Google.NAME,
     Comet.NAME,
-)
+}
+if _ENGINE_NAME_SET != set(DEFAULT_ENGINE_ORDER):
+    raise RuntimeError(
+        "web search engine class names and configured DEFAULT_ENGINE_ORDER are out of sync: "
+        f"class_names={sorted(_ENGINE_NAME_SET)} order={list(DEFAULT_ENGINE_ORDER)}",
+    )
 
 _ENGINE_PROVIDER_SET = set(DEFAULT_ENGINE_ORDER)
-_TOOL_BRANCH_PROVIDER_SET = {
-    DEFAULT_WEB_SEARCH_PROVIDER,
-    "tavily",
-    "baidu_ai_search",
-    "bocha",
-}
+_TOOL_BRANCH_PROVIDER_SET = set(WEB_SEARCH_TOOL_BRANCH_PROVIDERS)
 _WEB_SEARCH_PROVIDER_ALIASES = {
     "": DEFAULT_WEB_SEARCH_PROVIDER,
     "default": DEFAULT_WEB_SEARCH_PROVIDER,
@@ -83,3 +90,15 @@ def build_default_engine_order(provider: object) -> tuple[str, ...]:
 def is_known_websearch_provider(provider: object) -> bool:
     _, is_known = normalize_websearch_provider_for_tools(provider)
     return is_known
+
+
+def validate_default_engine_registry(engines_by_name: Mapping[str, object]) -> None:
+    missing = [name for name in DEFAULT_ENGINE_ORDER if name not in engines_by_name]
+    extra = [name for name in engines_by_name if name not in _ENGINE_PROVIDER_SET]
+    if not missing and not extra:
+        return
+
+    raise ValueError(
+        "default search engine registry mismatch. "
+        f"missing={missing}, extra={extra}, expected_order={list(DEFAULT_ENGINE_ORDER)}",
+    )
