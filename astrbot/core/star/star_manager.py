@@ -14,6 +14,7 @@ from types import ModuleType
 
 import anyio
 import yaml
+from anyio import to_thread
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
@@ -291,7 +292,7 @@ class PluginManager:
         如果 target_plugin 为 None，则检查所有插件的依赖
         """
         plugin_dir = self.plugin_store_path
-        if not os.path.exists(plugin_dir):
+        if not await anyio.Path(plugin_dir).exists():
             return False
         to_update = []
         if target_plugin:
@@ -310,7 +311,7 @@ class PluginManager:
         plugin_label: str,
     ) -> None:
         requirements_path = os.path.join(plugin_dir_path, "requirements.txt")
-        if not os.path.exists(requirements_path):
+        if not await anyio.Path(requirements_path).exists():
             return
 
         try:
@@ -342,7 +343,7 @@ class PluginManager:
         try:
             return __import__(path, fromlist=[module_str])
         except (ModuleNotFoundError, ImportError) as import_exc:
-            if os.path.exists(requirements_path):
+            if await anyio.Path(requirements_path).exists():
                 try:
                     logger.info(
                         f"插件 {root_dir_name} 导入失败，尝试从已安装依赖恢复: {import_exc!s}"
@@ -966,7 +967,7 @@ class PluginManager:
                     metadata.activated = False
 
                 # Plugin logo path
-                if os.path.exists(logo_path):
+                if await anyio.Path(logo_path).exists():
                     metadata.logo_path = logo_path
 
                 assert metadata.module_path, f"插件 {metadata.name} 模块路径为空"
@@ -1087,7 +1088,7 @@ class PluginManager:
 
         if await anyio.Path(plugin_path).exists():
             try:
-                await anyio.to_thread.run_sync(remove_dir, plugin_path)
+                await to_thread.run_sync(remove_dir, plugin_path)
                 logger.warning(f"已清理安装失败的插件目录: {plugin_path}")
             except Exception as e:
                 logger.warning(
@@ -1100,7 +1101,7 @@ class PluginManager:
         )
         if await anyio.Path(plugin_config_path).exists():
             try:
-                await anyio.to_thread.run_sync(os.remove, plugin_config_path)
+                await to_thread.run_sync(os.remove, plugin_config_path)
                 logger.warning(f"已清理安装失败插件配置: {plugin_config_path}")
             except Exception as e:
                 logger.warning(
@@ -1346,7 +1347,7 @@ class PluginManager:
             self._cleanup_plugin_state(dir_name)
 
             plugin_path = os.path.join(self.plugin_store_path, dir_name)
-            if os.path.exists(plugin_path):
+            if await anyio.Path(plugin_path).exists():
                 try:
                     remove_dir(plugin_path)
                 except Exception as e:
