@@ -80,7 +80,12 @@ from .permissions import check_admin_permission
 @dataclass
 class FileUploadTool(FunctionTool):
     name: str = "astrbot_upload_file"
-    description: str = "Upload a local file to the sandbox. The file must exist on the local filesystem."
+    description: str = (
+        "Upload a file from LOCAL filesystem to SANDBOX (direction: LOCAL -> SANDBOX). "
+        "Use this only when the source file is already on the local machine and the sandbox "
+        "needs it as input. Do NOT use this to retrieve/export results from sandbox; use "
+        "astrbot_download_file for that."
+    )
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -140,7 +145,12 @@ class FileUploadTool(FunctionTool):
 @dataclass
 class FileDownloadTool(FunctionTool):
     name: str = "astrbot_download_file"
-    description: str = "Download a file from the sandbox. Only call this when user explicitly need you to download a file."
+    description: str = (
+        "Download a file from SANDBOX to LOCAL filesystem (direction: SANDBOX -> LOCAL). "
+        "Use this when the file already exists in sandbox and the user wants to retrieve, "
+        "export, or receive it. Do NOT use this to provide local input files to sandbox; "
+        "use astrbot_upload_file for that."
+    )
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
