@@ -6,6 +6,7 @@ from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_PROVIDER_TYPE,
     DEERFLOW_THREAD_ID_KEY,
 )
+from astrbot.core.constants import PERSONA_NONE_MARKER
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.active_event_registry import active_event_registry
@@ -227,7 +228,7 @@ class ConversationCommands:
                 platform_name=platform_name,
                 provider_settings=provider_settings,
             )
-            if persona_id == "[%None]":
+            if persona_id == PERSONA_NONE_MARKER:
                 persona_name = "无"
             elif persona_id:
                 persona_name = persona_id

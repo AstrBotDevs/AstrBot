@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.core.constants import PERSONA_NONE_MARKER
 
 if TYPE_CHECKING:
     from astrbot.core.db.po import Persona
@@ -92,7 +93,7 @@ class PersonaCommands:
                 provider_settings=provider_settings,
             )
 
-            if persona_id == "[%None]":
+            if persona_id == PERSONA_NONE_MARKER:
                 curr_persona_name = "无"
             elif persona_id:
                 curr_persona_name = persona_id
@@ -174,7 +175,7 @@ class PersonaCommands:
                 return
             await self.context.conversation_manager.update_conversation_persona_id(
                 message.unified_msg_origin,
-                "[%None]",
+                PERSONA_NONE_MARKER,
             )
             message.set_result(MessageEventResult().message("取消人格成功。"))
         else:

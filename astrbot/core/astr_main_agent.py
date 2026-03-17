@@ -176,18 +176,19 @@ async def _get_session_conv(
     conv_mgr = plugin_context.conversation_manager
     umo = event.unified_msg_origin
     cid = await conv_mgr.get_curr_conversation_id(umo)
-    if not cid:
-        persona_id = await conv_mgr.get_curr_persona_id(umo)
-        cid = await conv_mgr.new_conversation(
-            umo, event.get_platform_id(), persona_id=persona_id
-        )
-    conversation = await conv_mgr.get_conversation(umo, cid)
-    if not conversation:
-        persona_id = await conv_mgr.get_curr_persona_id(umo)
-        cid = await conv_mgr.new_conversation(
-            umo, event.get_platform_id(), persona_id=persona_id
-        )
+
+    if cid:
         conversation = await conv_mgr.get_conversation(umo, cid)
+        if conversation:
+            return conversation
+
+    # 统一的对话创建路径：只获取一次 persona_id
+    persona_id = await conv_mgr.get_curr_persona_id(umo)
+    cid = await conv_mgr.new_conversation(
+        umo, event.get_platform_id(), persona_id=persona_id
+    )
+    conversation = await conv_mgr.get_conversation(umo, cid)
+
     if not conversation:
         raise RuntimeError("无法创建新的对话。")
     return conversation

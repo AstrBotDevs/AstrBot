@@ -9,12 +9,10 @@ from collections.abc import Awaitable, Callable
 
 from astrbot.core import sp
 from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment
+from astrbot.core.constants import PERSONA_NONE_MARKER
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Conversation, ConversationV2
 from astrbot.core.utils.datetime_utils import to_utc_timestamp
-
-# 人格特殊标记：表示用户明确清除人格
-PERSONA_NONE_MARKER = "[%None]"
 
 
 class ConversationManager:
