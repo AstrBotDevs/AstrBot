@@ -402,10 +402,10 @@ const viewMode = computed({
   },
   set: (value: 'bot' | 'chat') => {
     if (value === 'chat') {
-      const lastSessionId = localStorage.getItem(LAST_CHAT_ROUTE_KEY);
+      const lastSessionId = sessionStorage.getItem(LAST_CHAT_ROUTE_KEY);
       router.push(lastSessionId ? `/chat/${lastSessionId}` : '/chat');
     } else {
-      let lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+      let lastBotRoute = sessionStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
       if (lastBotRoute.startsWith('/chat')) {
         lastBotRoute = '/';
       }
@@ -425,7 +425,7 @@ watch(() => route.fullPath, (newPath) => {
 
     // ✅ bot：只存「非 chat 頁」
     if (!isChatRoute) {
-      localStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
+      sessionStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
     }
 
     // ✅ chat：只存 sessionId
@@ -435,7 +435,7 @@ watch(() => route.fullPath, (newPath) => {
       const sessionId = parts[2];
 
       if (sessionId) {
-        localStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
+        sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
       }
     }
 
