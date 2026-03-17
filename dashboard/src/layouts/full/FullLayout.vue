@@ -17,9 +17,7 @@ const customizer = useCustomizerStore();
 const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
-const isCurrentChatRoute = computed(() => route.path.startsWith('/chat'))
-
-
+const isCurrentChatRoute = computed(() => route.path === '/chat' || route.path.startsWith('/chat/'));
 
 
 const showSidebar = computed(() => !isCurrentChatRoute.value)

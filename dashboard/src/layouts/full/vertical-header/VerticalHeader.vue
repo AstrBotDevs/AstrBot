@@ -59,7 +59,9 @@ const desktopUpdateHasNewVersion = ref(false);
 const desktopUpdateCurrentVersion = ref('-');
 const desktopUpdateLatestVersion = ref('-');
 const desktopUpdateStatus = ref('');
-const isChatPath = computed(() => route.path.startsWith('/chat'))
+const isChatPath = computed(() =>
+  route.path === '/chat' || route.path.startsWith('/chat/')
+);
 const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
   if (typeof window === 'undefined') {
     return null;
