@@ -79,7 +79,8 @@
                             <v-col v-for="persona in currentPersonas" :key="persona.persona_id" cols="12" sm="6" lg="4"
                                 xl="3">
                                 <PersonaCard :persona="persona" @view="viewPersona(persona)"
-                                    @edit="editPersona(persona)" @move="openMovePersonaDialog(persona)"
+                                    @edit="editPersona(persona)" @clone="openClonePersonaDialog(persona)"
+                                    @move="openMovePersonaDialog(persona)"
                                     @delete="confirmDeletePersona(persona)" />
                             </v-col>
                         </v-row>
@@ -230,6 +231,33 @@
         <MoveToFolderDialog v-model="showMoveDialog" :item-type="moveDialogType" :item="moveDialogItem"
             @moved="showSuccess" @error="showError" />
 
+        <!-- 克隆人格对话框 -->
+        <v-dialog v-model="showCloneDialog" max-width="450px">
+            <v-card>
+                <v-card-title>{{ tm('cloneDialog.title') }}</v-card-title>
+                <v-card-text>
+                    <p class="text-body-2 text-medium-emphasis mb-4">
+                        {{ tm('cloneDialog.description', { name: cloningPersona?.persona_id ?? '' }) }}
+                    </p>
+                    <v-text-field v-model="cloneNewPersonaId" :label="tm('cloneDialog.newPersonaId')"
+                        :hint="tm('cloneDialog.newPersonaIdHint')" persistent-hint variant="outlined"
+                        density="comfortable" autofocus
+                        :rules="[v => !!v || tm('cloneDialog.validation.required')]"
+                        @keyup.enter="submitClonePersona" />
+                </v-card-text>
+                <v-card-actions>
+                    <v-spacer />
+                    <v-btn variant="text" @click="showCloneDialog = false">
+                        {{ tm('buttons.cancel') }}
+                    </v-btn>
+                    <v-btn color="primary" variant="flat" @click="submitClonePersona" :loading="cloneLoading"
+                        :disabled="!cloneNewPersonaId">
+                        {{ tm('buttons.clone') }}
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+
         <!-- 删除文件夹确认对话框 -->
         <v-dialog v-model="showDeleteFolderDialog" max-width="450px">
             <v-card>
@@ -340,6 +368,12 @@ export default defineComponent({
             moveDialogType: 'persona' as 'persona' | 'folder',
             moveDialogItem: null as Persona | Folder | null,
 
+            // 克隆对话框
+            showCloneDialog: false,
+            cloningPersona: null as Persona | null,
+            cloneNewPersonaId: '',
+            cloneLoading: false,
+
             // 消息提示
             showMessage: false,
             message: '',
@@ -406,7 +440,7 @@ export default defineComponent({
         await this.initialize();
     },
     methods: {
-        ...mapActions(usePersonaStore, ['loadFolderTree', 'navigateToFolder', 'updateFolder', 'deleteFolder', 'deletePersona', 'refreshCurrentFolder', 'movePersonaToFolder']),
+        ...mapActions(usePersonaStore, ['loadFolderTree', 'navigateToFolder', 'updateFolder', 'deleteFolder', 'deletePersona', 'refreshCurrentFolder', 'movePersonaToFolder', 'clonePersona']),
 
         async initialize() {
             await Promise.all([
@@ -470,6 +504,27 @@ export default defineComponent({
             this.moveDialogType = 'persona';
             this.moveDialogItem = persona;
             this.showMoveDialog = true;
+        },
+
+        openClonePersonaDialog(persona: Persona) {
+            this.cloningPersona = persona;
+            this.cloneNewPersonaId = `${persona.persona_id}_copy`;
+            this.showCloneDialog = true;
+        },
+
+        async submitClonePersona() {
+            if (!this.cloneNewPersonaId || !this.cloningPersona) return;
+
+            this.cloneLoading = true;
+            try {
+                await this.clonePersona(this.cloningPersona.persona_id, this.cloneNewPersonaId);
+                this.showSuccess(this.tm('cloneDialog.success'));
+                this.showCloneDialog = false;
+            } catch (error: any) {
+                this.showError(error.message || this.tm('cloneDialog.error'));
+            } finally {
+                this.cloneLoading = false;
+            }
         },
 
         async handlePersonaDropped({ persona_id, target_folder_id }: { persona_id: string; target_folder_id: string | null }) {
