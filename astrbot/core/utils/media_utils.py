@@ -4,10 +4,14 @@
 """
 
 import asyncio
+import base64
+import io
 import os
 import subprocess
 import uuid
 from pathlib import Path
+
+from PIL import Image as PILImage
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -316,3 +320,65 @@ async def extract_video_cover(
         return output_path
     except FileNotFoundError:
         raise Exception("ffmpeg not found")
+def _compress_image_sync(data: bytes, temp_dir: str) -> str:
+    """同步执行图片压缩逻辑，由 asyncio.to_thread 调用"""
+    img = PILImage.open(io.BytesIO(data))
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+    max_size = 1280
+    if max(img.size) > max_size:
+        img.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
+
+    new_uuid = uuid.uuid4().hex
+    save_path = os.path.join(temp_dir, f"compressed_{new_uuid}.jpg")
+    img.save(save_path, "JPEG", quality=85, optimize=True)
+    logger.info(f"图片压缩成功:{save_path}")
+    return save_path
+
+
+async def compress_image(
+    url_or_path: str, provider_settings: dict | None = None
+) -> str:
+    """压缩用户上传的大体积图片
+
+    Args:
+        url_or_path: 图片路径或URL
+        provider_settings: 提供商设置字典，用于获取 image_compress_enabled 配置
+
+    Returns:
+        压缩后的图片路径，如果未启用压缩或压缩失败则返回原路径
+    """
+    # 从 provider_settings 获取 image_compress_enabled，默认为 True
+    enabled = True
+    if provider_settings:
+        enabled = provider_settings.get("image_compress_enabled", True)
+    if not enabled:
+        logger.info("未启用图像压缩 跳过压缩阶段")
+        return url_or_path
+    logger.info("已启用图像压缩")
+    try:
+        data = None
+        # 若为远程图片则直接返回原值 无需压缩
+        if url_or_path.startswith("http"):
+            return url_or_path
+        elif url_or_path.startswith("data:image"):
+            _header, encoded = url_or_path.split(",", 1)
+            data = base64.b64decode(encoded)
+        elif os.path.exists(url_or_path):
+            if os.path.getsize(url_or_path) < 1024 * 1024:
+                return url_or_path
+            with open(url_or_path, "rb") as f:
+                data = f.read()
+
+        if not data:
+            return url_or_path
+
+        temp_dir = get_astrbot_temp_path()
+        os.makedirs(temp_dir, exist_ok=True)
+
+        # 使用 asyncio.to_thread 将同步阻塞的图片处理任务交给线程池
+        return await asyncio.to_thread(_compress_image_sync, data, str(temp_dir))
+
+    except Exception as e:
+        logger.error("图片压缩失败: %s", e)
+        return url_or_path
