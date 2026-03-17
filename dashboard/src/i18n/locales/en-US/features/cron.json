@@ -11,9 +11,10 @@
   "actions": {
     "create": "New Task",
     "refresh": "Refresh",
+    "edit": "Edit",
     "delete": "Delete",
     "cancel": "Cancel",
-    "submit": "Create"
+    "submit": "Save"
   },
   "table": {
     "title": "Registered Tasks",
@@ -40,7 +41,9 @@
   },
   "form": {
     "title": "New Task",
+    "editTitle": "Edit Task",
     "chatHint": "You can ask AstrBot in chat to create future tasks instead of adding them here.",
+    "chatEditHint": "You can directly ask AstrBot via chat to modify future tasks instead of editing them here.",
     "runOnce": "One-off task",
     "name": "Task name",
     "note": "Task description",

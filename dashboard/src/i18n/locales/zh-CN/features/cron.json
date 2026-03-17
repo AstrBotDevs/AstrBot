@@ -11,9 +11,10 @@
   "actions": {
     "create": "新建任务",
     "refresh": "刷新",
+    "edit": "编辑",
     "delete": "删除",
     "cancel": "取消",
-    "submit": "创建"
+    "submit": "保存"
   },
   "table": {
     "title": "已注册任务",
@@ -40,7 +41,9 @@
   },
   "form": {
     "title": "新建任务",
+    "editTitle": "编辑任务",
     "chatHint": "你可以直接通过聊天的方式来让 AstrBot 创建未来任务，而不必在此添加。",
+    "chatEditHint": "你可以直接通过聊天的方式来让 AstrBot 修改未来任务，而不必在此修改。",
     "runOnce": "一次性任务",
     "name": "任务名称",
     "note": "任务说明",

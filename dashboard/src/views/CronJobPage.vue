@@ -55,9 +55,12 @@
           <template #item.last_run_at="{ item }">{{ formatTime(item.last_run_at) }}</template>
           <template #item.note="{ item }">{{ item.note || tm('table.notAvailable') }}</template>
           <template #item.actions="{ item }">
-            <div class="d-flex align-center flex-nowrap" style="gap: 12px; min-width: 140px;">
+            <div class="d-flex align-center flex-nowrap" style="gap: 12px; width: max-content;">
               <v-switch v-model="item.enabled" inset density="compact" hide-details color="primary"
                 class="mt-0" @change="toggleJob(item)" />
+              <v-btn size="small" variant="text" color="primary" @click="openEdit(item)">
+                {{ tm('actions.edit') }}
+              </v-btn>
               <v-btn size="small" variant="text" color="error" @click="deleteJob(item)">
                 {{ tm('actions.delete') }}
               </v-btn>
@@ -71,28 +74,28 @@
       {{ snackbar.message }}
     </v-snackbar>
 
-    <v-dialog v-model="createDialog" max-width="560">
+    <v-dialog v-model="activeDialog" max-width="560">
       <v-card>
-        <v-card-title class="text-h6">{{ tm('form.title') }}</v-card-title>
+        <v-card-title class="text-h6">{{ editDialog ? tm('form.editTitle') : tm('form.title') }}</v-card-title>
         <v-card-subtitle class="text-body-2 text-medium-emphasis">
-          {{ tm('form.chatHint') }}
+          {{ editDialog ? tm('form.chatEditHint') : tm('form.chatHint') }}
         </v-card-subtitle>
         <v-card-text>
-          <v-switch v-model="newJob.run_once" :label="tm('form.runOnce')" inset color="primary" hide-details />
-          <v-text-field v-model="newJob.name" :label="tm('form.name')" variant="outlined" density="comfortable" />
-          <v-text-field v-model="newJob.note" :label="tm('form.note')" variant="outlined" density="comfortable" />
-          <v-text-field v-if="!newJob.run_once" v-model="newJob.cron_expression" :label="tm('form.cron')"
+          <v-switch v-model="formJob.run_once" :label="tm('form.runOnce')" inset color="primary" hide-details />
+          <v-text-field v-model="formJob.name" :label="tm('form.name')" variant="outlined" density="comfortable" />
+          <v-text-field v-model="formJob.note" :label="tm('form.note')" variant="outlined" density="comfortable" />
+          <v-text-field v-if="!formJob.run_once" v-model="formJob.cron_expression" :label="tm('form.cron')"
             :placeholder="tm('form.cronPlaceholder')" variant="outlined" density="comfortable" />
-          <v-text-field v-else v-model="newJob.run_at" :label="tm('form.runAt')" type="datetime-local"
+          <v-text-field v-else v-model="formJob.run_at" :label="tm('form.runAt')" type="datetime-local"
             variant="outlined" density="comfortable" />
-          <v-text-field v-model="newJob.session" :label="tm('form.session')" variant="outlined" density="comfortable" />
-          <v-text-field v-model="newJob.timezone" :label="tm('form.timezone')" variant="outlined"
+          <v-text-field v-model="formJob.session" :label="tm('form.session')" variant="outlined" density="comfortable" />
+          <v-text-field v-model="formJob.timezone" :label="tm('form.timezone')" variant="outlined"
             density="comfortable" />
-          <v-switch v-model="newJob.enabled" :label="tm('form.enabled')" inset color="primary" hide-details />
+          <v-switch v-model="formJob.enabled" :label="tm('form.enabled')" inset color="primary" hide-details />
         </v-card-text>
         <v-card-actions class="justify-end">
-          <v-btn variant="text" @click="createDialog = false">{{ tm('actions.cancel') }}</v-btn>
-          <v-btn variant="tonal" color="primary" :loading="creating" @click="createJob">{{ tm('actions.submit')
+          <v-btn variant="text" @click="activeDialog = false">{{ tm('actions.cancel') }}</v-btn>
+          <v-btn variant="tonal" color="primary" :loading="saving" @click="submitJob">{{ tm('actions.submit')
             }}</v-btn>
         </v-card-actions>
       </v-card>
@@ -111,8 +114,20 @@ const loading = ref(false)
 const jobs = ref<any[]>([])
 const proactivePlatforms = ref<{ id: string; name: string; display_name?: string }[]>([])
 const createDialog = ref(false)
-const creating = ref(false)
+const editDialog = ref(false)
+const saving = ref(false)
 const newJob = ref({
+  run_once: false,
+  name: '',
+  note: '',
+  cron_expression: '',
+  run_at: '',
+  session: '',
+  timezone: '',
+  enabled: true
+})
+
+const editJob = ref({
   run_once: false,
   name: '',
   note: '',
@@ -125,9 +140,22 @@ const newJob = ref({
 
 const snackbar = ref({ show: false, message: '', color: 'success' })
 
+const activeDialog = computed({
+  get: () => createDialog.value || editDialog.value,
+  set: (value: boolean) => {
+    if (!value) {
+      createDialog.value = false
+      editDialog.value = false
+    }
+  }
+})
+
+const formJob = computed(() => (editDialog.value ? editJob.value : newJob.value))
+
 const proactivePlatformText = computed(() =>
   proactivePlatforms.value.map((p) => `${p.display_name || p.name}(${p.id})`).join(' / ')
 )
+
 
 const headers = computed(() => [
   { title: tm('table.headers.name'), key: 'name', minWidth: '200px' },
@@ -213,6 +241,31 @@ async function toggleJob(job: any) {
   }
 }
 
+async function updateJob() {
+  const jobId = (editJob.value as any)?.job_id
+  if (!jobId) {
+    toast(tm('messages.updateFailed'), 'error')
+    return
+  }
+
+  saving.value = true
+  try {
+    const res = await axios.patch(`/api/cron/jobs/${jobId}`, editJob.value)
+    if (res.data.status === 'ok') {
+      editDialog.value = false
+      await loadJobs()
+    } else {
+
+      toast(res.data.message || tm('messages.updateFailed'), 'error')
+    }
+  } catch (e: any) {
+    toast(e?.response?.data?.message || tm('messages.updateFailed'), 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+
 async function deleteJob(job: any) {
   try {
     const res = await axios.delete(`/api/cron/jobs/${job.job_id}`)
@@ -232,6 +285,11 @@ function openCreate() {
   createDialog.value = true
 }
 
+function openEdit(job: any) {
+  editJob.value = JSON.parse(JSON.stringify(job))
+  editDialog.value = true
+}
+
 function resetNewJob() {
   newJob.value = {
     run_once: false,
@@ -245,11 +303,19 @@ function resetNewJob() {
   }
 }
 
+function submitJob() {
+  if (editDialog.value) {
+    return updateJob()
+  }
+  return createJob()
+}
+
 async function createJob() {
   if (!newJob.value.session) {
     toast(tm('messages.sessionRequired'), 'warning')
     return
   }
+
   if (!newJob.value.note) {
     toast(tm('messages.noteRequired'), 'warning')
     return
@@ -262,7 +328,7 @@ async function createJob() {
     toast(tm('messages.runAtRequired'), 'warning')
     return
   }
-  creating.value = true
+  saving.value = true
   try {
     const payload: any = { ...newJob.value }
     const res = await axios.post('/api/cron/jobs', payload)
@@ -277,7 +343,7 @@ async function createJob() {
   } catch (e: any) {
     toast(e?.response?.data?.message || tm('messages.createFailed'), 'error')
   } finally {
-    creating.value = false
+    saving.value = false
   }
 }
 
