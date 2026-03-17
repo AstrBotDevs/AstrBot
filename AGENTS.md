@@ -3,8 +3,10 @@
 ### Core
 
 ```
-uv sync
-uv run main.py
+uv tool install -e . --force
+astrbot init
+astrbot run # start the bot 
+astrbot run --backend-only # start the backend only
 ```
 
 Exposed an API server on `http://localhost:6185` by default.
@@ -13,8 +15,8 @@ Exposed an API server on `http://localhost:6185` by default.
 
 ```
 cd dashboard
-pnpm install # First time only. Use npm install -g pnpm if pnpm is not installed.
-pnpm dev
+bun install # First time only.
+bun dev
 ```
 
 Runs on `http://localhost:3000` by default.
@@ -27,6 +29,8 @@ Runs on `http://localhost:3000` by default.
 4. When committing, ensure to use conventional commits messages, such as `feat: add new agent for data analysis` or `fix: resolve bug in provider manager`.
 5. Use English for all new comments.
 6. For path handling, use `pathlib.Path` instead of string paths, and use `astrbot.core.utils.path_utils` to get the AstrBot data and temp directory.
+7. Use Python 3.12+ type hinting syntax (e.g., `list[str]` over `List[str]`, `int | None` over `Optional[int]`). Avoid using `Any` and ensure comprehensive type annotations are provided.
+
 
 ## PR instructions
 

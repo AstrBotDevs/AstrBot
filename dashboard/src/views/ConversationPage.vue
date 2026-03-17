@@ -499,7 +499,7 @@ export default {
         // 检测是否为暗色模式
         isDark() {
             console.log('isDark', this.customizerStore.uiTheme);
-            return this.customizerStore.uiTheme === 'PurpleThemeDark';
+            return this.customizerStore.isDarkTheme;
         },
 
         // 将对话历史转换为 MessageList 组件期望的格式

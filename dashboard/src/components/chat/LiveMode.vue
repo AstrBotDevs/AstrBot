@@ -99,16 +99,15 @@
 <script setup lang="ts">
 import axios from "axios";
 import { ref, computed, onBeforeUnmount, watch } from "vue";
-import { useTheme } from "vuetify";
 import { useVADRecording } from "@/composables/useVADRecording";
 import SiriOrb from "./LiveOrb.vue";
+import { useCustomizerStore } from "@/stores/customizer";
 
 const emit = defineEmits<{
   close: [];
 }>();
 
-const theme = useTheme();
-const isDark = computed(() => theme.global.current.value.dark);
+const isDark = computed(() => !useCustomizerStore().isDarkTheme);
 
 // 使用 VAD Recording composable
 const vadRecording = useVADRecording();

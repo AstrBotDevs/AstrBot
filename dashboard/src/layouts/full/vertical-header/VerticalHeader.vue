@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import axios from "axios";
 import Logo from "@/components/shared/Logo.vue";
@@ -13,7 +13,6 @@ import "highlight.js/styles/github.css";
 import { useI18n } from "@/i18n/composables";
 import { router } from "@/router";
 import { useRoute } from "vue-router";
-import { useTheme } from "vuetify";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
@@ -25,7 +24,6 @@ enableMermaid();
 
 const customizer = useCustomizerStore();
 const authStore = useAuthStore();
-const theme = useTheme();
 const { t } = useI18n();
 
 const { languageOptions, currentLanguage, switchLanguage, locale } =
@@ -429,14 +427,35 @@ function updateDashboard() {
     });
 }
 
-function toggleDarkMode() {
-  const newTheme =
-    customizer.uiTheme === "PurpleThemeDark"
-      ? "PurpleTheme"
-      : "PurpleThemeDark";
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
+// 修改：使用状态管理切换主题
+function toggleTheme() {
+  customizer.TOGGLE_DARK_MODE();
 }
+
+function autoSwitchTheme() {
+  // 根据浏览器主题同步页面主题
+  customizer.APPLY_SYSTEM_THEME();
+}
+
+function autoSwitchThemeListener(e: MediaQueryListEvent) {
+  if (customizer.autoSwitchTheme) {
+    autoSwitchTheme();
+  }
+}
+
+// 通过 watch 变量来添加和移除监听器
+watch(() => customizer.autoSwitchTheme, (isAuto) => {
+  if (typeof window === 'undefined') return;
+  
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  
+  if (isAuto) {
+    autoSwitchTheme();
+    mediaQuery.addEventListener('change', autoSwitchThemeListener);
+  } else {
+    mediaQuery.removeEventListener('change', autoSwitchThemeListener);
+  }
+}, { immediate: true });
 
 function openReleaseNotesDialog(body: string, tag: string) {
   selectedReleaseNotes.value = body;
@@ -510,6 +529,7 @@ const isChristmas = computed(() => {
   const day = today.getDate();
   return month === 12 && day === 25;
 });
+
 </script>
 
 <template>
@@ -713,14 +733,14 @@ const isChristmas = computed(() => {
 
         <!-- 主题切换 -->
         <v-list-item
-          @click="toggleDarkMode()"
+          @click="toggleTheme()"
           class="styled-menu-item"
           rounded="md"
         >
           <template v-slot:prepend>
             <v-icon>
               {{
-                useCustomizerStore().uiTheme === "PurpleThemeDark"
+                useCustomizerStore().isDarkTheme
                   ? "mdi-weather-night"
                   : "mdi-white-balance-sunny"
               }}
@@ -728,7 +748,7 @@ const isChristmas = computed(() => {
           </template>
           <v-list-item-title>
             {{
-              useCustomizerStore().uiTheme === "PurpleThemeDark"
+              useCustomizerStore().isDarkTheme
                 ? t("core.header.buttons.theme.light")
                 : t("core.header.buttons.theme.dark")
             }}

@@ -12,6 +12,7 @@ import print from "vue3-print-nb";
 import { loader } from "@guolao/vue-monaco-editor";
 import axios from "axios";
 import { waitForRouterReadyInBackground } from "./utils/routerReadiness.mjs";
+import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
 
 // 1. 定义加载配置的函数
 async function loadAppConfig() {
@@ -44,7 +45,7 @@ async function mountApp(app: any, pinia: any, waitForRouter = true) {
     const storedSecondary = localStorage.getItem("themeSecondary");
     if (storedPrimary || storedSecondary) {
       const themes = vuetify.theme.themes.value;
-      ["PurpleTheme", "PurpleThemeDark"].forEach((name) => {
+      [LIGHT_THEME_NAME, DARK_THEME_NAME].forEach((name) => {
         const theme = themes[name];
         if (!theme?.colors) return;
         if (storedPrimary) theme.colors.primary = storedPrimary;

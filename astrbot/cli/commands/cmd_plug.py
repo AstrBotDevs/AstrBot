@@ -4,11 +4,12 @@ from pathlib import Path
 
 import click
 
+from astrbot.core.utils.astrbot_path import astrbot_paths
+
 from ..utils import (
     PluginStatus,
     build_plug_list,
     check_astrbot_root,
-    get_astrbot_root,
     get_git_repo,
     manage_plugin,
 )
@@ -20,12 +21,12 @@ def plug() -> None:
 
 
 def _get_data_path() -> Path:
-    base = get_astrbot_root()
+    base = astrbot_paths.root
     if not check_astrbot_root(base):
         raise click.ClickException(
             f"{base} is not a valid AstrBot root directory. Use 'astrbot init' to initialize",
         )
-    return (base / "data").resolve()
+    return astrbot_paths.data.resolve()
 
 
 def display_plugins(plugins, title=None, color=None) -> None:

@@ -1,10 +1,8 @@
 import json
-from dataclasses import field
-from enum import IntEnum
-from typing import Literal
+from enum import IntEnum, StrEnum
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict
-from pydantic.dataclasses import dataclass
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class KookApiPaths:
@@ -25,8 +23,9 @@ class KookApiPaths:
     DIRECT_MESSAGE_CREATE = f"{BASE_URL}{API_VERSION_PATH}/direct-message/create"
 
 
-# 定义参见kook事件结构文档: https://developer.kookapp.cn/doc/event/event-introduction
 class KookMessageType(IntEnum):
+    """定义参见kook事件结构文档: https://developer.kookapp.cn/doc/event/event-introduction"""
+
     TEXT = 1
     IMAGE = 2
     VIDEO = 3
@@ -35,6 +34,26 @@ class KookMessageType(IntEnum):
     KMARKDOWN = 9
     CARD = 10
     SYSTEM = 255
+
+
+class KookModuleType(StrEnum):
+    PLAIN_TEXT = "plain-text"
+    KMARKDOWN = "kmarkdown"
+    IMAGE = "image"
+    BUTTON = "button"
+    HEADER = "header"
+    SECTION = "section"
+    IMAGE_GROUP = "image-group"
+    CONTAINER = "container"
+    ACTION_GROUP = "action-group"
+    CONTEXT = "context"
+    DIVIDER = "divider"
+    FILE = "file"
+    AUDIO = "audio"
+    VIDEO = "video"
+    COUNTDOWN = "countdown"
+    INVITE = "invite"
+    CARD = "card"
 
 
 ThemeType = Literal[
@@ -48,43 +67,81 @@ SectionMode = Literal["left", "right"]
 CountdownMode = Literal["day", "hour", "second"]
 
 
-class KookCardColor(str):
-    """16 进制色值"""
+class KookBaseDataClass(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+        arbitrary_types_allowed=True,
+        populate_by_name=True,
+    )
+
+    @classmethod
+    def from_dict(cls, raw_data: dict):
+        return cls.model_validate(raw_data)
+
+    @classmethod
+    def from_json(cls, raw_data: str | bytes | bytearray):
+        return cls.model_validate_json(raw_data)
+
+    def to_dict(
+        self,
+        mode: Literal["json", "python"] | str = "python",
+        by_alias=True,
+        exclude_none=True,
+        exclude_unset=False,
+    ) -> dict:
+        return self.model_dump(
+            by_alias=by_alias,
+            exclude_none=exclude_none,
+            mode=mode,
+            exclude_unset=exclude_unset,
+        )
+
+    def to_json(
+        self,
+        indent: int | None = None,
+        ensure_ascii=False,
+        by_alias=True,
+        exclude_none=True,
+        exclude_unset=False,
+    ) -> str:
+        return self.model_dump_json(
+            indent=indent,
+            ensure_ascii=ensure_ascii,
+            by_alias=by_alias,
+            exclude_none=exclude_none,
+            exclude_unset=exclude_unset,
+        )
 
 
-class KookCardModelBase:
+class KookCardModelBase(KookBaseDataClass):
     """卡片模块基类"""
 
     type: str
 
 
-@dataclass
 class PlainTextElement(KookCardModelBase):
     content: str
-    type: str = "plain-text"
+    type: Literal[KookModuleType.PLAIN_TEXT] = KookModuleType.PLAIN_TEXT
     emoji: bool = True
 
 
-@dataclass
 class KmarkdownElement(KookCardModelBase):
     content: str
-    type: str = "kmarkdown"
+    type: Literal[KookModuleType.KMARKDOWN] = KookModuleType.KMARKDOWN
 
 
-@dataclass
 class ImageElement(KookCardModelBase):
     src: str
-    type: str = "image"
+    type: Literal[KookModuleType.IMAGE] = KookModuleType.IMAGE
     alt: str = ""
     size: SizeType = "lg"
     circle: bool = False
     fallbackUrl: str | None = None
 
 
-@dataclass
 class ButtonElement(KookCardModelBase):
     text: str
-    type: str = "button"
+    type: Literal[KookModuleType.BUTTON] = KookModuleType.BUTTON
     theme: ThemeType = "primary"
     value: str = ""
     """当为 link 时，会跳转到 value 代表的链接;
@@ -96,93 +153,88 @@ class ButtonElement(KookCardModelBase):
 AnyElement = PlainTextElement | KmarkdownElement | ImageElement | ButtonElement | str
 
 
-@dataclass
 class ParagraphStructure(KookCardModelBase):
     fields: list[PlainTextElement | KmarkdownElement]
-    type: str = "paragraph"
+    type: Literal["paragraph"] = "paragraph"
     cols: int = 1
     """范围是 1-3 , 移动端忽略此参数"""
 
 
-@dataclass
 class HeaderModule(KookCardModelBase):
     text: PlainTextElement
-    type: str = "header"
+    type: Literal[KookModuleType.HEADER] = KookModuleType.HEADER
 
 
-@dataclass
 class SectionModule(KookCardModelBase):
     text: PlainTextElement | KmarkdownElement | ParagraphStructure
-    type: str = "section"
+    type: Literal[KookModuleType.SECTION] = KookModuleType.SECTION
     mode: SectionMode = "left"
     accessory: ImageElement | ButtonElement | None = None
 
 
-@dataclass
 class ImageGroupModule(KookCardModelBase):
     """1 到多张图片的组合"""
 
     elements: list[ImageElement]
-    type: str = "image-group"
+    type: Literal[KookModuleType.IMAGE_GROUP] = KookModuleType.IMAGE_GROUP
 
 
-@dataclass
 class ContainerModule(KookCardModelBase):
     """1 到多张图片的组合，与图片组模块(ImageGroupModule)不同，图片并不会裁切为正方形。多张图片会纵向排列。"""
 
     elements: list[ImageElement]
-    type: str = "container"
+    type: Literal[KookModuleType.CONTAINER] = KookModuleType.CONTAINER
 
 
-@dataclass
 class ActionGroupModule(KookCardModelBase):
+    """用来放按钮的模块"""
+
     elements: list[ButtonElement]
-    type: str = "action-group"
+    type: Literal[KookModuleType.ACTION_GROUP] = KookModuleType.ACTION_GROUP
 
 
-@dataclass
 class ContextModule(KookCardModelBase):
     elements: list[PlainTextElement | KmarkdownElement | ImageElement]
     """最多包含10个元素"""
-    type: str = "context"
+    type: Literal[KookModuleType.CONTEXT] = KookModuleType.CONTEXT
 
 
-@dataclass
 class DividerModule(KookCardModelBase):
-    type: str = "divider"
+    """展示分割线用的"""
+
+    type: Literal[KookModuleType.DIVIDER] = KookModuleType.DIVIDER
 
 
-@dataclass
 class FileModule(KookCardModelBase):
     src: str
     title: str = ""
-    type: Literal["file", "audio", "video"] = "file"
+    type: Literal[KookModuleType.FILE, KookModuleType.AUDIO, KookModuleType.VIDEO] = (
+        KookModuleType.FILE
+    )
     cover: str | None = None
     """cover 仅音频有效, 是音频的封面图"""
 
 
-@dataclass
 class CountdownModule(KookCardModelBase):
     """startTime 和 endTime 为毫秒时间戳，startTime 和 endTime 不能小于服务器当前时间戳。"""
 
     endTime: int
     """毫秒时间戳"""
-    type: str = "countdown"
+    type: Literal[KookModuleType.COUNTDOWN] = KookModuleType.COUNTDOWN
     startTime: int | None = None
     """毫秒时间戳, 仅当mode为second才有这个字段"""
     mode: CountdownMode = "day"
     """mode 主要是倒计时的样式"""
 
 
-@dataclass
 class InviteModule(KookCardModelBase):
     code: str
     """邀请链接或者邀请码"""
-    type: str = "invite"
+    type: Literal[KookModuleType.INVITE] = KookModuleType.INVITE
 
 
 # 所有模块的联合类型
-AnyModule = (
+AnyModule = Annotated[
     HeaderModule
     | SectionModule
     | ImageGroupModule
@@ -192,33 +244,28 @@ AnyModule = (
     | DividerModule
     | FileModule
     | CountdownModule
-    | InviteModule
-)
+    | InviteModule,
+    Field(discriminator="type"),
+]
 
 
-class KookCardMessage(BaseModel):
+class KookCardMessage(KookBaseDataClass):
     """卡片定义文档详见 : https://developer.kookapp.cn/doc/cardmessage
     此类型不能直接to_json后发送,因为kook要求卡片容器json顶层必须是**列表**
     若要发送卡片消息，请使用KookCardMessageContainer
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    type: str = "card"
+    type: Literal[KookModuleType.CARD] = KookModuleType.CARD
     theme: ThemeType | None = None
     size: SizeType | None = None
-    color: KookCardColor | None = None
-    modules: list[AnyModule] = field(default_factory=list)
+    color: str | None = None
+    """16 进制色值"""
+    modules: list[AnyModule] = Field(default_factory=list)
     """单个 card 模块数量不限制，但是一条消息中所有卡片的模块数量之和最多是 50"""
 
     def add_module(self, module: AnyModule):
         self.modules.append(module)
-
-    def to_dict(self, exclude_none: bool = True):
-        """exclude_none：去掉值为 None 字段，保留结构"""
-        return self.model_dump(exclude_none=exclude_none)
-
-    def to_json(self, indent: int | None = None, ensure_ascii: bool = True):
-        return json.dumps(self.to_dict(), indent=indent, ensure_ascii=ensure_ascii)
 
 
 class KookCardMessageContainer(list[KookCardMessage]):
@@ -232,10 +279,227 @@ class KookCardMessageContainer(list[KookCardMessage]):
             [i.to_dict() for i in self], indent=indent, ensure_ascii=ensure_ascii
         )
 
+    @classmethod
+    def from_dict(cls, raw_data: list[dict[str, Any]]):
+        return cls(KookCardMessage.from_dict(item) for item in raw_data)
 
-@dataclass
-class OrderMessage:
+
+class OrderMessage(BaseModel):
     index: int
     text: str
     type: KookMessageType
     reply_id: str | int = ""
+
+
+class KookMessageSignal(IntEnum):
+    """KOOK WebSocket 信令类型
+    ws文档: https://developer.kookapp.cn/doc/websocket"""  # noqa: W291
+
+    MESSAGE = 0
+    """server->client  消息(s包含聊天和通知消息)"""
+    HELLO = 1
+    """server->client  客户端连接 ws 时, 服务端返回握手结果"""
+    PING = 2
+    """client->server  心跳，ping"""
+    PONG = 3
+    """server->client  心跳，pong"""
+    RESUME = 4
+    """client->server  resume, 恢复会话"""
+    RECONNECT = 5
+    """server->client  reconnect, 要求客户端断开当前连接重新连接"""
+    RESUME_ACK = 6
+    """server->client  resume ack"""
+
+
+class KookChannelType(StrEnum):
+    GROUP = "GROUP"
+    PERSON = "PERSON"
+    BROADCAST = "BROADCAST"
+
+
+class KookAuthor(KookBaseDataClass):
+    id: str
+    username: str
+    identify_num: str
+    nickname: str
+    bot: bool
+    online: bool
+    avatar: str | None = None
+    vip_avatar: str | None = None
+    status: int
+    roles: list[int] = Field(default_factory=list)
+
+
+class KookKMarkdown(KookBaseDataClass):
+    raw_content: str
+    mention_part: list[Any] = Field(default_factory=list)
+    mention_role_part: list[Any] = Field(default_factory=list)
+
+
+class KookExtra(KookBaseDataClass):
+    type: int | str
+    code: str | None = None
+    body: dict[str, Any] | None = None
+    author: KookAuthor | None = None
+    kmarkdown: KookKMarkdown | None = None
+    last_msg_content: str | None = None
+    mention: list[str] = Field(default_factory=list)
+    mention_all: bool = False
+    mention_here: bool = False
+
+
+class KookMessageEventData(KookBaseDataClass):
+    signal: Literal[KookMessageSignal.MESSAGE] = Field(
+        KookMessageSignal.MESSAGE, exclude=True
+    )
+    """only for type hint"""
+
+    channel_type: KookChannelType
+    type: KookMessageType
+    target_id: str
+    author_id: str
+    content: str | dict[str, Any]
+    msg_id: str
+    msg_timestamp: int
+    nonce: str
+    from_type: int
+    extra: KookExtra
+
+
+class KookHelloEventData(KookBaseDataClass):
+    signal: Literal[KookMessageSignal.HELLO] = Field(
+        KookMessageSignal.HELLO, exclude=True
+    )
+    """only for type hint"""
+
+    code: int
+    session_id: str
+
+
+class KookPingEventData(KookBaseDataClass):
+    signal: Literal[KookMessageSignal.PING] = Field(
+        KookMessageSignal.PING, exclude=True
+    )
+    """only for type hint"""
+
+
+class KookPongEventData(KookBaseDataClass):
+    signal: Literal[KookMessageSignal.PONG] = Field(
+        KookMessageSignal.PONG, exclude=True
+    )
+    """only for type hint"""
+
+
+class KookResumeEventData(KookBaseDataClass):
+    signal: Literal[KookMessageSignal.RESUME] = Field(
+        KookMessageSignal.RESUME, exclude=True
+    )
+    """only for type hint"""
+
+
+class KookReconnectEventData(KookBaseDataClass):
+    signal: Literal[KookMessageSignal.RECONNECT] = Field(
+        KookMessageSignal.RECONNECT, exclude=True
+    )
+    """only for type hint"""
+
+    code: int
+    err: str
+
+
+class KookResumeAckEventData(KookBaseDataClass):
+    signal: Literal[KookMessageSignal.RESUME_ACK] = Field(
+        KookMessageSignal.RESUME_ACK, exclude=True
+    )
+    """only for type hint"""
+
+    session_id: str
+
+
+class KookWebsocketEvent(KookBaseDataClass):
+    """KOOK WebSocket 原始推送结构"""
+
+    signal: KookMessageSignal = Field(
+        ..., validation_alias="s", serialization_alias="s"
+    )
+    """信令类型"""
+    data: Annotated[
+        KookMessageEventData
+        | KookHelloEventData
+        | KookPingEventData
+        | KookPongEventData
+        | KookResumeEventData
+        | KookReconnectEventData
+        | KookResumeAckEventData
+        | None,
+        Field(discriminator="signal"),
+    ] = Field(None, validation_alias="d", serialization_alias="d")
+    """数据事件主体,对应原字段是'd'"""
+    sn: int | None = None
+    """消息序号 , 用来确定消息顺序和ws重连时使用  
+    详见ws连接流程文档: https://developer.kookapp.cn/doc/websocket#%E8%BF%9E%E6%8E%A5%E6%B5%81%E7%A8%8B"""  # noqa: W291
+
+    @model_validator(mode="before")
+    @classmethod
+    def _inject_signal_into_data(cls, data: Any) -> Any:
+        """在解析前，把外层的 s 同步到内层的 d 中，供 discriminator 使用"""
+        if isinstance(data, dict):
+            s_value = data.get("s")
+            d_value = data.get("d")
+            if s_value is not None and isinstance(d_value, dict):
+                d_value["signal"] = s_value
+        return data
+
+
+class KookUserTag(KookBaseDataClass):
+    color: str
+    bg_color: str
+    text: str
+
+
+class KookApiResponseBase(KookBaseDataClass):
+    code: int
+    message: str
+    data: Any
+
+    def success(self) -> bool:
+        return self.code == 0
+
+
+class KookUserMeData(KookBaseDataClass):
+    """USER_ME 接口返回的 'data' 字段主体"""
+
+    id: str
+    username: str
+    identify_num: str
+    nickname: str
+    bot: bool
+    online: bool
+    status: int
+    bot_status: int
+    avatar: str
+    vip_avatar: str | None = None
+    banner: str | None = None
+    roles: list[Any] = Field(default_factory=list)
+    is_vip: bool
+    vip_amp: bool
+    wealth_level: int
+    mobile_verified: bool
+    client_id: str
+    tag_info: KookUserTag | None = None
+
+
+class KookUserMeResponse(KookApiResponseBase):
+    """USER_ME 完整响应结构"""
+
+    data: KookUserMeData
+
+
+class KookGatewayIndexData(KookBaseDataClass):
+    url: str
+
+
+class KookGatewayIndexResponse(KookApiResponseBase):
+    """USER_ME 完整响应结构"""
+
+    data: KookGatewayIndexData

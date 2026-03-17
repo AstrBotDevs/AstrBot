@@ -171,7 +171,7 @@ const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 // 输入状态
 const prompt = ref('');
 
-const isDark = computed(() => useCustomizerStore().uiTheme === 'PurpleThemeDark');
+const isDark = computed(() => useCustomizerStore().isDarkTheme);
 
 function openImagePreview(imageUrl: string) {
     previewImageUrl.value = imageUrl;

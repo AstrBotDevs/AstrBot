@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
+import yaml
+
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_skills_path,
@@ -69,13 +71,19 @@ def _parse_frontmatter_description(text: str) -> str:
             break
     if end_idx is None:
         return ""
-    for line in lines[1:end_idx]:
-        if ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        if key.strip().lower() == "description":
-            return value.strip().strip('"').strip("'")
-    return ""
+
+    frontmatter = "\n".join(lines[1:end_idx])
+    try:
+        payload = yaml.safe_load(frontmatter) or {}
+    except yaml.YAMLError:
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+
+    description = payload.get("description", "")
+    if not isinstance(description, str):
+        return ""
+    return description.strip()
 
 
 # Regex for sanitizing paths used in prompt examples — only allow
@@ -128,7 +136,7 @@ def _build_skill_read_command_example(path: str) -> str:
         return f"cat {path}"
     if _is_windows_prompt_path(path):
         command = "type"
-        path_arg = f'"{path}"'
+        path_arg = f'"{os.path.normpath(path)}"'
     else:
         command = "cat"
         path_arg = shlex.quote(path)
