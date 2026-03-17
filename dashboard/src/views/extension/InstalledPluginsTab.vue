@@ -2,8 +2,10 @@
 import PluginSortControl from "@/components/extension/PluginSortControl.vue";
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import ModManagerLayout from "@/components/extension/mod-manager/ModManagerLayout.vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import { normalizeTextInput } from "@/utils/inputValue";
+import { computed, ref, watch } from "vue";
 
 const props = defineProps({
   state: {
@@ -155,6 +157,28 @@ const {
   handleLocaleChange,
   searchDebounceTimer,
 } = props.state;
+
+// MOD manager view mode persistence
+const VIEW_MODE_KEY = 'pluginManager.installedViewMode'
+const installedViewMode = ref(localStorage.getItem(VIEW_MODE_KEY) || 'legacy')
+watch(installedViewMode, (val) => {
+  localStorage.setItem(VIEW_MODE_KEY, val)
+})
+
+// Unified three-state view mode: 'card' | 'list' | 'mod'
+const combinedViewMode = computed(() => {
+  if (installedViewMode.value === 'mod') return 'mod'
+  return isListView.value ? 'list' : 'card'
+})
+
+const setCombinedViewMode = (val) => {
+  if (val === 'mod') {
+    installedViewMode.value = 'mod'
+  } else {
+    installedViewMode.value = 'legacy'
+    isListView.value = val === 'list'
+  }
+}
 </script>
 
 <template>
@@ -180,18 +204,59 @@ const {
                   </v-text-field>
 
                   <v-btn-toggle
-                    v-model="isListView"
+                    :model-value="combinedViewMode"
+                    @update:model-value="setCombinedViewMode"
                     mandatory
                     density="compact"
                     color="primary"
                     class="view-mode-toggle"
                   >
-                    <v-btn :value="false" icon="mdi-view-grid"></v-btn>
-                    <v-btn :value="true" icon="mdi-view-list"></v-btn>
+                    <v-btn value="card">
+                      <v-icon size="18">mdi-view-grid</v-icon>
+                      <v-tooltip activator="parent" location="bottom">{{ tm('views.card') }}</v-tooltip>
+                    </v-btn>
+                    <v-btn value="list">
+                      <v-icon size="18">mdi-view-list</v-icon>
+                      <v-tooltip activator="parent" location="bottom">{{ tm('views.list') }}</v-tooltip>
+                    </v-btn>
+                    <v-btn value="mod">
+                      <v-icon size="18">mdi-view-dashboard-outline</v-icon>
+                      <v-tooltip activator="parent" location="bottom">{{ tm('views.modManager') }}</v-tooltip>
+                    </v-btn>
                   </v-btn-toggle>
                 </div>
               </div>
             </div>
+
+            <!-- MOD Manager view -->
+            <div v-if="installedViewMode === 'mod'" style="height: calc(100vh - 200px)">
+              <ModManagerLayout
+                :plugins="filteredPlugins"
+                :loading="loading_"
+                :show-reserved="showReserved"
+                installed-view-mode="mod"
+                :updatable-count="updatableExtensions.length"
+                :search="pluginSearch"
+                :updating-all="updatingAll"
+                @update:search="pluginSearch = $event"
+                @update:show-reserved="toggleShowReserved"
+                @update:installed-view-mode="installedViewMode = $event"
+                @install="dialog = true"
+                @update-all="showUpdateAllConfirm"
+                @action-enable="pluginOn($event)"
+                @action-disable="pluginOff($event)"
+                @action-reload="reloadPlugin($event)"
+                @action-update="updateExtension($event)"
+                @action-uninstall="uninstallExtension($event)"
+                @action-configure="openExtensionConfig($event.name)"
+                @action-open-readme="viewReadme($event)"
+                @action-open-repo="(url) => window.open(url, '_blank')"
+                @config-saved="getExtensions"
+              />
+            </div>
+
+            <!-- Legacy views -->
+            <template v-else>
 
             <v-row class="mb-4">
               <v-col cols="12">
@@ -665,6 +730,8 @@ const {
                 </v-row>
               </div>
             </v-fade-transition>
+
+            </template>
 
             <v-tooltip :text="tm('market.installPlugin')" location="left">
               <template v-slot:activator="{ props }">
