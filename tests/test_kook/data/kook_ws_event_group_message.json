@@ -1,0 +1,119 @@
+{
+    "s": 0,
+    "d": {
+        "channel_type": "GROUP",
+        "type": 9,
+        "target_id": "-1016",
+        "author_id": "-1015",
+        "content": "done!",
+        "extra": {
+            "quote": {
+                "id": "test-only-event-004",
+                "rong_id": "00000000-0000-0000-0000-000000000006",
+                "type": 9,
+                "content": "/am 1",
+                "interact_res": null,
+                "create_at": 1700000003000,
+                "author": {
+                    "id": "-1018",
+                    "username": "some_username",
+                    "identify_num": "0000",
+                    "online": true,
+                    "os": "Websocket",
+                    "status": 1,
+                    "avatar": "https://example.com",
+                    "vip_avatar": "https://example.com",
+                    "banner": "",
+                    "nickname": "some_username",
+                    "roles": [
+                        -1005
+                    ],
+                    "is_vip": false,
+                    "vip_amp": false,
+                    "bot": false,
+                    "nameplate": [],
+                    "kpm_vip": null,
+                    "wealth_level": 0,
+                    "decorations_id_map": null,
+                    "mobile_verified": true,
+                    "is_sys": false,
+                    "joined_at": 1700000001000,
+                    "active_time": 1700000004000
+                },
+                "can_jump": true,
+                "preview_content": null,
+                "kmarkdown": {
+                    "mention_part": [],
+                    "mention_role_part": [],
+                    "channel_part": [],
+                    "item_part": []
+                }
+            },
+            "type": 9,
+            "code": "",
+            "guild_id": "-1017",
+            "guild_type": 0,
+            "channel_name": "FixtureUser10",
+            "author": {
+                "id": "-1015",
+                "username": "FixtureUser02",
+                "identify_num": "0000",
+                "online": true,
+                "os": "Websocket",
+                "status": 0,
+                "avatar": "https://example.com",
+                "vip_avatar": "https://example.com",
+                "banner": "",
+                "nickname": "FixtureUser02",
+                "roles": [
+                    -1006
+                ],
+                "is_vip": false,
+                "vip_amp": false,
+                "bot": true,
+                "nameplate": [],
+                "kpm_vip": null,
+                "wealth_level": 0,
+                "bot_status": 0,
+                "tag_info": {
+                    "color": "#0096FF",
+                    "bg_color": "#0096FF33",
+                    "text": "机器人"
+                },
+                "is_sys": false,
+                "client_id": "FixtureUser07",
+                "verified": false
+            },
+            "visible_only": "",
+            "mention": [],
+            "mention_no_at": [],
+            "mention_all": false,
+            "mention_roles": [],
+            "mention_here": false,
+            "nav_channels": [],
+            "kmarkdown": {
+                "raw_content": "done!",
+                "mention_part": [],
+                "mention_role_part": [],
+                "channel_part": [],
+                "spl": []
+            },
+            "emoji": [],
+            "preview_content": "",
+            "channel_type": 1,
+            "last_msg_content": "FixtureUser02：done!",
+            "send_msg_device": 0
+        },
+        "msg_id": "test-only-event-010",
+        "msg_timestamp": 1700000005000,
+        "nonce": "",
+        "from_type": 1
+    },
+    "extra": {
+        "verifyToken": "test-only-000001",
+        "encryptKey": "",
+        "callbackUrl": "",
+        "intent": 255
+    },
+    "sn": 3
+}

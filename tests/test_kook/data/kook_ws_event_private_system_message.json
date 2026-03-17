@@ -1,0 +1,31 @@
+{
+    "s": 0,
+    "d": {
+        "channel_type": "PERSON",
+        "type": 255,
+        "target_id": "-1015",
+        "author_id": "1",
+        "content": "[系统消息]",
+        "extra": {
+            "type": "guild_member_offline",
+            "body": {
+                "user_id": "-1016",
+                "event_time": 1700000008000,
+                "guilds": [
+                    "-1019"
+                ]
+            }
+        },
+        "msg_id": "00000000-0000-0000-0000-000000000011",
+        "msg_timestamp": 1700000009000,
+        "nonce": "",
+        "from_type": 1
+    },
+    "extra": {
+        "verifyToken": "test-only-000001",
+        "encryptKey": "",
+        "callbackUrl": "",
+        "intent": 255
+    },
+    "sn": 1
+}

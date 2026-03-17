@@ -1,0 +1,72 @@
+{
+    "s": 0,
+    "d": {
+        "channel_type": "PERSON",
+        "type": 10,
+        "target_id": "-1016",
+        "author_id": "-1015",
+        "content": "[{\"theme\":\"primary\",\"color\":\"\",\"size\":\"lg\",\"expand\":false,\"modules\":[{\"type\":\"audio\",\"cover\":\"\",\"duration\":0,\"title\":\"dancing_shot5.wav\",\"src\":\"https:\\/\\/img.kookapp.cn\\/attachments\\/2026-03\\/03\\/69a6841c3125d.wav\",\"external\":false,\"size\":443414,\"canDownload\":true,\"elements\":[]}],\"type\":\"card\"}]",
+        "extra": {
+            "type": 10,
+            "code": "test-only-event-001",
+            "author": {
+                "id": "-1015",
+                "username": "FixtureUser02",
+                "identify_num": "0000",
+                "online": true,
+                "os": "Websocket",
+                "status": 0,
+                "avatar": "https://example.com",
+                "vip_avatar": "https://example.com",
+                "banner": "",
+                "nickname": "FixtureUser02",
+                "roles": [],
+                "is_vip": false,
+                "vip_amp": false,
+                "bot": true,
+                "nameplate": [],
+                "kpm_vip": null,
+                "wealth_level": 0,
+                "bot_status": 0,
+                "tag_info": {
+                    "color": "#0096FF",
+                    "bg_color": "#0096FF33",
+                    "text": "机器人"
+                },
+                "is_sys": false,
+                "client_id": "FixtureUser09",
+                "verified": false
+            },
+            "visible_only": "",
+            "mention": [],
+            "mention_no_at": [],
+            "mention_all": false,
+            "mention_roles": [],
+            "mention_here": false,
+            "nav_channels": [],
+            "emoji": [],
+            "kmarkdown": {
+                "raw_content": "[音频]dancing_shot5.wav",
+                "mention_part": [],
+                "mention_role_part": [],
+                "channel_part": []
+            },
+            "editable": false,
+            "preview_content": "[音频]dancing_shot5.wav",
+            "preview_content_search": "[音频]dancing_shot5.wav",
+            "last_msg_content": "[音频]dancing_shot5.wav",
+            "send_msg_device": 0
+        },
+        "msg_id": "00000000-0000-0000-0000-000000000007",
+        "msg_timestamp": 1700000006000,
+        "nonce": "",
+        "from_type": 1
+    },
+    "extra": {
+        "verifyToken": "test-only-000001",
+        "encryptKey": "",
+        "callbackUrl": "",
+        "intent": 255
+    },
+    "sn": 5
+}

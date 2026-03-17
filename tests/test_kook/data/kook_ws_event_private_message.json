@@ -1,0 +1,64 @@
+{
+    "s": 0,
+    "d": {
+        "channel_type": "PERSON",
+        "type": 9,
+        "target_id": "-1015",
+        "author_id": "-1016",
+        "content": "/help",
+        "extra": {
+            "type": 9,
+            "code": "test-only-event-001",
+            "author": {
+                "id": "-1016",
+                "username": "FixtureUser08",
+                "identify_num": "0000",
+                "online": true,
+                "os": "Websocket",
+                "status": 1,
+                "avatar": "https://example.com",
+                "vip_avatar": "https://example.com",
+                "banner": "",
+                "nickname": "FixtureUser08",
+                "roles": [],
+                "is_vip": false,
+                "vip_amp": false,
+                "bot": false,
+                "nameplate": [],
+                "kpm_vip": null,
+                "wealth_level": 0,
+                "decorations_id_map": null,
+                "is_sys": false
+            },
+            "visible_only": "",
+            "mention": [],
+            "mention_no_at": [],
+            "mention_all": false,
+            "mention_roles": [],
+            "mention_here": false,
+            "nav_channels": [],
+            "kmarkdown": {
+                "raw_content": "/help",
+                "mention_part": [],
+                "mention_role_part": [],
+                "channel_part": [],
+                "spl": []
+            },
+            "emoji": [],
+            "preview_content": "",
+            "last_msg_content": "/help",
+            "send_msg_device": 0
+        },
+        "msg_id": "00000000-0000-0000-0000-000000000009",
+        "msg_timestamp": 1700000007000,
+        "nonce": "test-only-event-005",
+        "from_type": 1
+    },
+    "extra": {
+        "verifyToken": "test-only-000001",
+        "encryptKey": "",
+        "callbackUrl": "",
+        "intent": 255
+    },
+    "sn": 19
+}
