@@ -1165,6 +1165,30 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
             )
         }
 
+    async def _provider_manager_get_merged_provider_config(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        self._require_reserved_plugin("provider.manager.get_merged_provider_config")
+        provider_id = str(payload.get("provider_id", "")).strip()
+        if not provider_id:
+            raise AstrBotError.invalid_input(
+                "provider.manager.get_merged_provider_config requires provider_id"
+            )
+        provider = self._provider_payload_by_id(provider_id)
+        config = self._provider_config_by_id(provider_id)
+        if provider is None and config is None:
+            raise AstrBotError.invalid_input(
+                "provider.manager.get_merged_provider_config "
+                f"unknown provider_id: {provider_id}"
+            )
+        if provider is None:
+            return {"config": dict(config) if isinstance(config, dict) else config}
+        if config is None:
+            return {"config": dict(provider)}
+        merged_config = dict(provider)
+        merged_config.update(config)
+        return {"config": merged_config}
+
     @staticmethod
     def _normalize_provider_config_object(
         payload: Any,
@@ -2288,6 +2312,13 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
                 "按 ID 获取 Provider 管理记录",
             ),
             call_handler=self._provider_manager_get_by_id,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "provider.manager.get_merged_provider_config",
+                "获取 Provider 合并配置",
+            ),
+            call_handler=self._provider_manager_get_merged_provider_config,
         )
         self.register(
             self._builtin_descriptor("provider.manager.load", "运行时加载 Provider"),
