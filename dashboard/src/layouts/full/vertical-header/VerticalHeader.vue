@@ -435,12 +435,22 @@ watch(() => route.fullPath, (newPath) => {
 // 監聽 viewMode 切換 先這樣  算是目前最佳解法 有問題再修正
 watch(() => customizer.viewMode, (newMode, oldMode) => {
   if (typeof window === 'undefined') return;
+
   try {
+    // 👉 chat → bot
     if (newMode === 'bot' && oldMode === 'chat') {
-      const lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+      let lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+
+      // ✅ 防止被污染（如果誤存成 /chat/...）
+      if (lastBotRoute.startsWith('/chat')) {
+        lastBotRoute = '/';
+      }
+
       router.push(lastBotRoute);
+      return;
     }
 
+    // 👉 bot → chat
     if (newMode === 'chat' && oldMode === 'bot') {
       const lastSessionId = localStorage.getItem(LAST_CHAT_ROUTE_KEY);
 
@@ -449,7 +459,10 @@ watch(() => customizer.viewMode, (newMode, oldMode) => {
       } else {
         router.push('/chat');
       }
+
+      return;
     }
+
   } catch (e) {
     console.error('Failed to restore route:', e);
   }
