@@ -390,14 +390,9 @@ async def _ensure_persona_and_skills(
                 persona_tools = None
                 pid = a.get("persona_id")
                 if pid:
-                    persona_tools = next(
-                        (
-                            p.get("tools")
-                            for p in plugin_context.persona_manager.personas_v3
-                            if p["name"] == pid
-                        ),
-                        None,
-                    )
+                    persona = plugin_context.persona_manager.get_persona_v3_by_id(pid)
+                    if persona is not None:
+                        persona_tools = persona.get("tools")
                 tools = a.get("tools", [])
                 if persona_tools is not None:
                     tools = persona_tools
