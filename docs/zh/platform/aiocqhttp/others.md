@@ -1,0 +1,1 @@
+支持接入所有适配了 OneBotv11 反向 Websockets（AstrBot 做服务器端） 的机器人协议端。

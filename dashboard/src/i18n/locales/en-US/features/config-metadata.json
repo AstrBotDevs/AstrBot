@@ -78,6 +78,7 @@
     },
     "persona": {
       "description": "Persona",
+      "hint": "Set the default persona for AI conversations. Personas can be managed in the Persona tab.",
       "provider_settings": {
         "default_personality": {
           "description": "Default Persona"
@@ -550,6 +551,10 @@
         "description": "WeCom AI Bot Name",
         "hint": "Must be correct; otherwise some commands won't work."
       },
+      "wecom_ai_bot_connection_mode": {
+        "description": "WeCom AI Bot Connection Mode",
+        "hint": "Webhook mode requires Token/EncodingAESKey; long_connection mode requires BotID/Secret."
+      },
       "wecomaibot_friend_message_welcome_text": {
         "description": "WeCom AI Bot DM Welcome Message",
         "hint": "When a user enters a DM session on that day, reply with a welcome message. Leave empty to disable."
@@ -557,6 +562,30 @@
       "wecomaibot_init_respond_text": {
         "description": "WeCom AI Bot Initial Response Text",
         "hint": "First reply when the bot receives a message. Leave empty to disable."
+      },
+      "wecomaibot_token": {
+        "description": "WeCom AI Bot Token",
+        "hint": "Used for authentication in webhook callback mode."
+      },
+      "wecomaibot_encoding_aes_key": {
+        "description": "WeCom AI Bot EncodingAESKey",
+        "hint": "Used for message encryption/decryption in webhook callback mode."
+      },
+      "wecomaibot_ws_bot_id": {
+        "description": "Long Connection BotID",
+        "hint": "BotID credential for WeCom AI Bot long connection mode."
+      },
+      "wecomaibot_ws_secret": {
+        "description": "Long Connection Secret",
+        "hint": "Secret credential for WeCom AI Bot long connection mode."
+      },
+      "wecomaibot_ws_url": {
+        "description": "Long Connection WebSocket URL",
+        "hint": "Default is wss://openws.work.weixin.qq.com and usually does not need changes."
+      },
+      "wecomaibot_heartbeat_interval": {
+        "description": "Long Connection Heartbeat Interval",
+        "hint": "Heartbeat interval (seconds) in long connection mode. 30 seconds is recommended."
       },
       "wpp_active_message_poll": {
         "description": "Enable Proactive Message Polling",
@@ -584,6 +613,51 @@
       "only_use_webhook_url_to_send": {
         "description": "Send Replies via Webhook Only",
         "hint": "When enabled, all WeCom AI Bot replies are sent through msg_push_webhook_url. The message push webhook supports more message types (such as images, files, etc.). If you do not need the typing effect, it is strongly recommended to use this option. "
+      },
+      "kook_bot_token": {
+        "description": "Bot Token",
+        "type": "string",
+        "hint": "Required. The Bot Token obtained from the KOOK Developer Platform."
+      },
+      "kook_bot_nickname": {
+        "description": "Bot Nickname",
+        "type": "string",
+        "hint": "Optional. If the sender nickname matches this value, the message will be ignored to prevent broadcast storms."
+      },
+      "kook_reconnect_delay": {
+        "description": "Reconnect Delay",
+        "type": "int",
+        "hint": "Delay time for reconnection (seconds), using an exponential backoff strategy."
+      },
+      "kook_max_reconnect_delay": {
+        "description": "Max Reconnect Delay",
+        "type": "int",
+        "hint": "The maximum value for reconnection delay (seconds)."
+      },
+      "kook_max_retry_delay": {
+        "description": "Max Retry Delay",
+        "type": "int",
+        "hint": "The maximum delay time for retries (seconds)."
+      },
+      "kook_heartbeat_interval": {
+        "description": "Heartbeat Interval",
+        "type": "int",
+        "hint": "The interval time for heartbeat detection (seconds)."
+      },
+      "kook_heartbeat_timeout": {
+        "description": "Heartbeat Timeout",
+        "type": "int",
+        "hint": "The timeout duration for heartbeat detection (seconds)."
+      },
+      "kook_max_heartbeat_failures": {
+        "description": "Max Heartbeat Failures",
+        "type": "int",
+        "hint": "Maximum allowed heartbeat failures; the connection will be dropped if exceeded."
+      },
+      "kook_max_consecutive_failures": {
+        "description": "Max Consecutive Failures",
+        "type": "int",
+        "hint": "Maximum allowed consecutive failures; retries will stop if exceeded."
       }
     },
     "general": {
@@ -777,7 +851,7 @@
           },
           "interval_method": {
             "description": "Interval Method",
-            "hint": "random 为随机时间，log 为根据消息长度计算，$y=log_<log_base>(x)$，x为字数，y的单位为秒。"
+            "hint": "random uses a random delay. log calculates delay by message length: $y=log_{log\\_base}(x)$, where x is word count and y is in seconds."
           },
           "interval": {
             "description": "Random Interval Time",
@@ -800,7 +874,8 @@
             ]
           },
           "regex": {
-            "description": "Segmentation Regular Expression"
+            "description": "Segmentation Regular Expression",
+            "hint": "Used to identify split points with a regular expression. Prefer patterns that match separators."
           },
           "split_words": {
             "description": "Split Word List",

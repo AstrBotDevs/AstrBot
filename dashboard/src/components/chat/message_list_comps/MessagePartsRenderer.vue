@@ -63,8 +63,9 @@
         <!-- Text (Markdown) -->
         <MarkdownRender
             v-else-if="renderPart.part.type === 'plain' && renderPart.part.text && renderPart.part.text.trim()"
+            :key="`${renderPart.key}-${isDark ? 'dark' : 'light'}`"
             custom-id="message-list" :custom-html-tags="['ref']" :content="renderPart.part.text" :typewriter="false"
-            class="markdown-content" :is-dark="isDark" :monacoOptions="{ theme: isDark ? 'vs-dark' : 'vs-light' }" />
+            class="markdown-content" :is-dark="isDark" />
 
         <!-- Image -->
         <div v-else-if="renderPart.part.type === 'image' && renderPart.part.embedded_url" class="embedded-images">

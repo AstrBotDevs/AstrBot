@@ -16,4 +16,7 @@ class ProviderOpenRouter(ProviderOpenAIOfficial):
         self.client._custom_headers["HTTP-Referer"] = (  # type: ignore
             "https://github.com/AstrBotDevs/AstrBot"
         )
-        self.client._custom_headers["X-TITLE"] = "AstrBot"  # type: ignore
+        self.client._custom_headers["X-OpenRouter-Title"] = "AstrBot"  # type: ignore
+        self.client._custom_headers["X-OpenRouter-Categories"] = (
+            "general-chat,personal-agent"  # type: ignore
+        )

@@ -4,7 +4,21 @@ from astrbot.core.config import AstrBotConfig
 from astrbot.core.config.default import DB_PATH
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.file_token_service import FileTokenService
-from astrbot.core.utils.pip_installer import PipInstaller
+from astrbot.core.utils.pip_installer import (
+    DependencyConflictError as DependencyConflictError,
+)
+from astrbot.core.utils.pip_installer import (
+    PipInstaller,
+)
+from astrbot.core.utils.requirements_utils import (
+    RequirementsPrecheckFailed as RequirementsPrecheckFailed,
+)
+from astrbot.core.utils.requirements_utils import (
+    find_missing_requirements as find_missing_requirements,
+)
+from astrbot.core.utils.requirements_utils import (
+    find_missing_requirements_or_raise as find_missing_requirements_or_raise,
+)
 from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
 
@@ -14,7 +28,7 @@ from .utils.astrbot_path import get_astrbot_data_path
 # 初始化数据存储文件夹
 os.makedirs(get_astrbot_data_path(), exist_ok=True)
 
-DEMO_MODE = os.getenv("DEMO_MODE", False)
+DEMO_MODE = os.getenv("DEMO_MODE", "False").strip().lower() in ("true", "1", "t")
 
 astrbot_config = AstrBotConfig()
 t2i_base_url = astrbot_config.get("t2i_endpoint", "https://t2i.soulter.top/text2img")

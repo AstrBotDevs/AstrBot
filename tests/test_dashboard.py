@@ -1,22 +1,27 @@
 import asyncio
 import copy
+import io
 import os
 import sys
+import zipfile
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
 from quart import Quart
+from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.core.utils.pip_installer import PipInstallError
+from astrbot.dashboard.routes.plugin import PluginRoute
 from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
     MockPluginBuilder,
-    MockPluginConfig,
     create_mock_updater_install,
     create_mock_updater_update,
 )
@@ -150,6 +155,107 @@ async def test_subagent_config_accepts_default_persona(
             headers=authenticated_header,
         )
 
+@pytest.mark.parametrize("payload", [[], "x"])
+async def test_batch_delete_sessions_rejects_non_object_payload(
+    app: Quart, authenticated_header: dict, payload
+):
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/chat/batch_delete_sessions",
+        json=payload,
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "Invalid JSON body: expected object"
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_sessions_masks_internal_error(
+    app: Quart, authenticated_header: dict, monkeypatch
+):
+    test_client = app.test_client()
+
+    create_session_response = await test_client.get(
+        "/api/chat/new_session", headers=authenticated_header
+    )
+    assert create_session_response.status_code == 200
+    create_session_data = await create_session_response.get_json()
+    session_id = create_session_data["data"]["session_id"]
+
+    async def _raise_error(*args, **kwargs):
+        raise RuntimeError("secret-internal-error")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.chat.ChatRoute._delete_session_internal",
+        _raise_error,
+    )
+
+    response = await test_client.post(
+        "/api/chat/batch_delete_sessions",
+        json={"session_ids": [session_id]},
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["deleted_count"] == 0
+    assert data["data"]["failed_count"] == 1
+    assert data["data"]["failed_items"][0]["session_id"] == session_id
+    assert data["data"]["failed_items"][0]["reason"] == "internal_error"
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_sessions_uses_batch_lookup(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    db = core_lifecycle_td.db
+
+    create_session_response = await test_client.get(
+        "/api/chat/new_session", headers=authenticated_header
+    )
+    assert create_session_response.status_code == 200
+    create_session_data = await create_session_response.get_json()
+    session_id = create_session_data["data"]["session_id"]
+
+    original_batch_lookup = db.get_platform_sessions_by_ids
+    called = {"batch_lookup_count": 0}
+
+    async def _wrapped_batch_lookup(session_ids: list[str]):
+        called["batch_lookup_count"] += 1
+        return await original_batch_lookup(session_ids)
+
+    # 不应单个查询
+    async def _should_not_call_single_lookup(session_id: str):
+        raise AssertionError(
+            f"single-session lookup should not be called: {session_id}"
+        )
+
+    monkeypatch.setattr(db, "get_platform_sessions_by_ids", _wrapped_batch_lookup)
+    monkeypatch.setattr(
+        db, "get_platform_session_by_id", _should_not_call_single_lookup
+    )
+
+    response = await test_client.post(
+        "/api/chat/batch_delete_sessions",
+        json={"session_ids": [session_id]},
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["deleted_count"] == 1
+    assert data["data"]["failed_count"] == 0
+    assert called["batch_lookup_count"] == 1
+
 
 @pytest.mark.asyncio
 async def test_plugins(
@@ -166,6 +272,13 @@ async def test_plugins(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
+    for plugin in data["data"]:
+        assert "installed_at" in plugin
+        installed_at = plugin["installed_at"]
+        if installed_at is None:
+            continue
+        assert isinstance(installed_at, str)
+        datetime.fromisoformat(installed_at)
 
     # 插件市场
     response = await test_client.get(
@@ -195,9 +308,7 @@ async def test_plugins(
     monkeypatch.setattr(
         core_lifecycle_td.plugin_manager.updator, "install", mock_install
     )
-    monkeypatch.setattr(
-        core_lifecycle_td.plugin_manager.updator, "update", mock_update
-    )
+    monkeypatch.setattr(core_lifecycle_td.plugin_manager.updator, "update", mock_update)
 
     try:
         # 插件安装
@@ -208,7 +319,21 @@ async def test_plugins(
         )
         assert response.status_code == 200
         data = await response.get_json()
-        assert data["status"] == "ok", f"安装失败: {data.get('message', 'unknown error')}"
+        assert data["status"] == "ok", (
+            f"安装失败: {data.get('message', 'unknown error')}"
+        )
+
+        response = await test_client.get(
+            f"/api/plugin/get?name={test_plugin_name}",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert len(data["data"]) == 1
+        installed_at = data["data"][0]["installed_at"]
+        assert installed_at is not None
+        datetime.fromisoformat(installed_at)
 
         # 验证插件已注册
         exists = any(md.name == test_plugin_name for md in star_registry)
@@ -249,6 +374,28 @@ async def test_plugins(
     finally:
         # 清理测试插件
         builder.cleanup(test_plugin_name)
+
+
+@pytest.mark.asyncio
+async def test_plugins_when_installed_at_unresolved(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    """Tests plugin payload when installed_at cannot be resolved."""
+    test_client = app.test_client()
+
+    monkeypatch.setattr(PluginRoute, "_get_plugin_installed_at", lambda *_args: None)
+
+    response = await test_client.get("/api/plugin/get", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+
+    for plugin in data["data"]:
+        assert "name" in plugin
+        assert "installed_at" in plugin
+        assert plugin["installed_at"] is None
 
 
 @pytest.mark.asyncio
@@ -362,6 +509,35 @@ async def test_do_update(
     data = await response.get_json()
     assert data["status"] == "ok"
     assert os.path.exists(release_path)
+
+
+@pytest.mark.asyncio
+async def test_install_pip_package_returns_pip_install_error_message(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    test_client = app.test_client()
+
+    async def mock_pip_install(*args, **kwargs):
+        del args, kwargs
+        raise PipInstallError("install failed", code=2)
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.pip_installer.install",
+        mock_pip_install,
+    )
+
+    response = await test_client.post(
+        "/api/update/pip-install",
+        headers=authenticated_header,
+        json={"package": "demo-package"},
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "install failed"
 
 
 class _FakeNeoSkills:
@@ -543,3 +719,223 @@ async def test_neo_skills_routes(
     data = await response.get_json()
     assert data["status"] == "ok"
     assert data["data"]["skill_key"] == "neo.demo"
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_skills_returns_error_when_all_files_invalid(
+    app: Quart,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/skills/batch-upload",
+        headers=authenticated_header,
+        files={
+            "files": FileStorage(
+                stream=io.BytesIO(b"not-a-zip"),
+                filename="invalid.txt",
+                content_type="text/plain",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "Upload failed for all 1 file(s)."
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_skills_accepts_zip_files(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    async def _fake_sync_skills_to_active_sandboxes():
+        return
+
+    def _fake_install_skill_from_zip(
+        self,
+        zip_path: str,
+        *,
+        overwrite: bool = True,
+    ):
+        _ = self, overwrite
+        assert zip_path.endswith(".zip")
+        return "demo_skill"
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.SkillManager.install_skill_from_zip",
+        _fake_install_skill_from_zip,
+    )
+
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/skills/batch-upload",
+        headers=authenticated_header,
+        files={
+            "files": FileStorage(
+                stream=io.BytesIO(b"fake-zip"),
+                filename="demo_skill.zip",
+                content_type="application/zip",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["message"] == "All 1 skill(s) uploaded successfully."
+    assert data["data"]["total"] == 1
+    assert data["data"]["succeeded"] == [
+        {"filename": "demo_skill.zip", "name": "demo_skill"}
+    ]
+    assert data["data"]["failed"] == []
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_skills_accepts_valid_skill_archive(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+    tmp_path,
+):
+    data_dir = tmp_path / "data"
+    skills_dir = tmp_path / "skills"
+    temp_dir = tmp_path / "temp"
+    data_dir.mkdir()
+    skills_dir.mkdir()
+    temp_dir.mkdir()
+
+    async def _fake_sync_skills_to_active_sandboxes():
+        return
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
+        lambda: str(skills_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "demo_skill/SKILL.md",
+            "---\nname: demo-skill\ndescription: Demo skill\n---\n",
+        )
+        zf.writestr("demo_skill/notes.txt", "hello")
+        zf.writestr("__MACOSX/demo_skill/._SKILL.md", "")
+        zf.writestr("__MACOSX/._demo_skill", "")
+    archive.seek(0)
+
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/skills/batch-upload",
+        headers=authenticated_header,
+        files={
+            "files": FileStorage(
+                stream=archive,
+                filename="demo_skill.zip",
+                content_type="application/zip",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["succeeded"] == [
+        {"filename": "demo_skill.zip", "name": "demo_skill"}
+    ]
+    assert data["data"]["failed"] == []
+    assert (skills_dir / "demo_skill" / "SKILL.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_skills_partial_success(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    async def _fake_sync_skills_to_active_sandboxes():
+        return
+
+    def _fake_install_skill_from_zip(
+        self,
+        zip_path: str,
+        *,
+        overwrite: bool = True,
+    ):
+        _ = self, overwrite
+        if "ok_skill" in zip_path:
+            return "ok_skill"
+        raise RuntimeError("install failed")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.SkillManager.install_skill_from_zip",
+        _fake_install_skill_from_zip,
+    )
+
+    test_client = app.test_client()
+
+    boundary = "----AstrBotBatchBoundary"
+    body = (
+        (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="files"; filename="ok_skill.zip"\r\n'
+            "Content-Type: application/zip\r\n\r\n"
+        ).encode()
+        + b"fake-zip-1\r\n"
+        + (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="files"; filename="bad_skill.zip"\r\n'
+            "Content-Type: application/zip\r\n\r\n"
+        ).encode()
+        + b"fake-zip-2\r\n"
+        + f"--{boundary}--\r\n".encode()
+    )
+    headers = dict(authenticated_header)
+    headers["Content-Type"] = f"multipart/form-data; boundary={boundary}"
+
+    response = await test_client.post(
+        "/api/skills/batch-upload",
+        headers=headers,
+        data=body,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["message"] == "Partial success: 1/2 skill(s) uploaded."
+    assert data["data"]["total"] == 2
+    assert data["data"]["succeeded"] == [
+        {"filename": "ok_skill.zip", "name": "ok_skill"}
+    ]
+    assert data["data"]["failed"] == [
+        {"filename": "bad_skill.zip", "error": "install failed"}
+    ]

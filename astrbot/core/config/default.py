@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.18.3"
+VERSION = "4.20.1"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -219,6 +219,9 @@ DEFAULT_CONFIG = {
         "telegram": {
             "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
         },
+        "discord": {
+            "pre_ack_emoji": {"enable": False, "emojis": ["🤔"]},
+        },
     },
     "wake_prefix": ["/"],
     "log_level": "INFO",
@@ -342,14 +345,20 @@ CONFIG_METADATA_2 = {
                     "企业微信智能机器人": {
                         "id": "wecom_ai_bot",
                         "type": "wecom_ai_bot",
+                        "hint": "如果发现字段有异常，请重新创建",
                         "enable": True,
+                        "wecom_ai_bot_connection_mode": "long_connection",  # long_connection, webhook
+                        "wecom_ai_bot_name": "",
+                        "wecomaibot_ws_bot_id": "",
+                        "wecomaibot_ws_secret": "",
+                        "wecomaibot_token": "",
+                        "wecomaibot_encoding_aes_key": "",
                         "wecomaibot_init_respond_text": "",
                         "wecomaibot_friend_message_welcome_text": "",
-                        "wecom_ai_bot_name": "",
                         "msg_push_webhook_url": "",
                         "only_use_webhook_url_to_send": False,
-                        "token": "",
-                        "encoding_aes_key": "",
+                        "wecomaibot_ws_url": "wss://openws.work.weixin.qq.com",
+                        "wecomaibot_heartbeat_interval": 30,
                         "unified_webhook_mode": True,
                         "webhook_uuid": "",
                         "callback_server_host": "0.0.0.0",
@@ -448,6 +457,20 @@ CONFIG_METADATA_2 = {
                         "satori_auto_reconnect": True,
                         "satori_heartbeat_interval": 10,
                         "satori_reconnect_delay": 5,
+                    },
+                    "kook": {
+                        "id": "kook",
+                        "type": "kook",
+                        "enable": False,
+                        "kook_bot_token": "",
+                        "kook_bot_nickname": "",
+                        "kook_reconnect_delay": 1,
+                        "kook_max_reconnect_delay": 60,
+                        "kook_max_retry_delay": 60,
+                        "kook_heartbeat_interval": 30,
+                        "kook_heartbeat_timeout": 6,
+                        "kook_max_heartbeat_failures": 3,
+                        "kook_max_consecutive_failures": 5,
                     },
                     # "WebChat": {
                     #     "id": "webchat",
@@ -718,6 +741,13 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "请务必填写正确，否则无法使用一些指令。",
                     },
+                    "wecom_ai_bot_connection_mode": {
+                        "description": "企业微信智能机器人连接模式",
+                        "type": "string",
+                        "options": ["webhook", "long_connection"],
+                        "labels": ["Webhook 回调", "长连接"],
+                        "hint": "Webhook 回调模式需要配置 Token/EncodingAESKey。长连接模式需要配置 BotID/Secret。",
+                    },
                     "wecomaibot_init_respond_text": {
                         "description": "企业微信智能机器人初始响应文本",
                         "type": "string",
@@ -728,6 +758,22 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "当用户当天进入智能机器人单聊会话，回复欢迎语，留空则不回复。",
                     },
+                    "wecomaibot_token": {
+                        "description": "企业微信智能机器人 Token",
+                        "type": "string",
+                        "hint": "用于 Webhook 回调模式的身份验证。",
+                        "condition": {
+                            "wecom_ai_bot_connection_mode": "webhook",
+                        },
+                    },
+                    "wecomaibot_encoding_aes_key": {
+                        "description": "企业微信智能机器人 EncodingAESKey",
+                        "type": "string",
+                        "hint": "用于 Webhook 回调模式的消息加密解密。",
+                        "condition": {
+                            "wecom_ai_bot_connection_mode": "webhook",
+                        },
+                    },
                     "msg_push_webhook_url": {
                         "description": "企业微信消息推送 Webhook URL",
                         "type": "string",
@@ -737,6 +783,40 @@ CONFIG_METADATA_2 = {
                         "description": "仅使用 Webhook 发送消息",
                         "type": "bool",
                         "hint": "启用后，企业微信智能机器人的所有回复都改为通过消息推送 Webhook 发送。消息推送 Webhook 支持更多的消息类型（如图片、文件等）。",
+                    },
+                    "wecomaibot_ws_bot_id": {
+                        "description": "长连接 BotID",
+                        "type": "string",
+                        "hint": "企业微信智能机器人长连接模式凭证 BotID。",
+                        "condition": {
+                            "wecom_ai_bot_connection_mode": "long_connection",
+                        },
+                    },
+                    "wecomaibot_ws_secret": {
+                        "description": "长连接 Secret",
+                        "type": "string",
+                        "hint": "企业微信智能机器人长连接模式凭证 Secret。",
+                        "condition": {
+                            "wecom_ai_bot_connection_mode": "long_connection",
+                        },
+                    },
+                    "wecomaibot_ws_url": {
+                        "description": "长连接 WebSocket 地址",
+                        "type": "string",
+                        "invisible": True,
+                        "hint": "默认值为 wss://openws.work.weixin.qq.com，一般无需修改。",
+                        "condition": {
+                            "wecom_ai_bot_connection_mode": "long_connection",
+                        },
+                    },
+                    "wecomaibot_heartbeat_interval": {
+                        "description": "长连接心跳间隔",
+                        "type": "int",
+                        "invisible": True,
+                        "hint": "长连接模式心跳间隔（秒），建议 30 秒。",
+                        "condition": {
+                            "wecom_ai_bot_connection_mode": "long_connection",
+                        },
                     },
                     "lark_bot_name": {
                         "description": "飞书机器人的名字",
@@ -782,13 +862,58 @@ CONFIG_METADATA_2 = {
                     "unified_webhook_mode": {
                         "description": "统一 Webhook 模式",
                         "type": "bool",
-                        "hint": "启用后，将使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。",
+                        "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。",
                     },
                     "webhook_uuid": {
                         "invisible": True,
                         "description": "Webhook UUID",
                         "type": "string",
                         "hint": "统一 Webhook 模式下的唯一标识符，创建平台时自动生成。",
+                    },
+                    "kook_bot_token": {
+                        "description": "机器人 Token",
+                        "type": "string",
+                        "hint": "必填项。从 KOOK 开发者平台获取的机器人 Token。",
+                    },
+                    "kook_bot_nickname": {
+                        "description": "Bot Nickname",
+                        "type": "string",
+                        "hint": "可选项。若发送者昵称与此值一致，将忽略该消息以避免广播风暴。",
+                    },
+                    "kook_reconnect_delay": {
+                        "description": "重连延迟",
+                        "type": "int",
+                        "hint": "重连延迟时间（秒），使用指数退避策略。",
+                    },
+                    "kook_max_reconnect_delay": {
+                        "description": "最大重连延迟",
+                        "type": "int",
+                        "hint": "重连延迟的最大值（秒）。",
+                    },
+                    "kook_max_retry_delay": {
+                        "description": "最大重试延迟",
+                        "type": "int",
+                        "hint": "重试的最大延迟时间（秒）。",
+                    },
+                    "kook_heartbeat_interval": {
+                        "description": "心跳间隔",
+                        "type": "int",
+                        "hint": "心跳检测间隔时间（秒）。",
+                    },
+                    "kook_heartbeat_timeout": {
+                        "description": "心跳超时时间",
+                        "type": "int",
+                        "hint": "心跳检测超时时间（秒）。",
+                    },
+                    "kook_max_heartbeat_failures": {
+                        "description": "最大心跳失败次数",
+                        "type": "int",
+                        "hint": "允许的最大心跳失败次数，超过后断开连接。",
+                    },
+                    "kook_max_consecutive_failures": {
+                        "description": "最大连续失败次数",
+                        "type": "int",
+                        "hint": "允许的最大连续失败次数，超过后停止重试。",
                     },
                 },
             },
@@ -1007,6 +1132,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "MiniMax": {
+                        "id": "minimax",
+                        "provider": "minimax",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.minimaxi.com/v1",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "xAI": {
                         "id": "xai",
                         "provider": "xai",
@@ -1064,7 +1201,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": [],
                         "timeout": 120,
-                        "api_base": "https://openrouter.ai/v1",
+                        "api_base": "https://openrouter.ai/api/v1",
                         "proxy": "",
                         "custom_headers": {},
                     },

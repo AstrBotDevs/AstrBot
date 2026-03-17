@@ -79,6 +79,7 @@ class ProviderManager:
         self._provider_change_hooks: list[
             Callable[[str, ProviderType, str | None], None]
         ] = []
+        self._mcp_init_task: asyncio.Task | None = None
 
     def set_provider_change_callback(
         self,
@@ -330,8 +331,17 @@ class ProviderManager:
         if not self.curr_tts_provider_inst and self.tts_provider_insts:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
 
-        # 初始化 MCP Client 连接
-        asyncio.create_task(self.llm_tools.init_mcp_clients(), name="init_mcp_clients")
+        async def _init_mcp_clients_bg() -> None:
+            try:
+                await self.llm_tools.init_mcp_clients()
+            except Exception:
+                logger.error("MCP init background task failed", exc_info=True)
+
+        if self._mcp_init_task is None or self._mcp_init_task.done():
+            self._mcp_init_task = asyncio.create_task(
+                _init_mcp_clients_bg(),
+                name="provider-manager:mcp-init",
+            )
 
     def dynamic_import_provider(self, type: str) -> None:
         """动态导入提供商适配器模块
@@ -798,8 +808,17 @@ class ProviderManager:
             config.save_config()
             # load instance
             await self.load_provider(new_config)
+            # sync in-memory config for API queries (e.g., embedding provider list)
+            self.providers_config = astrbot_config["provider"]
 
     async def terminate(self) -> None:
+        if self._mcp_init_task and not self._mcp_init_task.done():
+            self._mcp_init_task.cancel()
+            try:
+                await self._mcp_init_task
+            except asyncio.CancelledError:
+                pass
+
         for provider_inst in self.provider_insts:
             if hasattr(provider_inst, "terminate"):
                 await provider_inst.terminate()  # type: ignore

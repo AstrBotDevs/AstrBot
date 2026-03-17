@@ -773,9 +773,14 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
                 continue
             mp = tool.handler_module_path
             if not mp:
+                # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
+                # 不应受到会话插件过滤影响。
+                new_tool_set.add_tool(tool)
                 continue
             plugin = star_map.get(mp)
             if not plugin:
+                # 无法解析插件归属时，保守保留工具，避免误过滤。
+                new_tool_set.add_tool(tool)
                 continue
             if plugin.name in event.plugins_name or plugin.reserved:
                 new_tool_set.add_tool(tool)
@@ -841,6 +846,8 @@ def _apply_sandbox_tools(
 ) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
+    if req.system_prompt is None:
+        req.system_prompt = ""
     booter = config.sandbox_cfg.get("booter", "shipyard_neo")
     if booter == "shipyard":
         ep = config.sandbox_cfg.get("shipyard_endpoint", "")
