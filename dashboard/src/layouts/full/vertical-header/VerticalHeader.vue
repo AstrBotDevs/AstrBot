@@ -397,9 +397,20 @@ commonStore.getStartTime();
 
 // 视图模式切换
 const viewMode = computed({
-  get: () => customizer.viewMode,
+  get: () => {
+    return route.path.startsWith('/chat') ? 'chat' : 'bot';
+  },
   set: (value: 'bot' | 'chat') => {
-    customizer.SET_VIEW_MODE(value);
+    if (value === 'chat') {
+      const lastSessionId = localStorage.getItem(LAST_CHAT_ROUTE_KEY);
+      router.push(lastSessionId ? `/chat/${lastSessionId}` : '/chat');
+    } else {
+      let lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+      if (lastBotRoute.startsWith('/chat')) {
+        lastBotRoute = '/';
+      }
+      router.push(lastBotRoute);
+    }
   }
 });
 
