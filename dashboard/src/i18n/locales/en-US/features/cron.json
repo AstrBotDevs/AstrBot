@@ -67,6 +67,7 @@
     "runAtRequired": "Please select run time",
     "createSuccess": "Created successfully",
     "createFailed": "Failed to create",
-    "updateSuccess": "Updated successfully"
+    "updateSuccess": "Updated successfully",
+    "updateFailed": "Failed to update"
   }
 }

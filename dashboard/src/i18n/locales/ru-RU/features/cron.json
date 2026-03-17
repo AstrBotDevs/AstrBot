@@ -67,6 +67,7 @@
         "runAtRequired": "Выберите время запуска",
         "createSuccess": "Задача создана",
         "createFailed": "Ошибка создания",
-        "updateSuccess": "Задача обновлена"
+        "updateSuccess": "Задача обновлена",
+        "updateFailed": "Ошибка обновления"
     }
 }

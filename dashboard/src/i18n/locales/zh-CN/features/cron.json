@@ -67,6 +67,7 @@
     "runAtRequired": "请选择执行时间",
     "createSuccess": "创建成功",
     "createFailed": "创建失败",
-    "updateSuccess": "更新成功"
+    "updateSuccess": "更新成功",
+    "updateFailed": "更新失败"
   }
 }
