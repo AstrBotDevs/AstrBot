@@ -98,7 +98,15 @@ type TranslationModule = {
   default: Record<string, any>;
 };
 
-const localeModuleLoaders = import.meta.glob<TranslationModule>('./locales/*/**/*.json');
+// NOTE:
+// `zh-CN` is statically imported above to build `translationSchema` (used at runtime and for type inference).
+// If the same JSON files are also included in the lazy-loading glob, Vite will warn that those modules cannot
+// be moved into a separate chunk. Excluding `zh-CN` here keeps the default locale bundled while allowing
+// other locales to be truly lazy-loaded.
+const localeModuleLoaders = import.meta.glob<TranslationModule>([
+  './locales/*/**/*.json',
+  '!./locales/zh-CN/**/*.json'
+]);
 const localeCache = new Map<SupportedLocale, TranslationData>();
 const loadingPromises = new Map<SupportedLocale, Promise<TranslationData>>();
 
@@ -191,6 +199,11 @@ function extractLocaleAndPath(modulePath: string): { locale: string; pathSegment
 }
 
 export async function loadLocaleTranslations(locale: SupportedLocale): Promise<TranslationData> {
+  if (locale === 'zh-CN') {
+    localeCache.set(locale, translationSchema);
+    return translationSchema;
+  }
+
   const cached = localeCache.get(locale);
   if (cached) {
     return cached;
