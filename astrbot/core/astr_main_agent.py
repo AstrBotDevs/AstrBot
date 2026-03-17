@@ -43,7 +43,7 @@ from astrbot.core.tools.prompts import (
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
     TOOL_CALL_PROMPT,
-    TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
+    TOOL_CALL_PROMPT_LAZY_LOAD_MODE,
     WEBCHAT_TITLE_GENERATOR_SYSTEM_PROMPT,
     WEBCHAT_TITLE_GENERATOR_USER_PROMPT,
 )
@@ -74,7 +74,7 @@ class MainAgentBuildConfig:
     a timeout error as a tool result will be returned.
     """
     tool_schema_mode: str = "full"
-    """The tool schema mode, can be 'full' or 'skills-like'."""
+    """The tool schema mode, can be 'full' or 'lazy_load'."""
     provider_wake_prefix: str = ""
     """The wake prefix for the provider. If the user message does not start with this prefix,
     the main agent will not be triggered."""
@@ -1110,7 +1110,7 @@ async def build_main_agent(
         tool_prompt = (
             TOOL_CALL_PROMPT
             if config.tool_schema_mode == "full"
-            else TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
+            else TOOL_CALL_PROMPT_LAZY_LOAD_MODE
         )
         req.system_prompt += f"\n{tool_prompt}\n"
 

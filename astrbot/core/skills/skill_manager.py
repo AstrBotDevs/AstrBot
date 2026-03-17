@@ -13,11 +13,7 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from astrbot.core.utils.astrbot_path import (
-    get_astrbot_data_path,
-    get_astrbot_skills_path,
-    get_astrbot_temp_path,
-)
+from astrbot.core.utils.astrbot_path import AstrbotPaths, astrbot_paths
 
 SKILLS_CONFIG_FILENAME = "skills.json"
 SANDBOX_SKILLS_CACHE_FILENAME = "sandbox_skills_cache.json"
@@ -46,10 +42,12 @@ class SkillInfo:
     source_label: str = "local"
     local_exists: bool = True
     sandbox_exists: bool = False
+    input_schema: dict | None = None
+    output_schema: dict | None = None
 
 
-def _parse_frontmatter_description(text: str) -> str:
-    """Extract the ``description`` value from YAML frontmatter.
+def _parse_frontmatter(text: str) -> dict:
+    """Extract metadata from YAML frontmatter.
 
     Expects the standard SKILL.md format used by OpenAI Codex CLI and
     Anthropic Claude Skills::
@@ -57,33 +55,32 @@ def _parse_frontmatter_description(text: str) -> str:
         ---
         name: my-skill
         description: What this skill does and when to use it.
+        input_schema: ...
+        output_schema: ...
         ---
     """
     if not text.startswith("---"):
-        return ""
+        return {}
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
-        return ""
+        return {}
     end_idx = None
     for i in range(1, len(lines)):
         if lines[i].strip() == "---":
             end_idx = i
             break
     if end_idx is None:
-        return ""
+        return {}
 
     frontmatter = "\n".join(lines[1:end_idx])
     try:
         payload = yaml.safe_load(frontmatter) or {}
     except yaml.YAMLError:
-        return ""
+        return {}
     if not isinstance(payload, dict):
-        return ""
+        return {}
 
-    description = payload.get("description", "")
-    if not isinstance(description, str):
-        return ""
-    return description.strip()
+    return payload
 
 
 # Regex for sanitizing paths used in prompt examples — only allow
@@ -171,9 +168,12 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
             if not rendered_path:
                 rendered_path = "<skills_root>/<skill_name>/SKILL.md"
 
-        skills_lines.append(
-            f"- **{display_name}**: {description}\n  File: `{rendered_path}`"
-        )
+        entry = f"- **{display_name}**: {description}\n  File: `{rendered_path}`"
+        if skill.input_schema:
+            entry += f"\n  Input Schema: {json.dumps(skill.input_schema, ensure_ascii=False)}"
+        if skill.output_schema:
+            entry += f"\n  Output Schema: {json.dumps(skill.output_schema, ensure_ascii=False)}"
+        skills_lines.append(entry)
         if not example_path:
             example_path = rendered_path
     skills_block = "\n".join(skills_lines)
@@ -223,11 +223,17 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
 
 
 class SkillManager:
-    def __init__(self, skills_root: str | None = None) -> None:
-        self.skills_root = skills_root or get_astrbot_skills_path()
-        data_path = Path(get_astrbot_data_path())
-        self.config_path = str(data_path / SKILLS_CONFIG_FILENAME)
-        self.sandbox_skills_cache_path = str(data_path / SANDBOX_SKILLS_CACHE_FILENAME)
+    def __init__(
+        self,
+        skills_root: str | None = None,
+        astrbot_paths: AstrbotPaths = astrbot_paths,
+    ) -> None:
+        self.astrbot_paths = astrbot_paths
+        self.skills_root = skills_root or str(self.astrbot_paths.skills)
+        self.config_path = str(self.astrbot_paths.config / SKILLS_CONFIG_FILENAME)
+        self.sandbox_skills_cache_path = str(
+            self.astrbot_paths.data / SANDBOX_SKILLS_CACHE_FILENAME
+        )
         os.makedirs(self.skills_root, exist_ok=True)
 
     def _load_config(self) -> dict:
@@ -350,9 +356,17 @@ class SkillManager:
             if active_only and not active:
                 continue
             description = ""
+            input_schema = None
+            output_schema = None
             try:
                 content = skill_md.read_text(encoding="utf-8")
-                description = _parse_frontmatter_description(content)
+                meta = _parse_frontmatter(content)
+                description = meta.get("description", "")
+                if not isinstance(description, str):
+                    description = ""
+                description = description.strip()
+                input_schema = meta.get("input_schema")
+                output_schema = meta.get("output_schema")
             except Exception:
                 description = ""
             sandbox_exists = (
@@ -376,6 +390,8 @@ class SkillManager:
                 source_label=source_label,
                 local_exists=True,
                 sandbox_exists=sandbox_exists,
+                input_schema=input_schema,
+                output_schema=output_schema,
             )
 
         if runtime == "sandbox":
@@ -529,7 +545,7 @@ class SkillManager:
             ):
                 raise ValueError("SKILL.md not found in the skill folder.")
 
-            with tempfile.TemporaryDirectory(dir=get_astrbot_temp_path()) as tmp_dir:
+            with tempfile.TemporaryDirectory(dir=str(astrbot_paths.temp)) as tmp_dir:
                 for member in zf.infolist():
                     member_name = member.filename.replace("\\", "/")
                     if not member_name or _is_ignored_zip_entry(member_name):
