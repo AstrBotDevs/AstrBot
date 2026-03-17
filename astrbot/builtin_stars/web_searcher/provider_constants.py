@@ -2,15 +2,6 @@ from __future__ import annotations
 
 DEFAULT_WEB_SEARCH_PROVIDER = "default"
 
-# Keep this order aligned with the default engine fallback chain.
-WEB_SEARCH_ENGINE_PROVIDERS: tuple[str, ...] = (
-    "bing",
-    "sogo",
-    "duckduckgo",
-    "google",
-    "comet",
-)
-
 # Canonical provider ids shown in config UI options.
 WEB_SEARCH_PROVIDER_OPTIONS: tuple[str, ...] = (
     DEFAULT_WEB_SEARCH_PROVIDER,

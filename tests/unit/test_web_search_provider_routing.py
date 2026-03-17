@@ -3,6 +3,7 @@ import pytest
 from astrbot.builtin_stars.web_searcher.provider_routing import (
     DEFAULT_ENGINE_ORDER,
     build_default_engine_order,
+    normalize_websearch,
     normalize_websearch_provider,
     normalize_websearch_provider_for_tools,
     resolve_tool_branch_provider,
@@ -17,6 +18,23 @@ def test_normalize_websearch_provider_aliases() -> None:
     assert normalize_websearch_provider("baidu") == "baidu_ai_search"
     assert normalize_websearch_provider("bochaai") == "bocha"
     assert normalize_websearch_provider("brave") == "default"
+
+
+def test_normalize_websearch_returns_unified_descriptor() -> None:
+    ddg = normalize_websearch("ddg")
+    assert ddg.canonical == "duckduckgo"
+    assert ddg.tool_branch == "default"
+    assert ddg.is_known is True
+
+    tavily = normalize_websearch("tavily")
+    assert tavily.canonical == "tavily"
+    assert tavily.tool_branch == "tavily"
+    assert tavily.is_known is True
+
+    unknown = normalize_websearch("unknown_provider")
+    assert unknown.canonical == "unknown_provider"
+    assert unknown.tool_branch == "default"
+    assert unknown.is_known is False
 
 
 def test_resolve_tool_branch_provider_uses_default_branch_for_engine_aliases() -> None:
