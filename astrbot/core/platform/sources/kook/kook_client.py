@@ -261,8 +261,6 @@ class KookClient:
         if code == 0:
             self.session_id = data.session_id
             logger.info(f"[KOOK] 握手成功，session_id: {self.session_id}")
-            # TODO 重置重连延迟
-            # self.reconnect_delay = 1
         else:
             logger.error(f"[KOOK] 握手失败，错误码: {code}")
             if code == 40103:  # token过期
