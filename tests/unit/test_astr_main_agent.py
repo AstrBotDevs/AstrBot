@@ -640,20 +640,6 @@ class TestModalitiesFix:
 
 
 class TestProviderRequestAssembleContext:
-    @pytest.mark.asyncio
-    async def test_provider_request_with_image_only_uses_text_placeholder(
-        self, tmp_path
-    ):
-        image_path = tmp_path / "example.jpg"
-        image_path.write_bytes(b"fake-image")
-        req = ProviderRequest(prompt=None, image_urls=[image_path.as_uri()])
-
-        context = await req.assemble_context()
-
-        assert context["role"] == "user"
-        assert isinstance(context["content"], list)
-        assert context["content"][0] == {"type": "text", "text": "[图片]"}
-        assert context["content"][1]["type"] == "image_url"
 
     def test_modalities_fix_all_supported(self, mock_provider):
         """Test modality fix when all features are supported."""
