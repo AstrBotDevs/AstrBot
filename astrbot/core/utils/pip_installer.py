@@ -7,21 +7,71 @@ import io
 import logging
 import os
 import re
+import shlex
 import sys
 import threading
 from collections import deque
+from dataclasses import dataclass
+from urllib.parse import urlparse
 
 from astrbot.core.utils.astrbot_path import get_astrbot_site_packages_path
+from astrbot.core.utils.core_constraints import CoreConstraintsProvider
+from astrbot.core.utils.requirements_utils import (
+    canonicalize_distribution_name as _canonicalize_distribution_name,
+)
+from astrbot.core.utils.requirements_utils import (
+    extract_requirement_name,
+    extract_requirement_names,
+    parse_package_install_input,
+)
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
 
 logger = logging.getLogger("astrbot")
 
 _DISTLIB_FINDER_PATCH_ATTEMPTED = False
 _SITE_PACKAGES_IMPORT_LOCK = threading.RLock()
+_PIP_FAILURE_PATTERNS = {
+    "error_prefix": re.compile(r"^\s*error:", re.IGNORECASE),
+    "user_requested": re.compile(r"\bthe user requested\b", re.IGNORECASE),
+    "resolution_impossible": re.compile(r"\bresolutionimpossible\b", re.IGNORECASE),
+    "cannot_install": re.compile(r"\bcannot install\b", re.IGNORECASE),
+    "conflict": re.compile(r"\bconflict(?:ing|s)?\b", re.IGNORECASE),
+    "constraint": re.compile(r"\(constraint\)", re.IGNORECASE),
+    "dependency_detail": re.compile(r"\bdepends on\b", re.IGNORECASE),
+}
+_SENSITIVE_PIP_VALUE_KEYS = frozenset(
+    {"password", "passwd", "pass", "api_token", "token", "auth_token"}
+)
+_MAX_PIP_OUTPUT_LINES = 200
 
 
-def _canonicalize_distribution_name(name: str) -> str:
-    return re.sub(r"[-_.]+", "-", name).strip("-").lower()
+class DependencyConflictError(Exception):
+    """Raised when pip encounters a dependency conflict."""
+
+    def __init__(
+        self, message: str, errors: list[str], *, is_core_conflict: bool
+    ) -> None:
+        super().__init__(message)
+        self.errors = errors
+        self.is_core_conflict = is_core_conflict
+
+
+class PipInstallError(Exception):
+    """Raised when pip install fails without a classified dependency conflict."""
+
+    def __init__(self, message: str, *, code: int) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+@dataclass
+class PipConflictContext:
+    relevant_lines: list[str]
+    requested_lines: list[str]
+    dependency_detail_lines: list[str]
+    constraint_lines: list[str]
+    has_strong_conflict_signal: bool
+    has_contextual_conflict_signal: bool
 
 
 def _get_pip_main():
@@ -41,11 +91,12 @@ def _get_pip_main():
     return pip_main
 
 
-def _run_pip_main_with_output(pip_main, args: list[str]) -> tuple[int, str]:
-    stream = io.StringIO()
-    with contextlib.redirect_stdout(stream), contextlib.redirect_stderr(stream):
-        result_code = pip_main(args)
-    return result_code, stream.getvalue()
+def _prepend_sys_path(path: str) -> None:
+    normalized_target = os.path.realpath(path)
+    sys.path[:] = [
+        item for item in sys.path if os.path.realpath(item) != normalized_target
+    ]
+    sys.path.insert(0, normalized_target)
 
 
 def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> None:
@@ -59,76 +110,258 @@ def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> No
                 handler.close()
 
 
-def _prepend_sys_path(path: str) -> None:
-    normalized_target = os.path.realpath(path)
-    sys.path[:] = [
-        item for item in sys.path if os.path.realpath(item) != normalized_target
-    ]
-    sys.path.insert(0, normalized_target)
+def _get_trusted_host_for_index_url(index_url: str) -> str | None:
+    parsed = urlparse(index_url if "://" in index_url else f"//{index_url}")
+    host = parsed.hostname
+    if host == "mirrors.aliyun.com":
+        return host
+    return None
 
 
-def _module_exists_in_site_packages(module_name: str, site_packages_path: str) -> bool:
-    base_path = os.path.join(site_packages_path, *module_name.split("."))
-    package_init = os.path.join(base_path, "__init__.py")
-    module_file = f"{base_path}.py"
-    return os.path.isfile(package_init) or os.path.isfile(module_file)
+def _normalize_sensitive_pip_key(raw_key: str) -> str:
+    return raw_key.lstrip("-").replace("-", "_").lower()
 
 
-def _is_module_loaded_from_site_packages(
-    module_name: str,
-    site_packages_path: str,
-) -> bool:
-    module = sys.modules.get(module_name)
-    if module is None:
-        try:
-            module = importlib.import_module(module_name)
-        except Exception:
-            return False
+def _is_sensitive_pip_value_key(raw_key: str) -> bool:
+    return _normalize_sensitive_pip_key(raw_key) in _SENSITIVE_PIP_VALUE_KEYS
 
-    module_file = getattr(module, "__file__", None)
-    if not module_file:
-        return False
 
-    module_path = os.path.realpath(module_file)
-    site_packages_real = os.path.realpath(site_packages_path)
-    try:
-        return (
-            os.path.commonpath([module_path, site_packages_real]) == site_packages_real
+def _redact_url_credentials(raw_value: str) -> str:
+    """Redact URL credentials and known inline secret values for safe logging."""
+    parsed = urlparse(raw_value)
+    if parsed.netloc and "@" in parsed.netloc:
+        hostname = parsed.hostname or ""
+        port = f":{parsed.port}" if parsed.port else ""
+        return parsed._replace(netloc=f"<redacted>@{hostname}{port}").geturl()
+
+    if raw_value.startswith("--"):
+        option, separator, _ = raw_value.partition("=")
+        if separator and _is_sensitive_pip_value_key(option):
+            return f"{option}=****"
+        return raw_value
+
+    key, separator, _ = raw_value.partition("=")
+    if separator and _is_sensitive_pip_value_key(key):
+        return f"{key}=****"
+
+    return raw_value
+
+
+def _redact_pip_args_for_logging(args: list[str]) -> list[str]:
+    redacted_args: list[str] = []
+    redact_next_value = False
+
+    for arg in args:
+        if redact_next_value:
+            redacted_args.append("****")
+            redact_next_value = False
+            continue
+
+        if arg.startswith("--") and "=" in arg:
+            option, value = arg.split("=", 1)
+            if _is_sensitive_pip_value_key(option):
+                redacted_args.append(f"{option}=****")
+            else:
+                redacted_args.append(f"{option}={_redact_url_credentials(value)}")
+            continue
+
+        if arg.startswith("-i") and arg != "-i":
+            redacted_args.append(f"-i{_redact_url_credentials(arg[2:])}")
+            continue
+
+        if _is_sensitive_pip_value_key(arg):
+            redacted_args.append(arg)
+            redact_next_value = True
+            continue
+
+        redacted_args.append(_redact_url_credentials(arg))
+
+    return redacted_args
+
+
+def _package_specs_override_index(package_specs: list[str]) -> bool:
+    for index, spec in enumerate(package_specs):
+        if spec == "--no-index":
+            return True
+        if spec in {"-i", "--index-url"}:
+            if index + 1 < len(package_specs):
+                return True
+            continue
+        if spec.startswith("--index-url="):
+            return True
+        if spec.startswith("-i") and spec != "-i":
+            return True
+    return False
+
+
+class _StreamingLogWriter(io.TextIOBase):
+    def __init__(self, log_func, *, max_lines: int | None = None) -> None:
+        self._log_func = log_func
+        self._lines = deque(maxlen=max_lines or _MAX_PIP_OUTPUT_LINES)
+        self._buffer = ""
+
+    def write(self, text: str) -> int:
+        if not text:
+            return 0
+
+        self._buffer += text.replace("\r\n", "\n").replace("\r", "\n")
+        while "\n" in self._buffer:
+            raw_line, self._buffer = self._buffer.split("\n", 1)
+            line = raw_line.rstrip("\r\n")
+            self._log_func(line)
+            self._lines.append(line)
+        return len(text)
+
+    def flush(self) -> None:
+        line = self._buffer.rstrip("\r\n")
+        if line:
+            self._log_func(line)
+            self._lines.append(line)
+        self._buffer = ""
+
+    @property
+    def lines(self) -> list[str]:
+        return list(self._lines)
+
+
+def _run_pip_main_streaming(pip_main, args: list[str]) -> tuple[int, list[str]]:
+    stream = _StreamingLogWriter(logger.info, max_lines=_MAX_PIP_OUTPUT_LINES)
+    with (
+        contextlib.redirect_stdout(stream),
+        contextlib.redirect_stderr(stream),
+    ):
+        result_code = pip_main(args)
+    stream.flush()
+    return result_code, stream.lines
+
+
+def _matches_pip_failure_pattern(line: str, *pattern_names: str) -> bool:
+    names = pattern_names or tuple(_PIP_FAILURE_PATTERNS)
+    return any(_PIP_FAILURE_PATTERNS[name].search(line) for name in names)
+
+
+def _normalize_conflict_detail_line(line: str) -> str:
+    stripped = line.strip()
+    if _matches_pip_failure_pattern(stripped, "user_requested"):
+        return re.sub(
+            r"^\s*The user requested\s+",
+            "",
+            stripped,
+            flags=re.IGNORECASE,
         )
-    except ValueError:
-        return False
+    return stripped
 
 
-def _extract_requirement_name(raw_requirement: str) -> str | None:
-    line = raw_requirement.split("#", 1)[0].strip()
-    if not line:
+def _build_pip_conflict_context(output_lines: list[str]) -> PipConflictContext | None:
+    matched_indices = [
+        index
+        for index, line in enumerate(output_lines)
+        if _matches_pip_failure_pattern(line)
+    ]
+    if matched_indices:
+        relevant_index_set: set[int] = set()
+        for index in matched_indices:
+            start = max(0, index - 1)
+            end = min(len(output_lines), index + 2)
+            relevant_index_set.update(range(start, end))
+        relevant_output_lines = [
+            line
+            for index, line in enumerate(output_lines)
+            if index in relevant_index_set
+        ]
+    else:
+        relevant_output_lines = output_lines[-5:]
+
+    if not relevant_output_lines:
         return None
-    if line.startswith(("-r", "--requirement", "-c", "--constraint")):
+
+    dependency_detail_lines = [
+        line.strip()
+        for line in relevant_output_lines
+        if _matches_pip_failure_pattern(line, "dependency_detail")
+    ]
+    requested_lines = [
+        line.strip()
+        for line in relevant_output_lines
+        if _matches_pip_failure_pattern(line, "user_requested")
+        and not _matches_pip_failure_pattern(line, "constraint")
+    ]
+    if not requested_lines:
+        requested_lines = [
+            line
+            for line in dependency_detail_lines
+            if not _matches_pip_failure_pattern(line, "constraint")
+        ]
+    constraint_lines = [
+        line.strip()
+        for line in relevant_output_lines
+        if _matches_pip_failure_pattern(line, "constraint")
+    ]
+
+    has_strong_conflict_signal = any(
+        _matches_pip_failure_pattern(
+            line,
+            "resolution_impossible",
+            "cannot_install",
+        )
+        for line in relevant_output_lines
+    )
+
+    has_contextual_conflict_signal = any(
+        _matches_pip_failure_pattern(line, "conflict") for line in relevant_output_lines
+    ) and bool(dependency_detail_lines or requested_lines or constraint_lines)
+
+    return PipConflictContext(
+        relevant_lines=relevant_output_lines,
+        requested_lines=requested_lines,
+        dependency_detail_lines=dependency_detail_lines,
+        constraint_lines=constraint_lines,
+        has_strong_conflict_signal=has_strong_conflict_signal,
+        has_contextual_conflict_signal=has_contextual_conflict_signal,
+    )
+
+
+def _classify_pip_failure(output_lines: list[str]) -> DependencyConflictError | None:
+    context = _build_pip_conflict_context(output_lines)
+    if context is None:
         return None
-    if line.startswith("-"):
+
+    if (
+        not context.has_strong_conflict_signal
+        and not context.has_contextual_conflict_signal
+        and not (context.requested_lines and context.constraint_lines)
+    ):
         return None
 
-    egg_match = re.search(r"#egg=([A-Za-z0-9_.-]+)", raw_requirement)
-    if egg_match:
-        return _canonicalize_distribution_name(egg_match.group(1))
+    is_core_conflict = bool(context.constraint_lines)
 
-    candidate = re.split(r"[<>=!~;\s\[]", line, maxsplit=1)[0].strip()
-    if not candidate:
-        return None
-    return _canonicalize_distribution_name(candidate)
+    detail = ""
+    if context.constraint_lines and context.requested_lines:
+        detail = (
+            " 冲突详情: "
+            f"{_normalize_conflict_detail_line(context.requested_lines[0])} vs "
+            f"{_normalize_conflict_detail_line(context.constraint_lines[0])}。"
+        )
+    elif len(context.dependency_detail_lines) >= 2:
+        detail = (
+            " 冲突详情: "
+            f"{_normalize_conflict_detail_line(context.dependency_detail_lines[0])} vs "
+            f"{_normalize_conflict_detail_line(context.dependency_detail_lines[1])}。"
+        )
 
+    if is_core_conflict:
+        message = (
+            f"检测到核心依赖版本保护冲突。{detail}插件要求的依赖版本与 AstrBot 核心不兼容，"
+            "为了系统稳定，已阻止该降级行为。请联系插件作者或调整 requirements.txt。"
+        )
+    else:
+        message = f"检测到依赖冲突。{detail}"
 
-def _extract_requirement_names(requirements_path: str) -> set[str]:
-    names: set[str] = set()
-    try:
-        with open(requirements_path, encoding="utf-8") as requirements_file:
-            for line in requirements_file:
-                requirement_name = _extract_requirement_name(line)
-                if requirement_name:
-                    names.add(requirement_name)
-    except Exception as exc:
-        logger.warning("读取依赖文件失败，跳过冲突检测: %s", exc)
-    return names
+    return DependencyConflictError(
+        message,
+        context.relevant_lines,
+        is_core_conflict=is_core_conflict,
+    )
 
 
 def _extract_top_level_modules(
@@ -155,7 +388,11 @@ def _collect_candidate_modules(
     by_name: dict[str, list[importlib_metadata.Distribution]] = {}
     try:
         for distribution in importlib_metadata.distributions(path=[site_packages_path]):
-            distribution_name = distribution.metadata.get("Name")
+            distribution_name = (
+                distribution.metadata["Name"]
+                if "Name" in distribution.metadata
+                else None
+            )
             if not distribution_name:
                 continue
             canonical_name = _canonicalize_distribution_name(distribution_name)
@@ -173,7 +410,7 @@ def _collect_candidate_modules(
 
         for distribution in by_name.get(requirement_name, []):
             for dependency_line in distribution.requires or []:
-                dependency_name = _extract_requirement_name(dependency_line)
+                dependency_name = extract_requirement_name(dependency_line)
                 if not dependency_name:
                     continue
                 if dependency_name in expanded_requirement_names:
@@ -228,6 +465,38 @@ def _ensure_preferred_modules(
             f"冲突模块: {', '.join(unresolved_modules)}"
         )
         raise RuntimeError(conflict_message)
+
+
+def _module_exists_in_site_packages(module_name: str, site_packages_path: str) -> bool:
+    base_path = os.path.join(site_packages_path, *module_name.split("."))
+    package_init = os.path.join(base_path, "__init__.py")
+    module_file = f"{base_path}.py"
+    return os.path.isfile(package_init) or os.path.isfile(module_file)
+
+
+def _is_module_loaded_from_site_packages(
+    module_name: str,
+    site_packages_path: str,
+) -> bool:
+    module = sys.modules.get(module_name)
+    if module is None:
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:
+            return False
+
+    module_file = getattr(module, "__file__", None)
+    if not module_file:
+        return False
+
+    module_path = os.path.realpath(module_file)
+    site_packages_real = os.path.realpath(site_packages_path)
+    try:
+        return (
+            os.path.commonpath([module_path, site_packages_real]) == site_packages_real
+        )
+    except ValueError:
+        return False
 
 
 def _prefer_module_from_site_packages(
@@ -531,9 +800,63 @@ def _patch_distlib_finder_for_frozen_runtime() -> None:
 
 
 class PipInstaller:
-    def __init__(self, pip_install_arg: str, pypi_index_url: str | None = None) -> None:
+    def __init__(
+        self,
+        pip_install_arg: str,
+        pypi_index_url: str | None = None,
+        core_dist_name: str | None = "AstrBot",
+    ) -> None:
         self.pip_install_arg = pip_install_arg
         self.pypi_index_url = pypi_index_url
+        self.core_dist_name = core_dist_name
+        self._core_constraints = CoreConstraintsProvider(core_dist_name)
+
+    def _build_pip_args(
+        self,
+        package_name: str | None,
+        requirements_path: str | None,
+        mirror: str | None,
+    ) -> tuple[list[str], set[str]]:
+        args: list[str] = []
+        requested_requirements: set[str] = set()
+        normalized_requirements_path = (
+            requirements_path.strip() if requirements_path else ""
+        )
+
+        if package_name and normalized_requirements_path:
+            raise ValueError(
+                "package_name and requirements_path cannot be used together"
+            )
+
+        if package_name:
+            parsed_package = parse_package_install_input(package_name)
+            if parsed_package.specs:
+                args = ["install", *parsed_package.specs]
+                requested_requirements = set(parsed_package.requirement_names)
+        elif normalized_requirements_path:
+            args = ["install", "-r", normalized_requirements_path]
+            requested_requirements = extract_requirement_names(
+                normalized_requirements_path
+            )
+
+        if not args:
+            return [], requested_requirements
+
+        pip_install_args = (
+            shlex.split(self.pip_install_arg) if self.pip_install_arg else []
+        )
+
+        if not _package_specs_override_index([*args[1:], *pip_install_args]):
+            index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
+            trusted_host = _get_trusted_host_for_index_url(index_url)
+            if trusted_host:
+                args.extend(["--trusted-host", trusted_host])
+            args.extend(["-i", index_url])
+
+        if pip_install_args:
+            args.extend(pip_install_args)
+
+        return args, requested_requirements
 
     async def install(
         self,
@@ -541,36 +864,37 @@ class PipInstaller:
         requirements_path: str | None = None,
         mirror: str | None = None,
     ) -> None:
-        args = ["install"]
-        requested_requirements: set[str] = set()
-        if package_name:
-            args.append(package_name)
-            requirement_name = _extract_requirement_name(package_name)
-            if requirement_name:
-                requested_requirements.add(requirement_name)
-        elif requirements_path:
-            args.extend(["-r", requirements_path])
-            requested_requirements = _extract_requirement_names(requirements_path)
-
-        index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
-        args.extend(["--trusted-host", "mirrors.aliyun.com", "-i", index_url])
+        args, requested_requirements = self._build_pip_args(
+            package_name, requirements_path, mirror
+        )
+        if not args:
+            logger.info("Pip 包管理器跳过安装：未提供有效的包名或 requirements 文件。")
+            return
 
         target_site_packages = None
         if is_packaged_desktop_runtime():
             target_site_packages = get_astrbot_site_packages_path()
             os.makedirs(target_site_packages, exist_ok=True)
             _prepend_sys_path(target_site_packages)
-            args.extend(["--target", target_site_packages])
-            args.extend(["--upgrade", "--force-reinstall"])
+            args.extend(
+                [
+                    "--target",
+                    target_site_packages,
+                    "--upgrade",
+                    "--upgrade-strategy",
+                    "only-if-needed",
+                ]
+            )
 
-        if self.pip_install_arg:
-            args.extend(self.pip_install_arg.split())
+        with self._core_constraints.constraints_file() as constraints_file_path:
+            if constraints_file_path:
+                args.extend(["-c", constraints_file_path])
 
-        logger.info(f"Pip 包管理器: pip {' '.join(args)}")
-        result_code = await self._run_pip_in_process(args)
-
-        if result_code != 0:
-            raise Exception(f"安装失败，错误码：{result_code}")
+            logger.info(
+                "Pip 包管理器 argv: %s",
+                ["pip", *_redact_pip_args_for_logging(args)],
+            )
+            await self._run_pip_with_classification(args)
 
         if target_site_packages:
             _prepend_sys_path(target_site_packages)
@@ -589,7 +913,7 @@ class PipInstaller:
         if not os.path.isdir(target_site_packages):
             return
 
-        requested_requirements = _extract_requirement_names(requirements_path)
+        requested_requirements = extract_requirement_names(requirements_path)
         if not requested_requirements:
             return
 
@@ -605,13 +929,21 @@ class PipInstaller:
         _patch_distlib_finder_for_frozen_runtime()
 
         original_handlers = list(logging.getLogger().handlers)
-        result_code, output = await asyncio.to_thread(
-            _run_pip_main_with_output, pip_main, args
-        )
-        for line in output.splitlines():
-            line = line.strip()
-            if line:
-                logger.info(line)
+        try:
+            result_code, output_lines = await asyncio.to_thread(
+                _run_pip_main_streaming, pip_main, args
+            )
+        finally:
+            _cleanup_added_root_handlers(original_handlers)
 
-        _cleanup_added_root_handlers(original_handlers)
+        if result_code != 0:
+            conflict = _classify_pip_failure(output_lines)
+            if conflict:
+                raise conflict
+
         return result_code
+
+    async def _run_pip_with_classification(self, args: list[str]) -> None:
+        result_code = await self._run_pip_in_process(args)
+        if result_code != 0:
+            raise PipInstallError(f"安装失败，错误码：{result_code}", code=result_code)
