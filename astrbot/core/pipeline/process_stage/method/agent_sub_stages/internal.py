@@ -56,9 +56,9 @@ class InternalAgentSubStage(Stage):
         self.max_step: int = settings.get("max_agent_step", 30)
         self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
         self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
-        if self.tool_schema_mode not in ("skills_like", "full"):
+        if self.tool_schema_mode not in ("lazy_load", "full"):
             logger.warning(
-                "Unsupported tool_schema_mode: %s, fallback to skills_like",
+                "Unsupported tool_schema_mode: %s, fallback to lazy_load",
                 self.tool_schema_mode,
             )
             self.tool_schema_mode = "full"

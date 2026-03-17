@@ -47,7 +47,6 @@ from astrbot.core.astr_main_agent_resources import (
     SEND_MESSAGE_TO_USER_TOOL,
     SYNC_SKILL_RELEASE_TOOL,
     TOOL_CALL_PROMPT,
-    TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
     retrieve_knowledge_base,
 )
 from astrbot.core.conversation_mgr import Conversation
@@ -66,6 +65,9 @@ from astrbot.core.tools.cron_tools import (
     CREATE_CRON_JOB_TOOL,
     DELETE_CRON_JOB_TOOL,
     LIST_CRON_JOBS_TOOL,
+)
+from astrbot.core.tools.prompts import (
+    TOOL_CALL_PROMPT_LAZY_LOAD_MODE,
 )
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
@@ -93,7 +95,7 @@ class MainAgentBuildConfig:
     a timeout error as a tool result will be returned.
     """
     tool_schema_mode: str = "full"
-    """The tool schema mode, can be 'full' or 'skills-like'."""
+    """The tool schema mode, can be 'full' or 'lazy_load'."""
     provider_wake_prefix: str = ""
     """The wake prefix for the provider. If the user message does not start with this prefix,
     the main agent will not be triggered."""
@@ -1182,7 +1184,7 @@ async def build_main_agent(
         tool_prompt = (
             TOOL_CALL_PROMPT
             if config.tool_schema_mode == "full"
-            else TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
+            else TOOL_CALL_PROMPT_LAZY_LOAD_MODE
         )
         req.system_prompt += f"\n{tool_prompt}\n"
 
