@@ -321,13 +321,7 @@ export default defineConfig({
               },
               {
                 text: "OneBot v11",
-                base: "/en/platform/aiocqhttp",
-                collapsed: true,
-                items: [
-                  { text: "NapCat", link: "/napcat" },
-                  { text: "Lagrange", link: "/lagrange" },
-                  { text: "Other Clients", link: "/others" },
-                ],
+                link: "/aiocqhttp",
               },
               { text: "WeCom Application", link: "/wecom" },
               { text: "WeCom AI Bot", link: "/wecom_ai_bot" },
@@ -344,7 +338,7 @@ export default defineConfig({
                 base: "/en/platform/satori",
                 collapsed: true,
                 items: [
-                  { text: "Using LLOneBot", link: "/llonebot" },
+                  { text: "Connect Satori", link: "/guide" },
                   { text: "Using server-satori", link: "/server-satori" },
                 ],
               },
