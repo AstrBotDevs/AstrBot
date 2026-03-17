@@ -16,65 +16,14 @@ from asyncio import Queue
 from astrbot.core import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.message.utils import (
-    build_event_content_dedup_key,
-    build_event_message_id_dedup_key,
+    build_content_dedup_key,
+    build_message_id_dedup_key,
 )
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.utils.number_utils import safe_positive_float
 from astrbot.core.utils.ttl_registry import TTLKeyRegistry
 
 from .platform import AstrMessageEvent
-
-
-class EventDeduplicator:
-    """Event deduplicator using TTL-based registry.
-
-    This class handles deduplication of events based on content fingerprint
-    and message ID, with configurable TTL window.
-    """
-
-    def __init__(self, ttl_seconds: float = 0.5) -> None:
-        self._registry = TTLKeyRegistry(ttl_seconds)
-
-    def is_duplicate(self, event: AstrMessageEvent) -> bool:
-        """Check if the event is a duplicate.
-
-        Returns False immediately if TTL is 0 (deduplication disabled).
-        Short-circuits on message_id key to avoid expensive attachment signature computation.
-        """
-        # TTL of 0 means deduplication is disabled
-        if self._registry.ttl_seconds == 0:
-            return False
-
-        # Short-circuit: check message_id first (cheap) before computing full content key (expensive)
-        message_id_key = build_event_message_id_dedup_key(event)
-        if message_id_key is not None:
-            if self._registry.contains(message_id_key):
-                logger.debug(
-                    "Skip duplicate event in event_bus (by message_id): umo=%s, sender=%s",
-                    event.unified_msg_origin,
-                    event.get_sender_id(),
-                )
-                return True
-            # Register message_id key since we'll process the event
-            self._registry.add(message_id_key)
-
-        # Only compute full content key if we get past message_id check
-        content_key = build_event_content_dedup_key(event)
-        if self._registry.contains(content_key):
-            logger.debug(
-                "Skip duplicate event in event_bus (by content): umo=%s, sender=%s",
-                event.unified_msg_origin,
-                event.get_sender_id(),
-            )
-            # If content duplicate, also remove message_id to preserve existing behavior
-            if message_id_key is not None:
-                self._registry.discard(message_id_key)
-            return True
-
-        # Register content key
-        self._registry.add(content_key)
-        return False
 
 
 class EventBus:
@@ -98,18 +47,65 @@ class EventBus:
             ),
             default=0.5,
         )
-        self._deduplicator = EventDeduplicator(ttl_seconds=dedup_ttl_seconds)
+        self._dedup_registry = TTLKeyRegistry(ttl_seconds=dedup_ttl_seconds)
+
+    @staticmethod
+    def _build_event_content_key(event: AstrMessageEvent) -> str:
+        return build_content_dedup_key(
+            platform_id=str(event.get_platform_id() or ""),
+            unified_msg_origin=str(event.unified_msg_origin or ""),
+            sender_id=str(event.get_sender_id() or ""),
+            text=str(event.get_message_str() or ""),
+            components=event.get_messages(),
+        )
+
+    @staticmethod
+    def _build_event_message_id_key(event: AstrMessageEvent) -> str | None:
+        message_id = getattr(event.message_obj, "message_id", "") or getattr(
+            event.message_obj,
+            "id",
+            "",
+        )
+        return build_message_id_dedup_key(
+            platform_id=str(event.get_platform_id() or ""),
+            unified_msg_origin=str(event.unified_msg_origin or ""),
+            message_id=str(message_id or ""),
+        )
+
+    def _is_duplicate(self, event: AstrMessageEvent) -> bool:
+        if self._dedup_registry.ttl_seconds == 0:
+            return False
+
+        message_id_key = self._build_event_message_id_key(event)
+        if message_id_key is not None:
+            if self._dedup_registry.contains(message_id_key):
+                logger.debug(
+                    "Skip duplicate event in event_bus (by message_id): umo=%s, sender=%s",
+                    event.unified_msg_origin,
+                    event.get_sender_id(),
+                )
+                return True
+            self._dedup_registry.add(message_id_key)
+
+        content_key = self._build_event_content_key(event)
+        if self._dedup_registry.contains(content_key):
+            logger.debug(
+                "Skip duplicate event in event_bus (by content): umo=%s, sender=%s",
+                event.unified_msg_origin,
+                event.get_sender_id(),
+            )
+            if message_id_key is not None:
+                self._dedup_registry.discard(message_id_key)
+            return True
+
+        self._dedup_registry.add(content_key)
+        return False
 
     async def dispatch(self) -> None:
         # event_queue 由单一消费者处理；去重结构不是线程安全的，按设计仅在此循环中使用。
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
-            if self._deduplicator.is_duplicate(event):
-                logger.debug(
-                    "Skip duplicate event in event_bus, umo=%s, sender=%s",
-                    event.unified_msg_origin,
-                    event.get_sender_id(),
-                )
+            if self._is_duplicate(event):
                 continue
             conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
             conf_id = conf_info["id"]

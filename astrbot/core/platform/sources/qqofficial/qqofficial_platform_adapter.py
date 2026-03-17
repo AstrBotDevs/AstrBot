@@ -331,10 +331,16 @@ class QQOfficialPlatformAdapter(Platform):
             cleanup_interval_seconds=cleanup_interval_seconds,
         )
 
-    async def _is_duplicate_message(
-        self, message_id: str, content: str = "", sender_id: str = ""
-    ) -> bool:
-        return await self._deduplicator.is_duplicate(message_id, content, sender_id)
+    async def should_handle_raw_message(self, message: Any) -> bool:
+        """Return False if the raw incoming message should be dropped."""
+        sender_id = _extract_sender_id(message)
+        content = getattr(message, "content", "") or ""
+        is_duplicate = await self._deduplicator.is_duplicate(
+            message.id,
+            content,
+            sender_id,
+        )
+        return not is_duplicate
 
     async def send_by_session(
         self,

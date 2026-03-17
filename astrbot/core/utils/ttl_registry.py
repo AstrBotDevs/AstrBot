@@ -5,7 +5,7 @@ for message/event deduplication across different components.
 """
 
 import time
-from typing import Hashable, Sequence
+from collections.abc import Hashable, Sequence
 
 
 class TTLKeyRegistry:
@@ -14,6 +14,12 @@ class TTLKeyRegistry:
     This utility handles time-based expiration of keys, making it suitable for
     deduplication scenarios where old entries should be automatically cleaned up.
     Supports optional cleanup interval throttling to avoid per-access full scans.
+
+    Concurrency note:
+        This class is not thread-safe and does not provide internal locking.
+        It is designed for single-consumer/single-thread usage patterns.
+        If shared across concurrent tasks/threads, callers must provide
+        external synchronization.
 
     Example:
         registry = TTLKeyRegistry(ttl_seconds=0.5)
