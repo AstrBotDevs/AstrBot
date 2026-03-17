@@ -621,11 +621,6 @@
         "type": "string",
         "hint": "必填项。从 KOOK 开发者平台获取的机器人 Token"
       },
-      "kook_bot_nickname": {
-        "description": "Bot Nickname",
-        "type": "string",
-        "hint": "可选项。若发送者昵称与此值一致，将忽略该消息。"
-      },
       "kook_reconnect_delay": {
         "description": "重连延迟",
         "type": "int",
@@ -876,7 +871,8 @@
             ]
           },
           "regex": {
-            "description": "分段正则表达式"
+            "description": "分段正则表达式",
+            "hint": "用于按正则规则识别分段点。建议使用能匹配分隔符的表达式。"
           },
           "split_words": {
             "description": "分段词列表",

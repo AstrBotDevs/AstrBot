@@ -78,6 +78,7 @@
     },
     "persona": {
       "description": "Persona",
+      "hint": "Set the default persona for AI conversations. Personas can be managed in the Persona tab.",
       "provider_settings": {
         "default_personality": {
           "description": "Default Persona"
@@ -618,11 +619,6 @@
         "type": "string",
         "hint": "Required. The Bot Token obtained from the KOOK Developer Platform."
       },
-      "kook_bot_nickname": {
-        "description": "Bot Nickname",
-        "type": "string",
-        "hint": "Optional. If the sender nickname matches this value, the message will be ignored to prevent broadcast storms."
-      },
       "kook_reconnect_delay": {
         "description": "Reconnect Delay",
         "type": "int",
@@ -850,7 +846,7 @@
           },
           "interval_method": {
             "description": "Interval Method",
-            "hint": "random 为随机时间，log 为根据消息长度计算，$y=log_<log_base>(x)$，x为字数，y的单位为秒。"
+            "hint": "random uses a random delay. log calculates delay by message length: $y=log_{log\\_base}(x)$, where x is word count and y is in seconds."
           },
           "interval": {
             "description": "Random Interval Time",
@@ -873,7 +869,8 @@
             ]
           },
           "regex": {
-            "description": "Segmentation Regular Expression"
+            "description": "Segmentation Regular Expression",
+            "hint": "Used to identify split points with a regular expression. Prefer patterns that match separators."
           },
           "split_words": {
             "description": "Split Word List",

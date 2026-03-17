@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.19.5"
+VERSION = "4.20.1"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -249,6 +249,9 @@ DEFAULT_CONFIG = {
         "telegram": {
             "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
         },
+        "discord": {
+            "pre_ack_emoji": {"enable": False, "emojis": ["🤔"]},
+        },
     },
     "wake_prefix": ["/"],
     "log_level": "INFO",
@@ -490,7 +493,6 @@ CONFIG_METADATA_2 = {
                         "type": "kook",
                         "enable": False,
                         "kook_bot_token": "",
-                        "kook_bot_nickname": "",
                         "kook_reconnect_delay": 1,
                         "kook_max_reconnect_delay": 60,
                         "kook_max_retry_delay": 60,
@@ -902,11 +904,6 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "必填项。从 KOOK 开发者平台获取的机器人 Token。",
                     },
-                    "kook_bot_nickname": {
-                        "description": "Bot Nickname",
-                        "type": "string",
-                        "hint": "可选项。若发送者昵称与此值一致，将忽略该消息以避免广播风暴。",
-                    },
                     "kook_reconnect_delay": {
                         "description": "重连延迟",
                         "type": "int",
@@ -1156,6 +1153,18 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://api.moonshot.cn/v1",
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
+                    "MiniMax": {
+                        "id": "minimax",
+                        "provider": "minimax",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.minimaxi.com/v1",
+                        "timeout": 120,
                         "proxy": "",
                         "custom_headers": {},
                     },

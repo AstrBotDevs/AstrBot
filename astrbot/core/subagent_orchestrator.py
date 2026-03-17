@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from astrbot import logger
 from astrbot.core.agent.handoff import HandoffTool
-from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.subagent.codec import decode_subagent_config
 from astrbot.core.subagent.error_classifier import build_error_classifier_from_config
@@ -17,6 +16,9 @@ from astrbot.core.subagent.models import (
 from astrbot.core.subagent.planner import SubagentPlanner
 from astrbot.core.subagent.runtime import SubagentRuntime
 from astrbot.core.subagent.worker import SubagentWorker
+
+if TYPE_CHECKING:
+    from astrbot.core.persona_mgr import PersonaManager
 
 
 class SubAgentOrchestrator:
