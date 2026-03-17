@@ -20,7 +20,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, TypeAlias
 
 from .decorators import append_filter_meta
 from .protocol.descriptors import (
@@ -30,6 +30,8 @@ from .protocol.descriptors import (
     MessageTypeFilterSpec,
     PlatformFilterSpec,
 )
+
+FilterOperator: TypeAlias = Literal["and", "or"]
 
 
 @dataclass(slots=True)
@@ -98,7 +100,7 @@ class CustomFilter(FilterBinding):
 
 @dataclass(slots=True)
 class CompositeFilter(FilterBinding):
-    operator: str
+    operator: FilterOperator
     children: list[FilterBinding]
 
     def compile(self) -> tuple[FilterSpec, list[LocalFilterBinding]]:

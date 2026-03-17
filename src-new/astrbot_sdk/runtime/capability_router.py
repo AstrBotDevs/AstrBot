@@ -65,6 +65,19 @@
         provider.embedding.get_embeddings: 批量获取向量
         provider.embedding.get_dim: 获取向量维度
         provider.rerank.rerank: 文档重排序
+        provider.manager.set: 设置当前 Provider
+        provider.manager.get_by_id: 按 ID 获取 Provider 管理记录
+        provider.manager.load: 运行时加载 Provider
+        provider.manager.terminate: 终止已加载的 Provider
+        provider.manager.create: 创建 Provider
+        provider.manager.update: 更新 Provider
+        provider.manager.delete: 删除 Provider
+        provider.manager.get_insts: 列出已加载聊天 Provider
+        provider.manager.watch_changes: 订阅 Provider 变更（流式）
+    Platform Manager:
+        platform.manager.get_by_id: 按 ID 获取平台管理快照
+        platform.manager.clear_errors: 清除平台错误
+        platform.manager.get_stats: 获取平台统计信息
     LLM Tool:
         llm_tool.manager.get: 获取 LLM 工具状态
         llm_tool.manager.activate: 激活 LLM 工具
@@ -78,11 +91,33 @@
     Registry:
         registry.get_handlers_by_event_type: 按事件类型列出 handler 元数据
         registry.get_handler_by_full_name: 按 full name 查询 handler 元数据
+    Session:
+        session.plugin.is_enabled: 获取会话级插件开关
+        session.plugin.filter_handlers: 按会话过滤 handler 元数据
+        session.service.is_llm_enabled: 获取会话级 LLM 开关
+        session.service.set_llm_status: 写入会话级 LLM 开关
+        session.service.is_tts_enabled: 获取会话级 TTS 开关
+        session.service.set_tts_status: 写入会话级 TTS 开关
     Managers:
         persona.get / persona.list / persona.create / persona.update / persona.delete
         conversation.new / conversation.switch / conversation.delete
         conversation.get / conversation.list / conversation.update
         kb.get / kb.create / kb.delete
+    System (内部使用):
+        system.get_data_dir: 获取插件数据目录
+        system.text_to_image: 文本转图片
+        system.html_render: 渲染 HTML 模板
+        system.file.register: 注册文件令牌
+        system.file.handle: 解析文件令牌
+        system.session_waiter.register: 注册会话等待器
+        system.session_waiter.unregister: 注销会话等待器
+        system.event.react: 发送事件表情回应
+        system.event.send_typing: 发送输入中状态
+        system.event.send_streaming: 发送事件流式消息
+        system.event.send_streaming_chunk: 推送事件流式消息分片
+        system.dynamic_command.register: 注册动态命令路由
+        system.dynamic_command.list: 列出动态命令路由
+        system.dynamic_command.remove: 移除动态命令路由
 
 能力命名规范：
     - 格式: {namespace}.{action} 或 {namespace}.{sub_namespace}.{action}
