@@ -105,7 +105,11 @@ class PersonaManager:
         )
 
         use_webchat_special_default = False
-        if not persona and platform_name == "webchat" and persona_id != PERSONA_NONE_MARKER:
+        if (
+            not persona
+            and platform_name == "webchat"
+            and persona_id != PERSONA_NONE_MARKER
+        ):
             persona_id = "_chatui_default_"
             use_webchat_special_default = True
 
