@@ -1242,7 +1242,10 @@ class PluginManager:
                 _, repo_name, _ = self.updator.parse_github_url(repo_url)
                 repo_name = self.updator.format_name(repo_name)
                 plugin_path = os.path.join(self.plugin_store_path, repo_name)
-                plugin_path_exists = os.path.exists(plugin_path)
+                if os.path.exists(plugin_path):
+                    raise Exception(
+                        f"安装失败：目录 {os.path.basename(plugin_path)} 已存在。"
+                    )
                 plugin_path = await self.updator.install(repo_url, proxy)
 
                 # reload the plugin
@@ -1252,10 +1255,6 @@ class PluginManager:
                     self.plugin_store_path,
                     metadata_dir_name,
                 )
-                if plugin_path_exists:
-                    raise Exception(
-                        f"安装失败：目录 {os.path.basename(plugin_path)} 已存在。"
-                    )
                 if target_plugin_path != plugin_path and os.path.exists(
                     target_plugin_path
                 ):
