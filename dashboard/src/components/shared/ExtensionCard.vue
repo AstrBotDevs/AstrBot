@@ -136,13 +136,13 @@ const viewChangelog = () => {
     :style="{
       position: 'relative',
       backgroundColor:
-        useCustomizerStore().uiTheme === 'PurpleTheme'
+        !useCustomizerStore().isDarkTheme
           ? marketMode
             ? '#f8f0dd'
             : '#ffffff'
           : '#282833',
       color:
-        useCustomizerStore().uiTheme === 'PurpleTheme'
+        !useCustomizerStore().isDarkTheme
           ? '#000000dd'
           : '#ffffff',
     }"

@@ -7,7 +7,6 @@ import { useApiStore } from "@/stores/api";
 import { useRouter } from "vue-router";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
-import { useTheme } from "vuetify";
 
 const cardVisible = ref(false);
 const router = useRouter();
@@ -15,7 +14,6 @@ const authStore = useAuthStore();
 const apiStore = useApiStore();
 const customizer = useCustomizerStore();
 const { tm: t } = useModuleI18n("features/auth");
-const theme = useTheme();
 
 const serverConfigDialog = ref(false);
 const apiUrl = ref(apiStore.apiBaseUrl);
@@ -47,12 +45,7 @@ function isCustomPreset(name: string) {
 
 // 主题切换函数
 function toggleTheme() {
-  const newTheme =
-    customizer.uiTheme === "PurpleThemeDark"
-      ? "PurpleTheme"
-      : "PurpleThemeDark";
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
+  customizer.TOGGLE_DARK_MODE();
 }
 
 onMounted(() => {
@@ -114,10 +107,10 @@ onMounted(() => {
               size="small"
             >
               <v-icon size="18" :color="'rgb(var(--v-theme-primary))'">
-                mdi-white-balance-sunny
+                {{ customizer.isDarkTheme ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}
               </v-icon>
               <v-tooltip activator="parent" location="top">
-                {{ t("theme.switchToLight") }}
+                {{ customizer.isDarkTheme ? t('theme.switchToLight') : t('theme.switchToDark') }}
               </v-tooltip>
             </v-btn>
           </div>
