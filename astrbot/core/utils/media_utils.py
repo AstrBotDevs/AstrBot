@@ -349,6 +349,7 @@ async def compress_image(
         压缩后的图片路径，如果未启用压缩或压缩失败则返回原路径
     """
     # 从 provider_settings 获取 image_compress_enabled，默认为 True
+    # 未来视需求 可在前端增加独立配置项 此处配置读取的作用是预留功能
     enabled = True
     if provider_settings:
         enabled = provider_settings.get("image_compress_enabled", True)

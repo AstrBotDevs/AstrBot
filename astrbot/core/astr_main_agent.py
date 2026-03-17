@@ -446,10 +446,15 @@ async def _ensure_img_caption(
     image_caption_provider: str,
 ) -> None:
     try:
+        # 同步处理以避免高额cpu开销
+        compressed_urls = []
+        for url in req.image_urls:
+            compressed_url = await compress_image(url, cfg)
+            compressed_urls.append(compressed_url)
         caption = await _request_img_caption(
             image_caption_provider,
             cfg,
-            [await compress_image(url, cfg) for url in req.image_urls],
+            compressed_urls,
             plugin_context,
         )
         if caption:
@@ -532,9 +537,7 @@ async def _process_quote_message(
                 )
                 llm_resp = await prov.text_chat(
                     prompt=IMAGE_CAPTION_DEFAULT_PROMPT,
-                    image_urls=[
-                        image_path
-                    ],
+                    image_urls=[image_path],
                 )
                 if llm_resp.completion_text:
                     content_parts.append(
