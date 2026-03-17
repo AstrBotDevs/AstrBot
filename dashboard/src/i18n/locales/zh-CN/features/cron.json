@@ -11,6 +11,8 @@
   "actions": {
     "create": "新建任务",
     "refresh": "刷新",
+    "edit": "编辑",
+    "save": "保存",
     "delete": "删除",
     "cancel": "取消",
     "submit": "创建"
@@ -38,6 +40,9 @@
     "timezoneLocal": "本地时区",
     "notAvailable": "—"
   },
+  "editForm": {
+    "title": "编辑任务"
+  },
   "form": {
     "title": "新建任务",
     "chatHint": "你可以直接通过聊天的方式来让 AstrBot 创建未来任务，而不必在此添加。",
@@ -61,6 +66,7 @@
     "cronRequired": "请填写 Cron 表达式",
     "runAtRequired": "请选择执行时间",
     "createSuccess": "创建成功",
-    "createFailed": "创建失败"
+    "createFailed": "创建失败",
+    "updateSuccess": "更新成功"
   }
 }

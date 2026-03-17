@@ -55,9 +55,12 @@
           <template #item.last_run_at="{ item }">{{ formatTime(item.last_run_at) }}</template>
           <template #item.note="{ item }">{{ item.note || tm('table.notAvailable') }}</template>
           <template #item.actions="{ item }">
-            <div class="d-flex align-center flex-nowrap" style="gap: 12px; min-width: 140px;">
+            <div class="d-flex align-center flex-nowrap" style="gap: 12px; min-width: 200px;">
               <v-switch v-model="item.enabled" inset density="compact" hide-details color="primary"
                 class="mt-0" @change="toggleJob(item)" />
+              <v-btn size="small" variant="text" color="primary" @click="openEdit(item)">
+                {{ tm('actions.edit') }}
+              </v-btn>
               <v-btn size="small" variant="text" color="error" @click="deleteJob(item)">
                 {{ tm('actions.delete') }}
               </v-btn>
@@ -97,6 +100,30 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+    <v-dialog v-model="editDialog" max-width="560">
+      <v-card>
+        <v-card-title class="text-h6">{{ tm('editForm.title') }}</v-card-title>
+        <v-card-text>
+          <v-switch v-model="editJob.run_once" :label="tm('form.runOnce')" inset color="primary" hide-details />
+          <v-text-field v-model="editJob.name" :label="tm('form.name')" variant="outlined" density="comfortable" />
+          <v-text-field v-model="editJob.note" :label="tm('form.note')" variant="outlined" density="comfortable" />
+          <v-text-field v-if="!editJob.run_once" v-model="editJob.cron_expression" :label="tm('form.cron')"
+            :placeholder="tm('form.cronPlaceholder')" variant="outlined" density="comfortable" />
+          <v-text-field v-else v-model="editJob.run_at" :label="tm('form.runAt')" type="datetime-local"
+            variant="outlined" density="comfortable" />
+          <v-text-field v-model="editJob.session" :label="tm('form.session')" variant="outlined"
+            density="comfortable" disabled />
+          <v-text-field v-model="editJob.timezone" :label="tm('form.timezone')" variant="outlined"
+            density="comfortable" />
+          <v-switch v-model="editJob.enabled" :label="tm('form.enabled')" inset color="primary" hide-details />
+        </v-card-text>
+        <v-card-actions class="justify-end">
+          <v-btn variant="text" @click="editDialog = false">{{ tm('actions.cancel') }}</v-btn>
+          <v-btn variant="tonal" color="primary" :loading="updating" @click="submitEdit">{{ tm('actions.save')
+            }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -113,6 +140,20 @@ const proactivePlatforms = ref<{ id: string; name: string; display_name?: string
 const createDialog = ref(false)
 const creating = ref(false)
 const newJob = ref({
+  run_once: false,
+  name: '',
+  note: '',
+  cron_expression: '',
+  run_at: '',
+  session: '',
+  timezone: '',
+  enabled: true
+})
+
+const editDialog = ref(false)
+const updating = ref(false)
+const editJob = ref({
+  job_id: '',
   run_once: false,
   name: '',
   note: '',
@@ -278,6 +319,67 @@ async function createJob() {
     toast(e?.response?.data?.message || tm('messages.createFailed'), 'error')
   } finally {
     creating.value = false
+  }
+}
+
+function openEdit(job: any) {
+  editJob.value = {
+    job_id: job.job_id,
+    run_once: job.run_once || false,
+    name: job.name || '',
+    note: job.note || job.description || '',
+    cron_expression: job.cron_expression || '',
+    run_at: job.run_at || '',
+    session: job.session || job?.payload?.session || '',
+    timezone: job.timezone || '',
+    enabled: job.enabled
+  }
+  editDialog.value = true
+}
+
+async function submitEdit() {
+  const j = editJob.value
+  if (!j.note) {
+    toast(tm('messages.noteRequired'), 'warning')
+    return
+  }
+  if (!j.run_once && !j.cron_expression) {
+    toast(tm('messages.cronRequired'), 'warning')
+    return
+  }
+  if (j.run_once && !j.run_at) {
+    toast(tm('messages.runAtRequired'), 'warning')
+    return
+  }
+  updating.value = true
+  try {
+    const payload: any = {
+      name: j.name,
+      description: j.note,
+      cron_expression: j.run_once ? undefined : j.cron_expression,
+      run_at: j.run_once ? j.run_at : undefined,
+      run_once: j.run_once,
+      enabled: j.enabled,
+      timezone: j.timezone || undefined,
+      payload: {
+        session: j.session,
+        note: j.note,
+        run_at: j.run_once ? j.run_at : undefined,
+        origin: 'api'
+      }
+    }
+    const res = await axios.patch(`/api/cron/jobs/${j.job_id}`, payload)
+    if (res.data.status === 'ok') {
+      toast(tm('messages.updateSuccess'))
+      editDialog.value = false
+      await loadJobs()
+    } else {
+      toast(res.data.message || tm('messages.updateFailed'), 'error')
+    }
+  } catch (e: any) {
+    toast(e?.response?.data?.message || tm('messages.updateFailed'), 'error')
+  } finally {
+    updating.value = false
   }
 }
 

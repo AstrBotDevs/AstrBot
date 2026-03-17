@@ -180,15 +180,175 @@ class ListCronJobsTool(FunctionTool[AstrAgentContext]):
         return "\n".join(lines)
 
 
+@dataclass
+class UpdateCronTool(FunctionTool[AstrAgentContext]):
+    name: str = "update_future_task"
+    description: str = (
+        "Update an existing future task (cron job). "
+        "You can modify the schedule, note, name, enabled state, etc."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "job_id": {
+                    "type": "string",
+                    "description": "The job_id of the task to update.",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "New name/label for the task.",
+                },
+                "cron_expression": {
+                    "type": "string",
+                    "description": "New cron expression for recurring tasks (e.g. '0 8 * * *').",
+                },
+                "run_at": {
+                    "type": "string",
+                    "description": "New ISO datetime for one-time tasks, e.g. 2026-03-20T10:00:00+08:00.",
+                },
+                "note": {
+                    "type": "string",
+                    "description": "New task instructions/description.",
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "description": "Enable or disable the task.",
+                },
+                "timezone": {
+                    "type": "string",
+                    "description": "Timezone, e.g. Asia/Shanghai.",
+                },
+            },
+            "required": ["job_id"],
+        }
+    )
+
+    async def call(
+        self, context: ContextWrapper[AstrAgentContext], **kwargs
+    ) -> ToolExecResult:
+        cron_mgr = context.context.context.cron_manager
+        if cron_mgr is None:
+            return "error: cron manager is not available."
+        current_umo = context.context.event.unified_msg_origin
+        job_id = kwargs.get("job_id")
+        if not job_id:
+            return "error: job_id is required."
+        job = await cron_mgr.db.get_cron_job(str(job_id))
+        if not job:
+            return f"error: cron job {job_id} not found."
+        if _extract_job_session(job) != current_umo:
+            return "error: you can only update future tasks in the current session."
+
+        updates: dict[str, Any] = {}
+        if "name" in kwargs and kwargs["name"]:
+            updates["name"] = str(kwargs["name"])
+        if "cron_expression" in kwargs and kwargs["cron_expression"]:
+            updates["cron_expression"] = str(kwargs["cron_expression"])
+        if "enabled" in kwargs:
+            updates["enabled"] = bool(kwargs["enabled"])
+        if "timezone" in kwargs and kwargs["timezone"]:
+            updates["timezone"] = str(kwargs["timezone"])
+
+        note = kwargs.get("note")
+        run_at = kwargs.get("run_at")
+
+        # Update payload fields (note, run_at)
+        if note or run_at:
+            payload = dict(job.payload) if job.payload else {}
+            if note:
+                payload["note"] = str(note)
+                updates["description"] = str(note)
+            if run_at:
+                try:
+                    datetime.fromisoformat(str(run_at))
+                except Exception:
+                    return "error: run_at must be ISO datetime."
+                payload["run_at"] = str(run_at)
+            updates["payload"] = payload
+
+        if not updates:
+            return "error: no fields to update."
+
+        updated = await cron_mgr.update_job(str(job_id), **updates)
+        if not updated:
+            return f"error: failed to update cron job {job_id}."
+        return f"Updated future task {job_id} ({updated.name}) successfully."
+
+
+@dataclass
+class GetCronDetailTool(FunctionTool[AstrAgentContext]):
+    name: str = "get_future_task_detail"
+    description: str = (
+        "Get detailed information about a specific future task (cron job), "
+        "including its full note/instructions, schedule, payload, and execution history."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "job_id": {
+                    "type": "string",
+                    "description": "The job_id of the task to inspect.",
+                }
+            },
+            "required": ["job_id"],
+        }
+    )
+
+    async def call(
+        self, context: ContextWrapper[AstrAgentContext], **kwargs
+    ) -> ToolExecResult:
+        cron_mgr = context.context.context.cron_manager
+        if cron_mgr is None:
+            return "error: cron manager is not available."
+        current_umo = context.context.event.unified_msg_origin
+        job_id = kwargs.get("job_id")
+        if not job_id:
+            return "error: job_id is required."
+        job = await cron_mgr.db.get_cron_job(str(job_id))
+        if not job:
+            return f"error: cron job {job_id} not found."
+        if _extract_job_session(job) != current_umo:
+            return "error: you can only view future tasks in the current session."
+
+        payload = job.payload or {}
+        lines = [
+            f"job_id: {job.job_id}",
+            f"name: {job.name}",
+            f"type: {job.job_type}",
+            f"description: {job.description or 'N/A'}",
+            f"note: {payload.get('note', 'N/A')}",
+            f"cron_expression: {job.cron_expression or 'N/A'}",
+            f"timezone: {job.timezone or 'system default'}",
+            f"run_once: {getattr(job, 'run_once', False)}",
+            f"run_at: {payload.get('run_at', 'N/A')}",
+            f"enabled: {job.enabled}",
+            f"status: {job.status}",
+            f"next_run_time: {job.next_run_time or 'N/A'}",
+            f"last_run_at: {job.last_run_at or 'N/A'}",
+            f"last_error: {job.last_error or 'none'}",
+            f"created_at: {getattr(job, 'created_at', 'N/A')}",
+            f"session: {payload.get('session', 'N/A')}",
+        ]
+        return "\n".join(lines)
+
+
 CREATE_CRON_JOB_TOOL = CreateActiveCronTool()
 DELETE_CRON_JOB_TOOL = DeleteCronJobTool()
 LIST_CRON_JOBS_TOOL = ListCronJobsTool()
+UPDATE_CRON_JOB_TOOL = UpdateCronTool()
+GET_CRON_DETAIL_TOOL = GetCronDetailTool()
 
 __all__ = [
     "CREATE_CRON_JOB_TOOL",
     "DELETE_CRON_JOB_TOOL",
     "LIST_CRON_JOBS_TOOL",
+    "UPDATE_CRON_JOB_TOOL",
+    "GET_CRON_DETAIL_TOOL",
     "CreateActiveCronTool",
     "DeleteCronJobTool",
     "ListCronJobsTool",
+    "UpdateCronTool",
+    "GetCronDetailTool",
 ]

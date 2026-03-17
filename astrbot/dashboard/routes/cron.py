@@ -142,15 +142,22 @@ class CronRoute(Route):
                 "enabled": payload.get("enabled"),
                 "timezone": payload.get("timezone"),
                 "run_once": payload.get("run_once"),
-                "payload": payload.get("payload"),
             }
             # remove None values to avoid unwanted resets
             updates = {k: v for k, v in updates.items() if v is not None}
+
+            # Merge payload: start from existing job payload, then overlay
+            existing_job = await cron_mgr.db.get_cron_job(job_id)
+            if not existing_job:
+                return jsonify(Response().error("Job not found").__dict__)
+            merged_payload = dict(existing_job.payload) if existing_job.payload else {}
+            if payload.get("payload") and isinstance(payload["payload"], dict):
+                merged_payload.update(payload["payload"])
             if "run_at" in payload:
-                updates.setdefault("payload", {})
-                if updates["payload"] is None:
-                    updates["payload"] = {}
-                updates["payload"]["run_at"] = payload.get("run_at")
+                merged_payload["run_at"] = payload.get("run_at")
+            if "description" in payload:
+                merged_payload["note"] = payload["description"]
+            updates["payload"] = merged_payload
 
             job = await cron_mgr.update_job(job_id, **updates)
             if not job:
