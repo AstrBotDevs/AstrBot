@@ -1,20 +1,9 @@
 <template>
   <div class="w-100">
     <!-- Special handling for specific metadata types -->
-    <template v-if="itemMeta?._special === 'select_provider'">
-      <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'chat_completion'" />
-    </template>
-    <template v-else-if="itemMeta?._special === 'select_provider_stt'">
-      <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'speech_to_text'" />
-    </template>
-    <template v-else-if="itemMeta?._special === 'select_provider_tts'">
-      <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'text_to_speech'" />
-    </template>
-    <template v-else-if="itemMeta?._special === 'select_provider_embedding'">
-      <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'embedding'" />
-    </template>
-    <template v-else-if="itemMeta?._special === 'select_provider_rerank'">
-      <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'rerank'" />
+    <!-- _special 值到 provider 类型的映射，详见 script 中的 specialProviderMap -->
+    <template v-if="specialProviderMap[itemMeta?._special]">
+      <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="specialProviderMap[itemMeta?._special]" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_providers'">
       <ProviderSelector
@@ -240,6 +229,15 @@ import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
+
+// _special 值到 provider 类型的映射表，新增 provider 类型时在此添加
+const specialProviderMap = {
+  'select_provider': 'chat_completion',
+  'select_provider_stt': 'speech_to_text',
+  'select_provider_tts': 'text_to_speech',
+  'select_provider_embedding': 'embedding',
+  'select_provider_rerank': 'rerank',
+}
 
 const props = defineProps({
   modelValue: {
