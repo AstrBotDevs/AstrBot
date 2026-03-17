@@ -28,6 +28,7 @@ const theme = useTheme();
 const { t } = useI18n();
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = 'astrbot:last_bot_route';
+const LAST_CHAT_ROUTE_KEY = 'astrbot:last_chat_route';
 let dialog = ref(false);
 let accountWarning = ref(false)
 let updateStatusDialog = ref(false);
@@ -396,9 +397,20 @@ commonStore.getStartTime();
 
 // 视图模式切换
 const viewMode = computed({
-  get: () => customizer.viewMode,
+  get: () => {
+    return route.path.startsWith('/chat') ? 'chat' : 'bot';
+  },
   set: (value: 'bot' | 'chat') => {
-    customizer.SET_VIEW_MODE(value);
+    if (value === 'chat') {
+      const lastSessionId = localStorage.getItem(LAST_CHAT_ROUTE_KEY);
+      router.push(lastSessionId ? `/chat/${lastSessionId}` : '/chat');
+    } else {
+      let lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+      if (lastBotRoute.startsWith('/chat')) {
+        lastBotRoute = '/';
+      }
+      router.push(lastBotRoute);
+    }
   }
 });
 
@@ -406,26 +418,65 @@ const viewMode = computed({
 // 保存 bot 模式的最後路由
 // 監聽 route 變化，保存最後一次 bot 路由
 watch(() => route.fullPath, (newPath) => {
-  if (customizer.viewMode === 'bot' && typeof window !== 'undefined') {
-    try {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const isChatRoute = newPath.startsWith('/chat');
+
+    // ✅ bot：只存「非 chat 頁」
+    if (!isChatRoute) {
       localStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
-    } catch (e) {
-      console.error('Failed to save last bot route to localStorage:', e);
     }
+
+    // ✅ chat：只存 sessionId
+    //  不是我不用route.params.id  而是用了一定炸裂過不了編譯
+    if (isChatRoute) {
+      const parts = newPath.split('/');
+      const sessionId = parts[2];
+
+      if (sessionId) {
+        localStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
+      }
+    }
+
+  } catch (e) {
+    console.error('Failed to save route:', e);
   }
 });
 
-// 監聽 viewMode 切換
+// 監聽 viewMode 切換 先這樣  算是目前最佳解法 有問題再修正
 watch(() => customizer.viewMode, (newMode, oldMode) => {
-  if (newMode === 'bot' && oldMode === 'chat' && typeof window !== 'undefined') {
-    // 從 chat 切換回 bot，跳轉到最後一次的 bot 路由
-    let lastBotRoute = '/';
-    try {
-      lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
-    } catch (e) {
-      console.error('Failed to read last bot route from localStorage:', e);
+  if (typeof window === 'undefined') return;
+
+  try {
+    // 👉 chat → bot
+    if (newMode === 'bot' && oldMode === 'chat') {
+      let lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+
+      // ✅ 防止被污染（如果誤存成 /chat/...）
+      if (lastBotRoute.startsWith('/chat')) {
+        lastBotRoute = '/';
+      }
+
+      router.push(lastBotRoute);
+      return;
     }
-    router.push(lastBotRoute);
+
+    // 👉 bot → chat
+    if (newMode === 'chat' && oldMode === 'bot') {
+      const lastSessionId = localStorage.getItem(LAST_CHAT_ROUTE_KEY);
+
+      if (lastSessionId) {
+        router.push(`/chat/${lastSessionId}`);
+      } else {
+        router.push('/chat');
+      }
+
+      return;
+    }
+
+  } catch (e) {
+    console.error('Failed to restore route:', e);
   }
 });
 
@@ -465,23 +516,42 @@ onMounted(async () => {
   <v-app-bar elevation="0" height="50" class="top-header">
 
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot'"
-      style="margin-left: 16px;"
-      class="hidden-md-and-down" icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
-    <!-- 移动端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot'" class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_SIDEBAR_DRAWER">
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
+<v-btn
+  v-if="!route.path.startsWith('/chat')"
+  style="margin-left: 16px;"
+  class="hidden-md-and-down"
+  icon
+  rounded="sm"
+  variant="flat"
+  @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)"
+>
+  <v-icon>mdi-menu</v-icon>
+</v-btn>
+
+<!-- 移动端 menu 按钮 -->
+<v-btn
+  v-if="!route.path.startsWith('/chat')"
+  class="hidden-lg-and-up ms-3"
+  icon
+  rounded="sm"
+  variant="flat"
+  @click.stop="customizer.SET_SIDEBAR_DRAWER"
+>
+  <v-icon>mdi-menu</v-icon>
+</v-btn>
 
     <!-- 移动端 chat sidebar 展开按钮 - 仅在 chat 模式下的小屏幕显示 -->
-    <v-btn v-if="customizer.viewMode === 'chat'" class="hidden-lg-and-up ms-1" icon rounded="sm" variant="flat"
-      @click.stop="customizer.TOGGLE_CHAT_SIDEBAR()">
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
+<!-- 移动端 chat sidebar 展开按钮 -->
+<v-btn
+  v-if="route.path.startsWith('/chat')"
+  class="hidden-lg-and-up ms-1"
+  icon
+  rounded="sm"
+  variant="flat"
+  @click.stop="customizer.TOGGLE_CHAT_SIDEBAR()"
+>
+  <v-icon>mdi-menu</v-icon>
+</v-btn>
 
     <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs, 'chat-mode-logo': customizer.viewMode === 'chat' }" @click="handleLogoClick">
       <span class="logo-text Outfit">Astr<span class="logo-text bot-text-wrapper">Bot
