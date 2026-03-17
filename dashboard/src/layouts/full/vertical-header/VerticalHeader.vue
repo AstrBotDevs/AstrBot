@@ -433,10 +433,9 @@ watch(() => route.fullPath, (newPath) => {
   }
 });
 
-// 監聽 viewMode 切換
+// 監聽 viewMode 切換 先這樣  算是目前最佳解法 有問題再修正
 watch(() => customizer.viewMode, (newMode, oldMode) => {
   if (typeof window === 'undefined') return;
-
   try {
     if (newMode === 'bot' && oldMode === 'chat') {
       const lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';

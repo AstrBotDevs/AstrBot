@@ -19,7 +19,6 @@ export function useSessions(chatboxMode: boolean = false) {
     const selectedSessions = ref<string[]>([]);
     const currSessionId = ref('');
     const pendingSessionId = ref<string | null>(null);
-
     // 编辑标题相关
     const editTitleDialog = ref(false);
     const editingTitle = ref('');
