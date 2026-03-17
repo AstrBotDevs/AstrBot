@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import io
 import os
 import sys
@@ -107,6 +108,53 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
+async def test_subagent_config_accepts_default_persona(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    old_cfg = copy.deepcopy(
+        core_lifecycle_td.astrbot_config.get("subagent_orchestrator", {})
+    )
+    payload = {
+        "main_enable": True,
+        "remove_main_duplicate_tools": True,
+        "agents": [
+            {
+                "name": "planner",
+                "persona_id": "default",
+                "public_description": "planner",
+                "system_prompt": "",
+                "enabled": True,
+            }
+        ],
+    }
+
+    try:
+        response = await test_client.post(
+            "/api/subagent/config",
+            json=payload,
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        get_response = await test_client.get(
+            "/api/subagent/config", headers=authenticated_header
+        )
+        assert get_response.status_code == 200
+        get_data = await get_response.get_json()
+        assert get_data["status"] == "ok"
+        assert get_data["data"]["agents"][0]["persona_id"] == "default"
+    finally:
+        await test_client.post(
+            "/api/subagent/config",
+            json=old_cfg,
+            headers=authenticated_header,
+        )
+
 @pytest.mark.parametrize("payload", [[], "x"])
 async def test_batch_delete_sessions_rejects_non_object_payload(
     app: Quart, authenticated_header: dict, payload
