@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 import os
 import random
@@ -24,6 +23,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.message.components import BaseMessageComponent
+from astrbot.core.message.utils import build_sender_content_dedup_key
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.number_utils import safe_positive_float
 from astrbot.core.utils.ttl_registry import TTLKeyRegistry
@@ -73,13 +73,22 @@ def _extract_sender_id(message) -> str:
     Returns:
         The sender ID as a string, or empty string if not found.
     """
-    if hasattr(message, "author") and hasattr(message.author, "user_openid"):
-        return str(message.author.user_openid)
-    if hasattr(message, "author") and hasattr(message.author, "member_openid"):
-        return str(message.author.member_openid)
-    if hasattr(message, "author") and hasattr(message.author, "id"):
-        return str(message.author.id)
-    return ""
+    author = getattr(message, "author", None)
+    if not author:
+        return ""
+
+    sender_id = (
+        getattr(author, "user_openid", None)
+        or getattr(author, "member_openid", None)
+        or getattr(author, "id", None)
+    )
+    if sender_id is None:
+        return ""
+
+    sender_id_str = str(sender_id).strip()
+    if not sender_id_str:
+        return ""
+    return sender_id_str
 
 
 class MessageDeduplicator:
@@ -100,10 +109,7 @@ class MessageDeduplicator:
         self._lock = asyncio.Lock()
 
     def _build_content_key(self, content: str, sender_id: str) -> str | None:
-        if not (content and sender_id):
-            return None
-        content_hash = hashlib.sha1(content.encode("utf-8")).hexdigest()[:16]
-        return f"{sender_id}:{content_hash}"
+        return build_sender_content_dedup_key(content, sender_id)
 
     async def is_duplicate(
         self,
@@ -112,24 +118,35 @@ class MessageDeduplicator:
         sender_id: str = "",
     ) -> bool:
         async with self._lock:
-            # Bypass deduplication if TTL is 0 (disabled)
-            if self._message_ids.ttl_seconds == 0:
+            id_dedup_enabled = self._message_ids.ttl_seconds > 0 and bool(message_id)
+            content_dedup_enabled = self._content_keys.ttl_seconds > 0
+
+            if not id_dedup_enabled and not content_dedup_enabled:
                 return False
 
             # 1) ID-based dedup
-            if self._message_ids.contains(message_id):
-                logger.debug(
-                    "[QQOfficial] Duplicate message detected (by ID): %s...",
-                    message_id[:50],
-                )
-                return True
+            if id_dedup_enabled:
+                if self._message_ids.contains(message_id):
+                    logger.debug(
+                        "[QQOfficial] Duplicate message detected (by ID): %s...",
+                        message_id[:50],
+                    )
+                    return True
 
-            self._message_ids.add(message_id)
+                self._message_ids.add(message_id)
 
             # 2) Content-based dedup
+            if not content_dedup_enabled:
+                logger.debug(
+                    "[QQOfficial] New message registered: %s...", message_id[:50]
+                )
+                return False
+
             content_key = self._build_content_key(content, sender_id)
             if content_key is None:
-                logger.debug("[QQOfficial] New message registered: %s...", message_id[:50])
+                logger.debug(
+                    "[QQOfficial] New message registered: %s...", message_id[:50]
+                )
                 return False
 
             if self._content_keys.contains(content_key):
@@ -138,7 +155,8 @@ class MessageDeduplicator:
                     content_key,
                 )
                 # Preserve existing behavior: do not keep message_id on content duplicates
-                self._message_ids.discard(message_id)
+                if id_dedup_enabled:
+                    self._message_ids.discard(message_id)
                 return True
 
             self._content_keys.add(content_key)
@@ -159,21 +177,9 @@ class botClient(Client):
     def is_shutting_down(self) -> bool:
         return self._shutting_down or self.is_closed()
 
-    def _get_sender_id(self, message) -> str:
-        """Extract sender ID from different message types.
-
-        Delegates to the centralized _extract_sender_id function to avoid
-        precedence drift.
-        """
-        return _extract_sender_id(message)
-
-    def _extract_dedup_key(self, message) -> tuple[str, str]:
-        sender_id = self._get_sender_id(message)
-        content = getattr(message, "content", "") or ""
-        return sender_id, content
-
     async def _should_drop_message(self, message) -> bool:
-        sender_id, content = self._extract_dedup_key(message)
+        sender_id = _extract_sender_id(message)
+        content = getattr(message, "content", "") or ""
         return await self.platform._is_duplicate_message(message.id, content, sender_id)
 
     # 收到群消息
@@ -674,11 +680,12 @@ class QQOfficialPlatformAdapter(Platform):
             message,
             botpy.message.C2CMessage,
         ):
+            sender_user_id = _extract_sender_id(message)
             if isinstance(message, botpy.message.GroupMessage):
-                abm.sender = MessageMember(message.author.member_openid, "")
+                abm.sender = MessageMember(sender_user_id, "")
                 abm.group_id = message.group_openid
             else:
-                abm.sender = MessageMember(message.author.user_openid, "")
+                abm.sender = MessageMember(sender_user_id, "")
             # Parse face messages to readable text
             abm.message_str = QQOfficialPlatformAdapter._parse_face_message(
                 message.content.strip()

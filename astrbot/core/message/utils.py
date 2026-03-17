@@ -1,9 +1,16 @@
 """Message utilities for deduplication and component handling."""
 
 import hashlib
-from typing import Iterable
+from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 from astrbot.core.message.components import BaseMessageComponent, File, Image
+
+if TYPE_CHECKING:
+    from astrbot.core.platform import AstrMessageEvent
+
+
+_MAX_RAW_TEXT_FINGERPRINT_LEN = 256
 
 
 def build_component_dedup_signature(
@@ -40,3 +47,56 @@ def build_component_dedup_signature(
 
     payload = "|".join(parts)
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def build_sender_content_dedup_key(content: str, sender_id: str) -> str | None:
+    """Build a sender+content hash key for short-window deduplication."""
+    if not (content and sender_id):
+        return None
+    content_hash = hashlib.sha1(content.encode("utf-8")).hexdigest()[:16]
+    return f"{sender_id}:{content_hash}"
+
+
+def build_event_content_dedup_key(event: "AstrMessageEvent") -> str:
+    """Build a content fingerprint key for EventBus deduplication."""
+    msg_text = str(event.get_message_str() or "").strip()
+    if len(msg_text) <= _MAX_RAW_TEXT_FINGERPRINT_LEN:
+        msg_sig = msg_text
+    else:
+        msg_hash = hashlib.sha1(msg_text.encode("utf-8")).hexdigest()[:16]
+        msg_sig = f"h:{len(msg_text)}:{msg_hash}"
+
+    attach_sig = build_component_dedup_signature(event.get_messages())
+    platform_id = str(event.get_platform_id() or "")
+    unified_msg_origin = str(event.unified_msg_origin or "")
+    sender_id = str(event.get_sender_id() or "")
+    return "|".join(
+        [
+            "content",
+            platform_id,
+            unified_msg_origin,
+            sender_id,
+            msg_sig,
+            attach_sig,
+        ]
+    )
+
+
+def build_event_message_id_dedup_key(event: "AstrMessageEvent") -> str | None:
+    """Build a message_id fingerprint key for EventBus deduplication."""
+    message_id = str(getattr(event.message_obj, "message_id", "") or "")
+    if not message_id:
+        message_id = str(getattr(event.message_obj, "id", "") or "")
+    if not message_id:
+        return None
+
+    platform_id = str(event.get_platform_id() or "")
+    unified_msg_origin = str(event.unified_msg_origin or "")
+    return "|".join(
+        [
+            "message_id",
+            platform_id,
+            unified_msg_origin,
+            message_id,
+        ]
+    )
