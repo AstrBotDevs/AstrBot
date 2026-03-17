@@ -17,18 +17,12 @@ const customizer = useCustomizerStore();
 const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
+const isChatRoute = computed(() => route.path.startsWith('/chat'))
 
-const isChatPage = computed(() => {
-  return route.path.startsWith('/chat');
-});
 
-const showSidebar = computed(() => {
-  return customizer.viewMode === 'bot';
-});
 
-const showChatPage = computed(() => {
-  return customizer.viewMode === 'chat';
-});
+
+const showSidebar = computed(() => !isChatRoute.value)
 
 const migrationDialog = ref<InstanceType<typeof MigrationDialog> | null>(null);
 const showFirstNoticeDialog = ref(false);
@@ -111,20 +105,20 @@ onMounted(() => {
       <VerticalHeaderVue />
       <VerticalSidebarVue v-if="showSidebar" />
       <v-main :style="{
-        height: showChatPage ? 'calc(100vh - 55px)' : undefined,
-        overflow: showChatPage ? 'hidden' : undefined
+        height: isChatRoute ? 'calc(100vh - 55px)' : undefined,
+        overflow: isChatRoute ? 'hidden' : undefined
       }">
         <v-container
           fluid
           class="page-wrapper"
-          :class="{ 'chat-mode-container': showChatPage }"
+          :class="{ 'chat-mode-container': isChatRoute }"
           :style="{
-            height: showChatPage ? '100%' : 'calc(100% - 8px)',
-            padding: (isChatPage || showChatPage) ? '0' : undefined,
-            minHeight: showChatPage ? 'unset' : undefined
+            height: isChatRoute ? '100%' : 'calc(100% - 8px)',
+            padding: isChatRoute ? '0' : undefined,
+            minHeight: isChatRoute ? 'unset' : undefined
           }">
-          <div :style="{ height: '100%', width: '100%', overflow: showChatPage ? 'hidden' : undefined }">
-            <div v-if="showChatPage" style="height: 100%; width: 100%; overflow: hidden;">
+          <div :style="{ height: '100%', width: '100%', overflow: isChatRoute ? 'hidden' : undefined }">
+            <div v-if="isChatRoute" style="height: 100%; width: 100%; overflow: hidden;">
               <Chat />
             </div>
             <RouterView v-else />

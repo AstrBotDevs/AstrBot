@@ -59,7 +59,7 @@ const desktopUpdateHasNewVersion = ref(false);
 const desktopUpdateCurrentVersion = ref('-');
 const desktopUpdateLatestVersion = ref('-');
 const desktopUpdateStatus = ref('');
-
+const isChatRoute = computed(() => route.path.startsWith('/chat'))
 const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
   if (typeof window === 'undefined') {
     return null;
@@ -381,7 +381,7 @@ function openReleaseNotesDialog(body: string, tag: string) {
 }
 
 function handleLogoClick() {
-  if (customizer.viewMode === 'chat') {
+  if (isChatRoute.value) {
     aboutDialog.value = true;
   } else {
     router.push('/about');
@@ -396,23 +396,7 @@ commonStore.createEventSource(); // log
 commonStore.getStartTime();
 
 // 视图模式切换
-const viewMode = computed({
-  get: () => {
-    return route.path.startsWith('/chat') ? 'chat' : 'bot';
-  },
-  set: (value: 'bot' | 'chat') => {
-    if (value === 'chat') {
-      const lastSessionId = sessionStorage.getItem(LAST_CHAT_ROUTE_KEY);
-      router.push(lastSessionId ? `/chat/${lastSessionId}` : '/chat');
-    } else {
-      let lastBotRoute = sessionStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
-      if (lastBotRoute.startsWith('/chat')) {
-        lastBotRoute = '/';
-      }
-      router.push(lastBotRoute);
-    }
-  }
-});
+
 
 // 监听 viewMode 变化，切换到 bot 模式时跳转到首页
 // 保存 bot 模式的最後路由
@@ -444,7 +428,21 @@ watch(() => route.fullPath, (newPath) => {
   }
 });
 
-
+const currentMode = computed({
+  get: () => (isChatRoute.value ? 'chat' : 'bot'),
+  set: (val: 'chat' | 'bot') => {
+    if (val === 'chat') {
+      const lastSessionId = sessionStorage.getItem(LAST_CHAT_ROUTE_KEY)
+      router.push(lastSessionId ? `/chat/${lastSessionId}` : '/chat')
+    } else {
+      let lastBotRoute = sessionStorage.getItem(LAST_BOT_ROUTE_KEY) || '/'
+      if (lastBotRoute.startsWith('/chat')) {
+        lastBotRoute = '/'
+      }
+      router.push(lastBotRoute)
+    }
+  }
+})
 // Merry Christmas! 🎄
 const isChristmas = computed(() => {
   const today = new Date();
@@ -482,7 +480,7 @@ onMounted(async () => {
 
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
 <v-btn
-  v-if="!route.path.startsWith('/chat')"
+  v-if="!isChatRoute"
   style="margin-left: 16px;"
   class="hidden-md-and-down"
   icon
@@ -495,7 +493,7 @@ onMounted(async () => {
 
 <!-- 移动端 menu 按钮 -->
 <v-btn
-  v-if="!route.path.startsWith('/chat')"
+  v-if="!isChatRoute"
   class="hidden-lg-and-up ms-3"
   icon
   rounded="sm"
@@ -505,10 +503,8 @@ onMounted(async () => {
   <v-icon>mdi-menu</v-icon>
 </v-btn>
 
-    <!-- 移动端 chat sidebar 展开按钮 - 仅在 chat 模式下的小屏幕显示 -->
-<!-- 移动端 chat sidebar 展开按钮 -->
 <v-btn
-  v-if="route.path.startsWith('/chat')"
+  v-if="isChatRoute"
   class="hidden-lg-and-up ms-1"
   icon
   rounded="sm"
@@ -518,11 +514,11 @@ onMounted(async () => {
   <v-icon>mdi-menu</v-icon>
 </v-btn>
 
-    <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs, 'chat-mode-logo': customizer.viewMode === 'chat' }" @click="handleLogoClick">
+    <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs, 'chat-mode-logo': isChatRoute }" @click="handleLogoClick">
       <span class="logo-text Outfit">Astr<span class="logo-text bot-text-wrapper">Bot
         <img v-if="isChristmas" src="@/assets/images/xmas-hat.png" alt="Christmas hat" class="xmas-hat" />
       </span></span>
-      <span class="logo-text logo-text-light Outfit" style="color: grey;" v-if="customizer.viewMode === 'chat'">ChatUI</span>
+      <span class="logo-text logo-text-light Outfit" style="color: grey;" v-if="isChatRoute">ChatUI</span>
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
 
@@ -539,14 +535,14 @@ onMounted(async () => {
     </div>
     
     <!-- Bot/Chat 模式切换按钮 - 手机端隐藏，移入 ... 菜单 -->
-    <v-btn-toggle
-      v-model="viewMode"
-      mandatory
-      variant="outlined"
-      density="compact"
-      class="mr-4 hidden-xs"
-      color="primary"
-    >
+<v-btn-toggle
+  v-model="currentMode"
+  mandatory
+  variant="outlined"
+  density="compact"
+  class="mr-4 hidden-xs"
+  color="primary"
+>
       <v-btn value="bot" size="small">
         <v-icon start>mdi-robot</v-icon>
         Bot
@@ -577,14 +573,14 @@ onMounted(async () => {
       <!-- Bot/Chat 模式切换 - 仅在手机端显示 -->
       <template v-if="$vuetify.display.xs">
         <div class="mobile-mode-toggle-wrapper">
-          <v-btn-toggle
-            v-model="viewMode"
-            mandatory
-            variant="outlined"
-            density="compact"
-            color="primary"
-            class="mobile-mode-toggle"
-          >
+<v-btn-toggle
+  v-model="currentMode"
+  mandatory
+  variant="outlined"
+  density="compact"
+  class="mr-4 hidden-xs"
+  color="primary"
+>
             <v-btn value="bot" size="small">
               <v-icon start>mdi-robot</v-icon>
               Bot
