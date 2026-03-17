@@ -63,14 +63,10 @@ class Main(Star):
                                     curr_cid,
                                 )
                             else:
-                                # 创建新对话
-                                persona_id = await self.context.conversation_manager.get_curr_persona_id(
-                                    event.unified_msg_origin
-                                )
+                                # 创建新对话（persona 继承逻辑在 new_conversation 内部处理）
                                 curr_cid = await self.context.conversation_manager.new_conversation(
                                     event.unified_msg_origin,
                                     platform_id=event.get_platform_id(),
-                                    persona_id=persona_id,
                                 )
 
                             # 使用 LLM 生成回复
