@@ -1,19 +1,18 @@
-from .network_strategy import NetworkRenderStrategy
-from .local_strategy import LocalRenderStrategy
 from astrbot.core.log import LogManager
+
+from .local_strategy import LocalRenderStrategy
+from .network_strategy import NetworkRenderStrategy
 
 logger = LogManager.GetLogger(log_name="astrbot")
 
 
 class HtmlRenderer:
-    def __init__(self, endpoint_url: str | None = None):
+    def __init__(self, endpoint_url: str | None = None) -> None:
         self.network_strategy = NetworkRenderStrategy(endpoint_url)
         self.local_strategy = LocalRenderStrategy()
 
-    def set_network_endpoint(self, endpoint_url: str):
-        """设置 t2i 的网络端点。"""
-        logger.info("文本转图像服务接口: " + endpoint_url)
-        self.network_strategy.set_endpoint(endpoint_url)
+    async def initialize(self) -> None:
+        await self.network_strategy.initialize()
 
     async def render_custom_template(
         self,
@@ -32,19 +31,30 @@ class HtmlRenderer:
         @example: 参见 https://astrbot.app 插件开发部分。
         """
         return await self.network_strategy.render_custom_template(
-            tmpl_str, tmpl_data, return_url, options
+            tmpl_str,
+            tmpl_data,
+            return_url,
+            options,
         )
 
     async def render_t2i(
-        self, text: str, use_network: bool = True, return_url: bool = False
+        self,
+        text: str,
+        use_network: bool = True,
+        return_url: bool = False,
+        template_name: str | None = None,
     ):
         """使用默认文转图模板。"""
         if use_network:
             try:
-                return await self.network_strategy.render(text, return_url=return_url)
+                return await self.network_strategy.render(
+                    text,
+                    return_url=return_url,
+                    template_name=template_name,
+                )
             except BaseException as e:
                 logger.error(
-                    f"Failed to render image via AstrBot API: {e}. Falling back to local rendering."
+                    f"Failed to render image via AstrBot API: {e}. Falling back to local rendering.",
                 )
                 return await self.local_strategy.render(text)
         else:

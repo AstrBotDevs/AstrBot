@@ -33,6 +33,7 @@ export class I18nLoader {
       { name: 'core/status', path: 'core/status.json' },
       { name: 'core/navigation', path: 'core/navigation.json' },
       { name: 'core/header', path: 'core/header.json' },
+      { name: 'core/shared', path: 'core/shared.json' },
       
       // 功能模块
       { name: 'features/chat', path: 'features/chat.json' },
@@ -43,15 +44,22 @@ export class I18nLoader {
       { name: 'features/provider', path: 'features/provider.json' },
       { name: 'features/platform', path: 'features/platform.json' },
       { name: 'features/config', path: 'features/config.json' },
+      { name: 'features/config-metadata', path: 'features/config-metadata.json' },
       { name: 'features/console', path: 'features/console.json' },
+      { name: 'features/trace', path: 'features/trace.json' },
       { name: 'features/about', path: 'features/about.json' },
       { name: 'features/settings', path: 'features/settings.json' },
       { name: 'features/auth', path: 'features/auth.json' },
       { name: 'features/chart', path: 'features/chart.json' },
       { name: 'features/dashboard', path: 'features/dashboard.json' },
+      { name: 'features/cron', path: 'features/cron.json' },
+      { name: 'features/subagent', path: 'features/subagent.json' },
       { name: 'features/alkaid/index', path: 'features/alkaid/index.json' },
       { name: 'features/alkaid/knowledge-base', path: 'features/alkaid/knowledge-base.json' },
       { name: 'features/alkaid/memory', path: 'features/alkaid/memory.json' },
+      { name: 'features/persona', path: 'features/persona.json' },
+      { name: 'features/migration', path: 'features/migration.json' },
+      { name: 'features/welcome', path: 'features/welcome.json' },
       
       // 消息模块
       { name: 'messages/errors', path: 'messages/errors.json' },

@@ -1,16 +1,17 @@
 import time
-from typing import List
 from dataclasses import dataclass
+
 from astrbot.core.message.components import BaseMessageComponent
+
 from .message_type import MessageType
 
 
 @dataclass
 class MessageMember:
     user_id: str  # 发送者id
-    nickname: str = None
+    nickname: str | None = None
 
-    def __str__(self):
+    def __str__(self) -> str:
         # 使用 f-string 来构建返回的字符串表示形式
         return (
             f"User ID: {self.user_id},"
@@ -22,18 +23,18 @@ class MessageMember:
 class Group:
     group_id: str
     """群号"""
-    group_name: str = None
+    group_name: str | None = None
     """群名称"""
-    group_avatar: str = None
+    group_avatar: str | None = None
     """群头像"""
-    group_owner: str = None
+    group_owner: str | None = None
     """群主 id"""
-    group_admins: List[str] = None
+    group_admins: list[str] | None = None
     """群管理员 id"""
-    members: List[MessageMember] = None
+    members: list[MessageMember] | None = None
     """所有群成员"""
 
-    def __str__(self):
+    def __str__(self) -> str:
         # 使用 f-string 来构建返回的字符串表示形式
         return (
             f"Group ID: {self.group_id}\n"
@@ -47,23 +48,42 @@ class Group:
 
 
 class AstrBotMessage:
-    """
-    AstrBot 的消息对象
-    """
+    """AstrBot 的消息对象"""
 
     type: MessageType  # 消息类型
     self_id: str  # 机器人的识别id
     session_id: str  # 会话id。取决于 unique_session 的设置。
     message_id: str  # 消息id
-    group_id: str = ""  # 群组id，如果为私聊，则为空
+    group: Group | None  # 群组
     sender: MessageMember  # 发送者
-    message: List[BaseMessageComponent]  # 消息链使用 Nakuru 的消息链格式
+    message: list[BaseMessageComponent]  # 消息链使用 Nakuru 的消息链格式
     message_str: str  # 最直观的纯文本消息字符串
     raw_message: object
     timestamp: int  # 消息时间戳
 
     def __init__(self) -> None:
         self.timestamp = int(time.time())
+        self.group = None
 
     def __str__(self) -> str:
         return str(self.__dict__)
+
+    @property
+    def group_id(self) -> str:
+        """向后兼容的 group_id 属性
+        群组id，如果为私聊，则为空
+        """
+        if self.group:
+            return self.group.group_id
+        return ""
+
+    @group_id.setter
+    def group_id(self, value: str | None) -> None:
+        """设置 group_id"""
+        if value:
+            if self.group:
+                self.group.group_id = value
+            else:
+                self.group = Group(group_id=value)
+        else:
+            self.group = None

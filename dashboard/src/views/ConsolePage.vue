@@ -10,13 +10,25 @@ const { tm } = useModuleI18n('features/console');
   <div style="height: 100%;">
     <div
       style="background-color: var(--v-theme-surface); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px; display: flex; flex-direction: row; align-items: center; justify-content: space-between;">
-      <h4>{{ tm('title') }}</h4>
+      <div>
+        <h4>{{ tm('title') }}</h4>
+        <v-alert
+          type="info"
+          variant="tonal"
+          density="compact"
+          class="mt-2"
+          style="max-width: 600px;"
+        >
+          {{ tm('debugHint.text') }}
+        </v-alert>
+      </div>
       <div class="d-flex align-center">
         <v-switch
-          v-model="autoScrollDisabled"
-          :label="autoScrollDisabled ? tm('autoScroll.disabled') : tm('autoScroll.enabled')"
+          v-model="autoScrollEnabled"
+          :label="autoScrollEnabled ? tm('autoScroll.enabled') : tm('autoScroll.disabled')"
           hide-details
           density="compact"
+          color="primary"
           style="margin-right: 16px;"
         ></v-switch>
         <v-dialog v-model="pipDialog" width="400">
@@ -57,7 +69,7 @@ export default {
   },
   data() {
     return {
-      autoScrollDisabled: false,
+      autoScrollEnabled: true,
       pipDialog: false,
       pipInstallPayload: {
         package: '',
@@ -68,9 +80,9 @@ export default {
     }
   },
   watch: {
-    autoScrollDisabled(val) {
+    autoScrollEnabled(val) {
       if (this.$refs.consoleDisplayer) {
-        this.$refs.consoleDisplayer.autoScroll = !val;
+        this.$refs.consoleDisplayer.autoScroll = val;
       }
     }
   },

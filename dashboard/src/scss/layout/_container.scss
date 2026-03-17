@@ -4,6 +4,10 @@ html {
 .v-main {
   margin-right: 20px;
 }
+
+.top-header {
+  border-bottom: 1px solid rgba(var(--v-theme-borderLight), 0.5);
+}
 @media (max-width: 1279px) {
   .v-main {
     margin: 0 10px;
@@ -20,8 +24,8 @@ html {
 
 .page-wrapper {
   min-height: calc(100vh - 100px);
-  padding: 15px;
-  border-radius: $border-radius-root;
+  padding: 8px;
+  // border-radius: $border-radius-root;
   background: rgb(var(--v-theme-containerBg));
 }
 $sizes: (
@@ -81,11 +85,15 @@ $sizes: (
 
 body {
   .Poppins {
-    font-family: 'Poppins', sans-serif !important;
+    font-family: 'Poppins', $cjk-sans-fallback, sans-serif !important;
   }
 
   .Inter {
-    font-family: 'Inter', sans-serif !important;
+    font-family: 'Inter', $cjk-sans-fallback, sans-serif !important;
+  }
+
+  .Outfit {
+    font-family: 'Outfit', $cjk-sans-fallback, sans-serif !important;
   }
 }
 

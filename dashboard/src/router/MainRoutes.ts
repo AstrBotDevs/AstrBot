@@ -1,18 +1,25 @@
+import { EXTENSION_ROUTE_NAME } from './routeConstants.mjs';
+
 const MainRoutes = {
   path: '/main',
   meta: {
     requiresAuth: true
   },
-  redirect: '/main/dashboard/default',
+  redirect: '/welcome',
   component: () => import('@/layouts/full/FullLayout.vue'),
   children: [
     {
-      name: 'Dashboard',
+      name: 'MainPage',
       path: '/',
-      component: () => import('@/views/dashboards/default/DefaultDashboard.vue')
+      component: () => import('@/views/WelcomePage.vue')
     },
     {
-      name: 'Extensions',
+      name: 'Welcome',
+      path: '/welcome',
+      component: () => import('@/views/WelcomePage.vue')
+    },
+    {
+      name: EXTENSION_ROUTE_NAME,
       path: '/extension',
       component: () => import('@/views/ExtensionPage.vue')
     },
@@ -32,14 +39,17 @@ const MainRoutes = {
       component: () => import('@/views/ProviderPage.vue')
     },
     {
-      name: 'ToolUsePage',
-      path: '/tool-use',
-      component: () => import('@/views/ToolUsePage.vue')
-    },
-    {
       name: 'Configs',
       path: '/config',
       component: () => import('@/views/ConfigPage.vue')
+    },
+    {
+      path: '/normal',
+      redirect: '/config#normal'
+    },
+    {
+      path: '/system',
+      redirect: '/config#system'
     },
     {
       name: 'Default',
@@ -57,32 +67,83 @@ const MainRoutes = {
       component: () => import('@/views/SessionManagementPage.vue')
     },
     {
+      name: 'Persona',
+      path: '/persona',
+      component: () => import('@/views/PersonaPage.vue')
+    },
+    {
+      name: 'SubAgent',
+      path: '/subagent',
+      component: () => import('@/views/SubAgentPage.vue')
+    },
+    {
+      name: 'CronJobs',
+      path: '/cron',
+      component: () => import('@/views/CronJobPage.vue')
+    },
+    {
       name: 'Console',
       path: '/console',
       component: () => import('@/views/ConsolePage.vue')
     },
     {
-      name: 'Alkaid',
-      path: '/alkaid',
-      component: () => import('@/views/AlkaidPage.vue'),
+      name: 'Trace',
+      path: '/trace',
+      component: () => import('@/views/TracePage.vue')
+    },
+    {
+      name: 'NativeKnowledgeBase',
+      path: '/knowledge-base',
+      component: () => import('@/views/knowledge-base/index.vue'),
       children: [
         {
-          path: 'knowledge-base',
-          name: 'KnowledgeBase',
-          component: () => import('@/views/alkaid/KnowledgeBase.vue')
+          path: '',
+          name: 'NativeKBList',
+          component: () => import('@/views/knowledge-base/KBList.vue')
         },
         {
-          path: 'long-term-memory',
-          name: 'LongTermMemory',
-          component: () => import('@/views/alkaid/LongTermMemory.vue')
+          path: ':kbId',
+          name: 'NativeKBDetail',
+          component: () => import('@/views/knowledge-base/KBDetail.vue'),
+          props: true
         },
         {
-          path: 'other',
-          name: 'OtherFeatures',
-          component: () => import('@/views/alkaid/Other.vue')
+          path: ':kbId/document/:docId',
+          name: 'NativeDocumentDetail',
+          component: () => import('@/views/knowledge-base/DocumentDetail.vue'),
+          props: true
         }
       ]
     },
+
+    // 旧版本的知识库路由
+    {
+      name: 'KnowledgeBase',
+      path: '/alkaid/knowledge-base',
+      component: () => import('@/views/alkaid/KnowledgeBase.vue'),
+    },
+    // {
+    //   name: 'Alkaid',
+    //   path: '/alkaid',
+    //   component: () => import('@/views/AlkaidPage.vue'),
+    //   children: [
+    //     {
+    //       path: 'knowledge-base',
+    //       name: 'KnowledgeBase',
+    //       component: () => import('@/views/alkaid/KnowledgeBase.vue')
+    //     },
+    //     {
+    //       path: 'long-term-memory',
+    //       name: 'LongTermMemory',
+    //       component: () => import('@/views/alkaid/LongTermMemory.vue')
+    //     },
+    //     {
+    //       path: 'other',
+    //       name: 'OtherFeatures',
+    //       component: () => import('@/views/alkaid/Other.vue')
+    //     }
+    //   ]
+    // },
     {
       name: 'Chat',
       path: '/chat',

@@ -1,0 +1,66 @@
+{
+  "page": {
+    "title": "Future Task Management",
+    "beta": "Experimental",
+    "subtitle": "See scheduled tasks for AstrBot. AstrBot will wake up, run them, and deliver the results.",
+    "proactive": {
+      "supported": "Proactive delivery is available on: {platforms}",
+      "unsupported": "No proactive messaging platforms enabled. Turn them on in Platform settings."
+    }
+  },
+  "actions": {
+    "create": "New Task",
+    "refresh": "Refresh",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "submit": "Create"
+  },
+  "table": {
+    "title": "Registered Tasks",
+    "empty": "No tasks yet.",
+    "headers": {
+      "name": "Name",
+      "type": "Type",
+      "cron": "Cron",
+      "session": "Session ID",
+      "nextRun": "Next Run",
+      "lastRun": "Last Run",
+      "note": "Note",
+      "actions": "Actions"
+    },
+    "type": {
+      "once": "One-off",
+      "recurring": "Recurring",
+      "activeAgent": "Active Agent",
+      "workflow": "Workflow",
+      "unknown": "{type}"
+    },
+    "timezoneLocal": "local",
+    "notAvailable": "—"
+  },
+  "form": {
+    "title": "New Task",
+    "chatHint": "You can ask AstrBot in chat to create future tasks instead of adding them here.",
+    "runOnce": "One-off task",
+    "name": "Task name",
+    "note": "Task description",
+    "cron": "Cron expression",
+    "cronPlaceholder": "0 9 * * *",
+    "runAt": "Run at",
+    "session": "Target session (platform_id:message_type:session_id)",
+    "timezone": "Timezone (optional, e.g. Asia/Shanghai)",
+    "enabled": "Enabled"
+  },
+  "messages": {
+    "loadFailed": "Failed to load tasks",
+    "updateFailed": "Failed to update",
+    "deleteSuccess": "Deleted",
+    "deleteFailed": "Failed to delete",
+    "sessionRequired": "Session is required",
+    "noteRequired": "Description is required",
+    "cronRequired": "Cron expression is required",
+    "runAtRequired": "Please select run time",
+    "createSuccess": "Created successfully",
+    "createFailed": "Failed to create"
+  }
+}

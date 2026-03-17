@@ -3,14 +3,15 @@
     <v-container fluid class="pa-0">
       <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-8">
         <div>
-          <h1 class="text-h1 font-weight-bold mb-2">
-            <v-icon color="black" class="me-2">mdi-connection</v-icon>{{ tm('title') }}
+          <h1 class="text-h1 font-weight-bold mb-2 d-flex align-center">
+            <v-icon color="black" class="me-2">mdi-robot</v-icon>{{ tm('title') }}
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-4">
             {{ tm('subtitle') }}
           </p>
         </div>
-        <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddPlatformDialog = true" rounded="xl" size="x-large">
+        <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="updatingMode = false; showAddPlatformDialog = true"
+          rounded="xl" size="x-large">
           {{ tm('addAdapter') }}
         </v-btn>
       </v-row>
@@ -25,21 +26,57 @@
 
         <v-row v-else>
           <v-col v-for="(platform, index) in config_data.platform || []" :key="index" cols="12" md="6" lg="4" xl="3">
-            <item-card 
-              :item="platform" 
-              title-field="id" 
-              enabled-field="enable"
-              :bglogo="getPlatformIcon(platform.type || platform.id)"
-              @toggle-enabled="platformStatusChange"
-              @delete="deletePlatform" 
-              @edit="editPlatform">
+            <item-card :item="platform" title-field="id" enabled-field="enable"
+              :bglogo="getPlatformIcon(platform.type || platform.id)" @toggle-enabled="platformStatusChange"
+              @delete="deletePlatform" @edit="editPlatform">
+              <template #item-details="{ item }">
+                <!-- 平台运行状态 - 只在非运行状态或有错误时显示 -->
+                <div class="platform-status-row mb-2" v-if="getPlatformStat(item.id) && (getPlatformStat(item.id)?.status !== 'running' || getPlatformStat(item.id)?.error_count > 0)">
+                  <!-- 状态 chip - 只在非 running 状态时显示 -->
+                  <v-chip
+                    v-if="getPlatformStat(item.id)?.status !== 'running'"
+                    size="small"
+                    :color="getStatusColor(getPlatformStat(item.id)?.status)"
+                    variant="tonal"
+                    class="status-chip"
+                  >
+                    <v-icon size="small" start>{{ getStatusIcon(getPlatformStat(item.id)?.status) }}</v-icon>
+                    {{ tm('runtimeStatus.' + (getPlatformStat(item.id)?.status || 'unknown')) }}
+                  </v-chip>
+                  <!-- 错误数量提示 -->
+                  <v-chip
+                    v-if="getPlatformStat(item.id)?.error_count > 0"
+                    size="small"
+                    color="error"
+                    variant="tonal"
+                    class="error-chip"
+                    :class="{ 'ms-2': getPlatformStat(item.id)?.status !== 'running' }"
+                    @click.stop="showErrorDetails(item)"
+                  >
+                    <v-icon size="small" start>mdi-bug</v-icon>
+                    {{ getPlatformStat(item.id)?.error_count }} {{ tm('runtimeStatus.errors') }}
+                  </v-chip>
+                </div>
+                <div v-if="getPlatformStat(item.id)?.unified_webhook && item.webhook_uuid" class="webhook-info">
+                  <v-chip
+                    size="small"
+                    color="primary"
+                    variant="tonal"
+                    class="webhook-chip"
+                    @click.stop="openWebhookDialog(item.webhook_uuid)"
+                  >
+                    <v-icon size="small" start>mdi-webhook</v-icon>
+                    {{ tm('viewWebhook') }}
+                  </v-chip>
+                </div>
+              </template>
             </item-card>
           </v-col>
         </v-row>
       </div>
 
       <!-- 日志部分 -->
-      <v-card elevation="0" class="mt-4">
+      <v-card elevation="0" class="mt-4 mb-10">
         <v-card-title class="d-flex align-center py-3 px-4">
           <v-icon class="me-2">mdi-console-line</v-icon>
           <span class="text-h4">{{ tm('logs.title') }}</span>
@@ -50,7 +87,6 @@
           </v-btn>
         </v-card-title>
 
-        <v-divider></v-divider>
 
         <v-expand-transition>
           <v-card-text class="pa-0" v-if="showConsole">
@@ -61,85 +97,83 @@
     </v-container>
 
     <!-- 添加平台适配器对话框 -->
-    <v-dialog v-model="showAddPlatformDialog" max-width="900px" min-height="80%">
-      <v-card class="platform-selection-dialog">
-        <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
-          <v-icon color="white" class="me-2">mdi-plus-circle</v-icon>
-          <span>{{ tm('dialog.addPlatform') }}</span>
-          <v-spacer></v-spacer>
-          <v-btn icon variant="text" color="white" @click="showAddPlatformDialog = false">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
-        </v-card-title>
+    <AddNewPlatform v-model:show="showAddPlatformDialog" :metadata="metadata" :config_data="config_data" ref="addPlatformDialog"
+      :updating-mode="updatingMode" :updating-platform-config="updatingPlatformConfig" @update="getConfig"
+      @show-toast="showToast" @refresh-config="getConfig"/>
 
-        <v-card-text class="pa-4" style="overflow-y: auto;">
-          <v-row class="mt-1">
-            <v-col v-for="(template, name) in metadata['platform_group']?.metadata?.platform?.config_template || {}"
-              :key="name" cols="12" sm="6" md="6">
-              <v-card variant="outlined" hover class="platform-card" @click="selectPlatformTemplate(name)">
-                <div class="platform-card-content">
-                  <div class="platform-card-text">
-                    <v-card-title class="platform-card-title">{{ tm('dialog.connectTitle', { name }) }}</v-card-title>
-                    <v-card-text class="text-caption text-medium-emphasis platform-card-description">
-                      {{ getPlatformDescription(template, name) }}
-                    </v-card-text>
-                  </div>
-                  <div class="platform-card-logo">
-                    <img :src="getPlatformIcon(template.type)" v-if="getPlatformIcon(template.type)" class="platform-logo-img">
-                    <div v-else class="platform-logo-fallback">
-                      {{ name[0].toUpperCase() }}
-                    </div>
-                  </div>
-                </div>
-              </v-card>
-            </v-col>
-            <v-col
-              v-if="Object.keys(metadata['platform_group']?.metadata?.platform?.config_template || {}).length === 0"
-              cols="12">
-              <v-alert type="info" variant="tonal">
-                {{ tm('dialog.noTemplates') }}
-              </v-alert>
-            </v-col>
-          </v-row>
+    <!-- Webhook URL 对话框 -->
+    <v-dialog v-model="showWebhookDialog" max-width="600">
+      <v-card>
+        <v-card-title class="d-flex align-center pa-4">
+          <v-icon class="me-2" color="primary">mdi-webhook</v-icon>
+          {{ tm('webhookDialog.title') }}
+        </v-card-title>
+        <v-card-text class="px-4 pb-2">
+          <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('webhookDialog.description') }}</p>
+          <v-text-field
+            :model-value="currentWebhookUrl"
+            readonly
+            variant="outlined"
+            hide-details
+            class="webhook-url-field"
+          >
+            <template v-slot:append-inner>
+              <v-btn
+                icon
+                size="small"
+                variant="text"
+                @click="copyWebhookUrl(currentWebhookUuid)"
+              >
+                <v-icon>mdi-content-copy</v-icon>
+              </v-btn>
+            </template>
+          </v-text-field>
         </v-card-text>
+        <v-card-actions class="pa-4 pt-2">
+          <v-spacer></v-spacer>
+          <v-btn variant="tonal" color="primary" @click="showWebhookDialog = false">
+            {{ tm('webhookDialog.close') }}
+          </v-btn>
+        </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- 配置对话框 -->
-    <v-dialog v-model="showPlatformCfg" persistent width="900px" max-width="90%">
+    <!-- 错误详情对话框 -->
+    <v-dialog v-model="showErrorDialog" max-width="700">
       <v-card>
-        <v-card-title class="bg-primary text-white py-3">
-          <v-icon color="white" class="me-2">{{ updatingMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
-          <span>{{ updatingMode ? tm('dialog.edit') : tm('dialog.add') }} {{ newSelectedPlatformName }} {{
-            tm('dialog.adapter') }}</span>
+        <v-card-title class="d-flex align-center pa-4">
+          <v-icon class="me-2" color="error">mdi-alert-circle</v-icon>
+          {{ tm('errorDialog.title') }}
         </v-card-title>
-
-        <v-card-text class="py-4">
-          <v-row>
-            <v-col cols="12">
-              <AstrBotConfig :iterable="newSelectedPlatformConfig" :metadata="metadata['platform_group']?.metadata"
-                metadataKey="platform" />
-            </v-col>
-          </v-row>
-          <v-row class="mt-2">
-            <v-col cols="12" class="text-center">
-              <v-btn color="info" variant="outlined" @click="openTutorial">
-                <v-icon start>mdi-book-open-variant</v-icon>
-                {{ tm('dialog.viewTutorial') }}
-              </v-btn>
-            </v-col>
-          </v-row>
+        <v-card-text class="px-4 pb-4" v-if="currentErrorPlatform">
+          <div class="mb-3">
+            <strong>{{ tm('errorDialog.platformId') }}:</strong> {{ currentErrorPlatform.id }}
+          </div>
+          <div class="mb-3">
+            <strong>{{ tm('errorDialog.errorCount') }}:</strong> {{ currentErrorPlatform.error_count }}
+          </div>
+          <div v-if="currentErrorPlatform.last_error" class="error-details">
+            <div class="mb-2">
+              <strong>{{ tm('errorDialog.lastError') }}:</strong>
+            </div>
+            <v-alert type="error" variant="tonal" class="mb-3">
+              <div class="error-message">{{ currentErrorPlatform.last_error.message }}</div>
+              <div class="error-time text-caption text-medium-emphasis mt-1">
+                {{ tm('errorDialog.occurredAt') }}: {{ new Date(currentErrorPlatform.last_error.timestamp).toLocaleString() }}
+              </div>
+            </v-alert>
+            <div v-if="currentErrorPlatform.last_error.traceback">
+              <div class="mb-2">
+                <strong>{{ tm('errorDialog.traceback') }}:</strong>
+              </div>
+              <pre class="traceback-box">{{ currentErrorPlatform.last_error.traceback }}</pre>
+            </div>
+          </div>
         </v-card-text>
-
-        <v-divider></v-divider>
-
-        <v-card-actions class="pa-4">
+        <v-card-actions class="pa-4 pt-0">
           <v-spacer></v-spacer>
-          <v-btn variant="text" @click="showPlatformCfg = false" :disabled="loading">
-            {{ tm('dialog.cancel') }}
-          </v-btn>
-          <v-btn color="primary" @click="newPlatform" :loading="loading">
-            {{ tm('dialog.save') }}
+          <v-btn variant="tonal" color="primary" @click="showErrorDialog = false">
+            {{ tm('errorDialog.close') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -150,26 +184,6 @@
       location="top">
       {{ save_message }}
     </v-snackbar>
-
-    <WaitingForRestart ref="wfr"></WaitingForRestart>
-
-    <!-- ID冲突确认对话框 -->
-    <v-dialog v-model="showIdConflictDialog" max-width="450" persistent>
-      <v-card>
-        <v-card-title class="text-h6 bg-warning d-flex align-center">
-          <v-icon start class="me-2">mdi-alert-circle-outline</v-icon>
-          {{ tm('dialog.idConflict.title') }}
-        </v-card-title>
-        <v-card-text class="py-4 text-body-1 text-medium-emphasis">
-          {{ tm('dialog.idConflict.message', { id: conflictId }) }}
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn color="grey" variant="text" @click="handleIdConflictConfirm(false)">{{ tm('dialog.idConflict.confirm')
-          }}</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </div>
 </template>
 
@@ -179,8 +193,14 @@ import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ItemCard from '@/components/shared/ItemCard.vue';
+import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import { useCommonStore } from '@/stores/common';
-import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { useI18n, useModuleI18n, mergeDynamicTranslations } from '@/i18n/composables';
+import { getPlatformIcon, getTutorialLink } from '@/utils/platformUtils';
+import {
+  askForConfirmation as askForConfirmationDialog,
+  useConfirmDialog
+} from '@/utils/confirmDialog';
 
 export default {
   name: 'PlatformPage',
@@ -188,128 +208,106 @@ export default {
     AstrBotConfig,
     WaitingForRestart,
     ConsoleDisplayer,
-    ItemCard
+    ItemCard,
+    AddNewPlatform
   },
   setup() {
     const { t } = useI18n();
     const { tm } = useModuleI18n('features/platform');
+    const confirmDialog = useConfirmDialog();
 
     return {
       t,
-      tm
+      tm,
+      confirmDialog
     };
-  },
-  computed: {
-    // 安全访问翻译的计算属性
-    messages() {
-      return {
-        updateSuccess: this.tm('messages.updateSuccess'),
-        addSuccess: this.tm('messages.addSuccess'),
-        deleteSuccess: this.tm('messages.deleteSuccess'),
-        statusUpdateSuccess: this.tm('messages.statusUpdateSuccess'),
-        deleteConfirm: this.tm('messages.deleteConfirm')
-      };
-    }
   },
   data() {
     return {
       config_data: {},
       fetched: false,
       metadata: {},
-      showPlatformCfg: false,
       showAddPlatformDialog: false,
 
-      newSelectedPlatformName: '',
-      newSelectedPlatformConfig: {},
+      updatingPlatformConfig: {},
       updatingMode: false,
-
-      loading: false,
 
       save_message_snack: false,
       save_message: "",
       save_message_success: "success",
 
-      showConsole: false,
+      showConsole: localStorage.getItem('platformPage_showConsole') === 'true',
 
-      // ID冲突确认对话框
-      showIdConflictDialog: false,
-      conflictId: '',
-      idConflictResolve: null,
+      showWebhookDialog: false,
+      currentWebhookUuid: '',
+
+      // 平台统计信息
+      platformStats: {},
+      statsRefreshInterval: null,
+
+      // 错误详情对话框
+      showErrorDialog: false,
+      currentErrorPlatform: null,
 
       store: useCommonStore()
     }
   },
 
   watch: {
+    showConsole(newValue) {
+      localStorage.setItem('platformPage_showConsole', newValue.toString());
+    },
+
     showIdConflictDialog(newValue) {
-      // 当对话框关闭时，如果 Promise 还在等待，则拒绝它以防止内存泄漏
       if (!newValue && this.idConflictResolve) {
         this.idConflictResolve(false);
         this.idConflictResolve = null;
+      }
+    },
+
+    showOneBotEmptyTokenWarnDialog(newValue) {
+      if (!newValue && this.oneBotEmptyTokenWarningResolve) {
+        this.oneBotEmptyTokenWarningResolve(true);
+        this.oneBotEmptyTokenWarningResolve = null;
       }
     }
   },
 
   mounted() {
     this.getConfig();
+    this.getPlatformStats();
+    // 每 10 秒刷新一次平台状态
+    this.statsRefreshInterval = setInterval(() => {
+      this.getPlatformStats();
+    }, 10000);
+    
+    // 监听语言切换事件，重新加载配置以获取插件的 i18n 数据
+    window.addEventListener('astrbot-locale-changed', this.handleLocaleChange);
+  },
+
+  beforeUnmount() {
+    if (this.statsRefreshInterval) {
+      clearInterval(this.statsRefreshInterval);
+    }
+    // 移除语言切换事件监听器
+    window.removeEventListener('astrbot-locale-changed', this.handleLocaleChange);
   },
 
   methods: {
-    openTutorial() {
-      const tutorialUrl = this.getTutorialLink(this.newSelectedPlatformConfig.type);
-      window.open(tutorialUrl, '_blank');
+    // 处理语言切换事件，重新加载配置以获取插件的 i18n 数据
+    handleLocaleChange() {
+      this.getConfig();
     },
 
-    getPlatformIcon(name) {
-      if (name === 'aiocqhttp' || name === 'qq_official' || name === 'qq_official_webhook') {
-        return new URL('@/assets/images/platform_logos/qq.png', import.meta.url).href
-      } else if (name === 'wecom') {
-        return new URL('@/assets/images/platform_logos/wecom.png', import.meta.url).href
-      } else if (name === 'wechatpadpro' || name === 'weixin_official_account' || name === 'wechat') {
-        return new URL('@/assets/images/platform_logos/wechat.png', import.meta.url).href
-      } else if (name === 'lark') {
-        return new URL('@/assets/images/platform_logos/lark.png', import.meta.url).href
-      } else if (name === 'dingtalk') {
-        return new URL('@/assets/images/platform_logos/dingtalk.svg', import.meta.url).href
-      } else if (name === 'telegram') {
-        return new URL('@/assets/images/platform_logos/telegram.svg', import.meta.url).href
-      } else if (name === 'discord') {
-        return new URL('@/assets/images/platform_logos/discord.svg', import.meta.url).href
-      } else if (name === 'slack') {
-        return new URL('@/assets/images/platform_logos/slack.svg', import.meta.url).href
-      } else if (name === 'kook') {
-        return new URL('@/assets/images/platform_logos/kook.png', import.meta.url).href
-      } else if (name === 'vocechat') {
-        return new URL('@/assets/images/platform_logos/vocechat.png', import.meta.url).href
+    // 从工具函数导入
+    getPlatformIcon(platform_id) {
+      // 首先检查是否有来自插件的 logo_token
+      const template = this.metadata['platform_group']?.metadata?.platform?.config_template?.[platform_id];
+      if (template && template.logo_token) {
+          // 通过文件服务访问插件提供的 logo
+        return `/api/file/${template.logo_token}`;
       }
-    },
-
-    getTutorialLink(platform_type) {
-      let tutorial_map = {
-        "qq_official_webhook": "https://astrbot.app/deploy/platform/qqofficial/webhook.html",
-        "qq_official": "https://astrbot.app/deploy/platform/qqofficial/websockets.html",
-        "aiocqhttp": "https://astrbot.app/deploy/platform/aiocqhttp/napcat.html",
-        "wecom": "https://astrbot.app/deploy/platform/wecom.html",
-        "lark": "https://astrbot.app/deploy/platform/lark.html",
-        "telegram": "https://astrbot.app/deploy/platform/telegram.html",
-        "dingtalk": "https://astrbot.app/deploy/platform/dingtalk.html",
-        "wechatpadpro": "https://astrbot.app/deploy/platform/wechat/wechatpadpro.html",
-        "weixin_official_account": "https://astrbot.app/deploy/platform/weixin-official-account.html",
-        "discord": "https://astrbot.app/deploy/platform/discord.html",
-        "slack": "https://astrbot.app/deploy/platform/slack.html",
-        "kook": "https://astrbot.app/deploy/platform/kook.html",
-        "vocechat": "https://astrbot.app/deploy/platform/vocechat.html",
-      }
-      return tutorial_map[platform_type] || "https://docs.astrbot.app";
-    },
-
-    getPlatformDescription(template, name) {
-      // special judge for community platforms
-      if (name.includes('vocechat')) {
-        return "由 @HikariFroya 提供。";
-      } else if (name.includes('kook')) {
-        return "由 @wuyan1003 提供。"
-      }
+      return getPlatformIcon(platform_id);
     },
 
     getConfig() {
@@ -317,108 +315,176 @@ export default {
         this.config_data = res.data.data.config;
         this.fetched = true
         this.metadata = res.data.data.metadata;
+
+        // 将插件平台适配器的 i18n 翻译注入到前端 i18n 系统中
+        const platformI18n = res.data.data.platform_i18n_translations;
+        if (platformI18n && typeof platformI18n === 'object') {
+          mergeDynamicTranslations('features.config-metadata', platformI18n);
+        }
       }).catch((err) => {
         this.showError(err);
       });
     },
 
-    // 添加一个新方法来选择平台模板
-    selectPlatformTemplate(name) {
-      this.newSelectedPlatformName = name;
-      this.showPlatformCfg = true;
-      this.updatingMode = false;
-      this.newSelectedPlatformConfig = JSON.parse(JSON.stringify(
-        this.metadata['platform_group']?.metadata?.platform?.config_template[name] || {}
-      ));
-      this.showAddPlatformDialog = false;
-    },
-
-    addFromDefaultConfigTmpl(index) {
-      this.newSelectedPlatformName = index[0];
-      this.showPlatformCfg = true;
-      this.updatingMode = false;
-      this.newSelectedPlatformConfig = JSON.parse(JSON.stringify(
-        this.metadata['platform_group']?.metadata?.platform?.config_template[index[0]] || {}
-      ));
-    },
-
-    editPlatform(platform) {
-      this.newSelectedPlatformName = platform.id;
-      this.newSelectedPlatformConfig = JSON.parse(JSON.stringify(platform));
-      this.updatingMode = true;
-      this.showPlatformCfg = true;
-    },
-
-    newPlatform() {
-      this.loading = true;
-      if (this.updatingMode) {
-        axios.post('/api/config/platform/update', {
-          id: this.newSelectedPlatformName,
-          config: this.newSelectedPlatformConfig
-        }).then((res) => {
-          this.loading = false;
-          this.showPlatformCfg = false;
-          this.getConfig();
-          this.$refs.wfr.check();
-          this.showSuccess(res.data.message || this.messages.updateSuccess);
-        }).catch((err) => {
-          this.loading = false;
-          this.showError(err.response?.data?.message || err.message);
-        });
-        this.updatingMode = false;
-      } else {
-        this.savePlatform();
-      }
-    },
-
-    async savePlatform() {
-      // 检查 ID 是否已存在
-      const existingPlatform = this.config_data.platform?.find(p => p.id === this.newSelectedPlatformConfig.id);
-      if (existingPlatform) {
-        const confirmed = await this.confirmIdConflict(this.newSelectedPlatformConfig.id);
-        if (!confirmed) {
-          this.loading = false;
-          return; // 如果用户取消，则中止保存
+    getPlatformStats() {
+      axios.get('/api/platform/stats').then((res) => {
+        if (res.data.status === 'ok') {
+          // 将数组转换为以 id 为 key 的对象，方便查找
+          const stats = {};
+          for (const platform of res.data.data.platforms || []) {
+            stats[platform.id] = platform;
+          }
+          this.platformStats = stats;
         }
-      }
-
-      try {
-        const res = await axios.post('/api/config/platform/new', this.newSelectedPlatformConfig);
-        this.loading = false;
-        this.showPlatformCfg = false;
-        this.getConfig();
-        this.showSuccess(res.data.message || this.messages.addSuccess);
-      } catch (err) {
-        this.loading = false;
-        this.showError(err.response?.data?.message || err.message);
-      }
-    },
-
-    confirmIdConflict(id) {
-      this.conflictId = id;
-      this.showIdConflictDialog = true;
-      return new Promise((resolve) => {
-        this.idConflictResolve = resolve;
+      }).catch((err) => {
+        console.warn('获取平台统计信息失败:', err);
       });
     },
 
-    handleIdConflictConfirm(confirmed) {
-      if (this.idConflictResolve) {
-        this.idConflictResolve(confirmed);
-      }
-      this.showIdConflictDialog = false;
+    getPlatformStat(platformId) {
+      return this.platformStats[platformId] || null;
     },
 
-    deletePlatform(platform) {
-      if (confirm(`${this.messages.deleteConfirm} ${platform.id}?`)) {
-        axios.post('/api/config/platform/delete', { id: platform.id }).then((res) => {
-          this.getConfig();
-          this.$refs.wfr.check();
-          this.showSuccess(res.data.message || this.messages.deleteSuccess);
-        }).catch((err) => {
-          this.showError(err.response?.data?.message || err.message);
-        });
+    getStatusColor(status) {
+      switch (status) {
+        case 'running': return 'success';
+        case 'error': return 'error';
+        case 'pending': return 'warning';
+        case 'stopped': return 'grey';
+        default: return 'grey';
       }
+    },
+
+    getStatusIcon(status) {
+      switch (status) {
+        case 'running': return 'mdi-check-circle';
+        case 'error': return 'mdi-alert-circle';
+        case 'pending': return 'mdi-clock-outline';
+        case 'stopped': return 'mdi-stop-circle';
+        default: return 'mdi-help-circle';
+      }
+    },
+
+    showErrorDetails(platform) {
+      const stat = this.getPlatformStat(platform.id);
+      if (stat && stat.error_count > 0) {
+        this.currentErrorPlatform = stat;
+        this.showErrorDialog = true;
+      }
+    },
+
+    findPlatformTemplate(platform) {
+      const templates = this.metadata?.platform_group?.metadata?.platform?.config_template || {};
+
+      if (platform?.type && templates[platform.type]) {
+        return templates[platform.type];
+      }
+      if (platform?.id && templates[platform.id]) {
+        return templates[platform.id];
+      }
+
+      for (const template of Object.values(templates)) {
+        if (template?.type === platform?.type) {
+          return template;
+        }
+      }
+      return null;
+    },
+
+    mergeConfigWithTemplate(sourceConfig, templateConfig) {
+      const merge = (source, reference) => {
+        const target = {};
+        const sourceObj = source && typeof source === 'object' && !Array.isArray(source) ? source : {};
+        const referenceObj = reference && typeof reference === 'object' && !Array.isArray(reference) ? reference : null;
+
+        if (!referenceObj) {
+          for (const [key, value] of Object.entries(sourceObj)) {
+            if (Array.isArray(value)) {
+              target[key] = [...value];
+            } else if (value && typeof value === 'object') {
+              target[key] = { ...value };
+            } else {
+              target[key] = value;
+            }
+          }
+          return target;
+        }
+
+        // 1) 先按模板顺序写入，保证字段相对顺序与 template 一致
+        for (const [key, refValue] of Object.entries(referenceObj)) {
+          const hasSourceKey = Object.prototype.hasOwnProperty.call(sourceObj, key);
+          const sourceValue = sourceObj[key];
+
+          if (refValue && typeof refValue === 'object' && !Array.isArray(refValue)) {
+            target[key] = merge(
+              hasSourceKey && sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue)
+                ? sourceValue
+                : {},
+              refValue
+            );
+            continue;
+          }
+
+          if (hasSourceKey) {
+            if (Array.isArray(sourceValue)) {
+              target[key] = [...sourceValue];
+            } else if (sourceValue && typeof sourceValue === 'object') {
+              target[key] = { ...sourceValue };
+            } else {
+              target[key] = sourceValue;
+            }
+          } else if (Array.isArray(refValue)) {
+            target[key] = [...refValue];
+          } else {
+            target[key] = refValue;
+          }
+        }
+
+        // 2) 再补充 source 中模板没有的额外字段，保持旧配置兼容性
+        for (const [key, value] of Object.entries(sourceObj)) {
+          if (Object.prototype.hasOwnProperty.call(referenceObj, key)) {
+            continue;
+          }
+          if (Array.isArray(value)) {
+            target[key] = [...value];
+          } else if (value && typeof value === 'object') {
+            target[key] = { ...value };
+          } else {
+            target[key] = value;
+          }
+        }
+
+        return target;
+      };
+
+      return merge(sourceConfig, templateConfig);
+    },
+
+    editPlatform(platform) {
+      const platformCopy = JSON.parse(JSON.stringify(platform));
+      const template = this.findPlatformTemplate(platformCopy);
+      this.updatingPlatformConfig = template
+        ? this.mergeConfigWithTemplate(platformCopy, template)
+        : platformCopy;
+      this.updatingMode = true;
+      this.showAddPlatformDialog = true;
+      this.$nextTick(() => {
+        this.$refs.addPlatformDialog.toggleShowConfigSection();
+      });
+    },
+
+    async deletePlatform(platform) {
+      const message = `${this.messages.deleteConfirm} ${platform.id}?`;
+      if (!(await askForConfirmationDialog(message, this.confirmDialog))) {
+        return;
+      }
+
+      axios.post('/api/config/platform/delete', { id: platform.id }).then((res) => {
+        this.getConfig();
+        this.showSuccess(res.data.message || this.messages.deleteSuccess);
+      }).catch((err) => {
+        this.showError(err.response?.data?.message || err.message);
+      });
     },
 
     platformStatusChange(platform) {
@@ -429,12 +495,19 @@ export default {
         config: platform
       }).then((res) => {
         this.getConfig();
-        this.$refs.wfr.check();
         this.showSuccess(res.data.message || this.messages.statusUpdateSuccess);
       }).catch((err) => {
         platform.enable = !platform.enable; // 发生错误时回滚状态
         this.showError(err.response?.data?.message || err.message);
       });
+    },
+
+    showToast({ message, type }) {
+      if (type === 'success') {
+        this.showSuccess(message);
+      } else if (type === 'error') {
+        this.showError(message);
+      }
     },
 
     showSuccess(message) {
@@ -447,6 +520,47 @@ export default {
       this.save_message = message;
       this.save_message_success = "error";
       this.save_message_snack = true;
+    },
+
+    getWebhookUrl(webhookUuid) {
+      let callbackBase = this.config_data.callback_api_base || '';
+      if (!callbackBase) {
+        callbackBase = "http(s)://<your-domain-or-ip>";
+      }
+      if (callbackBase) {
+        return `${callbackBase.replace(/\/$/, '')}/api/platform/webhook/${webhookUuid}`;
+      }
+      return `/api/platform/webhook/${webhookUuid}`;
+    },
+
+    openWebhookDialog(webhookUuid) {
+      this.currentWebhookUuid = webhookUuid;
+      this.showWebhookDialog = true;
+    },
+
+    async copyWebhookUrl(webhookUuid) {
+      const url = this.getWebhookUrl(webhookUuid);
+      try {
+        await navigator.clipboard.writeText(url);
+        this.showSuccess(this.tm('webhookCopied'));
+      } catch (err) {
+        this.showError(this.tm('webhookCopyFailed'));
+      }
+    }
+  },
+  computed: {
+    // 安全访问翻译的计算属性
+    messages() {
+      return {
+        updateSuccess: this.tm('messages.updateSuccess'),
+        addSuccess: this.tm('messages.addSuccess'),
+        deleteSuccess: this.tm('messages.deleteSuccess'),
+        statusUpdateSuccess: this.tm('messages.statusUpdateSuccess'),
+        deleteConfirm: this.tm('messages.deleteConfirm')
+      };
+    },
+    currentWebhookUrl() {
+      return this.getWebhookUrl(this.currentWebhookUuid);
     }
   }
 }
@@ -456,85 +570,52 @@ export default {
 .platform-page {
   padding: 20px;
   padding-top: 8px;
+  padding-bottom: 40px;
 }
 
-.platform-selection-dialog .v-card-title {
-  border-top-left-radius: 4px;
-  border-top-right-radius: 4px;
+.webhook-info {
+  margin-top: 4px;
 }
 
-.platform-card {
-  transition: all 0.3s ease;
-  height: 100%;
+.webhook-chip {
   cursor: pointer;
-  overflow: hidden;
-  position: relative;
 }
 
-.platform-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 25px 0 rgba(0, 0, 0, 0.05);
-  border-color: var(--v-primary-base);
-}
-
-.platform-card-content {
+.platform-status-row {
   display: flex;
   align-items: center;
-  height: 100px;
-  padding: 16px;
-  position: relative;
-  z-index: 2;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
-.platform-card-text {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+.status-chip {
+  font-size: 12px;
 }
 
-.platform-card-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 4px;
-  padding: 0;
+.error-chip {
+  cursor: pointer;
+  font-size: 12px;
 }
 
-.platform-card-description {
-  padding: 0;
-  margin: 0;
+.error-details {
+  margin-top: 8px;
 }
 
-.platform-card-logo {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1;
+.error-message {
+  word-break: break-word;
 }
 
-.platform-logo-img {
-  max-width: 60px;
-  max-height: 60px;
-  opacity: 0.6;
-  object-fit: contain;
-}
-
-.platform-logo-fallback {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background-color: var(--v-primary-base);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  font-weight: bold;
-  opacity: 0.3;
+.traceback-box {
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 300px;
+  overflow-y: auto;
 }
 </style>

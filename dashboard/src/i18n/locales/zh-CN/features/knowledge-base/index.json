@@ -1,0 +1,67 @@
+{
+  "title": "知识库管理",
+  "subtitle": "统一管理和查询知识库内容",
+  "list": {
+    "title": "我的知识库",
+    "subtitle": "管理您的所有知识库集合",
+    "create": "创建知识库",
+    "refresh": "刷新列表",
+    "empty": "暂无知识库",
+    "loading": "正在加载...",
+    "documents": "文档",
+    "chunks": "分块",
+    "sessionConfig": "会话配置"
+  },
+  "card": {
+    "edit": "编辑",
+    "delete": "删除",
+    "open": "打开",
+    "docCount": "{count} 个文档",
+    "chunkCount": "{count} 个分块"
+  },
+  "create": {
+    "title": "创建知识库",
+    "nameLabel": "知识库名称",
+    "namePlaceholder": "为知识库起个名字",
+    "descriptionLabel": "描述",
+    "descriptionPlaceholder": "简单描述这个知识库的用途...",
+    "emojiLabel": "图标",
+    "embeddingModelLabel": "嵌入模型 (Embedding Model)",
+    "rerankModelLabel": "重排序模型 (Rerank Model, 可选)",
+    "providerInfo": "提供商: {id} | 维度: {dimensions}",
+    "rerankProviderInfo": "提供商: {id}",
+    "cancel": "取消",
+    "submit": "创建",
+    "nameRequired": "请输入知识库名称"
+  },
+  "edit": {
+    "title": "编辑知识库",
+    "submit": "保存"
+  },
+  "delete": {
+    "title": "删除知识库",
+    "confirmText": "确定要删除知识库「{name}」吗?",
+    "warning": "此操作不可逆,所有文档、分块和关联配置都将被永久删除。",
+    "cancel": "取消",
+    "confirm": "删除"
+  },
+  "emoji": {
+    "title": "选择图标",
+    "close": "关闭",
+    "categories": {
+      "books": "书籍与文档",
+      "emotions": "表情与情感",
+      "objects": "物品与工具",
+      "symbols": "符号与标志"
+    }
+  },
+  "messages": {
+    "createSuccess": "知识库创建成功",
+    "createFailed": "创建失败",
+    "updateSuccess": "知识库更新成功",
+    "updateFailed": "更新失败",
+    "deleteSuccess": "知识库删除成功",
+    "deleteFailed": "删除失败",
+    "loadError": "加载知识库列表失败"
+  }
+}

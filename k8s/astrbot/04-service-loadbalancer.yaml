@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: astrbot-standalone-lb
+  namespace: astrbot-standalone-ns
+  labels:
+    app: astrbot-standalone
+spec:
+  type: LoadBalancer
+  selector:
+    app: astrbot-standalone
+  ports:
+    - name: webui
+      port: 6185
+      targetPort: 6185
+    - name: qq-ws
+      port: 6199
+      targetPort: 6199
+    # - name: wecom-wh
+    #   port: 6195
+    #   targetPort: 6195
+    # - name: qq-off-wh
+    #   port: 6196
+    #   targetPort: 6196

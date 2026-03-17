@@ -1,5 +1,5 @@
 import discord
-from typing import List
+
 from astrbot.api.message_components import BaseMessageComponent
 
 
@@ -11,15 +11,15 @@ class DiscordEmbed(BaseMessageComponent):
 
     def __init__(
         self,
-        title: str = None,
-        description: str = None,
-        color: int = None,
-        url: str = None,
-        thumbnail: str = None,
-        image: str = None,
-        footer: str = None,
-        fields: List[dict] = None,
-    ):
+        title: str | None = None,
+        description: str | None = None,
+        color: int | None = None,
+        url: str | None = None,
+        thumbnail: str | None = None,
+        image: str | None = None,
+        footer: str | None = None,
+        fields: list[dict] | None = None,
+    ) -> None:
         self.title = title
         self.description = description
         self.color = color
@@ -66,12 +66,12 @@ class DiscordButton(BaseMessageComponent):
     def __init__(
         self,
         label: str,
-        custom_id: str = None,
+        custom_id: str | None = None,
         style: str = "primary",
-        emoji: str = None,
-        url: str = None,
+        emoji: str | None = None,
+        url: str | None = None,
         disabled: bool = False,
-    ):
+    ) -> None:
         self.label = label
         self.custom_id = custom_id
         self.style = style
@@ -79,10 +79,13 @@ class DiscordButton(BaseMessageComponent):
         self.url = url
         self.disabled = disabled
 
+
 class DiscordReference(BaseMessageComponent):
     """Discord引用组件"""
+
     type: str = "discord_reference"
-    def __init__(self, message_id: str, channel_id: str):
+
+    def __init__(self, message_id: str, channel_id: str) -> None:
         self.message_id = message_id
         self.channel_id = channel_id
 
@@ -93,11 +96,12 @@ class DiscordView(BaseMessageComponent):
     type: str = "discord_view"
 
     def __init__(
-        self, components: List[BaseMessageComponent] = None, timeout: float = None
-    ):
+        self,
+        components: list[BaseMessageComponent] | None = None,
+        timeout: float | None = None,
+    ) -> None:
         self.components = components or []
         self.timeout = timeout
-
 
     def to_discord_view(self) -> discord.ui.View:
         """转换为Discord View对象"""
@@ -106,7 +110,9 @@ class DiscordView(BaseMessageComponent):
         for component in self.components:
             if isinstance(component, DiscordButton):
                 button_style = getattr(
-                    discord.ButtonStyle, component.style, discord.ButtonStyle.primary
+                    discord.ButtonStyle,
+                    component.style,
+                    discord.ButtonStyle.primary,
                 )
 
                 if component.url:

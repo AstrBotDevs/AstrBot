@@ -3,11 +3,13 @@ import os
 import uuid
 
 import aiohttp
-from ..provider import TTSProvider
-from ..entities import ProviderType
-from ..register import register_provider_adapter
+
 from astrbot import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+from ..entities import ProviderType
+from ..provider import TTSProvider
+from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -24,7 +26,7 @@ class ProviderGSVTTS(TTSProvider):
         super().__init__(provider_config, provider_settings)
 
         self.api_base = provider_config.get("api_base", "http://127.0.0.1:9880").rstrip(
-            "/"
+            "/",
         )
         self.gpt_weights_path: str = provider_config.get("gpt_weights_path", "")
         self.sovits_weights_path: str = provider_config.get("sovits_weights_path", "")
@@ -37,10 +39,10 @@ class ProviderGSVTTS(TTSProvider):
         self.timeout = provider_config.get("timeout", 60)
         self._session: aiohttp.ClientSession | None = None
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """异步初始化：在 ProviderManager 中被调用"""
         self._session = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=self.timeout)
+            timeout=aiohttp.ClientTimeout(total=self.timeout),
         )
         try:
             await self._set_model_weights()
@@ -52,12 +54,15 @@ class ProviderGSVTTS(TTSProvider):
     def get_session(self) -> aiohttp.ClientSession:
         if not self._session or self._session.closed:
             raise RuntimeError(
-                "[GSV TTS] Provider HTTP session is not ready or closed."
+                "[GSV TTS] Provider HTTP session is not ready or closed.",
             )
         return self._session
 
     async def _make_request(
-        self, endpoint: str, params=None, retries: int = 3
+        self,
+        endpoint: str,
+        params=None,
+        retries: int = 3,
     ) -> bytes | None:
         """发起请求"""
         for attempt in range(retries):
@@ -67,20 +72,20 @@ class ProviderGSVTTS(TTSProvider):
                     if response.status != 200:
                         error_text = await response.text()
                         raise Exception(
-                            f"[GSV TTS] Request to {endpoint} failed with status {response.status}: {error_text}"
+                            f"[GSV TTS] Request to {endpoint} failed with status {response.status}: {error_text}",
                         )
                     return await response.read()
             except Exception as e:
                 if attempt < retries - 1:
                     logger.warning(
-                        f"[GSV TTS] 请求 {endpoint} 第 {attempt + 1} 次失败：{e}，重试中..."
+                        f"[GSV TTS] 请求 {endpoint} 第 {attempt + 1} 次失败：{e}，重试中...",
                     )
                     await asyncio.sleep(1)
                 else:
                     logger.error(f"[GSV TTS] 请求 {endpoint} 最终失败：{e}")
                     raise
 
-    async def _set_model_weights(self):
+    async def _set_model_weights(self) -> None:
         """设置模型路径"""
         try:
             if self.gpt_weights_path:
@@ -98,7 +103,7 @@ class ProviderGSVTTS(TTSProvider):
                     {"weights_path": self.sovits_weights_path},
                 )
                 logger.info(
-                    f"[GSV TTS] 成功设置 SoVITS 模型路径：{self.sovits_weights_path}"
+                    f"[GSV TTS] 成功设置 SoVITS 模型路径：{self.sovits_weights_path}",
                 )
             else:
                 logger.info("[GSV TTS] SoVITS 模型路径未配置，将使用内置 SoVITS 模型")
@@ -116,7 +121,7 @@ class ProviderGSVTTS(TTSProvider):
 
         params = self.build_synthesis_params(text)
 
-        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+        temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
         path = os.path.join(temp_dir, f"gsv_tts_{uuid.uuid4().hex}.wav")
 
@@ -127,12 +132,10 @@ class ProviderGSVTTS(TTSProvider):
             with open(path, "wb") as f:
                 f.write(result)
             return path
-        else:
-            raise Exception(f"[GSV TTS] 合成失败，输入文本：{text}，错误信息：{result}")
+        raise Exception(f"[GSV TTS] 合成失败，输入文本：{text}，错误信息：{result}")
 
     def build_synthesis_params(self, text: str) -> dict:
-        """
-        构建语音合成所需的参数字典。
+        """构建语音合成所需的参数字典。
 
         当前仅包含默认参数 + 文本，未来可在此基础上动态添加如情绪、角色等语义控制字段。
         """
@@ -141,7 +144,7 @@ class ProviderGSVTTS(TTSProvider):
         # TODO: 在此处添加情绪分析，例如 params["emotion"] = detect_emotion(text)
         return params
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         """终止释放资源：在 ProviderManager 中被调用"""
         if self._session and not self._session.closed:
             await self._session.close()

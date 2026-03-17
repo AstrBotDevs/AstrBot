@@ -1,30 +1,36 @@
 from __future__ import annotations
 
-import botpy
-import logging
-import time
 import asyncio
-import botpy.message
-import botpy.types
-import botpy.types.message
+import hashlib
+import logging
 import os
+import random
+import time
+from typing import Any, cast
 
+import botpy
+import botpy.message
 from botpy import Client
+
+from astrbot import logger
+from astrbot.api.event import MessageChain
+from astrbot.api.message_components import At, File, Image, Plain, Record, Video
 from astrbot.api.platform import (
-    Platform,
     AstrBotMessage,
     MessageMember,
     MessageType,
+    Platform,
     PlatformMetadata,
 )
-from astrbot import logger
-from astrbot.api.event import MessageChain
-from typing import Union, List
-from astrbot.api.message_components import Image, Plain, At
-from astrbot.core.platform.astr_message_event import MessageSesion
-from .qqofficial_message_event import QQOfficialMessageEvent
-from ...register import register_platform_adapter
 from astrbot.core.message.components import BaseMessageComponent
+from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.number_utils import safe_positive_float
+from astrbot.core.utils.ttl_registry import TTLKeyRegistry
+
+from ...register import register_platform_adapter
+from .qqofficial_message_event import QQOfficialMessageEvent
+
+# pyright: reportUnreachable=false
 
 # remove logger handler
 for handler in logging.root.handlers[:]:
@@ -32,47 +38,173 @@ for handler in logging.root.handlers[:]:
 
 
 # QQ 机器人官方框架
+def _extract_sender_id(message) -> str:
+    """Extract sender ID from a QQ message object.
+
+    This is the central location for sender ID extraction logic to avoid
+    precedence drift between different code paths.
+
+    The precedence order is:
+    1. author.user_openid
+    2. author.member_openid
+    3. author.id
+
+    Args:
+        message: The message object with an author attribute.
+
+    Returns:
+        The sender ID as a string, or empty string if not found.
+    """
+    if hasattr(message, "author") and hasattr(message.author, "user_openid"):
+        return str(message.author.user_openid)
+    if hasattr(message, "author") and hasattr(message.author, "member_openid"):
+        return str(message.author.member_openid)
+    if hasattr(message, "author") and hasattr(message.author, "id"):
+        return str(message.author.id)
+    return ""
+
+
+class MessageDeduplicator:
+    def __init__(
+        self,
+        message_id_ttl_seconds: float = 30 * 60,
+        content_key_ttl_seconds: float = 3.0,
+        cleanup_interval_seconds: float = 1.0,
+    ) -> None:
+        self._message_ids = TTLKeyRegistry(
+            ttl_seconds=message_id_ttl_seconds,
+            cleanup_interval_seconds=cleanup_interval_seconds,
+        )
+        self._content_keys = TTLKeyRegistry(
+            ttl_seconds=content_key_ttl_seconds,
+            cleanup_interval_seconds=cleanup_interval_seconds,
+        )
+        self._lock = asyncio.Lock()
+
+    def _build_content_key(self, content: str, sender_id: str) -> str | None:
+        if not (content and sender_id):
+            return None
+        content_hash = hashlib.sha1(content.encode("utf-8")).hexdigest()[:16]
+        return f"{sender_id}:{content_hash}"
+
+    async def is_duplicate(
+        self,
+        message_id: str,
+        content: str = "",
+        sender_id: str = "",
+    ) -> bool:
+        async with self._lock:
+            # Bypass deduplication if TTL is 0 (disabled)
+            if self._message_ids.ttl_seconds == 0:
+                return False
+
+            # 1) ID-based dedup
+            if self._message_ids.contains(message_id):
+                logger.debug(
+                    "[QQOfficial] Duplicate message detected (by ID): %s...",
+                    message_id[:50],
+                )
+                return True
+
+            self._message_ids.add(message_id)
+
+            # 2) Content-based dedup
+            content_key = self._build_content_key(content, sender_id)
+            if content_key is None:
+                logger.debug("[QQOfficial] New message registered: %s...", message_id[:50])
+                return False
+
+            if self._content_keys.contains(content_key):
+                logger.debug(
+                    "[QQOfficial] Duplicate message detected (by content): %s",
+                    content_key,
+                )
+                # Preserve existing behavior: do not keep message_id on content duplicates
+                self._message_ids.discard(message_id)
+                return True
+
+            self._content_keys.add(content_key)
+            logger.debug("[QQOfficial] New message registered: %s...", message_id[:50])
+            return False
+
+
 class botClient(Client):
-    def set_platform(self, platform: "QQOfficialPlatformAdapter"):
+    def set_platform(self, platform: QQOfficialPlatformAdapter) -> None:
         self.platform = platform
 
+    def _get_sender_id(self, message) -> str:
+        """Extract sender ID from different message types.
+
+        Delegates to the centralized _extract_sender_id function to avoid
+        precedence drift.
+        """
+        return _extract_sender_id(message)
+
+    def _extract_dedup_key(self, message) -> tuple[str, str]:
+        sender_id = self._get_sender_id(message)
+        content = getattr(message, "content", "") or ""
+        return sender_id, content
+
+    async def _should_drop_message(self, message) -> bool:
+        sender_id, content = self._extract_dedup_key(message)
+        return await self.platform._is_duplicate_message(message.id, content, sender_id)
+
     # 收到群消息
-    async def on_group_at_message_create(self, message: botpy.message.GroupMessage):
+    async def on_group_at_message_create(
+        self, message: botpy.message.GroupMessage
+    ) -> None:
+        if await self._should_drop_message(message):
+            return
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.GROUP_MESSAGE
+            message,
+            MessageType.GROUP_MESSAGE,
         )
-        abm.session_id = (
-            abm.sender.user_id if self.platform.unique_session else message.group_openid
-        )
+        abm.group_id = cast(str, message.group_openid)
+        abm.session_id = abm.group_id
+        self.platform.remember_session_scene(abm.session_id, "group")
         self._commit(abm)
 
     # 收到频道消息
-    async def on_at_message_create(self, message: botpy.message.Message):
+    async def on_at_message_create(self, message: botpy.message.Message) -> None:
+        if await self._should_drop_message(message):
+            return
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.GROUP_MESSAGE
+            message,
+            MessageType.GROUP_MESSAGE,
         )
-        abm.session_id = (
-            abm.sender.user_id if self.platform.unique_session else message.channel_id
-        )
+        abm.group_id = message.channel_id
+        abm.session_id = abm.group_id
+        self.platform.remember_session_scene(abm.session_id, "channel")
         self._commit(abm)
 
     # 收到私聊消息
-    async def on_direct_message_create(self, message: botpy.message.DirectMessage):
+    async def on_direct_message_create(
+        self, message: botpy.message.DirectMessage
+    ) -> None:
+        if await self._should_drop_message(message):
+            return
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.FRIEND_MESSAGE
+            message,
+            MessageType.FRIEND_MESSAGE,
         )
         abm.session_id = abm.sender.user_id
+        self.platform.remember_session_scene(abm.session_id, "friend")
         self._commit(abm)
 
     # 收到 C2C 消息
-    async def on_c2c_message_create(self, message: botpy.message.C2CMessage):
+    async def on_c2c_message_create(self, message: botpy.message.C2CMessage) -> None:
+        if await self._should_drop_message(message):
+            return
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.FRIEND_MESSAGE
+            message,
+            MessageType.FRIEND_MESSAGE,
         )
         abm.session_id = abm.sender.user_id
+        self.platform.remember_session_scene(abm.session_id, "friend")
         self._commit(abm)
 
-    def _commit(self, abm: AstrBotMessage):
+    def _commit(self, abm: AstrBotMessage) -> None:
+        self.platform.remember_session_message_id(abm.session_id, abm.message_id)
         self.platform.commit_event(
             QQOfficialMessageEvent(
                 abm.message_str,
@@ -80,22 +212,22 @@ class botClient(Client):
                 self.platform.meta(),
                 abm.session_id,
                 self.platform.client,
-            )
+            ),
         )
 
 
 @register_platform_adapter("qq_official", "QQ 机器人官方 API 适配器")
 class QQOfficialPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
-
-        self.config = platform_config
+        super().__init__(platform_config, event_queue)
 
         self.appid = platform_config["appid"]
         self.secret = platform_config["secret"]
-        self.unique_session = platform_settings["unique_session"]
         qq_group = platform_config["enable_group_c2c"]
         guild_dm = platform_config["enable_guild_direct_message"]
 
@@ -107,7 +239,8 @@ class QQOfficialPlatformAdapter(Platform):
             )
         else:
             self.intents = botpy.Intents(
-                public_guild_messages=True, direct_message=guild_dm
+                public_guild_messages=True,
+                direct_message=guild_dm,
             )
         self.client = botClient(
             intents=self.intents,
@@ -117,23 +250,296 @@ class QQOfficialPlatformAdapter(Platform):
 
         self.client.set_platform(self)
 
+        self._session_last_message_id: dict[str, str] = {}
+        self._session_scene: dict[str, str] = {}
+
         self.test_mode = os.environ.get("TEST_MODE", "off") == "on"
 
+        message_id_ttl_seconds = safe_positive_float(
+            platform_config.get("dedup_message_id_ttl_seconds"),
+            30 * 60,
+        )
+        content_key_ttl_seconds = safe_positive_float(
+            platform_config.get("dedup_content_key_ttl_seconds"),
+            3.0,
+        )
+        cleanup_interval_seconds = safe_positive_float(
+            platform_config.get("dedup_cleanup_interval_seconds"),
+            1.0,
+        )
+
+        self._deduplicator = MessageDeduplicator(
+            message_id_ttl_seconds=message_id_ttl_seconds,
+            content_key_ttl_seconds=content_key_ttl_seconds,
+            cleanup_interval_seconds=cleanup_interval_seconds,
+        )
+
+    async def _is_duplicate_message(
+        self, message_id: str, content: str = "", sender_id: str = ""
+    ) -> bool:
+        return await self._deduplicator.is_duplicate(message_id, content, sender_id)
+
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
-    ):
-        raise NotImplementedError("QQ 机器人官方 API 适配器不支持 send_by_session")
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
+    ) -> None:
+        await self._send_by_session_common(session, message_chain)
+
+    async def _send_by_session_common(
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
+    ) -> None:
+        (
+            plain_text,
+            image_base64,
+            image_path,
+            record_file_path,
+            video_file_source,
+            file_source,
+            file_name,
+        ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_chain)
+        if (
+            not plain_text
+            and not image_path
+            and not image_base64
+            and not record_file_path
+            and not video_file_source
+            and not file_source
+        ):
+            return
+
+        msg_id = self._session_last_message_id.get(session.session_id)
+        if not msg_id:
+            logger.warning(
+                "[QQOfficial] No cached msg_id for session: %s, skip send_by_session",
+                session.session_id,
+            )
+            return
+
+        payload: dict[str, Any] = {"content": plain_text, "msg_id": msg_id}
+        ret: Any = None
+        send_helper = self.client
+
+        if session.message_type == MessageType.GROUP_MESSAGE:
+            scene = self._session_scene.get(session.session_id)
+            if scene == "group":
+                payload["msg_seq"] = random.randint(1, 10000)
+                if image_base64:
+                    media = await QQOfficialMessageEvent.upload_group_and_c2c_image(
+                        send_helper,  # type: ignore
+                        image_base64,
+                        QQOfficialMessageEvent.IMAGE_FILE_TYPE,
+                        group_openid=session.session_id,
+                    )
+                    payload["media"] = media
+                    payload["msg_type"] = 7
+                if record_file_path:
+                    media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
+                        send_helper,  # type: ignore
+                        record_file_path,
+                        QQOfficialMessageEvent.VOICE_FILE_TYPE,
+                        group_openid=session.session_id,
+                    )
+                    if media:
+                        payload["media"] = media
+                        payload["msg_type"] = 7
+                if video_file_source:
+                    media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
+                        send_helper,  # type: ignore
+                        video_file_source,
+                        QQOfficialMessageEvent.VIDEO_FILE_TYPE,
+                        group_openid=session.session_id,
+                    )
+                    if media:
+                        payload["media"] = media
+                        payload["msg_type"] = 7
+                        payload.pop("msg_id", None)
+                if file_source:
+                    media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
+                        send_helper,  # type: ignore
+                        file_source,
+                        QQOfficialMessageEvent.FILE_FILE_TYPE,
+                        file_name=file_name,
+                        group_openid=session.session_id,
+                    )
+                    if media:
+                        payload["media"] = media
+                        payload["msg_type"] = 7
+                        payload.pop("msg_id", None)
+                ret = await self.client.api.post_group_message(
+                    group_openid=session.session_id,
+                    **payload,
+                )
+            else:
+                if image_path:
+                    payload["file_image"] = image_path
+                ret = await self.client.api.post_message(
+                    channel_id=session.session_id,
+                    **payload,
+                )
+
+        elif session.message_type == MessageType.FRIEND_MESSAGE:
+            payload["msg_seq"] = random.randint(1, 10000)
+            if image_base64:
+                media = await QQOfficialMessageEvent.upload_group_and_c2c_image(
+                    send_helper,  # type: ignore
+                    image_base64,
+                    QQOfficialMessageEvent.IMAGE_FILE_TYPE,
+                    openid=session.session_id,
+                )
+                payload["media"] = media
+                payload["msg_type"] = 7
+            if record_file_path:
+                media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
+                    send_helper,  # type: ignore
+                    record_file_path,
+                    QQOfficialMessageEvent.VOICE_FILE_TYPE,
+                    openid=session.session_id,
+                )
+                if media:
+                    payload["media"] = media
+                    payload["msg_type"] = 7
+            if video_file_source:
+                media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
+                    send_helper,  # type: ignore
+                    video_file_source,
+                    QQOfficialMessageEvent.VIDEO_FILE_TYPE,
+                    openid=session.session_id,
+                )
+                if media:
+                    payload["media"] = media
+                    payload["msg_type"] = 7
+                    # QQ API rejects msg_id for media (video/file) messages sent
+                    # via the proactive tool-call path; remove it to avoid 越权 error.
+                    payload.pop("msg_id", None)
+            if file_source:
+                media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
+                    send_helper,  # type: ignore
+                    file_source,
+                    QQOfficialMessageEvent.FILE_FILE_TYPE,
+                    file_name=file_name,
+                    openid=session.session_id,
+                )
+                if media:
+                    payload["media"] = media
+                    payload["msg_type"] = 7
+                    payload.pop("msg_id", None)
+
+            ret = await QQOfficialMessageEvent.post_c2c_message(
+                send_helper,  # type: ignore
+                openid=session.session_id,
+                **payload,
+            )
+        else:
+            logger.warning(
+                "[QQOfficial] Unsupported message type for send_by_session: %s",
+                session.message_type,
+            )
+            return
+
+        sent_message_id = self._extract_message_id(ret)
+        if sent_message_id:
+            self.remember_session_message_id(session.session_id, sent_message_id)
+        await super().send_by_session(session, message_chain)
+
+    def remember_session_message_id(self, session_id: str, message_id: str) -> None:
+        if not session_id or not message_id:
+            return
+        self._session_last_message_id[session_id] = message_id
+
+    def remember_session_scene(self, session_id: str, scene: str) -> None:
+        if not session_id or not scene:
+            return
+        self._session_scene[session_id] = scene
+
+    def _extract_message_id(self, ret: Any) -> str | None:
+        if isinstance(ret, dict):
+            message_id = ret.get("id")
+            return str(message_id) if message_id else None
+        message_id = getattr(ret, "id", None)
+        if message_id:
+            return str(message_id)
+        return None
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
             name="qq_official",
             description="QQ 机器人官方 API 适配器",
-            id=self.config.get("id"),
+            id=cast(str, self.config.get("id")),
+            support_proactive_message=True,
         )
 
     @staticmethod
+    def _normalize_attachment_url(url: str | None) -> str:
+        if not url:
+            return ""
+        if url.startswith("http://") or url.startswith("https://"):
+            return url
+        return f"https://{url}"
+
+    @staticmethod
+    def _append_attachments(
+        msg: list[BaseMessageComponent],
+        attachments: list | None,
+    ) -> None:
+        if not attachments:
+            return
+
+        for attachment in attachments:
+            content_type = cast(
+                str,
+                getattr(attachment, "content_type", "") or "",
+            ).lower()
+            url = QQOfficialPlatformAdapter._normalize_attachment_url(
+                cast(str | None, getattr(attachment, "url", None))
+            )
+            if not url:
+                continue
+
+            if content_type.startswith("image"):
+                msg.append(Image.fromURL(url))
+            else:
+                filename = cast(
+                    str,
+                    getattr(attachment, "filename", None)
+                    or getattr(attachment, "name", None)
+                    or "attachment",
+                )
+                ext = os.path.splitext(filename)[1].lower()
+                image_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+                audio_exts = {
+                    ".mp3",
+                    ".wav",
+                    ".ogg",
+                    ".m4a",
+                    ".amr",
+                    ".silk",
+                }
+                video_exts = {
+                    ".mp4",
+                    ".mov",
+                    ".avi",
+                    ".mkv",
+                    ".webm",
+                }
+
+                if content_type.startswith("audio") or ext in audio_exts:
+                    msg.append(Record.fromURL(url))
+                elif content_type.startswith("video") or ext in video_exts:
+                    msg.append(Video.fromURL(url))
+                elif content_type.startswith("image") or ext in image_exts:
+                    msg.append(Image.fromURL(url))
+                else:
+                    msg.append(File(name=filename, file=url, url=url))
+
+    @staticmethod
     def _parse_from_qqofficial(
-        message: Union[botpy.message.Message, botpy.message.GroupMessage],
+        message: botpy.message.Message
+        | botpy.message.GroupMessage
+        | botpy.message.DirectMessage
+        | botpy.message.C2CMessage,
         message_type: MessageType,
     ):
         abm = AstrBotMessage()
@@ -141,11 +547,13 @@ class QQOfficialPlatformAdapter(Platform):
         abm.timestamp = int(time.time())
         abm.raw_message = message
         abm.message_id = message.id
-        abm.tag = "qq_official"
-        msg: List[BaseMessageComponent] = []
+        # abm.tag = "qq_official"
+        msg: list[BaseMessageComponent] = []
+        message = cast(Any, message)
 
         if isinstance(message, botpy.message.GroupMessage) or isinstance(
-            message, botpy.message.C2CMessage
+            message,
+            botpy.message.C2CMessage,
         ):
             if isinstance(message, botpy.message.GroupMessage):
                 abm.sender = MessageMember(message.author.member_openid, "")
@@ -156,40 +564,30 @@ class QQOfficialPlatformAdapter(Platform):
             abm.self_id = "unknown_selfid"
             msg.append(At(qq="qq_official"))
             msg.append(Plain(abm.message_str))
-            if message.attachments:
-                for i in message.attachments:
-                    if i.content_type.startswith("image"):
-                        url = i.url
-                        if not url.startswith("http"):
-                            url = "https://" + url
-                        img = Image.fromURL(url)
-                        msg.append(img)
+            QQOfficialPlatformAdapter._append_attachments(msg, message.attachments)
             abm.message = msg
 
         elif isinstance(message, botpy.message.Message) or isinstance(
-            message, botpy.message.DirectMessage
+            message,
+            botpy.message.DirectMessage,
         ):
-            try:
+            if isinstance(message, botpy.message.Message):
                 abm.self_id = str(message.mentions[0].id)
-            except BaseException as _:
+            else:
                 abm.self_id = ""
 
             plain_content = message.content.replace(
-                "<@!" + str(abm.self_id) + ">", ""
+                "<@!" + str(abm.self_id) + ">",
+                "",
             ).strip()
 
-            if message.attachments:
-                for i in message.attachments:
-                    if i.content_type.startswith("image"):
-                        url = i.url
-                        if not url.startswith("http"):
-                            url = "https://" + url
-                        img = Image.fromURL(url)
-                        msg.append(img)
+            QQOfficialPlatformAdapter._append_attachments(msg, message.attachments)
             abm.message = msg
             abm.message_str = plain_content
+            sender_user_id = _extract_sender_id(message)
             abm.sender = MessageMember(
-                str(message.author.id), str(message.author.username)
+                sender_user_id,
+                str(message.author.username),
             )
             msg.append(At(qq="qq_official"))
             msg.append(Plain(plain_content))
@@ -207,6 +605,6 @@ class QQOfficialPlatformAdapter(Platform):
     def get_client(self) -> botClient:
         return self.client
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         await self.client.close()
         logger.info("QQ 官方机器人接口 适配器已被优雅地关闭")

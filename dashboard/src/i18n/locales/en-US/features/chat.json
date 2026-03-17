@@ -8,7 +8,9 @@
     "upload": "Upload File",
     "voice": "Voice Input",
     "recordingPrompt": "Recording, please speak...",
-    "chatPrompt": "Let's chat!"
+    "chatPrompt": "Let's chat!",
+    "dropToUpload": "Drop files to upload",
+    "stopGenerating": "Stop generating"
   },
   "message": {
     "user": "User",
@@ -22,7 +24,11 @@
     "stop": "Stop Recording",
     "recording": "New Recording",
     "processing": "Processing...",
-    "error": "Recording Failed"
+    "error": "Recording Failed",
+    "listening": "Listening...",
+    "speaking": "Speaking",
+    "startRecording": "Start Voice Input",
+    "liveMode": "Live Mode"
   },
   "welcome": {
     "title": "Welcome to AstrBot",
@@ -40,14 +46,27 @@
     "deleteChat": "Delete this conversation",
     "editTitle": "Edit Title",
     "fullscreen": "Fullscreen Mode",
-    "exitFullscreen": "Exit Fullscreen"
+    "exitFullscreen": "Exit Fullscreen",
+    "reply": "Reply",
+    "providerConfig": "AI Configuration",
+    "toolsUsed": "Tool Used",
+    "toolCallUsed": "Used {name} tool",
+    "pythonCodeAnalysis": "Python Code Analysis Used"
+  },
+  "ipython": {
+    "output": "Output"
   },
   "conversation": {
     "newConversation": "New Conversation",
     "noHistory": "No conversation history",
     "systemStatus": "System Status",
     "llmService": "LLM Service",
-    "speechToText": "Speech to Text"
+    "speechToText": "Speech to Text",
+    "editDisplayName": "Edit Session Name",
+    "displayName": "Session Name",
+    "displayNameUpdated": "Session name updated",
+    "displayNameUpdateFailed": "Failed to update session name",
+    "confirmDelete": "Are you sure you want to delete \"{name}\"? This action cannot be undone."
   },
   "modes": {
     "darkMode": "Switch to Dark Mode",
@@ -56,6 +75,53 @@
     "help": "Get Help",
     "voiceRecord": "Record Voice",
     "pasteImage": "Paste Image"
+  },
+  "streaming": {
+    "enabled": "Streaming enabled",
+    "disabled": "Streaming disabled",
+    "on": "Stream",
+    "off": "Normal"
+  },
+  "transport": {
+    "title": "Transport Mode",
+    "sse": "SSE",
+    "websocket": "WebSocket"
+  },
+  "config": {
+    "title": "Config"
+  },
+  "reasoning": {
+    "thinking": "Thinking Process"
+  },
+  "reply": {
+    "replyTo": "Reply to",
+    "notFound": "Message not found"
+  },
+  "project": {
+    "title": "Projects",
+    "create": "Create Project",
+    "edit": "Edit Project",
+    "name": "Project Name",
+    "emoji": "Icon (Emoji)",
+    "description": "Description (Optional)",
+    "noSessions": "No conversations in this project",
+    "confirmDelete": "Are you sure you want to delete project \"{title}\"? Conversations in this project will not be deleted."
+  },
+  "time": {
+    "today": "Today",
+    "yesterday": "Yesterday"
+  },
+  "stats": {
+    "tokens": "Tokens",
+    "inputTokens": "Input Tokens",
+    "outputTokens": "Output Tokens",
+    "cachedTokens": "Cached Tokens",
+    "duration": "Duration",
+    "ttft": "Time to First Token"
+  },
+  "refs": {
+    "title": "References",
+    "sources": "Sources"
   },
   "connection": {
     "title": "Connection Status Notice",
@@ -71,5 +137,9 @@
       "reconnected": "Chat connection re-established",
       "failed": "Connection failed, please refresh the page"
     }
+  },
+  "errors": {
+    "sendMessageFailed": "Failed to send message, please try again",
+    "createSessionFailed": "Failed to create session, please refresh the page"
   }
 } 

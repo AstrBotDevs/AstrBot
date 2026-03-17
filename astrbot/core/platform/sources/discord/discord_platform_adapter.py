@@ -1,29 +1,31 @@
 import asyncio
-import discord
-import sys
 import re
-from discord.abc import Messageable
+import sys
+from typing import Any, cast
+
+import discord
+from discord.abc import GuildChannel, Messageable, PrivateChannel
 from discord.channel import DMChannel
+
+from astrbot import logger
+from astrbot.api.event import MessageChain
+from astrbot.api.message_components import File, Image, Plain
 from astrbot.api.platform import (
-    Platform,
     AstrBotMessage,
     MessageMember,
-    PlatformMetadata,
     MessageType,
+    Platform,
+    PlatformMetadata,
+    register_platform_adapter,
 )
-from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Plain, Image, File
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.api.platform import register_platform_adapter
-from astrbot import logger
-from .client import DiscordBotClient
-from .discord_platform_event import DiscordPlatformEvent
-
-from typing import Any, Tuple
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
+
+from .client import DiscordBotClient
+from .discord_platform_event import DiscordPlatformEvent
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -32,15 +34,19 @@ else:
 
 
 # 注册平台适配器
-@register_platform_adapter("discord", "Discord 适配器 (基于 Pycord)")
+@register_platform_adapter(
+    "discord", "Discord 适配器 (基于 Pycord)", support_streaming_message=False
+)
 class DiscordPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
-        self.config = platform_config
+        super().__init__(platform_config, event_queue)
         self.settings = platform_settings
-        self.client_self_id = None
+        self.client_self_id: str | None = None
         self.registered_handlers = []
         # 指令注册相关
         self.enable_command_register = self.config.get("discord_command_register", True)
@@ -51,9 +57,17 @@ class DiscordPlatformAdapter(Platform):
 
     @override
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
-    ):
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
+    ) -> None:
         """通过会话发送消息"""
+        if self.client.user is None:
+            logger.error(
+                "[Discord] 客户端未就绪 (self.client.user is None)，无法发送消息"
+            )
+            return
+
         # 创建一个 message_obj 以便在 event 中使用
         message_obj = AstrBotMessage()
         if "_" in session.session_id:
@@ -71,18 +85,19 @@ class DiscordPlatformAdapter(Platform):
             message_obj.group_id = self._get_channel_id(channel)
         else:
             logger.warning(
-                f"[Discord] Can't get channel info for {channel_id_str}, will guess message type."
+                f"[Discord] Can't get channel info for {channel_id_str}, will guess message type.",
             )
             message_obj.type = MessageType.GROUP_MESSAGE
             message_obj.group_id = session.session_id
 
         message_obj.message_str = message_chain.get_plain_text()
         message_obj.sender = MessageMember(
-            user_id=str(self.client_self_id), nickname=self.client.user.display_name
+            user_id=str(self.client_self_id),
+            nickname=self.client.user.display_name,
         )
-        message_obj.self_id = self.client_self_id
+        message_obj.self_id = cast(str, self.client_self_id)
         message_obj.session_id = session.session_id
-        message_obj.message = message_chain
+        message_obj.message = message_chain.chain
 
         # 创建临时事件对象来发送消息
         temp_event = DiscordPlatformEvent(
@@ -101,16 +116,17 @@ class DiscordPlatformAdapter(Platform):
         return PlatformMetadata(
             "discord",
             "Discord 适配器",
-            id=self.config.get("id"),
+            id=cast(str, self.config.get("id")),
             default_config_tmpl=self.config,
+            support_streaming_message=False,
         )
 
     @override
-    async def run(self):
+    async def run(self) -> None:
         """主要运行逻辑"""
 
         # 初始化回调函数
-        async def on_received(message_data):
+        async def on_received(message_data) -> None:
             logger.debug(f"[Discord] 收到消息: {message_data}")
             if self.client_self_id is None:
                 self.client_self_id = message_data.get("bot_id")
@@ -127,7 +143,7 @@ class DiscordPlatformAdapter(Platform):
         self.client = DiscordBotClient(token, proxy)
         self.client.on_message_received = on_received
 
-        async def callback():
+        async def callback() -> None:
             if self.enable_command_register:
                 await self._collect_and_register_commands()
             if self.activity_name:
@@ -149,7 +165,9 @@ class DiscordPlatformAdapter(Platform):
             logger.error(f"[Discord] 适配器运行时发生意外错误: {e}", exc_info=True)
 
     def _get_message_type(
-        self, channel: Messageable, guild_id: int | None = None
+        self,
+        channel: Messageable | GuildChannel | PrivateChannel,
+        guild_id: int | None = None,
     ) -> MessageType:
         """根据 channel 对象和 guild_id 判断消息类型"""
         if guild_id is not None:
@@ -158,13 +176,15 @@ class DiscordPlatformAdapter(Platform):
             return MessageType.FRIEND_MESSAGE
         return MessageType.GROUP_MESSAGE
 
-    def _get_channel_id(self, channel: Messageable) -> str:
+    def _get_channel_id(
+        self, channel: Messageable | GuildChannel | PrivateChannel
+    ) -> str:
         """根据 channel 对象获取ID"""
         return str(getattr(channel, "id", None))
 
     def _convert_message_to_abm(self, data: dict) -> AstrBotMessage:
         """将普通消息转换为 AstrBotMessage"""
-        message: discord.Message = data["message"]
+        message = data["message"]
 
         content = message.content
 
@@ -201,7 +221,8 @@ class DiscordPlatformAdapter(Platform):
         abm.group_id = self._get_channel_id(message.channel)
         abm.message_str = content
         abm.sender = MessageMember(
-            user_id=str(message.author.id), nickname=message.author.display_name
+            user_id=str(message.author.id),
+            nickname=message.author.display_name,
         )
         message_chain = []
         if abm.message_str:
@@ -209,18 +230,18 @@ class DiscordPlatformAdapter(Platform):
         if message.attachments:
             for attachment in message.attachments:
                 if attachment.content_type and attachment.content_type.startswith(
-                    "image/"
+                    "image/",
                 ):
                     message_chain.append(
-                        Image(file=attachment.url, filename=attachment.filename)
+                        Image(file=attachment.url, filename=attachment.filename),
                     )
                 else:
                     message_chain.append(
-                        File(name=attachment.filename, url=attachment.url)
+                        File(name=attachment.filename, url=attachment.url),
                     )
         abm.message = message_chain
         abm.raw_message = message
-        abm.self_id = self.client_self_id
+        abm.self_id = cast(str, self.client_self_id)
         abm.session_id = str(message.channel.id)
         abm.message_id = str(message.id)
         return abm
@@ -230,7 +251,7 @@ class DiscordPlatformAdapter(Platform):
         # 由于 on_interaction 已被禁用，我们只处理普通消息
         return self._convert_message_to_abm(data)
 
-    async def handle_msg(self, message: AstrBotMessage, followup_webhook=None):
+    async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
         """处理消息"""
         message_event = DiscordPlatformEvent(
             message_str=message.message_str,
@@ -241,32 +262,52 @@ class DiscordPlatformAdapter(Platform):
             interaction_followup_webhook=followup_webhook,
         )
 
+        if self.client.user is None:
+            logger.error(
+                "[Discord] 客户端未就绪 (self.client.user is None)，无法处理消息"
+            )
+            return
+
         # 检查是否为斜杠指令
         is_slash_command = message_event.interaction_followup_webhook is not None
 
+        # 1. 优先处理斜杠指令
+        if is_slash_command:
+            message_event.is_wake = True
+            message_event.is_at_or_wake_command = True
+            self.commit_event(message_event)
+            return
+
+        # 2. 处理普通消息（提及检测）
+        # 确保 raw_message 是 discord.Message 类型，以便静态检查通过
+        raw_message = message.raw_message
+        if not isinstance(raw_message, discord.Message):
+            logger.warning(
+                f"[Discord] 收到非 Message 类型的消息: {type(raw_message)}，已忽略。"
+            )
+            return
+
         # 检查是否被@（User Mention 或 Bot 拥有的 Role Mention）
         is_mention = False
+
         # User Mention
-        if (
-            self.client
-            and self.client.user
-            and hasattr(message.raw_message, "mentions")
-        ):
-            if self.client.user in message.raw_message.mentions:
-                is_mention = True
+        # 此时 Pylance 知道 raw_message 是 discord.Message，具有 mentions 属性
+        if self.client.user in raw_message.mentions:
+            is_mention = True
+
         # Role Mention（Bot 拥有的角色被提及）
-        if not is_mention and hasattr(message.raw_message, "role_mentions"):
+        if not is_mention and raw_message.role_mentions:
             bot_member = None
-            if hasattr(message.raw_message, "guild") and message.raw_message.guild:
+            if raw_message.guild:
                 try:
-                    bot_member = message.raw_message.guild.get_member(
-                        self.client.user.id
+                    bot_member = raw_message.guild.get_member(
+                        self.client.user.id,
                     )
                 except Exception:
                     bot_member = None
             if bot_member and hasattr(bot_member, "roles"):
                 bot_roles = set(bot_member.roles)
-                mentioned_roles = set(message.raw_message.role_mentions)
+                mentioned_roles = set(raw_message.role_mentions)
                 if (
                     bot_roles
                     and mentioned_roles
@@ -274,15 +315,15 @@ class DiscordPlatformAdapter(Platform):
                 ):
                     is_mention = True
 
-        # 如果是斜杠指令或被@的消息，设置为唤醒状态
-        if is_slash_command or is_mention:
+        # 如果是被@的消息，设置为唤醒状态
+        if is_mention:
             message_event.is_wake = True
             message_event.is_at_or_wake_command = True
 
         self.commit_event(message_event)
 
     @override
-    async def terminate(self):
+    async def terminate(self) -> None:
         """终止适配器"""
         logger.info("[Discord] 正在终止适配器... (step 1: cancel polling task)")
         self.shutdown_event.set()
@@ -317,17 +358,19 @@ class DiscordPlatformAdapter(Platform):
                 logger.warning(f"[Discord] 客户端关闭异常: {e}")
         logger.info("[Discord] 适配器已终止。")
 
-    def register_handler(self, handler_info):
+    def register_handler(self, handler_info) -> None:
         """注册处理器信息"""
         self.registered_handlers.append(handler_info)
 
-    async def _collect_and_register_commands(self):
+    async def _collect_and_register_commands(self) -> None:
         """收集所有指令并注册到Discord"""
         logger.info("[Discord] 开始收集并注册斜杠指令...")
         registered_commands = []
 
         for handler_md in star_handlers_registry:
             if not star_map[handler_md.handler_module_path].activated:
+                continue
+            if not handler_md.enabled:
                 continue
             for event_filter in handler_md.event_filters:
                 cmd_info = self._extract_command_info(event_filter, handler_md)
@@ -346,7 +389,7 @@ class DiscordPlatformAdapter(Platform):
                         description="指令的所有参数",
                         type=discord.SlashCommandOptionType.string,
                         required=False,
-                    )
+                    ),
                 ]
 
                 # 创建SlashCommand
@@ -362,7 +405,7 @@ class DiscordPlatformAdapter(Platform):
 
         if registered_commands:
             logger.info(
-                f"[Discord] 准备同步 {len(registered_commands)} 个指令: {', '.join(registered_commands)}"
+                f"[Discord] 准备同步 {len(registered_commands)} 个指令: {', '.join(registered_commands)}",
             )
         else:
             logger.info("[Discord] 没有发现可注册的指令。")
@@ -375,7 +418,9 @@ class DiscordPlatformAdapter(Platform):
     def _create_dynamic_callback(self, cmd_name: str):
         """为每个指令动态创建一个异步回调函数"""
 
-        async def dynamic_callback(ctx: discord.ApplicationContext, params: str = None):
+        async def dynamic_callback(
+            ctx: discord.ApplicationContext, params: str | None = None
+        ) -> None:
             # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
             logger.debug(f"[Discord] 回调函数触发: {cmd_name}")
             logger.debug(f"[Discord] 回调函数参数: {ctx}")
@@ -387,7 +432,7 @@ class DiscordPlatformAdapter(Platform):
             logger.debug(
                 f"[Discord] 斜杠指令 '{cmd_name}' 被触发。 "
                 f"原始参数: '{params}'. "
-                f"构建的指令字符串: '{message_str_for_filter}'"
+                f"构建的指令字符串: '{message_str_for_filter}'",
             )
 
             # 尝试立即响应，防止超时
@@ -399,16 +444,28 @@ class DiscordPlatformAdapter(Platform):
                 logger.warning(f"[Discord] 指令 '{cmd_name}' defer 失败: {e}")
 
             # 2. 构建 AstrBotMessage
+            channel = ctx.channel
             abm = AstrBotMessage()
-            abm.type = self._get_message_type(ctx.channel, ctx.guild_id)
-            abm.group_id = self._get_channel_id(ctx.channel)
+            if channel is not None:
+                abm.type = self._get_message_type(channel, ctx.guild_id)
+                abm.group_id = self._get_channel_id(channel)
+            else:
+                # 防守式兜底：channel 取不到时，仍能根据 guild_id/channel_id 推断会话信息
+                abm.type = (
+                    MessageType.GROUP_MESSAGE
+                    if ctx.guild_id is not None
+                    else MessageType.FRIEND_MESSAGE
+                )
+                abm.group_id = str(ctx.channel_id)
+
             abm.message_str = message_str_for_filter
             abm.sender = MessageMember(
-                user_id=str(ctx.author.id), nickname=ctx.author.display_name
+                user_id=str(ctx.author.id),
+                nickname=ctx.author.display_name,
             )
             abm.message = [Plain(text=message_str_for_filter)]
             abm.raw_message = ctx.interaction
-            abm.self_id = self.client_self_id
+            abm.self_id = cast(str, self.client_self_id)
             abm.session_id = str(ctx.channel_id)
             abm.message_id = str(ctx.interaction.id)
 
@@ -419,8 +476,9 @@ class DiscordPlatformAdapter(Platform):
 
     @staticmethod
     def _extract_command_info(
-        event_filter: Any, handler_metadata: StarHandlerMetadata
-    ) -> Tuple[str, str, CommandFilter] | None:
+        event_filter: Any,
+        handler_metadata: StarHandlerMetadata,
+    ) -> tuple[str, str, CommandFilter | None] | None:
         """从事件过滤器中提取指令信息"""
         cmd_name = None
         # is_group = False

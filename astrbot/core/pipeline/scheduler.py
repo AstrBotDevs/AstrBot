@@ -1,39 +1,50 @@
-from . import STAGES_ORDER
-from .stage import registered_stages
-from .context import PipelineContext
-from typing import AsyncGenerator
-from astrbot.core.platform import AstrMessageEvent
+from collections.abc import AsyncGenerator
+
 from astrbot.core import logger
+from astrbot.core.platform import AstrMessageEvent
+from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
+from astrbot.core.platform.sources.wecom_ai_bot.wecomai_event import (
+    WecomAIBotMessageEvent,
+)
+from astrbot.core.utils.active_event_registry import active_event_registry
+
+from .bootstrap import ensure_builtin_stages_registered
+from .context import PipelineContext
+from .stage import registered_stages
+from .stage_order import STAGES_ORDER
 
 
 class PipelineScheduler:
     """管道调度器，负责调度各个阶段的执行"""
 
-    def __init__(self, context: PipelineContext):
+    def __init__(self, context: PipelineContext) -> None:
+        ensure_builtin_stages_registered()
         registered_stages.sort(
-            key=lambda x: STAGES_ORDER.index(x.__class__.__name__)
+            key=lambda x: STAGES_ORDER.index(x.__name__),
         )  # 按照顺序排序
         self.ctx = context  # 上下文对象
+        self.stages = []  # 存储阶段实例
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """初始化管道调度器时, 初始化所有阶段"""
-        for stage in registered_stages:
-            # logger.debug(f"初始化阶段 {stage.__class__ .__name__}")
+        for stage_cls in registered_stages:
+            stage_instance = stage_cls()  # 创建实例
+            await stage_instance.initialize(self.ctx)
+            self.stages.append(stage_instance)
 
-            await stage.initialize(self.ctx)
-
-    async def _process_stages(self, event: AstrMessageEvent, from_stage=0):
+    async def _process_stages(self, event: AstrMessageEvent, from_stage=0) -> None:
         """依次执行各个阶段
 
         Args:
             event (AstrMessageEvent): 事件对象
             from_stage (int): 从第几个阶段开始执行, 默认从0开始
+
         """
-        for i in range(from_stage, len(registered_stages)):
-            stage = registered_stages[i]  # 获取当前要执行的阶段
-            # logger.debug(f"执行阶段 {stage.__class__ .__name__}")
+        for i in range(from_stage, len(self.stages)):
+            stage = self.stages[i]  # 获取当前要执行的阶段
+            # logger.debug(f"执行阶段 {stage.__class__.__name__}")
             coroutine = stage.process(
-                event
+                event,
             )  # 调用阶段的process方法, 返回协程或者异步生成器
 
             if isinstance(coroutine, AsyncGenerator):
@@ -42,7 +53,7 @@ class PipelineScheduler:
                     # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
                     if event.is_stopped():
                         logger.debug(
-                            f"阶段 {stage.__class__.__name__} 已终止事件传播。"
+                            f"阶段 {stage.__class__.__name__} 已终止事件传播。",
                         )
                         break
 
@@ -52,7 +63,7 @@ class PipelineScheduler:
                     # 此处是后续所有阶段处理完毕后返回的点, 执行后置处理
                     if event.is_stopped():
                         logger.debug(
-                            f"阶段 {stage.__class__.__name__} 已终止事件传播。"
+                            f"阶段 {stage.__class__.__name__} 已终止事件传播。",
                         )
                         break
             else:
@@ -64,16 +75,21 @@ class PipelineScheduler:
                     logger.debug(f"阶段 {stage.__class__.__name__} 已终止事件传播。")
                     break
 
-    async def execute(self, event: AstrMessageEvent):
+    async def execute(self, event: AstrMessageEvent) -> None:
         """执行 pipeline
 
         Args:
             event (AstrMessageEvent): 事件对象
+
         """
-        await self._process_stages(event)
+        active_event_registry.register(event)
+        try:
+            await self._process_stages(event)
 
-        # 如果没有发送操作, 则发送一个空消息, 以便于后续的处理
-        if event.get_platform_name() == "webchat":
-            await event.send(None)
+            # 如果没有发送操作, 则发送一个空消息, 以便于后续的处理
+            if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
+                await event.send(None)
 
-        logger.debug("pipeline 执行完毕。")
+            logger.debug("pipeline 执行完毕。")
+        finally:
+            active_event_registry.unregister(event)

@@ -1,0 +1,4 @@
+name: astrbot
+desc: AstrBot 自带插件，包含人格注入、思考内容注入、群聊上下文感知等功能的实现，禁用后将无法使用这些功能。
+author: Soulter
+version: 4.1.0

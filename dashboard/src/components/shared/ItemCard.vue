@@ -4,42 +4,59 @@
       <span class="text-h2 text-truncate" :title="getItemTitle()">{{ getItemTitle() }}</span>
       <v-tooltip location="top">
         <template v-slot:activator="{ props }">
-          <v-switch 
-            color="primary" 
-            hide-details 
-            density="compact" 
+          <v-switch
+            color="primary"
+            hide-details
+            density="compact"
             :model-value="getItemEnabled()"
             :loading="loading"
-            :disabled="loading"
-            v-bind="props" 
+            :disabled="loading || disableToggle"
+            v-bind="props"
             @update:model-value="toggleEnabled"
           ></v-switch>
         </template>
         <span>{{ getItemEnabled() ? t('core.common.itemCard.enabled') : t('core.common.itemCard.disabled') }}</span>
       </v-tooltip>
     </v-card-title>
-    
+
     <v-card-text>
       <slot name="item-details" :item="item"></slot>
     </v-card-text>
-    
-    <v-card-actions style="margin: 8px;">
+
+  <v-card-actions style="margin: 8px;">
+    <v-btn
+      variant="outlined"
+      color="error"
+      size="small"
+      rounded="xl"
+      :disabled="loading || disableDelete"
+      @click="$emit('delete', item)"
+    >
+      {{ t('core.common.itemCard.delete') }}
+    </v-btn>
+    <v-btn
+      v-if="showEditButton"
+      variant="tonal"
+      color="primary"
+      size="small"
+      rounded="xl"
+      :disabled="loading"
+      @click="$emit('edit', item)"
+    >
+      {{ t('core.common.itemCard.edit') }}
+    </v-btn>
       <v-btn
-        variant="outlined" 
-        color="error"
-        rounded="xl"
-        @click="$emit('delete', item)"
-      >
-        {{ t('core.common.itemCard.delete') }}
-      </v-btn>
-      <v-btn
+        v-if="showCopyButton"
         variant="tonal"
-        color="primary"
+        color="secondary"
+        size="small"
         rounded="xl"
-        @click="$emit('edit', item)"
+        :disabled="loading"
+        @click="$emit('copy', item)"
       >
-        {{ t('core.common.itemCard.edit') }}
+        {{ t('core.common.itemCard.copy') }}
       </v-btn>
+      <slot name="actions" :item="item"></slot>
       <v-spacer></v-spacer>
     </v-card-actions>
 
@@ -83,9 +100,25 @@ export default {
     loading: {
       type: Boolean,
       default: false
+    },
+    showCopyButton: {
+      type: Boolean,
+      default: false
+    },
+    showEditButton: {
+      type: Boolean,
+      default: true
+    },
+    disableToggle: {
+      type: Boolean,
+      default: false
+    },
+    disableDelete: {
+      type: Boolean,
+      default: false
     }
   },
-  emits: ['toggle-enabled', 'delete', 'edit'],
+  emits: ['toggle-enabled', 'delete', 'edit', 'copy'],
   methods: {
     getItemTitle() {
       return this.item[this.titleField];
@@ -107,7 +140,7 @@ export default {
   transition: all 0.3s ease;
   overflow: hidden;
   min-height: 220px;
-  margin-bottom: 16px;
+  height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: space-between;

@@ -1,27 +1,30 @@
-import uuid
-import time
+import asyncio
+import hashlib
 import json
 import re
-import hashlib
-import random
-import asyncio
+import secrets
+import time
+import uuid
 from pathlib import Path
-from typing import Dict
 from xml.sax.saxutils import escape
 
 from httpx import AsyncClient, Timeout
+
+from astrbot import logger
 from astrbot.core.config.default import VERSION
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
 from ..register import register_provider_adapter
 
-TEMP_DIR = Path("data/temp/azure_tts")
+TEMP_DIR = Path(get_astrbot_temp_path()) / "azure_tts"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
+AZURE_TTS_SUBSCRIPTION_KEY_PATTERN = r"^(?:[a-zA-Z0-9]{32}|[a-zA-Z0-9]{84})$"
 
 
 class OTTSProvider:
-    def __init__(self, config: Dict):
+    def __init__(self, config: dict) -> None:
         self.skey = config["OTTS_SKEY"]
         self.api_url = config["OTTS_URL"]
         self.auth_time_url = config["OTTS_AUTH_TIME"]
@@ -29,17 +32,31 @@ class OTTSProvider:
         self.last_sync_time = 0
         self.timeout = Timeout(10.0)
         self.retry_count = 3
-        self.client = None
+        self.proxy = config.get("proxy", "")
+        if self.proxy:
+            logger.info(f"[Azure TTS] 使用代理: {self.proxy}")
+        self._client: AsyncClient | None = None
+
+    @property
+    def client(self) -> AsyncClient:
+        if self._client is None:
+            raise RuntimeError(
+                "Client not initialized. Please use 'async with' context."
+            )
+        return self._client
 
     async def __aenter__(self):
-        self.client = AsyncClient(timeout=self.timeout)
+        self._client = AsyncClient(
+            timeout=self.timeout, proxy=self.proxy if self.proxy else None
+        )
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.client:
-            await self.client.aclose()
+        if self._client:
+            await self._client.aclose()
+            self._client = None
 
-    async def _sync_time(self):
+    async def _sync_time(self) -> None:
         try:
             response = await self.client.get(self.auth_time_url)
             response.raise_for_status()
@@ -54,11 +71,13 @@ class OTTSProvider:
     async def _generate_signature(self) -> str:
         await self._sync_time()
         timestamp = int(time.time()) + self.time_offset
-        nonce = "".join(random.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=10))
+        nonce = "".join(
+            secrets.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(10)
+        )
         path = re.sub(r"^https?://[^/]+", "", self.api_url) or "/"
         return f"{timestamp}-{nonce}-0-{hashlib.md5(f'{path}-{timestamp}-{nonce}-0-{self.skey}'.encode()).hexdigest()}"
 
-    async def get_audio(self, text: str, voice_params: Dict) -> str:
+    async def get_audio(self, text: str, voice_params: dict) -> str:
         file_path = TEMP_DIR / f"otts-{uuid.uuid4()}.wav"
         signature = await self._generate_signature()
         for attempt in range(self.retry_count):
@@ -86,23 +105,25 @@ class OTTSProvider:
                 return str(file_path.resolve())
             except Exception as e:
                 if attempt == self.retry_count - 1:
-                    raise RuntimeError(f"OTTS请求失败: {str(e)}") from e
+                    raise RuntimeError(f"OTTS请求失败: {e!s}") from e
                 await asyncio.sleep(0.5 * (attempt + 1))
+        raise RuntimeError("OTTS未返回音频文件")
 
 
 class AzureNativeProvider(TTSProvider):
-    def __init__(self, provider_config: dict, provider_settings: dict):
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
         self.subscription_key = provider_config.get(
-            "azure_tts_subscription_key", ""
+            "azure_tts_subscription_key",
+            "",
         ).strip()
-        if not re.fullmatch(r"^[a-zA-Z0-9]{32}$", self.subscription_key):
+        if not re.fullmatch(AZURE_TTS_SUBSCRIPTION_KEY_PATTERN, self.subscription_key):
             raise ValueError("无效的Azure订阅密钥")
         self.region = provider_config.get("azure_tts_region", "eastus").strip()
         self.endpoint = (
             f"https://{self.region}.tts.speech.microsoft.com/cognitiveservices/v1"
         )
-        self.client = None
+        self._client: AsyncClient | None = None
         self.token = None
         self.token_expire = 0
         self.voice_params = {
@@ -112,27 +133,41 @@ class AzureNativeProvider(TTSProvider):
             "rate": provider_config.get("azure_tts_rate", "1"),
             "volume": provider_config.get("azure_tts_volume", "100"),
         }
+        self.proxy = provider_config.get("proxy", "")
+        if self.proxy:
+            logger.info(f"[Azure TTS Native] 使用代理: {self.proxy}")
+
+    @property
+    def client(self) -> AsyncClient:
+        if self._client is None:
+            raise RuntimeError(
+                "Client not initialized. Please use 'async with' context."
+            )
+        return self._client
 
     async def __aenter__(self):
-        self.client = AsyncClient(
+        self._client = AsyncClient(
             headers={
                 "User-Agent": f"AstrBot/{VERSION}",
                 "Content-Type": "application/ssml+xml",
                 "X-Microsoft-OutputFormat": "riff-48khz-16bit-mono-pcm",
-            }
+            },
+            proxy=self.proxy if self.proxy else None,
         )
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.client:
-            await self.client.aclose()
+        if self._client:
+            await self._client.aclose()
+            self._client = None
 
-    async def _refresh_token(self):
+    async def _refresh_token(self) -> None:
         token_url = (
             f"https://{self.region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken"
         )
         response = await self.client.post(
-            token_url, headers={"Ocp-Apim-Subscription-Key": self.subscription_key}
+            token_url,
+            headers={"Ocp-Apim-Subscription-Key": self.subscription_key},
         )
         response.raise_for_status()
         self.token = response.text
@@ -172,13 +207,16 @@ class AzureNativeProvider(TTSProvider):
 
 @register_provider_adapter("azure_tts", "Azure TTS", ProviderType.TEXT_TO_SPEECH)
 class AzureTTSProvider(TTSProvider):
-    def __init__(self, provider_config: dict, provider_settings: dict):
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
         key_value = provider_config.get("azure_tts_subscription_key", "")
         self.provider = self._parse_provider(key_value, provider_config)
 
-    def _parse_provider(self, key_value: str, config: dict) -> TTSProvider:
+    def _parse_provider(
+        self, key_value: str, config: dict
+    ) -> OTTSProvider | AzureNativeProvider:
         if key_value.lower().startswith("other["):
+            json_str = ""
             try:
                 match = re.match(r"other\[(.*)\]", key_value, re.DOTALL)
                 if not match:
@@ -198,9 +236,9 @@ class AzureTTSProvider(TTSProvider):
                 raise ValueError(error_msg) from e
             except KeyError as e:
                 raise ValueError(f"配置错误: 缺少必要参数 {e}") from e
-        if re.fullmatch(r"^[a-zA-Z0-9]{32}$", key_value):
+        if re.fullmatch(AZURE_TTS_SUBSCRIPTION_KEY_PATTERN, key_value):
             return AzureNativeProvider(config, self.provider_settings)
-        raise ValueError("订阅密钥格式无效，应为32位字母数字或other[...]格式")
+        raise ValueError("订阅密钥格式无效，应为32位或84位字母数字或other[...]格式")
 
     async def get_audio(self, text: str) -> str:
         if isinstance(self.provider, OTTSProvider):

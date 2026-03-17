@@ -1,8 +1,10 @@
 import enum
-from . import HandlerFilter
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
 from astrbot.core.config import AstrBotConfig
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
+
+from . import HandlerFilter
 
 
 class EventMessageType(enum.Flag):
@@ -20,7 +22,7 @@ MESSAGE_TYPE_2_EVENT_MESSAGE_TYPE = {
 
 
 class EventMessageTypeFilter(HandlerFilter):
-    def __init__(self, event_message_type: EventMessageType):
+    def __init__(self, event_message_type: EventMessageType) -> None:
         self.event_message_type = event_message_type
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:

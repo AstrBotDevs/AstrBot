@@ -1,0 +1,184 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Astrbot PowerShell {{ version }} </title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/common.min.js"></script>
+  <script>hljs.highlightAll();</script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"
+      onload="renderMathInElement(document.getElementById('content'),{delimiters: [{left: '$$', right: '$$', display: true},{left: '$', right: '$', display: false}]});"></script>
+  <style>
+    :root {
+        --bg-color: #010409;
+        --text-color: #e6edf3;
+        --title-bar-color: #161b22;
+        --title-text-color: #e6edf3;
+        --font-family: 'Consolas', 'Microsoft YaHei Mono', 'Dengxian Mono', 'Courier New', monospace;
+        --glow-color: rgba(200, 220, 255, 0.7);
+    }
+
+    @keyframes scanline {
+        0% {
+            background-position: 0 0;
+        }
+        100% {
+            background-position: 0 100%;
+        }
+    }
+
+    body {
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        font-family: var(--font-family);
+        margin: 0;
+        padding: 0;
+        line-height: 1.6;
+        font-size: 18px;
+        /* The CRT glow effect from the image */
+        text-shadow: 0 0 15px var(--glow-color), 0 0 7px rgba(255, 255, 255, 1);
+        position: relative;
+        overflow: hidden;
+    }
+
+    body::after {
+        content: " ";
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(to bottom, transparent 50%, rgba(0, 0, 0, 0.3) 50%);
+        background-size: 100% 4px;
+        z-index: 2;
+        pointer-events: none;
+        animation: scanline 8s linear infinite;
+    }
+
+    .header {
+        background-color: var(--title-bar-color);
+        padding: 12px 18px;
+        color: var(--title-text-color);
+        font-size: 16px;
+        border-bottom: 1px solid #30363d;
+        text-shadow: none; /* No glow for title bar */
+    }
+    
+    .header .title {
+        font-weight: bold;
+        font-size: 28px;
+    }
+
+    .header .version {
+        opacity: 0.8;
+        margin-left: 1rem;
+    }
+
+    main {
+        padding: 1rem 1.5rem;
+    }
+
+    #content {
+        /* min-width and max-width removed as per request */
+    }
+
+    /* --- Markdown Styles adjusted for terminal look --- */
+    h1, h2, h3, h4, h5, h6 {
+        line-height: 1.4;
+        margin-top: 20px;
+        margin-bottom: 10px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #30363d;
+        color: var(--text-color);
+    }
+    h1 { font-size: 2rem; }
+    h2 { font-size: 1.7rem; }
+    h3 { font-size: 1.4rem; }
+
+    p {
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    strong {
+      color: var(--text-color);
+      font-weight: bold;
+    }
+
+    img {
+        max-width: 100%;
+        border: 1px solid #30363d;
+        display: block;
+        margin: 1rem auto;
+    }
+
+    hr {
+        border: 0;
+        border-top: 1px dashed #30363d;
+        margin: 2rem 0;
+    }
+
+    code {
+        font-family: var(--font-family);
+        padding: 0.2em 0.4em;
+        margin: 0;
+        font-size: 90%;
+        background-color: #161b22;
+        border-radius: 4px;
+    }
+
+    pre {
+        font-family: var(--font-family);
+        border-radius: 4px;
+        background: #0d1117;
+        padding: 1rem;
+        overflow-x: auto;
+        border: 1px solid #30363d;
+    }
+
+    pre > code {
+        padding: 0;
+        margin: 0;
+        font-size: 100%;
+        background-color: transparent;
+        border-radius: 0;
+        text-shadow: none; /* Disable glow inside code blocks for clarity */
+    }
+
+    a {
+        color: #58a6ff;
+        text-decoration: underline;
+    }
+    a:hover {
+        text-decoration: underline;
+    }
+
+    blockquote {
+        border-left: 4px solid #30363d;
+        padding: 0.5rem 1rem;
+        margin: 1.5rem 0;
+        color: #8b949e;
+        background-color: #161b22;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <span class="title">> Astrbot PowerShell</span>
+    <span class="version">{{ version }}</span>
+  </div>
+
+  <main>
+    <div id="content"></div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    document.getElementById('content').innerHTML = marked.parse(`{{ text | safe }}`);
+  </script>
+
+</body>
+</html>

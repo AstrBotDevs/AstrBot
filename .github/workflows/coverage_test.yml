@@ -17,12 +17,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
       
       - name: Install dependencies
         run: |
@@ -37,7 +37,7 @@ jobs:
           mkdir -p data/temp
           export TESTING=true
           export ZHIPU_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          pytest --cov=. -v -o log_cli=true -o log_level=DEBUG
+          pytest --cov=astrbot -v -o log_cli=true -o log_level=DEBUG
 
       - name: Upload results to Codecov
         uses: codecov/codecov-action@v5

@@ -1,8 +1,9 @@
-from abc import abstractmethod, ABCMeta
+from abc import ABCMeta, abstractmethod
+
+from astrbot.core.config import AstrBotConfig
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from . import HandlerFilter
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.config import AstrBotConfig
 
 
 class CustomFilterMeta(ABCMeta):
@@ -18,7 +19,7 @@ class CustomFilterMeta(ABCMeta):
 
 
 class CustomFilter(HandlerFilter, metaclass=CustomFilterMeta):
-    def __init__(self, raise_error: bool = True, **kwargs):
+    def __init__(self, raise_error: bool = True, **kwargs) -> None:
         self.raise_error = raise_error
 
     @abstractmethod
@@ -34,11 +35,11 @@ class CustomFilter(HandlerFilter, metaclass=CustomFilterMeta):
 
 
 class CustomFilterOr(CustomFilter):
-    def __init__(self, filter1: CustomFilter, filter2: CustomFilter):
+    def __init__(self, filter1: CustomFilter, filter2: CustomFilter) -> None:
         super().__init__()
         if not isinstance(filter1, (CustomFilter, CustomFilterAnd, CustomFilterOr)):
             raise ValueError(
-                "CustomFilter lass can only operate with other CustomFilter."
+                "CustomFilter class can only operate with other CustomFilter.",
             )
         self.filter1 = filter1
         self.filter2 = filter2
@@ -48,11 +49,11 @@ class CustomFilterOr(CustomFilter):
 
 
 class CustomFilterAnd(CustomFilter):
-    def __init__(self, filter1: CustomFilter, filter2: CustomFilter):
+    def __init__(self, filter1: CustomFilter, filter2: CustomFilter) -> None:
         super().__init__()
         if not isinstance(filter1, (CustomFilter, CustomFilterAnd, CustomFilterOr)):
             raise ValueError(
-                "CustomFilter lass can only operate with other CustomFilter."
+                "CustomFilter lass can only operate with other CustomFilter.",
             )
         self.filter1 = filter1
         self.filter2 = filter2

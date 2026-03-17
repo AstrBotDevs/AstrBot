@@ -1,5 +1,7 @@
-from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from botpy import Client
+
+from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+
 from ..qqofficial.qqofficial_message_event import QQOfficialMessageEvent
 
 
@@ -11,5 +13,5 @@ class QQOfficialWebhookMessageEvent(QQOfficialMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         bot: Client,
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id, bot)

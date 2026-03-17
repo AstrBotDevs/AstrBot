@@ -1,21 +1,26 @@
-"""
-Author: diudiu62
+"""Author: diudiu62
 Date: 2025-02-24 18:04:18
 LastEditTime: 2025-02-25 14:06:30
 """
 
 import asyncio
-from datetime import datetime
 import os
 import re
+from datetime import datetime
+from pathlib import Path
+from typing import cast
+
 from funasr_onnx import SenseVoiceSmall
 from funasr_onnx.utils.postprocess_utils import rich_transcription_postprocess
-from ..provider import STTProvider
-from ..entities import ProviderType
-from astrbot.core.utils.io import download_file
-from ..register import register_provider_adapter
+
 from astrbot.core import logger
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.io import download_file
 from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
+
+from ..entities import ProviderType
+from ..provider import STTProvider
+from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -30,33 +35,35 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         provider_settings: dict,
     ) -> None:
         super().__init__(provider_config, provider_settings)
-        self.set_model(provider_config.get("stt_model", None))
+        self.set_model(provider_config["stt_model"])
         self.model = None
         self.is_emotion = provider_config.get("is_emotion", False)
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         logger.info("下载或者加载 SenseVoice 模型中，这可能需要一些时间 ...")
 
         # 将模型加载放到线程池中执行
-        self.model = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: SenseVoiceSmall(self.model_name, quantize=True, batch_size=16)
+        self.model = await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: SenseVoiceSmall(self.model_name, quantize=True, batch_size=16),
         )
 
         logger.info("SenseVoice 模型加载完成。")
 
     async def get_timestamped_path(self) -> str:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return os.path.join("data", "temp", f"{timestamp}")
+        temp_dir = Path(get_astrbot_temp_path())
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        return str(temp_dir / timestamp)
 
-    async def _is_silk_file(self, file_path):
+    async def _is_silk_file(self, file_path) -> bool:
         silk_header = b"SILK"
         with open(file_path, "rb") as f:
             file_header = f.read(8)
 
         if silk_header in file_header:
             return True
-        else:
-            return False
+        return False
 
     async def get_text(self, audio_url: str) -> str:
         try:
@@ -81,10 +88,12 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
                     audio_url = output_path
 
             # 使用 run_in_executor 来调用模型进行识别
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             res = await loop.run_in_executor(
                 None,  # 使用默认的线程池
-                lambda: self.model(audio_url, language="auto", use_itn=True),
+                lambda: cast(SenseVoiceSmall, self.model)(
+                    audio_url, language="auto", use_itn=True
+                ),
             )
 
             # res = self.model(audio_url, language="auto", use_itn=True)

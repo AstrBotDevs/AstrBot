@@ -19,6 +19,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
+      mermaid: 'mermaid/dist/mermaid.js',
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
@@ -28,6 +29,7 @@ export default defineConfig({
     }
   },
   build: {
+    sourcemap: false,
     chunkSizeWarningLimit: 1024 * 1024 // Set the limit to 1 MB
   },
   optimizeDeps: {
@@ -39,8 +41,9 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:6185/',
+        target: 'http://127.0.0.1:6185/',
         changeOrigin: true,
+        ws: true
       }
     }
   }

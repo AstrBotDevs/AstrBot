@@ -1,8 +1,7 @@
-import asyncio
-import dingtalk_stream
-import astrbot.api.message_components as Comp
-from astrbot.api.event import AstrMessageEvent, MessageChain
+from typing import Any
+
 from astrbot import logger
+from astrbot.api.event import AstrMessageEvent, MessageChain
 
 
 class DingtalkMessageEvent(AstrMessageEvent):
@@ -12,56 +11,25 @@ class DingtalkMessageEvent(AstrMessageEvent):
         message_obj,
         platform_meta,
         session_id,
-        client: dingtalk_stream.ChatbotHandler,
-    ):
+        client: Any = None,
+        adapter: "Any" = None,
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
+        self.adapter = adapter
 
-    async def send_with_client(
-        self, client: dingtalk_stream.ChatbotHandler, message: MessageChain
-    ):
-        for segment in message.chain:
-            if isinstance(segment, Comp.Plain):
-                segment.text = segment.text.strip()
-                await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    client.reply_markdown,
-                    "AstrBot",
-                    segment.text,
-                    self.message_obj.raw_message,
-                )
-            elif isinstance(segment, Comp.Image):
-                markdown_str = ""
-
-                try:
-                    if not segment.file:
-                        logger.warning("钉钉图片 segment 缺少 file 字段，跳过")
-                        continue
-                    if segment.file.startswith(("http://", "https://")):
-                        image_url = segment.file
-                    else:
-                        image_url = await segment.register_to_file_service()
-
-                    markdown_str = f"![image]({image_url})\n\n"
-
-                    ret = await asyncio.get_event_loop().run_in_executor(
-                        None,
-                        client.reply_markdown,
-                        "😄",
-                        markdown_str,
-                        self.message_obj.raw_message,
-                    )
-                    logger.debug(f"send image: {ret}")
-
-                except Exception as e:
-                    logger.error(f"钉钉图片处理失败: {e}")
-                    logger.warning(f"跳过图片发送: {image_path}")
-                    continue
-    async def send(self, message: MessageChain):
-        await self.send_with_client(self.client, message)
+    async def send(self, message: MessageChain) -> None:
+        if not self.adapter:
+            logger.error("钉钉消息发送失败: 缺少 adapter")
+            return
+        await self.adapter.send_message_chain_with_incoming(
+            incoming_message=self.message_obj.raw_message,
+            message_chain=message,
+        )
         await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
+        # 钉钉统一回退为缓冲发送：最终发送仍使用新的 HTTP 消息接口。
         buffer = None
         async for chain in generator:
             if not buffer:
@@ -69,7 +37,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
             else:
                 buffer.chain.extend(chain.chain)
         if not buffer:
-            return
+            return None
         buffer.squash_plain()
         await self.send(buffer)
         return await super().send_streaming(generator, use_fallback)

@@ -2,12 +2,29 @@
   "title": "插件管理",
   "subtitle": "管理和配置系统插件",
   "tabs": {
-    "installed": "已安装",
-    "market": "插件市场"
+    "installedPlugins": "AstrBot 插件",
+    "market": "AstrBot 插件市场",
+    "installedMcpServers": "MCP",
+    "skills": "Skills",
+    "handlersOperation": "管理行为"
+  },
+  "titles": {
+    "installedAstrBotPlugins": "已安装的 AstrBot 插件"
+  },
+  "failedPlugins": {
+    "title": "加载失败插件（{count}）",
+    "hint": "这些插件加载失败，仍可尝试重载或直接卸载。",
+    "columns": {
+      "plugin": "插件",
+      "error": "错误"
+    }
   },
   "search": {
     "placeholder": "搜索插件...",
     "marketPlaceholder": "搜索市场插件..."
+  },
+  "filters": {
+    "all": "全部"
   },
   "views": {
     "card": "卡片视图",
@@ -16,7 +33,6 @@
   "buttons": {
     "showSystemPlugins": "显示系统插件",
     "hideSystemPlugins": "隐藏系统插件",
-    "platformConfig": "平台命令配置",
     "install": "安装",
     "uninstall": "卸载",
     "update": "更新",
@@ -26,6 +42,7 @@
     "configure": "配置",
     "viewInfo": "行为",
     "viewDocs": "文档",
+    "viewRepo": "仓库",
     "close": "关闭",
     "save": "保存",
     "saveAndClose": "保存并关闭",
@@ -33,7 +50,10 @@
     "actions": "操作",
     "back": "返回",
     "selectFile": "选择文件",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "updateAll": "更新全部插件",
+    "deleteSource": "删除源",
+    "reshuffle": "随机一发"
   },
   "status": {
     "enabled": "启用",
@@ -78,7 +98,43 @@
     "allPlugins": "📦 全部插件",
     "showFullName": "完整名称",
     "devDocs": "插件开发文档",
-    "submitRepo": "提交插件仓库"
+    "submitRepo": "提交插件仓库",
+    "customSource": "自定义插件源",
+    "source": "插件源",
+    "availableSources": "可用源",
+    "sourceManagement": "插件源管理",
+    "addSource": "添加插件源",
+    "sourceName": "源名称",
+    "sourceUrl": "源地址",
+    "defaultSource": "默认插件源",
+    "removeSource": "删除插件源",
+    "confirmRemoveSource": "确定要删除此插件源吗？",
+    "sourceAdded": "插件源添加成功",
+    "sourceRemoved": "插件源删除成功",
+    "sourceError": "操作失败",
+    "selectSource": "选择插件源",
+    "currentSource": "当前插件源",
+    "editSource": "编辑插件源",
+    "sourceUpdated": "插件源更新成功",
+    "defaultOfficialSource": "默认官方源",
+    "sourceExists": "该插件源已存在",
+    "installPlugin": "安装插件",
+    "randomPlugins": "🎲 随机插件",
+    "showRandomPlugins": "显示随机插件",
+    "hideRandomPlugins": "隐藏随机插件",
+    "sourceSafetyWarning": "即使是默认插件源，我们也不能完全保证插件的稳定性和安全性，使用前请谨慎核查。"
+  },
+  "sort": {
+    "by": "排序方式",
+    "default": "默认排序",
+    "installTime": "最后修改时间",
+    "name": "名称",
+    "stars": "Star数",
+    "author": "作者名",
+    "updated": "更新时间",
+    "updateStatus": "更新状态",
+    "ascending": "升序",
+    "descending": "降序"
   },
   "tags": {
     "danger": "危险"
@@ -86,19 +142,7 @@
   "dialogs": {
     "error": {
       "title": "错误信息",
-      "checkConsole": "详情请检查控制台"
-    },
-    "platformConfig": {
-      "title": "平台命令可用性配置",
-      "description": "设置每个插件在不同平台上的可用性，勾选表示启用",
-      "noAdapters": "未找到平台适配器",
-      "noAdaptersDesc": "请先在 平台管理 中添加并配置平台适配器，然后再设置插件的平台可用性",
-      "goPlatforms": "前往平台管理",
-      "selectAll": "全选",
-      "selectAllNormal": "全选普通插件",
-      "selectAllSystem": "全选系统插件",
-      "selectNone": "全不选",
-      "toggleAll": "反选"
+      "checkConsole": "详情请检查平台日志"
     },
     "config": {
       "title": "插件配置",
@@ -110,18 +154,39 @@
     },
     "uninstall": {
       "title": "删除确认",
-      "message": "你确定要删除当前插件吗？"
+      "message": "你确定要删除当前插件吗？",
+      "deleteConfig": "同时删除插件配置文件",
+      "deleteData": "同时删除插件持久化数据",
+      "configHint": "配置文件位于 data/config 目录",
+      "dataHint": "删除 data/plugin_data 和 data/plugins_data 目录下的数据"
     },
     "install": {
       "title": "安装插件",
       "fromFile": "从文件安装",
-      "fromUrl": "从链接安装"
+      "fromUrl": "从链接安装",
+      "supportPlatformsCount": "支持 {count} 个平台"
     },
     "danger_warning": {
       "title": "警告",
       "message": "该插件可能包含不安全的代码或功能，可能导致系统异常或数据损失等。请确认是否继续安装？",
       "confirm": "继续",
       "cancel": "取消"
+    },
+    "versionCompatibility": {
+      "title": "版本兼容性警告",
+      "message": "该插件声明的 AstrBot 版本范围与当前版本不匹配。你可以无视警告继续安装，但可能无法正常运行。",
+      "confirm": "无视警告，继续安装",
+      "cancel": "取消安装"
+    },
+    "forceUpdate": {
+      "title": "未检测到新版本",
+      "message": "当前插件未检测到新版本，是否强制重新安装？这将从远程仓库拉取最新代码。",
+      "confirm": "强制更新"
+    },
+    "updateAllConfirm": {
+      "title": "确认更新全部插件",
+      "message": "确定要更新全部 {count} 个插件吗？此操作可能需要一些时间。",
+      "confirm": "确认更新"
     }
   },
   "messages": {
@@ -129,7 +194,9 @@
     "refreshing": "正在刷新插件列表...",
     "refreshSuccess": "插件列表已刷新！",
     "refreshFailed": "刷新插件列表时发生错误",
+    "operationFailed": "操作失败",
     "reloadSuccess": "重载成功",
+    "reloadFailed": "重载失败",
     "updateSuccess": "更新成功!",
     "addSuccess": "添加成功!",
     "saveSuccess": "保存成功!",
@@ -137,20 +204,120 @@
     "installing": "正在从文件安装插件",
     "installingFromUrl": "正在从链接安装插件...",
     "installFailed": "安装插件失败:",
-    "getPlatformConfigFailed": "获取平台插件配置失败:",
-    "savePlatformConfigFailed": "保存平台插件配置失败:",
     "getMarketDataFailed": "获取插件市场数据失败:",
     "hasUpdate": "有新版本:",
     "confirmDelete": "确定要删除插件吗？",
     "fillUrlOrFile": "请填写插件链接或上传插件文件",
     "dontFillBoth": "请不要同时填写插件链接和上传文件",
-    "supportedFormats": "支持 .zip 格式的插件文件"
+    "supportedFormats": "支持 .zip 格式的插件文件",
+    "updateAllSuccess": "所有可更新的插件都已更新！",
+    "updateAllFailed": "有 {failed}/{total} 个插件更新失败:",
+    "fillSourceNameAndUrl": "请填写完整的插件源名称和地址",
+    "invalidUrl": "请输入有效的URL地址",
+    "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址"
   },
   "upload": {
     "fromFile": "从文件安装",
     "fromUrl": "从链接安装",
     "selectFile": "选择文件",
     "enterUrl": "输入插件仓库链接"
+  },
+  "skills": {
+    "modeLocal": "本地 Skills",
+    "modeNeo": "Neo Skills",
+    "actions": "操作",
+    "upload": "上传 Skills",
+    "refresh": "刷新",
+    "empty": "暂无 Skills",
+    "emptyHint": "请上传 Skills 压缩包",
+    "uploadDialogTitle": "上传 Skills",
+    "uploadHint": "支持批量上传 zip 技能包，也支持拖拽批量上传 zip 技能包。系统会自动校验目录结构，并给出逐个文件的结果。",
+    "structureRequirement": "常见失败原因是压缩包结构不正确。每个 zip 必须只包含一个顶层目录，例如 `skillname/`，且该目录下必须存在 `SKILL.md`。",
+    "abilityMultiple": "支持一次上传多个zip文件",
+    "abilityValidate": "自动校验 `SKILL.md`",
+    "abilitySkip": "自动跳过重复文件",
+    "selectFile": "选择文件",
+    "selectFiles": "选择文件（可多选）",
+    "dropzoneTitle": "拖拽多个 zip 文件到这里",
+    "dropzoneAction": "或者点击之后在文件夹中选择多个文件",
+    "dropzoneHint": "支持批量上传，系统会自动校验目录结构",
+    "fileListTitle": "待处理文件",
+    "fileListEmpty": "选择文件后会在这里显示校验结果与上传状态",
+    "uploading": "正在上传...",
+    "batchResultTitle": "批量上传结果",
+    "batchResultSummary": "共 {total} 个文件，成功 {success} 个",
+    "batchSuccessList": "上传成功",
+    "batchFailedList": "上传失败",
+    "confirm": "确定",
+    "confirmUpload": "开始上传",
+    "cancel": "取消",
+    "statusWaiting": "待上传",
+    "statusUploading": "上传中",
+    "statusSuccess": "已上传",
+    "statusError": "校验失败",
+    "statusSkipped": "已跳过",
+    "summaryTotal": "共 {count} 个文件",
+    "summaryReady": "待处理 {count}",
+    "summarySuccess": "成功 {count}",
+    "summaryFailed": "失败 {count}",
+    "summarySkipped": "跳过 {count}",
+    "validationReady": "等待上传，上传时会自动校验目录结构",
+    "validationZipOnly": "仅支持 zip 技能包",
+    "validationDuplicate": "同名文件已在列表中，已跳过",
+    "validationUploading": "正在校验并上传...",
+    "validationUploadFailed": "上传失败，请重试",
+    "validationUploadedAs": "已安装为 {name}",
+    "validationNoResult": "未收到校验结果，请检查平台日志",
+    "noDescription": "无描述",
+    "path": "路径",
+    "uploadSuccess": "上传成功",
+    "uploadFailed": "上传失败",
+    "download": "下载",
+    "downloadSuccess": "下载成功",
+    "downloadFailed": "下载失败",
+    "loadFailed": "加载 Skills 失败",
+    "updateSuccess": "更新成功",
+    "updateFailed": "更新失败",
+    "deleteTitle": "删除确认",
+    "deleteMessage": "确定要删除该 Skill 吗？",
+    "deleteSuccess": "删除成功",
+    "deleteFailed": "删除失败",
+    "neoSkillKey": "skill_key 过滤",
+    "neoStatus": "候选状态",
+    "neoStage": "发布阶段",
+    "neoFilterHint": "筛选候选与发布记录",
+    "neoAll": "全部",
+    "neoCandidates": "Neo Candidates",
+    "neoReleases": "Neo Releases",
+    "neoLoadFailed": "加载 Neo Skills 数据失败",
+    "neoPass": "通过",
+    "neoReject": "拒绝",
+    "neoEvaluateSuccess": "评测更新成功",
+    "neoEvaluateFailed": "评测更新失败",
+    "neoPromoteSuccess": "发布成功",
+    "neoPromoteFailed": "发布失败",
+    "neoRollback": "回滚",
+    "neoRollbackSuccess": "回滚成功",
+    "neoRollbackFailed": "回滚失败",
+    "neoDeactivate": "失活",
+    "neoDeactivateSuccess": "失活成功",
+    "neoDeactivateFailed": "失活失败",
+    "neoSync": "同步",
+    "neoSyncSuccess": "同步成功",
+    "neoSyncFailed": "同步失败",
+    "neoDelete": "删除",
+    "neoDeleteSuccess": "删除成功",
+    "neoDeleteFailed": "删除失败",
+    "neoPayloadTitle": "Neo Payload 详情",
+    "neoPayloadFailed": "读取 Payload 失败",
+    "runtimeNoneWarning": "Computer Use 运行环境为无，Skills 可能无法正确被 Agent 运行，因为没有启用运行环境。",
+    "runtimeHint": "需要在配置的 “使用电脑能力” 中将运行环境设置为 “local” 或 “sandbox” 才能让 AstrBot 正常使用你提供的 Skills。",
+    "neoRuntimeRequired": "Neo Skills 仅在运行环境为 sandbox 且沙箱驱动为 shipyard_neo 时可用。",
+    "sourceLocalOnly": "本地 Skill",
+    "sourceSandboxOnly": "Sandbox 预置 Skill",
+    "sourceBoth": "本地 + Sandbox",
+    "sandboxDiscoveryPending": "尚未发现 Sandbox 预置 Skill。请至少启动一次 Sandbox 会话后再查看。",
+    "sandboxPresetReadonly": "Sandbox 预置 Skill 在此处为只读，无法在本地 Skills 页面删除或启用/禁用。"
   },
   "card": {
     "actions": {
@@ -159,12 +326,16 @@
       "reloadPlugin": "重载插件",
       "togglePlugin": "插件",
       "viewHandlers": "查看行为",
-      "updateTo": "更新到"
+      "updateTo": "更新到",
+      "reinstall": "重新安装"
     },
     "status": {
       "hasUpdate": "有新版本可用",
       "disabled": "该插件已经被禁用",
-      "handlersCount": "个行为"
+      "handlersCount": "个行为",
+      "supportPlatform": "支持平台",
+      "supportPlatformsCount": "支持 {count} 个平台",
+      "astrbotVersion": "AstrBot 版本要求"
     },
     "alt": {
       "logo": "logo",
@@ -173,5 +344,15 @@
     "errors": {
       "confirmNotRegistered": "$confirm 未正确注册"
     }
+  },
+  "conflicts": {
+    "title": "检测到指令冲突",
+    "message": "这会导致部分指令工作异常，建议前往【指令管理】面板进行处理。",
+    "pairs": "对指令冲突",
+    "goToManage": "前往处理",
+    "later": "稍后处理"
+  },
+  "pluginChangelog": {
+    "menuTitle": "查看更新日志"
   }
 }
