@@ -70,7 +70,30 @@
           :class="msg.type"
         >
           <div class="message-content">
-            {{ msg.text }}
+            <div v-if="msg.type === 'tool_call'">
+              <div class="tool-call-title">{{ msg.text }}</div>
+              <div v-if="msg.toolCall?.name">
+                工具: {{ msg.toolCall.name }}
+              </div>
+              <div v-if="msg.toolCall?.id">
+                ID: {{ msg.toolCall.id }}
+              </div>
+              <div v-if="msg.toolCall?.args !== undefined">
+                参数:
+                <pre class="tool-call-detail">{{
+                  formatToolContent(msg.toolCall.args)
+                }}</pre>
+              </div>
+              <div v-if="msg.toolCall?.result !== undefined">
+                结果:
+                <pre class="tool-call-detail">{{
+                  formatToolContent(msg.toolCall.result)
+                }}</pre>
+              </div>
+            </div>
+            <template v-else>
+              {{ msg.text }}
+            </template>
           </div>
         </div>
       </div>
@@ -157,8 +180,23 @@ let isDecoding = false;
 let isPlayingAudio = false; // 内部状态：是否正在播放音频
 let currentSource: AudioBufferSourceNode | null = null;
 
+interface ToolCallEvent {
+  id?: string;
+  name?: string;
+  args?: unknown;
+  result?: unknown;
+  ts?: number;
+  finished_ts?: number;
+}
+
+interface LiveMessage {
+  type: "user" | "bot" | "tool_call";
+  text: string;
+  toolCall?: ToolCallEvent;
+}
+
 // 消息历史
-const messages = ref<Array<{ type: "user" | "bot"; text: string }>>([]);
+const messages = ref<LiveMessage[]>([]);
 const textInput = ref("");
 const isConnected = ref(false);
 
@@ -398,12 +436,120 @@ function connectWebSocket(): Promise<void> {
   });
 }
 
+function safeParseToolData(raw: unknown): Record<string, unknown> {
+  if (typeof raw === "object" && raw !== null) {
+    return raw as Record<string, unknown>;
+  }
+
+  if (typeof raw !== "string") {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function createToolCallMessage(payload: Record<string, unknown>): ToolCallEvent {
+  return {
+    id: (payload.id as string) || (payload.call_id as string),
+    name: (payload.name as string) || (payload.tool_name as string),
+    args: payload.args,
+    result: payload.result,
+    ts: (payload.ts as number) || Date.now(),
+    finished_ts: payload.finished_ts as number | undefined,
+  };
+}
+
+function formatToolContent(value: unknown): string {
+  if (typeof value === "string") {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2);
+    } catch {
+      return value;
+    }
+  }
+
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  if (typeof value === "object") {
+    return JSON.stringify(value, null, 2);
+  }
+
+  return String(value);
+}
+
+function pushOrUpdateToolCall(payload: ToolCallEvent, isResult = false): void {
+  if (!payload.id) {
+    messages.value.push({
+      type: "tool_call",
+      text: payload.name ? `${payload.name} 工具调用` : "工具调用",
+      toolCall: payload,
+    });
+    return;
+  }
+
+  const existing = [...messages.value].reverse().find(
+    (item): item is LiveMessage & { type: "tool_call"; toolCall: ToolCallEvent } =>
+      item.type === "tool_call" && item.toolCall?.id === payload.id,
+  );
+
+  if (existing) {
+    existing.toolCall = {
+      ...existing.toolCall,
+      ...payload,
+      finished_ts: isResult
+        ? payload.finished_ts || Date.now()
+        : existing.toolCall?.finished_ts,
+    };
+    const displayName = existing.toolCall.name || "工具调用";
+    existing.text = isResult ? `${displayName} 已返回结果` : `${displayName} 正在执行`;
+    return;
+  }
+
+  const name = payload.name || "工具调用";
+  const baseText = isResult ? `${name} 已返回结果` : `${name} 已触发`;
+  messages.value.push({
+    type: "tool_call",
+    text: baseText,
+    toolCall: payload,
+  });
+}
+
 // 这些函数不再需要，VAD 库会自动处理语音检测和音频上传
 
 function handleWebSocketMessage(event: MessageEvent) {
   try {
     const message = JSON.parse(event.data);
     const msgType = message.t;
+    const chainType = message.chain_type;
+    const isToolEvent =
+      msgType === "tool_call" ||
+      msgType === "tool_call_result" ||
+      chainType === "tool_call" ||
+      chainType === "tool_call_result";
+
+    if (isToolEvent) {
+      const payload = safeParseToolData(message.data);
+      const toolPayload = createToolCallMessage({
+        ...payload,
+        id: (payload.id as string) || message.id || message.call_id,
+        name: (payload.name as string) || message.name || message.tool_name,
+        args: message.args ?? payload.args,
+        result: message.result ?? payload.result,
+        finished_ts: message.finished_ts ?? payload.finished_ts,
+      });
+      const isResult = msgType === "tool_call_result" || chainType === "tool_call_result";
+      pushOrUpdateToolCall(toolPayload, isResult);
+      return;
+    }
 
     switch (msgType) {
       case "user_msg":
@@ -799,6 +945,23 @@ onBeforeUnmount(() => {
 .message-content {
   flex: 1;
   word-wrap: break-word;
+}
+
+.tool-call-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.tool-call-detail {
+  margin: 6px 0 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: rgba(var(--v-theme-surface), 0.2);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
+  white-space: pre-wrap;
+  overflow-x: auto;
+  max-width: 100%;
+  font-size: 12px;
 }
 
 .metrics-container {
