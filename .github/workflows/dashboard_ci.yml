@@ -8,6 +8,7 @@ on:
 
 jobs:
   build:
+    if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

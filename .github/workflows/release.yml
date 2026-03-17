@@ -20,6 +20,7 @@ permissions:
 jobs:
   build-dashboard:
     name: Build Dashboard
+    if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-24.04
     env:
       R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -104,6 +105,7 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
+    if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-24.04
     needs:
       - build-dashboard
@@ -183,6 +185,7 @@ jobs:
 
   publish-pypi:
     name: Publish PyPI
+    if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-24.04
     needs:
       - publish-release
