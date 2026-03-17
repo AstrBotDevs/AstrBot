@@ -28,6 +28,7 @@ const theme = useTheme();
 const { t } = useI18n();
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = 'astrbot:last_bot_route';
+const LAST_CHAT_ROUTE_KEY = 'astrbot:last_chat_route';
 let dialog = ref(false);
 let accountWarning = ref(false)
 let updateStatusDialog = ref(false);
@@ -58,7 +59,7 @@ const desktopUpdateHasNewVersion = ref(false);
 const desktopUpdateCurrentVersion = ref('-');
 const desktopUpdateLatestVersion = ref('-');
 const desktopUpdateStatus = ref('');
-
+const isCurrentChatRoute = computed(() => route.path.startsWith('/chat'))
 const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
   if (typeof window === 'undefined') {
     return null;
@@ -380,7 +381,7 @@ function openReleaseNotesDialog(body: string, tag: string) {
 }
 
 function handleLogoClick() {
-  if (customizer.viewMode === 'chat') {
+  if (isCurrentChatRoute.value) {
     aboutDialog.value = true;
   } else {
     router.push('/about');
@@ -395,40 +396,53 @@ commonStore.createEventSource(); // log
 commonStore.getStartTime();
 
 // 视图模式切换
-const viewMode = computed({
-  get: () => customizer.viewMode,
-  set: (value: 'bot' | 'chat') => {
-    customizer.SET_VIEW_MODE(value);
-  }
-});
+
 
 // 监听 viewMode 变化，切换到 bot 模式时跳转到首页
 // 保存 bot 模式的最後路由
 // 監聽 route 變化，保存最後一次 bot 路由
 watch(() => route.fullPath, (newPath) => {
-  if (customizer.viewMode === 'bot' && typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
-    } catch (e) {
-      console.error('Failed to save last bot route to localStorage:', e);
+  if (typeof window === 'undefined') return;
+
+  try {
+    const isCurrentChatRoute = newPath.startsWith('/chat');
+
+    // ✅ bot：只存「非 chat 頁」
+    if (!isCurrentChatRoute) {
+      sessionStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
     }
+
+    // ✅ chat：只存 sessionId
+    //  不是我不用route.params.id  而是用了一定炸裂過不了編譯
+    if (isCurrentChatRoute) {
+      const parts = newPath.split('/');
+      const sessionId = parts[2];
+
+      if (sessionId) {
+        sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
+      }
+    }
+
+  } catch (e) {
+    console.error('Failed to save route:', e);
   }
 });
 
-// 監聽 viewMode 切換
-watch(() => customizer.viewMode, (newMode, oldMode) => {
-  if (newMode === 'bot' && oldMode === 'chat' && typeof window !== 'undefined') {
-    // 從 chat 切換回 bot，跳轉到最後一次的 bot 路由
-    let lastBotRoute = '/';
-    try {
-      lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
-    } catch (e) {
-      console.error('Failed to read last bot route from localStorage:', e);
+const currentMode = computed({
+  get: () => (isCurrentChatRoute.value ? 'chat' : 'bot'),
+  set: (val: 'chat' | 'bot') => {
+    if (val === 'chat') {
+      const lastSessionId = sessionStorage.getItem(LAST_CHAT_ROUTE_KEY)
+      router.push(lastSessionId ? `/chat/${lastSessionId}` : '/chat')
+    } else {
+      let lastBotRoute = sessionStorage.getItem(LAST_BOT_ROUTE_KEY) || '/'
+      if (lastBotRoute.startsWith('/chat')) {
+        lastBotRoute = '/'
+      }
+      router.push(lastBotRoute)
     }
-    router.push(lastBotRoute);
   }
-});
-
+})
 // Merry Christmas! 🎄
 const isChristmas = computed(() => {
   const today = new Date();
@@ -465,29 +479,46 @@ onMounted(async () => {
   <v-app-bar elevation="0" height="50" class="top-header">
 
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot'"
-      style="margin-left: 16px;"
-      class="hidden-md-and-down" icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
-    <!-- 移动端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot'" class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_SIDEBAR_DRAWER">
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
+<v-btn
+  v-if="!isCurrentChatRoute"
+  style="margin-left: 16px;"
+  class="hidden-md-and-down"
+  icon
+  rounded="sm"
+  variant="flat"
+  @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)"
+>
+  <v-icon>mdi-menu</v-icon>
+</v-btn>
 
-    <!-- 移动端 chat sidebar 展开按钮 - 仅在 chat 模式下的小屏幕显示 -->
-    <v-btn v-if="customizer.viewMode === 'chat'" class="hidden-lg-and-up ms-1" icon rounded="sm" variant="flat"
-      @click.stop="customizer.TOGGLE_CHAT_SIDEBAR()">
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
+<!-- 移动端 menu 按钮 -->
+<v-btn
+  v-if="!isCurrentChatRoute"
+  class="hidden-lg-and-up ms-3"
+  icon
+  rounded="sm"
+  variant="flat"
+  @click.stop="customizer.SET_SIDEBAR_DRAWER"
+>
+  <v-icon>mdi-menu</v-icon>
+</v-btn>
 
-    <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs, 'chat-mode-logo': customizer.viewMode === 'chat' }" @click="handleLogoClick">
+<v-btn
+  v-if="isCurrentChatRoute"
+  class="hidden-lg-and-up ms-1"
+  icon
+  rounded="sm"
+  variant="flat"
+  @click.stop="customizer.TOGGLE_CHAT_SIDEBAR()"
+>
+  <v-icon>mdi-menu</v-icon>
+</v-btn>
+
+    <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs, 'chat-mode-logo': isCurrentChatRoute }" @click="handleLogoClick">
       <span class="logo-text Outfit">Astr<span class="logo-text bot-text-wrapper">Bot
         <img v-if="isChristmas" src="@/assets/images/xmas-hat.png" alt="Christmas hat" class="xmas-hat" />
       </span></span>
-      <span class="logo-text logo-text-light Outfit" style="color: grey;" v-if="customizer.viewMode === 'chat'">ChatUI</span>
+      <span class="logo-text logo-text-light Outfit" style="color: grey;" v-if="isCurrentChatRoute">ChatUI</span>
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
 
@@ -504,23 +535,23 @@ onMounted(async () => {
     </div>
     
     <!-- Bot/Chat 模式切换按钮 - 手机端隐藏，移入 ... 菜单 -->
-    <v-btn-toggle
-      v-model="viewMode"
-      mandatory
-      variant="outlined"
-      density="compact"
-      class="mr-4 hidden-xs"
-      color="primary"
-    >
-      <v-btn value="bot" size="small">
-        <v-icon start>mdi-robot</v-icon>
-        Bot
-      </v-btn>
-      <v-btn value="chat" size="small">
-        <v-icon start>mdi-chat</v-icon>
-        Chat
-      </v-btn>
-    </v-btn-toggle>
+<v-btn-toggle
+  v-model="currentMode"
+  mandatory
+  variant="outlined"
+  density="compact"
+  class="mr-4"
+  color="primary"
+>
+  <v-btn value="bot" size="small">
+    <v-icon start>mdi-robot</v-icon>
+    Bot
+  </v-btn>
+  <v-btn value="chat" size="small">
+    <v-icon start>mdi-chat</v-icon>
+    Chat
+  </v-btn>
+</v-btn-toggle>
 
 
     <!-- 功能菜单 -->
@@ -542,14 +573,14 @@ onMounted(async () => {
       <!-- Bot/Chat 模式切换 - 仅在手机端显示 -->
       <template v-if="$vuetify.display.xs">
         <div class="mobile-mode-toggle-wrapper">
-          <v-btn-toggle
-            v-model="viewMode"
-            mandatory
-            variant="outlined"
-            density="compact"
-            color="primary"
-            class="mobile-mode-toggle"
-          >
+<v-btn-toggle
+  v-model="currentMode"
+  mandatory
+  variant="outlined"
+  density="compact"
+  class="mr-4"
+  color="primary"
+>
             <v-btn value="bot" size="small">
               <v-icon start>mdi-robot</v-icon>
               Bot
