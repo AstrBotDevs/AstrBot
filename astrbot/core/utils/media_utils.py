@@ -320,7 +320,9 @@ async def extract_video_cover(
         return output_path
     except FileNotFoundError:
         raise Exception("ffmpeg not found")
-def _compress_image_sync(data: bytes, temp_dir: str) -> str:
+
+
+def _compress_image_sync(data: bytes, temp_dir: Path) -> str:
     """同步执行图片压缩逻辑，由 asyncio.to_thread 调用"""
     img = PILImage.open(io.BytesIO(data))
     if img.mode in ("RGBA", "P"):
@@ -330,10 +332,10 @@ def _compress_image_sync(data: bytes, temp_dir: str) -> str:
         img.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
 
     new_uuid = uuid.uuid4().hex
-    save_path = os.path.join(temp_dir, f"compressed_{new_uuid}.jpg")
+    save_path = temp_dir / f"compressed_{new_uuid}.jpg"
     img.save(save_path, "JPEG", quality=85, optimize=True)
     logger.info(f"图片压缩成功:{save_path}")
-    return save_path
+    return str(save_path)
 
 
 async def compress_image(
@@ -374,11 +376,11 @@ async def compress_image(
         if not data:
             return url_or_path
 
-        temp_dir = get_astrbot_temp_path()
-        os.makedirs(temp_dir, exist_ok=True)
+        temp_dir = Path(get_astrbot_temp_path())
+        temp_dir.mkdir(parents=True, exist_ok=True)
 
         # 使用 asyncio.to_thread 将同步阻塞的图片处理任务交给线程池
-        return await asyncio.to_thread(_compress_image_sync, data, str(temp_dir))
+        return await asyncio.to_thread(_compress_image_sync, data, temp_dir)
 
     except Exception as e:
         logger.error("图片压缩失败: %s", e)
