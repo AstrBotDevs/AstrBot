@@ -219,6 +219,10 @@ class UpdateCronTool(FunctionTool[AstrAgentContext]):
                     "type": "string",
                     "description": "Timezone, e.g. Asia/Shanghai.",
                 },
+                "run_once": {
+                    "type": "boolean",
+                    "description": "Switch between one-time (true) and recurring (false) task types.",
+                },
             },
             "required": ["job_id"],
         }
@@ -241,30 +245,34 @@ class UpdateCronTool(FunctionTool[AstrAgentContext]):
             return "error: you can only update future tasks in the current session."
 
         updates: dict[str, Any] = {}
-        if "name" in kwargs and kwargs["name"]:
+        if "name" in kwargs:
             updates["name"] = str(kwargs["name"])
-        if "cron_expression" in kwargs and kwargs["cron_expression"]:
+        if "cron_expression" in kwargs:
             updates["cron_expression"] = str(kwargs["cron_expression"])
         if "enabled" in kwargs:
             updates["enabled"] = bool(kwargs["enabled"])
-        if "timezone" in kwargs and kwargs["timezone"]:
+        if "timezone" in kwargs:
             updates["timezone"] = str(kwargs["timezone"])
-
-        note = kwargs.get("note")
-        run_at = kwargs.get("run_at")
+        if "run_once" in kwargs:
+            updates["run_once"] = bool(kwargs["run_once"])
 
         # Update payload fields (note, run_at)
-        if note or run_at:
+        if "note" in kwargs or "run_at" in kwargs:
             payload = dict(job.payload) if job.payload else {}
-            if note:
-                payload["note"] = str(note)
-                updates["description"] = str(note)
-            if run_at:
-                try:
-                    datetime.fromisoformat(str(run_at))
-                except Exception:
-                    return "error: run_at must be ISO datetime."
-                payload["run_at"] = str(run_at)
+            if "note" in kwargs:
+                note = kwargs.get("note")
+                payload["note"] = str(note) if note is not None else ""
+                updates["description"] = payload["note"]
+            if "run_at" in kwargs:
+                run_at = kwargs.get("run_at")
+                if run_at:
+                    try:
+                        datetime.fromisoformat(str(run_at))
+                    except Exception:
+                        return "error: run_at must be ISO datetime."
+                    payload["run_at"] = str(run_at)
+                else:
+                    payload.pop("run_at", None)
             updates["payload"] = payload
 
         if not updates:

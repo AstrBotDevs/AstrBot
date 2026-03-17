@@ -155,7 +155,7 @@ class CronRoute(Route):
                 merged_payload.update(payload["payload"])
             if "run_at" in payload:
                 merged_payload["run_at"] = payload.get("run_at")
-            if "description" in payload:
+            if "description" in payload and payload["description"] is not None:
                 merged_payload["note"] = payload["description"]
             updates["payload"] = merged_payload
 
