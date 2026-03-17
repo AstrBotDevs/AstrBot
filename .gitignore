@@ -61,5 +61,4 @@ GenieData/
 .codex/
 .opencode/
 .kilocode/
-pyproject.toml
-pyproject.toml
+.worktrees/
