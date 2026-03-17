@@ -88,6 +88,10 @@ class ConversationManager:
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
+            platform_id (str | None): 平台 ID，可选
+            content (list[dict] | None): 对话内容，可选
+            title (str | None): 对话标题，可选
+            persona_id (str | None): 人格 ID。如果未提供，将自动从当前对话继承（如果存在且非 [%None]）
         Returns:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
 
@@ -99,6 +103,11 @@ class ConversationManager:
                 platform_id = parts[0]
         if not platform_id:
             platform_id = "unknown"
+
+        # 如果未提供 persona_id，自动从当前对话继承
+        if persona_id is None:
+            persona_id = await self.get_curr_persona_id(unified_msg_origin)
+
         conv = await self.db.create_conversation(
             user_id=unified_msg_origin,
             platform_id=platform_id,

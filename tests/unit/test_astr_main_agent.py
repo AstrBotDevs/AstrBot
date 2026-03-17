@@ -257,8 +257,9 @@ class TestGetSessionConv:
         result = await module._get_session_conv(mock_event, mock_context)
 
         assert result == mock_conversation
+        # new_conversation is called without persona_id (inherits automatically)
         conv_mgr.new_conversation.assert_called_once_with(
-            mock_event.unified_msg_origin, mock_event.get_platform_id(), persona_id=None
+            mock_event.unified_msg_origin, mock_event.get_platform_id()
         )
 
     @pytest.mark.asyncio
@@ -267,7 +268,6 @@ class TestGetSessionConv:
         module = ama
         conv_mgr = mock_context.conversation_manager
         conv_mgr.get_curr_conversation_id = AsyncMock(return_value="conv-id")
-        conv_mgr.get_curr_persona_id = AsyncMock(return_value=None)
         conv_mgr.get_conversation = AsyncMock(return_value=None)
         conv_mgr.new_conversation = AsyncMock(return_value="retry-conv-id")
         mock_conversation = MagicMock(spec=Conversation)
@@ -288,7 +288,6 @@ class TestGetSessionConv:
         module = ama
         conv_mgr = mock_context.conversation_manager
         conv_mgr.get_curr_conversation_id = AsyncMock(return_value=None)
-        conv_mgr.get_curr_persona_id = AsyncMock(return_value=None)
         conv_mgr.new_conversation = AsyncMock(return_value="new-conv-id")
         conv_mgr.get_conversation = AsyncMock(return_value=None)
 
