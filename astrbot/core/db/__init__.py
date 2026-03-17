@@ -33,10 +33,18 @@ class BaseDatabase(abc.ABC):
     DATABASE_URL = ""
 
     def __init__(self) -> None:
+        # SQLite only supports a single writer at a time.  Without a busy
+        # timeout the driver raises "database is locked" instantly when a
+        # second write is attempted.  Setting timeout=30 tells SQLite to
+        # wait up to 30 s for the lock, which is enough to ride out brief
+        # write bursts from concurrent agent/metrics/session operations.
+        is_sqlite = "sqlite" in self.DATABASE_URL
+        connect_args = {"timeout": 30} if is_sqlite else {}
         self.engine = create_async_engine(
             self.DATABASE_URL,
             echo=False,
             future=True,
+            connect_args=connect_args,
         )
         self.AsyncSessionLocal = async_sessionmaker(
             self.engine,
