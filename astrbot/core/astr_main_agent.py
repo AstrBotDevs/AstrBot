@@ -173,22 +173,11 @@ def _select_provider(
 async def _get_session_conv(
     event: AstrMessageEvent, plugin_context: Context
 ) -> Conversation:
-    conv_mgr = plugin_context.conversation_manager
-    umo = event.unified_msg_origin
-    cid = await conv_mgr.get_curr_conversation_id(umo)
-
-    if cid:
-        conversation = await conv_mgr.get_conversation(umo, cid)
-        if conversation:
-            return conversation
-
-    # 统一的对话创建路径：new_conversation 会自动继承 persona_id
-    cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
-    conversation = await conv_mgr.get_conversation(umo, cid)
-
-    if not conversation:
-        raise RuntimeError("无法创建新的对话。")
-    return conversation
+    """获取或创建会话当前的对话。"""
+    return await plugin_context.conversation_manager.get_or_create_curr_conversation(
+        event.unified_msg_origin,
+        event.get_platform_id(),
+    )
 
 
 async def _apply_kb(

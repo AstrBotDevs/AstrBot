@@ -34,7 +34,6 @@ def mock_context():
     ctx = MagicMock()
     ctx.get_config.return_value = {}
     ctx.conversation_manager = MagicMock()
-    ctx.conversation_manager.get_curr_persona_id = AsyncMock(return_value=None)
     ctx.persona_manager = MagicMock()
     ctx.persona_manager.personas_v3 = []
     ctx.persona_manager.resolve_selected_persona = AsyncMock(
@@ -107,10 +106,8 @@ def _new_mock_conversation(cid: str = "conv-id") -> MagicMock:
 
 
 def _setup_conversation_for_build(conv_mgr, cid: str = "conv-id") -> MagicMock:
-    conv_mgr.get_curr_conversation_id = AsyncMock(return_value=None)
-    conv_mgr.new_conversation = AsyncMock(return_value=cid)
     conversation = _new_mock_conversation(cid=cid)
-    conv_mgr.get_conversation = AsyncMock(return_value=conversation)
+    conv_mgr.get_or_create_curr_conversation = AsyncMock(return_value=conversation)
     return conversation
 
 
@@ -221,75 +218,33 @@ class TestGetSessionConv:
     """Tests for _get_session_conv function."""
 
     @pytest.mark.asyncio
-    async def test_get_session_conv_existing(
-        self, mock_event, mock_context, mock_conversation
-    ):
-        """Test getting existing conversation."""
+    async def test_get_session_conv_success(self, mock_event, mock_context):
+        """Test getting or creating conversation."""
         module = ama
-        conv_mgr = mock_context.conversation_manager
-        conv_mgr.get_curr_conversation_id = AsyncMock(return_value="existing-conv-id")
-        conv_mgr.get_conversation = AsyncMock(return_value=mock_conversation)
-
-        result = await module._get_session_conv(mock_event, mock_context)
-
-        assert result == mock_conversation
-        conv_mgr.get_curr_conversation_id.assert_called_once_with(
-            mock_event.unified_msg_origin
-        )
-        conv_mgr.get_conversation.assert_called_once_with(
-            mock_event.unified_msg_origin, "existing-conv-id"
-        )
-
-    @pytest.mark.asyncio
-    async def test_get_session_conv_create_new(self, mock_event, mock_context):
-        """Test creating new conversation when none exists."""
-        module = ama
-        conv_mgr = mock_context.conversation_manager
-        conv_mgr.get_curr_conversation_id = AsyncMock(return_value=None)
-        conv_mgr.get_curr_persona_id = AsyncMock(return_value=None)
-        conv_mgr.new_conversation = AsyncMock(return_value="new-conv-id")
         mock_conversation = MagicMock(spec=Conversation)
-        mock_conversation.cid = "new-conv-id"
+        mock_conversation.cid = "conv-id"
         mock_conversation.persona_id = None
         mock_conversation.history = "[]"
-        conv_mgr.get_conversation = AsyncMock(return_value=mock_conversation)
+        conv_mgr = mock_context.conversation_manager
+        conv_mgr.get_or_create_curr_conversation = AsyncMock(
+            return_value=mock_conversation
+        )
 
         result = await module._get_session_conv(mock_event, mock_context)
 
         assert result == mock_conversation
-        # new_conversation is called without persona_id (inherits automatically)
-        conv_mgr.new_conversation.assert_called_once_with(
+        conv_mgr.get_or_create_curr_conversation.assert_called_once_with(
             mock_event.unified_msg_origin, mock_event.get_platform_id()
         )
-
-    @pytest.mark.asyncio
-    async def test_get_session_conv_retry(self, mock_event, mock_context):
-        """Test retrying conversation creation after failure."""
-        module = ama
-        conv_mgr = mock_context.conversation_manager
-        conv_mgr.get_curr_conversation_id = AsyncMock(return_value="conv-id")
-        conv_mgr.get_conversation = AsyncMock(return_value=None)
-        conv_mgr.new_conversation = AsyncMock(return_value="retry-conv-id")
-        mock_conversation = MagicMock(spec=Conversation)
-        mock_conversation.cid = "retry-conv-id"
-        mock_conversation.persona_id = None
-        mock_conversation.history = "[]"
-        conv_mgr.get_conversation.side_effect = [None, mock_conversation]
-
-        result = await module._get_session_conv(mock_event, mock_context)
-
-        assert result == mock_conversation
-        assert conv_mgr.new_conversation.call_count == 1
-        assert conv_mgr.get_conversation.call_count == 2
 
     @pytest.mark.asyncio
     async def test_get_session_conv_failure(self, mock_event, mock_context):
         """Test RuntimeError when conversation creation fails."""
         module = ama
         conv_mgr = mock_context.conversation_manager
-        conv_mgr.get_curr_conversation_id = AsyncMock(return_value=None)
-        conv_mgr.new_conversation = AsyncMock(return_value="new-conv-id")
-        conv_mgr.get_conversation = AsyncMock(return_value=None)
+        conv_mgr.get_or_create_curr_conversation = AsyncMock(
+            side_effect=RuntimeError("无法创建新的对话。")
+        )
 
         with pytest.raises(RuntimeError, match="无法创建新的对话。"):
             await module._get_session_conv(mock_event, mock_context)

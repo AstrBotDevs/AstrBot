@@ -183,6 +183,42 @@ class ConversationManager:
                 self.session_conversations[unified_msg_origin] = ret
         return ret
 
+    async def get_or_create_curr_conversation(
+        self,
+        unified_msg_origin: str,
+        platform_id: str | None = None,
+    ) -> Conversation:
+        """获取或创建会话当前的对话。
+
+        如果当前会话有对话ID，尝试获取该对话；如果不存在或没有对话ID，则创建新对话。
+        新对话会自动继承当前对话的 persona_id（如果存在且非 [%None]）。
+
+        Args:
+            unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
+            platform_id (str | None): 平台 ID，可选。创建新对话时使用
+
+        Returns:
+            conversation (Conversation): 对话对象
+
+        Raises:
+            RuntimeError: 如果创建新对话后仍无法获取
+
+        """
+        cid = await self.get_curr_conversation_id(unified_msg_origin)
+
+        if cid:
+            conversation = await self.get_conversation(unified_msg_origin, cid)
+            if conversation:
+                return conversation
+
+        # 创建新对话（persona_id 继承逻辑在 new_conversation 内部处理）
+        cid = await self.new_conversation(unified_msg_origin, platform_id)
+        conversation = await self.get_conversation(unified_msg_origin, cid)
+
+        if not conversation:
+            raise RuntimeError("无法创建新的对话。")
+        return conversation
+
     async def get_curr_persona_id(self, unified_msg_origin: str) -> str | None:
         """获取当前对话的persona_id，用于创建新对话时继承。
 
