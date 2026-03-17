@@ -17,4 +17,4 @@ SyslogIdentifier=astrbot-%u
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
