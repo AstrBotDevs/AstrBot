@@ -429,7 +429,7 @@ class PluginManager:
     @staticmethod
     def _validate_importable_name(plugin_name: str) -> None:
         if "/" in plugin_name or "\\" in plugin_name:
-            raise Exception(
+            raise ValueError(
                 "metadata.yaml 中 name 含有路径分隔符，不可用于 importlib 加载。"
             )
         if not plugin_name.isidentifier() or keyword.iskeyword(plugin_name):
