@@ -8,13 +8,19 @@ from typing import Type
 from astrbot.core.mind_sim.action import Action
 
 # 动作类导入
+from .EndConversation import EndConversationAction
+from .NoOp import NoOpAction
 from .Reply import ReplyAction
+from .RunTask import RunTaskAction
 from .Wait import WaitAction
 
 # 私聊可用动作
 PRIVATE_ACTIONS = [
     ReplyAction,
     WaitAction,
+    NoOpAction,
+    EndConversationAction,
+    RunTaskAction,
 ]
 
 
@@ -26,5 +32,8 @@ def get_available_actions() -> list[Type[Action]]:
 __all__ = [
     "ReplyAction",
     "WaitAction",
+    "NoOpAction",
+    "EndConversationAction",
+    "RunTaskAction",
     "get_available_actions",
 ]

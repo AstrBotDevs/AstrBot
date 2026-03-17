@@ -63,9 +63,10 @@ class ActionStateUpdate(MindMessage):
 class ActionOutput(MindMessage):
     """动作 → mind_sim：产出"""
     action_name: str
-    type: str  # "reply" | "typing" | "internal" | "error"
+    type: str  # "reply" | "typing" | "internal" | "error" | "request_think" | "completed"
     content: str
     metadata: dict = field(default_factory=dict)
+    prompt: str | None = None  # 触发思考的原因（用于 request_think）
 
 
 @dataclass

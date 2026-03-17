@@ -28,14 +28,24 @@ from .messages import (
 
 @dataclass
 class TempPrompt:
-    """临时提示词 - 在指定轮数内附加到主思考提示词
+    """临时提示词 - 在指定轮数和时间内附加到主思考提示词
 
-    由动作的 before_execute() 添加，每轮思考消耗一次，
-    remaining_rounds 降到 0 后自动移除。
+    由动作添加（before_execute 或运行中），每轮思考消耗一次，
+    remaining_rounds 降到 0 且超过 min_duration 后自动移除。
+
+    Attributes:
+        content: 提示词内容
+        remaining_rounds: 剩余有效轮数
+        min_duration: 最小保留时间（秒），默认 30 秒
+        created_at: 创建时间戳
+        source: 来源标识（如 "reply#1"、"wait#2"）
     """
 
     content: str
     remaining_rounds: int
+    min_duration: float = 30.0  # 最小保留时间（秒）
+    created_at: float = field(default_factory=time.time)
+    source: str = ""  # 来源动作实例 ID
 
 
 @dataclass
@@ -82,15 +92,24 @@ class Action(ABC):
 
     def __init__(self):
         self.ctx: Any = None  # MindContext，由 mind_sim 注入
+        self.llm: Any = None  # MindSimLLM，由 mind_sim 注入
         self.instance_id: str = ""  # 运行时分配的实例 ID（如 reply#1）
         self.inbox: asyncio.Queue[MindMessage] = asyncio.Queue()
         self._task: asyncio.Task | None = None
         self._state: ActionState = ActionState(action_name=self.name)
         self._send_callback: Callable | None = None
+        self._temp_prompt_callback: Callable | None = None
+        self._executor: Any = None  # ActionExecutor 引用，由 executor 注入
+        self._params: dict = {}  # 保存启动参数，用于 on_complete
 
     def bind_context(self, ctx: Any) -> "Action":
         """绑定上下文（由 ActionExecutor 调用）"""
         self.ctx = ctx
+        return self
+
+    def bind_llm(self, llm: Any) -> "Action":
+        """绑定 LLM（由 ActionExecutor 调用）"""
+        self.llm = llm
         return self
 
     @property
@@ -125,6 +144,28 @@ class Action(ABC):
     def set_send_callback(self, callback: Callable):
         """设置发送回调（由 ActionExecutor 调用）"""
         self._send_callback = callback
+
+    def set_temp_prompt_callback(self, callback: Callable):
+        """设置临时提示词回调（由 ActionExecutor 调用）"""
+        self._temp_prompt_callback = callback
+
+    def add_temp_prompt(self, content: str, rounds: int = 5, min_duration: float = 30.0) -> None:
+        """添加临时提示词（动作运行中调用）
+
+        Args:
+            content: 提示词内容
+            rounds: 有效轮数（默认5轮）
+            min_duration: 最小保留时间（秒），默认30秒
+        """
+        if hasattr(self, "_temp_prompt_callback") and self._temp_prompt_callback:
+            self._temp_prompt_callback(
+                TempPrompt(
+                    content=content,
+                    remaining_rounds=rounds,
+                    min_duration=min_duration,
+                    source=self.instance_id or self.name,
+                )
+            )
 
     async def send_to_main(self, output: ActionOutput):
         """发送产出给主思考"""
@@ -176,6 +217,36 @@ class Action(ABC):
         """
         return None
 
+    async def on_complete(self, params: dict) -> None:
+        """完成钩子 - 在 run() 完成（正常完成、非停止）后调用
+
+        可以用来添加临时提示词，例如：
+        - "已回复 xxx"
+        - "已等待 xxx 秒"
+
+        Args:
+            params: 启动参数（来自 START 决策的 JSON 参数）
+        """
+        pass
+
+    def get_completion_output(self) -> ActionOutput | None:
+        """获取完成后要发送的事件
+
+        子类可以重写此方法来定义完成后的行为：
+        - 返回 ActionOutput: 发送该事件（type="completed" 会触发重新思考）
+        - 返回 None: 不发送任何事件，不触发重新思考
+
+        默认行为：发送 type="completed" 的事件，触发主思考重新思考
+
+        Returns:
+            ActionOutput 或 None
+        """
+        return ActionOutput(
+            action_name=self.instance_id or self.name,
+            type="completed",
+            content="",
+        )
+
     @abstractmethod
     async def run(self, params: dict) -> AsyncGenerator[ActionOutput, None]:
         """运行动作（子类实现）
@@ -206,19 +277,20 @@ class Action(ABC):
 
     async def _run_wrapper(self, params: dict):
         """包装 run()，处理状态更新和异常"""
+        self._params = params  # 保存参数供 on_complete 使用
         try:
             async for output in self.run(params):
                 await self.send_to_main(output)
             self._state.status = "completed"
             self._state.prompt_contribution = None
-            # 通知动作完成，触发主思考重新思考
-            await self.send_to_main(
-                ActionOutput(
-                    action_name=self.instance_id or self.name,
-                    type="completed",
-                    content="",
-                )
-            )
+
+            # 调用完成钩子（添加临时提示词等）
+            await self.on_complete(params)
+
+            # 获取子类定义的完成事件（可能为 None）
+            completion_output = self.get_completion_output()
+            if completion_output:
+                await self.send_to_main(completion_output)
         except asyncio.CancelledError:
             self._state.status = "stopped"
             self._state.prompt_contribution = None
@@ -240,10 +312,7 @@ class Action(ABC):
         """停止动作"""
         if self._task and not self._task.done():
             self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
+            # 不 await task，避免等待阻塞中的 check_message 超时
         self._state.status = "stopped"
         self._state.progress = f"已停止: {reason}" if reason else "已停止"
 
@@ -297,19 +366,29 @@ class ActionExecutor:
     instance_id 格式：<动作名>#<序号>，如 reply#1, reply#2, wait#1
     """
 
-    def __init__(self, ctx: Any, send_callback: Callable):
+    def __init__(self, ctx: Any, send_callback: Callable, llm: Any = None):
         """初始化执行器
 
         Args:
             ctx: MindContext 会话上下文（绑定到每个新建的动作实例）
             send_callback: 动作产出回调（连接到 Brain 的事件队列）
+            llm: MindSimLLM 实例，供动作调用 LLM
         """
         self._action_classes: dict[str, type[Action]] = {}
         self._running: dict[str, RunningAction] = {}
         self._counter: dict[str, int] = {}  # 动作名 → 累计计数
         self._ctx = ctx
         self._send_callback = send_callback
+        self._llm = llm
         self._temp_prompts: list[TempPrompt] = []
+
+    def _add_temp_prompt(self, temp_prompt: TempPrompt) -> None:
+        """添加临时提示词（由 Action.add_temp_prompt 回调）"""
+        self._temp_prompts.append(temp_prompt)
+        logger.debug(
+            f"[ActionExecutor] 添加临时提示词 (来源: {temp_prompt.source}, "
+            f"剩余轮数: {temp_prompt.remaining_rounds}): {temp_prompt.content[:50]}..."
+        )
 
     def register(self, action_cls: type[Action]):
         """注册动作类"""
@@ -368,7 +447,10 @@ class ActionExecutor:
         # 创建新实例
         instance = cls()
         instance.bind_context(self._ctx)
+        instance.bind_llm(self._llm)
         instance.set_send_callback(self._send_callback)
+        instance.set_temp_prompt_callback(self._add_temp_prompt)
+        instance._executor = self
 
         # 生成唯一 instance_id
         count = self._counter.get(action_name, 0) + 1
@@ -455,24 +537,55 @@ class ActionExecutor:
                 )
         return states
 
-    def tick_temp_prompts(self) -> list[str]:
+    def tick_temp_prompts(self, consume_rounds: bool = True) -> list[str]:
         """消耗一轮临时提示词
 
-        返回本轮生效的临时提示词内容列表，
-        同时将剩余轮数减 1，清除已过期的。
+        返回本轮生效的临时提示词内容列表（带时间信息），
+        同时将剩余轮数减 1，清除已过期的（轮数为0且超过最小保留时间）。
+
+        格式："[距离现在Xs] 原始内容"
+
+        Args:
+            consume_rounds: 是否消耗轮数，默认 True
 
         Returns:
-            本轮生效的临时提示词内容
+            本轮生效的临时提示词内容（带时间戳）
         """
+        import time
+
+        now = time.time()
         active = []
         remaining = []
         for tp in self._temp_prompts:
-            if tp.remaining_rounds > 0:
-                active.append(tp.content)
-                tp.remaining_rounds -= 1
-                if tp.remaining_rounds > 0:
+            elapsed = now - tp.created_at
+
+            # 检查是否应该保留：轮数 > 0 或者未达到最小保留时间
+            should_keep = tp.remaining_rounds > 0 or elapsed < tp.min_duration
+
+            if should_keep:
+                # 格式化时间显示
+                elapsed_int = int(elapsed)
+                if elapsed_int < 60:
+                    time_str = f"{elapsed_int}秒"
+                elif elapsed_int < 3600:
+                    time_str = f"{elapsed_int // 60}分{elapsed_int % 60}秒"
+                else:
+                    time_str = f"{elapsed_int // 3600}小时{(elapsed_int % 3600) // 60}分"
+
+                # 添加时间信息
+                formatted = f"[{tp.source} 已完成，距离现在 {time_str}] {tp.content}"
+                active.append(formatted)
+
+                if consume_rounds:
+                    tp.remaining_rounds -= 1
+                    # 只有轮数 > 0 或未达到最小时间才保留
+                    if tp.remaining_rounds > 0 or elapsed < tp.min_duration:
+                        remaining.append(tp)
+                else:
                     remaining.append(tp)
-        self._temp_prompts = remaining
+
+        if consume_rounds:
+            self._temp_prompts = remaining
         return active
 
     def has_running(self) -> bool:

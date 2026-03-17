@@ -9,6 +9,7 @@
 6. 不控制事件生命周期（由主思考 Brain 决定何时结束）
 """
 
+import json
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
@@ -20,6 +21,27 @@ from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from ....context import PipelineContext
+
+
+async def _get_or_create_conversation(event: AstrMessageEvent, conv_manager):
+    """获取或创建当前会话的对话"""
+    # 先尝试获取当前对话ID
+    cid = await conv_manager.get_curr_conversation_id(event.unified_msg_origin)
+    if cid:
+        conversation = await conv_manager.get_conversation(
+            event.unified_msg_origin, cid
+        )
+        if conversation:
+            return conversation
+
+    # 如果没有当前对话，创建新的
+    cid = await conv_manager.new_conversation(
+        event.unified_msg_origin, event.get_platform_id()
+    )
+    conversation = await conv_manager.get_conversation(event.unified_msg_origin, cid)
+    if not conversation:
+        raise RuntimeError("无法创建新的对话。")
+    return conversation
 
 
 class InternalMindSubStage(Stage):
@@ -39,11 +61,12 @@ class InternalMindSubStage(Stage):
         - MindSim 每产生一条回复就立即发送到平台并保存历史
         - 事件流结束由 Brain 主思考控制
         """
-        # 1. 构建 MindContext
-        mind_ctx = self._build_mind_context(event)
+        # 1. 获取或创建对话
+        conversation = await _get_or_create_conversation(event, self.conv_manager)
+        conversation_id = conversation.cid
 
         # 2. 保存用户消息到历史
-        await self._save_user_message(event)
+        await self._save_user_message(event, conversation_id)
 
         # 3. 获取 Provider 并创建 MindSimLLM
         llm = self._create_llm(event)
@@ -51,7 +74,10 @@ class InternalMindSubStage(Stage):
         # 4. 获取高级人格配置
         persona = await self._resolve_persona(event)
 
-        # 5. 调用 dispatcher 获取事件流
+        # 5. 构建 MindContext
+        mind_ctx = self._build_mind_context(event, conversation_id, persona)
+
+        # 6. 调用 dispatcher 获取事件流
         dispatcher = get_dispatcher()
         event_stream = dispatcher.dispatch(
             ctx=mind_ctx,
@@ -61,8 +87,8 @@ class InternalMindSubStage(Stage):
             llm=llm,
             persona=persona,
         )
-
-        # 5. 监听事件流并处理
+        yield
+        # 7. 监听事件流并处理
         async for mind_event in event_stream:
             if mind_event.type == MindEventType.REPLY:
                 text = mind_event.data.get("text", "")
@@ -73,7 +99,7 @@ class InternalMindSubStage(Stage):
                 await event.send(MessageChain([Plain(text)]))
 
                 # 保存 AI 回复到历史
-                await self._save_assistant_message(event, text)
+                await self._save_assistant_message(event, conversation_id, text)
 
                 # yield 让管道继续
                 yield
@@ -121,15 +147,29 @@ class InternalMindSubStage(Stage):
             logger.error(f"[InternalMindSubStage] 创建 MindSimLLM 失败: {e}")
             return None
 
-    def _build_mind_context(self, event: AstrMessageEvent) -> MindContext:
+    def _build_mind_context(
+        self,
+        event: AstrMessageEvent,
+        conversation_id: str,
+        persona: dict,
+    ) -> MindContext:
         """从 AstrMessageEvent 构建 MindContext"""
+        plugin_context = self.ctx.plugin_manager.context
         return MindContext(
             session_id=str(event.session),
             unified_msg_origin=event.unified_msg_origin,
             is_private=event.is_private_chat(),
             persona_id=getattr(event, "_persona_id", "default"),
+            system_prompt=persona.get("prompt", ""),
+            personality_config=persona.get("personality_config", {}),
+            chat_config=persona.get("chat_config", {}),
+            robot_config=persona.get("robot_config", {}),
             user_id=event.get_sender_id(),
             user_name=event.get_sender_name(),
+            conv_manager=self.conv_manager,
+            conversation_id=conversation_id,
+            event=event,
+            plugin_context=plugin_context,
         )
 
     async def _resolve_persona(self, event: AstrMessageEvent) -> dict:
@@ -151,26 +191,38 @@ class InternalMindSubStage(Stage):
             logger.warning(f"[InternalMindSubStage] 解析人格配置失败: {e}")
             return {}
 
-    async def _save_user_message(self, event: AstrMessageEvent) -> None:
-        """保存用户消息到历史"""
+    async def _save_user_message(
+        self, event: AstrMessageEvent, conversation_id: str
+    ) -> None:
+        """保存用户消息到历史（追加模式）"""
         try:
+            conversation = await self.conv_manager.get_conversation(
+                event.unified_msg_origin, conversation_id
+            )
+            history = json.loads(conversation.history) if conversation and conversation.history else []
+            history.append({"role": "user", "content": event.message_str})
             await self.conv_manager.update_conversation(
                 event.unified_msg_origin,
-                None,
-                history=[{"role": "user", "content": event.message_str}],
+                conversation_id,
+                history=history,
             )
         except Exception as e:
             logger.warning(f"[InternalMindSubStage] 保存用户消息失败: {e}")
 
     async def _save_assistant_message(
-        self, event: AstrMessageEvent, content: str
+        self, event: AstrMessageEvent, conversation_id: str, content: str
     ) -> None:
-        """保存 AI 回复到历史（每条回复独立保存）"""
+        """保存 AI 回复到历史（追加模式）"""
         try:
+            conversation = await self.conv_manager.get_conversation(
+                event.unified_msg_origin, conversation_id
+            )
+            history = json.loads(conversation.history) if conversation and conversation.history else []
+            history.append({"role": "assistant", "content": content})
             await self.conv_manager.update_conversation(
                 event.unified_msg_origin,
-                None,
-                history=[{"role": "assistant", "content": content}],
+                conversation_id,
+                history=history,
             )
         except Exception as e:
             logger.warning(f"[InternalMindSubStage] 保存 AI 回复失败: {e}")

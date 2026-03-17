@@ -3,6 +3,7 @@ import re
 import time
 import traceback
 from collections.abc import AsyncGenerator
+from typing import Callable, Any
 
 from astrbot.core import logger
 from astrbot.core.agent.message import Message
@@ -94,6 +95,8 @@ async def run_agent(
     show_tool_call_result: bool = False,
     stream_to_general: bool = False,
     show_reasoning: bool = False,
+    # 回调函数：每步完成后调用，参数为 (step_idx, resp_type, resp_data)
+    step_callback: Callable[[int, str, Any], None] | None = None,
 ) -> AsyncGenerator[MessageChain | None, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.context.event
@@ -149,6 +152,10 @@ async def run_agent(
                         ),
                     )
 
+                    # 回调通知
+                    if step_callback:
+                        step_callback(step_idx, "tool_call_result", resp.data)
+
                     if msg_chain.type == "tool_direct_result":
                         # tool_direct_result 用于标记 llm tool 需要直接发送给用户的内容
                         await astr_event.send(msg_chain)
@@ -176,6 +183,10 @@ async def run_agent(
                     )
                     _record_tool_call_name(tool_info, tool_name_by_call_id)
 
+                    # 回调通知
+                    if step_callback:
+                        step_callback(step_idx, "tool_call", resp.data)
+
                     if astr_event.get_platform_name() == "webchat":
                         await astr_event.send(resp.data["chain"])
                     elif show_tool_use:
@@ -197,6 +208,11 @@ async def run_agent(
                         if resp.type == "llm_result"
                         else ResultContentType.GENERAL_RESULT
                     )
+
+                    # 回调通知 llm_result
+                    if step_callback and resp.type == "llm_result":
+                        step_callback(step_idx, "llm_result", resp.data)
+
                     astr_event.set_result(
                         MessageEventResult(
                             chain=resp.data["chain"].chain,
@@ -218,6 +234,10 @@ async def run_agent(
                 except asyncio.CancelledError:
                     pass
             if agent_runner.done():
+                # 回调通知完成
+                if step_callback:
+                    step_callback(step_idx, "done", None)
+
                 # send agent stats to webchat
                 if astr_event.get_platform_name() == "webchat":
                     await astr_event.send(

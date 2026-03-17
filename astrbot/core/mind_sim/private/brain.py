@@ -15,10 +15,13 @@
 
 import asyncio
 import json
+import random
 import re
 import time
 from collections.abc import AsyncGenerator
 from typing import Optional
+
+from tenacity import sleep
 
 from astrbot.core import logger
 from astrbot.core.mind_sim.action import ActionExecutor, PreExecuteResult
@@ -35,9 +38,12 @@ from astrbot.core.mind_sim.messages import (
 from .actions import get_available_actions
 from .prompts import (
     DECISION_FORMAT_PROMPT,
+    STUCK_PROMPT,
+    UPGRADE_THINKING_PROMPT,
     build_action_states_prompt,
     build_history_prompt,
     build_main_thinking_prompt,
+    build_prompt_sections,
     build_temp_prompts_section,
 )
 
@@ -115,7 +121,9 @@ class PrivateBrain:
         self.llm = llm
 
         # 动作执行器
-        self.executor = ActionExecutor(ctx=ctx, send_callback=self._on_action_output)
+        self.executor = ActionExecutor(
+            ctx=ctx, send_callback=self._on_action_output, llm=llm
+        )
 
         # 注册动作类
         for action_cls in get_available_actions():
@@ -129,6 +137,16 @@ class PrivateBrain:
         self._think_requested = False
         self._think_task: Optional[asyncio.Task] = None
 
+        # 思考节流机制（1秒内只触发一次思考，累积提示词）
+        self._last_think_time: float = 0
+        self._think_cooldown: float = 1.0  # 思考冷却时间（秒）
+        self._pending_think_timer: Optional[asyncio.Task] = None  # 延迟思考定时器
+
+        # 是否有需要打断 wait 的事件待处理
+        self._interrupt_wait_pending: bool = False
+
+
+
         # 中断事件（用于阻塞时被用户消息或动作消息打断）
         self._interrupt_event: asyncio.Event = asyncio.Event()
 
@@ -138,9 +156,51 @@ class PrivateBrain:
         # LLM 错误计数
         self._llm_error_count = 0
 
+        # 连续等待计数（用于检测是否卡住）
+        self._consecutive_wait_count: int = 0
+        self._consecutive_wait_threshold: int = 3  # 连续等待3次后认为可能卡住
+        self._first_wait_time: float = 0  # 第一次等待的时间戳
+        self._stuck_min_duration: float = 60.0  # 卡住判断的最小时间（秒）
+
+        # 思考传入提示词
+        self._think_prompt_queue: asyncio.Queue[str] = asyncio.Queue()
+
+        # 初始化心情（从高级人格配置中根据权重随机选择）
+        self._init_mood()
+
         logger.debug(
             f"[PrivateBrain] 初始化完成，动作类: {self.executor.get_action_class_names()}"
         )
+
+    def _init_mood(self):
+        """根据心情标签权重随机选择心情"""
+        # 从 persona 中获取心情标签配置
+        personality_config = self.persona.get("personality_config", {})
+        mood_tags = personality_config.get("mood_tags", [])
+
+        if not mood_tags:
+            # 默认心情
+            self.ctx.memory["current_mood"] = "平静"
+            return
+
+        # 根据权重随机选择
+        total_weight = sum(tag.get("weight", 0) for tag in mood_tags)
+        if total_weight <= 0:
+            self.ctx.memory["current_mood"] = "平静"
+            return
+
+        rand_val = random.random() * total_weight
+        cumulative = 0
+        selected_mood = "平静"
+
+        for tag in mood_tags:
+            cumulative += tag.get("weight", 0)
+            if rand_val <= cumulative:
+                selected_mood = tag.get("name", "平静")
+                break
+
+        self.ctx.memory["current_mood"] = selected_mood
+        logger.debug(f"[PrivateBrain] 初始心情: {selected_mood}")
 
     async def _on_action_output(self, output):
         """动作产出回调，将产出转为事件放入队列"""
@@ -149,6 +209,9 @@ class PrivateBrain:
             if output.type == "reply":
                 await self._event_queue.put(MindEvent.reply(output.content, output.metadata))
                 self._interrupt_event.set()
+                # reply 发出后打断 wait，让主思考决定下一步
+                self._interrupt_wait_pending = True
+                await self._schedule_think(f"动作 {output.action_name} 发出了回复")
             elif output.type == "typing":
                 await self._event_queue.put(MindEvent.typing())
             elif output.type == "error":
@@ -156,14 +219,28 @@ class PrivateBrain:
             elif output.type == "completed":
                 # 动作完成，触发重新思考
                 logger.debug(f"[PrivateBrain] 动作 {output.action_name} 完成，触发重新思考")
-                await self._schedule_think()
+                await self._schedule_think(f"这次是动作{output.action_name} 完成的自动触发思考")
+            elif output.type == "completed_no_think":
+                # 动作完成但不触发重新思考
+                logger.debug(f"[PrivateBrain] 动作 {output.action_name} 完成（不触发重新思考）")
+            elif output.type == "end":
+                # 动作请求结束对话
+                logger.info(f"[PrivateBrain] 动作 {output.action_name} 请求结束对话: {output.content}")
+                # 先停止所有其他正在运行的动作
+                await self.executor.stop_all("结束对话，停止所有动作")
+                await self._event_queue.put(MindEvent.end(output.content))
             elif output.type == "request_think":
-                # 动作显式请求重新思考
-                logger.debug(f"[PrivateBrain] 动作 {output.action_name} 请求重新思考")
-                await self._schedule_think()
-
+                # 动作显式请求重新思考，打断 wait
+                reason = output.prompt or output.content
+                logger.debug(f"[PrivateBrain] 动作 {output.action_name} 请求重新思考: {reason}")
+                self._interrupt_wait_pending = True
+                if reason:
+                    await self._schedule_think(f"这次是动作{output.action_name}由于原因是{reason}请求重新思考触发思考")
+                else:
+                    await self._schedule_think(f"这次是动作{output.action_name}请求重新思考触发思考")
+            elif output.type == "noop":
+                logger.info(f"[PrivateBrain] 动作 {output.action_name} 什么都没做")
         elif isinstance(output, ActionStateUpdate):
-            # 状态更新不需要放入事件队列，executor 内部已跟踪
             pass
 
     def set_llm(self, llm: MindSimLLM):
@@ -177,33 +254,68 @@ class PrivateBrain:
         sender_name: str,
     ):
         """处理用户消息 - 主要入口之一"""
-        # 添加到对话历史
-        self.ctx.conversation_history.append(
-            {
-                "role": "user",
-                "content": message,
-                "sender_name": sender_name,
-                "timestamp": time.time(),
-            }
-        )
         logger.debug(f"[PrivateBrain] 收到用户消息: {message[:50]}...")
 
         # 触发中断（打断阻塞等待）
         self._interrupt_event.set()
 
-        # 触发思考
-        await self._schedule_think()
+        # 标记本次思考由用户消息触发（需要打断 wait）
+        self._interrupt_wait_pending = True
 
-    async def _schedule_think(self):
-        """调度一次思考（防止并发）"""
+        # 触发思考
+        await self._schedule_think(f"以下是这一轮思考的新的用户消息: {message}")
+
+    async def _schedule_think(self, prompt: Optional[str] = None):
+        """调度一次思考（节流机制：1秒内只触发一次，累积提示词）"""
+        # 1. 将提示词加入队列（无论是否立即思考）
+        if prompt:
+            await self._think_prompt_queue.put(prompt)
+            logger.debug(f"[PrivateBrain] 收到思考提示词，已加入队列: {prompt[:50]}...")
+
+        # 2. 如果正在思考中，标记需要再次思考
         if self._thinking:
-            # 正在思考中，标记需要再次思考
             self._think_requested = True
             logger.debug("[PrivateBrain] 思考中，标记待思考")
             return
 
-        # 启动思考任务
+        # 3. 检查冷却时间
+        current_time = time.time()
+        time_since_last_think = current_time - self._last_think_time
+
+        if time_since_last_think < self._think_cooldown:
+            # 在冷却期内，延迟思考
+            remaining_cooldown = self._think_cooldown - time_since_last_think
+
+            # 如果已经有延迟定时器，不需要重复创建
+            if self._pending_think_timer and not self._pending_think_timer.done():
+                logger.debug(f"[PrivateBrain] 冷却中，提示词已累积，等待 {remaining_cooldown:.2f}秒后统一思考")
+                return
+
+            # 创建延迟思考定时器
+            logger.debug(f"[PrivateBrain] 冷却中，延迟 {remaining_cooldown:.2f}秒后思考")
+            self._pending_think_timer = asyncio.create_task(
+                self._delayed_think(remaining_cooldown)
+            )
+            return
+
+        # 4. 冷却完成，立即启动思考
+        self._last_think_time = current_time
         self._think_task = asyncio.create_task(self._do_think())
+
+    async def _delayed_think(self, delay: float):
+        """延迟思考（等待冷却时间后触发）"""
+        try:
+            await asyncio.sleep(delay)
+
+            # 冷却完成，启动思考
+            if not self._thinking:
+                self._last_think_time = time.time()
+                self._think_task = asyncio.create_task(self._do_think())
+                logger.debug("[PrivateBrain] 冷却完成，启动延迟思考")
+        except asyncio.CancelledError:
+            logger.debug("[PrivateBrain] 延迟思考被取消")
+        except Exception as e:
+            logger.error(f"[PrivateBrain] 延迟思考异常: {e}")
 
     async def _do_think(self):
         """执行思考（可能多轮）"""
@@ -212,12 +324,19 @@ class PrivateBrain:
             while True:
                 self._think_requested = False
 
+                # 进入思考时，检查是否需要打断 wait
+                if self._interrupt_wait_pending:
+                    await self.executor.stop_by_name("wait", "有新事件到达，打断等待")
+                    self._interrupt_wait_pending = False
+
                 # 清理已完成的动作实例
                 await self.executor.cleanup_completed()
 
                 # 构建提示词
-                prompt = self._build_prompt()
-                logger.debug(f"[PrivateBrain] 思考提示词: {prompt}")
+                prompt = await self._build_prompt()
+                ORANGE = '\033[38;5;214m'
+                RESET = '\033[0m'
+                logger.debug(f"{ORANGE}[PrivateBrain] 思考提示词: {prompt}{RESET}")
 
                 try:
                     if self.llm:
@@ -256,6 +375,45 @@ class PrivateBrain:
                 # 检查是否需要再次思考
                 if not self._think_requested:
                     break
+
+                # 检测是否只有 wait 动作在运行（连续等待）
+                running_states = self.executor.get_running_states()
+                is_only_wait = (
+                        len(running_states) == 1
+                        and running_states[0]["action_name"] == "wait"
+                )
+
+                if is_only_wait:
+                    # 第一次等待，记录时间
+                    if self._consecutive_wait_count == 0:
+                        self._first_wait_time = time.time()
+
+                    self._consecutive_wait_count += 1
+                    logger.debug(
+                        f"[PrivateBrain] 检测到连续等待，当前次数: {self._consecutive_wait_count}"
+                    )
+                else:
+                    # 有其他动作运行，重置计数和时间
+                    self._consecutive_wait_count = 0
+                    self._first_wait_time = 0
+
+                # 超过阈值时，检查时间条件
+                stuck_hint = ""
+                if self._consecutive_wait_count >= self._consecutive_wait_threshold:
+                    # 计算从第一次等待到现在的时间
+                    elapsed_time = time.time() - self._first_wait_time if self._first_wait_time > 0 else 0
+
+                    # 只有当连续等待次数达标且时间超过阈值时才提示
+                    if elapsed_time >= self._stuck_min_duration:
+                        stuck_hint = STUCK_PROMPT
+                        logger.debug(
+                            f"[PrivateBrain] 连续等待 {self._consecutive_wait_count} 次，"
+                            f"持续 {int(elapsed_time)} 秒，添加结束提示"
+                        )
+
+                # 将结束提示加入队列
+                if stuck_hint:
+                    await self._think_prompt_queue.put(stuck_hint)
 
         except asyncio.CancelledError:
             logger.info("[PrivateBrain] 思考被取消")
@@ -302,8 +460,9 @@ class PrivateBrain:
 
     async def _think(self, prompt: str) -> str:
         """统一的思考入口：先快速模型评估，按需升级"""
+        # 快速模型调用（包含升级思考模块）
         fast_response = await self.llm.call(prompt=prompt, role="fast")
-        logger.debug(f"[PrivateBrain] 快速思考结果: {fast_response[:100]}...")
+        logger.debug(f"[PrivateBrain] 快速思考结果: {fast_response}")
 
         need_role = self._parse_need_deeper(fast_response)
 
@@ -311,8 +470,11 @@ class PrivateBrain:
             return fast_response
 
         logger.info(f"[PrivateBrain] 升级到 {need_role} 思考")
-        response = await self.llm.call(prompt=prompt, role=need_role)
-        logger.debug(f"[PrivateBrain] {need_role} 思考结果: {response[:100]}...")
+
+        # 升级思考时不传入升级模块（避免循环升级）
+        upgraded_prompt = await self._build_prompt(include_upgrade=False)
+        response = await self.llm.call(prompt=upgraded_prompt, role=need_role)
+        logger.debug(f"[PrivateBrain] {need_role} 思考结果: {response}")
         return response
 
     @staticmethod
@@ -349,37 +511,77 @@ class PrivateBrain:
         except asyncio.TimeoutError:
             return "timeout"
 
-    def _build_prompt(self) -> str:
-        """构建提示词"""
-        sections = []
+    async def _build_prompt(self, include_upgrade: bool = True) -> str:
+        """构建思考提示词
 
+        Args:
+            include_upgrade: 是否包含升级思考模块（快速模型需要，升级后的模型不需要）
+        """
         # 系统提示词
         system_prompt = build_main_thinking_prompt(
             persona=self.persona,
             ctx=self.ctx,
             action_infos=self.executor.get_action_infos(),
         )
-        sections.append(system_prompt)
 
         # 当前运行的动作实例状态
         running_states = self.executor.get_running_states()
-        if running_states:
-            states_prompt = build_action_states_prompt(running_states)
-            sections.append(states_prompt)
+        states_prompt = build_action_states_prompt(running_states) if running_states else ""
 
         # 临时提示词
-        temp_contents = self.executor.tick_temp_prompts()
-        if temp_contents:
-            sections.append(build_temp_prompts_section(temp_contents))
+        if include_upgrade:
+            temp_contents = self.executor.tick_temp_prompts(consume_rounds = False)
+        else:
+            temp_contents = self.executor.tick_temp_prompts(consume_rounds = True)
 
-        # 最近对话历史
-        history_prompt = build_history_prompt(self.ctx.conversation_history)
-        sections.append(history_prompt)
+        temp_prompt = build_temp_prompts_section(temp_contents) if temp_contents else ""
 
-        # 决策格式
-        sections.append(DECISION_FORMAT_PROMPT)
+        # 最近对话历史（从数据库读取）
+        history = []
+        if self.ctx.conv_manager and self.ctx.conversation_id:
+            conversation = await self.ctx.conv_manager.get_conversation(
+                self.ctx.unified_msg_origin, self.ctx.conversation_id
+            )
+            if conversation and conversation.history:
+                history = json.loads(conversation.history)
 
-        return "\n\n---\n\n".join(sections)
+        # 从聊天配置中获取消息条数，默认为 10
+        chat_config = self.ctx.chat_config or {}
+        message_length = chat_config.get("message_length", 10)
+        if not isinstance(message_length, int) or message_length < 1:
+            message_length = 10
+
+        history_prompt = build_history_prompt(history, max_turns=message_length)
+
+        # 决策格式（可选升级思考模块）
+        decision_section = DECISION_FORMAT_PROMPT
+        if include_upgrade:
+            decision_section += UPGRADE_THINKING_PROMPT
+
+        # 传入思考的提示词
+        queue_prompts = []
+        while not self._think_prompt_queue.empty():
+            try:
+                prompt = self._think_prompt_queue.get_nowait()
+                queue_prompts.append(prompt)
+                self._think_prompt_queue.task_done()
+            except asyncio.QueueEmpty:
+                break
+        queue_section = ""
+        if queue_prompts:
+            queue_section = "【额外思考提示】\n"
+            for i, prompt in enumerate(queue_prompts, 1):
+                queue_section += f"{i}. {prompt}\n"
+
+        # 使用灵活组装器
+        return build_prompt_sections(
+            system_prompt,
+            states_prompt,
+            temp_prompt,
+            history_prompt,
+            decision_section,
+            queue_section,
+        )
 
     async def _execute_decision(self, decision: dict):
         """执行决策"""

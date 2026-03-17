@@ -302,10 +302,10 @@ export default defineComponent({
                 mood_tags: [] as { name: string; weight: number }[]  // 心情标签及权重
             },
             chat_config: {
-                chat_frequency: 'normal',      // 聊天频率
-                dynamic_frequency: 'auto',        // 动态发言频率
-                time_based_mode: false,          // 根据时间选择
-                message_length: 'normal'         // 消息条数长度
+                chat_frequency: 'normal',      // 聊天频率 todo
+                dynamic_frequency: 'auto',        // 动态发言频率 todo
+                time_based_mode: false,          // 根据时间选择 todo
+                message_length: 10         // 消息条数长度（数字）
             },
             robot_config: {
                 nickname: '',           // 昵称
@@ -433,7 +433,7 @@ export default defineComponent({
                 chat_frequency: 'normal',
                 dynamic_frequency: 'auto',
                 time_based_mode: true,
-                message_length: 'normal'
+                message_length: 10
             };
             personaForm.value.robot_config = {
                 nickname: '麦麦',
@@ -555,7 +555,7 @@ export default defineComponent({
                             chat_frequency: 'normal',
                             dynamic_frequency: 'auto',
                             time_based_mode: false,
-                            message_length: 'normal'
+                            message_length: 10
                         },
                         robot_config: data.robot_config || {
                             nickname: '',

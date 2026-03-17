@@ -1,9 +1,12 @@
 """mind_sim 上下文状态"""
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from .messages import ActionState
+
+if TYPE_CHECKING:
+    from astrbot.core.conversation_mgr import ConversationManager
 
 
 @dataclass
@@ -28,15 +31,20 @@ class MindContext:
     # 动作状态（主思考从这里读取）
     action_states: dict[str, ActionState] = field(default_factory=dict)
 
-    # 对话历史（给主思考用）
-    conversation_history: list[dict] = field(default_factory=list)
-
     # 用户信息
     user_id: str = ""
     user_name: str = ""
 
     # 自由存储区（动作可以存取）
     memory: dict = field(default_factory=dict)
+
+    # 数据库对话管理器和对话ID（用于读取历史记录）
+    conv_manager: Any = field(default=None)
+    conversation_id: str = ""
+
+    # 运行时上下文（用于动作调用外部服务）
+    event: Any = field(default=None)  # AstrMessageEvent
+    plugin_context: Any = field(default=None)  # PluginContext
 
     def get_action_state(self, action_name: str) -> ActionState | None:
         """获取指定动作的状态"""

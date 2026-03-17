@@ -1,4 +1,5 @@
 from typing import AsyncGenerator
+import asyncio
 
 from astrbot.core.mind_sim import Action, ActionOutput, ActionStopMsg
 
@@ -37,32 +38,69 @@ class WaitAction(Action):
     - 等待结束后会自动再次进入思考
     """
 
+    async def on_complete(self, params: dict) -> None:
+        """完成后添加临时提示词（仅正常完成时调用）"""
+        # 从 state 中获取实际等待时间
+        wait_time = self._state.data.get("actual_wait_time",0)
+        if wait_time:
+            self.add_temp_prompt(
+                f"已等待: {int(wait_time)}秒 ，如果有重复的等待，其实可以调用空时间啥也不用干",
+                rounds=5,
+                min_duration=30.0
+            )
+
     async def run(self, params: dict) -> AsyncGenerator[ActionOutput, None]:
         self.update_state(
             progress="等待中",
             prompt_contribution="正在等待用户回复",
         )
 
-        # 等待一段时间
-        # 实际上等待动作应该由外部事件（用户消息）来打断
-        wait_time = params.get("duration", 60)  # 默认等待60秒
+        wait_time = float(params.get("duration", 60))  # 转换为 float
+        start_time = asyncio.get_event_loop().time()
+        update_interval = 10.0  # 每10秒更新一次进度
+        check_interval = 2.0  # 每2秒检查一次消息
 
-        for i in range(int(wait_time)):
-            msg = await self.check_message(timeout=1.0)
-            if msg:
-                if isinstance(msg, ActionStopMsg):
-                    self.update_state(progress="等待被停止")
-                    # 被停止时不触发重新思考（由外部控制）
-                    return
-                # SEND 消息可以调整等待时间
-                continue
+        try:
+            while True:
+                elapsed = asyncio.get_event_loop().time() - start_time
+                remaining = wait_time - elapsed
 
-            # 更新剩余时间
-            remaining = wait_time - i - 1
-            if remaining > 0 and remaining % 10 == 0:
-                self.update_state(
-                    progress=f"等待中（剩余 {remaining} 秒）",
-                )
+                if remaining <= 0.0:
+                    # 等待时间到
+                    break
 
-        self.update_state(progress="等待超时，将重新思考")
+                # 每次只检查1秒，避免长时间阻塞
+                msg = await self.check_message(timeout=check_interval)
+
+                if msg:
+                    if isinstance(msg, ActionStopMsg):
+                        self.update_state(progress="等待被停止")
+                        # 被停止时不触发重新思考（由外部控制）
+                        return
+                    # SEND 消息可以调整等待时间或其他操作
+                    continue
+
+                # 每隔 update_interval 更新一次进度
+                elapsed = asyncio.get_event_loop().time() - start_time
+                remaining = wait_time - elapsed
+                if remaining > 0.0 and int(elapsed) % int(update_interval) == 0:
+                    self.update_state(
+                        progress=f"等待中（剩余 {int(remaining)} 秒）",
+                    )
+
+        except asyncio.CancelledError:
+            self.update_state(progress="等待被取消")
+            return
+
+        # 记录实际等待时间
+        actual_wait = asyncio.get_event_loop().time() - start_time
+        self.update_state(data={"actual_wait_time": actual_wait})
+        self.update_state(progress="等待完成，将重新思考")
+
+        # 正常完成，yield 一个标记
+        yield ActionOutput(
+            action_name=self.instance_id or self.name,
+            type="completed",
+            content="",
+        )
         # 正常完成，会自动发送 completed 事件触发重新思考

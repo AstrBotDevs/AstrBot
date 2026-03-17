@@ -37,10 +37,12 @@
 
                 <!-- 消息条数长度 -->
                 <v-col cols="12" md="6">
-                    <v-select v-model="localConfig.message_length"
-                        :items="messageLengthOptions"
+                    <v-text-field v-model.number="localConfig.message_length"
                         :label="tm('advancedPersona.chat.messageLength')"
                         :hint="tm('advancedPersona.chat.messageLengthHint')"
+                        type="number"
+                        min="1"
+                        max="100"
                         variant="outlined"
                         persistent-hint />
                 </v-col>
@@ -57,7 +59,7 @@ interface ChatConfig {
     chat_frequency: string;
     dynamic_frequency: string;
     time_based_mode: boolean;
-    message_length: string;
+    message_length: number;
 }
 
 export default defineComponent({
@@ -69,7 +71,7 @@ export default defineComponent({
                 chat_frequency: 'normal',
                 dynamic_frequency: 'auto',
                 time_based_mode: false,
-                message_length: 'normal'
+                message_length: 10
             })
         }
     },
@@ -95,14 +97,6 @@ export default defineComponent({
             { title: tm('advancedPersona.chat.dynamicOptions.random'), value: 'random' }
         ];
 
-        // 消息长度选项
-        const messageLengthOptions = [
-            { title: tm('advancedPersona.chat.lengthOptions.short'), value: 'short' },
-            { title: tm('advancedPersona.chat.lengthOptions.normal'), value: 'normal' },
-            { title: tm('advancedPersona.chat.lengthOptions.long'), value: 'long' },
-            { title: tm('advancedPersona.chat.lengthOptions.adaptive'), value: 'adaptive' }
-        ];
-
         // 监听输入变化
         watch(localConfig, (newVal) => {
             emit('update:modelValue', newVal);
@@ -119,8 +113,7 @@ export default defineComponent({
             tm,
             localConfig,
             chatFrequencyOptions,
-            dynamicFrequencyOptions,
-            messageLengthOptions
+            dynamicFrequencyOptions
         };
     }
 });
