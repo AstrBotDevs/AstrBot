@@ -48,7 +48,6 @@ from astrbot.core.astr_main_agent_resources import (
     SYNC_SKILL_RELEASE_TOOL,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
-    TOOL_CALL_PROMPT_TOOL_SEARCH_MODE,
     retrieve_knowledge_base,
 )
 from astrbot.core.conversation_mgr import Conversation
@@ -1183,7 +1182,9 @@ async def build_main_agent(
         if config.tool_schema_mode == "skills_like":
             tool_prompt = TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
         elif config.tool_schema_mode in ("tool_search", "auto"):
-            tool_prompt = TOOL_CALL_PROMPT_TOOL_SEARCH_MODE
+            # tool_search/auto prompt is injected by the runner AFTER mode resolution
+            # in reset(). Injecting here would double-inject or inject for auto→full fallback.
+            tool_prompt = TOOL_CALL_PROMPT
         else:
             tool_prompt = TOOL_CALL_PROMPT
         req.system_prompt += f"\n{tool_prompt}\n"
