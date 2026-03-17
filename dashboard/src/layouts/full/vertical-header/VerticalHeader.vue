@@ -434,13 +434,16 @@ const currentMode = computed({
   get: () => (isChatPath.value ? 'chat' : 'bot'),
   set: (val: 'chat' | 'bot') => {
     try {
-      // 檢查 window 和 sessionStorage 是否存在
+      // 检查是否在浏览器环境
       if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
-        // 如果在非瀏覽器環境中，不做任何 sessionStorage 操作
-        console.warn('sessionStorage is not available in this environment');
+        // 如果是非浏览器环境，避免操作 sessionStorage
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('sessionStorage is not available in this environment');
+        }
         return;
       }
 
+      // 在浏览器环境下执行相关操作
       if (val === 'chat') {
         const lastSessionId = sessionStorage.getItem(LAST_CHAT_ROUTE_KEY);
         router.push(lastSessionId ? `/chat/${lastSessionId}` : '/chat');
@@ -452,8 +455,10 @@ const currentMode = computed({
         router.push(lastBotRoute);
       }
     } catch (e) {
-      // 在受限隱私模式等環境中，sessionStorage 操作可能會拋出 SecurityError
-      console.warn('Failed to access sessionStorage in currentMode setter:', e);
+      // 在受限隐私模式等环境中，sessionStorage 操作可能会抛出 SecurityError
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Failed to access sessionStorage in currentMode setter:', e);
+      }
     }
   }
 });
