@@ -851,7 +851,7 @@
           },
           "interval_method": {
             "description": "Interval Method",
-            "hint": "random 为随机时间，log 为根据消息长度计算，$y=log_<log_base>(x)$，x为字数，y的单位为秒。"
+            "hint": "random uses a random delay. log calculates delay by message length: $y=log_{log\\_base}(x)$, where x is word count and y is in seconds."
           },
           "interval": {
             "description": "Random Interval Time",
