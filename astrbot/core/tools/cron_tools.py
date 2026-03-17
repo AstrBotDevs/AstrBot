@@ -283,7 +283,7 @@ class ListCronJobsTool(FunctionTool[AstrAgentContext]):
         lines = []
         for j in jobs:
             lines.append(
-                f"{j.job_id} | {j.name} | {j.job_type} | run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | next={j.next_run_time}"
+                f"{j.job_id} | {j.name} | {j.description} | {j.job_type} | run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | next={j.next_run_time}"
             )
         return "\n".join(lines)
 
