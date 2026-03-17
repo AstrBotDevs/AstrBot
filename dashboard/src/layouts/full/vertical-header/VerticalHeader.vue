@@ -429,17 +429,23 @@ watch(() => route.fullPath, (newPath) => {
 });
 
 const currentMode = computed({
-  get: () => (isChatPath.value ? 'chat' : 'bot'), // 使用全局變數 isChatPath
+  get: () => (isChatPath.value ? 'chat' : 'bot'),
   set: (val: 'chat' | 'bot') => {
-    if (val === 'chat') {
-      const lastSessionId = sessionStorage.getItem(LAST_CHAT_ROUTE_KEY)
-      router.push(lastSessionId ? `/chat/${lastSessionId}` : '/chat')
-    } else {
-      let lastBotRoute = sessionStorage.getItem(LAST_BOT_ROUTE_KEY) || '/'
-      if (lastBotRoute.startsWith('/chat')) {
-        lastBotRoute = '/'
+    // 檢查 window 和 sessionStorage 是否存在
+    if (typeof window !== 'undefined' && typeof sessionStorage !== 'undefined') {
+      if (val === 'chat') {
+        const lastSessionId = sessionStorage.getItem(LAST_CHAT_ROUTE_KEY);
+        router.push(lastSessionId ? `/chat/${lastSessionId}` : '/chat');
+      } else {
+        let lastBotRoute = sessionStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+        if (lastBotRoute.startsWith('/chat')) {
+          lastBotRoute = '/';
+        }
+        router.push(lastBotRoute);
       }
-      router.push(lastBotRoute)
+    } else {
+      // 如果在非瀏覽器環境中，不做任何 sessionStorage 操作
+      console.warn('sessionStorage is not available in this environment');
     }
   }
 });
