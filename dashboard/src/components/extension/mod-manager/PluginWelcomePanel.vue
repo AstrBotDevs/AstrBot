@@ -1,40 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useModuleI18n } from '@/i18n/composables'
-import MarkdownIt from 'markdown-it'
-import hljs from 'highlight.js'
-import 'highlight.js/styles/github-dark.css'
-
-// Use markdown-it directly (same as ReadmeDialog.vue) to preserve raw HTML inline layout.
-// markstream-vue's MarkdownRender wraps each node in width:100% Vue containers,
-// which breaks inline flow of <a> tags inside <div align="center">.
-const md = new MarkdownIt({
-  html: true,
-  linkify: true,
-  typographer: true,
-  breaks: false,
-})
-
-md.enable(['table', 'strikethrough'])
-md.renderer.rules.table_open = () => '<div class="table-container"><table>'
-md.renderer.rules.table_close = () => '</table></div>'
-
-// Syntax highlighting for fenced code blocks
-md.renderer.rules.fence = (tokens, idx) => {
-  const token = tokens[idx]
-  const lang = token.info.trim() || ''
-  const code = token.content
-
-  const highlighted =
-    lang && hljs.getLanguage(lang)
-      ? hljs.highlight(code, { language: lang }).value
-      : md.utils.escapeHtml(code)
-
-  return `<div class="code-block-wrapper">
-    ${lang ? `<span class="code-lang-label">${lang}</span>` : ''}
-    <pre class="hljs"><code class="language-${lang}">${highlighted}</code></pre>
-  </div>`
-}
+import { renderMarkdown } from '@/composables/useMarkdownIt'
 
 const UPSTREAM_REPO_URL = 'https://github.com/AstrBotDevs/AstrBot'
 const UPSTREAM_README_API_URL = 'https://api.github.com/repos/AstrBotDevs/AstrBot/readme'
@@ -125,25 +92,7 @@ async function fetchUpstreamReadme() {
   }
 }
 
-// Render markdown to HTML, preserving raw HTML inline structures
-const renderedHtml = computed(() => {
-  if (!content.value) return ''
-
-  const rawHtml = md.render(content.value)
-
-  // Post-process: make all links open in new tab
-  const tempDiv = document.createElement('div')
-  tempDiv.innerHTML = rawHtml
-  tempDiv.querySelectorAll('a').forEach((a) => {
-    const href = a.getAttribute('href') || ''
-    if (href && !href.startsWith('#')) {
-      a.setAttribute('target', '_blank')
-      a.setAttribute('rel', 'noopener noreferrer')
-    }
-  })
-
-  return tempDiv.innerHTML
-})
+const renderedHtml = computed(() => renderMarkdown(content.value))
 
 onMounted(() => {
   fetchUpstreamReadme()
