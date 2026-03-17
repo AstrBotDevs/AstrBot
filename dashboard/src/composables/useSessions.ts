@@ -30,29 +30,52 @@ export function useSessions(chatboxMode: boolean = false) {
         return sessions.value.find(s => s.session_id === currSessionId.value);
     });
 
+    
+     // 進入chat 會先執行這個  舊版發生一些小問題導致一定會跑到 第一頁面
     async function getSessions() {
         try {
             const response = await axios.get('/api/chat/sessions');
             sessions.value = response.data.data;
-
-            // 处理待加载的会话
+    
+            const routeId = route.params.id as string;
+    
+            // 🥇 1. pending（最高優先）
             if (pendingSessionId.value) {
                 const session = sessions.value.find(s => s.session_id === pendingSessionId.value);
                 if (session) {
+                    currSessionId.value = pendingSessionId.value;
                     selectedSessions.value = [pendingSessionId.value];
                     pendingSessionId.value = null;
+                    return;
                 }
-            } else if (currSessionId.value) {
-                // 如果当前有选中的会话，确保它在列表中并被选中
+            }
+    
+            // 🥈 2. URL（關鍵🔥）
+            if (routeId) {
+                const session = sessions.value.find(s => s.session_id === routeId);
+                if (session) {
+                    currSessionId.value = routeId;
+                    selectedSessions.value = [routeId];
+                    return;
+                }
+            }
+    
+            // 🥉 3. 已有 currSessionId
+            if (currSessionId.value) {
                 const session = sessions.value.find(s => s.session_id === currSessionId.value);
                 if (session) {
                     selectedSessions.value = [currSessionId.value];
+                    return;
                 }
-            } else if (sessions.value.length > 0) {
-                // 默认选择第一个会话
+            }
+    
+            // 🧨 4. fallback（最後才用）
+            if (sessions.value.length > 0) {
                 const firstSession = sessions.value[0];
+                currSessionId.value = firstSession.session_id;
                 selectedSessions.value = [firstSession.session_id];
             }
+    
         } catch (err: any) {
             if (err.response?.status === 401) {
                 router.push('/auth/login?redirect=/chatbox');

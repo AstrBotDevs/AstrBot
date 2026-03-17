@@ -28,6 +28,7 @@ const theme = useTheme();
 const { t } = useI18n();
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = 'astrbot:last_bot_route';
+const LAST_CHAT_ROUTE_KEY = 'astrbot:last_chat_route';
 let dialog = ref(false);
 let accountWarning = ref(false)
 let updateStatusDialog = ref(false);
@@ -406,26 +407,53 @@ const viewMode = computed({
 // 保存 bot 模式的最後路由
 // 監聽 route 變化，保存最後一次 bot 路由
 watch(() => route.fullPath, (newPath) => {
-  if (customizer.viewMode === 'bot' && typeof window !== 'undefined') {
-    try {
+  if (typeof window === 'undefined') return;
+
+  try {
+    // ✅ bot 保持原樣
+    if (customizer.viewMode === 'bot') {
       localStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
-    } catch (e) {
-      console.error('Failed to save last bot route to localStorage:', e);
     }
+
+    // 🔥 chat：只存 sessionId
+    if (
+      customizer.viewMode === 'chat' &&
+      newPath.startsWith('/chat/')
+    ) {
+      const parts = newPath.split('/');
+      const sessionId = parts[2]; // "/chat/abc123" → "abc123"
+
+      if (sessionId) {
+        localStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
+      }
+    }
+
+  } catch (e) {
+    console.error('Failed to save route:', e);
   }
 });
 
 // 監聽 viewMode 切換
 watch(() => customizer.viewMode, (newMode, oldMode) => {
-  if (newMode === 'bot' && oldMode === 'chat' && typeof window !== 'undefined') {
-    // 從 chat 切換回 bot，跳轉到最後一次的 bot 路由
-    let lastBotRoute = '/';
-    try {
-      lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
-    } catch (e) {
-      console.error('Failed to read last bot route from localStorage:', e);
+  if (typeof window === 'undefined') return;
+
+  try {
+    if (newMode === 'bot' && oldMode === 'chat') {
+      const lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+      router.push(lastBotRoute);
     }
-    router.push(lastBotRoute);
+
+    if (newMode === 'chat' && oldMode === 'bot') {
+      const lastSessionId = localStorage.getItem(LAST_CHAT_ROUTE_KEY);
+
+      if (lastSessionId) {
+        router.push(`/chat/${lastSessionId}`);
+      } else {
+        router.push('/chat');
+      }
+    }
+  } catch (e) {
+    console.error('Failed to restore route:', e);
   }
 });
 
