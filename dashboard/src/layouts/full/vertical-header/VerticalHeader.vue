@@ -406,23 +406,22 @@ const viewMode = computed({
 // 监听 viewMode 变化，切换到 bot 模式时跳转到首页
 // 保存 bot 模式的最後路由
 // 監聽 route 變化，保存最後一次 bot 路由
-watch(() => route.fullPath, (newPath) => {
+watch(() => route.fullPath, () => {
   if (typeof window === 'undefined') return;
 
   try {
-    const isChatRoute = newPath.startsWith('/chat');
+    const isChatRoute = route.path.startsWith('/chat');
 
     // ✅ bot：只存「非 chat 頁」
     if (!isChatRoute) {
-      localStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
+      localStorage.setItem(LAST_BOT_ROUTE_KEY, route.fullPath);
     }
 
-    // ✅ chat：只存 sessionId
+    // ✅ chat：只存 sessionId（🔥 改這裡）
     if (isChatRoute) {
-      const parts = newPath.split('/');
-      const sessionId = parts[2];
+      const sessionId = route.params?.id;
 
-      if (sessionId) {
+      if (typeof sessionId === 'string' && sessionId.length > 0) {
         localStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
       }
     }
@@ -432,12 +431,34 @@ watch(() => route.fullPath, (newPath) => {
   }
 });
 
-// 監聽 viewMode 切換 先這樣  算是目前最佳解法 有問題再修正
+
+// 🔥 加這段（解你「手打 URL 不同步」的 bug）
+watch(() => route.path, (path) => {
+  const isChat = path.startsWith('/chat');
+
+  if (isChat && customizer.viewMode !== 'chat') {
+    customizer.SET_VIEW_MODE('chat');
+  }
+
+  if (!isChat && customizer.viewMode !== 'bot') {
+    customizer.SET_VIEW_MODE('bot');
+  }
+});
+
+
+// 監聽 viewMode 切換
 watch(() => customizer.viewMode, (newMode, oldMode) => {
   if (typeof window === 'undefined') return;
+
   try {
     if (newMode === 'bot' && oldMode === 'chat') {
-      const lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+      let lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+
+      // 🔥 防止被污染（很重要）
+      if (lastBotRoute.startsWith('/chat')) {
+        lastBotRoute = '/';
+      }
+
       router.push(lastBotRoute);
     }
 
