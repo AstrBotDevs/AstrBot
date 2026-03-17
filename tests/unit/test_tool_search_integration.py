@@ -160,7 +160,7 @@ class TestSystemPromptBranching:
 class TestProviderDetectionClaude:
     """PRV-01: When provider_config['type'] == 'anthropic_chat_completion', _is_claude_provider returns True."""
 
-    def test_anthropic_provider_detected(self):
+    def test_provider_detection_claude(self):
         # PRV-01
         from astrbot.core.agent.runners.tool_loop_agent_runner import (
             _is_claude_provider,
@@ -177,7 +177,7 @@ class TestProviderDetectionClaude:
 class TestProviderDetectionNonClaude:
     """PRV-02: When provider_config['type'] != 'anthropic_chat_completion', _is_claude_provider returns False."""
 
-    def test_openai_provider_not_detected(self):
+    def test_provider_detection_openai_not_claude(self):
         # PRV-02
         from astrbot.core.agent.runners.tool_loop_agent_runner import (
             _is_claude_provider,
