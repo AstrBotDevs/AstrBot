@@ -133,11 +133,9 @@ class ConversationCommands:
         session_curr_cid = await conv_mgr.get_curr_conversation_id(umo)
 
         if not session_curr_cid:
-            persona_id = await conv_mgr.get_curr_persona_id(umo)
             session_curr_cid = await conv_mgr.new_conversation(
                 umo,
                 message.get_platform_id(),
-                persona_id=persona_id,
             )
 
         contexts, total_pages = await conv_mgr.get_human_readable_context(
@@ -270,9 +268,13 @@ class ConversationCommands:
             return
 
         active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
+        cpersona = await self.context.conversation_manager.get_curr_persona_id(
+            message.unified_msg_origin
+        )
         cid = await self.context.conversation_manager.new_conversation(
             message.unified_msg_origin,
             message.get_platform_id(),
+            persona_id=cpersona,
         )
 
         message.set_extra("_clean_ltm_session", True)
@@ -292,9 +294,13 @@ class ConversationCommands:
                 ),
             )
 
+            cpersona = await self.context.conversation_manager.get_curr_persona_id(
+                session
+            )
             cid = await self.context.conversation_manager.new_conversation(
                 session,
                 message.get_platform_id(),
+                persona_id=cpersona,
             )
             message.set_result(
                 MessageEventResult().message(

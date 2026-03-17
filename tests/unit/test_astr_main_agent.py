@@ -257,64 +257,8 @@ class TestGetSessionConv:
         result = await module._get_session_conv(mock_event, mock_context)
 
         assert result == mock_conversation
-        # new_conversation is called without persona_id (inherits automatically)
         conv_mgr.new_conversation.assert_called_once_with(
-            mock_event.unified_msg_origin, mock_event.get_platform_id()
-        )
-
-    @pytest.mark.asyncio
-    async def test_get_session_conv_create_new_with_persona(
-        self, mock_event, mock_context
-    ):
-        """Test creating new conversation inherits persona_id from previous conversation."""
-        module = ama
-        conv_mgr = mock_context.conversation_manager
-        conv_mgr.get_curr_conversation_id = AsyncMock(return_value=None)
-        # new_conversation internally calls get_curr_persona_id
-        conv_mgr.get_curr_persona_id = AsyncMock(return_value="psychologist")
-        conv_mgr.new_conversation = AsyncMock(return_value="new-conv-id")
-        mock_conversation = MagicMock(spec=Conversation)
-        mock_conversation.cid = "new-conv-id"
-        mock_conversation.persona_id = "psychologist"
-        mock_conversation.history = "[]"
-        conv_mgr.get_conversation = AsyncMock(return_value=mock_conversation)
-
-        result = await module._get_session_conv(mock_event, mock_context)
-
-        assert result == mock_conversation
-        assert result.persona_id == "psychologist"
-        # new_conversation is called without persona_id (inherits automatically via internal get_curr_persona_id)
-        conv_mgr.new_conversation.assert_called_once_with(
-            mock_event.unified_msg_origin,
-            mock_event.get_platform_id(),
-        )
-
-    @pytest.mark.asyncio
-    async def test_get_session_conv_create_new_with_none_marker(
-        self, mock_event, mock_context
-    ):
-        """Test creating new conversation when persona is explicitly cleared (PERSONA_NONE_MARKER)."""
-        module = ama
-        conv_mgr = mock_context.conversation_manager
-        conv_mgr.get_curr_conversation_id = AsyncMock(return_value=None)
-        # get_curr_persona_id returns None when persona is [%None]
-        conv_mgr.get_curr_persona_id = AsyncMock(return_value=None)
-        conv_mgr.new_conversation = AsyncMock(return_value="new-conv-id")
-        mock_conversation = MagicMock(spec=Conversation)
-        mock_conversation.cid = "new-conv-id"
-        mock_conversation.persona_id = None
-        mock_conversation.history = "[]"
-        conv_mgr.get_conversation = AsyncMock(return_value=mock_conversation)
-
-        result = await module._get_session_conv(mock_event, mock_context)
-
-        assert result == mock_conversation
-        # persona_id should be None (not the [%None])
-        assert result.persona_id is None
-        # new_conversation is called without persona_id (inherits automatically)
-        conv_mgr.new_conversation.assert_called_once_with(
-            mock_event.unified_msg_origin,
-            mock_event.get_platform_id(),
+            mock_event.unified_msg_origin, mock_event.get_platform_id(), persona_id=None
         )
 
     @pytest.mark.asyncio
@@ -323,6 +267,7 @@ class TestGetSessionConv:
         module = ama
         conv_mgr = mock_context.conversation_manager
         conv_mgr.get_curr_conversation_id = AsyncMock(return_value="conv-id")
+        conv_mgr.get_curr_persona_id = AsyncMock(return_value=None)
         conv_mgr.get_conversation = AsyncMock(return_value=None)
         conv_mgr.new_conversation = AsyncMock(return_value="retry-conv-id")
         mock_conversation = MagicMock(spec=Conversation)
@@ -343,6 +288,7 @@ class TestGetSessionConv:
         module = ama
         conv_mgr = mock_context.conversation_manager
         conv_mgr.get_curr_conversation_id = AsyncMock(return_value=None)
+        conv_mgr.get_curr_persona_id = AsyncMock(return_value=None)
         conv_mgr.new_conversation = AsyncMock(return_value="new-conv-id")
         conv_mgr.get_conversation = AsyncMock(return_value=None)
 
