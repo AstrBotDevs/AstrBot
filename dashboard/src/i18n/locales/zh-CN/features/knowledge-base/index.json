@@ -5,12 +5,42 @@
     "title": "我的知识库",
     "subtitle": "管理您的所有知识库集合",
     "create": "创建知识库",
+    "importPackage": "导入知识库",
     "refresh": "刷新列表",
     "empty": "暂无知识库",
     "loading": "正在加载...",
     "documents": "文档",
     "chunks": "分块",
     "sessionConfig": "会话配置"
+  },
+  "packageImport": {
+    "title": "导入知识库包",
+    "description": "上传已导出的知识库包，导入时会创建一个新的知识库并重建绑定关系。",
+    "fileLabel": "选择知识库包 (.zip)",
+    "uploadAndCheck": "上传并检查",
+    "checking": "正在检查知识库包...",
+    "packageSummary": "知识库包摘要",
+    "documents": "{count} 个文档",
+    "chunks": "{count} 个分块",
+    "exportedAt": "导出时间",
+    "version": "AstrBot 版本",
+    "embeddingSource": "源嵌入模型",
+    "rerankSource": "源重排序模型",
+    "dimension": "{count} 维",
+    "notSet": "未设置",
+    "nameLabel": "导入后的知识库名称",
+    "embeddingProvider": "本地嵌入模型",
+    "rerankProvider": "本地重排序模型",
+    "embeddingHint": "请选择与知识库包一致的嵌入模型，要求向量维度为 {count}",
+    "confirmImport": "确认导入",
+    "processing": "正在导入知识库...",
+    "completed": "知识库导入完成",
+    "cancel": "取消",
+    "close": "关闭",
+    "invalidPackage": "知识库包无效",
+    "importFailed": "导入知识库失败",
+    "versionMinorDiff": "知识库包版本为 {backup}，当前环境为 {current}，可继续导入但请注意兼容性。",
+    "versionMatch": "知识库包版本与当前环境兼容，可继续导入。"
   },
   "card": {
     "edit": "编辑",
@@ -62,6 +92,7 @@
     "updateFailed": "更新失败",
     "deleteSuccess": "知识库删除成功",
     "deleteFailed": "删除失败",
-    "loadError": "加载知识库列表失败"
+    "loadError": "加载知识库列表失败",
+    "importPackageSuccess": "知识库导入成功"
   }
 }
