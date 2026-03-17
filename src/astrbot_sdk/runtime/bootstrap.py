@@ -98,6 +98,9 @@ async def run_plugin_worker(
             transport=transport,
         )
     else:
+        # 前置互斥校验已保证单插件模式下 plugin_dir 一定存在；这里显式收窄，
+        # 避免把入口层的 Optional 继续传播到单插件运行时。
+        assert plugin_dir is not None
         runtime = PluginWorkerRuntime(plugin_dir=plugin_dir, transport=transport)
     try:
         await runtime.start()

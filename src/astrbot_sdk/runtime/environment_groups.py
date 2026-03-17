@@ -43,6 +43,12 @@ _PYVENV_VERSION_PATTERN = re.compile(
 )
 
 
+def _require_uv_binary(uv_binary: str | None) -> str:
+    if not uv_binary:
+        raise RuntimeError("uv executable not found")
+    return uv_binary
+
+
 def _venv_python_path(venv_path: Path) -> Path:
     if os.name == "nt":
         return venv_path / "Scripts" / "python.exe"
@@ -148,8 +154,7 @@ class EnvironmentPlanner:
         if not plugins:
             self.cleanup_artifacts([])
             return EnvironmentPlanResult()
-        if not self.uv_binary:
-            raise RuntimeError("uv executable not found")
+        _require_uv_binary(self.uv_binary)
 
         candidate_groups = self._build_candidate_groups(plugins)
         planned_groups: list[EnvironmentGroup] = []
@@ -397,9 +402,10 @@ class EnvironmentPlanner:
         python_version: str,
     ) -> None:
         """把依赖求解委托给 `uv pip compile`。"""
+        uv_binary = _require_uv_binary(self.uv_binary)
         self._run_command(
             [
-                self.uv_binary,
+                uv_binary,
                 "pip",
                 "compile",
                 "--python-version",
@@ -549,8 +555,7 @@ class GroupEnvironmentManager:
         - 环境结构还在但指纹变化：执行 `uv pip sync`
         - 否则：直接复用现有解释器路径
         """
-        if not self.uv_binary:
-            raise RuntimeError("uv executable not found")
+        _require_uv_binary(self.uv_binary)
 
         state_path = group.venv_path / GROUP_STATE_FILE_NAME
         state = self._load_state(state_path)
@@ -577,9 +582,10 @@ class GroupEnvironmentManager:
 
     def _sync_lockfile(self, group: EnvironmentGroup) -> None:
         """让已安装包与该分组的 lockfile 精确对齐。"""
+        uv_binary = _require_uv_binary(self.uv_binary)
         self._run_command(
             [
-                self.uv_binary,
+                uv_binary,
                 "pip",
                 "sync",
                 "--python",
@@ -597,9 +603,10 @@ class GroupEnvironmentManager:
         当前迁移阶段仍保留 `--system-site-packages`，以兼容那些仍然隐式依
         赖宿主环境包的旧插件。
         """
+        uv_binary = _require_uv_binary(self.uv_binary)
         self._run_command(
             [
-                self.uv_binary,
+                uv_binary,
                 "venv",
                 "--python",
                 group.python_version,

@@ -93,7 +93,7 @@ def _prepare_stdio_transport(
 
 
 def _sdk_source_dir(repo_root: Path) -> Path:
-    candidate = repo_root.resolve() / "src-new"
+    candidate = repo_root.resolve() / "src"
     if (candidate / "astrbot_sdk").exists():
         return candidate
     return Path(__file__).resolve().parents[2]
