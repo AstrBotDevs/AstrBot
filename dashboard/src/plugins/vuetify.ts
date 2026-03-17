@@ -1,32 +1,33 @@
-import { createVuetify } from 'vuetify';
-import '@mdi/font/css/materialdesignicons.css';
-import * as components from 'vuetify/components';
-import * as directives from 'vuetify/directives';
-import { PurpleTheme } from '@/theme/LightTheme';
+import { createVuetify } from "vuetify";
+import "@mdi/font/css/materialdesignicons.css";
+import * as components from "vuetify/components";
+import * as directives from "vuetify/directives";
+import { PurpleTheme } from "@/theme/LightTheme";
 import { PurpleThemeDark } from "@/theme/DarkTheme";
+import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
 
 export default createVuetify({
   components,
   directives,
 
   theme: {
-    defaultTheme: 'PurpleTheme',
+    defaultTheme: LIGHT_THEME_NAME,
     themes: {
-      PurpleTheme,
-      PurpleThemeDark
-    }
+      [LIGHT_THEME_NAME]: PurpleTheme,
+      [DARK_THEME_NAME]: PurpleThemeDark,
+    },
   },
   defaults: {
     VBtn: {},
     VCard: {
-      rounded: 'lg'
+      rounded: "lg",
     },
     VTextField: {
-      rounded: 'lg'
+      rounded: "lg",
     },
     VTooltip: {
       // set v-tooltip default location to top
-      location: 'top'
-    }
-  }
+      location: "top",
+    },
+  },
 });

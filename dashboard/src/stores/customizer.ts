@@ -1,5 +1,6 @@
-import { defineStore } from 'pinia';
-import config from '@/config';
+import { defineStore } from "pinia";
+import config from "@/config";
+import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
 
 export const useCustomizerStore = defineStore({
   id: "customizer",
@@ -16,7 +17,7 @@ export const useCustomizerStore = defineStore({
   }),
 
   getters: {
-    isDarkTheme: (state) => state.uiTheme === "PurpleThemeDark",
+    isDarkTheme: (state) => state.uiTheme === DARK_THEME_NAME,
   },
   actions: {
     SET_SIDEBAR_DRAWER() {
@@ -44,14 +45,14 @@ export const useCustomizerStore = defineStore({
     TOGGLE_DARK_MODE() {
       // 手动切换时禁用自动同步
       this.SET_AUTO_SYNC(false);
-      const newTheme = this.isDarkTheme ? "PurpleTheme" : "PurpleThemeDark";
+      const newTheme = this.isDarkTheme ? LIGHT_THEME_NAME : DARK_THEME_NAME;
       this.SET_UI_THEME(newTheme);
     },
     // 新增：应用系统主题（用于自动同步）
     APPLY_SYSTEM_THEME() {
       if (typeof window === "undefined") return;
       const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      const themeToApply = isDark ? "PurpleThemeDark" : "PurpleTheme";
+      const themeToApply = isDark ? DARK_THEME_NAME : LIGHT_THEME_NAME;
       this.SET_UI_THEME(themeToApply);
     },
     TOGGLE_CHAT_SIDEBAR() {
