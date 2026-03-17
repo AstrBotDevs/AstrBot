@@ -17,12 +17,12 @@ const customizer = useCustomizerStore();
 const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
-const isCurrentChatRoute = computed(() => route.path.startsWith('/chat'))
+const isChatRoute = computed(() => route.path.startsWith('/chat'))
 
 
 
 
-const showSidebar = computed(() => !isCurrentChatRoute.value)
+const showSidebar = computed(() => !isChatRoute.value)
 
 const migrationDialog = ref<InstanceType<typeof MigrationDialog> | null>(null);
 const showFirstNoticeDialog = ref(false);
@@ -105,20 +105,20 @@ onMounted(() => {
       <VerticalHeaderVue />
       <VerticalSidebarVue v-if="showSidebar" />
       <v-main :style="{
-        height: isCurrentChatRoute ? 'calc(100vh - 55px)' : undefined,
-        overflow: isCurrentChatRoute ? 'hidden' : undefined
+        height: isChatRoute ? 'calc(100vh - 55px)' : undefined,
+        overflow: isChatRoute ? 'hidden' : undefined
       }">
         <v-container
           fluid
           class="page-wrapper"
-          :class="{ 'chat-mode-container': isCurrentChatRoute }"
+          :class="{ 'chat-mode-container': isChatRoute }"
           :style="{
-            height: isCurrentChatRoute ? '100%' : 'calc(100% - 8px)',
-            padding: isCurrentChatRoute ? '0' : undefined,
-            minHeight: isCurrentChatRoute ? 'unset' : undefined
+            height: isChatRoute ? '100%' : 'calc(100% - 8px)',
+            padding: isChatRoute ? '0' : undefined,
+            minHeight: isChatRoute ? 'unset' : undefined
           }">
-          <div :style="{ height: '100%', width: '100%', overflow: isCurrentChatRoute ? 'hidden' : undefined }">
-            <div v-if="isCurrentChatRoute" style="height: 100%; width: 100%; overflow: hidden;">
+          <div :style="{ height: '100%', width: '100%', overflow: isChatRoute ? 'hidden' : undefined }">
+            <div v-if="isChatRoute" style="height: 100%; width: 100%; overflow: hidden;">
               <Chat />
             </div>
             <RouterView v-else />
