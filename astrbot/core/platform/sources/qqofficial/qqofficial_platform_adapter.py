@@ -5,6 +5,7 @@ import logging
 import os
 import random
 import time
+from types import SimpleNamespace
 from typing import Any, cast
 
 import botpy
@@ -108,8 +109,50 @@ class MessageDeduplicator:
         )
         self._lock = asyncio.Lock()
 
-    def _build_content_key(self, content: str, sender_id: str) -> str | None:
-        return build_sender_content_dedup_key(content, sender_id)
+    def _id_dedup_enabled(self, message_id: str) -> bool:
+        return self._message_ids.ttl_seconds > 0 and bool(message_id)
+
+    def _content_dedup_enabled(self) -> bool:
+        return self._content_keys.ttl_seconds > 0
+
+    def _register_message_id(self, message_id: str) -> bool:
+        """Return True if duplicate by ID, False otherwise (and register)."""
+        if self._message_ids.contains(message_id):
+            logger.debug(
+                "[QQOfficial] Duplicate message detected (by ID): %s...",
+                message_id[:50],
+            )
+            return True
+
+        self._message_ids.add(message_id)
+        return False
+
+    def _register_content(
+        self,
+        message_id: str,
+        content: str,
+        sender_id: str,
+        id_dedup_enabled: bool,
+    ) -> bool:
+        """Return True if duplicate by content, False otherwise (and register)."""
+        content_key = build_sender_content_dedup_key(content, sender_id)
+        if content_key is None:
+            logger.debug("[QQOfficial] New message registered: %s...", message_id[:50])
+            return False
+
+        if self._content_keys.contains(content_key):
+            logger.debug(
+                "[QQOfficial] Duplicate message detected (by content): %s",
+                content_key,
+            )
+            # Preserve existing behavior: do not keep message_id on content duplicates
+            if id_dedup_enabled:
+                self._message_ids.discard(message_id)
+            return True
+
+        self._content_keys.add(content_key)
+        logger.debug("[QQOfficial] New message registered: %s...", message_id[:50])
+        return False
 
     async def is_duplicate(
         self,
@@ -118,22 +161,14 @@ class MessageDeduplicator:
         sender_id: str = "",
     ) -> bool:
         async with self._lock:
-            id_dedup_enabled = self._message_ids.ttl_seconds > 0 and bool(message_id)
-            content_dedup_enabled = self._content_keys.ttl_seconds > 0
+            id_dedup_enabled = self._id_dedup_enabled(message_id)
+            content_dedup_enabled = self._content_dedup_enabled()
 
             if not id_dedup_enabled and not content_dedup_enabled:
                 return False
 
-            # 1) ID-based dedup
-            if id_dedup_enabled:
-                if self._message_ids.contains(message_id):
-                    logger.debug(
-                        "[QQOfficial] Duplicate message detected (by ID): %s...",
-                        message_id[:50],
-                    )
-                    return True
-
-                self._message_ids.add(message_id)
+            if id_dedup_enabled and self._register_message_id(message_id):
+                return True
 
             # 2) Content-based dedup
             if not content_dedup_enabled:
@@ -142,26 +177,12 @@ class MessageDeduplicator:
                 )
                 return False
 
-            content_key = self._build_content_key(content, sender_id)
-            if content_key is None:
-                logger.debug(
-                    "[QQOfficial] New message registered: %s...", message_id[:50]
-                )
-                return False
-
-            if self._content_keys.contains(content_key):
-                logger.debug(
-                    "[QQOfficial] Duplicate message detected (by content): %s",
-                    content_key,
-                )
-                # Preserve existing behavior: do not keep message_id on content duplicates
-                if id_dedup_enabled:
-                    self._message_ids.discard(message_id)
-                return True
-
-            self._content_keys.add(content_key)
-            logger.debug("[QQOfficial] New message registered: %s...", message_id[:50])
-            return False
+            return self._register_content(
+                message_id=message_id,
+                content=content,
+                sender_id=sender_id,
+                id_dedup_enabled=id_dedup_enabled,
+            )
 
 
 class botClient(Client):
@@ -334,9 +355,11 @@ class QQOfficialPlatformAdapter(Platform):
     async def should_handle_raw_message(self, message: Any) -> bool:
         """Return False if the raw incoming message should be dropped."""
         sender_id = _extract_sender_id(message)
-        content = getattr(message, "content", "") or ""
+        message_id = str(getattr(message, "id", "") or "")
+        raw_content = getattr(message, "content", "")
+        content = str(raw_content or "")
         is_duplicate = await self._deduplicator.is_duplicate(
-            message.id,
+            message_id,
             content,
             sender_id,
         )
@@ -383,7 +406,7 @@ class QQOfficialPlatformAdapter(Platform):
 
         payload: dict[str, Any] = {"content": plain_text, "msg_id": msg_id}
         ret: Any = None
-        send_helper = self.client
+        send_helper = SimpleNamespace(bot=self.client)
 
         if session.message_type == MessageType.GROUP_MESSAGE:
             scene = self._session_scene.get(session.session_id)
