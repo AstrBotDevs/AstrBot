@@ -674,7 +674,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                     raise
         finally:
-            await aiter.aclose()
+            try:
+                await aiter.aclose()
+            except Exception:
+                logger.warning(
+                    "Error while closing tool iterator for '%s'", label, exc_info=True
+                )
 
     async def _handle_function_tools(
         self,
@@ -776,11 +781,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 except Exception as e:
                     logger.error(f"Error in on_tool_start hook: {e}", exc_info=True)
 
-                tool_timeout = getattr(
-                    func_tool, "timeout", None
-                ) or self.provider.provider_config.get(
-                    "tool_exec_timeout", self.DEFAULT_TOOL_TIMEOUT
-                )
+                tool_timeout = getattr(func_tool, "timeout", None)
+                if tool_timeout is None:
+                    tool_timeout = self.provider.provider_config.get(
+                        "tool_exec_timeout", self.DEFAULT_TOOL_TIMEOUT
+                    )
 
                 executor = self.tool_executor.execute(
                     tool=func_tool,
