@@ -11,10 +11,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from astrbot.core.message.components import ComponentTypes, Image, Plain
-from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot_sdk._invocation_context import current_caller_plugin_id
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.llm.entities import (
@@ -27,11 +23,16 @@ from astrbot_sdk.llm.entities import (
 )
 from astrbot_sdk.runtime.capability_router import CapabilityRouter, StreamExecution
 
+from astrbot.core.file_token_service import FileTokenService
+from astrbot.core.message.components import ComponentTypes, Image, Plain
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
 from .event_converter import EventConverter
 
 if TYPE_CHECKING:
     from astrbot.core.agent.tool import ToolSet
-    from astrbot.core.file_token_service import FileTokenService
     from astrbot.core.provider.entities import LLMResponse
     from astrbot.core.star.context import Context as StarContext
 
@@ -57,7 +58,7 @@ def _get_runtime_astrbot_config():
 def _get_runtime_file_token_service() -> FileTokenService:
     from astrbot.core import file_token_service
 
-    return cast("FileTokenService", file_token_service)
+    return cast(FileTokenService, file_token_service)
 
 
 def _get_runtime_tool_types():
@@ -1863,8 +1864,7 @@ class CoreCapabilityBridge(CapabilityRouter):
                 "provider.manager.get_merged_provider_config unknown provider_id"
             )
         merged_config = cast(
-            "dict[str, Any]",
-            get_merged_provider_config(provider_config),
+            dict[str, Any], get_merged_provider_config(provider_config)
         )
         return {"config": dict(merged_config)}
 
