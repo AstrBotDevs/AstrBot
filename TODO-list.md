@@ -28,7 +28,7 @@
 | 会话控制 | 5 | 5 | 0 | 0 | 0 | 100% |
 | 过滤器 | 5 | 5 | 0 | 0 | 0 | 100% |
 | 高级管理器 | 12 | 12 | 0 | 0 | 0 | 100% |
-| Provider管理 | 11 | 10 | 0 | 1 | 0 | 91% |
+| Provider管理 | 11 | 11 | 0 | 0 | 0 | 100% |
 | Provider实体 | 9 | 6 | 1 | 2 | 0 | 72% |
 | TTS/STT/Embedding | 8 | 8 | 0 | 0 | 0 | 100% |
 | Platform实体 | 12 | 7 | 1 | 4 | 0 | 62% |
@@ -580,7 +580,7 @@
 | `delete_provider(provider_id)` | ✅ | 删除提供商 |
 | `register_provider_change_hook(hook)` | ✅ | 注册提供商变更钩子 |
 | `get_insts()` | ✅ | 获取所有提供商实例列表 |
-| `get_merged_provider_config(config)` | ❌ | 获取合并后的提供商配置 |
+| `get_merged_provider_config(config)` | ✅ | 获取合并后的提供商配置 |
 
 ### Provider 类型枚举
 
@@ -789,7 +789,7 @@
 3. **KnowledgeBaseManager** - ✅ 知识库管理器（`get_kb()`, `create_kb()`, `delete_kb()`）
 
 #### P1.3 - Provider 与 Platform 管理面 🔄 部分完成
-1. **Provider 管理** - ✅ `set_provider()`, `get_provider_by_id()`, `get_using_provider()`, `load_provider()`, `terminate_provider()`, `create_provider()`, `update_provider()`, `delete_provider()`, `register_provider_change_hook()`, `get_insts()`；❌ `get_merged_provider_config()`
+1. **Provider 管理** - ✅ `set_provider()`, `get_provider_by_id()`, `get_using_provider()`, `load_provider()`, `terminate_provider()`, `create_provider()`, `update_provider()`, `delete_provider()`, `register_provider_change_hook()`, `get_insts()`, `get_merged_provider_config()`
 2. **Platform 实体** - ✅ `PlatformStatus` 枚举, `PlatformError`, `last_error`, `errors`, `clear_errors()`, `send_by_session()`, `get_stats()`；🔄 `unified_webhook()`；❌ `record_error()`, `commit_event()`, `get_client()`
 3. **Webhook 处理** - 🔄 只补统一 webhook 状态观测；`webhook_callback()` 原始请求入口与 Dashboard webhook 路由延期
 
