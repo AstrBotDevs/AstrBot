@@ -453,6 +453,7 @@ CONFIG_METADATA_2 = {
                         "discord_proxy": "",
                         "discord_command_register": True,
                         "discord_activity_name": "",
+                        "discord_allow_bot_messages": False,
                     },
                     "Misskey": {
                         "id": "misskey",
@@ -894,6 +895,11 @@ CONFIG_METADATA_2 = {
                         "description": "Discord 活动名称",
                         "type": "string",
                         "hint": "可选的 Discord 活动名称。留空则不设置活动。",
+                    },
+                    "discord_allow_bot_messages": {
+                        "description": "允许接收机器人消息",
+                        "type": "bool",
+                        "hint": "启用后，AstrBot 将接收来自其他 Discord 机器人的消息。适用于机器人间通信场景（如消息转发）。默认关闭。",
                     },
                     "port": {
                         "description": "回调服务器端口",

@@ -386,6 +386,10 @@
         "description": "Discord Activity Name",
         "hint": "Optional Discord activity name. Leave empty to disable."
       },
+      "discord_allow_bot_messages": {
+        "description": "Allow Bot Messages",
+        "hint": "When enabled, AstrBot will receive messages from other Discord bots. Useful for bot-to-bot communication scenarios (e.g., message forwarding). Disabled by default."
+      },
       "discord_command_register": {
         "description": "Register Discord slash commands",
         "hint": "When enabled, AstrBot will automatically register plugin commands as Discord slash commands"

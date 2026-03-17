@@ -388,6 +388,10 @@
         "description": "Discord 活动名称",
         "hint": "可选的 Discord 活动名称。留空则不设置活动。"
       },
+      "discord_allow_bot_messages": {
+        "description": "允许接收机器人消息",
+        "hint": "启用后，AstrBot 将接收来自其他 Discord 机器人的消息。适用于机器人间通信场景（如消息转发）。默认关闭。"
+      },
       "discord_command_register": {
         "description": "注册 Discord 指令",
         "hint": "启用后，自动将插件指令注册为 Discord 斜杠指令"
