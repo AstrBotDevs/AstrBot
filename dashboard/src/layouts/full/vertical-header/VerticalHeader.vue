@@ -59,7 +59,7 @@ const desktopUpdateHasNewVersion = ref(false);
 const desktopUpdateCurrentVersion = ref('-');
 const desktopUpdateLatestVersion = ref('-');
 const desktopUpdateStatus = ref('');
-const isChatRoute = computed(() => route.path.startsWith('/chat'))
+const isCurrentChatRoute  = computed(() => route.path.startsWith('/chat'))
 const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
   if (typeof window === 'undefined') {
     return null;
@@ -381,7 +381,7 @@ function openReleaseNotesDialog(body: string, tag: string) {
 }
 
 function handleLogoClick() {
-  if (isChatRoute.value) {
+  if (isCurrentChatRoute.value) {
     aboutDialog.value = true;
   } else {
     router.push('/about');
@@ -405,16 +405,16 @@ watch(() => route.fullPath, (newPath) => {
   if (typeof window === 'undefined') return;
 
   try {
-    const isChatRoute = newPath.startsWith('/chat');
+    const isCurrentChatRoute = newPath.startsWith('/chat');
 
     // ✅ bot：只存「非 chat 頁」
-    if (!isChatRoute) {
+    if (!isCurrentChatRoute) {
       sessionStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
     }
 
     // ✅ chat：只存 sessionId
     //  不是我不用route.params.id  而是用了一定炸裂過不了編譯
-    if (isChatRoute) {
+    if (isCurrentChatRoute) {
       const parts = newPath.split('/');
       const sessionId = parts[2];
 
@@ -429,7 +429,7 @@ watch(() => route.fullPath, (newPath) => {
 });
 
 const currentMode = computed({
-  get: () => (isChatRoute.value ? 'chat' : 'bot'),
+  get: () => (isCurrentChatRoute.value ? 'chat' : 'bot'),
   set: (val: 'chat' | 'bot') => {
     if (val === 'chat') {
       const lastSessionId = sessionStorage.getItem(LAST_CHAT_ROUTE_KEY)
@@ -480,7 +480,7 @@ onMounted(async () => {
 
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
 <v-btn
-  v-if="!isChatRoute"
+  v-if="!isCurrentChatRoute"
   style="margin-left: 16px;"
   class="hidden-md-and-down"
   icon
@@ -493,7 +493,7 @@ onMounted(async () => {
 
 <!-- 移动端 menu 按钮 -->
 <v-btn
-  v-if="!isChatRoute"
+  v-if="!isCurrentChatRoute"
   class="hidden-lg-and-up ms-3"
   icon
   rounded="sm"
@@ -504,7 +504,7 @@ onMounted(async () => {
 </v-btn>
 
 <v-btn
-  v-if="isChatRoute"
+  v-if="isCurrentChatRoute"
   class="hidden-lg-and-up ms-1"
   icon
   rounded="sm"
@@ -514,11 +514,11 @@ onMounted(async () => {
   <v-icon>mdi-menu</v-icon>
 </v-btn>
 
-    <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs, 'chat-mode-logo': isChatRoute }" @click="handleLogoClick">
+    <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs, 'chat-mode-logo': isCurrentChatRoute }" @click="handleLogoClick">
       <span class="logo-text Outfit">Astr<span class="logo-text bot-text-wrapper">Bot
         <img v-if="isChristmas" src="@/assets/images/xmas-hat.png" alt="Christmas hat" class="xmas-hat" />
       </span></span>
-      <span class="logo-text logo-text-light Outfit" style="color: grey;" v-if="isChatRoute">ChatUI</span>
+      <span class="logo-text logo-text-light Outfit" style="color: grey;" v-if="isCurrentChatRoute">ChatUI</span>
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
 
@@ -540,7 +540,7 @@ onMounted(async () => {
   mandatory
   variant="outlined"
   density="compact"
-  class="mr-4 hidden-xs"
+  class="mr-4 mobile-mode-toggle"
   color="primary"
 >
       <v-btn value="bot" size="small">
