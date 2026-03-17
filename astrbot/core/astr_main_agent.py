@@ -182,11 +182,8 @@ async def _get_session_conv(
         if conversation:
             return conversation
 
-    # 统一的对话创建路径：只获取一次 persona_id
-    persona_id = await conv_mgr.get_curr_persona_id(umo)
-    cid = await conv_mgr.new_conversation(
-        umo, event.get_platform_id(), persona_id=persona_id
-    )
+    # 统一的对话创建路径：new_conversation 会自动继承 persona_id
+    cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
     conversation = await conv_mgr.get_conversation(umo, cid)
 
     if not conversation:
