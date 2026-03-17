@@ -410,18 +410,17 @@ watch(() => route.fullPath, (newPath) => {
   if (typeof window === 'undefined') return;
 
   try {
-    // ✅ bot 保持原樣
-    if (customizer.viewMode === 'bot') {
+    const isChatRoute = newPath.startsWith('/chat');
+
+    // ✅ bot：只存「非 chat 頁」
+    if (!isChatRoute) {
       localStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
     }
 
-    // 🔥 chat：只存 sessionId
-    if (
-      customizer.viewMode === 'chat' &&
-      newPath.startsWith('/chat/')
-    ) {
+    // ✅ chat：只存 sessionId
+    if (isChatRoute) {
       const parts = newPath.split('/');
-      const sessionId = parts[2]; // "/chat/abc123" → "abc123"
+      const sessionId = parts[2];
 
       if (sessionId) {
         localStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
