@@ -346,6 +346,8 @@ class KnowledgeBasePackageImporter:
         check_result = self.pre_check(zip_path)
         if not check_result.valid:
             raise ValueError(check_result.error or "知识库包无效")
+        if not check_result.can_import:
+            raise ValueError(check_result.error or "当前环境不满足知识库包导入条件")
 
         if not kb_name.strip():
             raise ValueError("知识库名称不能为空")
@@ -614,10 +616,21 @@ class KnowledgeBasePackageImporter:
             elif len(parts) >= 1 and parts[0] == old_kb_id:
                 parts[0] = new_kb_id
 
-            target_path = target_root / Path(*parts)
+            target_path = self._build_safe_runtime_target_path(target_root, parts)
             target_path.parent.mkdir(parents=True, exist_ok=True)
             with zf.open(name) as src, open(target_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
+
+    def _build_safe_runtime_target_path(
+        self,
+        target_root: Path,
+        parts: list[str],
+    ) -> Path:
+        target_root_resolved = target_root.resolve()
+        target_path = (target_root / Path(*parts)).resolve()
+        if not target_path.is_relative_to(target_root_resolved):
+            raise ValueError("知识库包包含非法运行时路径")
+        return target_path
 
     async def _rewrite_doc_store_metadata(
         self,
@@ -702,7 +715,6 @@ class KnowledgeBasePackageImporter:
                     session.add(doc)
                 for media in new_media:
                     session.add(media)
-                await session.commit()
 
     def _rewrite_runtime_path(
         self,

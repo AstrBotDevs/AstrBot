@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -346,3 +347,70 @@ async def test_import_kb_package_rewrites_metadata(kb_package_fixture, tmp_path)
     metadata = json.loads(metadata_raw)
     assert metadata["kb_id"] == imported_kb.kb_id
     assert metadata["kb_doc_id"] == documents[0].doc_id
+
+
+@pytest.mark.asyncio
+async def test_import_kb_package_rejects_non_importable_package(
+    kb_package_fixture, tmp_path
+):
+    exporter = KnowledgeBasePackageExporter(kb_package_fixture["manager"])
+    zip_path = await exporter.export_kb(
+        kb_id=kb_package_fixture["kb"].kb_id,
+        output_dir=tmp_path.as_posix(),
+    )
+
+    modified_zip_path = tmp_path / "major-diff-package.zip"
+    with (
+        zipfile.ZipFile(zip_path, "r") as source_zip,
+        zipfile.ZipFile(modified_zip_path, "w", zipfile.ZIP_DEFLATED) as target_zip,
+    ):
+        manifest = json.loads(source_zip.read("manifest.json"))
+        manifest["astrbot_version"] = "999.0.0"
+        for name in source_zip.namelist():
+            if name == "manifest.json":
+                continue
+            target_zip.writestr(name, source_zip.read(name))
+        target_zip.writestr(
+            "manifest.json",
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+        )
+
+    importer = KnowledgeBasePackageImporter(kb_package_fixture["manager"])
+    check_result = importer.pre_check(modified_zip_path.as_posix())
+    assert check_result.valid is True
+    assert check_result.can_import is False
+    assert check_result.version_status == "major_diff"
+
+    with pytest.raises(ValueError, match="当前环境不满足知识库包导入条件"):
+        await importer.import_kb(
+            zip_path=modified_zip_path.as_posix(),
+            kb_name="Source KB (Imported)",
+            embedding_provider_id="embedding-local",
+            rerank_provider_id="rerank-local",
+        )
+
+
+@pytest.mark.asyncio
+async def test_import_kb_package_rejects_runtime_path_traversal(
+    kb_package_fixture, tmp_path
+):
+    exporter = KnowledgeBasePackageExporter(kb_package_fixture["manager"])
+    zip_path = await exporter.export_kb(
+        kb_id=kb_package_fixture["kb"].kb_id,
+        output_dir=tmp_path.as_posix(),
+    )
+
+    with zipfile.ZipFile(zip_path, "a", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("runtime/files/../../../../tmp/evil.txt", "owned")
+
+    importer = KnowledgeBasePackageImporter(kb_package_fixture["manager"])
+
+    with pytest.raises(ValueError, match="非法运行时路径"):
+        await importer.import_kb(
+            zip_path=zip_path,
+            kb_name="Source KB (Imported)",
+            embedding_provider_id="embedding-local",
+            rerank_provider_id="rerank-local",
+        )
+
+    assert not (Path("/tmp") / "evil.txt").exists()
