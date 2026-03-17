@@ -9,7 +9,7 @@ from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from astrbot.core.message.components import ComponentTypes, Image, Plain
 from astrbot.core.message.message_event_result import MessageChain
@@ -57,7 +57,7 @@ def _get_runtime_astrbot_config():
 def _get_runtime_file_token_service() -> FileTokenService:
     from astrbot.core import file_token_service
 
-    return file_token_service
+    return cast("FileTokenService", file_token_service)
 
 
 def _get_runtime_tool_types():
@@ -1832,6 +1832,42 @@ class CoreCapabilityBridge(CapabilityRouter):
         provider_id = str(payload.get("provider_id", "")).strip()
         return {"provider": self._managed_provider_payload_by_id(provider_id)}
 
+    async def _provider_manager_get_merged_provider_config(
+        self,
+        request_id: str,
+        payload: dict[str, Any],
+        _token,
+    ) -> dict[str, Any]:
+        self._require_reserved_plugin(
+            request_id,
+            "provider.manager.get_merged_provider_config",
+        )
+        provider_id = str(payload.get("provider_id", "")).strip()
+        if not provider_id:
+            raise AstrBotError.invalid_input(
+                "provider.manager.get_merged_provider_config requires provider_id"
+            )
+        provider_manager = getattr(self._star_context, "provider_manager", None)
+        get_merged_provider_config = getattr(
+            provider_manager,
+            "get_merged_provider_config",
+            None,
+        )
+        if provider_manager is None or not callable(get_merged_provider_config):
+            raise AstrBotError.invalid_input(
+                "Provider manager does not support merged config lookup"
+            )
+        provider_config = self._find_provider_config_by_id(provider_id)
+        if provider_config is None:
+            raise AstrBotError.invalid_input(
+                "provider.manager.get_merged_provider_config unknown provider_id"
+            )
+        merged_config = cast(
+            "dict[str, Any]",
+            get_merged_provider_config(provider_config),
+        )
+        return {"config": dict(merged_config)}
+
     async def _provider_manager_load(
         self,
         request_id: str,
@@ -2760,6 +2796,13 @@ class CoreCapabilityBridge(CapabilityRouter):
                 "Get managed provider record by id",
             ),
             call_handler=self._provider_manager_get_by_id,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "provider.manager.get_merged_provider_config",
+                "Get merged managed provider config by id",
+            ),
+            call_handler=self._provider_manager_get_merged_provider_config,
         )
         self.register(
             self._builtin_descriptor(

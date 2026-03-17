@@ -193,6 +193,17 @@ class ProviderManagerClient:
         )
         return self._record_from_output(output)
 
+    async def get_merged_provider_config(
+        self,
+        provider_id: str,
+    ) -> dict[str, Any] | None:
+        output = await self._proxy.call(
+            "provider.manager.get_merged_provider_config",
+            {"provider_id": str(provider_id).strip()},
+        )
+        config = output.get("config")
+        return dict(config) if isinstance(config, dict) else None
+
     async def load_provider(
         self,
         provider_config: dict[str, Any],
