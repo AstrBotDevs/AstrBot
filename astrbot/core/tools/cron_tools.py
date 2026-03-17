@@ -184,25 +184,33 @@ class UpdateCronJobTool(FunctionTool[AstrAgentContext]):
         if enabled is not None:
             update_kwargs["enabled"] = bool(enabled)
 
-        current_run_once = (
-            bool(run_once) if run_once is not None else getattr(job, "run_once", False)
-        )
-        if run_once is not None:
-            update_kwargs["run_once"] = bool(run_once)
+        job_run_once = getattr(job, "run_once", False)
+        target_run_once = bool(run_once) if run_once is not None else job_run_once
 
-        if current_run_once:
+        if run_once is not None:
+            update_kwargs["run_once"] = target_run_once
+
+        if target_run_once:
+            if cron_expression is not None:
+                return "error: cron_expression cannot be used with run_once=true."
             if run_at is not None:
-                # User provided run_at, validate it
                 try:
                     run_at_dt = datetime.fromisoformat(str(run_at))
                     payload = update_kwargs.get("payload", dict(job.payload or {}))
                     payload["run_at"] = run_at_dt.isoformat()
                     update_kwargs["payload"] = payload
-                except Exception:
+                    update_kwargs["cron_expression"] = None
+                except ValueError:
                     return "error: run_at must be ISO datetime, e.g., 2026-02-02T08:00:00+08:00"
+            elif not job_run_once:
+                return "error: run_at is required when changing to run_once=true."
         else:
+            if run_at is not None:
+                return "error: run_at cannot be used with run_once=false."
             if cron_expression is not None:
                 update_kwargs["cron_expression"] = str(cron_expression)
+            elif job_run_once:
+                return "error: cron_expression is required when changing to run_once=false."
 
         if not update_kwargs:
             return "error: no update parameters provided."
