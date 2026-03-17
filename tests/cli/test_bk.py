@@ -211,3 +211,23 @@ def test_export_gpg_missing(mock_exporter, mock_kb_manager):
 
         assert result.exit_code != 0
         assert "GPG tool not found" in result.output
+
+
+def test_export_gpg_recipient_recovery(mock_exporter, mock_kb_manager, mock_gpg_tools):
+    """Test recovery when -E consumes a flag"""
+    _, mock_exec = mock_gpg_tools
+    runner = CliRunner()
+
+    with patch("pathlib.Path.unlink"), patch("pathlib.Path.exists", return_value=True):
+        # input="user@example.com\n" provides the recipient when prompted
+        result = runner.invoke(bk, ["export", "-E", "-S"], input="user@example.com\n")
+
+        assert result.exit_code == 0
+        assert "Warning: Flag '-S' was interpreted as the recipient" in result.output
+        assert "Recovered flag -S (Sign)" in result.output
+
+        # Verify GPG command has both sign and encrypt with correct recipient
+        args = mock_exec.call_args[0]
+        assert "--sign" in args
+        assert "--encrypt" in args
+        assert "user@example.com" in args

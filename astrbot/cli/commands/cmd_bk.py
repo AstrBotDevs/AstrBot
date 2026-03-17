@@ -109,6 +109,27 @@ def export_data(
        -> Signs, encrypts for Bob, and generates a SHA256 checksum file.
     """
 
+    # Handle case where -E consumes the next flag (e.g. -E -S)
+    if gpg_encrypt and gpg_encrypt.startswith("-"):
+        consumed_flag = gpg_encrypt
+        click.echo(
+            click.style(
+                f"Warning: Flag '{consumed_flag}' was interpreted as the recipient for -E.",
+                fg="yellow",
+            )
+        )
+
+        # Recover flags
+        if consumed_flag == "-S":
+            gpg_sign = True
+            click.echo("Recovered flag -S (Sign).")
+        elif consumed_flag == "-C":
+            gpg_symmetric = True
+            click.echo("Recovered flag -C (Symmetric).")
+
+        # Prompt for the actual recipient
+        gpg_encrypt = click.prompt("Please enter the GPG recipient (email or key ID)")
+
     async def _run():
         if gpg_sign or gpg_encrypt or gpg_symmetric:
             if not shutil.which("gpg"):
@@ -200,15 +221,76 @@ def export_data(
 @bk.command(name="import")
 @click.argument("backup_file")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompts")
-def import_data(backup_file: str, yes: bool):
+def import_data_command(backup_file: str, yes: bool):
     """Import AstrBot data from a backup archive.
 
     Automatically handles .zip files and .gpg files (signed or encrypted).
     If the file is encrypted, you will be prompted for the passphrase.
+    If a digest file (.sha256, .md5, etc.) exists, it will be verified automatically.
     """
     backup_path = Path(backup_file)
     if not backup_path.exists():
         raise click.ClickException(f"Backup file not found: {backup_file}")
+
+    # 1. Verify Digest if exists
+    def _verify_digest(file_path: Path) -> bool:
+        supported_digests = ["sha256", "sha512", "md5", "sha1"]
+        digest_verified = True  # Default true if no digest file found
+
+        for algo in supported_digests:
+            digest_file = file_path.with_name(f"{file_path.name}.{algo}")
+            if digest_file.exists():
+                click.echo(f"Found digest file: {digest_file.name}")
+                try:
+                    # Parse digest file
+                    content = digest_file.read_text(encoding="utf-8").strip()
+                    # Format: "digest *filename" or "digest  filename"
+                    # We expect the hash to be the first part
+                    if " " in content:
+                        expected_digest = content.split()[0].lower()
+                    else:
+                        expected_digest = content.lower()
+
+                    click.echo(f"Verifying {algo} digest...")
+                    hash_func = getattr(hashlib, algo)()
+                    with open(file_path, "rb") as f:
+                        while chunk := f.read(8192):
+                            hash_func.update(chunk)
+
+                    calculated_digest = hash_func.hexdigest().lower()
+
+                    if calculated_digest == expected_digest:
+                        click.echo(
+                            click.style("Digest verification PASSED.", fg="green")
+                        )
+                    else:
+                        click.echo(
+                            click.style(
+                                "Digest verification FAILED!", fg="red", bold=True
+                            )
+                        )
+                        click.echo(f"  Expected: {expected_digest}")
+                        click.echo(f"  Actual:   {calculated_digest}")
+                        digest_verified = False
+                except Exception as e:
+                    click.echo(click.style(f"Error checking digest: {e}", fg="red"))
+                    digest_verified = False
+
+        return digest_verified
+
+    if not _verify_digest(backup_path):
+        if not yes:
+            if not click.confirm(
+                "Digest verification failed. Abort import?", default=True, abort=True
+            ):
+                pass
+        else:
+            click.echo(
+                click.style(
+                    "Warning: Digest verification failed. Continuing due to --yes.",
+                    fg="yellow",
+                )
+            )
 
     if not yes:
         click.confirm(
