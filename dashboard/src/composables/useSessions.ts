@@ -30,7 +30,7 @@ export function useSessions(chatboxMode: boolean = false) {
     });
 
     
-     // 不知道為甚麼 越刪越穩定了 先這樣吧
+
     async function getSessions() {
         try {
             const response = await axios.get('/api/chat/sessions');
