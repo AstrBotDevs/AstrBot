@@ -35,7 +35,9 @@ WantedBy=default.target
 """
 
 
-async def initialize_astrbot(astrbot_root: Path, *, yes: bool) -> None:
+async def initialize_astrbot(
+    astrbot_root: Path, *, yes: bool, backend_only: bool
+) -> None:
     """Execute AstrBot initialization logic"""
     dot_astrbot = astrbot_root / ".astrbot"
 
@@ -60,9 +62,13 @@ async def initialize_astrbot(astrbot_root: Path, *, yes: bool) -> None:
         click.echo(
             f"{'Created' if not path.exists() else f'{name} Directory exists'}: {path}"
         )
-    if yes or click.confirm(
-        "是否需要集成式 WebUI？（个人电脑推荐，服务器不推荐）",
-        default=True,
+
+    if not backend_only and (
+        yes
+        or click.confirm(
+            "是否需要集成式 WebUI？（个人电脑推荐，服务器不推荐）",
+            default=True,
+        )
     ):
         await check_dashboard(astrbot_root)
     else:
@@ -71,7 +77,8 @@ async def initialize_astrbot(astrbot_root: Path, *, yes: bool) -> None:
 
 @click.command()
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompts")
-def init(yes: bool) -> None:
+@click.option("--backend-only", is_flag=True, help="Only initialize the backend")
+def init(yes: bool, backend_only: bool) -> None:
     """Initialize AstrBot"""
     click.echo("Initializing AstrBot...")
 
@@ -105,7 +112,9 @@ def init(yes: bool) -> None:
 
     try:
         with lock.acquire():
-            asyncio.run(initialize_astrbot(astrbot_root, yes=yes))
+            asyncio.run(
+                initialize_astrbot(astrbot_root, yes=yes, backend_only=backend_only)
+            )
             click.echo("Done! You can now run 'astrbot run' to start AstrBot")
     except Timeout:
         raise click.ClickException(

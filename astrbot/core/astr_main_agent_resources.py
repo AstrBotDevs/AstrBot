@@ -3,6 +3,7 @@ import json
 import os
 import uuid
 
+import anyio
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
@@ -246,7 +247,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
         bool: indicates whether the file was downloaded from sandbox.
         """
-        if os.path.exists(path):
+        if await anyio.Path(path).exists():
             return path, False
 
         # Try to check if the file exists in the sandbox

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import aiohttp
+import anyio
 import certifi
 from quart import request
 
@@ -346,7 +347,9 @@ class PluginRoute(Route):
             if token := self._logo_cache.get(logo_path):
                 if not await file_token_service.check_token_expired(token):
                     return self._logo_cache[logo_path]
-            token = await file_token_service.register_file(logo_path, timeout=300)
+            token = await file_token_service.register_file(
+                logo_path, expire_seconds=300
+            )
             self._logo_cache[logo_path] = token
             return token
         except Exception as e:
@@ -779,8 +782,8 @@ class PluginRoute(Route):
             return Response().error(f"插件 {plugin_name} 没有README文件").__dict__
 
         try:
-            with open(readme_path, encoding="utf-8") as f:
-                readme_content = f.read()
+            async with await anyio.open_file(readme_path, encoding="utf-8") as f:
+                readme_content = await f.read()
 
             return (
                 Response()
@@ -839,8 +842,10 @@ class PluginRoute(Route):
             changelog_path = os.path.join(plugin_dir, name)
             if os.path.isfile(changelog_path):
                 try:
-                    with open(changelog_path, encoding="utf-8") as f:
-                        changelog_content = f.read()
+                    async with await anyio.open_file(
+                        changelog_path, encoding="utf-8"
+                    ) as f:
+                        changelog_content = await f.read()
                     return (
                         Response()
                         .ok({"content": changelog_content}, "成功获取更新日志")

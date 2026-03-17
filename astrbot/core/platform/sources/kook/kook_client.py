@@ -1,13 +1,11 @@
 import asyncio
 import base64
-import os
 import random
 import time
 import zlib
-from pathlib import Path
 
-import aiofiles
 import aiohttp
+import anyio
 import pydantic
 import websockets
 
@@ -407,23 +405,23 @@ class KookClient:
             b64_str = file_url.removeprefix("base64://")
             bytes_data = base64.b64decode(b64_str)
 
-        elif file_url.startswith("file://") or os.path.exists(file_url):
+        elif file_url.startswith("file://") or await anyio.Path(file_url).exists():
             file_url = file_url.removeprefix("file:///")
             file_url = file_url.removeprefix("file://")
-
+            # get absolute path
             try:
-                target_path = Path(file_url).resolve()
+                target_path = await anyio.Path(file_url).resolve()
             except Exception as exp:
                 logger.error(f'[KOOK] 获取文件 "{file_url}" 绝对路径失败: "{exp}"')
                 raise FileNotFoundError(
                     f'获取文件 "{file_url}" 绝对路径失败: "{exp}"'
                 ) from exp
 
-            if not target_path.is_file():
+            if not await target_path.is_file():
                 raise FileNotFoundError(f"文件不存在: {target_path.name}")
 
             filename = target_path.name
-            async with aiofiles.open(target_path, "rb") as f:
+            async with await anyio.open_file(target_path, "rb") as f:
                 bytes_data = await f.read()
 
         else:

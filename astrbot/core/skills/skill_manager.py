@@ -247,6 +247,7 @@ class SkillManager:
         return data
 
     def _save_config(self, config: dict) -> None:
+        os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
         with open(self.config_path, "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=4)
 
@@ -272,6 +273,7 @@ class SkillManager:
     def _save_sandbox_skills_cache(self, cache: dict) -> None:
         cache["version"] = _SANDBOX_SKILLS_CACHE_VERSION
         cache["updated_at"] = datetime.now(timezone.utc).isoformat()
+        os.makedirs(os.path.dirname(self.sandbox_skills_cache_path), exist_ok=True)
         with open(self.sandbox_skills_cache_path, "w", encoding="utf-8") as f:
             json.dump(cache, f, ensure_ascii=False, indent=2)
 

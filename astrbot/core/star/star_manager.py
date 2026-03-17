@@ -12,6 +12,7 @@ import tempfile
 import traceback
 from types import ModuleType
 
+import anyio
 import yaml
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
@@ -778,15 +779,17 @@ class PluginManager:
                     plugin_dir_path,
                     self.conf_schema_fname,
                 )
-                if os.path.exists(plugin_schema_path):
+                if await anyio.Path(plugin_schema_path).exists():
                     # 加载插件配置
-                    with open(plugin_schema_path, encoding="utf-8") as f:
+                    async with await anyio.open_file(
+                        plugin_schema_path, encoding="utf-8"
+                    ) as f:
                         plugin_config = AstrBotConfig(
                             config_path=os.path.join(
                                 self.plugin_config_path,
                                 f"{root_dir_name}_config.json",
                             ),
-                            schema=json.loads(f.read()),
+                            schema=json.loads(await f.read()),
                         )
                 logo_path = os.path.join(plugin_dir_path, self.logo_fname)
 
@@ -1082,9 +1085,9 @@ class PluginManager:
             except Exception:
                 logger.warning(traceback.format_exc())
 
-        if os.path.exists(plugin_path):
+        if await anyio.Path(plugin_path).exists():
             try:
-                remove_dir(plugin_path)
+                await anyio.to_thread.run_sync(remove_dir, plugin_path)
                 logger.warning(f"已清理安装失败的插件目录: {plugin_path}")
             except Exception as e:
                 logger.warning(
@@ -1095,9 +1098,9 @@ class PluginManager:
             self.plugin_config_path,
             f"{dir_name}_config.json",
         )
-        if os.path.exists(plugin_config_path):
+        if await anyio.Path(plugin_config_path).exists():
             try:
-                os.remove(plugin_config_path)
+                await anyio.to_thread.run_sync(os.remove, plugin_config_path)
                 logger.warning(f"已清理安装失败插件配置: {plugin_config_path}")
             except Exception as e:
                 logger.warning(
@@ -1231,13 +1234,14 @@ class PluginManager:
                 # Extract README.md content if exists
                 readme_content = None
                 readme_path = os.path.join(plugin_path, "README.md")
-                if not os.path.exists(readme_path):
+                if not await anyio.Path(readme_path).exists():
                     readme_path = os.path.join(plugin_path, "readme.md")
 
-                if os.path.exists(readme_path):
+                if await anyio.Path(readme_path).exists():
                     try:
-                        with open(readme_path, encoding="utf-8") as f:
-                            readme_content = f.read()
+                        readme_content = await anyio.Path(readme_path).read_text(
+                            encoding="utf-8"
+                        )
                     except Exception as e:
                         logger.warning(
                             f"读取插件 {dir_name} 的 README.md 文件失败: {e!s}",
@@ -1649,13 +1653,14 @@ class PluginManager:
             # Extract README.md content if exists
             readme_content = None
             readme_path = os.path.join(desti_dir, "README.md")
-            if not os.path.exists(readme_path):
+            if not await anyio.Path(readme_path).exists():
                 readme_path = os.path.join(desti_dir, "readme.md")
 
-            if os.path.exists(readme_path):
+            if await anyio.Path(readme_path).exists():
                 try:
-                    with open(readme_path, encoding="utf-8") as f:
-                        readme_content = f.read()
+                    readme_content = await anyio.Path(readme_path).read_text(
+                        encoding="utf-8"
+                    )
                 except Exception as e:
                     logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {e!s}")
 

@@ -1380,7 +1380,7 @@ class ConfigRoute(Route):
             if os.path.exists(logo_file_path):
                 logo_token = await file_token_service.register_file(
                     logo_file_path,
-                    timeout=3600,
+                    expire_seconds=3600,
                 )
 
                 # 确保platform_default_tmpl[platform.name]存在且为字典
