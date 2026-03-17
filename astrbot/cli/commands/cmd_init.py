@@ -22,7 +22,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=%h/.local/share/astrbot
-ExecStart=/usr/bin/sh -c '/usr/bin/astrbot run || { /usr/bin/astrbot init && /usr/bin/astrbot run; }'
+ExecStart=/usr/bin/astrbot run --backend-only
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
