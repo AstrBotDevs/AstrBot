@@ -95,7 +95,9 @@ class DiscordBotClient(discord.Bot):
 
     async def on_message(self, message: discord.Message) -> None:
         """当接收到消息时触发"""
-        if message.author.bot:
+        # 如果配置不允许接收 bot 的消息，则忽略 bot 消息（向后兼容原行为）
+        allow_bots = getattr(self, "allow_bot_messages", False)
+        if message.author.bot and not allow_bots:
             return
 
         logger.debug(
