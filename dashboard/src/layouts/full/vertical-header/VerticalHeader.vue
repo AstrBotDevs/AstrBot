@@ -417,25 +417,23 @@ const viewMode = computed({
 // 监听 viewMode 变化，切换到 bot 模式时跳转到首页
 // 保存 bot 模式的最後路由
 // 監聽 route 變化，保存最後一次 bot 路由
-watch(() => route.fullPath, (newPath) => {
+watch(() => route.fullPath, () => {
   if (typeof window === 'undefined') return;
 
   try {
-    const isChatRoute = newPath.startsWith('/chat');
+    const isChatRoute = route.path.startsWith('/chat');
 
-    // ✅ bot：只存「非 chat 頁」
+    // 🟦 bot：存完整 path
     if (!isChatRoute) {
-      localStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
+      localStorage.setItem(LAST_BOT_ROUTE_KEY, route.fullPath);
+      return;
     }
 
-    // ✅ chat：只存 sessionId
-    if (isChatRoute) {
-      const parts = newPath.split('/');
-      const sessionId = parts[2];
+    // 🟩 chat：存 sessionId（用 params！）
+    const sessionId = route.params.id as string | undefined;
 
-      if (sessionId) {
-        localStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
-      }
+    if (sessionId) {
+      localStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
     }
 
   } catch (e) {

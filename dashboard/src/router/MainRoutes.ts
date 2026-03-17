@@ -146,7 +146,7 @@ const MainRoutes = {
     // },
     {
       name: 'Chat',
-      path: '/chat',
+      path: '/chat/:id',
       component: () => import('@/views/ChatPage.vue'),
       children: [
         {
