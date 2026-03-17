@@ -1632,10 +1632,11 @@ class PluginManager:
     async def install_plugin_from_file(
         self, zip_file_path: str, ignore_version_check: bool = False
     ):
-        dir_name = os.path.basename(zip_file_path).replace(".zip", "")
-        dir_name = dir_name.removesuffix("-master").removesuffix("-main").lower()
-        desti_dir = os.path.join(self.plugin_store_path, dir_name)
-        desti_dir_exists = os.path.exists(desti_dir)
+        dir_name = os.path.splitext(os.path.basename(zip_file_path))[0]
+        desti_dir = tempfile.mkdtemp(
+            dir=self.plugin_store_path, prefix="plugin_upload_"
+        )
+        temp_desti_dir = desti_dir
 
         try:
             self.updator.unzip_file(zip_file_path, desti_dir)
@@ -1644,8 +1645,6 @@ class PluginManager:
                 self.plugin_store_path,
                 metadata_dir_name,
             )
-            if desti_dir_exists:
-                raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
             if target_plugin_path != desti_dir and os.path.exists(target_plugin_path):
                 raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
             if target_plugin_path != desti_dir:
@@ -1719,3 +1718,11 @@ class PluginManager:
                 f"安装插件 {dir_name} 失败，插件安装目录：{desti_dir}",
             )
             raise
+        finally:
+            if temp_desti_dir != desti_dir and os.path.isdir(temp_desti_dir):
+                try:
+                    remove_dir(temp_desti_dir)
+                except Exception as e:
+                    logger.warning(
+                        f"清理临时插件解压目录失败: {temp_desti_dir}，原因: {e!s}",
+                    )
