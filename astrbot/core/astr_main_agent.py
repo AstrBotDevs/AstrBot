@@ -67,6 +67,7 @@ from astrbot.core.tools.cron_tools import (
     LIST_CRON_JOBS_TOOL,
 )
 from astrbot.core.tools.prompts import (
+    TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_LAZY_LOAD_MODE,
 )
 from astrbot.core.utils.file_extract import extract_file_moonshotai
