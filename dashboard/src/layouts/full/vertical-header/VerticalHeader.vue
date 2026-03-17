@@ -405,16 +405,16 @@ watch(() => route.fullPath, (newPath) => {
   if (typeof window === 'undefined') return;
 
   try {
-    // 改變局部變數名稱，避免與全局變數衝突
-    const isPathChat = newPath.startsWith('/chat'); // 改為 isPathChat
+    // 使用現有的 isChatPath 計算屬性來避免名稱衝突
+    const isChat = isChatPath.value; // 這裡使用已經計算好的 isChatPath
 
     // ✅ bot：只存「非 chat 頁」
-    if (!isPathChat) {
+    if (!isChat) {
       sessionStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
     }
 
     // ✅ chat：只存 sessionId
-    if (isPathChat) {
+    if (isChat) {
       const parts = newPath.split('/');
       const sessionId = parts[2];
 
@@ -431,8 +431,14 @@ watch(() => route.fullPath, (newPath) => {
 const currentMode = computed({
   get: () => (isChatPath.value ? 'chat' : 'bot'),
   set: (val: 'chat' | 'bot') => {
-    // 檢查 window 和 sessionStorage 是否存在
-    if (typeof window !== 'undefined' && typeof sessionStorage !== 'undefined') {
+    try {
+      // 檢查 window 和 sessionStorage 是否存在
+      if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+        // 如果在非瀏覽器環境中，不做任何 sessionStorage 操作
+        console.warn('sessionStorage is not available in this environment');
+        return;
+      }
+
       if (val === 'chat') {
         const lastSessionId = sessionStorage.getItem(LAST_CHAT_ROUTE_KEY);
         router.push(lastSessionId ? `/chat/${lastSessionId}` : '/chat');
@@ -443,9 +449,9 @@ const currentMode = computed({
         }
         router.push(lastBotRoute);
       }
-    } else {
-      // 如果在非瀏覽器環境中，不做任何 sessionStorage 操作
-      console.warn('sessionStorage is not available in this environment');
+    } catch (e) {
+      // 在受限隱私模式等環境中，sessionStorage 操作可能會拋出 SecurityError
+      console.warn('Failed to access sessionStorage in currentMode setter:', e);
     }
   }
 });
