@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 
-from ..utils import get_astrbot_root
+from astrbot.core.utils.astrbot_path import astrbot_paths
 
 
 @click.command()
@@ -51,14 +51,14 @@ def uninstall(yes: bool, keep_data: bool) -> None:
                     )
 
     # 2. Remove Data
-    astrbot_root = get_astrbot_root()
-    data_dir = astrbot_root / "data"
-    dot_astrbot = astrbot_root / ".astrbot"
-    lock_file = astrbot_root / "astrbot.lock"
-
     if keep_data:
         click.echo("Skipping data removal as requested.")
         return
+
+    # Helper paths
+    dot_astrbot = astrbot_paths.root / ".astrbot"
+    lock_file = astrbot_paths.root / "astrbot.lock"
+    data_dir = astrbot_paths.data
 
     # Check if this looks like an AstrBot root before blowing things up
     if not dot_astrbot.exists() and not data_dir.exists():
@@ -66,7 +66,7 @@ def uninstall(yes: bool, keep_data: bool) -> None:
         return
 
     if yes or click.confirm(
-        f"Are you sure you want to remove AstrBot data at {astrbot_root}? \n"
+        f"Are you sure you want to remove AstrBot data at {astrbot_paths.root}? \n"
         f"This will delete:\n"
         f" - {data_dir} (Config, Plugins, Database)\n"
         f" - {dot_astrbot}\n"
@@ -87,3 +87,5 @@ def uninstall(yes: bool, keep_data: bool) -> None:
             lock_file.unlink()
 
         click.echo("AstrBot data removed successfully.")
+        click.echo("uv: uv tool uninstall astrbot")
+        click.echo("paru/yay: paru -R astrbot")

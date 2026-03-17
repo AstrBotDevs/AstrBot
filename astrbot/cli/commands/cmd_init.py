@@ -7,7 +7,9 @@ from pathlib import Path
 import click
 from filelock import FileLock, Timeout
 
-from ..utils import check_dashboard, get_astrbot_root
+from astrbot.core.utils.astrbot_path import astrbot_paths
+
+from ..utils import check_dashboard
 
 SYSTEMD_SERVICE = r"""
 # user service
@@ -97,7 +99,7 @@ def init(yes: bool) -> None:
             except subprocess.CalledProcessError as e:
                 click.echo(f"Failed to reload systemd daemon: {e}", err=True)
 
-    astrbot_root = get_astrbot_root()
+    astrbot_root = astrbot_paths.root
     lock_file = astrbot_root / "astrbot.lock"
     lock = FileLock(lock_file, timeout=5)
 
