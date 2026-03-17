@@ -10,7 +10,14 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generic
+from typing import TYPE_CHECKING, Any, Generic, Protocol
+
+from tenacity import (
+    before_sleep_log,
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from astrbot import logger
 from astrbot.core.agent.mcp_elicitation_registry import pending_mcp_elicitation
@@ -27,13 +34,6 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_root,
     get_astrbot_skills_path,
     get_astrbot_temp_path,
-)
-from tenacity import (
-    before_sleep_log,
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
 )
 
 if TYPE_CHECKING:
@@ -106,6 +106,23 @@ class UnsupportedElicitationRequestError(ValueError):
 
 class MCPElicitationError(Exception):
     """Base exception for elicitation failures."""
+
+
+# Type definitions for improved type safety
+
+
+class SupportsEvent(Protocol):
+    """Protocol for event objects that can receive MCP elicitation messages."""
+
+    unified_msg_origin: str | None
+
+    async def send(self, message: MessageChain) -> None:
+        """Send a message to the user."""
+        ...
+
+
+# JSON Schema value types for MCP elicitation form fields
+JsonValue = str | int | float | bool | list[str] | None
 
 
 class ElicitationParseError(MCPElicitationError):
@@ -266,6 +283,8 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
         self._interaction_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._lock_last_used: dict[str, float] = {}
         self._active_run_context: ContextWrapper[TContext] | None = None
+        # Temporary allowlist for user-configured root paths
+        self._user_configured_root_paths: set[Path] = set()
 
     def configure_from_server_config(self, server_config: dict[str, Any]) -> None:
         self._capabilities = MCPClientCapabilitiesConfig.from_server_config(
@@ -287,33 +306,38 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
     @property
     def elicitation_timeout_seconds(self) -> int:
         return self._capabilities.elicitation.timeout_seconds
-    
-    def _compute_elicitation_timeout(self, properties: dict[str, dict[str, Any]]) -> int:
+
+    def _compute_elicitation_timeout(
+        self, properties: dict[str, dict[str, Any]]
+    ) -> int:
         """根据表单复杂度动态计算超时时间。
-        
+
         公式：
         - 基础时间：60 秒
         - 普通字段：每个 30 秒
         - Enum 字段：每个 15 秒（用户只需选择）
-        
+
         如果用户配置了显式超时，则使用配置值。
         """
         # 如果用户配置了显式超时，优先使用配置
         configured = self._capabilities.elicitation.timeout_seconds
         if configured != DEFAULT_MCP_ELICITATION_TIMEOUT_SECONDS:
             return configured
-        
+
         base = 60  # 基础 1 分钟
         per_field = 30  # 每个字段 30 秒
         per_enum_field = 15  # enum 字段减少时间
-        
+
         enum_count = sum(
-            1 for f in properties.values()
+            1
+            for f in properties.values()
             if f.get("enum") and isinstance(f.get("enum"), list)
         )
         field_count = len(properties)
-        
-        timeout = base + (field_count - enum_count) * per_field + enum_count * per_enum_field
+
+        timeout = (
+            base + (field_count - enum_count) * per_field + enum_count * per_enum_field
+        )
         # 限制最小 60 秒，最大 600 秒
         return max(60, min(600, timeout))
 
@@ -331,7 +355,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
 
     async def handle_list_roots(
         self,
-        _request_context: Any,
+        _request_context: None,
     ) -> mcp.types.ListRootsResult | mcp.types.ErrorData:
         import mcp
 
@@ -358,12 +382,13 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
 
     def clear_runtime_state(self) -> None:
         self._active_run_context = None
-    
+
     def _cleanup_unused_locks(self, max_age_seconds: int = 300) -> None:
         """清理超过指定时间未使用的锁（LRU 清理）。"""
         now = time.time()
         expired = [
-            umo for umo, last_used in self._lock_last_used.items()
+            umo
+            for umo, last_used in self._lock_last_used.items()
             if now - last_used > max_age_seconds
         ]
         for umo in expired:
@@ -382,6 +407,18 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
             yield
             return
 
+        # 自动从 run_context 提取 umo（如果未显式提供）
+        if umo is None and run_context is not None:
+            event = getattr(run_context.context, "event", None)
+            if event is not None:
+                umo = getattr(event, "unified_msg_origin", None)
+                if umo:
+                    logger.debug(
+                        "Auto-extracted umo from run_context for server %s: %s",
+                        self._server_name,
+                        umo,
+                    )
+
         # 使用 per-umo 锁，如果没有提供 umo 则使用全局锁（向后兼容）
         if umo:
             lock = self._interaction_locks[umo]
@@ -392,7 +429,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
         else:
             # 向后兼容：如果没有 umo，创建一个临时锁
             lock = asyncio.Lock()
-        
+
         async with lock:
             self._active_run_context = run_context
             try:
@@ -402,7 +439,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
 
     async def handle_sampling(
         self,
-        _request_context: Any,
+        _request_context: None,
         params: mcp.types.CreateMessageRequestParams,
     ) -> (
         mcp.types.CreateMessageResult
@@ -449,7 +486,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
 
     async def handle_elicitation(
         self,
-        _request_context: Any,
+        _request_context: None,
         params: mcp.types.ElicitRequestParams,
     ) -> mcp.types.ElicitResult | mcp.types.ErrorData:
         import mcp
@@ -649,8 +686,8 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
 
     async def _execute_form_elicitation(
         self,
-        plugin_context: Any,
-        event: Any,
+        plugin_context: ContextWrapper[TContext],
+        event: TContext,
         sender_id: str,
         params: mcp.types.ElicitRequestFormParams,
     ) -> mcp.types.ElicitResult:
@@ -684,7 +721,11 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
                     requested_schema=params.requestedSchema,
                     reply_text=reply_text,
                 )
-            except UnsupportedElicitationRequestError as exc:
+            except (
+                UnsupportedElicitationRequestError,
+                ElicitationValidationError,
+                ElicitationParseError,
+            ) as exc:
                 content = await self._try_llm_form_reply_fallback(
                     plugin_context=plugin_context,
                     event=event,
@@ -717,8 +758,8 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
     async def _try_llm_form_reply_fallback(
         self,
         *,
-        plugin_context: Any,
-        event: Any,
+        plugin_context: ContextWrapper[TContext],
+        event: TContext,
         params: mcp.types.ElicitRequestFormParams,
         reply_text: str,
         direct_parse_error: UnsupportedElicitationRequestError,
@@ -798,7 +839,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
 
     async def _execute_url_elicitation(
         self,
-        event: Any,
+        event: TContext,
         sender_id: str,
         params: mcp.types.ElicitRequestURLParams,
     ) -> mcp.types.ElicitResult:
@@ -831,7 +872,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
 
     async def _send_elicitation_message(
         self,
-        event: Any,
+        event: TContext,
         message: str,
         *,
         payload: dict[str, Any] | None = None,
@@ -857,7 +898,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
     async def _wait_for_elicitation_reply(
         self,
         *,
-        event: Any,
+        event: TContext,
         sender_id: str,
         deadline: float,
     ) -> str | None:
@@ -1027,9 +1068,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
                     "The JSON reply could not be parsed."
                 ) from exc
             if not isinstance(payload, dict):
-                raise ElicitationParseError(
-                    "The JSON reply must be an object."
-                )
+                raise ElicitationParseError("The JSON reply must be an object.")
         elif len(properties) == 1:
             field_name = next(iter(properties))
             payload = {field_name: normalized_reply}
@@ -1106,7 +1145,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
         self,
         *,
         field_name: str,
-        raw_value: Any,
+        raw_value: str | int | float | bool | list | None,
         schema: dict[str, Any],
     ) -> str | int | float | bool | list[str] | None:
         field_type = self._get_elicitation_field_type(schema)
@@ -1154,7 +1193,9 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
         return value
 
     @staticmethod
-    def _coerce_boolean_value(field_name: str, raw_value: Any) -> bool:
+    def _coerce_boolean_value(
+        field_name: str, raw_value: str | int | float | bool | None
+    ) -> bool:
         if isinstance(raw_value, bool):
             return raw_value
 
@@ -1165,12 +1206,12 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
             return True
         if normalized in falsy:
             return False
-        raise ElicitationValidationError(
-            f"Field `{field_name}` must be a boolean."
-        )
+        raise ElicitationValidationError(f"Field `{field_name}` must be a boolean.")
 
     @staticmethod
-    def _coerce_string_array_value(field_name: str, raw_value: Any) -> list[str]:
+    def _coerce_string_array_value(
+        field_name: str, raw_value: str | list | None
+    ) -> list[str]:
         if isinstance(raw_value, list):
             return [str(item).strip() for item in raw_value if str(item).strip()]
 
@@ -1288,9 +1329,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
             for candidate in field_type:
                 if candidate in {"string", "integer", "number", "boolean", "array"}:
                     return candidate
-            raise ElicitationParseError(
-                "Unsupported multi-type elicitation field."
-            )
+            raise ElicitationParseError("Unsupported multi-type elicitation field.")
         if not isinstance(field_type, str):
             return "string"
         return field_type
@@ -1326,7 +1365,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
         return "\n".join(lines[1:-1]).strip()
 
     @staticmethod
-    def _is_webchat_event(event: Any) -> bool:
+    def _is_webchat_event(event: TContext) -> bool:
         platform_name = getattr(event, "get_platform_name", None)
         if callable(platform_name):
             try:
@@ -1380,6 +1419,9 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
                 candidate_path = Path(get_astrbot_root()) / candidate_path
             path = candidate_path.resolve()
             display_name = path.name or normalized_entry
+            # 将用户显式配置的绝对路径加入临时白名单
+            if candidate_path.is_absolute():
+                self._user_configured_root_paths.add(path)
 
         # 安全检查 1: 符号链接检查
         if path.is_symlink():
@@ -1409,18 +1451,22 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
             return None
 
         return display_name, path
-    
+
     def _is_root_path_in_allowlist(self, path: Path) -> bool:
         """检查路径是否在允许的白名单内。
-        
+
         白名单包括：
         1. AstrBot 标准目录（data, temp, config 等）
         2. 用户显式配置的其他目录
         """
+        # 检查是否是用户显式配置的路径
+        if path in self._user_configured_root_paths:
+            return True
+
         # 获取所有允许的根路径解析器
         alias_resolvers = get_root_path_alias_resolvers()
         allowed_paths = set()
-        
+
         # 添加所有别名解析的路径
         for resolver_func in alias_resolvers.values():
             try:
@@ -1428,7 +1474,7 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
                 allowed_paths.add(allowed_path)
             except Exception:
                 continue
-        
+
         # 检查路径是否是允许路径的子目录或本身
         for allowed_path in allowed_paths:
             try:
@@ -1438,6 +1484,6 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
             except ValueError:
                 # 不是子目录，继续检查
                 continue
-        
+
         # 检查是否完全匹配
         return path in allowed_paths

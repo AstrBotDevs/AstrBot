@@ -260,7 +260,7 @@ def _format_prompt_message_content(
 
 
 def _normalize_prompt_arguments(
-    raw_arguments: Any,
+    raw_arguments: str | dict[str, Any] | None,
 ) -> dict[str, str] | None:
     if raw_arguments is None:
         return None

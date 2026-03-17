@@ -116,26 +116,23 @@ def submit_pending_mcp_elicitation_reply(
 
 def cleanup_expired_elicitations() -> int:
     """清理已完成的 elicitation 条目。
-    
+
     返回清理的条目数量。
     """
     start_time = time.time()
-    expired = [
-        umo for umo, p in _PENDING_MCP_ELICITATIONS.items()
-        if p.future.done()
-    ]
-    
+    expired = [umo for umo, p in _PENDING_MCP_ELICITATIONS.items() if p.future.done()]
+
     for umo in expired:
         _PENDING_MCP_ELICITATIONS.pop(umo, None)
-    
+
     # 记录指标
     _cleanup_metrics["total_cleaned"] += len(expired)
     _cleanup_metrics["last_cleanup_time"] = start_time
     _cleanup_metrics["last_cleanup_duration"] = time.time() - start_time
-    
+
     if expired:
         logger.debug(f"清理了 {len(expired)} 个已完成的 elicitation 条目")
-    
+
     return len(expired)
 
 
@@ -146,7 +143,7 @@ def get_cleanup_metrics() -> dict:
 
 async def cleanup_elicitation_periodically(interval: int = 60) -> None:
     """后台定期清理 elicitation 条目。
-    
+
     Args:
         interval: 清理间隔秒数，默认 60 秒
     """

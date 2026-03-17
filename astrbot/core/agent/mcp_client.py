@@ -2,7 +2,7 @@ import asyncio
 import logging
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Any, Generic
+from typing import Generic
 
 from tenacity import (
     before_sleep_log,
@@ -14,17 +14,16 @@ from tenacity import (
 
 from astrbot import logger
 from astrbot.core.agent.mcp_prompt_bridge import build_mcp_prompt_tool_names
-from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.run_context import ContextWrapper, TContext
 from astrbot.core.utils.log_pipe import LogPipe
 
+from .mcp_elicitation_registry import cleanup_elicitation_periodically
 from .mcp_resource_bridge import build_mcp_resource_tool_names
 from .mcp_stdio_client import tolerant_stdio_client
 from .mcp_subcapability_bridge import (
     MCPClientSubCapabilityBridge,
     normalize_mcp_server_config,
 )
-from .mcp_elicitation_registry import cleanup_elicitation_periodically
-from .run_context import TContext
 from .tool import FunctionTool
 
 try:
@@ -118,7 +117,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         return False, f"{e!s}"
 
 
-class MCPClient:
+class MCPClient(Generic[TContext]):
     def __init__(self) -> None:
         # Initialize session and client objects
         self.session: mcp.ClientSession | None = None
@@ -143,12 +142,12 @@ class MCPClient:
         self._server_capabilities: mcp.types.ServerCapabilities | None = None
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False  # For logging and debugging
-        self.subcapability_bridge = MCPClientSubCapabilityBridge[Any]()
-        
+        self.subcapability_bridge = MCPClientSubCapabilityBridge[TContext]()
+
         # Elicitation cleanup task
         self._elicitation_cleanup_task: asyncio.Task[None] | None = None
         self._start_elicitation_cleanup()
-    
+
     def _start_elicitation_cleanup(self) -> None:
         """启动后台 elicitation 清理任务。"""
         self._elicitation_cleanup_task = asyncio.create_task(
@@ -526,7 +525,7 @@ class MCPClient:
         tool_name: str,
         arguments: dict,
         read_timeout_seconds: timedelta,
-        run_context: ContextWrapper[Any] | None = None,
+        run_context: ContextWrapper[TContext] | None = None,
     ) -> mcp.types.CallToolResult:
         """Call MCP tool with automatic reconnection on failure, max 2 retries.
 
