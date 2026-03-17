@@ -67,6 +67,7 @@
         provider.rerank.rerank: 文档重排序
         provider.manager.set: 设置当前 Provider
         provider.manager.get_by_id: 按 ID 获取 Provider 管理记录
+        provider.manager.get_merged_provider_config: 获取 Provider 合并配置
         provider.manager.load: 运行时加载 Provider
         provider.manager.terminate: 终止已加载的 Provider
         provider.manager.create: 创建 Provider
