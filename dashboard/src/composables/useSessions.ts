@@ -35,6 +35,8 @@ export function useSessions(chatboxMode: boolean = false) {
         try {
             const response = await axios.get('/api/chat/sessions');
             sessions.value = response.data.data;
+            //刪除主要原因 因為 會強制導航到第一會話 並且 看不出代碼定義的新變數用途 似乎皆是局部變數
+            //經過數次確認  未對執行產生重大影響
             
 
 
