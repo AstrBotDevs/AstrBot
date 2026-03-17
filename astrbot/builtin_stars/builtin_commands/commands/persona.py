@@ -156,13 +156,13 @@ class PersonaCommands:
             ps = l[2].strip()
             if persona := next(
                 builtins.filter(
-                    lambda persona: persona["name"] == ps,
-                    self.context.provider_manager.personas,
+                    lambda p: p.persona_id == ps, # 替换字典取值
+                    self.context.persona_manager.personas, # 替换错误的数据源
                 ),
                 None,
             ):
                 msg = f"人格{ps}的详细信息：\n"
-                msg += f"{persona['prompt']}\n"
+                msg += f"{persona.system_prompt}\n" # 替换字典取值 prompt -> system_prompt
             else:
                 msg = f"人格{ps}不存在"
             message.set_result(MessageEventResult().message(msg))
@@ -188,8 +188,8 @@ class PersonaCommands:
                 return
             if persona := next(
                 builtins.filter(
-                    lambda persona: persona["name"] == ps,
-                    self.context.provider_manager.personas,
+                    lambda p: p.persona_id == ps, # 替换字典取值
+                    self.context.persona_manager.personas, # 替换错误的数据源
                 ),
                 None,
             ):
