@@ -942,6 +942,14 @@ PROVIDER_MANAGER_GET_BY_ID_OUTPUT_SCHEMA = _object_schema(
     required=("provider",),
     provider=_nullable(MANAGED_PROVIDER_RECORD_SCHEMA),
 )
+PROVIDER_MANAGER_GET_MERGED_PROVIDER_CONFIG_INPUT_SCHEMA = _object_schema(
+    required=("provider_id",),
+    provider_id={"type": "string"},
+)
+PROVIDER_MANAGER_GET_MERGED_PROVIDER_CONFIG_OUTPUT_SCHEMA = _object_schema(
+    required=("config",),
+    config=_nullable({"type": "object"}),
+)
 PROVIDER_MANAGER_LOAD_INPUT_SCHEMA = _object_schema(
     required=("provider_config",),
     provider_config={"type": "object"},
@@ -1332,6 +1340,10 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": PROVIDER_MANAGER_GET_BY_ID_INPUT_SCHEMA,
         "output": PROVIDER_MANAGER_GET_BY_ID_OUTPUT_SCHEMA,
     },
+    "provider.manager.get_merged_provider_config": {
+        "input": PROVIDER_MANAGER_GET_MERGED_PROVIDER_CONFIG_INPUT_SCHEMA,
+        "output": PROVIDER_MANAGER_GET_MERGED_PROVIDER_CONFIG_OUTPUT_SCHEMA,
+    },
     "provider.manager.load": {
         "input": PROVIDER_MANAGER_LOAD_INPUT_SCHEMA,
         "output": PROVIDER_MANAGER_LOAD_OUTPUT_SCHEMA,
@@ -1555,6 +1567,8 @@ __all__ = [
     "PROVIDER_MANAGER_DELETE_OUTPUT_SCHEMA",
     "PROVIDER_MANAGER_GET_BY_ID_INPUT_SCHEMA",
     "PROVIDER_MANAGER_GET_BY_ID_OUTPUT_SCHEMA",
+    "PROVIDER_MANAGER_GET_MERGED_PROVIDER_CONFIG_INPUT_SCHEMA",
+    "PROVIDER_MANAGER_GET_MERGED_PROVIDER_CONFIG_OUTPUT_SCHEMA",
     "PROVIDER_MANAGER_GET_INSTS_INPUT_SCHEMA",
     "PROVIDER_MANAGER_GET_INSTS_OUTPUT_SCHEMA",
     "PROVIDER_MANAGER_LOAD_INPUT_SCHEMA",
