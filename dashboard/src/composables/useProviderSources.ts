@@ -10,109 +10,6 @@ export interface UseProviderSourcesOptions {
   showMessage: (message: string, color?: string) => void
 }
 
-type ProviderSourceLike = {
-  id?: string
-  provider?: string
-  type?: string
-  provider_type?: string
-  [key: string]: any
-}
-
-type ProviderSourceIdentity = {
-  id: string
-  provider: string
-  type: string
-  provider_type: string
-}
-
-type ProviderSourceTemplate = ProviderSourceLike & ProviderSourceIdentity
-
-type ProviderSourceTemplates = Record<string, ProviderSourceTemplate>
-
-function hasProviderSourceIdentity(value: unknown): value is ProviderSourceIdentity {
-  if (!value || typeof value !== 'object') {
-    return false
-  }
-
-  const candidate = value as ProviderSourceLike
-  return (
-    typeof candidate.id === 'string'
-    && typeof candidate.provider === 'string'
-    && typeof candidate.type === 'string'
-    && typeof candidate.provider_type === 'string'
-  )
-}
-
-function cloneTemplateValue<T>(value: T): T {
-  if (value === null || typeof value !== 'object') {
-    return value
-  }
-
-  try {
-    return structuredClone(value)
-  } catch {
-    if (Array.isArray(value)) {
-      return [...value] as T
-    }
-    return { ...(value as Record<string, unknown>) } as T
-  }
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function matchesProviderSourceTemplate(
-  template: ProviderSourceTemplate,
-  source: ProviderSourceIdentity
-): boolean {
-  return (
-    template.provider === source.provider
-    && template.type === source.type
-    && template.provider_type === source.provider_type
-  )
-}
-
-function matchesGeneratedSourceId(sourceId: string, templateId: string): boolean {
-  return new RegExp(`^${escapeRegExp(templateId)}_\\d+$`).test(sourceId)
-}
-
-function warnTemplateMatchAmbiguity(
-  message: string,
-  source: ProviderSourceIdentity,
-  candidates: ProviderSourceTemplate[]
-) {
-  console.warn(message, {
-    sourceId: source.id,
-    provider: source.provider,
-    type: source.type,
-    providerType: source.provider_type,
-    candidateTemplateIds: candidates.map((candidate) => candidate.id)
-  })
-}
-
-function toProviderSourceTemplates(rawTemplates: unknown): ProviderSourceTemplates {
-  if (!rawTemplates || typeof rawTemplates !== 'object') {
-    return {}
-  }
-
-  const templates: ProviderSourceTemplates = {}
-  for (const [templateName, value] of Object.entries(rawTemplates as Record<string, unknown>)) {
-    if (!value || typeof value !== 'object') {
-      continue
-    }
-
-    if (!hasProviderSourceIdentity(value)) {
-      console.warn('[ProviderSources] Skip invalid provider template shape', { templateName })
-      continue
-    }
-
-    templates[templateName] = value as ProviderSourceTemplate
-  }
-
-  return templates
-}
-
 export function resolveDefaultTab(value?: string) {
   const normalized = (value || '').toLowerCase()
 
@@ -143,14 +40,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const { tm, showMessage } = options
 
   const confirmDialog = useConfirmDialog()
-  const sourceTemplateExcludedKeys = new Set([
-    'id',
-    'enable',
-    'model',
-    'provider_source_id',
-    'modalities',
-    'custom_extra_body'
-  ])
 
   async function askForConfirmation(message: string) {
     return askForConfirmationDialog(message, confirmDialog)
@@ -172,7 +61,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const testingProviders = ref<string[]>([])
   const isSourceModified = ref(false)
   const configSchema = ref<Record<string, any>>({})
-  const providerTemplates = ref<ProviderSourceTemplates>({})
+  const providerTemplates = ref<Record<string, any>>({})
   const manualModelId = ref('')
   const modelSearch = ref('')
 
@@ -465,95 +354,17 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     isSourceModified.value = false
   }
 
-  function extractSourceFieldsFromTemplate(template: ProviderSourceTemplate) {
+  function extractSourceFieldsFromTemplate(template: Record<string, any>) {
     const sourceFields: Record<string, any> = {}
+    const excludeKeys = ['id', 'enable', 'model', 'provider_source_id', 'modalities', 'custom_extra_body']
 
     for (const [key, value] of Object.entries(template)) {
-      if (!sourceTemplateExcludedKeys.has(key)) {
-        sourceFields[key] = cloneTemplateValue(value)
+      if (!excludeKeys.includes(key)) {
+        sourceFields[key] = value
       }
     }
 
     return sourceFields
-  }
-
-  function resolveSourceTemplate(
-    source: ProviderSourceLike,
-    templates: ProviderSourceTemplates
-  ): ProviderSourceTemplate | null {
-    const templateList = Object.values(templates || {})
-    if (!hasProviderSourceIdentity(source) || templateList.length === 0) {
-      return null
-    }
-
-    const exactIdCandidates = templateList.filter((template) =>
-      source.id === template.id && matchesProviderSourceTemplate(template, source)
-    )
-
-    if (exactIdCandidates.length === 1) {
-      return exactIdCandidates[0]
-    }
-
-    if (exactIdCandidates.length > 1) {
-      warnTemplateMatchAmbiguity(
-        '[ProviderSources] Multiple templates matched provider source by exact id; skip hydration to avoid ambiguity',
-        source,
-        exactIdCandidates
-      )
-      return null
-    }
-
-    const generatedIdCandidates = templateList.filter((template) =>
-      matchesGeneratedSourceId(source.id, template.id) && matchesProviderSourceTemplate(template, source)
-    )
-
-    if (generatedIdCandidates.length === 1) {
-      return generatedIdCandidates[0]
-    }
-
-    if (generatedIdCandidates.length > 1) {
-      warnTemplateMatchAmbiguity(
-        '[ProviderSources] Multiple templates matched provider source by generated id; skip hydration to avoid ambiguity',
-        source,
-        generatedIdCandidates
-      )
-      return null
-    }
-
-    const strictCandidates = templateList.filter((template) =>
-      matchesProviderSourceTemplate(template, source)
-    )
-
-    if (strictCandidates.length === 1) {
-      return strictCandidates[0]
-    }
-
-    if (strictCandidates.length > 1) {
-      warnTemplateMatchAmbiguity(
-        '[ProviderSources] Multiple templates matched provider source; skip hydration to avoid ambiguity',
-        source,
-        strictCandidates
-      )
-    }
-
-    return null
-  }
-
-  function hydrateSourceWithTemplateDefaults(
-    source: ProviderSourceLike,
-    templates: ProviderSourceTemplates
-  ): ProviderSourceLike {
-    const template = resolveSourceTemplate(source, templates)
-    if (!template) return source
-
-    const hydratedSource = { ...source }
-    for (const [key, value] of Object.entries(template)) {
-      if (sourceTemplateExcludedKeys.has(key)) continue
-      if (!(key in hydratedSource)) {
-        hydratedSource[key] = cloneTemplateValue(value)
-      }
-    }
-    return hydratedSource
   }
 
   function generateUniqueSourceId(baseId: string) {
@@ -803,11 +614,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       const response = await axios.get('/api/config/provider/template')
       if (response.data.status === 'ok') {
         configSchema.value = response.data.data.config_schema || {}
-        const templates = toProviderSourceTemplates(configSchema.value.provider?.config_template)
-        providerTemplates.value = templates
-        providerSources.value = (response.data.data.provider_sources || []).map((source: ProviderSourceLike) =>
-          hydrateSourceWithTemplateDefaults(source, templates)
-        )
+        if (configSchema.value.provider?.config_template) {
+          providerTemplates.value = configSchema.value.provider.config_template
+        }
+        providerSources.value = response.data.data.provider_sources || []
         providers.value = response.data.data.providers || []
       }
     } catch (error) {
