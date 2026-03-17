@@ -80,9 +80,14 @@ def _get_core_constraints(core_dist_name: str | None) -> tuple[str, ...]:
                 continue
             name = canonicalize_distribution_name(req.name)
             if name in installed:
-                # Use >= instead of == so plugins can pull in newer compatible
-                # versions while still preventing downgrades below what's installed.
-                constraints.append(f"{name}>={installed[name]}")
+                ver = installed[name]
+                try:
+                    next_major = int(str(ver).split(".")[0]) + 1
+                except (ValueError, TypeError):
+                    constraints.append(f"{name}=={ver}")
+                else:
+                    # Allow compatible upgrades but block next major version
+                    constraints.append(f"{name}>={ver},<{next_major}")
         except Exception:
             continue
 
