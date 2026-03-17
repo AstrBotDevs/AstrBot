@@ -39,6 +39,8 @@
     "close": "Close",
     "invalidPackage": "Invalid knowledge base package",
     "importFailed": "Failed to import knowledge base",
+    "importBlocked": "This knowledge base package cannot be imported until the issues above are resolved.",
+    "versionMajorDiff": "Package version is {backup} while current environment is {current}. Major versions are incompatible, so import is blocked.",
     "versionMinorDiff": "Package version is {backup} while current environment is {current}. Import is allowed with compatibility warning.",
     "versionMatch": "Package version is compatible with the current environment."
   },

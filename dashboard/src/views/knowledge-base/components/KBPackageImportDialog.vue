@@ -33,6 +33,15 @@
             {{ versionAlertMessage }}
           </v-alert>
 
+          <v-alert
+            v-if="importBlockingMessage"
+            type="error"
+            variant="tonal"
+            class="mb-4"
+          >
+            {{ importBlockingMessage }}
+          </v-alert>
+
           <v-card variant="outlined" class="mb-4">
             <v-card-title class="text-subtitle-1">
               <v-icon class="mr-2">mdi-package-variant-closed</v-icon>
@@ -192,11 +201,18 @@ const errorMessage = ref('')
 const importResult = ref<any>(null)
 
 const versionAlertType = computed(() => {
+  if (checkResult.value?.version_status === 'major_diff') return 'error'
   if (checkResult.value?.version_status === 'minor_diff') return 'warning'
   return 'info'
 })
 
 const versionAlertMessage = computed(() => {
+  if (checkResult.value?.version_status === 'major_diff') {
+    return t('packageImport.versionMajorDiff', {
+      backup: checkResult.value?.backup_version || '-',
+      current: checkResult.value?.current_version || '-'
+    })
+  }
   if (checkResult.value?.version_status === 'minor_diff') {
     return t('packageImport.versionMinorDiff', {
       backup: checkResult.value?.backup_version || '-',
@@ -206,6 +222,12 @@ const versionAlertMessage = computed(() => {
   return t('packageImport.versionMatch', {
     backup: checkResult.value?.backup_version || '-'
   })
+})
+
+const importBlockingMessage = computed(() => {
+  if (checkResult.value?.can_import) return ''
+  if (checkResult.value?.version_status === 'major_diff') return ''
+  return checkResult.value?.error || t('packageImport.importBlocked')
 })
 
 const embeddingHint = computed(() => {
