@@ -66,6 +66,7 @@ from astrbot.core.tools.cron_tools import (
     CREATE_CRON_JOB_TOOL,
     DELETE_CRON_JOB_TOOL,
     LIST_CRON_JOBS_TOOL,
+    UPDATE_CRON_JOB_TOOL,
 )
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
@@ -921,6 +922,7 @@ def _proactive_cron_job_tools(req: ProviderRequest) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
     req.func_tool.add_tool(CREATE_CRON_JOB_TOOL)
+    req.func_tool.add_tool(UPDATE_CRON_JOB_TOOL)
     req.func_tool.add_tool(DELETE_CRON_JOB_TOOL)
     req.func_tool.add_tool(LIST_CRON_JOBS_TOOL)
 
