@@ -40,6 +40,7 @@ jobs:
           pytest --cov=astrbot -v -o log_cli=true -o log_level=DEBUG
 
       - name: Upload results to Codecov
+        if: github.repository == 'AstrBotDevs/AstrBot'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

@@ -87,13 +87,7 @@ export default defineConfig({
               },
               {
                 text: "OneBot v11",
-                base: "/platform/aiocqhttp",
-                collapsed: true,
-                items: [
-                  { text: "NapCat", link: "/napcat" },
-                  { text: "Lagrange", link: "/lagrange" },
-                  { text: "其他端", link: "/others" },
-                ],
+                link: "/aiocqhttp"
               },
               { text: "企微应用", link: "/wecom" },
               { text: "企微智能机器人", link: "/wecom_ai_bot" },
@@ -111,7 +105,7 @@ export default defineConfig({
                 base: "/platform/satori",
                 collapsed: true,
                 items: [
-                  { text: "使用 LLOneBot", link: "/llonebot" },
+                  { text: "接入 Satori", link: "/guide" },
                   { text: "使用 server-satori", link: "/server-satori" },
                 ],
               },
@@ -327,13 +321,7 @@ export default defineConfig({
               },
               {
                 text: "OneBot v11",
-                base: "/en/platform/aiocqhttp",
-                collapsed: true,
-                items: [
-                  { text: "NapCat", link: "/napcat" },
-                  { text: "Lagrange", link: "/lagrange" },
-                  { text: "Other Clients", link: "/others" },
-                ],
+                link: "/aiocqhttp",
               },
               { text: "WeCom Application", link: "/wecom" },
               { text: "WeCom AI Bot", link: "/wecom_ai_bot" },
@@ -350,7 +338,7 @@ export default defineConfig({
                 base: "/en/platform/satori",
                 collapsed: true,
                 items: [
-                  { text: "Using LLOneBot", link: "/llonebot" },
+                  { text: "Connect Satori", link: "/guide" },
                   { text: "Using server-satori", link: "/server-satori" },
                 ],
               },
