@@ -251,11 +251,11 @@ class PluginRoute(Route):
 
     def _load_cached_md5(self, cache_file: str) -> str | None:
         """从缓存文件中加载MD5"""
-        if not os.path.exists(cache_file):
+        if not await anyio.Path(cache_file).exists():
             return None
 
         try:
-            with open(cache_file, encoding="utf-8") as f:
+            async with await anyio.open_file(cache_file, encoding="utf-8") as f:
                 cache_data = json.load(f)
             return cache_data.get("md5")
         except Exception as e:
@@ -311,8 +311,8 @@ class PluginRoute(Route):
     def _load_plugin_cache(self, cache_file: str):
         """加载本地缓存的插件市场数据"""
         try:
-            if os.path.exists(cache_file):
-                with open(cache_file, encoding="utf-8") as f:
+            if await anyio.Path(cache_file).exists():
+                async with await anyio.open_file(cache_file, encoding="utf-8") as f:
                     cache_data = json.load(f)
                     # 检查缓存是否有效
                     if "data" in cache_data and "timestamp" in cache_data:
@@ -336,7 +336,7 @@ class PluginRoute(Route):
                 "md5": md5 or "",
             }
 
-            with open(cache_file, "w", encoding="utf-8") as f:
+            async with await anyio.open_file(cache_file, "w", encoding="utf-8") as f:
                 json.dump(cache_data, f, ensure_ascii=False, indent=2)
             logger.debug(f"插件市场数据已缓存到: {cache_file}, MD5: {md5}")
         except Exception as e:
@@ -771,13 +771,13 @@ class PluginRoute(Route):
                 plugin_obj.root_dir_name,
             )
 
-        if not os.path.isdir(plugin_dir):
+        if not await anyio.Path(plugin_dir).is_dir():
             logger.warning(f"无法找到插件目录: {plugin_dir}")
             return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
 
         readme_path = os.path.join(plugin_dir, "README.md")
 
-        if not os.path.isfile(readme_path):
+        if not await anyio.Path(readme_path).is_file():
             logger.warning(f"插件 {plugin_name} 没有README文件")
             return Response().error(f"插件 {plugin_name} 没有README文件").__dict__
 
@@ -832,7 +832,7 @@ class PluginRoute(Route):
                 plugin_obj.root_dir_name,
             )
 
-        if not os.path.isdir(plugin_dir):
+        if not await anyio.Path(plugin_dir).is_dir():
             logger.warning(f"无法找到插件目录: {plugin_dir}")
             return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
 
@@ -840,7 +840,7 @@ class PluginRoute(Route):
         changelog_names = ["CHANGELOG.md", "changelog.md", "CHANGELOG", "changelog"]
         for name in changelog_names:
             changelog_path = os.path.join(plugin_dir, name)
-            if os.path.isfile(changelog_path):
+            if await anyio.Path(changelog_path).is_file():
                 try:
                     async with await anyio.open_file(
                         changelog_path, encoding="utf-8"

@@ -6,6 +6,7 @@ import random
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
+import anyio
 import boxlite
 from shipyard.filesystem import FileSystemComponent as ShipyardFileSystemComponent
 from shipyard.python import PythonComponent as ShipyardPythonComponent
@@ -52,8 +53,8 @@ class MockShipyardSandboxClient:
 
         try:
             # Read file content
-            with open(path, "rb") as f:
-                file_content = f.read()
+            async with await anyio.open_file(path, "rb") as f:
+                file_content = await f.read()
 
             # Create multipart form data
             data = aiohttp.FormData()

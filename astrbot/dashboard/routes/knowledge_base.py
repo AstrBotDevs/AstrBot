@@ -7,6 +7,7 @@ import uuid
 from typing import Any
 
 import aiofiles
+import anyio
 from quart import request
 
 from astrbot.core import logger
@@ -729,8 +730,8 @@ class KnowledgeBaseRoute(Route):
                     )
                 finally:
                     # 清理临时文件
-                    if os.path.exists(temp_file_path):
-                        os.remove(temp_file_path)
+                    if await anyio.Path(temp_file_path).exists():
+                        await anyio.Path(temp_file_path).unlink()
 
             # 获取知识库
             kb_helper = await kb_manager.get_kb(kb_id)

@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import anyio
 from sqlalchemy import delete
 
 from astrbot.core import logger
@@ -364,7 +365,7 @@ class AstrBotImporter:
         """
         result = ImportResult()
 
-        if not os.path.exists(zip_path):
+        if not await anyio.Path(zip_path).exists():
             result.add_error(f"备份文件不存在: {zip_path}")
             return result
 
@@ -446,12 +447,12 @@ class AstrBotImporter:
                     try:
                         config_content = zf.read("config/cmd_config.json")
                         # 备份现有配置
-                        if os.path.exists(self.config_path):
+                        if await anyio.Path(self.config_path).exists():
                             backup_path = f"{self.config_path}.bak"
                             shutil.copy2(self.config_path, backup_path)
 
-                        with open(self.config_path, "wb") as f:
-                            f.write(config_content)
+                        async with await anyio.open_file(self.config_path, "wb") as f:
+                            await f.write(config_content)
                         result.imported_files["config"] = 1
                     except Exception as e:
                         result.add_warning(f"导入配置文件失败: {e}")
@@ -753,8 +754,10 @@ class AstrBotImporter:
             if faiss_path in zf.namelist():
                 try:
                     target_path = kb_dir / "index.faiss"
-                    with zf.open(faiss_path) as src, open(target_path, "wb") as dst:
-                        dst.write(src.read())
+                    with zf.open(faiss_path) as src:
+                        content = src.read()
+                    async with await anyio.open_file(target_path, "wb") as dst:
+                        await dst.write(content)
                 except Exception as e:
                     result.add_warning(f"导入知识库 {kb_id} 的 FAISS 索引失败: {e}")
 
@@ -765,9 +768,13 @@ class AstrBotImporter:
                     try:
                         rel_path = name[len(media_prefix) :]
                         target_path = kb_dir / rel_path
-                        target_path.parent.mkdir(parents=True, exist_ok=True)
-                        with zf.open(name) as src, open(target_path, "wb") as dst:
-                            dst.write(src.read())
+                        await anyio.Path(target_path.parent).mkdir(
+                            parents=True, exist_ok=True
+                        )
+                        with zf.open(name) as src:
+                            content = src.read()
+                        async with await anyio.open_file(target_path, "wb") as dst:
+                            await dst.write(content)
                     except Exception as e:
                         result.add_warning(f"导入媒体文件 {name} 失败: {e}")
 
@@ -827,9 +834,13 @@ class AstrBotImporter:
                     else:
                         target_path = attachments_dir / os.path.basename(name)
 
-                    target_path.parent.mkdir(parents=True, exist_ok=True)
-                    with zf.open(name) as src, open(target_path, "wb") as dst:
-                        dst.write(src.read())
+                    await anyio.Path(target_path.parent).mkdir(
+                        parents=True, exist_ok=True
+                    )
+                    with zf.open(name) as src:
+                        content = src.read()
+                    async with await anyio.open_file(target_path, "wb") as dst:
+                        await dst.write(content)
                     count += 1
                 except Exception as e:
                     logger.warning(f"导入附件 {name} 失败: {e}")
@@ -885,15 +896,15 @@ class AstrBotImporter:
                     continue
 
                 # 备份现有目录（如果存在）
-                if target_dir.exists():
+                if await anyio.Path(target_dir).exists():
                     backup_path = Path(f"{target_dir}.bak")
-                    if backup_path.exists():
+                    if await anyio.Path(backup_path).exists():
                         shutil.rmtree(backup_path)
                     shutil.move(str(target_dir), str(backup_path))
                     logger.debug(f"已备份现有目录 {target_dir} 到 {backup_path}")
 
                 # 创建目标目录
-                target_dir.mkdir(parents=True, exist_ok=True)
+                await anyio.Path(target_dir).mkdir(parents=True, exist_ok=True)
 
                 # 解压文件
                 for name in dir_files:
@@ -904,10 +915,14 @@ class AstrBotImporter:
                             continue
 
                         target_path = target_dir / rel_path
-                        target_path.parent.mkdir(parents=True, exist_ok=True)
+                        await anyio.Path(target_path.parent).mkdir(
+                            parents=True, exist_ok=True
+                        )
 
-                        with zf.open(name) as src, open(target_path, "wb") as dst:
-                            dst.write(src.read())
+                        with zf.open(name) as src:
+                            content = src.read()
+                        async with await anyio.open_file(target_path, "wb") as dst:
+                            await dst.write(content)
                         file_count += 1
                     except Exception as e:
                         result.add_warning(f"导入文件 {name} 失败: {e}")

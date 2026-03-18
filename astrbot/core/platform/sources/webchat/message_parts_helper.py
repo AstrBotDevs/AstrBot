@@ -141,14 +141,15 @@ async def parse_webchat_message_parts(
             continue
 
         file_path = Path(str(path))
-        if verify_media_path_exists and not file_path.exists():
+        if verify_media_path_exists and not await anyio.Path(file_path).exists():
             if strict:
                 raise ValueError(f"file not found: {file_path!s}")
             continue
 
-        file_path_str = (
-            str(file_path.resolve()) if verify_media_path_exists else str(file_path)
-        )
+        if verify_media_path_exists:
+            file_path_str = str(await anyio.Path(file_path).resolve())
+        else:
+            file_path_str = str(file_path)
         has_content = True
         if part_type == "image":
             components.append(Image.fromFileSystem(file_path_str))
