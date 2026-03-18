@@ -18,6 +18,10 @@ function mdiSubset() {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => ({
+   base: command === 'build'
+    ? process.env.BASE_PATH || '/'
+    : '/',
+
   plugins: [
     // Only run MDI subsetting during production builds, skip in dev server
     ...(command === 'build' ? [mdiSubset()] : []),
