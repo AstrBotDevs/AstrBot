@@ -6,6 +6,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+import anyio
 from quart import request
 
 from astrbot.core import astrbot_config, file_token_service, logger
@@ -38,6 +39,10 @@ from .util import (
 )
 
 MAX_FILE_BYTES = 500 * 1024 * 1024
+
+
+def _resolve_path(path: Path) -> Path:
+    return path.resolve(strict=False)
 
 
 def try_cast(value: Any, type_: str):
@@ -1105,8 +1110,8 @@ class ConfigRoute(Route):
         if not files:
             return Response().error("No files uploaded").__dict__
 
-        storage_root_path = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
-        plugin_root_path = (storage_root_path / name).resolve(strict=False)
+        storage_root_path = _resolve_path(Path(get_astrbot_plugin_data_path()))
+        plugin_root_path = _resolve_path(storage_root_path / name)
         try:
             plugin_root_path.relative_to(storage_root_path)
         except ValueError:
@@ -1133,7 +1138,7 @@ class ConfigRoute(Route):
                 continue
 
             rel_path = f"files/{folder}/{filename}"
-            save_path = (plugin_root_path / rel_path).resolve(strict=False)
+            save_path = _resolve_path(plugin_root_path / rel_path)
             try:
                 save_path.relative_to(plugin_root_path)
             except ValueError:
@@ -1181,13 +1186,13 @@ class ConfigRoute(Route):
         if not md:
             return Response().error(f"Plugin {name} not found").__dict__
 
-        storage_root_path = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
-        plugin_root_path = (storage_root_path / name).resolve(strict=False)
+        storage_root_path = _resolve_path(Path(get_astrbot_plugin_data_path()))
+        plugin_root_path = _resolve_path(storage_root_path / name)
         try:
             plugin_root_path.relative_to(storage_root_path)
         except ValueError:
             return Response().error("Invalid name parameter").__dict__
-        target_path = (plugin_root_path / rel_path).resolve(strict=False)
+        target_path = _resolve_path(plugin_root_path / rel_path)
         try:
             target_path.relative_to(plugin_root_path)
         except ValueError:
@@ -1209,15 +1214,15 @@ class ConfigRoute(Route):
         if not meta or meta.get("type") != "file":
             return Response().error("Config item not found or not file type").__dict__
 
-        storage_root_path = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
-        plugin_root_path = (storage_root_path / name).resolve(strict=False)
+        storage_root_path = _resolve_path(Path(get_astrbot_plugin_data_path()))
+        plugin_root_path = _resolve_path(storage_root_path / name)
         try:
             plugin_root_path.relative_to(storage_root_path)
         except ValueError:
             return Response().error("Invalid name parameter").__dict__
 
         folder = config_key_to_folder(key_path)
-        target_dir = (plugin_root_path / "files" / folder).resolve(strict=False)
+        target_dir = _resolve_path(plugin_root_path / "files" / folder)
         try:
             target_dir.relative_to(plugin_root_path)
         except ValueError:
@@ -1377,7 +1382,7 @@ class ConfigRoute(Route):
             logo_file_path = os.path.join(plugin_dir, platform.logo_path)
 
             # 检查文件是否存在并注册令牌
-            if os.path.exists(logo_file_path):
+            if await anyio.Path(logo_file_path).exists():
                 logo_token = await file_token_service.register_file(
                     logo_file_path,
                     expire_seconds=3600,

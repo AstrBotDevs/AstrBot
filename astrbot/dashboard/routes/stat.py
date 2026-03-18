@@ -7,6 +7,7 @@ from functools import cmp_to_key
 from pathlib import Path
 
 import aiohttp
+import anyio
 import psutil
 from quart import request
 
@@ -20,6 +21,10 @@ from astrbot.core.utils.io import get_dashboard_version
 from astrbot.core.utils.version_comparator import VersionComparator
 
 from .route import Response, Route, RouteContext
+
+
+def _resolve_path(path: str | Path) -> Path:
+    return Path(path).resolve(strict=False)
 
 
 class StatRoute(Route):
@@ -210,41 +215,33 @@ class StatRoute(Route):
 
             filename = f"v{version}.md"
             project_path = get_astrbot_path()
-            changelogs_dir = os.path.join(project_path, "changelogs")
-            changelog_path = os.path.join(changelogs_dir, filename)
-
-            # 规范化路径，防止符号链接攻击
-            changelog_path = os.path.realpath(changelog_path)
-            changelogs_dir = os.path.realpath(changelogs_dir)
+            changelogs_dir = _resolve_path(Path(project_path) / "changelogs")
+            changelog_path = _resolve_path(changelogs_dir / filename)
 
             # 验证最终路径在预期的 changelogs 目录内（防止路径遍历）
-            # 确保规范化后的路径以 changelogs_dir 开头，且是目录内的文件
-            changelog_path_normalized = os.path.normpath(changelog_path)
-            changelogs_dir_normalized = os.path.normpath(changelogs_dir)
-
-            # 检查路径是否在预期目录内（必须是目录的子文件，不能是目录本身）
-            expected_prefix = changelogs_dir_normalized + os.sep
-            if not changelog_path_normalized.startswith(expected_prefix):
+            try:
+                changelog_path.relative_to(changelogs_dir)
+            except ValueError:
                 logger.warning(
                     f"Path traversal attempt detected: {version} -> {changelog_path}",
                 )
                 return Response().error("Invalid version format").__dict__
 
-            if not os.path.exists(changelog_path):
+            if not await anyio.Path(changelog_path).exists():
                 return (
                     Response()
                     .error(f"Changelog for version {version} not found")
                     .__dict__
                 )
-            if not os.path.isfile(changelog_path):
+            if not await anyio.Path(changelog_path).is_file():
                 return (
                     Response()
                     .error(f"Changelog for version {version} not found")
                     .__dict__
                 )
 
-            with open(changelog_path, encoding="utf-8") as f:
-                content = f.read()
+            async with await anyio.open_file(changelog_path, encoding="utf-8") as f:
+                content = await f.read()
 
             return Response().ok({"content": content, "version": version}).__dict__
         except Exception as e:
@@ -257,7 +254,7 @@ class StatRoute(Route):
             project_path = get_astrbot_path()
             changelogs_dir = os.path.join(project_path, "changelogs")
 
-            if not os.path.exists(changelogs_dir):
+            if not await anyio.Path(changelogs_dir).exists():
                 return Response().ok({"versions": []}).__dict__
 
             versions = []

@@ -1246,7 +1246,7 @@ class PluginManager:
                 _, repo_name, _ = self.updator.parse_github_url(repo_url)
                 repo_name = self.updator.format_name(repo_name)
                 plugin_path = os.path.join(self.plugin_store_path, repo_name)
-                if os.path.exists(plugin_path):
+                if await anyio.Path(plugin_path).exists():
                     raise Exception(
                         f"安装失败：目录 {os.path.basename(plugin_path)} 已存在。"
                     )
@@ -1259,8 +1259,9 @@ class PluginManager:
                     self.plugin_store_path,
                     metadata_dir_name,
                 )
-                if target_plugin_path != plugin_path and os.path.exists(
-                    target_plugin_path
+                if (
+                    target_plugin_path != plugin_path
+                    and await anyio.Path(target_plugin_path).exists()
                 ):
                     raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
                 if target_plugin_path != plugin_path:
@@ -1649,7 +1650,10 @@ class PluginManager:
                 self.plugin_store_path,
                 metadata_dir_name,
             )
-            if target_plugin_path != desti_dir and os.path.exists(target_plugin_path):
+            if (
+                target_plugin_path != desti_dir
+                and await anyio.Path(target_plugin_path).exists()
+            ):
                 raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
             if target_plugin_path != desti_dir:
                 os.rename(desti_dir, target_plugin_path)
@@ -1724,7 +1728,10 @@ class PluginManager:
             )
             raise
         finally:
-            if temp_desti_dir != desti_dir and os.path.isdir(temp_desti_dir):
+            if (
+                temp_desti_dir != desti_dir
+                and await anyio.Path(temp_desti_dir).is_dir()
+            ):
                 try:
                     remove_dir(temp_desti_dir)
                 except Exception as e:

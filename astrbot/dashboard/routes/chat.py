@@ -4,8 +4,10 @@ import os
 import re
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import cast
 
+import anyio
 from quart import Response as QuartResponse
 from quart import g, make_response, request, send_file
 
@@ -48,6 +50,10 @@ async def _poll_webchat_stream_result(back_queue, username: str):
         logger.error(f"WebChat stream error: {e}")
         return None, False
     return result, False
+
+
+def _resolve_path(path: str) -> Path:
+    return Path(path).resolve(strict=False)
 
 
 class ChatRoute(Route):
@@ -95,27 +101,29 @@ class ChatRoute(Route):
 
         try:
             file_path = os.path.join(self.attachments_dir, os.path.basename(filename))
-            real_file_path = os.path.realpath(file_path)
-            real_imgs_dir = os.path.realpath(self.attachments_dir)
+            resolved_file_path = _resolve_path(file_path)
+            resolved_base_dir = _resolve_path(self.attachments_dir)
 
-            if not os.path.exists(real_file_path):
+            if not await anyio.Path(resolved_file_path).exists():
                 # try legacy
                 file_path = os.path.join(
                     self.legacy_img_dir, os.path.basename(filename)
                 )
-                if os.path.exists(file_path):
-                    real_file_path = os.path.realpath(file_path)
-                    real_imgs_dir = os.path.realpath(self.legacy_img_dir)
+                if await anyio.Path(file_path).exists():
+                    resolved_file_path = _resolve_path(file_path)
+                    resolved_base_dir = _resolve_path(self.legacy_img_dir)
 
-            if not real_file_path.startswith(real_imgs_dir):
+            try:
+                resolved_file_path.relative_to(resolved_base_dir)
+            except ValueError:
                 return Response().error("Invalid file path").__dict__
 
             filename_ext = os.path.splitext(filename)[1].lower()
             if filename_ext == ".wav":
-                return await send_file(real_file_path, mimetype="audio/wav")
+                return await send_file(str(resolved_file_path), mimetype="audio/wav")
             if filename_ext[1:] in self.supported_imgs:
-                return await send_file(real_file_path, mimetype="image/jpeg")
-            return await send_file(real_file_path)
+                return await send_file(str(resolved_file_path), mimetype="image/jpeg")
+            return await send_file(str(resolved_file_path))
 
         except (FileNotFoundError, OSError):
             return Response().error("File access error").__dict__
@@ -132,9 +140,11 @@ class ChatRoute(Route):
                 return Response().error("Attachment not found").__dict__
 
             file_path = attachment.path
-            real_file_path = os.path.realpath(file_path)
+            resolved_file_path = _resolve_path(file_path)
 
-            return await send_file(real_file_path, mimetype=attachment.mime_type)
+            return await send_file(
+                str(resolved_file_path), mimetype=attachment.mime_type
+            )
 
         except (FileNotFoundError, OSError):
             return Response().error("File access error").__dict__
@@ -715,10 +725,10 @@ class ChatRoute(Route):
         try:
             attachments = await self.db.get_attachments(attachment_ids)
             for attachment in attachments:
-                if not os.path.exists(attachment.path):
+                if not await anyio.Path(attachment.path).exists():
                     continue
                 try:
-                    os.remove(attachment.path)
+                    await anyio.Path(attachment.path).unlink()
                 except OSError as e:
                     logger.warning(
                         f"Failed to delete attachment file {attachment.path}: {e}"
