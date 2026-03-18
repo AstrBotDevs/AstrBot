@@ -1128,15 +1128,32 @@ class SdkPluginBridge:
             for item in raw_results:
                 if not getattr(item, "tool_calls_result", None):
                     continue
+                tool_name_by_id: dict[str, str] = {}
+                tool_calls_info = getattr(item, "tool_calls_info", None)
+                raw_tool_calls = getattr(tool_calls_info, "tool_calls", None)
+                if isinstance(raw_tool_calls, list):
+                    for tool_call in raw_tool_calls:
+                        if isinstance(tool_call, dict):
+                            tool_call_id = tool_call.get("id")
+                            function_payload = tool_call.get("function")
+                            if isinstance(function_payload, dict):
+                                tool_name = function_payload.get("name")
+                            else:
+                                tool_name = None
+                        else:
+                            tool_call_id = getattr(tool_call, "id", None)
+                            function_payload = getattr(tool_call, "function", None)
+                            tool_name = getattr(function_payload, "name", None)
+                        if tool_call_id is None or tool_name is None:
+                            continue
+                        tool_name_by_id[str(tool_call_id)] = str(tool_name)
                 for tool_result in item.tool_calls_result:
                     tool_name = ""
                     tool_call_id = getattr(tool_result, "tool_call_id", None)
                     content = getattr(tool_result, "content", "")
                     success = True
-                    if getattr(tool_result, "tool_call", None) is not None:
-                        tool_name = str(
-                            getattr(tool_result.tool_call.function, "name", "")
-                        )
+                    if tool_call_id is not None:
+                        tool_name = tool_name_by_id.get(str(tool_call_id), "")
                     tool_calls_result.append(
                         {
                             "tool_call_id": str(tool_call_id)
