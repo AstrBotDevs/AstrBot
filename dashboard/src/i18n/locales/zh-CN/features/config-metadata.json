@@ -286,6 +286,15 @@
           "description": "转发消息中图片获取上限",
           "hint": "转发消息解析到的图片最多注入数量，超出部分会截断。"
         },
+        "quoted_image_caption_mode": {
+          "description": "引用图片转述策略",
+          "hint": "自动模式下，仅当当前对话模型不支持图片时才补充引用图片的文字转述。",
+          "labels": [
+            "自动",
+            "总是转述",
+            "从不转述"
+          ]
+        },
         "quoted_message_parser": {
           "max_component_chain_depth": {
             "description": "转发消息富文本解析深度",
