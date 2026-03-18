@@ -384,6 +384,31 @@ async def test_run_pip_in_process_injects_windows_runtime_build_env_without_exis
 
 
 @pytest.mark.asyncio
+async def test_run_pip_in_process_does_not_inject_when_runtime_dirs_missing(
+    monkeypatch,
+):
+    observed_env = _configure_run_pip_in_process_capture(
+        monkeypatch,
+        platform="win32",
+        packaged_runtime=True,
+        include_value=EXISTING_WINDOWS_INCLUDE_DIR,
+        lib_value=EXISTING_WINDOWS_LIB_DIR,
+        existing_runtime_dirs=set(),
+    )
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result == 0
+    assert observed_env == {
+        "INCLUDE": EXISTING_WINDOWS_INCLUDE_DIR,
+        "LIB": EXISTING_WINDOWS_LIB_DIR,
+    }
+    assert pip_installer_module.os.environ["INCLUDE"] == EXISTING_WINDOWS_INCLUDE_DIR
+    assert pip_installer_module.os.environ["LIB"] == EXISTING_WINDOWS_LIB_DIR
+
+
+@pytest.mark.asyncio
 async def test_run_pip_in_process_does_not_modify_env_on_non_windows(monkeypatch):
     existing_include = "/toolchain/include"
     existing_lib = "/toolchain/lib"
