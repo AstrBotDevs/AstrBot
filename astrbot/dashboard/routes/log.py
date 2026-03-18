@@ -77,6 +77,11 @@ class LogRoute(Route):
             methods=["GET"],
         )
         self.app.add_url_rule(
+            "/api/trace/sources",
+            view_func=self.get_trace_sources,
+            methods=["GET"],
+        )
+        self.app.add_url_rule(
             "/api/trace/clear",
             view_func=self.clear_traces,
             methods=["DELETE"],
@@ -205,6 +210,7 @@ class LogRoute(Route):
             page_size = request.args.get("page_size", 20, type=int)
             umo = request.args.get("umo") or None
             search = request.args.get("search") or None
+            sender = request.args.get("sender") or None
 
             page = max(1, page)
             page_size = max(1, min(page_size, 100))
@@ -217,6 +223,7 @@ class LogRoute(Route):
                 page_size=page_size,
                 umo=umo,
                 search=search,
+                sender=sender,
             )
 
             def _entry_to_dict(e):
@@ -272,6 +279,17 @@ class LogRoute(Route):
         except Exception as e:
             logger.error(f"查询 Trace 列表失败: {e}")
             return Response().error(f"查询 Trace 列表失败: {e}").__dict__
+
+    async def get_trace_sources(self):
+        """Return distinct sender_name values for the source filter dropdown."""
+        try:
+            if self.db_helper is None:
+                return Response().error("数据库未初始化").__dict__
+            sources = await self.db_helper.get_trace_sources()
+            return Response().ok(data={"sources": sources}).__dict__
+        except Exception as e:
+            logger.error(f"查询 Trace 来源失败: {e}")
+            return Response().error(f"查询 Trace 来源失败: {e}").__dict__
 
     async def get_trace_detail(self):
         """获取单个 Trace 完整 span 树"""

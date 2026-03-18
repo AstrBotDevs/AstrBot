@@ -312,6 +312,8 @@ async def span_context(
     name: str,
     span_type: str = "span",
     parent: "TraceSpan | None" = None,
+    sender_name: str | None = None,
+    message_outline: str | None = None,
     **meta: Any,
 ) -> AsyncGenerator["TraceSpan | _NullSpan", None]:
     """Create a child span, set it as the current context, and auto-finish on exit.
@@ -319,12 +321,29 @@ async def span_context(
     When tracing is disabled a no-op ``_NullSpan`` is yielded so the caller
     never needs to guard against ``None``.
 
+    Args:
+        sender_name: Source attribution shown in the Trace list when this
+            span becomes a root span (no pipeline parent).  Typically the
+            plugin name, e.g. ``"astrbot_plugin_stealer"``.
+        message_outline: Short description shown as the trace title when
+            this span becomes a root span.  Ignored for child spans.
+
     Usage::
 
         async with span_context("fetch_data", span_type="io_call") as s:
             s.set_input(url=url)
             result = await httpx.get(url)
             s.set_output(status=result.status_code)
+
+        # Plugin-initiated root trace with source attribution:
+        async with span_context(
+            "classify",
+            span_type="plugin_call",
+            sender_name="my_plugin",
+            message_outline="[MyPlugin] Classify image",
+            plugin="my_plugin",
+        ) as s:
+            ...
     """
     if not astrbot_config.get("trace_enable", False):
         yield _NullSpan()
@@ -348,6 +367,11 @@ async def span_context(
         span = TraceSpan(name=name, span_type=span_type)
         if meta:
             span.meta.update(meta)
+        # Root span: fill in display fields for the Trace UI list/header.
+        if sender_name:
+            span.sender_name = sender_name
+        if message_outline:
+            span.message_outline = message_outline
 
     token = _current_span.set(span)
     try:

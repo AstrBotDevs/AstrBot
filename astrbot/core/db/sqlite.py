@@ -1907,6 +1907,7 @@ class SQLiteDatabase(BaseDatabase):
         page_size: int = 20,
         umo: str | None = None,
         search: str | None = None,
+        sender: str | None = None,
     ) -> tuple[list[TraceEntry], int]:
         """Return a paginated list of trace records (spans field excluded)."""
         async with self.get_db() as session:
@@ -1931,6 +1932,9 @@ class SQLiteDatabase(BaseDatabase):
             if umo:
                 base_query = base_query.where(col(TraceEntry.umo) == umo)
                 count_query = count_query.where(col(TraceEntry.umo) == umo)
+            if sender:
+                base_query = base_query.where(col(TraceEntry.sender_name) == sender)
+                count_query = count_query.where(col(TraceEntry.sender_name) == sender)
             if search:
                 cond = or_(
                     col(TraceEntry.sender_name).contains(search),
@@ -1973,6 +1977,18 @@ class SQLiteDatabase(BaseDatabase):
                 for row in rows
             ]
             return entries, total
+
+    async def get_trace_sources(self) -> list[str]:
+        """Return distinct sender_name values from all trace records."""
+        async with self.get_db() as session:
+            result = await session.execute(
+                select(TraceEntry.sender_name)
+                .where(col(TraceEntry.sender_name).isnot(None))
+                .where(col(TraceEntry.sender_name) != "")
+                .distinct()
+                .order_by(TraceEntry.sender_name)
+            )
+            return [row[0] for row in result.fetchall()]
 
     async def get_trace_detail(self, trace_id: str) -> TraceEntry | None:
         """Return the full trace record including the span tree."""

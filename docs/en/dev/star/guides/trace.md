@@ -170,7 +170,39 @@ async with span_context("process_file", span_type="io_call") as outer:
 | `name` | `str` | Span name (required) |
 | `span_type` | `str` | Span type, defaults to `"span"` |
 | `parent` | `TraceSpan \| None` | Explicitly specify a parent Span. Defaults to the current context span. |
+| `sender_name` | `str \| None` | Source attribution shown in the Trace list when this Span becomes a Root Span (e.g. plugin name). |
+| `message_outline` | `str \| None` | Short description shown as the Trace title when this Span becomes a Root Span. |
 | `**meta` | `Any` | Key-value pairs written directly to `span.meta` |
+
+> [!TIP]
+> `sender_name` and `message_outline` only take effect when the Span becomes a Root Span (no pipeline parent context). When the Span is attached to an existing pipeline context, these parameters are ignored.
+
+---
+
+### Standalone Plugin Traces (Outside the Pipeline)
+
+When a plugin triggers operations from its own web page, scheduled tasks, or other non-message-processing paths, there is no pipeline context and `span_context` automatically creates an independent Root Span. Use `sender_name` and `message_outline` to identify the source in the Trace list:
+
+```python
+from astrbot.api.trace import span_context
+
+
+async def analyze_image_from_web(self, file_path: str):
+    """Image analysis triggered from plugin WebUI (not a message handler)"""
+    async with span_context(
+        "image_analysis",
+        span_type="plugin_call",
+        sender_name="my_plugin",
+        message_outline=f"[MyPlugin] Analyze: {file_path}",
+        plugin="my_plugin",
+        plugin_type="third_party",
+    ) as s:
+        s.set_input(file_path=file_path)
+        result = await self._do_analysis(file_path)
+        s.set_output(category=result["category"])
+```
+
+In the Trace page, you can use the **Source** dropdown filter to show only traces from a specific source (AstrBot core or individual plugins).
 
 ---
 
@@ -266,9 +298,10 @@ class WeatherPlugin(Star):
 
 1. Open the dashboard and navigate to the **Trace** page.
 2. The left panel lists recent Traces with search support by message content or session origin.
-3. Click any Trace to display the full **Span tree** on the right.
-4. Click any node in the tree to view the **Input / Output / Metadata** details for that Span.
-5. A copy button at the top-right of each detail panel copies the full JSON to the clipboard.
+3. Use the **Source** dropdown filter to show only traces from a specific source (AstrBot core or individual plugins).
+4. Click any Trace to display the full **Span tree** on the right.
+5. Click any node in the tree to view the **Input / Output / Metadata** details for that Span.
+6. A copy button at the top-right of each detail panel copies the full JSON to the clipboard.
 
 ---
 

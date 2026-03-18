@@ -800,8 +800,14 @@ class BaseDatabase(abc.ABC):
         page_size: int = 20,
         umo: str | None = None,
         search: str | None = None,
+        sender: str | None = None,
     ) -> tuple[list[TraceEntry], int]:
         """Return a paginated list of trace records, optionally filtered."""
+        ...
+
+    @abc.abstractmethod
+    async def get_trace_sources(self) -> list[str]:
+        """Return distinct sender_name values from all trace records."""
         ...
 
     @abc.abstractmethod

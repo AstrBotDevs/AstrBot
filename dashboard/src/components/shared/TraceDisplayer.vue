@@ -1,7 +1,7 @@
 <script setup>
 defineOptions({ name: 'TraceDisplayer' });
 
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import axios from 'axios';
 import { EventSourcePolyfill } from 'event-source-polyfill';
 
@@ -20,10 +20,16 @@ const pagination = ref({ page: 1, page_size: 20, total: 0 });
 const loading = ref(false);
 const searchText = ref('');
 const umoFilter = ref('');
+const senderFilter = ref(null);
+const senderSources = ref([]);
 const highlightMap = ref({});
 const traceCount = ref(0);
 const traceDiskUsage = ref('0 B');
 const dbDiskUsage = ref('0 B');
+
+const senderSourceItems = computed(() =>
+  senderSources.value.map(s => ({ title: s, value: s }))
+);
 
 let highlightTimers = {};
 let eventSource = null;
@@ -38,6 +44,7 @@ async function fetchTraces(page = 1) {
     const params = { page, page_size: pagination.value.page_size };
     if (searchText.value) params.search = searchText.value;
     if (umoFilter.value) params.umo = umoFilter.value;
+    if (senderFilter.value) params.sender = senderFilter.value;
     const res = await axios.get('/api/trace/list', { params });
     if (res.data?.status === 'ok') {
       traces.value = res.data.data.traces;
@@ -53,7 +60,23 @@ async function fetchTraces(page = 1) {
   }
 }
 
+async function fetchSources() {
+  try {
+    const res = await axios.get('/api/trace/sources');
+    if (res.data?.status === 'ok') {
+      senderSources.value = res.data.data.sources || [];
+    }
+  } catch (err) {
+    console.error('Failed to fetch trace sources:', err);
+  }
+}
+
 function onSearch() {
+  pagination.value.page = 1;
+  fetchTraces(1);
+}
+
+function onSenderChange() {
   pagination.value.page = 1;
   fetchTraces(1);
 }
@@ -99,6 +122,8 @@ function connectSSE() {
 function prependTrace(payload) {
   // Avoid duplicates
   if (traces.value.some(t => t.trace_id === payload.trace_id)) return;
+  // Respect active sender filter
+  if (senderFilter.value && (payload.sender_name || '') !== senderFilter.value) return;
   traces.value.unshift({
     trace_id: payload.trace_id,
     umo: payload.umo,
@@ -118,6 +143,11 @@ function prependTrace(payload) {
     traces.value.pop();
   }
   pulseTrace(payload.trace_id);
+  // Dynamically add new source to dropdown
+  const name = payload.sender_name || '';
+  if (name && !senderSources.value.includes(name)) {
+    senderSources.value = [...senderSources.value, name].sort();
+  }
 }
 
 function pulseTrace(traceId) {
@@ -152,7 +182,7 @@ function statusColor(status) {
 
 // ── lifecycle ────────────────────────────────────────────────────────────────
 onMounted(async () => {
-  await fetchTraces();
+  await Promise.all([fetchTraces(), fetchSources()]);
   connectSSE();
 });
 
@@ -192,6 +222,18 @@ onBeforeUnmount(() => {
         style="max-width: 200px;"
         @keyup.enter="onSearch"
         @click:clear="onSearch"
+      />
+      <v-select
+        v-model="senderFilter"
+        :items="senderSourceItems"
+        density="compact"
+        variant="outlined"
+        rounded="lg"
+        hide-details
+        placeholder="Source"
+        clearable
+        style="max-width: 200px;"
+        @update:model-value="onSenderChange"
       />
       <v-btn
         density="compact"

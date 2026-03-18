@@ -170,7 +170,39 @@ async with span_context("process_file", span_type="io_call") as outer:
 | `name` | `str` | Span 名称（必填） |
 | `span_type` | `str` | Span 类型，默认 `"span"` |
 | `parent` | `TraceSpan \| None` | 显式指定父 Span，默认自动从当前上下文继承 |
+| `sender_name` | `str \| None` | 来源标识，当 Span 成为 Root Span 时在 Trace 列表中显示（如插件名） |
+| `message_outline` | `str \| None` | 简短描述，当 Span 成为 Root Span 时作为 Trace 标题显示 |
 | `**meta` | `Any` | 直接写入 `span.meta` 的键值对 |
+
+> [!TIP]
+> `sender_name` 和 `message_outline` 仅在 Span 成为 Root Span（没有 pipeline 父级上下文）时生效。当 Span 挂载到已有的 pipeline 上下文中时，这两个参数会被忽略。
+
+---
+
+### 插件独立 Trace（脱离 Pipeline）
+
+当插件从自身的 Web 页面、定时任务或其他非消息处理路径触发操作时，不存在 pipeline 上下文，`span_context` 会自动创建一个独立的 Root Span。通过 `sender_name` 和 `message_outline` 可以在 Trace 列表中标识来源：
+
+```python
+from astrbot.api.trace import span_context
+
+
+async def analyze_image_from_web(self, file_path: str):
+    """从插件 WebUI 触发的图片分析（非消息处理流程）"""
+    async with span_context(
+        "image_analysis",
+        span_type="plugin_call",
+        sender_name="my_plugin",
+        message_outline=f"[MyPlugin] Analyze: {file_path}",
+        plugin="my_plugin",
+        plugin_type="third_party",
+    ) as s:
+        s.set_input(file_path=file_path)
+        result = await self._do_analysis(file_path)
+        s.set_output(category=result["category"])
+```
+
+在 Trace 页面中，可以通过 **Source** 下拉筛选框按来源（AstrBot 核心 / 各插件名）过滤 Trace 记录。
 
 ---
 
@@ -266,9 +298,10 @@ class WeatherPlugin(Star):
 
 1. 打开管理面板，进入 **Trace** 页面。
 2. 左侧面板显示最近的 Trace 列表，支持按消息内容或会话来源搜索。
-3. 点击任意一条 Trace，右侧展示完整的 **Span 树**。
-4. 点击树中的任意 Span 节点，查看该节点的 **Input / Output / Metadata** 详情。
-5. 每个详情面板右上角有复制按钮，可复制完整 JSON。
+3. 使用 **Source** 下拉筛选框可按来源过滤（AstrBot 核心或各个插件产生的 Trace）。
+4. 点击任意一条 Trace，右侧展示完整的 **Span 树**。
+5. 点击树中的任意 Span 节点，查看该节点的 **Input / Output / Metadata** 详情。
+6. 每个详情面板右上角有复制按钮，可复制完整 JSON。
 
 ---
 
