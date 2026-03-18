@@ -210,11 +210,110 @@ async def handle_request(self, event, ctx: Context):
     await ctx.platform.send(event.user_id, "已自动通过好友请求")
 ```
 
+#### LLM Pipeline Hooks
+
+`@on_event` 也用于挂接 AstrBot 原生消息处理链路中的系统事件。
+
+常见事件及可注入对象：
+
+| 事件名 | 常见可注入参数 | 是否可修改主链路 |
+|------|------|------|
+| `waiting_llm_request` | `MessageEvent`, `Context` | 间接可修改，例如切换当前对话 persona |
+| `llm_request` | `MessageEvent`, `Context`, `ProviderRequest` | 是，可直接修改 `ProviderRequest` |
+| `llm_response` | `MessageEvent`, `Context`, `LLMResponse` | 否，适合观察和提取回复内容 |
+| `decorating_result` | `MessageEvent`, `Context`, `MessageEventResult` | 是，可直接修改结果消息链 |
+| `after_message_sent` | `MessageEvent`, `Context` | 否，适合落库、记忆、统计 |
+
+最小示例：
+
+```python
+from astrbot_sdk import Context, MessageEvent
+from astrbot_sdk.decorators import on_event
+from astrbot_sdk.llm.entities import ProviderRequest
+
+@on_event("llm_request")
+async def add_memory(self, event: MessageEvent, ctx: Context, request: ProviderRequest):
+    del event, ctx
+    request.system_prompt = (request.system_prompt or "") + "\n\nmemory: user likes tea"
+```
+
+完整示例：
+
+```python
+from astrbot_sdk import Context, MessageEvent, Star
+from astrbot_sdk.clients.llm import LLMResponse
+from astrbot_sdk.clients.managers import ConversationUpdateParams
+from astrbot_sdk.decorators import on_event
+from astrbot_sdk.llm.entities import ProviderRequest
+from astrbot_sdk.message_result import MessageEventResult
+from astrbot_sdk.message_components import Plain
+
+class PersonaSample(Star):
+    @on_event("waiting_llm_request")
+    async def ensure_persona(self, event: MessageEvent, ctx: Context) -> None:
+        conversation = await ctx.conversations.get_current_conversation(
+            event.session_id,
+            create_if_not_exists=True,
+        )
+        if conversation is None or conversation.persona_id == "girlfriend":
+            return
+        await ctx.conversations.update_conversation(
+            event.session_id,
+            conversation.conversation_id,
+            ConversationUpdateParams(persona_id="girlfriend"),
+        )
+
+    @on_event("llm_request")
+    async def inject_context(
+        self,
+        event: MessageEvent,
+        ctx: Context,
+        request: ProviderRequest,
+    ) -> None:
+        memories = await ctx.memory.search(event.text, limit=3)
+        facts = []
+        for item in memories:
+            value = item.get("value")
+            if isinstance(value, dict) and value.get("content"):
+                facts.append(f"- {value['content']}")
+        if facts:
+            request.system_prompt = (request.system_prompt or "") + "\n\n" + "\n".join(facts)
+
+    @on_event("llm_response")
+    async def capture_reply(
+        self,
+        event: MessageEvent,
+        ctx: Context,
+        response: LLMResponse,
+    ) -> None:
+        del ctx
+        if response.text:
+            event.set_extra("last_reply", response.text)
+
+    @on_event("decorating_result")
+    async def decorate(
+        self,
+        event: MessageEvent,
+        ctx: Context,
+        result: MessageEventResult,
+    ) -> None:
+        del event, ctx
+        result.chain.append(Plain("\n[persona active]", convert=False))
+
+    @on_event("after_message_sent")
+    async def persist(self, event: MessageEvent, ctx: Context) -> None:
+        reply = str(event.get_extra("last_reply", "") or "").strip()
+        if reply:
+            await ctx.db.set("sample:last_reply", reply)
+```
+
 #### 注意事项
 
-1. 用于处理非消息类型的事件（如群成员变动、好友请求等）
+1. 可用于处理平台事件，也可用于处理 AstrBot 原生消息链路中的系统事件（如 `llm_request`）
 2. 不能与 `@rate_limit` 或 `@cooldown` 一起使用
 3. 不同平台的事件类型可能不同，需要查阅平台文档
+4. `llm_request` 和 `decorating_result` 注入的是可变对象，修改会回写到 AstrBot 主链路
+5. `llm_response` 主要用于观测和提取结果，不应用来替代主回复流程
 
 ---
 

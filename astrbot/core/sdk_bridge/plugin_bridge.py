@@ -35,6 +35,8 @@ from astrbot.core import logger
 from astrbot.core.message.components import ComponentTypes, Image, Plain
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.provider.entities import LLMResponse as CoreLLMResponse
+from astrbot.core.provider.entities import ProviderRequest as CoreProviderRequest
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .capability_bridge import CoreCapabilityBridge
@@ -1114,6 +1116,133 @@ class SdkPluginBridge:
             ],
         }
 
+    @staticmethod
+    def _core_provider_request_to_sdk_payload(
+        request: CoreProviderRequest,
+    ) -> dict[str, Any]:
+        tool_calls_result: list[dict[str, Any]] = []
+        raw_results = request.tool_calls_result
+        if raw_results is not None:
+            if not isinstance(raw_results, list):
+                raw_results = [raw_results]
+            for item in raw_results:
+                if not getattr(item, "tool_calls_result", None):
+                    continue
+                for tool_result in item.tool_calls_result:
+                    tool_name = ""
+                    tool_call_id = getattr(tool_result, "tool_call_id", None)
+                    content = getattr(tool_result, "content", "")
+                    success = True
+                    if getattr(tool_result, "tool_call", None) is not None:
+                        tool_name = str(
+                            getattr(tool_result.tool_call.function, "name", "")
+                        )
+                    tool_calls_result.append(
+                        {
+                            "tool_call_id": str(tool_call_id)
+                            if tool_call_id is not None
+                            else None,
+                            "tool_name": tool_name,
+                            "content": str(content or ""),
+                            "success": bool(success),
+                        }
+                    )
+        return {
+            "prompt": request.prompt,
+            "system_prompt": request.system_prompt or None,
+            "session_id": request.session_id or None,
+            "contexts": json.loads(json.dumps(request.contexts or [])),
+            "image_urls": list(request.image_urls or []),
+            "tool_calls_result": tool_calls_result,
+            "model": request.model,
+        }
+
+    @staticmethod
+    def _apply_sdk_provider_request_payload(
+        request: CoreProviderRequest,
+        payload: dict[str, Any],
+    ) -> None:
+        prompt = payload.get("prompt")
+        request.prompt = None if prompt is None else str(prompt)
+        system_prompt = payload.get("system_prompt")
+        request.system_prompt = "" if system_prompt is None else str(system_prompt)
+        session_id = payload.get("session_id")
+        request.session_id = None if session_id is None else str(session_id)
+
+        contexts = payload.get("contexts")
+        if isinstance(contexts, list):
+            request.contexts = json.loads(json.dumps(contexts))
+
+        image_urls = payload.get("image_urls")
+        if isinstance(image_urls, list):
+            request.image_urls = [str(item) for item in image_urls]
+
+        model = payload.get("model")
+        request.model = None if model is None else str(model)
+
+    @staticmethod
+    def _core_llm_response_to_sdk_payload(
+        response: CoreLLMResponse,
+    ) -> dict[str, Any]:
+        usage_payload = None
+        if response.usage is not None:
+            usage_payload = {
+                "input_tokens": response.usage.input,
+                "output_tokens": response.usage.output,
+                "total_tokens": response.usage.total,
+                "input_cached_tokens": response.usage.input_cached,
+            }
+        tool_calls: list[dict[str, Any]] = []
+        for idx, tool_name in enumerate(response.tools_call_name):
+            tool_calls.append(
+                {
+                    "id": (
+                        response.tools_call_ids[idx]
+                        if idx < len(response.tools_call_ids)
+                        else None
+                    ),
+                    "name": tool_name,
+                    "arguments": (
+                        response.tools_call_args[idx]
+                        if idx < len(response.tools_call_args)
+                        else {}
+                    ),
+                    "extra_content": (
+                        response.tools_call_extra_content.get(
+                            response.tools_call_ids[idx]
+                        )
+                        if idx < len(response.tools_call_ids)
+                        else None
+                    ),
+                }
+            )
+        return {
+            "text": response.completion_text or "",
+            "usage": usage_payload,
+            "finish_reason": "tool_calls" if tool_calls else "stop",
+            "tool_calls": tool_calls,
+            "role": response.role,
+            "reasoning_content": response.reasoning_content or None,
+            "reasoning_signature": response.reasoning_signature,
+        }
+
+    @classmethod
+    def _apply_sdk_result_payload(
+        cls,
+        result: MessageEventResult,
+        payload: dict[str, Any],
+    ) -> MessageEventResult:
+        chain_payload = payload.get("chain")
+        updated = (
+            cls._build_core_result_from_chain_payload(chain_payload)
+            if isinstance(chain_payload, list)
+            else MessageEventResult()
+        )
+        result.chain = updated.chain
+        result.use_t2i_ = updated.use_t2i_
+        result.type = updated.type
+        return result
+
     def get_effective_result(
         self, event: AstrMessageEvent
     ) -> MessageEventResult | None:
@@ -1272,6 +1401,10 @@ class SdkPluginBridge:
         event_type: str,
         event: AstrMessageEvent,
         payload: dict[str, Any] | None = None,
+        *,
+        provider_request: CoreProviderRequest | None = None,
+        llm_response: CoreLLMResponse | None = None,
+        event_result: MessageEventResult | None = None,
     ) -> None:
         dispatch_token = self._get_dispatch_token(event)
         if not dispatch_token:
@@ -1321,13 +1454,44 @@ class SdkPluginBridge:
             }
             for key, value in (payload or {}).items():
                 event_payload[key] = value
+            if provider_request is not None:
+                request_payload = self._core_provider_request_to_sdk_payload(
+                    provider_request
+                )
+                event_payload["provider_request"] = request_payload
+                if isinstance(event_payload["raw"], dict):
+                    event_payload["raw"]["provider_request"] = request_payload
+            if llm_response is not None:
+                response_payload = self._core_llm_response_to_sdk_payload(llm_response)
+                event_payload["llm_response"] = response_payload
+                if isinstance(event_payload["raw"], dict):
+                    event_payload["raw"]["llm_response"] = response_payload
+            if event_result is not None:
+                result_payload = self._legacy_result_to_sdk_payload(event_result)
+                if result_payload is not None:
+                    event_payload["event_result"] = result_payload
+                    if isinstance(event_payload["raw"], dict):
+                        event_payload["raw"]["event_result"] = result_payload
             try:
-                await record.session.invoke_handler(
+                output = await record.session.invoke_handler(
                     descriptor.id,
                     event_payload,
                     request_id=request_id,
                     args={},
                 )
+                if isinstance(output, dict):
+                    request_payload = output.get("provider_request")
+                    if provider_request is not None and isinstance(
+                        request_payload, dict
+                    ):
+                        self._apply_sdk_provider_request_payload(
+                            provider_request,
+                            request_payload,
+                        )
+                    result_payload = output.get("event_result")
+                    if event_result is not None and isinstance(result_payload, dict):
+                        if not self.set_result_for_request(request_id, result_payload):
+                            self._apply_sdk_result_payload(event_result, result_payload)
             except Exception as exc:
                 logger.warning(
                     "SDK event handler failed: plugin=%s handler=%s error=%s",

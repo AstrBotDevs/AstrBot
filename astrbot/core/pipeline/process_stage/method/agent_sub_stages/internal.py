@@ -248,6 +248,7 @@ class InternalAgentSubStage(Stage):
                                     "prompt": req.prompt,
                                     "provider_id": provider.meta().id,
                                 },
+                                provider_request=req,
                             )
                         except Exception as exc:
                             logger.warning("SDK llm_request dispatch failed: %s", exc)

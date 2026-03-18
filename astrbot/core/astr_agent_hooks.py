@@ -60,6 +60,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
                             else []
                         ),
                     },
+                    llm_response=llm_response,
                 )
             except Exception as exc:
                 from astrbot.core import logger

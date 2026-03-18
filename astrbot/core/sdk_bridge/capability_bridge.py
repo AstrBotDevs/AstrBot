@@ -2765,6 +2765,13 @@ class CoreCapabilityBridge(CapabilityRouter):
             call_handler=self._conversation_get,
         )
         self.register(
+            self._builtin_descriptor(
+                "conversation.get_current",
+                "Get current conversation",
+            ),
+            call_handler=self._conversation_get_current,
+        )
+        self.register(
             self._builtin_descriptor("conversation.list", "List conversations"),
             call_handler=self._conversation_list,
         )
@@ -3329,6 +3336,31 @@ class CoreCapabilityBridge(CapabilityRouter):
         conversation = await self._star_context.conversation_manager.get_conversation(
             unified_msg_origin=str(payload.get("session", "")),
             conversation_id=str(payload.get("conversation_id", "")),
+            create_if_not_exists=bool(payload.get("create_if_not_exists", False)),
+        )
+        return {"conversation": self._serialize_conversation(conversation)}
+
+    async def _conversation_get_current(
+        self,
+        _request_id: str,
+        payload: dict[str, Any],
+        _token,
+    ) -> dict[str, Any]:
+        session = str(payload.get("session", ""))
+        conversation_id = (
+            await self._star_context.conversation_manager.get_curr_conversation_id(
+                session
+            )
+        )
+        if not conversation_id and bool(payload.get("create_if_not_exists", False)):
+            conversation_id = (
+                await self._star_context.conversation_manager.new_conversation(session)
+            )
+        if not conversation_id:
+            return {"conversation": None}
+        conversation = await self._star_context.conversation_manager.get_conversation(
+            unified_msg_origin=session,
+            conversation_id=conversation_id,
             create_if_not_exists=bool(payload.get("create_if_not_exists", False)),
         )
         return {"conversation": self._serialize_conversation(conversation)}

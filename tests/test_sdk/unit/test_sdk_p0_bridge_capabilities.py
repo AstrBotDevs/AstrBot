@@ -58,6 +58,7 @@ from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.events import MessageEvent
 from astrbot_sdk.protocol.descriptors import (
     CommandTrigger,
+    EventTrigger,
     HandlerDescriptor,
     ParamSpec,
 )
@@ -71,6 +72,7 @@ from astrbot.core.message.message_event_result import (
 )
 from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
+from astrbot.core.provider.entities import ProviderRequest as CoreProviderRequest
 from astrbot.core.sdk_bridge.event_converter import EventConverter
 from astrbot.core.sdk_bridge.plugin_bridge import SdkPluginBridge
 
@@ -230,6 +232,13 @@ async def test_mock_context_p0_6_platform_and_session_managers() -> None:
     await ctx.session_services.set_tts_status_for_session(session, True)
     assert await ctx.session_services.is_tts_enabled_for_session(session) is True
 
+    current = await ctx.conversations.get_current_conversation(
+        session,
+        create_if_not_exists=True,
+    )
+    assert current is not None
+    assert current.session == session
+
 
 @pytest.mark.unit
 def test_message_session_round_trip() -> None:
@@ -348,6 +357,87 @@ class _OverlayFakeEvent:
         return self._result
 
 
+class _TypedHookFakeEvent:
+    def __init__(self) -> None:
+        self.call_llm = False
+        self.is_wake = False
+        self.is_at_or_wake_command = False
+        self.unified_msg_origin = "demo-platform:private:user-1"
+        self._sdk_dispatch_token = "dispatch-typed"
+        self._result = MessageEventResult(chain=[Plain("legacy", convert=False)])
+        self._extras: dict[str, object] = {}
+
+    def get_message_type(self):
+        return types.SimpleNamespace(value="private")
+
+    def get_platform_id(self) -> str:
+        return "demo-platform"
+
+    def get_message_str(self) -> str:
+        return "hello"
+
+    def get_sender_id(self) -> str:
+        return "user-1"
+
+    def get_group_id(self) -> str | None:
+        return None
+
+    def get_platform_name(self) -> str:
+        return "demo-platform"
+
+    def get_self_id(self) -> str:
+        return "bot-1"
+
+    def get_sender_name(self) -> str:
+        return "Tester"
+
+    def is_admin(self) -> bool:
+        return False
+
+    def get_message_outline(self) -> str:
+        return "hello"
+
+    def get_extra(self, key: str | None = None, default=None):
+        if key is None:
+            return self._extras
+        return self._extras.get(key, default)
+
+    def get_messages(self):
+        return [Plain("hello", convert=False)]
+
+    def get_result(self) -> MessageEventResult | None:
+        return self._result
+
+
+class _TypedHookSession:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    async def invoke_handler(
+        self,
+        handler_id: str,
+        event_payload: dict[str, object],
+        *,
+        request_id: str,
+        args: dict[str, object],
+    ) -> dict[str, object]:
+        del request_id, args
+        self.calls.append((handler_id, event_payload))
+        return {
+            "provider_request": {
+                **dict(event_payload["provider_request"]),
+                "system_prompt": "decorated memory prompt",
+                "contexts": [
+                    {"role": "system", "content": "memory: user likes tea"},
+                ],
+            },
+            "event_result": {
+                "type": "chain",
+                "chain": [{"type": "text", "data": {"text": "decorated result"}}],
+            },
+        }
+
+
 class _DecoratingResultFakeBridge:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, str]]] = []
@@ -362,6 +452,7 @@ class _DecoratingResultFakeBridge:
         event_type: str,
         event: _DecoratingResultFakeEvent,
         payload: dict[str, str],
+        **_: object,
     ) -> None:
         self.calls.append((event_type, payload))
 
@@ -443,6 +534,62 @@ def test_sdk_request_overlay_controls_llm_result_and_whitelist() -> None:
 
     assert bridge.clear_result_for_request(request_id) is True
     assert bridge.get_effective_result(event) is None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_dispatch_message_event_round_trips_typed_payloads() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    session = _TypedHookSession()
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-demo",
+            load_order=0,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.on_llm_request",
+                        trigger=EventTrigger(event_type="llm_request"),
+                    ),
+                    declaration_order=0,
+                )
+            ],
+            session=session,
+        )
+    }
+
+    event = _TypedHookFakeEvent()
+    bridge._request_overlays["dispatch-typed"] = bridge._ensure_request_overlay(
+        "dispatch-typed",
+        should_call_llm=True,
+    )
+    request = CoreProviderRequest(
+        prompt="hello",
+        session_id=event.unified_msg_origin,
+        contexts=[],
+        system_prompt="original",
+    )
+    result = event.get_result()
+    assert result is not None
+
+    await bridge.dispatch_message_event(
+        "llm_request",
+        event,
+        {"prompt": request.prompt, "provider_id": "demo-provider"},
+        provider_request=request,
+        event_result=result,
+    )
+
+    assert len(session.calls) == 1
+    sent_payload = session.calls[0][1]
+    assert sent_payload["provider_request"]["system_prompt"] == "original"
+    assert request.system_prompt == "decorated memory prompt"
+    assert request.contexts == [{"role": "system", "content": "memory: user likes tea"}]
+
+    effective_result = bridge.get_effective_result(event)
+    assert effective_result is not None
+    assert effective_result.chain.get_plain_text() == "decorated result"
 
 
 @pytest.mark.unit

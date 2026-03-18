@@ -7,10 +7,15 @@ import sys
 from types import SimpleNamespace
 
 import pytest
+from astrbot_sdk.clients.llm import LLMResponse
 from astrbot_sdk.context import CancelToken
 from astrbot_sdk.decorators import ConversationMeta
+from astrbot_sdk.llm.entities import ProviderRequest
+from astrbot_sdk.message_components import Plain
+from astrbot_sdk.message_result import MessageEventResult
 from astrbot_sdk.protocol.descriptors import (
     CommandTrigger,
+    EventTrigger,
     HandlerDescriptor,
     MessageTrigger,
     Permissions,
@@ -87,6 +92,25 @@ class _ConversationPlugin:
     async def chat(self, event, conversation, ctx):
         self.started = True
         conversation.end()
+
+
+class _LLMRequestHookPlugin:
+    async def decorate(self, request: ProviderRequest) -> None:
+        request.system_prompt = "decorated memory prompt"
+        request.contexts.append({"role": "system", "content": "memory: user likes tea"})
+
+
+class _LLMResponseHookPlugin:
+    async def inspect(self, response: LLMResponse) -> dict[str, object]:
+        return {
+            "text": response.text,
+            "llm_response": response.model_dump(exclude_none=True),
+        }
+
+
+class _DecoratingResultHookPlugin:
+    async def decorate(self, result: MessageEventResult) -> None:
+        result.chain.append(Plain(" decorated", convert=False))
 
 
 @pytest.mark.unit
@@ -250,3 +274,158 @@ async def test_conversation_command_consumes_trigger_message() -> None:
 
     assert result == {"sent_message": False, "stop": True, "call_llm": False}
     assert plugin.started is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_handler_dispatcher_injects_and_round_trips_provider_request() -> None:
+    plugin = _LLMRequestHookPlugin()
+    dispatcher = HandlerDispatcher(
+        plugin_id="demo",
+        peer=MockPeer(MockCapabilityRouter()),
+        handlers=[
+            LoadedHandler(
+                descriptor=HandlerDescriptor(
+                    id="demo:demo.decorate",
+                    trigger=EventTrigger(event_type="llm_request"),
+                ),
+                callable=plugin.decorate,
+                owner=plugin,
+                plugin_id="demo",
+            )
+        ],
+    )
+
+    result = await dispatcher.invoke(
+        SimpleNamespace(
+            id="req-4",
+            input={
+                "handler_id": "demo:demo.decorate",
+                "event": {
+                    "type": "llm_request",
+                    "event_type": "llm_request",
+                    "text": "hello",
+                    "session_id": "test-session",
+                    "user_id": "test-user",
+                    "platform": "test",
+                    "message_type": "private",
+                    "provider_request": {
+                        "prompt": "hello",
+                        "system_prompt": "original",
+                        "contexts": [],
+                        "image_urls": [],
+                        "tool_calls_result": [],
+                    },
+                },
+            },
+        ),
+        CancelToken(),
+    )
+
+    assert result["sent_message"] is False
+    assert result["stop"] is False
+    assert result["call_llm"] is False
+    assert result["provider_request"]["system_prompt"] == "decorated memory prompt"
+    assert result["provider_request"]["contexts"][-1] == {
+        "role": "system",
+        "content": "memory: user likes tea",
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_handler_dispatcher_injects_llm_response_payload() -> None:
+    plugin = _LLMResponseHookPlugin()
+    router = MockCapabilityRouter()
+    dispatcher = HandlerDispatcher(
+        plugin_id="demo",
+        peer=MockPeer(router),
+        handlers=[
+            LoadedHandler(
+                descriptor=HandlerDescriptor(
+                    id="demo:demo.inspect",
+                    trigger=EventTrigger(event_type="llm_response"),
+                ),
+                callable=plugin.inspect,
+                owner=plugin,
+                plugin_id="demo",
+            )
+        ],
+    )
+
+    result = await dispatcher.invoke(
+        SimpleNamespace(
+            id="req-5",
+            input={
+                "handler_id": "demo:demo.inspect",
+                "event": {
+                    "type": "llm_response",
+                    "event_type": "llm_response",
+                    "text": "hello",
+                    "session_id": "test-session",
+                    "user_id": "test-user",
+                    "platform": "test",
+                    "message_type": "private",
+                    "llm_response": {
+                        "text": "reply text",
+                        "usage": {"total_tokens": 3},
+                        "finish_reason": "stop",
+                        "tool_calls": [],
+                        "role": "assistant",
+                    },
+                },
+            },
+        ),
+        CancelToken(),
+    )
+
+    assert result["sent_message"] is True
+    assert router.platform_sink.records[0].text == "reply text"
+    assert result["llm_response"]["text"] == "reply text"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_handler_dispatcher_injects_and_round_trips_event_result() -> None:
+    plugin = _DecoratingResultHookPlugin()
+    dispatcher = HandlerDispatcher(
+        plugin_id="demo",
+        peer=MockPeer(MockCapabilityRouter()),
+        handlers=[
+            LoadedHandler(
+                descriptor=HandlerDescriptor(
+                    id="demo:demo.decorate_result",
+                    trigger=EventTrigger(event_type="decorating_result"),
+                ),
+                callable=plugin.decorate,
+                owner=plugin,
+                plugin_id="demo",
+            )
+        ],
+    )
+
+    result = await dispatcher.invoke(
+        SimpleNamespace(
+            id="req-6",
+            input={
+                "handler_id": "demo:demo.decorate_result",
+                "event": {
+                    "type": "decorating_result",
+                    "event_type": "decorating_result",
+                    "text": "hello",
+                    "session_id": "test-session",
+                    "user_id": "test-user",
+                    "platform": "test",
+                    "message_type": "private",
+                    "event_result": {
+                        "type": "chain",
+                        "chain": [{"type": "plain", "data": {"text": "base"}}],
+                    },
+                },
+            },
+        ),
+        CancelToken(),
+    )
+
+    assert result["event_result"]["chain"][0]["data"]["text"] == "base"
+    assert result["event_result"]["chain"][1]["data"]["text"] == " decorated"

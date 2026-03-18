@@ -662,7 +662,7 @@ await ctx.conversations.delete_conversation(
 await ctx.conversations.delete_conversation(event.session_id)
 ```
 
-##### `get_conversation() / get_conversations()`
+##### `get_conversation() / get_current_conversation() / get_conversations()`
 
 获取对话。
 
@@ -672,6 +672,12 @@ conv = await ctx.conversations.get_conversation(
     event.session_id,
     "conv_123",
     create_if_not_exists=True
+)
+
+# 获取当前选中的对话
+current = await ctx.conversations.get_current_conversation(
+    event.session_id,
+    create_if_not_exists=True,
 )
 
 # 获取对话列表

@@ -214,6 +214,7 @@ class ResultDecorateStage(Stage):
                             result.chain
                         )
                     },
+                    event_result=result,
                 )
             except Exception as exc:
                 logger.warning(f"SDK decorating_result dispatch failed: {exc}")
