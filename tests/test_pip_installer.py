@@ -84,6 +84,14 @@ def _configure_run_pip_in_process_capture(
     return observed_env
 
 
+@pytest.fixture
+def configure_run_pip_in_process_capture(monkeypatch):
+    def _configure(**kwargs):
+        return _configure_run_pip_in_process_capture(monkeypatch, **kwargs)
+
+    return _configure
+
+
 @pytest.mark.asyncio
 async def test_install_targets_site_packages_for_desktop_client(monkeypatch, tmp_path):
     monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
@@ -319,6 +327,42 @@ def test_normalize_windows_native_build_path_variants(path, expected):
     assert pip_installer_module._normalize_windows_native_build_path(path) == expected
 
 
+def test_build_packaged_windows_runtime_build_env_uses_base_env_snapshot(
+    monkeypatch,
+):
+    snapshot_include = ntpath.join(r"C:\snapshot-toolchain", "include")
+    snapshot_lib = ntpath.join(r"C:\snapshot-toolchain", "lib")
+    process_include = ntpath.join(r"C:\process-toolchain", "include")
+    process_lib = ntpath.join(r"C:\process-toolchain", "lib")
+
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.setenv("INCLUDE", process_include)
+    monkeypatch.setenv("LIB", process_lib)
+    monkeypatch.setattr(pip_installer_module.sys, "platform", "win32")
+    monkeypatch.setattr(
+        pip_installer_module.sys,
+        "executable",
+        WINDOWS_PACKAGED_RUNTIME_EXECUTABLE,
+    )
+    monkeypatch.setattr(
+        pip_installer_module.os.path,
+        "isdir",
+        lambda path: path in {WINDOWS_RUNTIME_INCLUDE_DIR, WINDOWS_RUNTIME_LIBS_DIR},
+    )
+
+    env_updates = pip_installer_module._build_packaged_windows_runtime_build_env(
+        base_env={
+            "INCLUDE": snapshot_include,
+            "LIB": snapshot_lib,
+        }
+    )
+
+    assert env_updates == {
+        "INCLUDE": f"{WINDOWS_RUNTIME_INCLUDE_DIR};{snapshot_include}",
+        "LIB": f"{WINDOWS_RUNTIME_LIBS_DIR};{snapshot_lib}",
+    }
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("include_exists", "libs_exists"),
@@ -329,7 +373,7 @@ def test_normalize_windows_native_build_path_variants(path, expected):
     ],
 )
 async def test_run_pip_in_process_injects_windows_runtime_build_env(
-    monkeypatch, include_exists, libs_exists
+    configure_run_pip_in_process_capture, include_exists, libs_exists
 ):
     existing_runtime_dirs = set()
     if include_exists:
@@ -337,8 +381,7 @@ async def test_run_pip_in_process_injects_windows_runtime_build_env(
     if libs_exists:
         existing_runtime_dirs.add(WINDOWS_RUNTIME_LIBS_DIR)
 
-    observed_env = _configure_run_pip_in_process_capture(
-        monkeypatch,
+    observed_env = configure_run_pip_in_process_capture(
         platform="win32",
         packaged_runtime=True,
         include_value=EXISTING_WINDOWS_INCLUDE_DIR,
@@ -373,7 +416,7 @@ async def test_run_pip_in_process_injects_windows_runtime_build_env(
     ],
 )
 async def test_run_pip_in_process_injects_windows_runtime_build_env_without_existing_paths(
-    monkeypatch, include_exists, libs_exists
+    configure_run_pip_in_process_capture, include_exists, libs_exists
 ):
     existing_runtime_dirs = set()
     if include_exists:
@@ -381,8 +424,7 @@ async def test_run_pip_in_process_injects_windows_runtime_build_env_without_exis
     if libs_exists:
         existing_runtime_dirs.add(WINDOWS_RUNTIME_LIBS_DIR)
 
-    observed_env = _configure_run_pip_in_process_capture(
-        monkeypatch,
+    observed_env = configure_run_pip_in_process_capture(
         platform="win32",
         packaged_runtime=True,
         existing_runtime_dirs=existing_runtime_dirs,
@@ -406,10 +448,9 @@ async def test_run_pip_in_process_injects_windows_runtime_build_env_without_exis
 
 @pytest.mark.asyncio
 async def test_run_pip_in_process_does_not_inject_when_runtime_dirs_missing(
-    monkeypatch,
+    configure_run_pip_in_process_capture,
 ):
-    observed_env = _configure_run_pip_in_process_capture(
-        monkeypatch,
+    observed_env = configure_run_pip_in_process_capture(
         platform="win32",
         packaged_runtime=True,
         include_value=EXISTING_WINDOWS_INCLUDE_DIR,
@@ -432,11 +473,11 @@ async def test_run_pip_in_process_does_not_inject_when_runtime_dirs_missing(
 @pytest.mark.asyncio
 async def test_run_pip_in_process_uses_latest_env_when_building_runtime_paths(
     monkeypatch,
+    configure_run_pip_in_process_capture,
 ):
     updated_include = ntpath.join(r"C:\new-toolchain", "include")
     updated_lib = ntpath.join(r"C:\new-toolchain", "lib")
-    observed_env = _configure_run_pip_in_process_capture(
-        monkeypatch,
+    observed_env = configure_run_pip_in_process_capture(
         platform="win32",
         packaged_runtime=True,
         include_value=EXISTING_WINDOWS_INCLUDE_DIR,
@@ -467,11 +508,12 @@ async def test_run_pip_in_process_uses_latest_env_when_building_runtime_paths(
 
 
 @pytest.mark.asyncio
-async def test_run_pip_in_process_does_not_modify_env_on_non_windows(monkeypatch):
+async def test_run_pip_in_process_does_not_modify_env_on_non_windows(
+    configure_run_pip_in_process_capture,
+):
     existing_include = "/toolchain/include"
     existing_lib = "/toolchain/lib"
-    observed_env = _configure_run_pip_in_process_capture(
-        monkeypatch,
+    observed_env = configure_run_pip_in_process_capture(
         platform="linux",
         packaged_runtime=True,
         include_value=existing_include,
@@ -488,9 +530,10 @@ async def test_run_pip_in_process_does_not_modify_env_on_non_windows(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_run_pip_in_process_does_not_inject_env_when_not_packaged(monkeypatch):
-    observed_env = _configure_run_pip_in_process_capture(
-        monkeypatch,
+async def test_run_pip_in_process_does_not_inject_env_when_not_packaged(
+    configure_run_pip_in_process_capture,
+):
+    observed_env = configure_run_pip_in_process_capture(
         platform="win32",
         packaged_runtime=False,
         existing_runtime_dirs={

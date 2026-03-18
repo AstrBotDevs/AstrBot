@@ -11,6 +11,7 @@ import re
 import shlex
 import sys
 import threading
+from collections.abc import Mapping
 from collections import deque
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -32,6 +33,8 @@ logger = logging.getLogger("astrbot")
 _DISTLIB_FINDER_PATCH_ATTEMPTED = False
 _SITE_PACKAGES_IMPORT_LOCK = threading.RLock()
 _PIP_IN_PROCESS_ENV_LOCK = threading.RLock()
+_WINDOWS_UNC_PATH_PREFIXES = ("\\\\?\\UNC\\", "\\??\\UNC\\")
+_WINDOWS_EXTENDED_PATH_PREFIXES = ("\\\\?\\", "\\??\\")
 _PIP_FAILURE_PATTERNS = {
     "error_prefix": re.compile(r"^\s*error:", re.IGNORECASE),
     "user_requested": re.compile(r"\bthe user requested\b", re.IGNORECASE),
@@ -248,7 +251,9 @@ def _run_pip_main_with_temporary_environ(
     # the worker.
     with _PIP_IN_PROCESS_ENV_LOCK:
         if env_updates is None:
-            env_updates = _build_packaged_windows_runtime_build_env()
+            env_updates = _build_packaged_windows_runtime_build_env(
+                base_env=dict(os.environ)
+            )
         with _temporary_environ(env_updates):
             return _run_pip_main_streaming(pip_main, args)
 
@@ -256,11 +261,11 @@ def _run_pip_main_with_temporary_environ(
 def _normalize_windows_native_build_path(path: str) -> str:
     normalized = path.replace("/", "\\")
 
-    for prefix in ("\\\\?\\UNC\\", "\\??\\UNC\\"):
+    for prefix in _WINDOWS_UNC_PATH_PREFIXES:
         if normalized.startswith(prefix):
             return ntpath.normpath(f"\\\\{normalized[len(prefix) :]}")
 
-    for prefix in ("\\\\?\\", "\\??\\"):
+    for prefix in _WINDOWS_EXTENDED_PATH_PREFIXES:
         if normalized.startswith(prefix):
             normalized = normalized[len(prefix) :]
             break
@@ -268,16 +273,26 @@ def _normalize_windows_native_build_path(path: str) -> str:
     return ntpath.normpath(normalized)
 
 
-def _prepend_windows_env_path(name: str, path: str) -> str:
-    existing = os.environ.get(name)
+def _prepend_windows_env_path(
+    name: str,
+    path: str,
+    base_env: Mapping[str, str],
+) -> str:
+    existing = base_env.get(name)
     if existing:
         return f"{path};{existing}"
     return path
 
 
-def _build_packaged_windows_runtime_build_env() -> dict[str, str]:
+def _build_packaged_windows_runtime_build_env(
+    *,
+    base_env: Mapping[str, str] | None = None,
+) -> dict[str, str]:
     if sys.platform != "win32" or not is_packaged_desktop_runtime():
         return {}
+
+    if base_env is None:
+        base_env = os.environ
 
     runtime_executable = _normalize_windows_native_build_path(sys.executable)
     runtime_dir = ntpath.dirname(runtime_executable)
@@ -291,9 +306,11 @@ def _build_packaged_windows_runtime_build_env() -> dict[str, str]:
     libs_dir = _normalize_windows_native_build_path(ntpath.join(runtime_dir, "libs"))
 
     if os.path.isdir(include_dir):
-        env_updates["INCLUDE"] = _prepend_windows_env_path("INCLUDE", include_dir)
+        env_updates["INCLUDE"] = _prepend_windows_env_path(
+            "INCLUDE", include_dir, base_env
+        )
     if os.path.isdir(libs_dir):
-        env_updates["LIB"] = _prepend_windows_env_path("LIB", libs_dir)
+        env_updates["LIB"] = _prepend_windows_env_path("LIB", libs_dir, base_env)
 
     return env_updates
 
