@@ -12,6 +12,39 @@ class ContextTruncator:
             and len(message.tool_calls) > 0
         )
 
+    @staticmethod
+    def _split_system_rest(
+        messages: list[Message],
+    ) -> tuple[list[Message], list[Message]]:
+        """把 system 消息和后面的对话消息分开。"""
+        first_non_system = 0
+        for i, msg in enumerate(messages):
+            if msg.role != "system":
+                first_non_system = i
+                break
+        return messages[:first_non_system], messages[first_non_system:]
+
+    @staticmethod
+    def _ensure_user_message(
+        system_messages: list[Message],
+        truncated: list[Message],
+        original_messages: list[Message],
+    ) -> list[Message]:
+        """截断后如果没有 user 消息了，从原始列表里把第一条 user 补回来。
+        很多 provider (智谱、Gemini 等) 要求 system 之后必须紧跟 user，否则直接 400。
+        """
+        if any(m.role == "user" for m in truncated):
+            return system_messages + truncated
+
+        # 从原始消息里找第一条 user
+        first_user = next(
+            (m for m in original_messages if m.role == "user"), None
+        )
+        if first_user is None:
+            return system_messages + truncated
+
+        return system_messages + [first_user] + truncated
+
     def fix_messages(self, messages: list[Message]) -> list[Message]:
         """修复消息列表，确保 tool call 和 tool response 的配对关系有效。
 
@@ -81,14 +114,7 @@ class ContextTruncator:
         if keep_most_recent_turns == -1:
             return messages
 
-        first_non_system = 0
-        for i, msg in enumerate(messages):
-            if msg.role != "system":
-                first_non_system = i
-                break
-
-        system_messages = messages[:first_non_system]
-        non_system_messages = messages[first_non_system:]
+        system_messages, non_system_messages = self._split_system_rest(messages)
 
         if len(non_system_messages) // 2 <= keep_most_recent_turns:
             return messages
@@ -99,7 +125,7 @@ class ContextTruncator:
         else:
             truncated_contexts = non_system_messages[-num_to_keep * 2 :]
 
-        # 找到第一个 role 为 user 的索引，确保上下文格式正确
+        # 对齐到第一条 user 消息
         index = next(
             (i for i, item in enumerate(truncated_contexts) if item.role == "user"),
             None,
@@ -107,8 +133,9 @@ class ContextTruncator:
         if index is not None and index > 0:
             truncated_contexts = truncated_contexts[index:]
 
-        result = system_messages + truncated_contexts
-
+        result = self._ensure_user_message(
+            system_messages, truncated_contexts, messages
+        )
         return self.fix_messages(result)
 
     def truncate_by_dropping_oldest_turns(
@@ -120,31 +147,24 @@ class ContextTruncator:
         if drop_turns <= 0:
             return messages
 
-        first_non_system = 0
-        for i, msg in enumerate(messages):
-            if msg.role != "system":
-                first_non_system = i
-                break
-
-        system_messages = messages[:first_non_system]
-        non_system_messages = messages[first_non_system:]
+        system_messages, non_system_messages = self._split_system_rest(messages)
 
         if len(non_system_messages) // 2 <= drop_turns:
             truncated_non_system = []
         else:
             truncated_non_system = non_system_messages[drop_turns * 2 :]
 
+        # 对齐到第一条 user
         index = next(
             (i for i, item in enumerate(truncated_non_system) if item.role == "user"),
             None,
         )
         if index is not None:
             truncated_non_system = truncated_non_system[index:]
-        elif truncated_non_system:
-            truncated_non_system = []
 
-        result = system_messages + truncated_non_system
-
+        result = self._ensure_user_message(
+            system_messages, truncated_non_system, messages
+        )
         return self.fix_messages(result)
 
     def truncate_by_halving(
@@ -155,14 +175,7 @@ class ContextTruncator:
         if len(messages) <= 2:
             return messages
 
-        first_non_system = 0
-        for i, msg in enumerate(messages):
-            if msg.role != "system":
-                first_non_system = i
-                break
-
-        system_messages = messages[:first_non_system]
-        non_system_messages = messages[first_non_system:]
+        system_messages, non_system_messages = self._split_system_rest(messages)
 
         messages_to_delete = len(non_system_messages) // 2
         if messages_to_delete == 0:
@@ -170,6 +183,7 @@ class ContextTruncator:
 
         truncated_non_system = non_system_messages[messages_to_delete:]
 
+        # 对齐到第一条 user
         index = next(
             (i for i, item in enumerate(truncated_non_system) if item.role == "user"),
             None,
@@ -177,6 +191,7 @@ class ContextTruncator:
         if index is not None:
             truncated_non_system = truncated_non_system[index:]
 
-        result = system_messages + truncated_non_system
-
+        result = self._ensure_user_message(
+            system_messages, truncated_non_system, messages
+        )
         return self.fix_messages(result)
