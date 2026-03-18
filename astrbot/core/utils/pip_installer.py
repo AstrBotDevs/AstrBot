@@ -31,6 +31,7 @@ logger = logging.getLogger("astrbot")
 
 _DISTLIB_FINDER_PATCH_ATTEMPTED = False
 _SITE_PACKAGES_IMPORT_LOCK = threading.RLock()
+_PIP_IN_PROCESS_ENV_LOCK = threading.RLock()
 _PIP_FAILURE_PATTERNS = {
     "error_prefix": re.compile(r"^\s*error:", re.IGNORECASE),
     "user_requested": re.compile(r"\bthe user requested\b", re.IGNORECASE),
@@ -234,6 +235,18 @@ def _run_pip_main_streaming(pip_main, args: list[str]) -> tuple[int, list[str]]:
         result_code = pip_main(args)
     stream.flush()
     return result_code, stream.lines
+
+
+def _run_pip_main_with_temporary_environ(
+    pip_main,
+    args: list[str],
+    env_updates: dict[str, str],
+) -> tuple[int, list[str]]:
+    # os.environ is process-wide; serialize temporary mutations around the
+    # in-process pip invocation and keep the mutation window inside the worker.
+    with _PIP_IN_PROCESS_ENV_LOCK:
+        with _temporary_environ(env_updates):
+            return _run_pip_main_streaming(pip_main, args)
 
 
 def _normalize_windows_native_build_path(path: str) -> str:
@@ -997,10 +1010,12 @@ class PipInstaller:
 
         original_handlers = list(logging.getLogger().handlers)
         try:
-            with _temporary_environ(build_env):
-                result_code, output_lines = await asyncio.to_thread(
-                    _run_pip_main_streaming, pip_main, args
-                )
+            result_code, output_lines = await asyncio.to_thread(
+                _run_pip_main_with_temporary_environ,
+                pip_main,
+                args,
+                build_env,
+            )
         finally:
             _cleanup_added_root_handlers(original_handlers)
 

@@ -1,4 +1,5 @@
 import asyncio
+import ntpath
 import threading
 from unittest.mock import AsyncMock
 
@@ -8,6 +9,15 @@ from astrbot.core.utils import core_constraints as core_constraints_module
 from astrbot.core.utils import pip_installer as pip_installer_module
 from astrbot.core.utils import requirements_utils
 from astrbot.core.utils.pip_installer import PipInstaller
+
+WINDOWS_RUNTIME_ROOT = ntpath.join(r"C:\astrbot-test", "backend", "python")
+WINDOWS_RUNTIME_EXECUTABLE = ntpath.join(WINDOWS_RUNTIME_ROOT, "python.exe")
+WINDOWS_PACKAGED_RUNTIME_EXECUTABLE = f"\\\\?\\{WINDOWS_RUNTIME_EXECUTABLE}"
+WINDOWS_RUNTIME_INCLUDE_DIR = ntpath.join(WINDOWS_RUNTIME_ROOT, "include")
+WINDOWS_RUNTIME_LIBS_DIR = ntpath.join(WINDOWS_RUNTIME_ROOT, "libs")
+EXISTING_WINDOWS_INCLUDE_DIR = ntpath.join(r"C:\toolchain", "include")
+EXISTING_WINDOWS_LIB_DIR = ntpath.join(r"C:\toolchain", "lib")
+_ENV_MISSING = object()
 
 
 def _make_run_pip_mock(
@@ -22,6 +32,56 @@ def _make_run_pip_mock(
         return code
 
     return AsyncMock(side_effect=run_pip)
+
+
+def _configure_run_pip_in_process_capture(
+    monkeypatch,
+    *,
+    platform: str,
+    packaged_runtime: bool,
+    runtime_executable: str = WINDOWS_PACKAGED_RUNTIME_EXECUTABLE,
+    include_value: str | object = _ENV_MISSING,
+    lib_value: str | object = _ENV_MISSING,
+    existing_runtime_dirs: set[str] | None = None,
+) -> dict[str, str | None]:
+    observed_env: dict[str, str | None] = {}
+
+    def fake_pip_main(args):
+        del args
+        observed_env["INCLUDE"] = pip_installer_module.os.environ.get("INCLUDE")
+        observed_env["LIB"] = pip_installer_module.os.environ.get("LIB")
+        return 0
+
+    if packaged_runtime:
+        monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    else:
+        monkeypatch.delenv("ASTRBOT_DESKTOP_CLIENT", raising=False)
+
+    if include_value is _ENV_MISSING:
+        monkeypatch.delenv("INCLUDE", raising=False)
+    else:
+        monkeypatch.setenv("INCLUDE", include_value)
+
+    if lib_value is _ENV_MISSING:
+        monkeypatch.delenv("LIB", raising=False)
+    else:
+        monkeypatch.setenv("LIB", lib_value)
+
+    monkeypatch.setattr(pip_installer_module.sys, "platform", platform)
+    monkeypatch.setattr(pip_installer_module.sys, "executable", runtime_executable)
+
+    if existing_runtime_dirs is not None:
+        monkeypatch.setattr(
+            pip_installer_module.os.path,
+            "isdir",
+            lambda path: path in existing_runtime_dirs,
+        )
+
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._get_pip_main",
+        lambda: fake_pip_main,
+    )
+    return observed_env
 
 
 @pytest.mark.asyncio
@@ -226,6 +286,31 @@ async def test_run_pip_in_process_normalizes_crlf_without_extra_blank_lines(
     ]
 
 
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        (
+            WINDOWS_PACKAGED_RUNTIME_EXECUTABLE,
+            WINDOWS_RUNTIME_EXECUTABLE,
+        ),
+        (
+            r"\\?\UNC\server\share\include",
+            r"\\server\share\include",
+        ),
+        (
+            r"\??\UNC\server\share\libs",
+            r"\\server\share\libs",
+        ),
+        (
+            "C:/astrbot-test/backend/python/libs",
+            WINDOWS_RUNTIME_LIBS_DIR,
+        ),
+    ],
+)
+def test_normalize_windows_native_build_path_variants(path, expected):
+    assert pip_installer_module._normalize_windows_native_build_path(path) == expected
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("include_exists", "libs_exists"),
@@ -238,91 +323,60 @@ async def test_run_pip_in_process_normalizes_crlf_without_extra_blank_lines(
 async def test_run_pip_in_process_injects_windows_runtime_build_env(
     monkeypatch, include_exists, libs_exists
 ):
-    runtime_executable = (
-        r"\\?\C:\Users\buding\AppData\Local\AstrBot\backend\python\python.exe"
-    )
-    include_dir = r"C:\Users\buding\AppData\Local\AstrBot\backend\python\include"
-    libs_dir = r"C:\Users\buding\AppData\Local\AstrBot\backend\python\libs"
-    existing_include = r"C:\VS\include"
-    existing_lib = r"C:\VS\lib"
-    observed_env = {}
+    existing_runtime_dirs = set()
+    if include_exists:
+        existing_runtime_dirs.add(WINDOWS_RUNTIME_INCLUDE_DIR)
+    if libs_exists:
+        existing_runtime_dirs.add(WINDOWS_RUNTIME_LIBS_DIR)
 
-    def fake_pip_main(args):
-        del args
-        observed_env["INCLUDE"] = pip_installer_module.os.environ.get("INCLUDE")
-        observed_env["LIB"] = pip_installer_module.os.environ.get("LIB")
-        return 0
-
-    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
-    monkeypatch.setenv("INCLUDE", existing_include)
-    monkeypatch.setenv("LIB", existing_lib)
-    monkeypatch.setattr(pip_installer_module.sys, "platform", "win32")
-    monkeypatch.setattr(pip_installer_module.sys, "executable", runtime_executable)
-    monkeypatch.setattr(
-        pip_installer_module.os.path,
-        "isdir",
-        lambda path: (
-            (path == include_dir and include_exists)
-            or (path == libs_dir and libs_exists)
-        ),
-    )
-    monkeypatch.setattr(
-        "astrbot.core.utils.pip_installer._get_pip_main",
-        lambda: fake_pip_main,
+    observed_env = _configure_run_pip_in_process_capture(
+        monkeypatch,
+        platform="win32",
+        packaged_runtime=True,
+        include_value=EXISTING_WINDOWS_INCLUDE_DIR,
+        lib_value=EXISTING_WINDOWS_LIB_DIR,
+        existing_runtime_dirs=existing_runtime_dirs,
     )
 
     installer = PipInstaller("")
     result = await installer._run_pip_in_process(["install", "demo-package"])
 
     assert result == 0
-    expected_include = existing_include
-    expected_lib = existing_lib
+    expected_include = EXISTING_WINDOWS_INCLUDE_DIR
+    expected_lib = EXISTING_WINDOWS_LIB_DIR
     if include_exists:
-        expected_include = f"{include_dir};{existing_include}"
+        expected_include = (
+            f"{WINDOWS_RUNTIME_INCLUDE_DIR};{EXISTING_WINDOWS_INCLUDE_DIR}"
+        )
     if libs_exists:
-        expected_lib = f"{libs_dir};{existing_lib}"
+        expected_lib = f"{WINDOWS_RUNTIME_LIBS_DIR};{EXISTING_WINDOWS_LIB_DIR}"
     assert observed_env == {"INCLUDE": expected_include, "LIB": expected_lib}
-    assert pip_installer_module.os.environ["INCLUDE"] == existing_include
-    assert pip_installer_module.os.environ["LIB"] == existing_lib
+    assert pip_installer_module.os.environ["INCLUDE"] == EXISTING_WINDOWS_INCLUDE_DIR
+    assert pip_installer_module.os.environ["LIB"] == EXISTING_WINDOWS_LIB_DIR
 
 
 @pytest.mark.asyncio
 async def test_run_pip_in_process_injects_windows_runtime_build_env_without_existing_paths(
     monkeypatch,
 ):
-    runtime_executable = (
-        r"\\?\C:\Users\buding\AppData\Local\AstrBot\backend\python\python.exe"
-    )
-    include_dir = r"C:\Users\buding\AppData\Local\AstrBot\backend\python\include"
-    libs_dir = r"C:\Users\buding\AppData\Local\AstrBot\backend\python\libs"
-    observed_env: dict[str, str | None] = {}
-
-    def fake_pip_main(args):
-        del args
-        observed_env["INCLUDE"] = pip_installer_module.os.environ.get("INCLUDE")
-        observed_env["LIB"] = pip_installer_module.os.environ.get("LIB")
-        return 0
-
-    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
-    monkeypatch.delenv("INCLUDE", raising=False)
-    monkeypatch.delenv("LIB", raising=False)
-    monkeypatch.setattr(pip_installer_module.sys, "platform", "win32")
-    monkeypatch.setattr(pip_installer_module.sys, "executable", runtime_executable)
-    monkeypatch.setattr(
-        pip_installer_module.os.path,
-        "isdir",
-        lambda path: path in {include_dir, libs_dir},
-    )
-    monkeypatch.setattr(
-        "astrbot.core.utils.pip_installer._get_pip_main",
-        lambda: fake_pip_main,
+    observed_env = _configure_run_pip_in_process_capture(
+        monkeypatch,
+        platform="win32",
+        packaged_runtime=True,
+        existing_runtime_dirs={
+            WINDOWS_RUNTIME_INCLUDE_DIR,
+            WINDOWS_RUNTIME_LIBS_DIR,
+        },
     )
 
     installer = PipInstaller("")
     result = await installer._run_pip_in_process(["install", "demo-package"])
 
     assert result == 0
-    assert observed_env == {"INCLUDE": include_dir, "LIB": libs_dir}
+    assert observed_env == {
+        "INCLUDE": WINDOWS_RUNTIME_INCLUDE_DIR,
+        "LIB": WINDOWS_RUNTIME_LIBS_DIR,
+    }
     assert ";" not in observed_env["INCLUDE"]
     assert ";" not in observed_env["LIB"]
     assert "INCLUDE" not in pip_installer_module.os.environ
@@ -331,23 +385,14 @@ async def test_run_pip_in_process_injects_windows_runtime_build_env_without_exis
 
 @pytest.mark.asyncio
 async def test_run_pip_in_process_does_not_modify_env_on_non_windows(monkeypatch):
-    existing_include = "/usr/local/include"
-    existing_lib = "/usr/local/lib"
-    observed_env: dict[str, str | None] = {}
-
-    def fake_pip_main(args):
-        del args
-        observed_env["INCLUDE"] = pip_installer_module.os.environ.get("INCLUDE")
-        observed_env["LIB"] = pip_installer_module.os.environ.get("LIB")
-        return 0
-
-    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
-    monkeypatch.setenv("INCLUDE", existing_include)
-    monkeypatch.setenv("LIB", existing_lib)
-    monkeypatch.setattr(pip_installer_module.sys, "platform", "linux")
-    monkeypatch.setattr(
-        "astrbot.core.utils.pip_installer._get_pip_main",
-        lambda: fake_pip_main,
+    existing_include = "/toolchain/include"
+    existing_lib = "/toolchain/lib"
+    observed_env = _configure_run_pip_in_process_capture(
+        monkeypatch,
+        platform="linux",
+        packaged_runtime=True,
+        include_value=existing_include,
+        lib_value=existing_lib,
     )
 
     installer = PipInstaller("")
@@ -361,32 +406,14 @@ async def test_run_pip_in_process_does_not_modify_env_on_non_windows(monkeypatch
 
 @pytest.mark.asyncio
 async def test_run_pip_in_process_does_not_inject_env_when_not_packaged(monkeypatch):
-    runtime_executable = (
-        r"\\?\C:\Users\buding\AppData\Local\AstrBot\backend\python\python.exe"
-    )
-    include_dir = r"C:\Users\buding\AppData\Local\AstrBot\backend\python\include"
-    libs_dir = r"C:\Users\buding\AppData\Local\AstrBot\backend\python\libs"
-    observed_env: dict[str, str | None] = {}
-
-    def fake_pip_main(args):
-        del args
-        observed_env["INCLUDE"] = pip_installer_module.os.environ.get("INCLUDE")
-        observed_env["LIB"] = pip_installer_module.os.environ.get("LIB")
-        return 0
-
-    monkeypatch.delenv("ASTRBOT_DESKTOP_CLIENT", raising=False)
-    monkeypatch.delenv("INCLUDE", raising=False)
-    monkeypatch.delenv("LIB", raising=False)
-    monkeypatch.setattr(pip_installer_module.sys, "platform", "win32")
-    monkeypatch.setattr(pip_installer_module.sys, "executable", runtime_executable)
-    monkeypatch.setattr(
-        pip_installer_module.os.path,
-        "isdir",
-        lambda path: path in {include_dir, libs_dir},
-    )
-    monkeypatch.setattr(
-        "astrbot.core.utils.pip_installer._get_pip_main",
-        lambda: fake_pip_main,
+    observed_env = _configure_run_pip_in_process_capture(
+        monkeypatch,
+        platform="win32",
+        packaged_runtime=False,
+        existing_runtime_dirs={
+            WINDOWS_RUNTIME_INCLUDE_DIR,
+            WINDOWS_RUNTIME_LIBS_DIR,
+        },
     )
 
     installer = PipInstaller("")
