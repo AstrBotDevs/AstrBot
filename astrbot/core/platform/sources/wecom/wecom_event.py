@@ -1,6 +1,7 @@
 import asyncio
-import os
 
+import aiofiles
+import anyio
 from wechatpy.enterprise import WeChatClient
 
 from astrbot.api import logger
@@ -100,7 +101,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                 elif isinstance(comp, Image):
                     img_path = await comp.convert_to_file_path()
 
-                    with open(img_path, "rb") as f:
+                    async with aiofiles.open(img_path, "rb") as f:
                         try:
                             response = self.client.media.upload("image", f)
                         except Exception as e:
@@ -120,7 +121,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                     record_path_amr = await convert_audio_to_amr(record_path)
 
                     try:
-                        with open(record_path_amr, "rb") as f:
+                        async with aiofiles.open(record_path_amr, "rb") as f:
                             try:
                                 response = self.client.media.upload("voice", f)
                             except Exception as e:
@@ -138,17 +139,18 @@ class WecomPlatformEvent(AstrMessageEvent):
                                 response["media_id"],
                             )
                     finally:
-                        if record_path_amr != record_path and os.path.exists(
-                            record_path_amr,
+                        if (
+                            record_path_amr != record_path
+                            and await anyio.Path(record_path_amr).exists()
                         ):
                             try:
-                                os.remove(record_path_amr)
+                                await anyio.Path(record_path_amr).unlink()
                             except OSError as e:
                                 logger.warning(f"删除临时音频文件失败: {e}")
                 elif isinstance(comp, File):
                     file_path = await comp.get_file()
 
-                    with open(file_path, "rb") as f:
+                    async with aiofiles.open(file_path, "rb") as f:
                         try:
                             response = self.client.media.upload("file", f)
                         except Exception as e:
@@ -166,7 +168,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                 elif isinstance(comp, Video):
                     video_path = await comp.convert_to_file_path()
 
-                    with open(video_path, "rb") as f:
+                    async with aiofiles.open(video_path, "rb") as f:
                         try:
                             response = self.client.media.upload("video", f)
                         except Exception as e:
@@ -199,7 +201,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                 elif isinstance(comp, Image):
                     img_path = await comp.convert_to_file_path()
 
-                    with open(img_path, "rb") as f:
+                    async with aiofiles.open(img_path, "rb") as f:
                         try:
                             response = self.client.media.upload("image", f)
                         except Exception as e:
@@ -219,7 +221,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                     record_path_amr = await convert_audio_to_amr(record_path)
 
                     try:
-                        with open(record_path_amr, "rb") as f:
+                        async with aiofiles.open(record_path_amr, "rb") as f:
                             try:
                                 response = self.client.media.upload("voice", f)
                             except Exception as e:
@@ -237,17 +239,18 @@ class WecomPlatformEvent(AstrMessageEvent):
                                 response["media_id"],
                             )
                     finally:
-                        if record_path_amr != record_path and os.path.exists(
-                            record_path_amr,
+                        if (
+                            record_path_amr != record_path
+                            and await anyio.Path(record_path_amr).exists()
                         ):
                             try:
-                                os.remove(record_path_amr)
+                                await anyio.Path(record_path_amr).unlink()
                             except OSError as e:
                                 logger.warning(f"删除临时音频文件失败: {e}")
                 elif isinstance(comp, File):
                     file_path = await comp.get_file()
 
-                    with open(file_path, "rb") as f:
+                    async with aiofiles.open(file_path, "rb") as f:
                         try:
                             response = self.client.media.upload("file", f)
                         except Exception as e:
@@ -265,7 +268,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                 elif isinstance(comp, Video):
                     video_path = await comp.convert_to_file_path()
 
-                    with open(video_path, "rb") as f:
+                    async with aiofiles.open(video_path, "rb") as f:
                         try:
                             response = self.client.media.upload("video", f)
                         except Exception as e:

@@ -10,6 +10,7 @@ from typing import Any, Literal
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import aiohttp
+import anyio
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
@@ -103,7 +104,8 @@ class WecomAIBotWebhookClient:
     async def upload_media(
         self, file_path: Path, media_type: Literal["file", "voice"]
     ) -> str:
-        if not file_path.exists() or not file_path.is_file():
+        file_path_anyio = anyio.Path(file_path)
+        if not await file_path_anyio.exists() or not await file_path_anyio.is_file():
             raise WecomAIBotWebhookError(f"文件不存在: {file_path}")
 
         content_type = (
@@ -112,7 +114,7 @@ class WecomAIBotWebhookClient:
         form = aiohttp.FormData()
         form.add_field(
             "media",
-            file_path.read_bytes(),
+            await file_path_anyio.read_bytes(),
             filename=file_path.name,
             content_type=content_type,
         )

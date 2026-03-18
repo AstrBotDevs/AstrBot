@@ -1,7 +1,8 @@
 import asyncio
-import os
 import random
 from typing import Any
+
+import anyio
 
 import astrbot.api.message_components as Comp
 from astrbot.api import logger
@@ -499,11 +500,12 @@ class MisskeyPlatformAdapter(Platform):
                     # 清理临时文件
                     if local_path and isinstance(local_path, str):
                         data_temp = get_astrbot_temp_path()
-                        if local_path.startswith(data_temp) and os.path.exists(
-                            local_path,
+                        if (
+                            local_path.startswith(data_temp)
+                            and await anyio.Path(local_path).exists()
                         ):
                             try:
-                                os.remove(local_path)
+                                await anyio.Path(local_path).unlink()
                                 logger.debug(f"[Misskey] 已清理临时文件: {local_path}")
                             except Exception:
                                 pass

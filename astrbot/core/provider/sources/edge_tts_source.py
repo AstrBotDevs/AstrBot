@@ -112,8 +112,9 @@ class ProviderEdgeTTS(TTSProvider):
                 f"FFmpeg 转换失败: {e.stderr.decode() if e.stderr else str(e)}",
             )
             try:
-                if os.path.exists(mp3_path):
-                    os.remove(mp3_path)
+                mp3_path_obj = anyio.Path(mp3_path)
+                if await mp3_path_obj.exists():
+                    await mp3_path_obj.unlink()
             except Exception:
                 pass
             raise RuntimeError(f"FFmpeg 转换失败: {e!s}")
@@ -121,8 +122,9 @@ class ProviderEdgeTTS(TTSProvider):
         except Exception as e:
             logger.error(f"音频生成失败: {e!s}")
             try:
-                if os.path.exists(mp3_path):
-                    os.remove(mp3_path)
+                mp3_path_obj = anyio.Path(mp3_path)
+                if await mp3_path_obj.exists():
+                    await mp3_path_obj.unlink()
             except Exception:
                 pass
             raise RuntimeError(f"音频生成失败: {e!s}")

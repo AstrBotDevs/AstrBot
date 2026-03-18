@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import anyio
 from sqlalchemy import select
 
 from astrbot.core import logger
@@ -83,7 +84,7 @@ class AstrBotExporter:
             output_dir = get_astrbot_backups_path()
 
         # 确保输出目录存在
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        await anyio.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         zip_filename = f"astrbot_backup_{timestamp}.zip"
@@ -160,9 +161,11 @@ class AstrBotExporter:
                 # 3. 导出配置文件
                 if progress_callback:
                     await progress_callback("config", 0, 100, "正在导出配置文件...")
-                if os.path.exists(self.config_path):
-                    with open(self.config_path, encoding="utf-8") as f:
-                        config_content = f.read()
+                if await anyio.Path(self.config_path).exists():
+                    async with await anyio.open_file(
+                        self.config_path, encoding="utf-8"
+                    ) as f:
+                        config_content = await f.read()
                     zf.writestr("config/cmd_config.json", config_content)
                     self._add_checksum("config/cmd_config.json", config_content)
                 if progress_callback:
@@ -199,8 +202,8 @@ class AstrBotExporter:
         except Exception as e:
             logger.error(f"备份导出失败: {e}")
             # 清理失败的文件
-            if os.path.exists(zip_path):
-                os.remove(zip_path)
+            if await anyio.Path(zip_path).exists():
+                await anyio.Path(zip_path).unlink()
             raise
 
     async def _export_main_database(self) -> dict[str, list[dict]]:
@@ -317,7 +320,7 @@ class AstrBotExporter:
 
         for dir_name, dir_path in backup_directories.items():
             full_path = Path(dir_path)
-            if not full_path.exists():
+            if not await anyio.Path(full_path).exists():
                 logger.debug(f"目录不存在，跳过: {full_path}")
                 continue
 
@@ -362,7 +365,7 @@ class AstrBotExporter:
         for attachment in attachments:
             try:
                 file_path = attachment.get("path", "")
-                if file_path and os.path.exists(file_path):
+                if file_path and await anyio.Path(file_path).exists():
                     # 使用 attachment_id 作为文件名
                     attachment_id = attachment.get("attachment_id", "")
                     ext = os.path.splitext(file_path)[1]

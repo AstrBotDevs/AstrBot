@@ -1,7 +1,8 @@
 import asyncio
-import os
 from typing import Any, cast
 
+import aiofiles
+import anyio
 from wechatpy import WeChatClient
 from wechatpy.replies import ImageReply, VoiceReply
 
@@ -101,7 +102,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
             elif isinstance(comp, Image):
                 img_path = await comp.convert_to_file_path()
 
-                with open(img_path, "rb") as f:
+                async with aiofiles.open(img_path, "rb") as f:
                     try:
                         response = self.client.media.upload("image", f)
                     except Exception as e:
@@ -132,7 +133,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                 record_path_amr = await convert_audio_to_amr(record_path)
 
                 try:
-                    with open(record_path_amr, "rb") as f:
+                    async with aiofiles.open(record_path_amr, "rb") as f:
                         try:
                             response = self.client.media.upload("voice", f)
                         except Exception as e:
@@ -162,11 +163,12 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                             assert isinstance(future, asyncio.Future)
                             future.set_result(xml)
                 finally:
-                    if record_path_amr != record_path and os.path.exists(
-                        record_path_amr
+                    if (
+                        record_path_amr != record_path
+                        and await anyio.Path(record_path_amr).exists()
                     ):
                         try:
-                            os.remove(record_path_amr)
+                            await anyio.Path(record_path_amr).unlink()
                         except OSError as e:
                             logger.warning(f"删除临时音频文件失败: {e}")
 

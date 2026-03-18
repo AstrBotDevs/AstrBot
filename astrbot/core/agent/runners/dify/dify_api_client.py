@@ -3,6 +3,7 @@ import json
 from collections.abc import AsyncGenerator
 from typing import Any
 
+import anyio
 from aiohttp import ClientResponse, ClientSession, FormData
 
 from astrbot.core import logger
@@ -47,20 +48,20 @@ class DifyAPIClient:
         response_mode: str = "streaming",
         conversation_id: str = "",
         files: list[dict[str, Any]] | None = None,
-        timeout: float = 60,
+        request_timeout: float = 60,
     ) -> AsyncGenerator[dict[str, Any], None]:
         if files is None:
             files = []
         url = f"{self.api_base}/chat-messages"
         payload = locals()
         payload.pop("self")
-        payload.pop("timeout")
+        payload.pop("request_timeout")
         logger.info(f"chat_messages payload: {payload}")
         async with self.session.post(
             url,
             json=payload,
             headers=self.headers,
-            timeout=timeout,
+            timeout=request_timeout,
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()
@@ -76,20 +77,20 @@ class DifyAPIClient:
         user: str,
         response_mode: str = "streaming",
         files: list[dict[str, Any]] | None = None,
-        timeout: float = 60,
+        request_timeout: float = 60,
     ):
         if files is None:
             files = []
         url = f"{self.api_base}/workflows/run"
         payload = locals()
         payload.pop("self")
-        payload.pop("timeout")
+        payload.pop("request_timeout")
         logger.info(f"workflow_run payload: {payload}")
         async with self.session.post(
             url,
             json=payload,
             headers=self.headers,
-            timeout=timeout,
+            timeout=request_timeout,
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()
@@ -134,8 +135,8 @@ class DifyAPIClient:
             # 使用文件路径
             import os
 
-            with open(file_path, "rb") as f:
-                file_content = f.read()
+            async with await anyio.open_file(file_path, "rb") as f:
+                file_content = await f.read()
                 form.add_field(
                     "file",
                     file_content,

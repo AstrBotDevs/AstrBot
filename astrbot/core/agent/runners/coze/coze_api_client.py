@@ -288,14 +288,16 @@ if __name__ == "__main__":
     import asyncio
     import os
 
+    import anyio
+
     async def test_coze_api_client() -> None:
         api_key = os.getenv("COZE_API_KEY", "")
         bot_id = os.getenv("COZE_BOT_ID", "")
         client = CozeAPIClient(api_key=api_key)
 
         try:
-            with open("README.md", "rb") as f:
-                file_data = f.read()
+            async with await anyio.open_file("README.md", "rb") as f:
+                file_data = await f.read()
             file_id = await client.upload_file(file_data)
             print(f"Uploaded file_id: {file_id}")
             async for event in client.chat_messages(

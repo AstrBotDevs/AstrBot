@@ -10,6 +10,7 @@ from ipaddress import IPv4Address, IPv6Address, ip_address
 from pathlib import Path
 from typing import Protocol
 
+import anyio
 import jwt
 import psutil
 import werkzeug.exceptions
@@ -115,18 +116,23 @@ class AstrBotDashboard:
                 self.data_path = os.path.abspath(user_dist)
 
         if self.enable_webui and not (Path(self.data_path) / "index.html").exists():
-            raise RuntimeError(
+            logger.warning(
                 f"Dashboard static assets not found: index.html is missing in {self.data_path}. "
-                "Please run the WebUI build step."
+                "WebUI will be disabled."
             )
+            self.enable_webui = False
 
     def _init_app(self):
         """初始化 Quart 应用"""
         global APP
+
+        static_folder = self.data_path if self.enable_webui else None
+        static_url_path = "/" if self.enable_webui else None
+
         self.app = Quart(
             "AstrBotDashboard",
-            static_folder=self.data_path,
-            static_url_path="/",
+            static_folder=static_folder,
+            static_url_path=static_url_path,
         )
         APP = self.app
         self.app.json_provider_class = DefaultJSONProvider
@@ -456,25 +462,25 @@ class AstrBotDashboard:
                 or ssl_config.get("ca_certs", "")
             )
 
-            cert_path = Path(cert_file).expanduser()
-            key_path = Path(key_file).expanduser()
+            cert_path = anyio.Path(cert_file).expanduser()
+            key_path = anyio.Path(key_file).expanduser()
             if not cert_file or not key_file:
                 raise ValueError(
                     "dashboard.ssl.enable 为 true 时，必须配置 cert_file 和 key_file。",
                 )
-            if not cert_path.is_file():
+            if not await cert_path.is_file():
                 raise ValueError(f"SSL 证书文件不存在: {cert_path}")
-            if not key_path.is_file():
+            if not await key_path.is_file():
                 raise ValueError(f"SSL 私钥文件不存在: {key_path}")
 
-            config.certfile = str(cert_path.resolve())
-            config.keyfile = str(key_path.resolve())
+            config.certfile = str(await cert_path.resolve())
+            config.keyfile = str(await key_path.resolve())
 
             if ca_certs:
-                ca_path = Path(ca_certs).expanduser()
-                if not ca_path.is_file():
+                ca_path = anyio.Path(ca_certs).expanduser()
+                if not await ca_path.is_file():
                     raise ValueError(f"SSL CA 证书文件不存在: {ca_path}")
-                config.ca_certs = str(ca_path.resolve())
+                config.ca_certs = str(await ca_path.resolve())
 
         # 根据配置决定是否禁用访问日志
         disable_access_log = dashboard_config.get("disable_access_log", True)

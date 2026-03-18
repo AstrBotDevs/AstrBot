@@ -6,6 +6,7 @@ import uuid
 from typing import cast
 
 import aiofiles
+import anyio
 import botpy
 import botpy.errors
 import botpy.message
@@ -495,7 +496,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             payload["file_name"] = file_name
 
         # 处理文件数据
-        if os.path.exists(file_source):
+        file_source_obj = anyio.Path(file_source)
+        if await file_source_obj.exists():
             # 读取本地文件
             async with aiofiles.open(file_source, "rb") as f:
                 file_content = await f.read()

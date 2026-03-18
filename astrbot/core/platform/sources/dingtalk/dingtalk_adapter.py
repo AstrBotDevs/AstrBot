@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Literal, NoReturn, cast
 
 import aiohttp
+import anyio
 import dingtalk_stream
 from dingtalk_stream import AckMessage
 
@@ -334,8 +335,8 @@ class DingtalkPlatformAdapter(Platform):
             "downloadCode": download_code,
             "robotCode": robot_code,
         }
-        temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = anyio.Path(get_astrbot_temp_path())
+        await temp_dir.mkdir(parents=True, exist_ok=True)
         f_path = temp_dir / f"dingtalk_{uuid.uuid4()}.{ext}"
         async with (
             aiohttp.ClientSession() as session,
@@ -494,7 +495,7 @@ class DingtalkPlatformAdapter(Platform):
             return converted, converted != input_path
 
     async def upload_media(self, file_path: str, media_type: str) -> str:
-        media_file_path = Path(file_path)
+        media_file_path = anyio.Path(file_path)
         access_token = await self.get_access_token()
         if not access_token:
             logger.error("钉钉媒体上传失败: access_token 为空")
@@ -503,7 +504,7 @@ class DingtalkPlatformAdapter(Platform):
         form = aiohttp.FormData()
         form.add_field(
             "media",
-            media_file_path.read_bytes(),
+            await media_file_path.read_bytes(),
             filename=media_file_path.name,
             content_type="application/octet-stream",
         )

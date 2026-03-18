@@ -7,6 +7,7 @@ import re
 from collections.abc import AsyncGenerator
 from typing import Any
 
+import aiofiles
 import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai._exceptions import NotFoundError
@@ -950,8 +951,8 @@ class ProviderOpenAIOfficial(Provider):
         """将图片转换为 base64"""
         if image_url.startswith("base64://"):
             return image_url.replace("base64://", "data:image/jpeg;base64,")
-        with open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
+        async with aiofiles.open(image_url, "rb") as f:
+            image_bs64 = base64.b64encode(await f.read()).decode("utf-8")
             return "data:image/jpeg;base64," + image_bs64
 
     async def terminate(self):

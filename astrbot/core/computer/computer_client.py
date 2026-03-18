@@ -388,22 +388,24 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
     Backward-compatible orchestrator: keep historical behavior while internally
     splitting into `apply` and `scan` phases.
     """
-    skills_root = Path(get_astrbot_skills_path())
-    if not skills_root.is_dir():
+    import anyio
+
+    skills_root = anyio.Path(get_astrbot_skills_path())
+    if not await skills_root.is_dir():
         return
     local_skill_dirs = _list_local_skill_dirs(skills_root)
 
-    temp_dir = Path(get_astrbot_temp_path())
-    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_dir = anyio.Path(get_astrbot_temp_path())
+    await temp_dir.mkdir(parents=True, exist_ok=True)
     zip_base = temp_dir / "skills_bundle"
     zip_path = zip_base.with_suffix(".zip")
 
     try:
         if local_skill_dirs:
-            if zip_path.exists():
-                zip_path.unlink()
+            if await zip_path.exists():
+                await zip_path.unlink()
             shutil.make_archive(str(zip_base), "zip", str(skills_root))
-            remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
+            remote_zip = anyio.Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
             logger.info("[Computer] sandbox_sync phase=upload status=start")
             await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
             upload_result = await booter.upload_file(str(zip_path), str(remote_zip))

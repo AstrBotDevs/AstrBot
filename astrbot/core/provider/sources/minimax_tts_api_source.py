@@ -3,6 +3,7 @@ import os
 import uuid
 from collections.abc import AsyncIterator
 
+import aiofiles
 import aiohttp
 
 from astrbot.api import logger
@@ -163,8 +164,8 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                 )
 
             # 结果保存至文件
-            with open(path, "wb") as file:
-                file.write(audio)
+            async with aiofiles.open(path, "wb") as file:
+                await file.write(audio)
 
             return path
 

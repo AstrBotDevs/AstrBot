@@ -4,6 +4,8 @@ import time
 import traceback
 from collections.abc import AsyncGenerator
 
+import anyio
+
 from astrbot.core import logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
@@ -529,8 +531,8 @@ async def _simulated_stream_tts(
                 audio_path = await tts_provider.get_audio(text)
 
                 if audio_path:
-                    with open(audio_path, "rb") as f:
-                        audio_data = f.read()
+                    async with await anyio.open_file(audio_path, "rb") as f:
+                        audio_data = await f.read()
                     await audio_queue.put((text, audio_data))
             except Exception as e:
                 logger.error(

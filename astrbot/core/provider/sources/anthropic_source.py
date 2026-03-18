@@ -2,6 +2,7 @@ import base64
 import json
 from collections.abc import AsyncGenerator
 
+import aiofiles
 import anthropic
 import httpx
 from anthropic import AsyncAnthropic
@@ -652,8 +653,8 @@ class ProviderAnthropic(Provider):
             except Exception:
                 mime_type = "image/jpeg"
             return f"data:{mime_type};base64,{raw_base64}", mime_type
-        with open(image_url, "rb") as f:
-            image_bytes = f.read()
+        async with aiofiles.open(image_url, "rb") as f:
+            image_bytes = await f.read()
             mime_type = self._detect_image_mime_type(image_bytes)
             image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
             return f"data:{mime_type};base64,{image_bs64}", mime_type

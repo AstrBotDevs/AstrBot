@@ -4,6 +4,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import anyio
 import click
 
 from astrbot.core import astrbot_config, db_helper
@@ -188,7 +189,7 @@ def export_data(
                     raise subprocess.CalledProcessError(process.returncode or 1, cmd)
 
                 # Clean up original file
-                final_path.unlink()
+                await anyio.Path(final_path).unlink()
                 final_path = gpg_output
                 click.echo(
                     click.style(f"Processed backup created: {final_path}", fg="green")
@@ -199,13 +200,13 @@ def export_data(
                 click.echo(f"Calculating {digest} digest...")
                 hash_func = getattr(hashlib, digest)()
                 # Read file in chunks
-                with open(final_path, "rb") as f:
-                    while chunk := f.read(8192):
+                async with await anyio.open_file(final_path, "rb") as f:
+                    while chunk := await f.read(8192):
                         hash_func.update(chunk)
 
                 digest_val = hash_func.hexdigest()
                 digest_file = final_path.with_name(final_path.name + f".{digest}")
-                digest_file.write_text(
+                await anyio.Path(digest_file).write_text(
                     f"{digest_val} *{final_path.name}\n", encoding="utf-8"
                 )
                 click.echo(click.style(f"Digest generated: {digest_file}", fg="green"))
@@ -369,8 +370,8 @@ def import_data_command(backup_file: str, yes: bool):
                     click.echo(f"  - {warn}")
 
         finally:
-            if is_temp_file and zip_path.exists():
-                zip_path.unlink()
+            if is_temp_file and await anyio.Path(zip_path).exists():
+                await anyio.Path(zip_path).unlink()
                 click.echo(f"Cleaned up temporary file: {zip_path}")
 
     asyncio.run(_run())
