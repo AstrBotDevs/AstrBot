@@ -58,7 +58,7 @@ class InternalAgentSubStage(Stage):
         self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
         if self.tool_schema_mode not in ("lazy_load", "full"):
             logger.warning(
-                "Unsupported tool_schema_mode: %s, fallback to lazy_load",
+                "Unsupported tool_schema_mode: %s, fallback to full",
                 self.tool_schema_mode,
             )
             self.tool_schema_mode = "full"
