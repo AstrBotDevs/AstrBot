@@ -75,11 +75,28 @@ LLM_STREAM_CHAT_OUTPUT_SCHEMA = _object_schema(
     required=("text",), text={"type": "string"}
 )
 MEMORY_SEARCH_INPUT_SCHEMA = _object_schema(
-    required=("query",), query={"type": "string"}
+    required=("query",),
+    query={"type": "string"},
+    mode={"type": "string", "enum": ["auto", "keyword", "vector", "hybrid"]},
+    limit={"type": "integer", "minimum": 1},
+    min_score={"type": "number"},
+    provider_id={"type": "string"},
 )
 MEMORY_SEARCH_OUTPUT_SCHEMA = _object_schema(
     required=("items",),
-    items={"type": "array", "items": {"type": "object"}},
+    items={
+        "type": "array",
+        "items": _object_schema(
+            required=("key", "value", "score", "match_type"),
+            key={"type": "string"},
+            value=_nullable({"type": "object"}),
+            score={"type": "number"},
+            match_type={
+                "type": "string",
+                "enum": ["keyword", "vector", "hybrid"],
+            },
+        ),
+    },
 )
 MEMORY_SAVE_INPUT_SCHEMA = _object_schema(
     required=("key", "value"),
@@ -133,6 +150,9 @@ MEMORY_STATS_OUTPUT_SCHEMA = _object_schema(
     total_bytes=_nullable({"type": "integer"}),
     plugin_id=_nullable({"type": "string"}),
     ttl_entries=_nullable({"type": "integer"}),
+    indexed_items=_nullable({"type": "integer"}),
+    embedded_items=_nullable({"type": "integer"}),
+    dirty_items=_nullable({"type": "integer"}),
 )
 SYSTEM_GET_DATA_DIR_INPUT_SCHEMA = _object_schema()
 SYSTEM_GET_DATA_DIR_OUTPUT_SCHEMA = _object_schema(

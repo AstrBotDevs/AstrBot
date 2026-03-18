@@ -142,25 +142,33 @@ from astrbot_sdk.clients import MemoryClient
 
 ### 方法
 
-#### `search(query)`
+#### `search(query, *, mode="auto", limit=None, min_score=None, provider_id=None)`
 
-语义搜索记忆项。
+搜索记忆项。默认会在存在 embedding provider 时执行 hybrid 检索，
+否则退化为关键词检索。
 
 **参数**:
 - `query` (`str`): 搜索查询文本（自然语言）
+- `mode` (`Literal["auto", "keyword", "vector", "hybrid"]`): 搜索模式
+- `limit` (`int | None`): 最大返回条数
+- `min_score` (`float | None`): 最低分数阈值
+- `provider_id` (`str | None`): 指定 embedding provider
 
-**返回**: `list[dict]` - 匹配的记忆项列表，按相关度排序
+**返回**: `list[dict]` - 匹配的记忆项列表。每项至少包含 `key`、`value`、`score`、`match_type`
 
 **示例**:
 
 ```python
 # 搜索用户偏好
-results = await ctx.memory.search("用户喜欢什么颜色")
+results = await ctx.memory.search("用户喜欢什么颜色", mode="hybrid", limit=5)
 for item in results:
-    print(f"Key: {item['key']}, Content: {item['content']}")
+    print(item["key"], item["score"], item["match_type"])
 
-# 搜索对话摘要
-summaries = await ctx.memory.search("之前讨论过什么技术话题")
+# 强制使用关键词检索
+keyword_hits = await ctx.memory.search("blue", mode="keyword", min_score=0.9)
+
+# 使用当前激活的 embedding provider 执行向量检索
+vector_hits = await ctx.memory.search("之前讨论过什么技术话题", mode="vector")
 ```
 
 ---
@@ -191,6 +199,16 @@ await ctx.memory.save(
     content="重要笔记",
     tags=["work"],
     timestamp="2024-01-01"
+)
+
+# 显式指定检索文本
+await ctx.memory.save(
+    "profile:alice",
+    {
+        "name": "Alice",
+        "city": "Shanghai",
+        "embedding_text": "Alice 喜欢蓝色、海边和摄影",
+    },
 )
 ```
 
@@ -314,6 +332,12 @@ stats = await ctx.memory.stats()
 print(f"记忆库共有 {stats['total_items']} 条记录")
 if 'ttl_entries' in stats:
     print(f"其中 {stats['ttl_entries']} 条有过期时间")
+if 'indexed_items' in stats:
+    print(f"已建立索引: {stats['indexed_items']}")
+if 'embedded_items' in stats:
+    print(f"已向量化: {stats['embedded_items']}")
+if 'dirty_items' in stats:
+    print(f"待重建索引: {stats['dirty_items']}")
 ```
 
 ---

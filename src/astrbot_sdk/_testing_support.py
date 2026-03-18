@@ -6,6 +6,7 @@ import asyncio
 import typing
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, TextIO
 
 from .context import CancelToken
@@ -121,10 +122,77 @@ class InMemoryDB:
 
 
 class InMemoryMemory:
-    def __init__(self, store: dict[str, dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        store: dict[str, dict[str, Any]],
+        *,
+        expires_at: dict[str, datetime | None] | None = None,
+    ) -> None:
         self._store = store
+        self._expires_at = expires_at if expires_at is not None else {}
+
+    @staticmethod
+    def _is_ttl_entry(value: Any) -> bool:
+        """判断测试 memory 值是否使用 TTL 包装结构。
+
+        Args:
+            value: 待检查的存储值。
+
+        Returns:
+            bool: 如果包含 ``value`` 和 ``ttl_seconds`` 字段则返回 ``True``。
+        """
+        return isinstance(value, dict) and "value" in value and "ttl_seconds" in value
+
+    @classmethod
+    def _search_text(cls, value: Any) -> str:
+        """提取测试用 memory.search 的匹配文本。
+
+        Args:
+            value: 当前存储的 memory 值。
+
+        Returns:
+            str: 用于本地测试搜索的文本内容。
+        """
+        if cls._is_ttl_entry(value):
+            value = value.get("value")
+        if not isinstance(value, dict):
+            return ""
+        for field_name in ("embedding_text", "content", "summary", "title", "text"):
+            item = value.get(field_name)
+            if isinstance(item, str) and item.strip():
+                return item.strip()
+        return str(value)
+
+    def _is_expired(self, key: str) -> bool:
+        """判断测试 memory 键是否已经过期。
+
+        Args:
+            key: memory 条目的键。
+
+        Returns:
+            bool: 如果当前时间已超过过期时间则返回 ``True``。
+        """
+        expires_at = self._expires_at.get(key)
+        return expires_at is not None and expires_at <= datetime.now(timezone.utc)
+
+    def _purge_if_expired(self, key: str) -> bool:
+        """在测试 helper 中清理已过期的 memory 条目。
+
+        Args:
+            key: memory 条目的键。
+
+        Returns:
+            bool: 如果条目已过期并被清理则返回 ``True``。
+        """
+        if not self._is_expired(key):
+            return False
+        self._store.pop(key, None)
+        self._expires_at.pop(key, None)
+        return True
 
     def get(self, key: str, default: Any = None) -> Any:
+        if self._purge_if_expired(key):
+            return default
         return self._store.get(key, default)
 
     def save(self, key: str, value: dict[str, Any]) -> None:
@@ -132,11 +200,14 @@ class InMemoryMemory:
 
     def delete(self, key: str) -> None:
         self._store.pop(key, None)
+        self._expires_at.pop(key, None)
 
     def search(self, query: str) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
-        for key, value in self._store.items():
-            if query in key or query in str(value):
+        for key, value in list(self._store.items()):
+            if self._purge_if_expired(key):
+                continue
+            if query in key or query in self._search_text(value):
                 results.append({"key": key, "value": value})
         return results
 
@@ -200,7 +271,10 @@ class MockCapabilityRouter(CapabilityRouter):
         self._llm_stream_responses: list[str] = []
         super().__init__()
         self.db = InMemoryDB(self.db_store)
-        self.memory = InMemoryMemory(self.memory_store)
+        self.memory = InMemoryMemory(
+            self.memory_store,
+            expires_at=self._memory_expires_at,
+        )
 
     def list_dynamic_command_routes(self, plugin_id: str) -> list[dict[str, Any]]:
         return super().list_dynamic_command_routes(plugin_id)
