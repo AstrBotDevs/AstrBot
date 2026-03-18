@@ -96,7 +96,7 @@ class AstrbotPaths:
     """Astrbot 项目路径管理类"""
 
     def __init__(self) -> None:
-        self._root = self._resolve_root()
+        self._root_override: Path | None = None
 
     def _resolve_root(self) -> Path:
         if path := os.environ.get("ASTRBOT_ROOT"):
@@ -108,11 +108,13 @@ class AstrbotPaths:
 
     @property
     def root(self) -> Path:
-        return self._root
+        if self._root_override is not None:
+            return self._root_override
+        return self._resolve_root()
 
     @root.setter
     def root(self, value: Path) -> None:
-        self._root = value
+        self._root_override = value
 
     @property
     def project_root(self) -> Path:
