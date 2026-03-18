@@ -364,7 +364,11 @@ class SkillManager:
                     description = ""
                 description = description.strip()
                 input_schema = meta.get("input_schema")
+                if not isinstance(input_schema, dict):
+                    input_schema = None
                 output_schema = meta.get("output_schema")
+                if not isinstance(output_schema, dict):
+                    output_schema = None
             except Exception:
                 description = ""
             sandbox_exists = (
