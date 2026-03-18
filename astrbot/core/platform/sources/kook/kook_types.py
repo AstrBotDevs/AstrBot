@@ -293,7 +293,7 @@ class OrderMessage(BaseModel):
 
 class KookMessageSignal(IntEnum):
     """KOOK WebSocket 信令类型
-    ws文档: https://developer.kookapp.cn/doc/websocket"""  # noqa: W291
+    ws文档: https://developer.kookapp.cn/doc/websocket"""
 
     MESSAGE = 0
     """server->client  消息(s包含聊天和通知消息)"""
@@ -436,8 +436,8 @@ class KookWebsocketEvent(KookBaseDataClass):
     ] = Field(None, validation_alias="d", serialization_alias="d")
     """数据事件主体,对应原字段是'd'"""
     sn: int | None = None
-    """消息序号 , 用来确定消息顺序和ws重连时使用  
-    详见ws连接流程文档: https://developer.kookapp.cn/doc/websocket#%E8%BF%9E%E6%8E%A5%E6%B5%81%E7%A8%8B"""  # noqa: W291
+    """消息序号 , 用来确定消息顺序和ws重连时使用
+    详见ws连接流程文档: https://developer.kookapp.cn/doc/websocket#%E8%BF%9E%E6%8E%A5%E6%B5%81%E7%A8%8B"""
 
     @model_validator(mode="before")
     @classmethod

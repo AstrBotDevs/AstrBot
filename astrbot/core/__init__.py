@@ -22,7 +22,7 @@ from astrbot.core.utils.requirements_utils import (
 from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
 
-from .log import LogBroker, LogManager  # noqa
+from .log import LogBroker, LogManager
 from .utils.astrbot_path import get_astrbot_data_path
 
 # 初始化数据存储文件夹
@@ -47,3 +47,17 @@ pip_installer = PipInstaller(
     astrbot_config.get("pip_install_arg", ""),
     astrbot_config.get("pypi_index_url", None),
 )
+__all__ = [
+    "AstrBotConfig",
+    "DEMO_MODE",
+    "astrbot_config",
+    "t2i_base_url",
+    "html_renderer",
+    "logger",
+    "LogBroker",
+    "LogManager",
+    "db_helper",
+    "sp",
+    "file_token_service",
+    "pip_installer",
+]

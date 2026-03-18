@@ -2,7 +2,7 @@ import asyncio
 import copy
 import os
 import traceback
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Protocol, runtime_checkable
 
 from astrbot.core import astrbot_config, logger, sp
@@ -26,6 +26,11 @@ from .register import llm_tools, provider_cls_map
 @runtime_checkable
 class HasInitialize(Protocol):
     async def initialize(self) -> None: ...
+
+
+@runtime_checkable
+class SupportsTerminate(Protocol):
+    def terminate(self) -> Awaitable[object]: ...
 
 
 class ProviderManager:
@@ -739,8 +744,9 @@ class ProviderManager:
             if self.inst_map[provider_id] == self.curr_tts_provider_inst:
                 self.curr_tts_provider_inst = None
 
-            if getattr(self.inst_map[provider_id], "terminate", None):
-                await self.inst_map[provider_id].terminate()  # type: ignore
+            inst = self.inst_map[provider_id]
+            if isinstance(inst, SupportsTerminate):
+                await inst.terminate()
 
             logger.info(
                 f"{provider_id} 提供商适配器已终止({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)})",
@@ -820,8 +826,8 @@ class ProviderManager:
                 pass
 
         for provider_inst in self.provider_insts:
-            if hasattr(provider_inst, "terminate"):
-                await provider_inst.terminate()  # type: ignore
+            if isinstance(provider_inst, SupportsTerminate):
+                await provider_inst.terminate()
         try:
             await self.llm_tools.disable_mcp_server()
         except Exception:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from asyncio import Queue
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from typing import TYPE_CHECKING, Any, Protocol
 
 from deprecated import deprecated
@@ -53,14 +53,20 @@ class PlatformManagerProtocol(Protocol):
     platform_insts: list[Platform]
 
 
+class StarManagerProtocol(Protocol):
+    async def turn_off_plugin(self, plugin_name: str) -> None: ...
+    async def turn_on_plugin(self, plugin_name: str) -> None: ...
+    async def install_plugin(self, repo_url: str, proxy: str = "") -> dict | None: ...
+
+
 class Context:
     """暴露给插件的接口上下文。"""
 
     registered_web_apis: list = []
 
     # 向后兼容的变量
-    _register_tasks: list[Awaitable] = []
-    _star_manager = None
+    _register_tasks: list[Coroutine[object, object, object]] = []
+    _star_manager: StarManagerProtocol | None = None
 
     def __init__(
         self,

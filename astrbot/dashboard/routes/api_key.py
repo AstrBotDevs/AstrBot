@@ -72,6 +72,7 @@ class ApiKeyRoute(Route):
         post_data = await request.json or {}
 
         name = str(post_data.get("name", "")).strip() or "Untitled API Key"
+        normalized_scopes: list[str]
         scopes = post_data.get("scopes")
         if scopes is None:
             normalized_scopes = list(ALL_OPEN_API_SCOPES)
@@ -111,7 +112,7 @@ class ApiKeyRoute(Route):
             name=name,
             key_hash=key_hash,
             key_prefix=key_prefix,
-            scopes=normalized_scopes,  # type: ignore
+            scopes=normalized_scopes,
             created_by=created_by,
             expires_at=expires_at,
         )

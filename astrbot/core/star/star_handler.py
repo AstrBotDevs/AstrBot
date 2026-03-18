@@ -197,7 +197,7 @@ class StarHandlerRegistry(Generic[T]):
         return len(self._handlers)
 
 
-star_handlers_registry = StarHandlerRegistry()  # type: ignore
+star_handlers_registry: StarHandlerRegistry = StarHandlerRegistry()
 
 
 class EventType(enum.Enum):

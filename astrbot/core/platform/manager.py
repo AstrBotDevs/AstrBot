@@ -2,6 +2,7 @@ import asyncio
 import traceback
 from asyncio import Queue
 from dataclasses import dataclass
+from importlib import import_module
 
 from astrbot.core import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -11,6 +12,24 @@ from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from .platform import Platform, PlatformStatus
 from .register import platform_cls_map
 from .sources.webchat.webchat_adapter import WebChatAdapter
+
+PLATFORM_ADAPTER_MODULES: dict[str, str] = {
+    "aiocqhttp": ".sources.aiocqhttp.aiocqhttp_platform_adapter",
+    "qq_official": ".sources.qqofficial.qqofficial_platform_adapter",
+    "qq_official_webhook": ".sources.qqofficial_webhook.qo_webhook_adapter",
+    "lark": ".sources.lark.lark_adapter",
+    "dingtalk": ".sources.dingtalk.dingtalk_adapter",
+    "telegram": ".sources.telegram.tg_adapter",
+    "wecom": ".sources.wecom.wecom_adapter",
+    "wecom_ai_bot": ".sources.wecom_ai_bot.wecomai_adapter",
+    "weixin_official_account": ".sources.weixin_official_account.weixin_offacc_adapter",
+    "discord": ".sources.discord.discord_platform_adapter",
+    "misskey": ".sources.misskey.misskey_adapter",
+    "slack": ".sources.slack.slack_adapter",
+    "satori": ".sources.satori.satori_adapter",
+    "line": ".sources.line.line_adapter",
+    "kook": ".sources.kook.kook_adapter",
+}
 
 
 @dataclass
@@ -125,65 +144,9 @@ class PlatformManager:
             logger.info(
                 f"载入 {platform_config['type']}({platform_config['id']}) 平台适配器 ...",
             )
-            match platform_config["type"]:
-                case "aiocqhttp":
-                    from .sources.aiocqhttp.aiocqhttp_platform_adapter import (
-                        AiocqhttpAdapter,  # noqa: F401
-                    )
-                case "qq_official":
-                    from .sources.qqofficial.qqofficial_platform_adapter import (
-                        QQOfficialPlatformAdapter,  # noqa: F401
-                    )
-                case "qq_official_webhook":
-                    from .sources.qqofficial_webhook.qo_webhook_adapter import (
-                        QQOfficialWebhookPlatformAdapter,  # noqa: F401
-                    )
-                case "lark":
-                    from .sources.lark.lark_adapter import (
-                        LarkPlatformAdapter,  # noqa: F401
-                    )
-                case "dingtalk":
-                    from .sources.dingtalk.dingtalk_adapter import (
-                        DingtalkPlatformAdapter,  # noqa: F401
-                    )
-                case "telegram":
-                    from .sources.telegram.tg_adapter import (
-                        TelegramPlatformAdapter,  # noqa: F401
-                    )
-                case "wecom":
-                    from .sources.wecom.wecom_adapter import (
-                        WecomPlatformAdapter,  # noqa: F401
-                    )
-                case "wecom_ai_bot":
-                    from .sources.wecom_ai_bot.wecomai_adapter import (
-                        WecomAIBotAdapter,  # noqa: F401
-                    )
-                case "weixin_official_account":
-                    from .sources.weixin_official_account.weixin_offacc_adapter import (
-                        WeixinOfficialAccountPlatformAdapter,  # noqa: F401
-                    )
-                case "discord":
-                    from .sources.discord.discord_platform_adapter import (
-                        DiscordPlatformAdapter,  # noqa: F401
-                    )
-                case "misskey":
-                    from .sources.misskey.misskey_adapter import (
-                        MisskeyPlatformAdapter,  # noqa: F401
-                    )
-                case "slack":
-                    from .sources.slack.slack_adapter import SlackAdapter  # noqa: F401
-                case "satori":
-                    from .sources.satori.satori_adapter import (
-                        SatoriPlatformAdapter,  # noqa: F401
-                    )
-                case "line":
-                    from .sources.line.line_adapter import (
-                        LinePlatformAdapter,  # noqa: F401
-                    )
-                case "kook":
-                    from .sources.kook.kook_adapter import (
-                        KookPlatformAdapter,  # noqa: F401
-                    )
+            module_path = PLATFORM_ADAPTER_MODULES.get(platform_config["type"])
+            if module_path is not None:
+                import_module(module_path, package=__package__)
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
                 f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->平台日志->安装Pip库 中安装依赖库。",

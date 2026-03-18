@@ -5,6 +5,8 @@ import os
 import sys
 from pathlib import Path
 
+import anyio
+
 import runtime_bootstrap
 from astrbot.core import LogBroker, LogManager, db_helper, logger
 from astrbot.core.config.default import VERSION
@@ -69,13 +71,13 @@ async def check_dashboard_files(webui_dir: str | None = None):
     """下载管理面板文件"""
     # 指定webui目录
     if webui_dir:
-        if os.path.exists(webui_dir):
+        if await anyio.Path(webui_dir).exists():
             logger.info(f"使用指定的 WebUI 目录: {webui_dir}")
             return webui_dir
         logger.warning(f"指定的 WebUI 目录 {webui_dir} 不存在，将使用默认逻辑。")
 
     data_dist_path = os.path.join(get_astrbot_data_path(), "dist")
-    if os.path.exists(data_dist_path):
+    if await anyio.Path(data_dist_path).exists():
         v = await get_dashboard_version()
         if v is not None:
             # 存在文件

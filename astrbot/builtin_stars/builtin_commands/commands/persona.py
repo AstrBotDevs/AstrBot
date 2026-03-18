@@ -51,7 +51,7 @@ class PersonaCommands:
         return lines
 
     async def persona(self, message: AstrMessageEvent) -> None:
-        l = message.message_str.split(" ")  # noqa: E741
+        parts = message.message_str.split(" ")
         umo = message.unified_msg_origin
 
         curr_persona_name = "无"
@@ -103,7 +103,7 @@ class PersonaCommands:
             curr_cid_title = conv.title if conv.title else "新对话"
             curr_cid_title += f"({cid[:4]})"
 
-        if len(l) == 1:
+        if len(parts) == 1:
             message.set_result(
                 MessageEventResult()
                 .message(
@@ -122,7 +122,7 @@ class PersonaCommands:
                 )
                 .use_t2i(False),
             )
-        elif l[1] == "list":
+        elif parts[1] == "list":
             # 获取文件夹树和所有人格
             folder_tree = await self.context.persona_manager.get_folder_tree()
             all_personas = self.context.persona_manager.personas
@@ -149,11 +149,11 @@ class PersonaCommands:
 
             msg = "\n".join(lines)
             message.set_result(MessageEventResult().message(msg).use_t2i(False))
-        elif l[1] == "view":
-            if len(l) == 2:
+        elif parts[1] == "view":
+            if len(parts) == 2:
                 message.set_result(MessageEventResult().message("请输入人格情景名"))
                 return
-            ps = l[2].strip()
+            ps = parts[2].strip()
             if persona := next(
                 builtins.filter(
                     lambda persona: persona["name"] == ps,
@@ -166,7 +166,7 @@ class PersonaCommands:
             else:
                 msg = f"人格{ps}不存在"
             message.set_result(MessageEventResult().message(msg))
-        elif l[1] == "unset":
+        elif parts[1] == "unset":
             if not cid:
                 message.set_result(
                     MessageEventResult().message("当前没有对话，无法取消人格。"),
@@ -178,7 +178,7 @@ class PersonaCommands:
             )
             message.set_result(MessageEventResult().message("取消人格成功。"))
         else:
-            ps = "".join(l[1:]).strip()
+            ps = "".join(parts[1:]).strip()
             if not cid:
                 message.set_result(
                     MessageEventResult().message(

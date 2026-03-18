@@ -4,7 +4,6 @@ from astrbot.core import DEMO_MODE, logger
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
-from astrbot.core.star.star_manager import PluginManager
 
 
 class PluginCommands:
@@ -40,7 +39,10 @@ class PluginCommands:
                 MessageEventResult().message("/plugin off <插件名> 禁用插件。"),
             )
             return
-        await self.context._star_manager.turn_off_plugin(plugin_name)  # type: ignore
+        if self.context._star_manager is None:
+            event.set_result(MessageEventResult().message("插件管理器未初始化。"))
+            return
+        await self.context._star_manager.turn_off_plugin(plugin_name)
         event.set_result(MessageEventResult().message(f"插件 {plugin_name} 已禁用。"))
 
     async def plugin_on(self, event: AstrMessageEvent, plugin_name: str = "") -> None:
@@ -53,7 +55,10 @@ class PluginCommands:
                 MessageEventResult().message("/plugin on <插件名> 启用插件。"),
             )
             return
-        await self.context._star_manager.turn_on_plugin(plugin_name)  # type: ignore
+        if self.context._star_manager is None:
+            event.set_result(MessageEventResult().message("插件管理器未初始化。"))
+            return
+        await self.context._star_manager.turn_on_plugin(plugin_name)
         event.set_result(MessageEventResult().message(f"插件 {plugin_name} 已启用。"))
 
     async def plugin_get(self, event: AstrMessageEvent, plugin_repo: str = "") -> None:
@@ -68,9 +73,9 @@ class PluginCommands:
             return
         logger.info(f"准备从 {plugin_repo} 安装插件。")
         if self.context._star_manager:
-            star_mgr: PluginManager = self.context._star_manager
+            star_mgr = self.context._star_manager
             try:
-                await star_mgr.install_plugin(plugin_repo)  # type: ignore
+                await star_mgr.install_plugin(plugin_repo)
                 event.set_result(MessageEventResult().message("安装插件成功。"))
             except Exception as e:
                 logger.error(f"安装插件失败: {e}")

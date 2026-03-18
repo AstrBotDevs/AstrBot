@@ -8,7 +8,6 @@ from pathlib import Path
 import aiofiles
 
 from astrbot.core import logger
-from astrbot.core.db.vec_db.base import BaseVecDB
 from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.provider import (
@@ -106,7 +105,7 @@ Text chunk to process:
 
 
 class KBHelper:
-    vec_db: BaseVecDB
+    vec_db: FaissVecDB | None
     kb: KnowledgeBase
 
     def __init__(
@@ -126,6 +125,7 @@ class KBHelper:
         self.kb_dir = Path(self.kb_root_dir) / self.kb.kb_id
         self.kb_medias_dir = Path(self.kb_dir) / "medias" / self.kb.kb_id
         self.kb_files_dir = Path(self.kb_dir) / "files" / self.kb.kb_id
+        self.vec_db = None
 
         self.kb_medias_dir.mkdir(parents=True, exist_ok=True)
         self.kb_files_dir.mkdir(parents=True, exist_ok=True)
@@ -133,15 +133,24 @@ class KBHelper:
     async def initialize(self) -> None:
         await self._ensure_vec_db()
 
+    def _get_vec_db(self) -> FaissVecDB:
+        if self.vec_db is None:
+            raise ValueError("Vector database is not initialized")
+        return self.vec_db
+
     async def get_ep(self) -> EmbeddingProvider:
         if not self.kb.embedding_provider_id:
             raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
         ep: EmbeddingProvider = await self.prov_mgr.get_provider_by_id(
             self.kb.embedding_provider_id,
-        )  # type: ignore
+        )
         if not ep:
             raise ValueError(
                 f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider",
+            )
+        if not isinstance(ep, EmbeddingProvider):
+            raise ValueError(
+                f"Provider {self.kb.embedding_provider_id} is not an Embedding Provider",
             )
         return ep
 
@@ -150,10 +159,14 @@ class KBHelper:
             return None
         rp: RerankProvider = await self.prov_mgr.get_provider_by_id(
             self.kb.rerank_provider_id,
-        )  # type: ignore
+        )
         if not rp:
             raise ValueError(
                 f"无法找到 ID 为 {self.kb.rerank_provider_id} 的 Rerank Provider",
+            )
+        if not isinstance(rp, RerankProvider):
+            raise ValueError(
+                f"Provider {self.kb.rerank_provider_id} is not a Rerank Provider",
             )
         return rp
 
@@ -297,7 +310,7 @@ class KBHelper:
                 if progress_callback:
                     await progress_callback("embedding", current, total)
 
-            await self.vec_db.insert_batch(
+            await self._get_vec_db().insert_batch(
                 contents=contents,
                 metadatas=metadatas,
                 batch_size=batch_size,
@@ -327,7 +340,7 @@ class KBHelper:
 
                 await session.refresh(doc)
 
-            vec_db: FaissVecDB = self.vec_db  # type: ignore
+            vec_db = self._get_vec_db()
             await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=vec_db)
             await self.refresh_kb()
             await self.refresh_document(doc_id)
@@ -364,21 +377,21 @@ class KBHelper:
         """删除单个文档及其相关数据"""
         await self.kb_db.delete_document_by_id(
             doc_id=doc_id,
-            vec_db=self.vec_db,  # type: ignore
+            vec_db=self._get_vec_db(),
         )
         await self.kb_db.update_kb_stats(
             kb_id=self.kb.kb_id,
-            vec_db=self.vec_db,  # type: ignore
+            vec_db=self._get_vec_db(),
         )
         await self.refresh_kb()
 
     async def delete_chunk(self, chunk_id: str, doc_id: str) -> None:
         """删除单个文本块及其相关数据"""
-        vec_db: FaissVecDB = self.vec_db  # type: ignore
+        vec_db = self._get_vec_db()
         await vec_db.delete(chunk_id)
         await self.kb_db.update_kb_stats(
             kb_id=self.kb.kb_id,
-            vec_db=self.vec_db,  # type: ignore
+            vec_db=self._get_vec_db(),
         )
         await self.refresh_kb()
         await self.refresh_document(doc_id)
@@ -409,7 +422,7 @@ class KBHelper:
         limit: int = 100,
     ) -> list[dict]:
         """获取文档的所有块及其元数据"""
-        vec_db: FaissVecDB = self.vec_db  # type: ignore
+        vec_db = self._get_vec_db()
         chunks = await vec_db.document_storage.get_documents(
             metadata_filters={"kb_doc_id": doc_id},
             offset=offset,
@@ -432,7 +445,7 @@ class KBHelper:
 
     async def get_chunk_count_by_doc_id(self, doc_id: str) -> int:
         """获取文档的块数量"""
-        vec_db: FaissVecDB = self.vec_db  # type: ignore
+        vec_db = self._get_vec_db()
         count = await vec_db.count_documents(metadata_filter={"kb_doc_id": doc_id})
         return count
 

@@ -160,7 +160,7 @@ class PluginManager:
         self.updator = PluginUpdator()
 
         self.context = context
-        self.context._star_manager = self  # type: ignore
+        self.context._star_manager = self
         StarTools.initialize(context)
 
         self.config = config
@@ -910,6 +910,9 @@ class PluginManager:
                     assert metadata.module_path is not None, (
                         f"插件 {metadata.name} 的模块路径为空。"
                     )
+                    assert metadata.star_cls is not None, (
+                        f"插件 {metadata.name} 的实例为空。"
+                    )
 
                     # 绑定 handler
                     related_handlers = (
@@ -920,7 +923,7 @@ class PluginManager:
                     for handler in related_handlers:
                         handler.handler = functools.partial(
                             handler.handler,
-                            metadata.star_cls,  # type: ignore
+                            metadata.star_cls,
                         )
                     # 绑定 llm_tool handler
                     for func_tool in llm_tools.func_list:
@@ -942,7 +945,7 @@ class PluginManager:
                                 ft.handler_module_path = metadata.module_path
                                 ft.handler = functools.partial(
                                     ft.handler,
-                                    metadata.star_cls,  # type: ignore
+                                    metadata.star_cls,
                                 )
                             if ft.name in inactivated_llm_tools:
                                 ft.active = False
@@ -1246,7 +1249,7 @@ class PluginManager:
                 _, repo_name, _ = self.updator.parse_github_url(repo_url)
                 repo_name = self.updator.format_name(repo_name)
                 plugin_path = os.path.join(self.plugin_store_path, repo_name)
-                if os.path.exists(plugin_path):
+                if await anyio.Path(plugin_path).exists():
                     raise Exception(
                         f"安装失败：目录 {os.path.basename(plugin_path)} 已存在。"
                     )
@@ -1259,8 +1262,9 @@ class PluginManager:
                     self.plugin_store_path,
                     metadata_dir_name,
                 )
-                if target_plugin_path != plugin_path and os.path.exists(
-                    target_plugin_path
+                if (
+                    target_plugin_path != plugin_path
+                    and await anyio.Path(target_plugin_path).exists()
                 ):
                     raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
                 if target_plugin_path != plugin_path:
@@ -1649,7 +1653,10 @@ class PluginManager:
                 self.plugin_store_path,
                 metadata_dir_name,
             )
-            if target_plugin_path != desti_dir and os.path.exists(target_plugin_path):
+            if (
+                target_plugin_path != desti_dir
+                and await anyio.Path(target_plugin_path).exists()
+            ):
                 raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
             if target_plugin_path != desti_dir:
                 os.rename(desti_dir, target_plugin_path)
@@ -1724,7 +1731,10 @@ class PluginManager:
             )
             raise
         finally:
-            if temp_desti_dir != desti_dir and os.path.isdir(temp_desti_dir):
+            if (
+                temp_desti_dir != desti_dir
+                and await anyio.Path(temp_desti_dir).is_dir()
+            ):
                 try:
                     remove_dir(temp_desti_dir)
                 except Exception as e:

@@ -410,21 +410,19 @@ class AstrBotDashboard:
         )
 
         scheme = "https" if ssl_enable else "http"
-        display_host = f"[{host}]" if ":" in host else host
+        binds: list[str] = [self._build_bind(host, port)]
+        if host == "::" and platform.system() in ("Windows", "Darwin"):
+            binds.append(self._build_bind("0.0.0.0", port))
 
         if self.enable_webui:
             logger.info(
-                "正在启动 WebUI + API, 监听地址: %s://%s:%s",
-                scheme,
-                display_host,
-                port,
+                "正在启动 WebUI + API, 监听: %s",
+                ", ".join(f"{scheme}://{bind}" for bind in binds),
             )
         else:
             logger.info(
-                "正在启动 API Server (WebUI 已分离), 监听地址: %s://%s:%s",
-                scheme,
-                display_host,
-                port,
+                "正在启动 API Server (WebUI 已分离), 监听: %s",
+                ", ".join(f"{scheme}://{bind}" for bind in binds),
             )
 
         check_hosts = {host}
@@ -435,14 +433,10 @@ class AstrBotDashboard:
                 info = self.get_process_using_port(port)
                 raise RuntimeError(f"端口 {port} 已被占用\n{info}")
 
-        if self.enable_webui:
-            self._print_access_urls(host, port, scheme)
+        self._print_access_urls(host, port, scheme, self.enable_webui)
 
         # 配置 Hypercorn
         config = HyperConfig()
-        binds: list[str] = [self._build_bind(host, port)]
-        if host == "::" and platform.system() in ("Windows", "Darwin"):
-            binds.append(self._build_bind("0.0.0.0", port))
         config.bind = binds
 
         if ssl_enable:
@@ -500,10 +494,17 @@ class AstrBotDashboard:
         except ValueError:
             return f"{host}:{port}"
 
-    def _print_access_urls(self, host: str, port: int, scheme: str = "http") -> None:
+    def _print_access_urls(
+        self,
+        host: str,
+        port: int,
+        scheme: str = "http",
+        enable_webui: bool = True,
+    ) -> None:
         local_ips: list[IPv4Address | IPv6Address] = get_local_ip_addresses()
+        mode_label = "WebUI + API" if enable_webui else "API Server (WebUI 已分离)"
 
-        parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI 已启动\n\n"]
+        parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} {mode_label} 已启动\n\n"]
 
         parts.append(f"   ➜  本地: {scheme}://localhost:{port}\n")
 
@@ -518,8 +519,15 @@ class AstrBotDashboard:
                     display_url = f"{scheme}://{ip}:{port}"
 
                 parts.append(f"   ➜  网络: {display_url}\n")
+        else:
+            if ":" in host:
+                parts.append(f"   ➜  指定监听: {scheme}://[{host}]:{port}\n")
+            else:
+                parts.append(f"   ➜  指定监听: {scheme}://{host}:{port}\n")
 
-        parts.append("   ➜  默认用户名和密码: astrbot\n ✨✨✨\n")
+        if enable_webui:
+            parts.append("   ➜  默认用户名和密码: astrbot\n")
+        parts.append(" ✨✨✨\n")
 
         if not local_ips:
             parts.append(

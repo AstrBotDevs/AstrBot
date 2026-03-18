@@ -127,7 +127,7 @@ class ProviderAnthropic(Provider):
 
                 if "tool_calls" in message and isinstance(message["tool_calls"], list):
                     for tool_call in message["tool_calls"]:
-                        blocks.append(  # noqa: PERF401
+                        blocks.append(
                             {
                                 "type": "tool_use",
                                 "name": tool_call["function"]["name"],
