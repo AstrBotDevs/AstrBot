@@ -621,7 +621,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             log_message="[background_task_summary_note] 模板格式化失败，回退使用默认模板。",
             summary_name=summary_name,
             task_id=task_id,
-            result=result,
+            result=task_meta.get("result") or result_text or "no content",
         )
         if llm_resp and llm_resp.completion_text:
             summary_note += _format_template_with_default_fallback(
