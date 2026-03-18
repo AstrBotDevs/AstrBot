@@ -227,6 +227,50 @@ async def test_run_pip_in_process_normalizes_crlf_without_extra_blank_lines(
 
 
 @pytest.mark.asyncio
+async def test_run_pip_in_process_injects_windows_runtime_build_env(monkeypatch):
+    runtime_executable = (
+        r"\\?\C:\Users\buding\AppData\Local\AstrBot\backend\python\python.exe"
+    )
+    include_dir = r"C:\Users\buding\AppData\Local\AstrBot\backend\python\include"
+    libs_dir = r"C:\Users\buding\AppData\Local\AstrBot\backend\python\libs"
+    existing_include = r"C:\VS\include"
+    existing_lib = r"C:\VS\lib"
+    observed_env = {}
+
+    def fake_pip_main(args):
+        del args
+        observed_env["INCLUDE"] = pip_installer_module.os.environ.get("INCLUDE")
+        observed_env["LIB"] = pip_installer_module.os.environ.get("LIB")
+        return 0
+
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.setenv("INCLUDE", existing_include)
+    monkeypatch.setenv("LIB", existing_lib)
+    monkeypatch.setattr(pip_installer_module.sys, "platform", "win32")
+    monkeypatch.setattr(pip_installer_module.sys, "executable", runtime_executable)
+    monkeypatch.setattr(
+        pip_installer_module.os.path,
+        "isdir",
+        lambda path: path in {include_dir, libs_dir},
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._get_pip_main",
+        lambda: fake_pip_main,
+    )
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result == 0
+    assert observed_env == {
+        "INCLUDE": f"{include_dir};{existing_include}",
+        "LIB": f"{libs_dir};{existing_lib}",
+    }
+    assert pip_installer_module.os.environ["INCLUDE"] == existing_include
+    assert pip_installer_module.os.environ["LIB"] == existing_lib
+
+
+@pytest.mark.asyncio
 async def test_run_pip_in_process_classifies_nonstandard_conflict_output(monkeypatch):
     def fake_pip_main(args):
         del args

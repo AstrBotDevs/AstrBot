@@ -5,6 +5,7 @@ import importlib.metadata as importlib_metadata
 import importlib.util
 import io
 import logging
+import ntpath
 import os
 import re
 import shlex
@@ -233,6 +234,71 @@ def _run_pip_main_streaming(pip_main, args: list[str]) -> tuple[int, list[str]]:
         result_code = pip_main(args)
     stream.flush()
     return result_code, stream.lines
+
+
+def _normalize_windows_native_build_path(path: str) -> str:
+    normalized = path.replace("/", "\\")
+
+    for prefix in ("\\\\?\\UNC\\", "\\??\\UNC\\"):
+        if normalized.startswith(prefix):
+            return ntpath.normpath(f"\\\\{normalized[len(prefix):]}")
+
+    for prefix in ("\\\\?\\", "\\??\\"):
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix) :]
+            break
+
+    return ntpath.normpath(normalized)
+
+
+def _prepend_windows_env_path(name: str, path: str) -> str:
+    existing = os.environ.get(name)
+    if existing:
+        return f"{path};{existing}"
+    return path
+
+
+def _build_packaged_windows_runtime_build_env() -> dict[str, str]:
+    if sys.platform != "win32" or not is_packaged_desktop_runtime():
+        return {}
+
+    runtime_executable = _normalize_windows_native_build_path(sys.executable)
+    runtime_dir = ntpath.dirname(runtime_executable)
+    if not runtime_dir:
+        return {}
+
+    env_updates: dict[str, str] = {}
+    include_dir = _normalize_windows_native_build_path(
+        ntpath.join(runtime_dir, "include")
+    )
+    libs_dir = _normalize_windows_native_build_path(ntpath.join(runtime_dir, "libs"))
+
+    if os.path.isdir(include_dir):
+        env_updates["INCLUDE"] = _prepend_windows_env_path("INCLUDE", include_dir)
+    if os.path.isdir(libs_dir):
+        env_updates["LIB"] = _prepend_windows_env_path("LIB", libs_dir)
+
+    return env_updates
+
+
+@contextlib.contextmanager
+def _temporary_environ(updates: dict[str, str]):
+    if not updates:
+        yield
+        return
+
+    missing = object()
+    previous_values = {key: os.environ.get(key, missing) for key in updates}
+
+    try:
+        os.environ.update(updates)
+        yield
+    finally:
+        for key, previous_value in previous_values.items():
+            if previous_value is missing:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = previous_value
 
 
 def _matches_pip_failure_pattern(line: str, *pattern_names: str) -> bool:
@@ -927,12 +993,14 @@ class PipInstaller:
     async def _run_pip_in_process(self, args: list[str]) -> int:
         pip_main = _get_pip_main()
         _patch_distlib_finder_for_frozen_runtime()
+        build_env = _build_packaged_windows_runtime_build_env()
 
         original_handlers = list(logging.getLogger().handlers)
         try:
-            result_code, output_lines = await asyncio.to_thread(
-                _run_pip_main_streaming, pip_main, args
-            )
+            with _temporary_environ(build_env):
+                result_code, output_lines = await asyncio.to_thread(
+                    _run_pip_main_streaming, pip_main, args
+                )
         finally:
             _cleanup_added_root_handlers(original_handlers)
 
