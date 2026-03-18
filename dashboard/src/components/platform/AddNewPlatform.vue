@@ -306,7 +306,12 @@
 <script>
 import axios from 'axios';
 import { useModuleI18n } from '@/i18n/composables';
-import { getPlatformIcon, getPlatformDescription, getTutorialLink } from '@/utils/platformUtils';
+import {
+  getPlatformIcon,
+  getPlatformDescription,
+  getTutorialLink,
+  stripPlatformRuntimeFields
+} from '@/utils/platformUtils';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
 import ConfigPage from '@/views/ConfigPage.vue';
@@ -526,11 +531,7 @@ export default {
   },
   methods: {
     stripRuntimeFields(config) {
-      if (!config || typeof config !== 'object') {
-        return config;
-      }
-      delete config.logo_token;
-      return config;
+      return stripPlatformRuntimeFields(config);
     },
     getPlatformIcon(platformType) {
       return getPlatformIcon(platformType, {

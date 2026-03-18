@@ -39,10 +39,31 @@ from .util import (
 )
 
 MAX_FILE_BYTES = 500 * 1024 * 1024
+RUNTIME_PLATFORM_FIELD_KEYS = frozenset({"logo_token"})
 
 
 def _resolve_path(path: Path) -> Path:
     return path.resolve(strict=False)
+
+
+def strip_platform_runtime_fields(
+    config: Any,
+    runtime_field_keys: frozenset[str] = RUNTIME_PLATFORM_FIELD_KEYS,
+) -> Any:
+    if isinstance(config, list):
+        return [
+            strip_platform_runtime_fields(item, runtime_field_keys) for item in config
+        ]
+
+    if not isinstance(config, dict):
+        return config
+
+    cleaned_config: dict[Any, Any] = {}
+    for key, value in config.items():
+        if key in runtime_field_keys:
+            continue
+        cleaned_config[key] = strip_platform_runtime_fields(value, runtime_field_keys)
+    return cleaned_config
 
 
 def try_cast(value: Any, type_: str):
@@ -1245,7 +1266,7 @@ class ConfigRoute(Route):
         return Response().ok({"files": files}).__dict__
 
     async def post_new_platform(self):
-        new_platform_config = await request.json
+        new_platform_config = strip_platform_runtime_fields(await request.json)
 
         # 如果是支持统一 webhook 模式的平台，生成 webhook_uuid
         ensure_platform_webhook_config(new_platform_config)
@@ -1274,7 +1295,9 @@ class ConfigRoute(Route):
     async def post_update_platform(self):
         update_platform_config = await request.json
         origin_platform_id = update_platform_config.get("id", None)
-        new_config = update_platform_config.get("config", None)
+        new_config = strip_platform_runtime_fields(
+            update_platform_config.get("config", None)
+        )
         if not origin_platform_id or not new_config:
             return Response().error("参数错误").__dict__
 

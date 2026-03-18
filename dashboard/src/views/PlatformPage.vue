@@ -196,7 +196,11 @@ import ItemCard from '@/components/shared/ItemCard.vue';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n, mergeDynamicTranslations } from '@/i18n/composables';
-import { getPlatformIcon, getTutorialLink } from '@/utils/platformUtils';
+import {
+  getPlatformIcon,
+  getTutorialLink,
+  stripPlatformRuntimeFields
+} from '@/utils/platformUtils';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog
@@ -457,13 +461,13 @@ export default {
     },
 
     editPlatform(platform) {
-      const platformCopy = JSON.parse(JSON.stringify(platform));
-      delete platformCopy.logo_token;
+      const platformCopy = stripPlatformRuntimeFields(
+        JSON.parse(JSON.stringify(platform))
+      );
       const template = this.findPlatformTemplate(platformCopy);
       this.updatingPlatformConfig = template
         ? this.mergeConfigWithTemplate(platformCopy, template)
         : platformCopy;
-      delete this.updatingPlatformConfig.logo_token;
       this.updatingMode = true;
       this.showAddPlatformDialog = true;
       this.$nextTick(() => {

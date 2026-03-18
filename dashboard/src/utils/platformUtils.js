@@ -47,6 +47,30 @@ const BUILTIN_PLATFORM_ICON_MAP = {
   line: new URL("@/assets/images/platform_logos/line.png", import.meta.url).href,
 };
 
+const DEFAULT_RUNTIME_PLATFORM_KEYS = ['logo_token'];
+
+export function stripPlatformRuntimeFields(config, runtimeKeys = DEFAULT_RUNTIME_PLATFORM_KEYS) {
+  if (Array.isArray(config)) {
+    return config.map((item) => stripPlatformRuntimeFields(item, runtimeKeys));
+  }
+
+  if (!config || typeof config !== 'object') {
+    return config;
+  }
+
+  const runtimeKeySet = new Set(runtimeKeys);
+  const cleanedConfig = {};
+
+  for (const [key, value] of Object.entries(config)) {
+    if (runtimeKeySet.has(key)) {
+      continue;
+    }
+    cleanedConfig[key] = stripPlatformRuntimeFields(value, runtimeKeys);
+  }
+
+  return cleanedConfig;
+}
+
 function getDynamicPlatformLogoToken(name, options = {}) {
   const metadata = options.metadata;
   const platformTemplates = options.platformTemplates;
