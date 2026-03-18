@@ -5,6 +5,21 @@ Gathered here so every module can import prompts without pulling in
 tool classes or heavy dependencies.
 """
 
+def _format_template_with_default_fallback(
+        prompt_template: str | None,
+        default_template: str,
+        logger,
+        log_message: str,
+        **kwargs
+) -> str:
+    """尝试根据模板格式化文案，如果失败则使用默认模板并记录错误日志"""
+    template_result = prompt_template
+    try:
+        return template_result.format(**kwargs)
+    except Exception:
+        logger.error(log_message, exc_info=True)
+        return default_template.format(**kwargs)
+
 LLM_SAFETY_MODE_SYSTEM_PROMPT = """You are running in Safe Mode.
 
 Rules:
