@@ -398,14 +398,35 @@ commonStore.createEventSource(); // log
 commonStore.getStartTime();
 
 // 视图模式切换
-
+onMounted(() => {
+  // 初次加載時保存當前路由
+  if (typeof window !== 'undefined') {
+    if (isChatPath.value) {
+      // 保存 chat ID
+      const parts = route.fullPath.split('/');
+      const sessionId = parts[2];
+      if (sessionId) {
+        sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
+        console.log('Initial save chat ID:', sessionId);
+      }
+    } else {
+      // 保存 bot 路由（非 chat 頁面）
+      sessionStorage.setItem(LAST_BOT_ROUTE_KEY, route.fullPath);
+      console.log('Initial save bot route:', route.fullPath);
+    }
+  }
+});
 
 // 监听 viewMode 变化，切换到 bot 模式时跳转到首页
 // 保存 bot 模式的最後路由
 // 監聽 route 變化，保存最後一次 bot 路由
 watch(() => route.fullPath, (newPath) => {
   if (typeof window === 'undefined') return;
-
+  console.log('Route changed:', {
+    newPath,
+    isChat: isChatPath.value,
+    currentChatId: route.params.id
+  });
   try {
     // 使用現有的 isChatPath 計算屬性來避免名稱衝突
     const isChat = isChatPath.value; // 這裡使用已經計算好的 isChatPath
