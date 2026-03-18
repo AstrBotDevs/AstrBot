@@ -318,6 +318,10 @@ async def test_run_pip_in_process_normalizes_crlf_without_extra_blank_lines(
             r"\\server\share\libs",
         ),
         (
+            r"\\server\share\include",
+            r"\\server\share\include",
+        ),
+        (
             "C:/astrbot-test/backend/python/libs",
             WINDOWS_RUNTIME_LIBS_DIR,
         ),

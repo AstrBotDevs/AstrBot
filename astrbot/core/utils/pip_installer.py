@@ -252,8 +252,21 @@ def _run_pip_main_with_temporary_environ(
     with _PIP_IN_PROCESS_ENV_LOCK:
         if env_updates is None:
             env_updates = _build_packaged_windows_runtime_build_env(base_env=os.environ)
-        with _temporary_environ(env_updates):
+        if not env_updates:
             return _run_pip_main_streaming(pip_main, args)
+
+        missing = object()
+        previous_values = {key: os.environ.get(key, missing) for key in env_updates}
+
+        try:
+            os.environ.update(env_updates)
+            return _run_pip_main_streaming(pip_main, args)
+        finally:
+            for key, previous_value in previous_values.items():
+                if previous_value is missing:
+                    os.environ.pop(key, None)
+                elif isinstance(previous_value, str):
+                    os.environ[key] = previous_value
 
 
 def _normalize_windows_native_build_path(path: str) -> str:
@@ -271,33 +284,6 @@ def _normalize_windows_native_build_path(path: str) -> str:
     return ntpath.normpath(normalized)
 
 
-def _get_windows_env_value(
-    name: str,
-    base_env: Mapping[str, str],
-) -> str | None:
-    existing = base_env.get(name)
-    if existing is not None:
-        return existing
-
-    normalized_name = name.upper()
-    for key, value in base_env.items():
-        if key.upper() == normalized_name:
-            return value
-
-    return None
-
-
-def _prepend_windows_env_path(
-    name: str,
-    path: str,
-    base_env: Mapping[str, str],
-) -> str:
-    existing = _get_windows_env_value(name, base_env)
-    if existing:
-        return f"{path};{existing}"
-    return path
-
-
 def _build_packaged_windows_runtime_build_env(
     *,
     base_env: Mapping[str, str] | None = None,
@@ -313,40 +299,36 @@ def _build_packaged_windows_runtime_build_env(
     if not runtime_dir:
         return {}
 
-    env_updates: dict[str, str] = {}
     include_dir = _normalize_windows_native_build_path(
         ntpath.join(runtime_dir, "include")
     )
     libs_dir = _normalize_windows_native_build_path(ntpath.join(runtime_dir, "libs"))
+    include_exists = os.path.isdir(include_dir)
+    libs_exists = os.path.isdir(libs_dir)
 
-    if os.path.isdir(include_dir):
-        env_updates["INCLUDE"] = _prepend_windows_env_path(
-            "INCLUDE", include_dir, base_env
-        )
-    if os.path.isdir(libs_dir):
-        env_updates["LIB"] = _prepend_windows_env_path("LIB", libs_dir, base_env)
+    if not (include_exists or libs_exists):
+        return {}
+
+    upper_to_key = {key.upper(): key for key in base_env}
+
+    def _prepend(name: str, path: str) -> str:
+        existing = base_env.get(name)
+        if existing is None:
+            existing_key = upper_to_key.get(name.upper())
+            if existing_key is not None:
+                existing = base_env.get(existing_key)
+        if existing:
+            return f"{path};{existing}"
+        return path
+
+    env_updates: dict[str, str] = {}
+
+    if include_exists:
+        env_updates["INCLUDE"] = _prepend("INCLUDE", include_dir)
+    if libs_exists:
+        env_updates["LIB"] = _prepend("LIB", libs_dir)
 
     return env_updates
-
-
-@contextlib.contextmanager
-def _temporary_environ(updates: dict[str, str]):
-    if not updates:
-        yield
-        return
-
-    missing = object()
-    previous_values = {key: os.environ.get(key, missing) for key in updates}
-
-    try:
-        os.environ.update(updates)
-        yield
-    finally:
-        for key, previous_value in previous_values.items():
-            if previous_value is missing:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = previous_value
 
 
 def _matches_pip_failure_pattern(line: str, *pattern_names: str) -> bool:
