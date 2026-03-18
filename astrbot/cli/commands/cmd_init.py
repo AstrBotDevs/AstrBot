@@ -56,8 +56,9 @@ async def initialize_astrbot(
 
 @click.command()
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompts")
-@click.option("--backend-only", is_flag=True, help="Only initialize the backend")
-def init(yes: bool, backend_only: bool) -> None:
+@click.option("--backend-only", "-b", is_flag=True, help="Only initialize the backend")
+@click.option("--backup", help="Initialize from backup file", type=str)
+def init(yes: bool, backend_only: bool, backup: str | None) -> None:
     """Initialize AstrBot"""
     click.echo("Initializing AstrBot...")
 
@@ -73,6 +74,15 @@ def init(yes: bool, backend_only: bool) -> None:
             asyncio.run(
                 initialize_astrbot(astrbot_root, yes=yes, backend_only=backend_only)
             )
+
+            if backup:
+                from .cmd_bk import import_data_command
+
+                click.echo(f"Restoring from backup: {backup}")
+                click.get_current_context().invoke(
+                    import_data_command, backup_file=backup, yes=True
+                )
+
             click.echo("Done! You can now run 'astrbot run' to start AstrBot")
     except Timeout:
         raise click.ClickException(
