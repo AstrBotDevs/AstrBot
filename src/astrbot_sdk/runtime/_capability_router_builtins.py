@@ -96,7 +96,7 @@ def _mock_embedding_vector(text: str, *, provider_id: str) -> list[float]:
     """
     values = [0.0] * _MOCK_EMBEDDING_DIM
     for term in _embedding_terms(text):
-        digest = hashlib.sha256(f"{provider_id}:{term}".encode("utf-8")).digest()
+        digest = hashlib.sha256(f"{provider_id}:{term}".encode()).digest()
         index = int.from_bytes(digest[:2], "big") % _MOCK_EMBEDDING_DIM
         values[index] += 1.0 + min(len(term), 8) * 0.05
     norm = math.sqrt(sum(value * value for value in values))
@@ -176,10 +176,12 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
         self._register_platform_capabilities()
         self._register_http_capabilities()
         self._register_metadata_capabilities()
-        self._register_p0_5_capabilities()
-        self._register_p0_6_capabilities()
-        self._register_p1_2_capabilities()
-        self._register_p1_3_capabilities()
+        self._register_provider_capabilities()
+        self._register_agent_tool_capabilities()
+        self._register_session_capabilities()
+        self._register_persona_conversation_kb_capabilities()
+        self._register_provider_manager_capabilities()
+        self._register_platform_manager_capabilities()
         self._register_system_capabilities()
 
     def _builtin_descriptor(
@@ -1709,6 +1711,30 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
             )
         }
 
+    async def _provider_manager_get_merged_provider_config(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        self._require_reserved_plugin("provider.manager.get_merged_provider_config")
+        provider_id = str(payload.get("provider_id", "")).strip()
+        if not provider_id:
+            raise AstrBotError.invalid_input(
+                "provider.manager.get_merged_provider_config requires provider_id"
+            )
+        provider = self._provider_payload_by_id(provider_id)
+        config = self._provider_config_by_id(provider_id)
+        if provider is None and config is None:
+            raise AstrBotError.invalid_input(
+                "provider.manager.get_merged_provider_config "
+                f"unknown provider_id: {provider_id}"
+            )
+        if provider is None:
+            return {"config": dict(config) if isinstance(config, dict) else config}
+        if config is None:
+            return {"config": dict(provider)}
+        merged_config = dict(provider)
+        merged_config.update(config)
+        return {"config": merged_config}
+
     @staticmethod
     def _normalize_provider_config_object(
         payload: Any,
@@ -2166,7 +2192,7 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
             "reasoning_signature": None,
         }
 
-    def _register_p0_5_capabilities(self) -> None:
+    def _register_provider_capabilities(self) -> None:
         self.register(
             self._builtin_descriptor("provider.get_using", "获取当前聊天 Provider"),
             call_handler=self._provider_get_using,
@@ -2265,6 +2291,8 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
             self._builtin_descriptor("provider.rerank.rerank", "文档重排序"),
             call_handler=self._provider_rerank_rerank,
         )
+
+    def _register_agent_tool_capabilities(self) -> None:
         self.register(
             self._builtin_descriptor("llm_tool.manager.get", "获取 LLM 工具状态"),
             call_handler=self._llm_tool_manager_get,
@@ -2381,7 +2409,7 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
         self._session_service_configs[session] = config
         return {}
 
-    def _register_p0_6_capabilities(self) -> None:
+    def _register_session_capabilities(self) -> None:
         self.register(
             self._builtin_descriptor("session.plugin.is_enabled", "获取会话级插件开关"),
             call_handler=self._session_plugin_is_enabled,
@@ -2648,6 +2676,25 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
             return {"conversation": None}
         return {"conversation": dict(record)}
 
+    async def _conversation_get_current(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        session = str(payload.get("session", "")).strip()
+        conversation_id = self._session_current_conversation_ids.get(session, "")
+        if not conversation_id and bool(payload.get("create_if_not_exists", False)):
+            created = await self._conversation_new(
+                _request_id,
+                {"session": session, "conversation": {}},
+                _token,
+            )
+            conversation_id = str(created.get("conversation_id", "")).strip()
+        if not conversation_id:
+            return {"conversation": None}
+        record = self._conversation_store.get(conversation_id)
+        if record is None or str(record.get("session", "")) != session:
+            return {"conversation": None}
+        return {"conversation": dict(record)}
+
     async def _conversation_list(
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
@@ -2763,7 +2810,7 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
         deleted = self._kb_store.pop(kb_id, None) is not None
         return {"deleted": deleted}
 
-    def _register_p1_2_capabilities(self) -> None:
+    def _register_persona_conversation_kb_capabilities(self) -> None:
         self.register(
             self._builtin_descriptor("persona.get", "获取人格"),
             call_handler=self._persona_get,
@@ -2801,6 +2848,10 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
             call_handler=self._conversation_get,
         )
         self.register(
+            self._builtin_descriptor("conversation.get_current", "获取当前对话"),
+            call_handler=self._conversation_get_current,
+        )
+        self.register(
             self._builtin_descriptor("conversation.list", "列出对话"),
             call_handler=self._conversation_list,
         )
@@ -2821,7 +2872,7 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
             call_handler=self._kb_delete,
         )
 
-    def _register_p1_3_capabilities(self) -> None:
+    def _register_provider_manager_capabilities(self) -> None:
         self.register(
             self._builtin_descriptor("provider.manager.set", "设置当前 Provider"),
             call_handler=self._provider_manager_set,
@@ -2832,6 +2883,13 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
                 "按 ID 获取 Provider 管理记录",
             ),
             call_handler=self._provider_manager_get_by_id,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "provider.manager.get_merged_provider_config",
+                "获取 Provider 合并配置",
+            ),
+            call_handler=self._provider_manager_get_merged_provider_config,
         )
         self.register(
             self._builtin_descriptor("provider.manager.load", "运行时加载 Provider"),
@@ -2872,6 +2930,8 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
             ),
             stream_handler=self._provider_manager_watch_changes,
         )
+
+    def _register_platform_manager_capabilities(self) -> None:
         self.register(
             self._builtin_descriptor(
                 "platform.manager.get_by_id",
@@ -2893,6 +2953,7 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
             ),
             call_handler=self._platform_manager_get_stats,
         )
+
 
     def _register_system_capabilities(self) -> None:
         self.register(
