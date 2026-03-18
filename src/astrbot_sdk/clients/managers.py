@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..errors import AstrBotError, ErrorCodes
 from ..message_session import MessageSession
 from ._proxy import CapabilityProxy
 
@@ -138,7 +139,15 @@ class PersonaManagerClient:
         self._proxy = proxy
 
     async def get_persona(self, persona_id: str) -> PersonaRecord:
-        output = await self._proxy.call("persona.get", {"persona_id": str(persona_id)})
+        try:
+            output = await self._proxy.call(
+                "persona.get",
+                {"persona_id": str(persona_id)},
+            )
+        except AstrBotError as exc:
+            if exc.code == ErrorCodes.INVALID_INPUT:
+                raise ValueError(f"persona not found: {persona_id}") from exc
+            raise
         persona = PersonaRecord.from_payload(output.get("persona"))
         if persona is None:
             raise ValueError(f"persona not found: {persona_id}")
@@ -246,6 +255,21 @@ class ConversationManagerClient:
             {
                 "session": _normalize_session(session),
                 "conversation_id": str(conversation_id),
+                "create_if_not_exists": bool(create_if_not_exists),
+            },
+        )
+        return ConversationRecord.from_payload(output.get("conversation"))
+
+    async def get_current_conversation(
+        self,
+        session: str | MessageSession,
+        *,
+        create_if_not_exists: bool = False,
+    ) -> ConversationRecord | None:
+        output = await self._proxy.call(
+            "conversation.get_current",
+            {
+                "session": _normalize_session(session),
                 "create_if_not_exists": bool(create_if_not_exists),
             },
         )

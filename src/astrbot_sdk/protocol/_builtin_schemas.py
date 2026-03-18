@@ -642,6 +642,15 @@ CONVERSATION_GET_OUTPUT_SCHEMA = _object_schema(
     required=("conversation",),
     conversation=_nullable(CONVERSATION_RECORD_SCHEMA),
 )
+CONVERSATION_GET_CURRENT_INPUT_SCHEMA = _object_schema(
+    required=("session",),
+    session={"type": "string"},
+    create_if_not_exists={"type": "boolean"},
+)
+CONVERSATION_GET_CURRENT_OUTPUT_SCHEMA = _object_schema(
+    required=("conversation",),
+    conversation=_nullable(CONVERSATION_RECORD_SCHEMA),
+)
 CONVERSATION_LIST_INPUT_SCHEMA = _object_schema(
     session=_nullable({"type": "string"}),
     platform_id=_nullable({"type": "string"}),
@@ -1207,6 +1216,10 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": CONVERSATION_GET_INPUT_SCHEMA,
         "output": CONVERSATION_GET_OUTPUT_SCHEMA,
     },
+    "conversation.get_current": {
+        "input": CONVERSATION_GET_CURRENT_INPUT_SCHEMA,
+        "output": CONVERSATION_GET_CURRENT_OUTPUT_SCHEMA,
+    },
     "conversation.list": {
         "input": CONVERSATION_LIST_INPUT_SCHEMA,
         "output": CONVERSATION_LIST_OUTPUT_SCHEMA,
@@ -1653,6 +1666,8 @@ __all__ = [
     "CONVERSATION_CREATE_SCHEMA",
     "CONVERSATION_DELETE_INPUT_SCHEMA",
     "CONVERSATION_DELETE_OUTPUT_SCHEMA",
+    "CONVERSATION_GET_CURRENT_INPUT_SCHEMA",
+    "CONVERSATION_GET_CURRENT_OUTPUT_SCHEMA",
     "CONVERSATION_GET_INPUT_SCHEMA",
     "CONVERSATION_GET_OUTPUT_SCHEMA",
     "CONVERSATION_LIST_INPUT_SCHEMA",

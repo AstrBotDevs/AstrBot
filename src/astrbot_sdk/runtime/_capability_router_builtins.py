@@ -96,7 +96,7 @@ def _mock_embedding_vector(text: str, *, provider_id: str) -> list[float]:
     """
     values = [0.0] * _MOCK_EMBEDDING_DIM
     for term in _embedding_terms(text):
-        digest = hashlib.sha256(f"{provider_id}:{term}".encode("utf-8")).digest()
+        digest = hashlib.sha256(f"{provider_id}:{term}".encode()).digest()
         index = int.from_bytes(digest[:2], "big") % _MOCK_EMBEDDING_DIM
         values[index] += 1.0 + min(len(term), 8) * 0.05
     norm = math.sqrt(sum(value * value for value in values))
@@ -2672,6 +2672,25 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
             return {"conversation": None}
         return {"conversation": dict(record)}
 
+    async def _conversation_get_current(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        session = str(payload.get("session", "")).strip()
+        conversation_id = self._session_current_conversation_ids.get(session, "")
+        if not conversation_id and bool(payload.get("create_if_not_exists", False)):
+            created = await self._conversation_new(
+                _request_id,
+                {"session": session, "conversation": {}},
+                _token,
+            )
+            conversation_id = str(created.get("conversation_id", "")).strip()
+        if not conversation_id:
+            return {"conversation": None}
+        record = self._conversation_store.get(conversation_id)
+        if record is None or str(record.get("session", "")) != session:
+            return {"conversation": None}
+        return {"conversation": dict(record)}
+
     async def _conversation_list(
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
@@ -2823,6 +2842,10 @@ class BuiltinCapabilityRouterMixin(_CapabilityRouterHost):
         self.register(
             self._builtin_descriptor("conversation.get", "获取对话"),
             call_handler=self._conversation_get,
+        )
+        self.register(
+            self._builtin_descriptor("conversation.get_current", "获取当前对话"),
+            call_handler=self._conversation_get_current,
         )
         self.register(
             self._builtin_descriptor("conversation.list", "列出对话"),

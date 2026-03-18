@@ -1101,6 +1101,8 @@ from astrbot_sdk.clients import PersonaManagerClient
 
 获取指定人格。
 
+当人格不存在时会抛出 `ValueError`，而不是返回 `None`。
+
 ---
 
 #### `get_all_personas()`
@@ -1160,6 +1162,17 @@ from astrbot_sdk.clients import ConversationManagerClient
 #### `get_conversation(session, conversation_id, create_if_not_exists=False)`
 
 获取对话。
+
+---
+
+#### `get_current_conversation(session, create_if_not_exists=False)`
+
+获取当前 session 正在使用的对话记录。
+
+这个方法适合“跟随 AstrBot 原生当前会话状态”的插件，例如：
+- 给当前会话切换 persona
+- 判断当前主聊天是否已经在某个 persona 下
+- 在 `waiting_llm_request` / `llm_request` hook 中对当前对话做增强
 
 ---
 
