@@ -41,6 +41,10 @@ from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
+# Fallback message when a tool completes successfully but produces no direct output.
+# This is defined as a constant so it can be localized or overridden by i18n systems.
+TOOL_NO_OUTPUT_FALLBACK_MESSAGE = "Tool executed successfully with no output."
+
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     @classmethod
@@ -627,7 +631,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                             content=[
                                 mcp.types.TextContent(
                                     type="text",
-                                    text="Tool executed successfully with no output.",
+                                    text=TOOL_NO_OUTPUT_FALLBACK_MESSAGE,
                                 )
                             ]
                         )
