@@ -2,41 +2,75 @@
  * 平台相关工具函数
  */
 
+import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+
+const BUILTIN_PLATFORM_ICON_MAP = {
+  aiocqhttp: new URL("@/assets/images/platform_logos/onebot.png", import.meta.url)
+    .href,
+  qq_official: new URL("@/assets/images/platform_logos/qq.png", import.meta.url)
+    .href,
+  qq_official_webhook: new URL(
+    "@/assets/images/platform_logos/qq.png",
+    import.meta.url,
+  ).href,
+  wecom: new URL("@/assets/images/platform_logos/wecom.png", import.meta.url)
+    .href,
+  wecom_ai_bot: new URL(
+    "@/assets/images/platform_logos/wecom.png",
+    import.meta.url,
+  ).href,
+  weixin_official_account: new URL(
+    "@/assets/images/platform_logos/wechat.png",
+    import.meta.url,
+  ).href,
+  lark: new URL("@/assets/images/platform_logos/lark.png", import.meta.url).href,
+  dingtalk: new URL("@/assets/images/platform_logos/dingtalk.svg", import.meta.url)
+    .href,
+  telegram: new URL(
+    "@/assets/images/platform_logos/telegram.svg",
+    import.meta.url,
+  ).href,
+  discord: new URL("@/assets/images/platform_logos/discord.svg", import.meta.url)
+    .href,
+  slack: new URL("@/assets/images/platform_logos/slack.svg", import.meta.url).href,
+  kook: new URL("@/assets/images/platform_logos/kook.png", import.meta.url).href,
+  vocechat: new URL(
+    "@/assets/images/platform_logos/vocechat.png",
+    import.meta.url,
+  ).href,
+  satori: new URL("@/assets/images/platform_logos/satori.png", import.meta.url)
+    .href,
+  Satori: new URL("@/assets/images/platform_logos/satori.png", import.meta.url)
+    .href,
+  misskey: new URL("@/assets/images/platform_logos/misskey.png", import.meta.url)
+    .href,
+  line: new URL("@/assets/images/platform_logos/line.png", import.meta.url).href,
+};
+
+function getDynamicPlatformLogoToken(name, options = {}) {
+  const metadata = options.metadata;
+  const platformTemplates = options.platformTemplates;
+
+  return (
+    metadata?.platform_group?.metadata?.platform?.logo_tokens?.[name] ||
+    metadata?.platform_group?.metadata?.platform?.config_template?.[name]?.logo_token ||
+    platformTemplates?.[name]?.logo_token
+  );
+}
+
 /**
  * 获取平台图标
  * @param {string} name - 平台名称或类型
+ * @param {Object} [options] - 平台 logo 解析选项
  * @returns {string|undefined} 图标URL
  */
-export function getPlatformIcon(name) {
-  if (name === 'aiocqhttp') {
-    return new URL('@/assets/images/platform_logos/onebot.png', import.meta.url).href
-  } else if (name === 'qq_official' || name === 'qq_official_webhook') {
-    return new URL('@/assets/images/platform_logos/qq.png', import.meta.url).href
-  } else if (name === 'wecom' || name === 'wecom_ai_bot') {
-    return new URL('@/assets/images/platform_logos/wecom.png', import.meta.url).href
-  } else if (name === 'weixin_official_account') {
-    return new URL('@/assets/images/platform_logos/wechat.png', import.meta.url).href
-  } else if (name === 'lark') {
-    return new URL('@/assets/images/platform_logos/lark.png', import.meta.url).href
-  } else if (name === 'dingtalk') {
-    return new URL('@/assets/images/platform_logos/dingtalk.svg', import.meta.url).href
-  } else if (name === 'telegram') {
-    return new URL('@/assets/images/platform_logos/telegram.svg', import.meta.url).href
-  } else if (name === 'discord') {
-    return new URL('@/assets/images/platform_logos/discord.svg', import.meta.url).href
-  } else if (name === 'slack') {
-    return new URL('@/assets/images/platform_logos/slack.svg', import.meta.url).href
-  } else if (name === 'kook') {
-    return new URL('@/assets/images/platform_logos/kook.png', import.meta.url).href
-  } else if (name === 'vocechat') {
-    return new URL('@/assets/images/platform_logos/vocechat.png', import.meta.url).href
-  } else if (name === 'satori' || name === 'Satori') {
-    return new URL('@/assets/images/platform_logos/satori.png', import.meta.url).href
-  } else if (name === 'misskey') {
-    return new URL('@/assets/images/platform_logos/misskey.png', import.meta.url).href
-  } else if (name === 'line') {
-    return new URL('@/assets/images/platform_logos/line.png', import.meta.url).href
+export function getPlatformIcon(name, options = {}) {
+  const dynamicLogoToken = getDynamicPlatformLogoToken(name, options);
+  if (dynamicLogoToken) {
+    return `/api/file/${dynamicLogoToken}`;
   }
+
+  return BUILTIN_PLATFORM_ICON_MAP[name] || defaultPluginIcon;
 }
 
 /**

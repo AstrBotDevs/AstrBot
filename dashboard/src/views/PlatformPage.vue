@@ -301,13 +301,9 @@ export default {
 
     // 从工具函数导入
     getPlatformIcon(platform_id) {
-      // 首先检查是否有来自插件的 logo_token
-      const template = this.metadata['platform_group']?.metadata?.platform?.config_template?.[platform_id];
-      if (template && template.logo_token) {
-          // 通过文件服务访问插件提供的 logo
-        return `/api/file/${template.logo_token}`;
-      }
-      return getPlatformIcon(platform_id);
+      return getPlatformIcon(platform_id, {
+        metadata: this.metadata,
+      });
     },
 
     getConfig() {
@@ -462,10 +458,12 @@ export default {
 
     editPlatform(platform) {
       const platformCopy = JSON.parse(JSON.stringify(platform));
+      delete platformCopy.logo_token;
       const template = this.findPlatformTemplate(platformCopy);
       this.updatingPlatformConfig = template
         ? this.mergeConfigWithTemplate(platformCopy, template)
         : platformCopy;
+      delete this.updatingPlatformConfig.logo_token;
       this.updatingMode = true;
       this.showAddPlatformDialog = true;
       this.$nextTick(() => {
