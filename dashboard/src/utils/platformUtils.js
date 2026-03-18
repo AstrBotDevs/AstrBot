@@ -45,8 +45,8 @@ const BUILTIN_PLATFORM_ICON_MAP = {
   line: new URL("@/assets/images/platform_logos/line.png", import.meta.url).href,
 };
 
-function getDynamicPlatformLogoToken(name, options = {}) {
-  const metadata = options.metadata;
+function getDynamicPlatformLogoToken(name, options) {
+  const metadata = options?.metadata;
 
   return metadata?.platform_group?.metadata?.platform?.logo_tokens?.[name];
 }
