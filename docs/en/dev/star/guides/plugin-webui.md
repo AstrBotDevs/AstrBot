@@ -18,18 +18,21 @@ name: astrbot_plugin_webui_demo
 author: AstrBot
 desc: Plugin WebUI demo
 version: 1.0.0
+display_name: Plugin WebUI Demo
 
 webui:
-  display_name: Demo Panel
+  title: Bridge Capability Lab
   root_dir: webui
   entry_file: index.html
 ```
 
 Field notes:
 
-- `display_name`: Display name shown in the Dashboard. Default: `WebUI`
+- `webui.title`: WebUI entry label shown in the Dashboard. Default: `WebUI`
 - `root_dir`: Static asset root directory. Default: `webui`
 - `entry_file`: Entry file name. Default: `index.html`
+
+`webui.title` is a dedicated WebUI field. Do not reuse the plugin-level `display_name` here.
 
 > [!TIP]
 > If the entry file does not exist, AstrBot will not expose the WebUI entry in the plugin list.
@@ -164,6 +167,55 @@ The current `ready()` context looks like this:
 - must not contain `.` or `..` path segments
 
 So use values like `ping` or `settings/save`, not a full URL.
+
+### Common Request Shapes
+
+`apiPost(endpoint, body)` forwards `body` as a JSON request payload. On the backend you would usually read it like this:
+
+```python
+from quart import jsonify, request
+
+
+async def webui_echo(self):
+    payload = await request.get_json()
+    return jsonify({"received": payload})
+```
+
+`upload(endpoint, file)` sends a `multipart/form-data` request. The file field name is always `file`, and each call uploads a single file:
+
+```python
+from quart import jsonify, request
+
+
+async def webui_upload(self):
+    files = await request.files
+    uploaded = files["file"]
+    return jsonify({"filename": uploaded.filename})
+```
+
+`download(endpoint, params, filename)` sends a GET request and puts `params` into the query string. The backend only needs to return a file response such as `send_file(...)`. The third argument `filename` only overrides the browser-visible download name.
+
+`subscribeSSE(endpoint, handlers, params)` also uses GET and puts `params` into the query string. The backend must return `text/event-stream`:
+
+```python
+from quart import make_response
+
+
+async def webui_events(self):
+    async def stream():
+        yield "data: hello\n\n"
+
+    response = await make_response(
+        stream(),
+        {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    )
+    response.timeout = None
+    return response
+```
 
 ## Asset Path Rules
 

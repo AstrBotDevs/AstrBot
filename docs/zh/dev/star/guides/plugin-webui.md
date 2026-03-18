@@ -18,18 +18,21 @@ name: astrbot_plugin_webui_demo
 author: AstrBot
 desc: 插件 WebUI 示例
 version: 1.0.0
+display_name: Plugin WebUI Demo
 
 webui:
-  display_name: 示例面板
+  title: Bridge Capability Lab
   root_dir: webui
   entry_file: index.html
 ```
 
 字段说明：
 
-- `display_name`: WebUI 页面展示名。默认值是 `WebUI`
+- `webui.title`: WebUI 入口展示名。默认值是 `WebUI`
 - `root_dir`: 静态资源根目录。默认值是 `webui`
 - `entry_file`: 入口文件。默认值是 `index.html`
+
+`webui.title` 是独立的 WebUI 字段，不要复用插件顶层的 `display_name`。
 
 > [!TIP]
 > 如果入口文件不存在，AstrBot 不会在插件列表里暴露这个 WebUI 入口。
@@ -164,6 +167,55 @@ class MyPlugin(Star):
 - 不能包含 `.` 或 `..` 路径段
 
 也就是说，应该写成 `ping`、`settings/save` 这种形式，不要写完整 URL。
+
+### 常用请求形态
+
+`apiPost(endpoint, body)` 会把 `body` 作为 JSON 请求体转发，后端通常这样读取：
+
+```python
+from quart import jsonify, request
+
+
+async def webui_echo(self):
+    payload = await request.get_json()
+    return jsonify({"received": payload})
+```
+
+`upload(endpoint, file)` 会以 `multipart/form-data` 发起请求，文件字段名固定为 `file`，每次调用只上传一个文件：
+
+```python
+from quart import jsonify, request
+
+
+async def webui_upload(self):
+    files = await request.files
+    uploaded = files["file"]
+    return jsonify({"filename": uploaded.filename})
+```
+
+`download(endpoint, params, filename)` 会发起 GET 请求，`params` 会进入 query string。后端只需要返回文件响应，例如 `send_file(...)`。第三个参数 `filename` 用于覆盖浏览器保存时显示的文件名。
+
+`subscribeSSE(endpoint, handlers, params)` 同样使用 GET 请求，`params` 会进入 query string。后端需要返回 `text/event-stream`：
+
+```python
+from quart import make_response
+
+
+async def webui_events(self):
+    async def stream():
+        yield "data: hello\n\n"
+
+    response = await make_response(
+        stream(),
+        {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    )
+    response.timeout = None
+    return response
+```
 
 ## 资源路径规则
 
