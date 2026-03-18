@@ -183,6 +183,10 @@ def _replace_filter(meta: HandlerMeta, spec: FilterSpec) -> None:
     meta.filters.append(spec)
 
 
+def _has_filter_kind(meta: HandlerMeta, kind: str) -> bool:
+    return any(getattr(item, "kind", None) == kind for item in meta.filters)
+
+
 def _set_platform_filter(
     meta: HandlerMeta,
     values: list[str],
@@ -197,6 +201,8 @@ def _set_platform_filter(
     existing = meta.decorator_sources.get("platforms")
     if existing is not None and existing != source:
         raise ValueError("platforms(...) 不能与 on_message(platforms=...) 混用")
+    if existing is None and _has_filter_kind(meta, "platform"):
+        raise ValueError("platforms(...) 不能与已有平台过滤器混用")
     meta.decorator_sources["platforms"] = source
     _replace_filter(meta, PlatformFilterSpec(platforms=normalized))
 
@@ -218,6 +224,10 @@ def _set_message_type_filter(
     if existing is not None and existing != source:
         raise ValueError(
             "group_only()/private_only()/message_types(...) 不能与已有消息类型约束混用"
+        )
+    if existing is None and _has_filter_kind(meta, "message_type"):
+        raise ValueError(
+            "group_only()/private_only()/message_types(...) 不能与已有消息类型过滤器混用"
         )
     meta.decorator_sources["message_types"] = source
     _replace_filter(meta, MessageTypeFilterSpec(message_types=normalized))
