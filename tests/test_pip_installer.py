@@ -331,6 +331,23 @@ def test_normalize_windows_native_build_path_variants(path, expected):
     assert pip_installer_module._normalize_windows_native_build_path(path) == expected
 
 
+def test_temporary_environ_restores_previous_values(monkeypatch):
+    monkeypatch.setenv("INCLUDE", EXISTING_WINDOWS_INCLUDE_DIR)
+    monkeypatch.delenv("LIB", raising=False)
+
+    with pip_installer_module._temporary_environ(
+        {
+            "INCLUDE": WINDOWS_RUNTIME_INCLUDE_DIR,
+            "LIB": WINDOWS_RUNTIME_LIBS_DIR,
+        }
+    ):
+        assert pip_installer_module.os.environ["INCLUDE"] == WINDOWS_RUNTIME_INCLUDE_DIR
+        assert pip_installer_module.os.environ["LIB"] == WINDOWS_RUNTIME_LIBS_DIR
+
+    assert pip_installer_module.os.environ["INCLUDE"] == EXISTING_WINDOWS_INCLUDE_DIR
+    assert "LIB" not in pip_installer_module.os.environ
+
+
 def test_build_packaged_windows_runtime_build_env_uses_base_env_snapshot(
     monkeypatch,
 ):
