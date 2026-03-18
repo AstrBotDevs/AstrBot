@@ -18,17 +18,19 @@ class ToolProviderContext:
     Wraps the information a provider needs to decide which tools to offer.
     """
 
-    __slots__ = ("computer_use_runtime", "sandbox_cfg", "session_id")
+    __slots__ = ("computer_use_runtime", "sandbox_cfg", "local_cfg", "session_id")
 
     def __init__(
         self,
         *,
         computer_use_runtime: str = "none",
         sandbox_cfg: dict | None = None,
+        local_cfg: dict | None = None,
         session_id: str = "",
     ) -> None:
         self.computer_use_runtime = computer_use_runtime
         self.sandbox_cfg = sandbox_cfg or {}
+        self.local_cfg = local_cfg or {}
         self.session_id = session_id
 
 
