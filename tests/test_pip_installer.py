@@ -409,6 +409,43 @@ async def test_run_pip_in_process_does_not_inject_when_runtime_dirs_missing(
 
 
 @pytest.mark.asyncio
+async def test_run_pip_in_process_uses_latest_env_when_building_runtime_paths(
+    monkeypatch,
+):
+    updated_include = ntpath.join(r"C:\new-toolchain", "include")
+    updated_lib = ntpath.join(r"C:\new-toolchain", "lib")
+    observed_env = _configure_run_pip_in_process_capture(
+        monkeypatch,
+        platform="win32",
+        packaged_runtime=True,
+        include_value=EXISTING_WINDOWS_INCLUDE_DIR,
+        lib_value=EXISTING_WINDOWS_LIB_DIR,
+        existing_runtime_dirs={
+            WINDOWS_RUNTIME_INCLUDE_DIR,
+            WINDOWS_RUNTIME_LIBS_DIR,
+        },
+    )
+
+    async def fake_to_thread(func, *args):
+        pip_installer_module.os.environ["INCLUDE"] = updated_include
+        pip_installer_module.os.environ["LIB"] = updated_lib
+        return func(*args)
+
+    monkeypatch.setattr(pip_installer_module.asyncio, "to_thread", fake_to_thread)
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result == 0
+    assert observed_env == {
+        "INCLUDE": f"{WINDOWS_RUNTIME_INCLUDE_DIR};{updated_include}",
+        "LIB": f"{WINDOWS_RUNTIME_LIBS_DIR};{updated_lib}",
+    }
+    assert pip_installer_module.os.environ["INCLUDE"] == updated_include
+    assert pip_installer_module.os.environ["LIB"] == updated_lib
+
+
+@pytest.mark.asyncio
 async def test_run_pip_in_process_does_not_modify_env_on_non_windows(monkeypatch):
     existing_include = "/toolchain/include"
     existing_lib = "/toolchain/lib"

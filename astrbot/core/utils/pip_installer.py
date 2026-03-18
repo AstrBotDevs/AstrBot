@@ -240,11 +240,15 @@ def _run_pip_main_streaming(pip_main, args: list[str]) -> tuple[int, list[str]]:
 def _run_pip_main_with_temporary_environ(
     pip_main,
     args: list[str],
-    env_updates: dict[str, str],
+    env_updates: dict[str, str] | None = None,
 ) -> tuple[int, list[str]]:
     # os.environ is process-wide; serialize temporary mutations around the
-    # in-process pip invocation and keep the mutation window inside the worker.
+    # in-process pip invocation, including reading the existing environment for
+    # packaged runtime build-path prepends, and keep the mutation window inside
+    # the worker.
     with _PIP_IN_PROCESS_ENV_LOCK:
+        if env_updates is None:
+            env_updates = _build_packaged_windows_runtime_build_env()
         with _temporary_environ(env_updates):
             return _run_pip_main_streaming(pip_main, args)
 
@@ -1006,7 +1010,6 @@ class PipInstaller:
     async def _run_pip_in_process(self, args: list[str]) -> int:
         pip_main = _get_pip_main()
         _patch_distlib_finder_for_frozen_runtime()
-        build_env = _build_packaged_windows_runtime_build_env()
 
         original_handlers = list(logging.getLogger().handlers)
         try:
@@ -1014,7 +1017,6 @@ class PipInstaller:
                 _run_pip_main_with_temporary_environ,
                 pip_main,
                 args,
-                build_env,
             )
         finally:
             _cleanup_added_root_handlers(original_handlers)
