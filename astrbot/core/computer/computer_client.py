@@ -492,7 +492,8 @@ async def get_booter(
             from .booters.bwrap import BwrapBooter
 
             rw_binds = sandbox_cfg.get("bwrap_rw_binds", [])
-            client = BwrapBooter(rw_binds=rw_binds)
+            ro_binds = sandbox_cfg.get("bwrap_ro_binds", [])
+            client = BwrapBooter(rw_binds=rw_binds, ro_binds=ro_binds)
         else:
             raise ValueError(f"Unknown booter type: {booter_type}")
 

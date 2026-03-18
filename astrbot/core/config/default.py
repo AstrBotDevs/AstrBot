@@ -142,6 +142,7 @@ DEFAULT_CONFIG = {
             "shipyard_neo_profile": "python-default",
             "shipyard_neo_ttl": 3600,
             "bwrap_rw_binds": [],
+            "bwrap_ro_binds": [],
         },
     },
     # SubAgent orchestrator mode:
@@ -3014,10 +3015,20 @@ CONFIG_METADATA_3 = {
                         },
                     },
                     "provider_settings.sandbox.bwrap_rw_binds": {
-                        "description": "Bubblewrap RW Binds",
+                        "description": "Bubblewrap Read & Write Binds",
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "Bubblewrap 沙箱额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写，整个宿主机系统默认是只读挂载于沙箱内的相同位置）。",
+                        "hint": "Bubblewrap 沙箱额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "bwrap",
+                        },
+                    },
+                    "provider_settings.sandbox.bwrap_ro_binds": {
+                        "description": "Bubblewrap Read Only Binds",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "Bubblewrap 沙箱额外的只读挂载目录（回车添加，可添加多个。宿主机系统目录/usr, /etc, /opt默认只读挂载于沙箱内的相同位置）。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "bwrap",

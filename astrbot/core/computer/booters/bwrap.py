@@ -39,9 +39,16 @@ def _decode_shell_output(output: bytes | None) -> str:
 @dataclass
 class BwrapConfig:
     workspace_dir: str
-    ro_binds: list[str] = field(default_factory=lambda: ["/usr", "/lib", "/lib64", "/bin", "/etc", "/opt"])
+    ro_binds: list[str] = field(default_factory=list)
     rw_binds: list[str] = field(default_factory=list)
     share_net: bool = True
+
+    def __post_init__(self):
+        # Merge default required system binds with any additional ro_binds passed
+        default_ro = ["/usr", "/lib", "/lib64", "/bin", "/etc", "/opt"]
+        for p in default_ro:
+            if p not in self.ro_binds:
+                self.ro_binds.append(p)
 
 def build_bwrap_cmd(config: BwrapConfig, script_cmd: list[str]) -> list[str]:
     """Helper to build a bubblewrap command."""
@@ -229,8 +236,9 @@ class HostBackedFileSystemComponent(FileSystemComponent):
             return {"success": False, "error": str(e), "items": []}
 
 class BwrapBooter(ComputerBooter):
-    def __init__(self, rw_binds: list[str] = None):
+    def __init__(self, rw_binds: list[str] = None, ro_binds: list[str] = None):
         self._rw_binds = rw_binds or []
+        self._ro_binds = ro_binds or []
         self._fs: HostBackedFileSystemComponent | None = None
         self._python: BwrapPythonComponent | None = None
         self._shell: BwrapShellComponent | None = None
@@ -258,7 +266,8 @@ class BwrapBooter(ComputerBooter):
         
         self.config = BwrapConfig(
             workspace_dir=os.path.abspath(workspace_dir),
-            rw_binds=self._rw_binds
+            rw_binds=self._rw_binds,
+            ro_binds=self._ro_binds
         )
         self._fs = HostBackedFileSystemComponent(self.config.workspace_dir)
         self._python = BwrapPythonComponent(self.config)
@@ -288,4 +297,6 @@ class BwrapBooter(ComputerBooter):
     async def available(self) -> bool:
         if sys.platform == "win32":
             return False
-        return shutil.which("bwrap") is not None
+        if shutil.which("bwrap") is None:
+            return False
+        return True
