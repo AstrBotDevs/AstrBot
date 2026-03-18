@@ -92,8 +92,8 @@ _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F\x7F]")
 
 
 def _is_windows_prompt_path(path: str) -> bool:
-    if os.name != "nt":
-        return False
+    # 检查路径本身是否是 Windows 路径（不依赖当前系统）
+    # 修复 #6477：支持 Linux 容器中映射的 Windows 路径
     return bool(_WINDOWS_DRIVE_PATH_RE.match(path) or _WINDOWS_UNC_PATH_RE.match(path))
 
 
