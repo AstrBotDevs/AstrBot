@@ -208,6 +208,20 @@
             "description": "Bubblewrap 读写挂载目录",
             "hint": "额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写，整个宿主机系统默认是只读挂载于沙箱内的相同位置）。"
           }
+        },
+        "local": {
+          "local_mode_prompt": {
+            "description": "本地模式提示词",
+            "hint": "当运行环境选择 local 时，在系统提示词末尾注入该文案。支持 {system_name} 占位符。"
+          },
+          "local_shell_windows_hint": {
+            "description": "本地模式命令行提示词（Windows）",
+            "hint": "当系统为 Windows 时，注入到系统提示词末尾。"
+          },
+          "local_shell_unix_like_hint": {
+            "description": "本地模式命令行提示词（Unix-like）",
+            "hint": "当系统为类 Unix 时，注入到系统提示词末尾。"
+          }
         }
       }
     },
@@ -219,6 +233,26 @@
           "add_cron_tools": {
             "description": "启用",
             "hint": "启用后，将会传递给 Agent 相关工具来实现主动型 Agent。你可以告诉 AstrBot 未来某个时间要做的事情，它将被定时触发然后执行任务，然后将结果发送给你。"
+          },
+          "background_history_wrap_prompt": {
+            "description": "后台任务历史包装提示词",
+            "hint": "后台任务唤醒且存在历史对话时使用；支持 {context_dump} 占位符。"
+          },
+          "background_execution_prompt": {
+            "description": "后台任务执行提示词",
+            "hint": "后台任务唤醒后的系统提示词；支持 {background_task_result} 占位符。"
+          },
+          "background_task_work_user_prompt": {
+            "description": "后台任务执行唤醒提示词.",
+            "hint": "后台任务执行唤醒提示文案"
+          },
+          "background_task_summary_note": {
+            "description": "后台任务笔记文案",
+            "hint": "后台任务完成笔记文案，支持 {summary_name} {task_id} {result} 占位符。"
+          },
+          "background_task_summary_note_result": {
+            "description": "后台任务结果提示词",
+            "hint": "后台任务结果提示文案，支持 {result} 占位符。"
           }
         }
       }
@@ -254,6 +288,14 @@
         "llm_compress_provider_id": {
           "description": "用于上下文压缩的模型提供商 ID",
           "hint": "留空时将降级为\"按对话轮数截断\"的策略。"
+        },
+        "context_summary_user_prompt": {
+          "description": "上下文摘要用户文案",
+          "hint": "应至少包含且仅包含一个{summary_content}占位符，如果为空或不符合要求则使用默认文案。"
+        },
+        "context_summary_ack_prompt": {
+          "description": "上下文摘要确认文案",
+          "hint": "如果为空则使用默认文案。"
         }
       }
     },
@@ -270,6 +312,10 @@
         "safety_mode_strategy": {
           "description": "健康模式策略",
           "hint": "选择健康模式的实现方式。"
+        },
+        "llm_safety_mode_system_prompt": {
+          "description": "健康模式提示词",
+          "hint": "当健康模式策略选择“系统提示词”时，在系统提示词开头注入该文案。"
         },
         "identifier": {
           "description": "用户识别",
@@ -330,6 +376,26 @@
             "Full（完整参数）"
           ]
         },
+        "tool_call_prompt": {
+          "description": "工具调用提示词",
+          "hint": "具有可调用工具时的注入文案，注入到系统提示词末尾。"
+        },
+        "tool_call_lazy_load_mode_prompt": {
+          "description": "lazy_load工具调用提示词",
+          "hint": "lazy_load模式，具有可调用工具时的注入文案，注入到系统提示词末尾。"
+        },
+        "tool_call_requery_instruction_prompt": {
+          "description": "lazy_load工具调用二阶段提示词",
+          "hint": "lazy_load模式下发完整参数的提示文案，支持{tool_names}占位符。"
+        },
+        "tool_call_follow_up_notice_prompt": {
+          "description": "追问提示文案",
+          "hint": "工具调用执行期间，用户追问的提示文案模板，支持{follow_up_lines}占位符。"
+        },
+        "tool_call_max_step_reached_prompt": {
+          "description": "工具调用轮数上限提示文案",
+          "hint": "当工具调用达到最大轮数时的提示文案"
+        },
         "streaming_response": {
           "description": "流式输出"
         },
@@ -343,11 +409,15 @@
         },
         "wake_prefix": {
           "description": "LLM 聊天额外唤醒前缀",
-          "hint": "如果唤醒前缀为 /, 额外聊天唤醒前缀为 chat,则需要 /chat 才会触发 LLM 请求"
+          "hint": "如果唤醒前缀为 /, 额外聊天唤醒前缀为 chat,則需要 /chat 才會觸發 LLM 請求"
         },
         "prompt_prefix": {
           "description": "用户提示词",
-          "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。"
+          "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符則代表添加在用户输入的前面。"
+        },
+        "live_mode_system_prompt": {
+          "description": "live模式系统提示词",
+          "hint": "action_type == live 时，在系统提示词末尾注入该文案。"
         },
         "image_compress_enabled": {
           "description": "启用图片压缩",
@@ -1000,6 +1070,26 @@
       "log_level": {
         "description": "控制台日志级别",
         "hint": "控制台输出日志的级别。"
+      },
+      "cron_history_wrap_prompt": {
+        "description": "定时任务历史包装提示词",
+        "hint": "定时任务历史包装提示文案，支持 {context_dump} 占位符。"
+      },
+      "cron_execution_prompt": {
+        "description": "定时任务执行提示词",
+        "hint": "定时任务执行提示文案，支持 {cron_job} 占位符。"
+      },
+      "cron_task_work_user_prompt": {
+        "description": "定时任务执行唤醒提示词",
+        "hint": "定时任务执行唤醒提示文案。"
+      },
+      "cron_task_summary_note": {
+        "description": "定时任务笔记文案",
+        "hint": "定时任务完成笔记文案，支持 {name_or_id} {description} {started_at} 占位符。"
+      },
+      "cron_task_summary_note_result": {
+        "description": "定时任务结果提示词",
+        "hint": "定时任务结果提示文案，支持 {result} 占位符。"
       },
       "log_file_enable": {
         "description": "启用文件日志",

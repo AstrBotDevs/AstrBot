@@ -25,6 +25,10 @@ class ContextConfig:
     """
     llm_compress_instruction: str | None = None
     """Instruction prompt for LLM-based compression."""
+    context_summary_user_prompt: str | None = None
+    """User prompt for context summarization when using LLM-based compression."""
+    context_summary_ack_prompt: str | None = None
+    """Assistant prompt for context summarization when using LLM-based compression."""
     llm_compress_keep_recent: int = 0
     """Number of recent messages to keep during LLM-based compression."""
     llm_compress_provider: "Provider | None" = None

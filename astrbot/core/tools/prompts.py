@@ -132,7 +132,8 @@ FILE_EXTRACT_CONTEXT_TEMPLATE = (
 )
 
 CONVERSATION_HISTORY_INJECT_PREFIX = (
-    "\n\nBelow is your and the user's previous conversation history:\n"
+    "\n\nBelow is your and the user's previous conversation history:"
+    "---\n{context_dump}\n---\n"
 )
 
 BACKGROUND_TASK_WOKE_USER_PROMPT = (

@@ -206,6 +206,20 @@
             "description": "Bubblewrap RW Binds",
             "hint": "Extra read-write mount directories for Bubblewrap sandbox (press Enter to add, multiple allowed. /tmp and /var/tmp are RW by default, and the entire host system is mounted RO in the same location by default)."
           }
+        },
+        "local": {
+          "local_mode_prompt": {
+            "description": "Local Mode Prompt",
+            "hint": "Appended to the system prompt when runtime is local. Supports the {system_name} placeholder."
+          },
+          "local_shell_windows_hint": {
+            "description": "Local Shell Hint (Windows)",
+            "hint": "Windows-specific shell hint appended in local runtime."
+          },
+          "local_shell_unix_like_hint": {
+            "description": "Local Shell Hint (Unix-like)",
+            "hint": "Unix-like shell hint appended in local runtime."
+          }
         }
       }
     },
@@ -217,6 +231,26 @@
           "add_cron_tools": {
             "description": "Enable",
             "hint": "When enabled, related tools will be passed to the Agent to implement proactive Agent capabilities. You can tell AstrBot what to do at a future time, and it will be triggered on schedule to execute the task, and report the result back to you."
+          },
+          "background_history_wrap_prompt": {
+            "description": "Background History Wrap Prompt",
+            "hint": "Used when background wake-up has conversation history. Supports the {context_dump} placeholder."
+          },
+          "background_execution_prompt": {
+            "description": "Background Execution Prompt",
+            "hint": "System prompt for background task wake-up. Supports the {background_task_result} placeholder."
+          },
+          "background_task_work_user_prompt": {
+            "description": "Background Task Wake-up Prompt",
+            "hint": "Wake-up prompt text for background task execution."
+          },
+          "background_task_summary_note": {
+            "description": "Background Task Summary Note",
+            "hint": "Summary note text after background task completion. Supports {summary_name} {task_id} {result} placeholders."
+          },
+          "background_task_summary_note_result": {
+            "description": "Background Task Result Prompt",
+            "hint": "Prompt text for background task result. Supports the {result} placeholder."
           }
         }
       }
@@ -252,6 +286,14 @@
         "llm_compress_provider_id": {
           "description": "Model Provider ID for Context Compression",
           "hint": "When left empty, will fall back to the 'Truncate by Turns' strategy."
+        },
+        "context_summary_user_prompt": {
+          "description": "Context Summary User Prompt",
+          "hint": "Must contain exactly one {summary_content} placeholder. If empty or invalid, the default text is used."
+        },
+        "context_summary_ack_prompt": {
+          "description": "Context Summary Acknowledgement Prompt",
+          "hint": "If empty, the default text is used."
         }
       }
     },
@@ -268,6 +310,10 @@
         "safety_mode_strategy": {
           "description": "Healthy Mode Strategy",
           "hint": "How to apply healthy mode."
+        },
+        "llm_safety_mode_system_prompt": {
+          "description": "Healthy Mode Prompt",
+          "hint": "When the healthy mode strategy is set to 'System Prompt', this text is injected at the beginning of the system prompt."
         },
         "identifier": {
           "description": "User Identification",
@@ -328,6 +374,26 @@
             "Full schema"
           ]
         },
+        "tool_call_prompt": {
+          "description": "Tool Call Prompt",
+          "hint": "Injected text when callable tools are available, appended to the end of the system prompt."
+        },
+        "tool_call_lazy_load_mode_prompt": {
+          "description": "Lazy Load Tool Call Prompt",
+          "hint": "Injected text when callable tools are available in lazy_load mode, appended to the end of the system prompt."
+        },
+        "tool_call_requery_instruction_prompt": {
+          "description": "Lazy Load Tool Call Second-Stage Prompt",
+          "hint": "Prompt text for requesting full parameters in lazy_load mode. Supports the {tool_names} placeholder."
+        },
+        "tool_call_follow_up_notice_prompt": {
+          "description": "Follow-up Notice Prompt",
+          "hint": "Template shown when the user sends follow-up messages during tool execution. Supports the {follow_up_lines} placeholder."
+        },
+        "tool_call_max_step_reached_prompt": {
+          "description": "Tool Call Round Limit Prompt",
+          "hint": "Prompt text shown when tool calls reach the maximum round limit."
+        },
         "streaming_response": {
           "description": "Streaming Output"
         },
@@ -346,6 +412,10 @@
         "prompt_prefix": {
           "description": "User Prompt",
           "hint": "You can use {{prompt}} as a placeholder for user input. If no placeholder is provided, it will be added before the user input."
+        },
+        "live_mode_system_prompt": {
+          "description": "Live Mode System Prompt",
+          "hint": "When action_type == live, this text is injected at the end of the system prompt."
         },
         "image_compress_enabled": {
           "description": "Enable image compression",
@@ -998,6 +1068,26 @@
       "log_level": {
         "description": "Console Log Level",
         "hint": "Log level for console output."
+      },
+      "cron_history_wrap_prompt": {
+        "description": "Scheduled Task History Wrap Prompt",
+        "hint": "Prompt text for wrapping scheduled task history. Supports the {context_dump} placeholder."
+      },
+      "cron_execution_prompt": {
+        "description": "Scheduled Task Execution Prompt",
+        "hint": "Prompt text for executing scheduled tasks. Supports the {cron_job} placeholder."
+      },
+      "cron_task_work_user_prompt": {
+        "description": "Scheduled Task Wake-up Prompt",
+        "hint": "Wake-up prompt text for scheduled task execution."
+      },
+      "cron_task_summary_note": {
+        "description": "Scheduled Task Note Text",
+        "hint": "Note text when a scheduled task is completed. Supports the {name_or_id}, {description}, and {started_at} placeholders."
+      },
+      "cron_task_summary_note_result": {
+        "description": "Scheduled Task Result Prompt",
+        "hint": "Prompt text for scheduled task results. Supports the {result} placeholder."
       },
       "log_file_enable": {
         "description": "Enable File Logging",
