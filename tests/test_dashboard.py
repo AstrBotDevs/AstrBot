@@ -33,7 +33,7 @@ from tests.fixtures.helpers import (
 
 PLUGIN_WEBUI_DEMO_NAME = "astrbot_plugin_webui_demo"
 PLUGIN_WEBUI_DEMO_WEBUI = {
-    "display_name": "Demo WebUI",
+    "title": "Demo WebUI",
 }
 
 
@@ -106,7 +106,7 @@ window.renderTabs = renderTabs;
         root_dir_name=PLUGIN_WEBUI_DEMO_NAME,
         activated=True,
         webui=PluginWebUIPage(
-            display_name=PLUGIN_WEBUI_DEMO_WEBUI["display_name"],
+            title=PLUGIN_WEBUI_DEMO_WEBUI["title"],
             root_dir="webui",
             entry_file="index.html",
         ),

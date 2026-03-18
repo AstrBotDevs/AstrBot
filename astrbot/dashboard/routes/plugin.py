@@ -513,7 +513,7 @@ class PluginRoute(Route):
             return None
 
         return {
-            "display_name": page.display_name,
+            "title": page.title,
             "content_path": self._build_plugin_webui_content_path(plugin_name),
         }
 
@@ -560,6 +560,9 @@ class PluginRoute(Route):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
+        # 沙箱 iframe（无 allow-same-origin）会以 Origin: null 加载 ES module 资源；
+        # 允许跨源读取可避免模块脚本被 CORS 拦截，同时访问仍由 JWT/asset_token 保护。
+        response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Content-Security-Policy"] = (
             "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
         )

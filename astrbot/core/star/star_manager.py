@@ -376,12 +376,12 @@ class PluginManager:
                         return stripped
             return default
 
-        display_name = _get_str_value(["display_name", "title"], "WebUI")
+        title = _get_str_value(["title"], "WebUI")
         root_dir = _get_str_value(["root_dir", "root"], "webui")
         entry_file = _get_str_value(["entry_file", "entry"], "index.html")
 
         return PluginWebUIPage(
-            display_name=display_name,
+            title=title,
             root_dir=root_dir,
             entry_file=entry_file,
         )

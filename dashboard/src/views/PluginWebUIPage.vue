@@ -91,6 +91,46 @@ const buildPluginApiPath = (endpoint) => {
   return `/api/plug/${encodeURIComponent(pluginName.value)}/${normalized}`;
 };
 
+const isBridgeUploadFile = (value) => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  if (typeof File !== "undefined" && value instanceof File) {
+    return true;
+  }
+  if (typeof Blob !== "undefined" && value instanceof Blob) {
+    return true;
+  }
+  const tag = Object.prototype.toString.call(value);
+  if (tag === "[object File]" || tag === "[object Blob]") {
+    return true;
+  }
+  return typeof value.arrayBuffer === "function" && typeof value.size === "number";
+};
+
+const coerceBridgeUploadFile = async (value, fileName) => {
+  if (!isBridgeUploadFile(value)) {
+    throw new Error("Missing uploaded file payload.");
+  }
+  if (typeof Blob !== "undefined" && value instanceof Blob) {
+    return value;
+  }
+
+  const buffer = await value.arrayBuffer();
+  const fileType =
+    typeof value.type === "string" && value.type
+      ? value.type
+      : "application/octet-stream";
+  if (typeof File !== "undefined") {
+    return new File([buffer], fileName, {
+      type: fileType,
+      lastModified:
+        typeof value.lastModified === "number" ? value.lastModified : Date.now(),
+    });
+  }
+  return new Blob([buffer], { type: fileType });
+};
+
 const sendBridgeResponse = (requestId, ok, payload) => {
   postToIframe({
     kind: "response",
@@ -153,26 +193,26 @@ const handleBridgeRequest = async (message) => {
 
     if (action === "files:upload") {
       const formData = new FormData();
-      if (!(message.file instanceof Blob)) {
-        throw new Error("Missing uploaded file payload.");
-      }
-      formData.append(
-        "file",
+      const uploadFile = await coerceBridgeUploadFile(
         message.file,
         typeof message.fileName === "string" && message.fileName
           ? message.fileName
           : "upload.bin",
       );
-      const response = await fetch(buildPluginApiPath(message.endpoint), {
-        method: "POST",
-        body: formData,
-        credentials: "same-origin",
-      });
-      const payload = await response.json();
-      if (!response.ok || payload.status !== "ok") {
-        throw new Error(payload.message || "Plugin upload request failed.");
+      formData.append("file", uploadFile);
+      const response = await axios.post(
+        buildPluginApiPath(message.endpoint),
+        formData,
+        {
+          timeout: 60000,
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
+        },
+      );
+      if (response.data?.status === "error") {
+        throw new Error(response.data.message || "Plugin upload request failed.");
       }
-      sendBridgeResponse(requestId, true, payload.data);
+      sendBridgeResponse(requestId, true, response.data?.data ?? response.data);
       return;
     }
 
@@ -219,6 +259,11 @@ const handleBridgeRequest = async (message) => {
         });
       };
       eventSource.onerror = () => {
+        if (eventSource.readyState === EventSource.CLOSED) {
+          closeSSEConnection(subscriptionId);
+          postToIframe({ kind: "sse_state", subscriptionId, state: "closed" });
+          return;
+        }
         postToIframe({ kind: "sse_state", subscriptionId, state: "error" });
       };
       sendBridgeResponse(requestId, true, { subscriptionId });
@@ -347,7 +392,7 @@ watch([pluginName], loadPluginWebUI, { immediate: true });
 
       <div>
         <div class="text-h2 mb-1">
-          {{ webui?.display_name || tm("buttons.openWebUI") }}
+          {{ webui?.title || tm("buttons.openWebUI") }}
         </div>
         <div class="text-body-2 text-medium-emphasis">
           {{ plugin?.display_name || plugin?.name || pluginName }}

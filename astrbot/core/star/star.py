@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class PluginWebUIPage:
-    display_name: str
+    title: str
     root_dir: str
     entry_file: str
 
