@@ -1,4 +1,5 @@
 import asyncio
+import os
 from pathlib import Path
 
 import click
@@ -44,7 +45,11 @@ async def initialize_astrbot(
             default=True,
         )
     ):
-        await check_dashboard(astrbot_root)
+        # 避免在 systemd 模式下因等待输入而阻塞
+        if os.environ.get("ASTRBOT_SYSTEMD") == "1":
+            click.echo("Systemd detected: Skipping dashboard check.")
+        else:
+            await check_dashboard(astrbot_root)
     else:
         click.echo("你可以使用在线面版（v4.14.4+），填写后端地址的方式来控制。")
 
@@ -55,6 +60,9 @@ async def initialize_astrbot(
 def init(yes: bool, backend_only: bool) -> None:
     """Initialize AstrBot"""
     click.echo("Initializing AstrBot...")
+
+    if os.environ.get("ASTRBOT_SYSTEMD") == "1":
+        yes = True
 
     astrbot_root = astrbot_paths.root
     lock_file = astrbot_root / "astrbot.lock"

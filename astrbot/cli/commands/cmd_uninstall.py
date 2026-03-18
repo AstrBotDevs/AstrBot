@@ -1,3 +1,4 @@
+import os
 import platform
 import shutil
 import subprocess
@@ -16,6 +17,9 @@ from astrbot.core.utils.astrbot_path import astrbot_paths
 def uninstall(yes: bool, keep_data: bool) -> None:
     """Uninstall AstrBot systemd service and cleanup data"""
 
+    if os.environ.get("ASTRBOT_SYSTEMD") == "1":
+        yes = True
+
     # 1. Remove Systemd Service
     if platform.system() == "Linux" and shutil.which("systemctl"):
         service_path = Path.home() / ".config" / "systemd" / "user" / "astrbot.service"
@@ -26,10 +30,15 @@ def uninstall(yes: bool, keep_data: bool) -> None:
                 default=True,
             ):
                 try:
-                    click.echo("Stopping AstrBot service...")
-                    subprocess.run(
-                        ["systemctl", "--user", "stop", "astrbot"], check=False
-                    )
+                    if os.environ.get("ASTRBOT_SYSTEMD") != "1":
+                        click.echo("Stopping AstrBot service...")
+                        subprocess.run(
+                            ["systemctl", "--user", "stop", "astrbot"], check=False
+                        )
+                    else:
+                        click.echo(
+                            "Skipping stop service (running as systemd service)."
+                        )
 
                     click.echo("Disabling AstrBot service...")
                     subprocess.run(
