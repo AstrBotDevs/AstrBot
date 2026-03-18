@@ -3,7 +3,7 @@ import { ref, computed, watch } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import axios from "axios";
 import Logo from "@/components/shared/Logo.vue";
-import { md5 } from "js-md5";
+import { hashDashboardPassword } from "@/utils/passwordHash";
 import { useAuthStore } from "@/stores/auth";
 import { useCommonStore } from "@/stores/common";
 import { MarkdownRender, enableKatex, enableMermaid } from "markstream-vue";
@@ -266,22 +266,24 @@ function handleLogout() {
 }
 
 // 账户修改
-function accountEdit() {
+async function accountEdit() {
   accountEditStatus.value.loading = true;
   accountEditStatus.value.error = false;
   accountEditStatus.value.success = false;
 
-  const passwordHash = password.value ? md5(password.value) : "";
-  const newPasswordHash = newPassword.value ? md5(newPassword.value) : "";
-  const confirmPasswordHash = confirmPassword.value
-    ? md5(confirmPassword.value)
-    : "";
+  const [passwordHashes, newPasswordHashes, confirmPasswordHashes] =
+    await Promise.all([
+      hashDashboardPassword(password.value),
+      hashDashboardPassword(newPassword.value),
+      hashDashboardPassword(confirmPassword.value),
+    ]);
 
   axios
     .post("/api/auth/account/edit", {
-      password: passwordHash,
-      new_password: newPasswordHash,
-      confirm_password: confirmPasswordHash,
+      password: passwordHashes.sha256,
+      password_md5: passwordHashes.md5,
+      new_password: newPasswordHashes.sha256,
+      confirm_password: confirmPasswordHashes.sha256,
       new_username: newUsername.value ? newUsername.value : username,
     })
     .then((res) => {
@@ -616,13 +618,13 @@ const isChristmas = computed(() => {
         >
           <v-btn
             value="chat"
-            prepend-icon="mdi-chat-processing-outline"
+            prepend-icon="mdi-chat-processing"
           >
             Chat
           </v-btn>
           <v-btn
             value="bot"
-            prepend-icon="mdi-robot-outline"
+            prepend-icon="mdi-robot"
           >
             Bot
           </v-btn>
@@ -840,7 +842,7 @@ const isChristmas = computed(() => {
           @click="handleLogout"
         >
           <template #prepend>
-            <v-icon>mdi-logout</v-icon>
+            <v-icon>mdi-export</v-icon>
           </template>
           <v-list-item-title>
             {{

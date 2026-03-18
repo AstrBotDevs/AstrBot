@@ -435,7 +435,7 @@
               @click="applyThemeColors"
             >
               <v-icon start>
-                mdi-palette
+                mdi-pencil-ruler
               </v-icon>
               {{ t("core.common.save") }}
             </v-btn>
@@ -513,7 +513,7 @@
           <v-btn
             color="error"
             variant="tonal"
-            prepend-icon="mdi-logout"
+            prepend-icon="mdi-export"
             @click="logout"
           >
             {{ tm("system.logout.button") }}

@@ -310,9 +310,9 @@
         },
         "tool_schema_mode": {
           "description": "Tool Schema Mode",
-          "hint": "Skills-like sends name/description first and re-queries for parameters; Full sends the complete schema in one step.",
+          "hint": "Lazy-tool-load sends name/description first and re-queries for parameters; Full sends the complete schema in one step.",
           "labels": [
-            "Skills-like (two-stage)",
+            "Lazy-tool-load (two-stage)",
             "Full schema"
           ]
         },

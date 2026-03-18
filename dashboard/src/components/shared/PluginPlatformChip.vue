@@ -118,7 +118,7 @@ const platformDetails = computed(() => {
               </v-avatar>
               <v-icon
                 v-else
-                icon="mdi-platform"
+                icon="mdi-web"
                 size="12"
                 class="mr-2"
               />

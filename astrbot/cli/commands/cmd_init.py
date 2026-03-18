@@ -43,6 +43,7 @@ async def initialize_astrbot(
         "config": astrbot_root / "data" / "config",
         "plugins": astrbot_root / "data" / "plugins",
         "temp": astrbot_root / "data" / "temp",
+        "skills": astrbot_root / "data" / "skills",
     }
 
     for name, path in paths.items():

@@ -11,7 +11,7 @@ from slack_sdk.web.async_client import AsyncWebClient
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import *
+from astrbot.api.message_components import At, File, Image, Plain
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,

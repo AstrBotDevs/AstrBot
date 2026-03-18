@@ -98,10 +98,7 @@ select = [
   # "SIM", # flake8-simplify
 ]
 ignore = [
-  "F403",
-  "F405",
   "E501",
-
 ]
 
 [tool.pyright]

@@ -203,7 +203,7 @@ DEFAULT_CONFIG = {
     "dashboard": {
         "enable": True,
         "username": "astrbot",
-        "password": "77b90590a8945a7d36c963981a307dc9",
+        "password": "e045f42cb3af61cad0d5ea200ad3faa9ff185b844af554dd1294195c6050511a",
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,

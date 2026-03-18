@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import hashlib
 import io
 import os
 import sys
@@ -97,6 +98,26 @@ async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
 
 
 @pytest.mark.asyncio
+async def test_auth_login_accepts_legacy_md5_password(
+    app: Quart, core_lifecycle_td: AstrBotCoreLifecycle
+):
+    test_client = app.test_client()
+    username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
+    legacy_md5 = hashlib.md5(b"astrbot").hexdigest()
+
+    response = await test_client.post(
+        "/api/auth/login",
+        json={
+            "username": username,
+            "password": "invalid-sha256",
+            "password_md5": legacy_md5,
+        },
+    )
+    data = await response.get_json()
+    assert data["status"] == "ok"
+
+
+@pytest.mark.asyncio
 async def test_get_stat(app: Quart, authenticated_header: dict):
     test_client = app.test_client()
     response = await test_client.get("/api/stat/get")
@@ -154,6 +175,7 @@ async def test_subagent_config_accepts_default_persona(
             json=old_cfg,
             headers=authenticated_header,
         )
+
 
 @pytest.mark.parametrize("payload", [[], "x"])
 async def test_batch_delete_sessions_rejects_non_object_payload(

@@ -10,10 +10,28 @@ from astrbot.core.utils.astrbot_path import astrbot_paths
 
 from ..utils import check_astrbot_root
 
+DEFAULT_DASHBOARD_PASSWORD = "astrbot"
+DEFAULT_DASHBOARD_PASSWORD_MD5 = hashlib.md5(
+    DEFAULT_DASHBOARD_PASSWORD.encode()
+).hexdigest()
+DEFAULT_DASHBOARD_PASSWORD_SHA256 = hashlib.sha256(
+    DEFAULT_DASHBOARD_PASSWORD.encode()
+).hexdigest()
+
 
 def hash_dashboard_password(value: str) -> str:
     """Hash Dashboard password for storage."""
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def hash_dashboard_password_md5(value: str) -> str:
+    """Hash Dashboard password with the legacy MD5 algorithm."""
     return hashlib.md5(value.encode()).hexdigest()
+
+
+def is_dashboard_password_hash(value: str, *, algorithm: str) -> bool:
+    expected_len = 64 if algorithm == "sha256" else 32
+    return len(value) == expected_len and all(ch in "0123456789abcdef" for ch in value)
 
 
 def _validate_log_level(value: str) -> str:

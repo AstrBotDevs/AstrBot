@@ -11,6 +11,10 @@ import anyio
 import psutil
 from quart import request
 
+from astrbot.cli.commands.cmd_conf import (
+    DEFAULT_DASHBOARD_PASSWORD_MD5,
+    DEFAULT_DASHBOARD_PASSWORD_SHA256,
+)
 from astrbot.core import DEMO_MODE, logger
 from astrbot.core.config import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -71,7 +75,8 @@ class StatRoute(Route):
         password = self.config["dashboard"]["password"]
         return (
             username == "astrbot"
-            and password == "77b90590a8945a7d36c963981a307dc9"
+            and password
+            in {DEFAULT_DASHBOARD_PASSWORD_MD5, DEFAULT_DASHBOARD_PASSWORD_SHA256}
             and not DEMO_MODE
         )
 
