@@ -73,7 +73,7 @@ kubectl apply -f k8s/astrbot_with_napcat/02-deployment.yaml
 Since AstrBot and NapCat are in the same Pod, they can communicate directly via `localhost`.
 
 1.  **Add a message platform in AstrBot:**
-    *   Go to the AstrBot WebUI, select `Settings` -> `Message Platform` -> `Add`.
+    *   Go to the AstrBot WebUI, select  `Platform` -> `Add`.
     *   **Select Message Platform Category**: `aiocqhttp`
     *   **Bot Name**: `napcat` (or custom)
     *   **Reverse Websocket Host**: `0.0.0.0`
