@@ -174,9 +174,9 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
 
         entry = f"- **{display_name}**: {description}\n  File: `{rendered_path}`"
         if skill.input_schema:
-            entry += f"\n  Input Schema: {json.dumps(skill.input_schema, ensure_ascii=False)}"
+            entry += f"\n  Input Schema: {json.dumps(skill.input_schema, ensure_ascii=False, default=str)}"
         if skill.output_schema:
-            entry += f"\n  Output Schema: {json.dumps(skill.output_schema, ensure_ascii=False)}"
+            entry += f"\n  Output Schema: {json.dumps(skill.output_schema, ensure_ascii=False, default=str)}"
         skills_lines.append(entry)
         if not example_path:
             example_path = rendered_path
