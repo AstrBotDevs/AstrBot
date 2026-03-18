@@ -754,6 +754,26 @@ class TestProcessQuoteMessage:
         )
 
 
+class TestProviderSupportsImages:
+    """Tests for provider image modality detection."""
+
+    def test_provider_supports_images_accepts_provider_like_proxy(self):
+        """Provider-like objects should be detected via provider_config."""
+        provider = MagicMock(spec=Provider)
+        provider.provider_config = {"modalities": ["text", "image"]}
+
+        assert ama._provider_supports_images(provider) is True
+
+    def test_provider_supports_images_defaults_to_false_on_invalid_modalities(self):
+        """Invalid or missing modality declarations should not imply image support."""
+        provider = MagicMock(spec=Provider)
+        provider.provider_config = {"modalities": None}
+        assert ama._provider_supports_images(provider) is False
+
+        provider.provider_config = {"modalities": {"image": True}}
+        assert ama._provider_supports_images(provider) is False
+
+
 class TestModalitiesFix:
     """Tests for _modalities_fix function."""
 

@@ -511,16 +511,22 @@ def _get_quoted_message_parser_settings(
     return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)
 
 
-def _provider_supports_images(provider: Provider | None) -> bool:
-    if not isinstance(provider, Provider):
+def _provider_supports_images(provider: object | None) -> bool:
+    if provider is None:
         return False
 
-    modalities = provider.provider_config.get("modalities", ["image"])
+    provider_config = getattr(provider, "provider_config", None)
+    if not isinstance(provider_config, dict):
+        return False
+
+    modalities = provider_config.get("modalities")
+    if modalities is None:
+        return False
     if isinstance(modalities, str):
         return "image" in {part.strip() for part in modalities.split(",") if part}
     if not isinstance(modalities, (list, tuple, set)):
-        return True
-    return "image" in modalities
+        return False
+    return "image" in {str(part).strip() for part in modalities if str(part).strip()}
 
 
 def _resolve_quoted_image_caption_mode(
