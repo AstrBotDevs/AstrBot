@@ -3,8 +3,8 @@
 
 ### Modifications / 改动点
 
-<!--请总结你的改动：哪些核心文件被修改了？实现了什么功能？-->
 <!--Please summarize your changes: What core files were modified? What functionality was implemented?-->
+<!--请总结你的改动：哪些核心文件被修改了？实现了什么功能？-->
 
 - [x] This is NOT a breaking change. / 这不是一个破坏性变更。
 <!-- If your changes is a breaking change, please uncheck the checkbox above -->
@@ -21,7 +21,14 @@
 <!--If merged, your code will serve tens of thousands of users! Please double-check the following items before submitting.-->
 <!--如果分支被合并，您的代码将服务于数万名用户！在提交前，请核查一下几点内容。-->
 
-- [ ] 😊 如果 PR 中有新加入的功能，已经通过 Issue / 邮件等方式和作者讨论过。/ If there are new features added in the PR, I have discussed it with the authors through issues/emails, etc.
-- [ ] 👀 我的更改经过了良好的测试，**并已在上方提供了“验证步骤”和“运行截图”**。/ My changes have been well-tested, **and "Verification Steps" and "Screenshots" have been provided above**.
-- [ ] 🤓 我确保没有引入新依赖库，或者引入了新依赖库的同时将其添加到了 `requirements.txt` 和 `pyproject.toml` 文件相应位置。/ I have ensured that no new dependencies are introduced, OR if new dependencies are introduced, they have been added to the appropriate locations in `requirements.txt` and `pyproject.toml`.
-- [ ] 😮 我的更改没有引入恶意代码。/ My changes do not introduce malicious code.
+- [ ] 😊 If there are new features added in the PR, I have discussed it with the authors through issues/emails, etc. 
+  / 如果 PR 中有新加入的功能，已经通过 Issue / 邮件等方式和作者讨论过。
+
+- [ ] 👀 My changes have been well-tested, **and "Verification Steps" and "Screenshots" have been provided above**.
+  / 我的更改经过了良好的测试，**并已在上方提供了“验证步骤”和“运行截图”**。
+
+- [ ] 🤓 I have ensured that no new dependencies are introduced, OR if new dependencies are introduced, they have been added to the appropriate locations in `requirements.txt` and `pyproject.toml`.
+  / 我确保没有引入新依赖库，或者引入了新依赖库的同时将其添加到 `requirements.txt` 和 `pyproject.toml` 文件相应位置。
+
+- [ ] 😮 My changes do not introduce malicious code.
+  / 我的更改没有引入恶意代码。
