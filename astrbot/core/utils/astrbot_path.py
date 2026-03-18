@@ -20,78 +20,6 @@ from pathlib import Path
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
 
 
-def get_astrbot_path() -> str:
-    """获取Astrbot项目路径"""
-    return os.path.realpath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../"),
-    )
-
-
-def get_astrbot_root() -> str:
-    """获取Astrbot根目录路径"""
-    if path := os.environ.get("ASTRBOT_ROOT"):
-        return os.path.realpath(path)
-    if is_packaged_desktop_runtime():
-        return os.path.realpath(os.path.join(os.path.expanduser("~"), ".astrbot"))
-
-    return os.path.realpath(os.getcwd())
-
-
-def get_astrbot_data_path() -> str:
-    """获取Astrbot数据目录路径"""
-    return os.path.realpath(os.path.join(get_astrbot_root(), "data"))
-
-
-def get_astrbot_config_path() -> str:
-    """获取Astrbot配置文件路径"""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "config"))
-
-
-def get_astrbot_plugin_path() -> str:
-    """获取Astrbot插件目录路径"""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "plugins"))
-
-
-def get_astrbot_plugin_data_path() -> str:
-    """获取Astrbot插件数据目录路径"""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "plugin_data"))
-
-
-def get_astrbot_t2i_templates_path() -> str:
-    """获取Astrbot T2I 模板目录路径"""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "t2i_templates"))
-
-
-def get_astrbot_webchat_path() -> str:
-    """获取Astrbot WebChat 数据目录路径"""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "webchat"))
-
-
-def get_astrbot_temp_path() -> str:
-    """获取Astrbot临时文件目录路径"""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "temp"))
-
-
-def get_astrbot_skills_path() -> str:
-    """获取Astrbot Skills 目录路径"""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "skills"))
-
-
-def get_astrbot_site_packages_path() -> str:
-    """获取Astrbot第三方依赖目录路径"""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "site-packages"))
-
-
-def get_astrbot_knowledge_base_path() -> str:
-    """获取Astrbot知识库根目录路径"""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "knowledge_base"))
-
-
-def get_astrbot_backups_path() -> str:
-    """获取Astrbot备份目录路径"""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "backups"))
-
-
 class AstrbotPaths:
     """Astrbot 项目路径管理类"""
 
@@ -156,3 +84,68 @@ class AstrbotPaths:
 
 
 astrbot_paths = AstrbotPaths()
+
+
+def get_astrbot_path() -> str:
+    """获取Astrbot项目路径"""
+    return str(astrbot_paths.project_root)
+
+
+def get_astrbot_root() -> str:
+    """获取Astrbot根目录路径"""
+    return str(astrbot_paths.root)
+
+
+def get_astrbot_data_path() -> str:
+    """获取Astrbot数据目录路径"""
+    return os.path.realpath(os.path.join(get_astrbot_root(), "data"))
+
+
+def get_astrbot_config_path() -> str:
+    """获取Astrbot配置文件路径"""
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "config"))
+
+
+def get_astrbot_plugin_path() -> str:
+    """获取Astrbot插件目录路径"""
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "plugins"))
+
+
+def get_astrbot_plugin_data_path() -> str:
+    """获取Astrbot插件数据目录路径"""
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "plugin_data"))
+
+
+def get_astrbot_t2i_templates_path() -> str:
+    """获取Astrbot T2I 模板目录路径"""
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "t2i_templates"))
+
+
+def get_astrbot_webchat_path() -> str:
+    """获取Astrbot WebChat 数据目录路径"""
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "webchat"))
+
+
+def get_astrbot_temp_path() -> str:
+    """获取Astrbot临时文件目录路径"""
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "temp"))
+
+
+def get_astrbot_skills_path() -> str:
+    """获取Astrbot Skills 目录路径"""
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "skills"))
+
+
+def get_astrbot_site_packages_path() -> str:
+    """获取Astrbot第三方依赖目录路径"""
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "site-packages"))
+
+
+def get_astrbot_knowledge_base_path() -> str:
+    """获取Astrbot知识库根目录路径"""
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "knowledge_base"))
+
+
+def get_astrbot_backups_path() -> str:
+    """获取Astrbot备份目录路径"""
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "backups"))
