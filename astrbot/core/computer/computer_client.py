@@ -2,7 +2,7 @@ import json
 import os
 import shutil
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from astrbot.api import logger
 from astrbot.core.skills.skill_manager import SANDBOX_SKILLS_ROOT, SkillManager
@@ -397,10 +397,11 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             if zip_path.exists():
                 zip_path.unlink()
             shutil.make_archive(str(zip_base), "zip", str(skills_root))
-            remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
+            # Remote sandbox paths are POSIX-style regardless of host OS.
+            remote_zip = str(PurePosixPath(SANDBOX_SKILLS_ROOT) / "skills.zip")
             logger.info("Uploading skills bundle to sandbox...")
             await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
-            upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
+            upload_result = await booter.upload_file(str(zip_path), remote_zip)
             if not upload_result.get("success", False):
                 raise RuntimeError("Failed to upload skills bundle to sandbox.")
         else:

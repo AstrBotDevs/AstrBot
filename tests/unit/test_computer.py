@@ -626,13 +626,14 @@ class TestComputerClient:
         mock_config = MagicMock()
         mock_config.get = lambda key, default=None: {
             "provider_settings": {
+                "computer_use_runtime": "sandbox",
                 "sandbox": {
                     "booter": "shipyard",
                     "shipyard_endpoint": "http://localhost:8080",
                     "shipyard_access_token": "test_token",
                     "shipyard_ttl": 3600,
                     "shipyard_max_sessions": 10,
-                }
+                },
             }
         }.get(key, default)
         mock_context.get_config = MagicMock(return_value=mock_config)
@@ -677,9 +678,10 @@ class TestComputerClient:
         mock_config = MagicMock()
         mock_config.get = lambda key, default=None: {
             "provider_settings": {
+                "computer_use_runtime": "sandbox",
                 "sandbox": {
                     "booter": "unknown_type",
-                }
+                },
             }
         }.get(key, default)
         mock_context.get_config = MagicMock(return_value=mock_config)
@@ -700,11 +702,12 @@ class TestComputerClient:
         mock_config = MagicMock()
         mock_config.get = lambda key, default=None: {
             "provider_settings": {
+                "computer_use_runtime": "sandbox",
                 "sandbox": {
                     "booter": "shipyard",
                     "shipyard_endpoint": "http://localhost:8080",
                     "shipyard_access_token": "test_token",
-                }
+                },
             }
         }.get(key, default)
         mock_context.get_config = MagicMock(return_value=mock_config)
@@ -744,11 +747,12 @@ class TestComputerClient:
         mock_config = MagicMock()
         mock_config.get = lambda key, default=None: {
             "provider_settings": {
+                "computer_use_runtime": "sandbox",
                 "sandbox": {
                     "booter": "shipyard",
                     "shipyard_endpoint": "http://localhost:8080",
                     "shipyard_access_token": "test_token",
-                }
+                },
             }
         }.get(key, default)
         mock_context.get_config = MagicMock(return_value=mock_config)
