@@ -5,7 +5,7 @@ import uuid
 
 import aiohttp
 from bs4 import BeautifulSoup
-from readability import Document
+from readability_lxml import Document
 
 from astrbot.api import AstrBotConfig, llm_tool, logger, sp, star
 from astrbot.api.event import AstrMessageEvent, filter
