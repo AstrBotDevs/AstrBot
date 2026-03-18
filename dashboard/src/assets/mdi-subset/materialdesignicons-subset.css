@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 229 icons */
+/* Auto-generated MDI subset – 231 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -30,6 +30,14 @@
 
 .mdi-account-edit-outline::before {
   content: "\F0FFB";
+}
+
+.mdi-account-group::before {
+  content: "\F0849";
+}
+
+.mdi-account-group-outline::before {
+  content: "\F0B58";
 }
 
 .mdi-account-heart::before {

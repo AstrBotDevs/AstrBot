@@ -53,9 +53,12 @@
     "title": "No Group Settings",
     "description": "Click 'Add Setting' to configure custom provider and persona for specific groups"
   },
+  "buttons": {
+    "clear": "Clear"
+  },
   "validation": {
     "umoRequired": "UMO is required",
-    "umoFormat": "Invalid UMO format, should contain colon separators"
+    "umoFormat": "Invalid UMO format, expected: platform:message_type:group_id"
   },
   "messages": {
     "loadFailed": "Failed to load group settings",
@@ -67,6 +70,7 @@
     "batchDeleteSuccess": "Successfully deleted {count} settings",
     "batchDeletePartial": "Delete completed: {success} succeeded, {fail} failed",
     "batchDeleteFailed": "Batch delete failed",
-    "nothingToSave": "Please select at least one setting to save"
+    "nothingToSave": "Please select at least one setting to save",
+    "partialSuccess": "Some operations failed"
   }
 }

@@ -271,21 +271,15 @@ const headers = computed(() => [
   { title: tm('table.actions'), key: 'actions', sortable: false, align: 'end' }
 ]);
 
-// Validation rules
+// Validation rules - 使用正则验证 UMO 格式
 const umoRules = [
   v => !!v || tm('validation.umoRequired'),
-  v => v.includes(':') || tm('validation.umoFormat')
+  v => /^[^:]+:[^:]+:[^:]+$/.test(v) || tm('validation.umoFormat')
 ];
 
-// Filtered settings list
+// 使用后端返回的数据，不再进行前端过滤
 const filteredSettingsList = computed(() => {
-  if (!searchQuery.value) return settingsList.value;
-  const query = searchQuery.value.toLowerCase();
-  return settingsList.value.filter(item =>
-    item.umo.toLowerCase().includes(query) ||
-    (item.provider_id && item.provider_id.toLowerCase().includes(query)) ||
-    (item.persona_id && item.persona_id.toLowerCase().includes(query))
-  );
+  return settingsList.value;
 });
 
 // Methods
@@ -371,10 +365,18 @@ const openAddDialog = () => {
   dialogVisible.value = true;
 };
 
+// 存储原始值用于对比
+const originalFormData = ref({ provider_id: '', persona_id: '' });
+
 const openEditDialog = (item) => {
   isEditing.value = true;
   formData.value = {
     umo: item.umo,
+    provider_id: item.provider_id || '',
+    persona_id: item.persona_id || ''
+  };
+  // 保存原始值用于后续对比
+  originalFormData.value = {
     provider_id: item.provider_id || '',
     persona_id: item.persona_id || ''
   };
@@ -385,39 +387,78 @@ const saveSetting = async () => {
   if (!formValid.value) return;
 
   saving.value = true;
-  try {
-    const promises = [];
+  const operations = [];
+  const operationNames = [];
 
-    // Set provider if specified
+  try {
+    // 处理 Provider：新增、修改或清除
     if (formData.value.provider_id) {
-      promises.push(axios.post('/api/group-settings/set-provider', {
+      // 新增或修改 Provider
+      operations.push(axios.post('/api/group-settings/set-provider', {
         umo: formData.value.umo,
         provider_id: formData.value.provider_id
       }));
+      operationNames.push(tm('table.provider'));
+    } else if (isEditing.value && originalFormData.value.provider_id) {
+      // 编辑时清空 Provider - 需要清除
+      operations.push(axios.post('/api/group-settings/clear-provider', {
+        umo: formData.value.umo
+      }));
+      operationNames.push(tm('table.provider') + '(' + tm('buttons.clear') + ')');
     }
 
-    // Set persona if specified
+    // 处理 Persona：新增、修改或清除
     if (formData.value.persona_id) {
-      promises.push(axios.post('/api/group-settings/set-persona', {
+      // 新增或修改 Persona
+      operations.push(axios.post('/api/group-settings/set-persona', {
         umo: formData.value.umo,
         persona_id: formData.value.persona_id
       }));
+      operationNames.push(tm('table.persona'));
+    } else if (isEditing.value && originalFormData.value.persona_id) {
+      // 编辑时清空 Persona - 需要清除
+      operations.push(axios.post('/api/group-settings/clear-persona', {
+        umo: formData.value.umo
+      }));
+      operationNames.push(tm('table.persona') + '(' + tm('buttons.clear') + ')');
     }
 
-    // If neither is specified, just clear (which effectively means no change for editing)
-    if (promises.length === 0 && !isEditing.value) {
+    // 如果没有要执行的操作
+    if (operations.length === 0) {
       showToast(tm('messages.nothingToSave'), 'warning');
       saving.value = false;
       return;
     }
 
-    const results = await Promise.all(promises);
-    const hasError = results.some(r => r.data.status !== 'ok');
+    const results = await Promise.all(operations);
+    
+    // 分析结果
+    const failed = [];
+    const succeeded = [];
+    
+    results.forEach((r, index) => {
+      if (r.data.status === 'ok') {
+        succeeded.push(operationNames[index]);
+      } else {
+        failed.push({
+          name: operationNames[index],
+          message: r.data.message || 'Unknown error'
+        });
+      }
+    });
 
-    if (hasError) {
-      const errorMsg = results.find(r => r.data.status !== 'ok')?.data?.message;
-      showToast(errorMsg || tm('messages.saveFailed'), 'error');
+    if (failed.length > 0) {
+      if (succeeded.length > 0) {
+        // 部分成功
+        const failedNames = failed.map(f => f.name).join(', ');
+        showToast(`${tm('messages.partialSuccess')}: ${failedNames}`, 'warning');
+      } else {
+        // 全部失败
+        const errorMsg = failed.map(f => `${f.name}: ${f.message}`).join('; ');
+        showToast(errorMsg || tm('messages.saveFailed'), 'error');
+      }
     } else {
+      // 全部成功
       showToast(isEditing.value ? tm('messages.updateSuccess') : tm('messages.addSuccess'), 'success');
       dialogVisible.value = false;
       loadSettings();
