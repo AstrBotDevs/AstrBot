@@ -5,6 +5,8 @@ import os
 import traceback
 from pathlib import Path
 from typing import Any
+
+import anyio
 from quart import request
 
 from astrbot.core import astrbot_config, file_token_service, logger
@@ -1378,7 +1380,7 @@ class ConfigRoute(Route):
             logo_file_path = os.path.join(plugin_dir, platform.logo_path)
 
             # 检查文件是否存在并注册令牌
-            if Path(logo_file_path).exists():  # noqa: ASYNC240
+            if await anyio.Path(logo_file_path).exists():
                 logo_token = await file_token_service.register_file(
                     logo_file_path,
                     expire_seconds=3600,

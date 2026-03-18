@@ -2,8 +2,9 @@ import asyncio
 import platform
 import time
 import uuid
-from pathlib import Path
 from urllib.parse import unquote, urlparse
+
+import anyio
 
 
 class FileTokenService:
@@ -65,7 +66,7 @@ class FileTokenService:
         async with self.lock:
             await self._cleanup_expired_tokens()
 
-            if not Path(local_path).exists():  # noqa: ASYNC240
+            if not await anyio.Path(local_path).exists():
                 raise FileNotFoundError(
                     f"文件不存在: {local_path} (原始输入: {file_path})",
                 )
@@ -101,6 +102,6 @@ class FileTokenService:
             file_path, _, single_use = self.staged_files[file_token]
             if single_use:
                 self.staged_files.pop(file_token, None)
-            if not Path(file_path).exists():  # noqa: ASYNC240
+            if not await anyio.Path(file_path).exists():
                 raise FileNotFoundError(f"文件不存在: {file_path}")
             return file_path
