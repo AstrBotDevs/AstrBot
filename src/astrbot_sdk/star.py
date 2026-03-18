@@ -102,7 +102,9 @@ class Star(PluginKVStoreMixin):
             options=options,
         )
 
-    async def on_error(self, error: Exception, event, ctx) -> None:
+    @staticmethod
+    async def default_on_error(error: Exception, event, ctx) -> None:
+        del ctx
         if isinstance(error, AstrBotError):
             lines: list[str] = []
             if error.retryable:
@@ -121,6 +123,9 @@ class Star(PluginKVStoreMixin):
         else:
             await event.reply("出了点问题，请联系插件作者")
         logger.error("handler 执行失败\n{}", traceback.format_exc())
+
+    async def on_error(self, error: Exception, event, ctx) -> None:
+        await self.default_on_error(error, event, ctx)
 
     @classmethod
     def __astrbot_is_new_star__(cls) -> bool:
