@@ -290,7 +290,15 @@ async def test_run_pip_in_process_normalizes_crlf_without_extra_blank_lines(
     ("path", "expected"),
     [
         (
+            WINDOWS_RUNTIME_EXECUTABLE,
+            WINDOWS_RUNTIME_EXECUTABLE,
+        ),
+        (
             WINDOWS_PACKAGED_RUNTIME_EXECUTABLE,
+            WINDOWS_RUNTIME_EXECUTABLE,
+        ),
+        (
+            f"\\??\\{WINDOWS_RUNTIME_EXECUTABLE}",
             WINDOWS_RUNTIME_EXECUTABLE,
         ),
         (
@@ -356,17 +364,28 @@ async def test_run_pip_in_process_injects_windows_runtime_build_env(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("include_exists", "libs_exists"),
+    [
+        (True, True),
+        (True, False),
+        (False, True),
+    ],
+)
 async def test_run_pip_in_process_injects_windows_runtime_build_env_without_existing_paths(
-    monkeypatch,
+    monkeypatch, include_exists, libs_exists
 ):
+    existing_runtime_dirs = set()
+    if include_exists:
+        existing_runtime_dirs.add(WINDOWS_RUNTIME_INCLUDE_DIR)
+    if libs_exists:
+        existing_runtime_dirs.add(WINDOWS_RUNTIME_LIBS_DIR)
+
     observed_env = _configure_run_pip_in_process_capture(
         monkeypatch,
         platform="win32",
         packaged_runtime=True,
-        existing_runtime_dirs={
-            WINDOWS_RUNTIME_INCLUDE_DIR,
-            WINDOWS_RUNTIME_LIBS_DIR,
-        },
+        existing_runtime_dirs=existing_runtime_dirs,
     )
 
     installer = PipInstaller("")
@@ -374,11 +393,13 @@ async def test_run_pip_in_process_injects_windows_runtime_build_env_without_exis
 
     assert result == 0
     assert observed_env == {
-        "INCLUDE": WINDOWS_RUNTIME_INCLUDE_DIR,
-        "LIB": WINDOWS_RUNTIME_LIBS_DIR,
+        "INCLUDE": WINDOWS_RUNTIME_INCLUDE_DIR if include_exists else None,
+        "LIB": WINDOWS_RUNTIME_LIBS_DIR if libs_exists else None,
     }
-    assert ";" not in observed_env["INCLUDE"]
-    assert ";" not in observed_env["LIB"]
+    if include_exists:
+        assert ";" not in observed_env["INCLUDE"]
+    if libs_exists:
+        assert ";" not in observed_env["LIB"]
     assert "INCLUDE" not in pip_installer_module.os.environ
     assert "LIB" not in pip_installer_module.os.environ
 
