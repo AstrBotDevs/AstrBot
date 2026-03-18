@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "astrbot-sdk"
+version = "0.1.0"
+description = "AstrBot SDK with v4 runtime, worker protocol, and plugin tooling"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.13.2",
+    "anthropic>=0.72.1",
+    "certifi>=2025.10.5",
+    "click>=8.3.0",
+    "docstring-parser>=0.17.0",
+    "google-genai>=1.50.0",
+    "loguru>=0.7.3",
+    "msgpack>=1.1.1",
+    "openai>=2.7.2",
+    "pydantic>=2.12.3",
+    "pyyaml>=6.0.3",
+]
+
+[project.scripts]
+astr = "astrbot_sdk.cli:cli"
+astrbot-sdk = "astrbot_sdk.cli:cli"
+
+# ============================================================
+# Package Discovery (src layout)
+# ============================================================
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ============================================================
+# Optional Dependencies
+# ============================================================
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0.0",
+    "ruff>=0.4.0",
+]
