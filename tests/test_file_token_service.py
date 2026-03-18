@@ -1,5 +1,6 @@
 import asyncio
 import importlib.util
+import time
 from pathlib import Path
 
 import pytest
@@ -73,5 +74,14 @@ async def test_reusable_token_expires_normally(tmp_path: Path) -> None:
     await service._cleanup_expired_tokens()
     assert await service.check_token_expired(token) is False
 
-    await asyncio.sleep(0.02)
-    assert await service.check_token_expired(token) is True
+    start = time.monotonic()
+    timeout = 1.0
+    expired = await service.check_token_expired(token)
+    while not expired and time.monotonic() - start < timeout:
+        await asyncio.sleep(0.01)
+        expired = await service.check_token_expired(token)
+
+    assert expired is True
+
+    with pytest.raises(KeyError):
+        await service.handle_file(token)
