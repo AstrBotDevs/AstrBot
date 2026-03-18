@@ -54,6 +54,8 @@ export function getProviderIcon(type) {
 export function getProviderDescription(template, name, tm) {
   if (name == 'OpenAI') {
     return tm('providers.description.openai', { type: template.type });
+  } else if (name == 'Kimi CodingPlan' || template.provider === 'kimi-code') {
+    return tm('providers.description.kimi_code');
   } else if (name == 'vLLM Rerank') {
     return tm('providers.description.vllm_rerank', { type: template.type });
   }
