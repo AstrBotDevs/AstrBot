@@ -82,6 +82,14 @@ class AstrbotPaths:
     def backups(self) -> Path:
         return self.data / "backups"
 
+    @property
+    def t2i_templates(self) -> Path:
+        return self.data / "t2i_templates"
+
+    @property
+    def webchat(self) -> Path:
+        return self.data / "webchat"
+
 
 astrbot_paths = AstrbotPaths()
 
