@@ -1,5 +1,5 @@
 import json
-from enum import IntEnum, StrEnum
+from enum import Enum, IntEnum
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -36,7 +36,7 @@ class KookMessageType(IntEnum):
     SYSTEM = 255
 
 
-class KookModuleType(StrEnum):
+class KookModuleType(str, Enum):
     PLAIN_TEXT = "plain-text"
     KMARKDOWN = "kmarkdown"
     IMAGE = "image"
@@ -311,7 +311,7 @@ class KookMessageSignal(IntEnum):
     """server->client  resume ack"""
 
 
-class KookChannelType(StrEnum):
+class KookChannelType(str, Enum):
     GROUP = "GROUP"
     PERSON = "PERSON"
     BROADCAST = "BROADCAST"

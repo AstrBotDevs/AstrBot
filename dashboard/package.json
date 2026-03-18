@@ -5,6 +5,7 @@
   "author": "CodedThemes",
   "scripts": {
     "dev": "vite --host",
+    "subset-icons": "node scripts/subset-mdi-font.mjs",
     "build": "vue-tsc --noEmit && vite build",
     "build-stage": "vue-tsc --noEmit && vite build --base=/vue/free/stage/",
     "build-prod": "vue-tsc --noEmit && vite build --base=/vue/free/",
@@ -33,7 +34,6 @@
     "monaco-editor": "^0.52.2",
     "pinia": "2.1.6",
     "pinyin-pro": "^3.26.0",
-    "remixicon": "3.5.0",
     "shiki": "^3.20.0",
     "stream-markdown": "^0.0.13",
     "vee-validate": "4.11.3",
@@ -60,9 +60,14 @@
     "eslint-plugin-vue": "9.17.0",
     "prettier": "3.0.2",
     "sass": "1.66.1",
+    "sass-loader": "13.3.2",
+    "subset-font": "^2.4.0",
     "typescript": "5.1.6",
     "vite": "6.4.1",
-    "vue-tsc": "1.8.27"
+    "vite-plugin-webfont-dl": "^3.12.0",
+    "vue-cli-plugin-vuetify": "2.5.8",
+    "vue-tsc": "1.8.8",
+    "vuetify-loader": "^2.0.0-alpha.9"
   },
   "overrides": {
     "immutable": "4.3.8",
