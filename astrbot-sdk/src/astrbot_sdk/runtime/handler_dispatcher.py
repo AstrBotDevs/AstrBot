@@ -838,7 +838,7 @@ class HandlerDispatcher:
                 if inspect.isawaitable(result):
                     await result
             return
-        await Star().on_error(exc, event, ctx)
+        await Star.default_on_error(exc, event, ctx)
 
 
 __all__ = ["CapabilityDispatcher", "HandlerDispatcher"]

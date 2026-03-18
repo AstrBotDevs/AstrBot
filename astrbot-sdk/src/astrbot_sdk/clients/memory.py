@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from ._proxy import CapabilityProxy
 
@@ -48,30 +48,47 @@ class MemoryClient:
         """
         self._proxy = proxy
 
-    async def search(self, query: str) -> list[dict[str, Any]]:
-        """Search memory items with the current bridge behavior.
+    async def search(
+        self,
+        query: str,
+        *,
+        mode: Literal["auto", "keyword", "vector", "hybrid"] = "auto",
+        limit: int | None = None,
+        min_score: float | None = None,
+        provider_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """搜索记忆项。
 
-        The current core bridge matches `query` against the memory key and the
-        serialized memory payload. It does not provide vector or semantic
-        retrieval yet.
-
-        Returned items preserve the original `{"key": ..., "value": {...}}`
-        shape. When `value` is a mapping, its fields are also exposed at the
-        top level for compatibility with existing plugin examples.
+        默认会在有 embedding provider 时执行 hybrid 检索，
+        否则退化为关键词检索。返回结果包含 `score` 与 `match_type` 字段。
 
         Args:
             query: 搜索查询文本
+            mode: 搜索模式，支持 auto/keyword/vector/hybrid
+            limit: 最大返回条数
+            min_score: 最低分数阈值
+            provider_id: 指定 embedding provider，默认使用当前激活的 provider
 
         Returns:
             匹配的记忆项列表，按相关度排序
 
         示例:
-            # 搜索用户偏好相关的记忆
-            results = await ctx.memory.search("用户喜欢什么颜色")
+            results = await ctx.memory.search(
+                "用户喜欢什么颜色",
+                mode="hybrid",
+                limit=5,
+            )
             for item in results:
-                print(item["key"], item["content"])
+                print(item["key"], item["score"], item["match_type"])
         """
-        output = await self._proxy.call("memory.search", {"query": query})
+        payload: dict[str, Any] = {"query": query, "mode": mode}
+        if limit is not None:
+            payload["limit"] = limit
+        if min_score is not None:
+            payload["min_score"] = min_score
+        if provider_id is not None:
+            payload["provider_id"] = provider_id
+        output = await self._proxy.call("memory.search", payload)
         items = output.get("items")
         if not isinstance(items, (list, tuple)):
             return []
@@ -96,16 +113,20 @@ class MemoryClient:
             key: 记忆项的唯一标识键
             value: 要存储的数据字典
             **extra: 额外的键值对，会合并到 value 中
-
         Raises:
             TypeError: 如果 value 不是 dict 类型
-
         示例:
-            # 保存用户偏好
+            保存用户偏好
             await ctx.memory.save("user_pref", {"theme": "dark", "lang": "zh"})
 
-            # 使用关键字参数
+            使用关键字参数
             await ctx.memory.save("note", None, content="重要笔记", tags=["work"])
+
+            使用 embedding_text 显式指定检索文本
+            await ctx.memory.save(
+                "profile",
+                {"name": "alice", "embedding_text": "Alice 喜欢蓝色和海边"},
+            )
         """
         if value is not None and not isinstance(value, dict):
             raise TypeError("memory.save 的 value 必须是 dict")
@@ -230,16 +251,22 @@ class MemoryClient:
     async def stats(self) -> dict[str, Any]:
         """获取记忆系统统计信息。
 
-        返回记忆系统的当前状态，包括总条目数等统计信息。
+        返回记忆系统的当前状态，包括条目数、索引状态和脏索引数量。
 
         Returns:
             统计信息字典，包含：
             - total_items: 总记忆条目数
             - total_bytes: 总占用字节数（可选）
+            - ttl_entries: 带过期时间的条目数（可选）
+            - indexed_items: 已建立检索索引的条目数（可选）
+            - embedded_items: 已生成向量的条目数（可选）
+            - dirty_items: 等待重建索引的条目数（可选）
 
         示例:
             stats = await ctx.memory.stats()
             print(f"记忆库共有 {stats['total_items']} 条记录")
+            if "embedded_items" in stats:
+                print(f"其中 {stats['embedded_items']} 条已经向量化")
         """
         output = await self._proxy.call("memory.stats", {})
         stats = {
@@ -250,4 +277,10 @@ class MemoryClient:
             stats["plugin_id"] = output.get("plugin_id")
         if "ttl_entries" in output:
             stats["ttl_entries"] = output.get("ttl_entries")
+        if "indexed_items" in output:
+            stats["indexed_items"] = output.get("indexed_items")
+        if "embedded_items" in output:
+            stats["embedded_items"] = output.get("embedded_items")
+        if "dirty_items" in output:
+            stats["dirty_items"] = output.get("dirty_items")
         return stats
