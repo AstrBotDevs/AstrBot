@@ -76,13 +76,22 @@ async def run_astrbot(astrbot_root: Path) -> None:
 @click.option("--port", "-p", help="AstrBot Dashboard port", required=False, type=str)
 @click.option("--root", help="AstrBot root directory", required=False, type=str)
 @click.option(
+    "--service-config",
+    "-c",
+    help="Service configuration file path",
+    required=False,
+    type=str,
+)
+@click.option(
     "--backend-only",
+    "-b",
     is_flag=True,
     default=False,
     help="Disable WebUI, run backend only",
 )
 @click.option(
     "--log-level",
+    "-l",
     help="Log level",
     required=False,
     type=str,
@@ -95,6 +104,7 @@ def run(
     host: str,
     port: str,
     root: str,
+    service_config: str,
     backend_only: bool,
     log_level: str,
     debug: bool,
@@ -103,6 +113,31 @@ def run(
     try:
         if debug:
             log_level = "DEBUG"
+
+        if service_config:
+            svc_path = Path(service_config)
+            if svc_path.exists():
+                content = svc_path.read_text(encoding="utf-8")
+                for line in content.splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" in line:
+                        key, value = line.split("=", 1)
+                        key = key.strip()
+                        value = value.strip()
+                        # Remove quotes
+                        if (value.startswith('"') and value.endswith('"')) or (
+                            value.startswith("'") and value.endswith("'")
+                        ):
+                            value = value[1:-1]
+
+                        if key == "HOST" and not host:
+                            host = value
+                        elif key == "PORT" and not port:
+                            port = value
+                        elif key == "ASTRBOT_ROOT" and not root:
+                            root = value
 
         # Normalize environment variables for backward compatibility
         # If the legacy env var is set but the new one isn't, copy it over.

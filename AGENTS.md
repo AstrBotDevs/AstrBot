@@ -36,6 +36,7 @@ Runs on `http://localhost:3000` by default.
    - Update `astrbot/cli/commands/cmd_run.py`:
      - Add to the module docstring under "Environment Variables Used in Project".
      - Add to the `keys_to_print` list in the `run` function for debug output.
+9. To check all available CLI commands and their usage recursively, run `astrbot help --all`.
 
 
 ## PR instructions
