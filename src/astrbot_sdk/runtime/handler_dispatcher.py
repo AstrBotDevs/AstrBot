@@ -60,12 +60,12 @@ from ..protocol.descriptors import (
 from ..schedule import ScheduleContext
 from ..session_waiter import SessionWaiterManager
 from ..star import Star
-from .capability_dispatcher import CapabilityDispatcher
 from ._command_matching import (
     build_command_args,
     build_regex_args,
     match_command_name,
 )
+from .capability_dispatcher import CapabilityDispatcher
 from .limiter import LimiterEngine
 from .loader import LoadedHandler
 
@@ -456,7 +456,7 @@ class HandlerDispatcher:
     ) -> dict[str, Any]:
         assert loaded.conversation is not None
         conversation_meta = loaded.conversation
-        summary = {"sent_message": False, "stop": False, "call_llm": False}
+        summary = {"sent_message": False, "stop": True, "call_llm": False}
         key = f"{self._resolve_plugin_id(loaded)}:{event.session_id}"
         active = self._conversations.get(key)
         if active is not None and not active.task.done():
