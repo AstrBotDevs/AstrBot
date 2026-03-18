@@ -363,6 +363,38 @@ def test_build_packaged_windows_runtime_build_env_uses_base_env_snapshot(
     }
 
 
+def test_build_packaged_windows_runtime_build_env_matches_snapshot_keys_case_insensitively(
+    monkeypatch,
+):
+    snapshot_include = ntpath.join(r"C:\snapshot-toolchain", "include")
+    snapshot_lib = ntpath.join(r"C:\snapshot-toolchain", "lib")
+
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.setattr(pip_installer_module.sys, "platform", "win32")
+    monkeypatch.setattr(
+        pip_installer_module.sys,
+        "executable",
+        WINDOWS_PACKAGED_RUNTIME_EXECUTABLE,
+    )
+    monkeypatch.setattr(
+        pip_installer_module.os.path,
+        "isdir",
+        lambda path: path in {WINDOWS_RUNTIME_INCLUDE_DIR, WINDOWS_RUNTIME_LIBS_DIR},
+    )
+
+    env_updates = pip_installer_module._build_packaged_windows_runtime_build_env(
+        base_env={
+            "include": snapshot_include,
+            "lib": snapshot_lib,
+        }
+    )
+
+    assert env_updates == {
+        "INCLUDE": f"{WINDOWS_RUNTIME_INCLUDE_DIR};{snapshot_include}",
+        "LIB": f"{WINDOWS_RUNTIME_LIBS_DIR};{snapshot_lib}",
+    }
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("include_exists", "libs_exists"),

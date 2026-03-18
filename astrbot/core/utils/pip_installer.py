@@ -11,8 +11,8 @@ import re
 import shlex
 import sys
 import threading
-from collections.abc import Mapping
 from collections import deque
+from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -251,9 +251,7 @@ def _run_pip_main_with_temporary_environ(
     # the worker.
     with _PIP_IN_PROCESS_ENV_LOCK:
         if env_updates is None:
-            env_updates = _build_packaged_windows_runtime_build_env(
-                base_env=dict(os.environ)
-            )
+            env_updates = _build_packaged_windows_runtime_build_env(base_env=os.environ)
         with _temporary_environ(env_updates):
             return _run_pip_main_streaming(pip_main, args)
 
@@ -273,12 +271,28 @@ def _normalize_windows_native_build_path(path: str) -> str:
     return ntpath.normpath(normalized)
 
 
+def _get_windows_env_value(
+    name: str,
+    base_env: Mapping[str, str],
+) -> str | None:
+    existing = base_env.get(name)
+    if existing is not None:
+        return existing
+
+    normalized_name = name.upper()
+    for key, value in base_env.items():
+        if key.upper() == normalized_name:
+            return value
+
+    return None
+
+
 def _prepend_windows_env_path(
     name: str,
     path: str,
     base_env: Mapping[str, str],
 ) -> str:
-    existing = base_env.get(name)
+    existing = _get_windows_env_value(name, base_env)
     if existing:
         return f"{path};{existing}"
     return path
