@@ -41,12 +41,14 @@ ruff check . --fix # 使用 ruff 检查并自动修复全局格式问题
 
 如果修改了内容可能影响现有功能，请运行测试以确保没有引入错误：
 如果修改了bug或者更改了功能需要添加新的测试
+当前仓库已统一使用 `tests/` 目录，`tests_v4/` 不再作为新增测试入口。
+仓库当前没有 `run_tests.py`，请直接使用 `pytest`。
 
 ```bash
-python run_tests.py            # 运行所有测试
-python run_tests.py -v         # 详细输出
-python run_tests.py -k "test_peer"  # 运行匹配模式的测试
-python run_tests.py --cov      # 运行测试并生成覆盖率报告
+python -m pytest tests -q                         # 运行 tests 目录全部测试
+python -m pytest tests -v                         # 详细输出
+python -m pytest tests -k "test_context_register_task"  # 运行匹配模式的测试
+python -m pytest tests --cov=astrbot_sdk          # 运行测试并生成覆盖率报告
 ```
 
 ## 设计原则

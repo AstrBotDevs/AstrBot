@@ -210,12 +210,16 @@ async for chunk in ctx.llm.stream_chat("讲一个故事"):
 
 ##### `search()`
 
-语义搜索。
+搜索记忆。默认在有 embedding provider 时执行 hybrid 检索。
 
 ```python
-results = await ctx.memory.search("用户喜欢什么颜色")
+results = await ctx.memory.search(
+    "用户喜欢什么颜色",
+    mode="hybrid",
+    limit=5,
+)
 for item in results:
-    print(item["key"], item["content"])
+    print(item["key"], item["score"], item["match_type"])
 ```
 
 ##### `save()`
@@ -228,6 +232,15 @@ await ctx.memory.save("user_pref", {"theme": "dark", "lang": "zh"})
 
 # 使用关键字参数
 await ctx.memory.save("note", None, content="重要笔记", tags=["work"])
+
+# 显式指定检索文本
+await ctx.memory.save(
+    "profile:alice",
+    {
+        "name": "Alice",
+        "embedding_text": "Alice 喜欢蓝色和海边",
+    },
+)
 ```
 
 ##### `get()`
@@ -259,6 +272,15 @@ await ctx.memory.save_with_ttl(
 
 ```python
 await ctx.memory.delete("old_note")
+```
+
+##### `stats()`
+
+查看记忆索引状态。
+
+```python
+stats = await ctx.memory.stats()
+print(stats["total_items"], stats.get("embedded_items"), stats.get("dirty_items"))
 ```
 
 ---
