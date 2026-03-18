@@ -8,13 +8,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from quart import request as quart_request
-
-from astrbot.core import logger
-from astrbot.core.message.components import ComponentTypes, Image, Plain
-from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.llm.agents import AgentSpec
 from astrbot_sdk.llm.entities import LLMToolSpec
@@ -32,8 +25,17 @@ from astrbot_sdk.runtime.loader import (
     PluginSpec,
     discover_plugins,
     load_plugin_config,
+    load_plugin_config_schema,
+    save_plugin_config,
 )
 from astrbot_sdk.runtime.supervisor import WorkerSession
+from quart import request as quart_request
+
+from astrbot.core import logger
+from astrbot.core.message.components import ComponentTypes, Image, Plain
+from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .capability_bridge import CoreCapabilityBridge
 from .event_converter import EventConverter
@@ -138,6 +140,7 @@ class SdkPluginRecord:
     load_order: int
     state: str
     unsupported_features: list[str]
+    config_schema: dict[str, Any]
     config: dict[str, Any]
     handlers: list[SdkHandlerRef]
     llm_tools: dict[str, LLMToolSpec] = field(default_factory=dict)
@@ -383,6 +386,28 @@ class SdkPluginBridge:
         record = self._records.get(plugin_id)
         if record is None:
             return None
+        return dict(record.config)
+
+    def get_plugin_config_schema(self, plugin_id: str) -> dict[str, Any] | None:
+        record = self._records.get(plugin_id)
+        if record is None:
+            return None
+        return dict(record.config_schema)
+
+    def save_plugin_config(
+        self,
+        plugin_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        record = self._records.get(plugin_id)
+        if record is None:
+            raise ValueError(f"SDK plugin not found: {plugin_id}")
+        normalized = save_plugin_config(
+            record.plugin,
+            payload,
+            schema=record.config_schema,
+        )
+        record.config = dict(normalized)
         return dict(record.config)
 
     def get_registered_llm_tools(self, plugin_id: str) -> list[LLMToolSpec]:
@@ -1452,12 +1477,14 @@ class SdkPluginBridge:
         disabled = bool(
             self._state_overrides.get(plugin.name, {}).get("disabled", False)
         )
+        config_schema = load_plugin_config_schema(plugin)
         record = SdkPluginRecord(
             plugin=plugin,
             load_order=load_order,
             state=SDK_STATE_DISABLED if disabled else SDK_STATE_ENABLED,
             unsupported_features=[],
-            config=load_plugin_config(plugin),
+            config_schema=config_schema,
+            config=load_plugin_config(plugin, schema=config_schema),
             handlers=[],
             llm_tools={},
             active_llm_tools=set(),

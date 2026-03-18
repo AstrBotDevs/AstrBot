@@ -71,6 +71,8 @@ Runs on `http://localhost:3000` by default.
 - `ProviderManager.register_provider_change_hook()` originally had no matching unregister API. Any SDK/provider change watch stream built on top of it would leak callbacks across repeated subscriptions unless the core manager grows an explicit `unregister_provider_change_hook()`.
 - `Context.add_llm_tools()` only updates bridge-side tool metadata. It does not register a worker-local callable by itself, so dynamically executable SDK LLM tools must keep the bridge metadata and the worker callable registry in sync (for example via `Context.register_llm_tool()` / `StarTools.register_llm_tool()`).
 - `ctx.memory.search()` currently returns items shaped like `{"key": ..., "value": {...}}`, not flattened memory fields, and the current core bridge implementation only does substring matching on key / serialized JSON instead of true semantic retrieval. SDK plugins must read `item["value"]` explicitly and should not assume vector-style memory search quality yet.
+- `astrbot/dashboard/routes/config.py` originally only read and wrote plugin config through legacy `star_registry`. SDK plugins could load `_conf_schema.json` for runtime use, but the dashboard plugin-config dialog still showed "这个插件没有配置" and reloaded through the wrong legacy path unless config routes also consult `sdk_plugin_bridge`.
+- `astrbot_sdk.runtime.loader.load_plugin_config()` originally swallowed `_conf_schema.json` parse failures and returned an empty schema/config. An invalid SDK plugin schema JSON therefore looked identical to "plugin has no config" unless the loader logs the schema parse/read error with the file path.
 
 
 旧插件走旧逻辑，新插件走sdk，保证旧逻辑依旧能使用的情况下写新sdk桥接或者astrbot适配
