@@ -29,6 +29,16 @@ from ..register import register_provider_adapter
     "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
+    @staticmethod
+    def _normalize_custom_headers(provider_config: dict) -> dict[str, str] | None:
+        custom_headers = provider_config.get("custom_headers", {})
+        if not isinstance(custom_headers, dict) or not custom_headers:
+            return None
+        normalized_headers: dict[str, str] = {}
+        for key, value in custom_headers.items():
+            normalized_headers[str(key)] = str(value)
+        return normalized_headers or None
+
     def __init__(
         self,
         provider_config,
@@ -46,6 +56,7 @@ class ProviderAnthropic(Provider):
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
         self.thinking_config = provider_config.get("anth_thinking_config", {})
+        self.custom_headers = self._normalize_custom_headers(provider_config)
 
         if use_api_key:
             self._init_api_key(provider_config)
@@ -66,7 +77,14 @@ class ProviderAnthropic(Provider):
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
-        return create_proxy_client("Anthropic", proxy)
+        client = create_proxy_client("Anthropic", proxy)
+        if client is not None:
+            if self.custom_headers:
+                client.headers.update(self.custom_headers)
+            return client
+        if self.custom_headers:
+            return httpx.AsyncClient(headers=self.custom_headers)
+        return None
 
     def _apply_thinking_config(self, payloads: dict) -> None:
         thinking_type = self.thinking_config.get("type", "")
