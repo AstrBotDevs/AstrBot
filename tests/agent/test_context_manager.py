@@ -773,8 +773,8 @@ class TestContextManager:
         if len(recent) > 0:
             assert recent[0].role == "user"
 
-    def test_split_history_with_zero_keep_recent(self):
-        """Test split_history handles zero keep_recent without indexing past the end."""
+    def test_split_history_with_zero_keep_recent_preserves_last_turn(self):
+        """Test split_history preserves the latest user-assistant turn when keep_recent is zero."""
         from astrbot.core.agent.context.compressor import split_history
 
         messages = [
@@ -788,5 +788,7 @@ class TestContextManager:
         system, to_summarize, recent = split_history(messages, keep_recent=0)
 
         assert len(system) == 1
-        assert len(to_summarize) == 4
-        assert recent == []
+        assert [message.content for message in to_summarize] == ["msg1", "msg2"]
+        assert [message.content for message in recent] == ["msg3", "msg4"]
+        assert recent[0].role == "user"
+        assert recent[1].role == "assistant"

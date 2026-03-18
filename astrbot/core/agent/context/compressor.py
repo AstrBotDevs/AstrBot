@@ -120,15 +120,14 @@ def split_history(
     system_messages = messages[:first_non_system]
     non_system_messages = messages[first_non_system:]
 
-    if keep_recent <= 0:
-        return system_messages, non_system_messages, []
+    effective_keep_recent = max(keep_recent, 2)
 
-    if len(non_system_messages) <= keep_recent:
+    if len(non_system_messages) <= effective_keep_recent:
         return system_messages, [], non_system_messages
 
     # Find the split point, ensuring recent_messages starts with a user message
     # This maintains complete conversation turns
-    split_index = len(non_system_messages) - keep_recent
+    split_index = len(non_system_messages) - effective_keep_recent
 
     # Search backward from split_index to find the first user message
     # This ensures recent_messages starts with a user message (complete turn)
