@@ -134,7 +134,7 @@ class TestMainAgentBuildConfig:
         module = ama
         config = module.MainAgentBuildConfig(
             tool_call_timeout=120,
-            tool_schema_mode="skills-like",
+            tool_schema_mode="lazy_load",
             provider_wake_prefix="/",
             streaming_response=False,
             kb_agentic_mode=True,
@@ -143,7 +143,7 @@ class TestMainAgentBuildConfig:
             add_cron_tools=False,
         )
         assert config.tool_call_timeout == 120
-        assert config.tool_schema_mode == "skills-like"
+        assert config.tool_schema_mode == "lazy_load"
         assert config.provider_wake_prefix == "/"
         assert config.streaming_response is False
         assert config.kb_agentic_mode is True

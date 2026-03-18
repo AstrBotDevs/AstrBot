@@ -326,14 +326,37 @@ class CronJobManager:
             req.contexts = context
             context_dump = req._print_friendly_context()
             req.contexts = []
-            req.system_prompt += (
-                CONVERSATION_HISTORY_INJECT_PREFIX + f"---\n{context_dump}\n---\n"
+            history_wrap_prompt = self.ctx.get_config().get(
+                "cron_history_wrap_prompt",
+                CONVERSATION_HISTORY_INJECT_PREFIX
             )
+            try:
+                req.system_prompt += history_wrap_prompt.format(
+                    context_dump=context_dump
+                )
+            except Exception:
+                logger.error(
+                    "cron_history_wrap_prompt 文案格式化失败，已退回默认格式",
+                    exc_info=True,
+                )
+                req.system_prompt += CONVERSATION_HISTORY_INJECT_PREFIX.format(
+                    context_dump=context_dump
+                )
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
-        req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
-            cron_job=cron_job_str
+        cron_execution_prompt = self.ctx.get_config().get("cron_execution_prompt", "")
+        try:
+            req.system_prompt += cron_execution_prompt.format(cron_job=cron_job_str)
+        except Exception:
+            logger.error(
+                "cron_execution_prompt 文案格式化失败，已退回默认格式", exc_info=True
+            )
+            req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
+                cron_job=cron_job_str
+            )
+        req.prompt = self.ctx.get_config().get(
+            "cron_task_work_user_prompt",
+            CRON_TASK_WOKE_USER_PROMPT
         )
-        req.prompt = CRON_TASK_WOKE_USER_PROMPT
         if not req.func_tool:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
@@ -351,14 +374,33 @@ class CronJobManager:
             pass
         llm_resp = runner.get_final_llm_resp()
         cron_meta = extras.get("cron_job", {}) if extras else {}
-        summary_note = (
-            f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
-            f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
-        )
-        if llm_resp and llm_resp.role == "assistant":
-            summary_note += (
-                f"I finished this job, here is the result: {llm_resp.completion_text}"
+        cron_task_summary_note = self.ctx.get_config().get("cron_task_summary_note", "")
+        try:
+            summary_note = cron_task_summary_note.format(
+                name_or_id=cron_meta.get("name") or cron_meta.get("id", "unknown"),
+                description=cron_meta.get("description", ""),
+                started_at=cron_meta.get("run_started_at", "unknown time"),
             )
+        except Exception:
+            logger.error(
+                "cron_task_summary_note 文案格式化失败，已退回默认格式", exc_info=True
+            )
+            summary_note = (
+                f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
+                f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
+            )
+        if llm_resp and llm_resp.role == "assistant":
+            result_prompt = self.ctx.get_config().get(
+                "cron_task_summary_note_result", ""
+            )
+            try:
+                result_prompt = result_prompt.format(result=llm_resp.completion_text)
+            except Exception:
+                logger.error(
+                    "cron_task_summary_note_result 文案格式化失败，已退回默认格式",
+                    exc_info=True,
+                )
+                summary_note += f"I finished this job, here is the result: {llm_resp.completion_text}"
 
         await persist_agent_history(
             self.ctx.conversation_manager,

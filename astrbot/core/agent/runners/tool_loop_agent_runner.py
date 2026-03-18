@@ -100,6 +100,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         enforce_max_turns: int = -1,
         # llm compressor
         llm_compress_instruction: str | None = None,
+        context_summary_user_prompt: str | None = None,
+        context_summary_ack_prompt: str | None = None,
         llm_compress_keep_recent: int = 0,
         llm_compress_provider: Provider | None = None,
         # truncate by turns compressor
@@ -108,6 +110,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         custom_token_counter: TokenCounter | None = None,
         custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
+        tool_call_requery_instruction_prompt: str = "",
+        tool_call_follow_up_notice_prompt: str = "",
+        tool_call_max_step_reached_prompt: str = "",
         fallback_providers: list[Provider] | None = None,
         **kwargs: T.Any,
     ) -> None:
@@ -115,6 +120,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.streaming = streaming
         self.enforce_max_turns = enforce_max_turns
         self.llm_compress_instruction = llm_compress_instruction
+        self.context_summary_user_prompt = context_summary_user_prompt
+        self.context_summary_ack_prompt = context_summary_ack_prompt
         self.llm_compress_keep_recent = llm_compress_keep_recent
         self.llm_compress_provider = llm_compress_provider
         self.truncate_turns = truncate_turns
@@ -130,6 +137,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             enforce_max_turns=self.enforce_max_turns,
             truncate_turns=self.truncate_turns,
             llm_compress_instruction=self.llm_compress_instruction,
+            context_summary_user_prompt=self.context_summary_user_prompt,
+            context_summary_ack_prompt=self.context_summary_ack_prompt,
             llm_compress_keep_recent=self.llm_compress_keep_recent,
             llm_compress_provider=self.llm_compress_provider,
             custom_token_counter=self.custom_token_counter,
@@ -166,7 +175,40 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         #   Light tool schema does not include tool parameters.
         #   This can reduce token usage when tools have large descriptions.
         # See #4681
-        self.tool_schema_mode = tool_schema_mode
+        def _is_valid_prompt(prompt: str, placeholder: str) -> bool:
+            """检查提示字符串是否有效：非空且包含恰好一个占位符"""
+            return prompt and prompt.count(placeholder) == 1
+
+        PLACEHOLDER = "{tool_names}"
+        DEFAULT_PROMPT = (
+            f"You have decided to call tool(s): {PLACEHOLDER}. "
+            f"Now call the tool(s) with required arguments using the tool schema, "
+            f"and follow the existing tool-use rules."
+        )
+        self.tool_call_requery_instruction_prompt = (
+            tool_call_requery_instruction_prompt
+            if _is_valid_prompt(tool_call_requery_instruction_prompt, PLACEHOLDER)
+            else DEFAULT_PROMPT
+        )
+        PLACEHOLDER = "{follow_up_lines}"
+        DEFAULT_PROMPT = (
+            "\n\n[SYSTEM NOTICE] User sent follow-up messages while tool execution "
+            "was in progress. Prioritize these follow-up instructions in your next "
+            "actions. In your very next action, briefly acknowledge to the user "
+            "that their follow-up message(s) were received before continuing.\n"
+            f"{PLACEHOLDER}"
+        )
+        self.tool_call_follow_up_notice_prompt = (
+            tool_call_follow_up_notice_prompt
+            if _is_valid_prompt(tool_call_follow_up_notice_prompt, PLACEHOLDER)
+            else DEFAULT_PROMPT
+        )
+        self.tool_call_max_step_reached_prompt = (
+            tool_call_max_step_reached_prompt
+            if tool_call_max_step_reached_prompt
+            else "工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。"
+        )
+
         self._tool_schema_param_set = None
         self._lazy_load_raw_tool_set = None
         if tool_schema_mode == "lazy_load":
@@ -331,12 +373,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         follow_up_lines = "\n".join(
             f"{idx}. {ticket.text}" for idx, ticket in enumerate(follow_ups, start=1)
         )
-        return (
-            "\n\n[SYSTEM NOTICE] User sent follow-up messages while tool execution "
-            "was in progress. Prioritize these follow-up instructions in your next "
-            "actions. In your very next action, briefly acknowledge to the user "
-            "that their follow-up message(s) were received before continuing.\n"
-            f"{follow_up_lines}"
+        return self.tool_call_follow_up_notice_prompt.format(
+            follow_up_lines=follow_up_lines
         )
 
     def _merge_follow_up_notice(self, content: str) -> str:
@@ -640,7 +678,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.run_context.messages.append(
                 Message(
                     role="user",
-                    content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
+                    content=self.tool_call_max_step_reached_prompt,
                 )
             )
             # 再执行最后一步
@@ -899,11 +937,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 contexts.append(msg.model_dump())  # type: ignore[call-arg]
             elif isinstance(msg, dict):
                 contexts.append(copy.deepcopy(msg))
-        instruction = (
-            "You have decided to call tool(s): "
-            + ", ".join(tool_names)
-            + ". Now call the tool(s) with required arguments using the tool schema, "
-            "and follow the existing tool-use rules."
+        instruction = self.tool_call_requery_instruction_prompt.format(
+            tool_names=", ".join(tool_names)
         )
         if contexts and contexts[0].get("role") == "system":
             content = contexts[0].get("content") or ""

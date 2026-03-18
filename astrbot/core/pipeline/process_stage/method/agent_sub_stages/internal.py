@@ -58,12 +58,27 @@ class InternalAgentSubStage(Stage):
         self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
         if self.tool_schema_mode not in ("lazy_load", "full"):
             logger.warning(
-                "Unsupported tool_schema_mode: %s, fallback to lazy_load",
+                "Unsupported tool_schema_mode: %s, fallback to full",
                 self.tool_schema_mode,
             )
             self.tool_schema_mode = "full"
         if isinstance(self.max_step, bool):  # workaround: #2622
             self.max_step = 30
+        # 工具调用相关文案
+        self.tool_call_prompt: str = settings.get("tool_call_prompt", "")
+        self.tool_call_lazy_load_mode_prompt: str = settings.get(
+            "tool_call_lazy_load_mode_prompt", ""
+        )
+        self.tool_call_requery_instruction_prompt: str = settings.get(
+            "tool_call_requery_instruction_prompt", ""
+        )
+        self.tool_call_follow_up_notice_prompt: str = settings.get(
+            "tool_call_follow_up_notice_prompt", ""
+        )
+        self.tool_call_max_step_reached_prompt: str = settings.get(
+            "tool_call_max_step_reached_prompt", ""
+        )
+
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
         self.show_tool_call_result: bool = settings.get("show_tool_call_result", False)
         self.show_reasoning = settings.get("display_reasoning_text", False)
@@ -87,6 +102,14 @@ class InternalAgentSubStage(Stage):
         self.llm_compress_instruction: str = settings.get(
             "llm_compress_instruction", ""
         )
+        # 上下文压缩相关的文案
+        self.context_summary_user_prompt: str = settings.get(
+            "context_summary_user_prompt", ""
+        )
+        self.context_summary_ack_prompt: str = settings.get(
+            "context_summary_ack_prompt", ""
+        )
+
         self.llm_compress_keep_recent: int = settings.get("llm_compress_keep_recent", 4)
         self.llm_compress_provider_id: str = settings.get(
             "llm_compress_provider_id", ""
@@ -103,9 +126,14 @@ class InternalAgentSubStage(Stage):
         self.safety_mode_strategy = settings.get(
             "safety_mode_strategy", "system_prompt"
         )
+        self.llm_safety_mode_system_prompt = settings.get(
+            "llm_safety_mode_system_prompt", ""
+        )
 
         self.computer_use_runtime = settings.get("computer_use_runtime")
+        self.live_mode_system_prompt = settings.get("live_mode_system_prompt", "")
         self.sandbox_cfg = settings.get("sandbox", {})
+        self.local_cfg = settings.get("local", {})
 
         # Proactive capability configuration
         proactive_cfg = settings.get("proactive_capability", {})
@@ -124,6 +152,11 @@ class InternalAgentSubStage(Stage):
         self.main_agent_cfg = MainAgentBuildConfig(
             tool_call_timeout=self.tool_call_timeout,
             tool_schema_mode=self.tool_schema_mode,
+            tool_call_prompt=self.tool_call_prompt,
+            tool_call_lazy_load_mode_prompt=self.tool_call_lazy_load_mode_prompt,
+            tool_call_requery_instruction_prompt=self.tool_call_requery_instruction_prompt,
+            tool_call_follow_up_notice_prompt=self.tool_call_follow_up_notice_prompt,
+            tool_call_max_step_reached_prompt=self.tool_call_max_step_reached_prompt,
             sanitize_context_by_modalities=self.sanitize_context_by_modalities,
             kb_agentic_mode=self.kb_agentic_mode,
             file_extract_enabled=self.file_extract_enabled,
@@ -131,14 +164,19 @@ class InternalAgentSubStage(Stage):
             file_extract_msh_api_key=self.file_extract_msh_api_key,
             context_limit_reached_strategy=self.context_limit_reached_strategy,
             llm_compress_instruction=self.llm_compress_instruction,
+            context_summary_user_prompt=self.context_summary_user_prompt,
+            context_summary_ack_prompt=self.context_summary_ack_prompt,
             llm_compress_keep_recent=self.llm_compress_keep_recent,
             llm_compress_provider_id=self.llm_compress_provider_id,
             max_context_length=self.max_context_length,
             dequeue_context_length=self.dequeue_context_length,
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
+            llm_safety_mode_system_prompt=self.llm_safety_mode_system_prompt,
             computer_use_runtime=self.computer_use_runtime,
+            live_mode_system_prompt=self.live_mode_system_prompt,
             sandbox_cfg=self.sandbox_cfg,
+            local_cfg=self.local_cfg,
             tool_providers=_tool_providers,
             add_cron_tools=self.add_cron_tools,
             provider_settings=settings,

@@ -51,19 +51,33 @@ SANDBOX_MODE_PROMPT = (
 )
 
 
-def _build_local_mode_prompt() -> str:
+def _build_local_mode_prompt(local_cfg: dict | None = None) -> str:
+    local_cfg = local_cfg or {}
     system_name = platform.system() or "Unknown"
-    shell_hint = (
+    default_windows_hint = (
         "The runtime shell is Windows Command Prompt (cmd.exe). "
         "Use cmd-compatible commands and do not assume Unix commands like cat/ls/grep are available."
+    )
+    default_unix_hint = (
+        "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
+    )
+    shell_hint = (
+        str(local_cfg.get("local_shell_windows_hint") or default_windows_hint)
         if system_name.lower() == "windows"
-        else "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
+        else str(local_cfg.get("local_shell_unix_like_hint") or default_unix_hint)
     )
-    return (
+    default_local_mode_prompt = (
         "You have access to the host local environment and can execute shell commands and Python code. "
-        f"Current operating system: {system_name}. "
-        f"{shell_hint}"
+        "Current operating system: {system_name}."
     )
+    local_mode_prompt = str(
+        local_cfg.get("local_mode_prompt") or default_local_mode_prompt
+    )
+    try:
+        rendered_local_mode_prompt = local_mode_prompt.format(system_name=system_name)
+    except Exception:
+        rendered_local_mode_prompt = local_mode_prompt
+    return f"{rendered_local_mode_prompt} {shell_hint}"
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +181,7 @@ class ComputerToolProvider:
             return ""
 
         if runtime == "local":
-            return f"\n{_build_local_mode_prompt()}\n"
+            return f"\n{_build_local_mode_prompt(ctx.local_cfg)}\n"
 
         if runtime == "sandbox":
             return self._sandbox_prompt_addon(ctx)
