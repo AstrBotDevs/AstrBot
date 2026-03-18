@@ -1,7 +1,4 @@
 import asyncio
-import platform
-import shutil
-import subprocess
 from pathlib import Path
 
 import click
@@ -10,29 +7,6 @@ from filelock import FileLock, Timeout
 from astrbot.core.utils.astrbot_path import astrbot_paths
 
 from ..utils import check_dashboard
-
-SYSTEMD_SERVICE = r"""
-# user service
-[Unit]
-Description=AstrBot Service
-Documentation=https://github.com/AstrBotDevs/AstrBot
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-WorkingDirectory=%h/.local/share/astrbot
-ExecStart=/usr/bin/sh -c '/usr/bin/astrbot run || { /usr/bin/astrbot init && /usr/bin/astrbot run; }'
-Restart=on-failure
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=astrbot-%u
-Environment=PYTHONUNBUFFERED=1
-
-[Install]
-WantedBy=default.target
-"""
 
 
 async def initialize_astrbot(
@@ -81,30 +55,6 @@ async def initialize_astrbot(
 def init(yes: bool, backend_only: bool) -> None:
     """Initialize AstrBot"""
     click.echo("Initializing AstrBot...")
-
-    # 检查当前系统是否为 Linux 且存在 systemd
-    if platform.system() == "Linux" and shutil.which("systemctl"):
-        if yes or click.confirm(
-            "Detected Linux with systemd. Install AstrBot user service?", default=True
-        ):
-            user_config_dir = Path.home() / ".config" / "systemd" / "user"
-            user_config_dir.mkdir(parents=True, exist_ok=True)
-
-            service_path = user_config_dir / "astrbot.service"
-
-            service_path.write_text(SYSTEMD_SERVICE)
-            click.echo(f"Created service file at {service_path}")
-
-            try:
-                subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
-                click.echo("Systemd daemon reloaded.")
-                click.echo("Management commands:")
-                click.echo("  Start:  systemctl --user start astrbot")
-                click.echo("  Stop:   systemctl --user stop astrbot")
-                click.echo("  Enable: systemctl --user enable astrbot")
-                click.echo("  Log:    journalctl --user -u astrbot -f")
-            except subprocess.CalledProcessError as e:
-                click.echo(f"Failed to reload systemd daemon: {e}", err=True)
 
     astrbot_root = astrbot_paths.root
     lock_file = astrbot_root / "astrbot.lock"

@@ -348,6 +348,8 @@ class DiscordPlatformAdapter(Platform):
                     timeout=10,
                 )
                 logger.info("[Discord] 指令清理完成。")
+            except asyncio.TimeoutError:
+                logger.warning("[Discord] 清理指令超时，跳过。")
             except Exception as e:
                 logger.error(f"[Discord] 清理指令时发生错误: {e}", exc_info=True)
         logger.info("[Discord] 正在关闭 Discord 客户端... (step 3)")
