@@ -465,23 +465,14 @@ onMounted(async () => {
   <v-app-bar elevation="0" height="50" class="top-header">
 
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" style="margin-left: 16px;"
-      class="hidden-md-and-down"  icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
-    <v-btn v-else-if="customizer.viewMode === 'bot'"
-      style="margin-left: 22px;"
+    <v-btn v-if="customizer.viewMode === 'bot'"
+      style="margin-left: 16px;"
       class="hidden-md-and-down" icon rounded="sm" variant="flat"
       @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
     <!-- 移动端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" class="hidden-lg-and-up ms-3"
-      icon rounded="sm" variant="flat" @click.stop="customizer.SET_SIDEBAR_DRAWER">
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
-    <v-btn v-else-if="customizer.viewMode === 'bot'" class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
+    <v-btn v-if="customizer.viewMode === 'bot'" class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
       @click.stop="customizer.SET_SIDEBAR_DRAWER">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
@@ -572,21 +563,51 @@ onMounted(async () => {
         <v-divider class="my-1" />
       </template>
 
-      <!-- 语言切换 -->
-      <v-list-item
-        v-for="lang in languages"
-        :key="lang.code"
-        :value="lang.code"
-        @click="changeLanguage(lang.code)"
-        :class="{ 'styled-menu-item-active': currentLocale === lang.code }"
-        class="styled-menu-item"
-        rounded="md"
+      <!-- 语言切换分组 -->
+      <v-menu
+        :open-on-hover="!$vuetify.display.xs"
+        :open-on-click="$vuetify.display.xs"
+        :open-delay="!$vuetify.display.xs ? 60 : 0"
+        :close-delay="!$vuetify.display.xs ? 120 : 0"
+        :location="$vuetify.display.xs ? 'bottom' : 'start center'"
+        offset="8"
       >
-        <template v-slot:prepend>
-          <span class="language-flag">{{ lang.flag }}</span>
+        <template v-slot:activator="{ props: languageMenuProps }">
+          <v-list-item
+            v-bind="languageMenuProps"
+            class="styled-menu-item language-group-trigger"
+            rounded="md"
+          >
+            <template v-slot:prepend>
+              <v-icon>mdi-translate</v-icon>
+            </template>
+            <v-list-item-title>{{ t('core.common.language') }}</v-list-item-title>
+            <template v-slot:append>
+              <span class="language-group-current">{{ currentLanguage?.flag }}</span>
+              <v-icon size="18" class="language-group-arrow">mdi-chevron-right</v-icon>
+            </template>
+          </v-list-item>
         </template>
-        <v-list-item-title>{{ lang.name }}</v-list-item-title>
-      </v-list-item>
+
+        <v-card class="styled-menu-card" style="min-width: 180px;" elevation="8" rounded="lg">
+          <v-list density="compact" class="styled-menu-list pa-1">
+            <v-list-item
+              v-for="lang in languages"
+              :key="lang.code"
+              :value="lang.code"
+              @click="changeLanguage(lang.code)"
+              :class="{ 'styled-menu-item-active': currentLocale === lang.code }"
+              class="styled-menu-item"
+              rounded="md"
+            >
+              <template v-slot:prepend>
+                <span class="language-flag">{{ lang.flag }}</span>
+              </template>
+              <v-list-item-title>{{ lang.name }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-card>
+      </v-menu>
 
       <!-- 主题切换 -->
       <v-list-item
@@ -976,6 +997,25 @@ onMounted(async () => {
 .language-flag {
   font-size: 16px;
   margin-right: 8px;
+}
+
+.language-group-trigger :deep(.v-list-item__append) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.language-group-current {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.language-group-arrow {
+  opacity: 0.7;
+}
+
+.language-submenu-card {
+  min-width: 180px;
 }
 
 .mobile-mode-toggle-wrapper {

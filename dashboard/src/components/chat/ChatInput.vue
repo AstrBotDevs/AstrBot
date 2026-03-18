@@ -15,7 +15,7 @@
             <transition name="fade">
                 <div v-if="isDragging" class="drop-overlay">
                     <div class="drop-overlay-content">
-                        <v-icon size="48" color="deep-purple">mdi-cloud-upload</v-icon>
+                        <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
                         <span class="drop-text">{{ tm('input.dropToUpload') }}</span>
                     </div>
                 </div>
@@ -41,7 +41,7 @@
                     <!-- Settings Menu -->
                     <StyledMenu offset="8" location="top start" :close-on-content-click="false">
                         <template v-slot:activator="{ props: activatorProps }">
-                            <v-btn v-bind="activatorProps" icon="mdi-plus" variant="text" color="deep-purple" />
+                            <v-btn v-bind="activatorProps" icon="mdi-plus" variant="text" color="primary" />
                         </template>
 
                         <!-- Upload Files -->
@@ -87,7 +87,7 @@
                             {{ tm('voice.liveMode') }}
                         </v-tooltip>
                     </v-btn> -->
-                    <v-btn @click="handleRecordClick" icon variant="text" :color="isRecording ? 'error' : 'deep-purple'"
+                    <v-btn @click="handleRecordClick" icon variant="text" :color="isRecording ? 'error' : 'primary'"
                         class="record-btn">
                         <v-icon :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
                             plain></v-icon>
@@ -95,13 +95,13 @@
                             {{ isRecording ? tm('voice.speaking') : tm('voice.startRecording') }}
                         </v-tooltip>
                     </v-btn>
-                    <v-btn icon v-if="isRunning" @click="$emit('stop')" variant="tonal" color="deep-purple" class="send-btn">
+                    <v-btn icon v-if="isRunning && !canSend" @click="$emit('stop')" variant="tonal" color="primary" class="send-btn">
                         <v-icon icon="mdi-stop" variant="text" plain></v-icon>
                         <v-tooltip activator="parent" location="top">
                             {{ tm('input.stopGenerating') }}
                         </v-tooltip>
                     </v-btn>
-                    <v-btn v-else @click="$emit('send')" icon="mdi-send" variant="tonal" color="deep-purple"
+                    <v-btn v-else @click="$emit('send')" icon="mdi-send" variant="tonal" color="primary"
                         :disabled="!canSend" class="send-btn" />
                 </div>
             </div>
@@ -117,7 +117,7 @@
             </div>
 
             <div v-if="stagedAudioUrl" class="audio-preview">
-                <v-chip color="deep-purple-lighten-4" class="audio-chip">
+                <v-chip color="primary" variant="tonal" class="audio-chip">
                     <v-icon start icon="mdi-microphone" size="small"></v-icon>
                     {{ tm('voice.recording') }}
                 </v-chip>
@@ -126,7 +126,7 @@
             </div>
 
             <div v-for="(file, index) in stagedFiles" :key="'file-' + index" class="file-preview">
-                <v-chip color="blue-grey-lighten-4" class="file-chip">
+                <v-chip color="primary" variant="tonal" class="file-chip">
                     <v-icon start icon="mdi-file-document-outline" size="small"></v-icon>
                     <span class="file-name-preview">{{ file.original_name }}</span>
                 </v-chip>
@@ -173,6 +173,7 @@ interface Props {
     currentSession?: Session | null;
     configId?: string | null;
     replyTo?: ReplyInfo | null;
+    sendShortcut?: 'enter' | 'shift_enter';
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -180,7 +181,8 @@ const props = withDefaults(defineProps<Props>(), {
     currentSession: null,
     configId: null,
     stagedFiles: () => [],
-    replyTo: null
+    replyTo: null,
+    sendShortcut: 'shift_enter'
 });
 
 const emit = defineEmits<{
@@ -253,9 +255,29 @@ watch(localPrompt, () => {
 });
 
 function handleKeyDown(e: KeyboardEvent) {
-    // Enter 插入换行（桌面和手机端均如此，发送通过右下角发送按鈕）
-    // Shift+Enter 发送（Ctrl+Enter / Cmd+Enter 也保留）
-    if (e.keyCode === 13 && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+    const isEnter = e.key === 'Enter';
+    if (!isEnter) {
+        // Ctrl+B 录音
+        if (e.ctrlKey && e.keyCode === 66) {
+            e.preventDefault();
+            if (ctrlKeyDown.value) return;
+
+            ctrlKeyDown.value = true;
+            ctrlKeyTimer.value = window.setTimeout(() => {
+                if (ctrlKeyDown.value && !props.isRecording) {
+                    emit('startRecording');
+                }
+            }, ctrlKeyLongPressThreshold);
+        }
+        return;
+    }
+
+    const isSendHotkey =
+        e.ctrlKey ||
+        e.metaKey ||
+        (props.sendShortcut === 'enter' ? !e.shiftKey : e.shiftKey);
+
+    if (isSendHotkey) {
         e.preventDefault();
         if (localPrompt.value.trim() === '/astr_live_dev') {
             emit('openLiveMode');
@@ -266,19 +288,6 @@ function handleKeyDown(e: KeyboardEvent) {
             emit('send');
         }
         return;
-    }
-
-    // Ctrl+B 录音
-    if (e.ctrlKey && e.keyCode === 66) {
-        e.preventDefault();
-        if (ctrlKeyDown.value) return;
-
-        ctrlKeyDown.value = true;
-        ctrlKeyTimer.value = window.setTimeout(() => {
-            if (ctrlKeyDown.value && !props.isRecording) {
-                emit('startRecording');
-            }
-        }, ctrlKeyLongPressThreshold);
     }
 }
 
@@ -364,6 +373,11 @@ function getCurrentSelection() {
     return providerModelMenuRef.value?.getCurrentSelection();
 }
 
+function focusInput() {
+    if (!inputField.value) return;
+    inputField.value.focus();
+}
+
 onMounted(() => {
     if (inputField.value) {
         inputField.value.addEventListener('paste', handlePaste);
@@ -379,7 +393,8 @@ onBeforeUnmount(() => {
 });
 
 defineExpose({
-    getCurrentSelection
+    getCurrentSelection,
+    focusInput
 });
 </script>
 
@@ -399,8 +414,8 @@ defineExpose({
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(103, 58, 183, 0.15);
-    border: 2px dashed rgba(103, 58, 183, 0.5);
+    background-color: rgba(var(--v-theme-primary), 0.12);
+    border: 2px dashed rgba(var(--v-theme-primary), 0.45);
     border-radius: 24px;
     display: flex;
     align-items: center;
@@ -419,7 +434,7 @@ defineExpose({
 .drop-text {
     font-size: 16px;
     font-weight: 500;
-    color: #673ab7;
+    color: rgb(var(--v-theme-primary));
 }
 
 /* Fade transition for drop overlay */
@@ -439,7 +454,7 @@ defineExpose({
     justify-content: space-between;
     padding: 8px 16px;
     margin: 8px 8px 0 8px;
-    background-color: rgba(103, 58, 183, 0.06);
+    background-color: rgba(var(--v-theme-primary), 0.06);
     border-radius: 12px;
     gap: 8px;
     max-height: 500px;
