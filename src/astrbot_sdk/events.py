@@ -45,6 +45,21 @@ class PlainTextResult:
 ReplyHandler = Callable[[str], Awaitable[None]]
 
 
+def _coerce_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _coerce_optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = value if isinstance(value, str) else str(value)
+    return text or None
+
+
 class MessageEvent:
     """消息事件对象。
 
@@ -53,10 +68,10 @@ class MessageEvent:
 
     Attributes:
         text: 消息文本内容
-        user_id: 发送者用户 ID
+        user_id: 发送者用户 ID，缺失时为空字符串
         group_id: 群组 ID（私聊时为 None）
-        platform: 平台标识（如 "qq", "wechat"）
-        session_id: 会话 ID（通常是 group_id 或 user_id）
+        platform: 平台标识（如 "qq", "wechat"），缺失时为空字符串
+        session_id: 会话 ID（通常是 group_id 或 user_id，缺失时为空字符串）
         raw: 原始消息数据
 
     Example:
@@ -64,6 +79,16 @@ class MessageEvent:
         async def echo(self, event: MessageEvent, ctx: Context):
             await event.reply(f"你说: {event.text}")
     """
+
+    text: str
+    user_id: str
+    group_id: str | None
+    platform: str
+    session_id: str
+    self_id: str
+    platform_id: str
+    message_type: str
+    sender_name: str
 
     def __init__(
         self,
@@ -94,15 +119,22 @@ class MessageEvent:
             context: 运行时上下文
             reply_handler: 自定义回复处理器
         """
+        normalized_user_id = _coerce_str(user_id)
+        normalized_group_id = _coerce_optional_str(group_id)
+        normalized_platform = _coerce_str(platform)
+        normalized_session_id = _coerce_str(session_id)
+
         self.text = text
-        self.user_id = user_id
-        self.group_id = group_id
-        self.platform = platform
-        self.session_id = session_id or group_id or user_id or ""
-        self.self_id = self_id or ""
-        self.platform_id = platform_id or platform or ""
-        self.message_type = (message_type or "").lower()
-        self.sender_name = sender_name or ""
+        self.user_id = normalized_user_id
+        self.group_id = normalized_group_id
+        self.platform = normalized_platform
+        self.session_id = (
+            normalized_session_id or normalized_group_id or normalized_user_id or ""
+        )
+        self.self_id = _coerce_str(self_id)
+        self.platform_id = _coerce_str(platform_id) or normalized_platform
+        self.message_type = _coerce_str(message_type).lower()
+        self.sender_name = _coerce_str(sender_name)
         self._is_admin = bool(is_admin)
         self.raw = raw or {}
         self._stopped = False

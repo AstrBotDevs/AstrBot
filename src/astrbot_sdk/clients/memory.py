@@ -1,11 +1,11 @@
 """记忆客户端模块。
 
-提供 AI 记忆存储能力，用于存储和检索对话记忆、用户偏好等语义数据。
+提供 AI 记忆存储能力，用于存储和检索对话记忆、用户偏好等上下文数据。
 
 设计说明：
     MemoryClient 与 DBClient 的区别：
     - DBClient: 简单的键值存储，精确匹配
-    - MemoryClient: 支持语义搜索的智能存储，适合 AI 上下文管理
+    - MemoryClient: 支持基于当前 bridge 行为的记忆检索，适合 AI 上下文管理
 
     记忆系统可用于：
     - 存储用户偏好和设置
@@ -20,10 +20,21 @@ from typing import Any
 from ._proxy import CapabilityProxy
 
 
+def _normalize_search_item(item: Any) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    normalized = dict(item)
+    value = normalized.get("value")
+    if isinstance(value, dict):
+        for key, payload_value in value.items():
+            normalized.setdefault(str(key), payload_value)
+    return normalized
+
+
 class MemoryClient:
     """记忆客户端。
 
-    提供 AI 记忆的存储和检索能力，支持语义搜索。
+    提供 AI 记忆的存储和检索能力。
 
     Attributes:
         _proxy: CapabilityProxy 实例，用于远程能力调用
@@ -38,10 +49,15 @@ class MemoryClient:
         self._proxy = proxy
 
     async def search(self, query: str) -> list[dict[str, Any]]:
-        """语义搜索记忆项。
+        """Search memory items with the current bridge behavior.
 
-        使用自然语言查询检索相关记忆，返回匹配的记忆项列表。
-        与精确匹配的 get() 不同，search() 使用向量相似度进行语义匹配。
+        The current core bridge matches `query` against the memory key and the
+        serialized memory payload. It does not provide vector or semantic
+        retrieval yet.
+
+        Returned items preserve the original `{"key": ..., "value": {...}}`
+        shape. When `value` is a mapping, its fields are also exposed at the
+        top level for compatibility with existing plugin examples.
 
         Args:
             query: 搜索查询文本
@@ -59,7 +75,12 @@ class MemoryClient:
         items = output.get("items")
         if not isinstance(items, (list, tuple)):
             return []
-        return list(items)
+        normalized_items: list[dict[str, Any]] = []
+        for item in items:
+            normalized = _normalize_search_item(item)
+            if normalized is not None:
+                normalized_items.append(normalized)
+        return normalized_items
 
     async def save(
         self,
@@ -69,7 +90,7 @@ class MemoryClient:
     ) -> None:
         """保存记忆项。
 
-        将数据存储到记忆系统，可通过 search() 进行语义搜索或 get() 精确获取。
+        将数据存储到记忆系统，可通过 search() 检索或 get() 精确获取。
 
         Args:
             key: 记忆项的唯一标识键
@@ -96,7 +117,7 @@ class MemoryClient:
     async def get(self, key: str) -> dict[str, Any] | None:
         """精确获取单个记忆项。
 
-        通过唯一键精确获取记忆内容，不使用语义搜索。
+        通过唯一键精确获取记忆内容，不经过搜索匹配。
 
         Args:
             key: 记忆项的唯一键

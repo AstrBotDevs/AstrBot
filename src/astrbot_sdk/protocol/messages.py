@@ -28,12 +28,16 @@ class ErrorPayload(_MessageBase):
         message: 错误消息，人类可读的错误描述
         hint: 错误提示，可选的解决方案或建议
         retryable: 是否可重试，标识该错误是否可通过重试解决
+        docs_url: 可选的文档链接，帮助调用方定位更多说明
+        details: 可选的结构化细节，便于调试和日志展示
     """
 
     code: str
     message: str
     hint: str = ""
     retryable: bool = False
+    docs_url: str = ""
+    details: dict[str, Any] | None = None
 
 
 class PeerInfo(_MessageBase):
