@@ -6,6 +6,7 @@ on:
 
 jobs:
   title-format:
+    if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write

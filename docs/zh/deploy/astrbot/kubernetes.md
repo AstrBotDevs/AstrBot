@@ -73,7 +73,7 @@ kubectl apply -f k8s/astrbot_with_napcat/02-deployment.yaml
 由于 AstrBot 和 NapCat 在同一个 Pod 中，它们可以通过 `localhost` 直接通信。
 
 1.  **在 AstrBot 中添加消息平台：**
-    *   进入 AstrBot WebUI，选择 `设置` -> `消息平台` -> `添加`。
+    *   进入 AstrBot WebUI，选择 `机器人` -> `添加`。
     *   **选择消息平台类别**: `aiocqhttp`
     *   **机器人名称**: `napcat` (或自定义)
     *   **反向 Websocket 主机**: `0.0.0.0`
