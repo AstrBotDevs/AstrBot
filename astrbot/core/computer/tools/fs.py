@@ -80,14 +80,19 @@ from .permissions import check_admin_permission
 @dataclass
 class FileUploadTool(FunctionTool):
     name: str = "astrbot_upload_file"
-    description: str = "Upload a local file to the sandbox. The file must exist on the local filesystem."
+    description: str = (
+        "Transfer a file FROM the host machine INTO the sandbox so that sandbox "
+        "code can access it. Use this when the user sends/attaches a file and you "
+        "need to process it inside the sandbox. The local_path must point to an "
+        "existing file on the host filesystem."
+    )
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
                 "local_path": {
                     "type": "string",
-                    "description": "The local file path to upload. This must be an absolute path to an existing file on the local filesystem.",
+                    "description": "Absolute path to the file on the host filesystem that will be copied into the sandbox.",
                 },
                 # "remote_path": {
                 #     "type": "string",
@@ -140,14 +145,18 @@ class FileUploadTool(FunctionTool):
 @dataclass
 class FileDownloadTool(FunctionTool):
     name: str = "astrbot_download_file"
-    description: str = "Download a file from the sandbox. Only call this when user explicitly need you to download a file."
+    description: str = (
+        "Transfer a file FROM the sandbox OUT to the host and optionally send it "
+        "to the user. Use this ONLY when the user asks to retrieve/export a file "
+        "that was created or modified inside the sandbox."
+    )
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
                 "remote_path": {
                     "type": "string",
-                    "description": "The path of the file in the sandbox to download.",
+                    "description": "Path of the file inside the sandbox to copy out to the host.",
                 },
                 "also_send_to_user": {
                     "type": "boolean",
