@@ -1,17 +1,11 @@
 """Tests for ClaudeToolSearchStrategy -- Claude-native tool search path (CLN-01 through CLN-04)."""
 
-import json
-
-import pytest
-
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.tools.discovery_state import DiscoveryState
+from astrbot.core.tools.claude_strategy import ClaudeToolSearchStrategy
+from astrbot.core.tools.strategy import ToolSearchStrategy
 from astrbot.core.tools.tool_catalog import ToolCatalog
 from astrbot.core.tools.tool_search_index import ToolSearchIndex
 from astrbot.core.tools.tool_search_tool import ToolSearchTool
-
-from astrbot.core.tools.strategy import ToolSearchStrategy
-from astrbot.core.tools.claude_strategy import ClaudeToolSearchStrategy
 
 # ---------------------------------------------------------------------------
 # Helpers (self-contained, copied pattern from test_tools_assembler.py)
@@ -352,6 +346,18 @@ class TestABCCompliance:
         assert "plugin_weather" in names
         assert "plugin_email" in names
         assert "tool_search" in names
+
+    def test_build_tool_set_overrides_anthropic_schema(self):
+        """build_tool_set().anthropic_schema() uses deferred-loading tool dicts."""
+        strategy = _make_strategy(
+            core_names=["core_a"],
+            deferred_names=["plugin_weather"],
+        )
+        result = strategy.build_tool_set()
+        tool_defs = result.anthropic_schema()
+
+        weather_tool = next(d for d in tool_defs if d["name"] == "plugin_weather")
+        assert weather_tool["defer_loading"] is True
 
     def test_get_tool_search_tool_returns_tool_search_tool(self):
         """get_tool_search_tool() returns a ToolSearchTool instance."""

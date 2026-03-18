@@ -38,9 +38,10 @@ class GenericToolSearchStrategy(ToolSearchStrategy):
         catalog: ToolCatalog,
         index: ToolSearchIndex,
         max_results: int = 5,
+        discovery_state: DiscoveryState | None = None,
     ) -> None:
         self._catalog = catalog
-        self._discovery_state = DiscoveryState()
+        self._discovery_state = discovery_state or DiscoveryState()
         self._tool_search_tool = ToolSearchTool(
             _index=index,
             _discovery_state=self._discovery_state,

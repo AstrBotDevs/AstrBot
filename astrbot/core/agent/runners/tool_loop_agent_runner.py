@@ -33,6 +33,7 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.provider.provider import Provider
 from astrbot.core.tools.claude_strategy import ClaudeToolSearchStrategy
+from astrbot.core.tools.discovery_state import DiscoveryState
 from astrbot.core.tools.generic_strategy import GenericToolSearchStrategy
 from astrbot.core.tools.strategy import ToolSearchStrategy
 from astrbot.core.tools.tool_catalog import ToolCatalog
@@ -62,6 +63,17 @@ def _is_claude_provider(provider: Provider) -> bool:
     not runtime feature probing (PRV-02).
     """
     return provider.provider_config.get("type") == "anthropic_chat_completion"
+
+
+def _count_active_tools(tool_set: ToolSet | None) -> int:
+    """Count active tools only.
+
+    Auto mode should make its threshold decision based on the tools that are
+    actually visible to the model, not disabled tools left in the registry.
+    """
+    if tool_set is None:
+        return 0
+    return sum(1 for tool in tool_set.tools if tool.active)
 
 
 @dataclass(slots=True)
@@ -184,6 +196,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_schema_mode = tool_schema_mode
         self._tool_schema_param_set = None
         self._skill_like_raw_tool_set = None
+        self._tool_search_catalog: ToolCatalog | None = None
+        self._tool_search_index: ToolSearchIndex | None = None
+        self._tool_search_discovery_state: DiscoveryState | None = None
+        self._tool_search_max_results = 5
 
         effective_mode = tool_schema_mode
         self._tool_search_strategy: ToolSearchStrategy | None = None
@@ -193,9 +209,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             try:
                 if effective_mode == "auto":
                     threshold = tool_search_config.get("threshold", 25)
-                    tool_count = (
-                        len(request.func_tool.tools) if request.func_tool else 0
-                    )
+                    tool_count = _count_active_tools(request.func_tool)
                     if tool_count <= threshold:
                         effective_mode = "full"
 
@@ -210,19 +224,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         effective_mode = "full"
                     else:
                         index = ToolSearchIndex(tools=catalog.deferred_tools)
-                        max_results = tool_search_config.get("max_results", 5)
-
-                        if _is_claude_provider(provider):
-                            strategy = ClaudeToolSearchStrategy(
-                                catalog, index, max_results
-                            )
-                        else:
-                            strategy = GenericToolSearchStrategy(
-                                catalog, index, max_results
-                            )
-
-                        self._tool_search_strategy = strategy
-                        request.func_tool = strategy.build_tool_set()
+                        self._tool_search_catalog = catalog
+                        self._tool_search_index = index
+                        self._tool_search_discovery_state = DiscoveryState()
+                        self._tool_search_max_results = tool_search_config.get(
+                            "max_results", 5
+                        )
+                        self._refresh_tool_search_strategy(provider)
                         effective_mode = "tool_search"
                 else:
                     if effective_mode != "full":
@@ -233,6 +241,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     exc_info=True,
                 )
                 effective_mode = "full"
+                self._tool_search_catalog = None
+                self._tool_search_index = None
+                self._tool_search_discovery_state = None
                 self._tool_search_strategy = None
 
         self.tool_schema_mode = effective_mode
@@ -306,6 +317,40 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         else:
             yield await self.provider.text_chat(**payload)
 
+    def _refresh_tool_search_strategy(self, provider: Provider) -> None:
+        """Rebuild tool_search strategy for the current provider family.
+
+        The strategy owns provider-specific serialization behavior. Fallback may
+        switch from a generic provider to Anthropic (or the reverse), so we
+        rebuild the strategy while reusing the same catalog/index/discovery
+        state to preserve discovered tools across turns.
+        """
+        if (
+            self._tool_search_catalog is None
+            or self._tool_search_index is None
+            or self._tool_search_discovery_state is None
+        ):
+            self._tool_search_strategy = None
+            return
+
+        if _is_claude_provider(provider):
+            strategy: ToolSearchStrategy = ClaudeToolSearchStrategy(
+                self._tool_search_catalog,
+                self._tool_search_index,
+                self._tool_search_max_results,
+                discovery_state=self._tool_search_discovery_state,
+            )
+        else:
+            strategy = GenericToolSearchStrategy(
+                self._tool_search_catalog,
+                self._tool_search_index,
+                self._tool_search_max_results,
+                discovery_state=self._tool_search_discovery_state,
+            )
+
+        self._tool_search_strategy = strategy
+        self.req.func_tool = strategy.build_tool_set()
+
     async def _iter_llm_responses_with_fallback(
         self,
     ) -> T.AsyncGenerator[LLMResponse, None]:
@@ -325,6 +370,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     candidate_id,
                 )
             self.provider = candidate
+            if (
+                self.tool_schema_mode == "tool_search"
+                and self._tool_search_strategy is not None
+            ):
+                self._refresh_tool_search_strategy(candidate)
             has_stream_output = False
             try:
                 async for resp in self._iter_llm_responses(include_model=idx == 0):

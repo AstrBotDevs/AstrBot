@@ -73,9 +73,10 @@ class ClaudeToolSearchStrategy(ToolSearchStrategy):
         catalog: ToolCatalog,
         index: ToolSearchIndex,
         max_results: int = 5,
+        discovery_state: DiscoveryState | None = None,
     ) -> None:
         self._catalog = catalog
-        self._discovery_state = DiscoveryState()
+        self._discovery_state = discovery_state or DiscoveryState()
         self._tool_search_tool = ToolSearchTool(
             _index=index,
             _discovery_state=self._discovery_state,
@@ -116,15 +117,21 @@ class ClaudeToolSearchStrategy(ToolSearchStrategy):
         return self._tool_dicts
 
     def build_tool_set(self) -> ToolSet:
-        """Build a ToolSet containing ALL tools (core + deferred + tool_search).
+        """Build a ToolSet with Anthropic-specific schema/formatting overrides.
 
-        Satisfies the ToolSearchStrategy ABC contract.
+        The returned ToolSet still contains all executable tools so the runner can
+        resolve them locally, but it overrides Anthropic serialization to emit the
+        precomputed deferred-loading tool dicts and exposes a formatter for
+        tool_search results.
 
         Returns:
             A :class:`ToolSet` with the full tool catalog plus tool_search.
         """
         tools = list(self._catalog.all_tools) + [self._tool_search_tool]
-        return ToolSet(tools=tools)
+        tool_set = ToolSet(tools=tools)
+        tool_set._anthropic_schema_override = self._tool_dicts
+        tool_set._anthropic_tool_search_formatter = self.format_tool_result
+        return tool_set
 
     def get_tool_search_tool(self) -> ToolSearchTool:
         """Return the ToolSearchTool instance.
