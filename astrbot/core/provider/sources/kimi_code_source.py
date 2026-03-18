@@ -19,13 +19,9 @@ class ProviderKimiCode(ProviderAnthropic):
         merged_provider_config = dict(provider_config)
         merged_provider_config.setdefault("api_base", KIMI_CODE_API_BASE)
         merged_provider_config.setdefault("model", KIMI_CODE_DEFAULT_MODEL)
-
-        custom_headers = merged_provider_config.get("custom_headers", {})
-        if not isinstance(custom_headers, dict):
-            custom_headers = {}
-        merged_headers = {str(key): str(value) for key, value in custom_headers.items()}
-        if not merged_headers.get("User-Agent", "").strip():
-            merged_headers["User-Agent"] = KIMI_CODE_USER_AGENT
-        merged_provider_config["custom_headers"] = merged_headers
+        merged_provider_config["custom_headers"] = self._resolve_custom_headers(
+            merged_provider_config,
+            required_headers={"User-Agent": KIMI_CODE_USER_AGENT},
+        )
 
         super().__init__(merged_provider_config, provider_settings)

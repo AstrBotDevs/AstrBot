@@ -61,3 +61,21 @@ def test_kimi_code_provider_sets_defaults_and_preserves_custom_headers(monkeypat
         kimi_code_source.KIMI_CODE_USER_AGENT
     )
     assert provider.client.kwargs["http_client"].headers["X-Trace-Id"] == "trace-1"
+
+
+def test_kimi_code_provider_restores_required_user_agent_when_blank(monkeypatch):
+    monkeypatch.setattr(anthropic_source, "AsyncAnthropic", _FakeAsyncAnthropic)
+
+    provider = kimi_code_source.ProviderKimiCode(
+        provider_config={
+            "id": "kimi-code",
+            "type": "kimi_code_chat_completion",
+            "key": ["test-key"],
+            "custom_headers": {"User-Agent": "   "},
+        },
+        provider_settings={},
+    )
+
+    assert provider.custom_headers == {
+        "User-Agent": kimi_code_source.KIMI_CODE_USER_AGENT,
+    }
