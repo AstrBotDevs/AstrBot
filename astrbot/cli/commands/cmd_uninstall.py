@@ -1,7 +1,5 @@
 import os
-import platform
 import shutil
-import subprocess
 from pathlib import Path
 
 import click
@@ -15,64 +13,26 @@ from astrbot.core.utils.astrbot_path import astrbot_paths
     "--keep-data", is_flag=True, help="Keep data directory (config, plugins, etc.)"
 )
 def uninstall(yes: bool, keep_data: bool) -> None:
-    """Uninstall AstrBot systemd service and cleanup data"""
+    """Remove AstrBot files from the current root directory."""
 
     if os.environ.get("ASTRBOT_SYSTEMD") == "1":
         yes = True
 
-    # 1. Remove Systemd Service
-    if platform.system() == "Linux" and shutil.which("systemctl"):
-        service_path = Path.home() / ".config" / "systemd" / "user" / "astrbot.service"
-
-        if service_path.exists():
-            if yes or click.confirm(
-                "Detected AstrBot systemd service. Stop and remove it?",
-                default=True,
-            ):
-                try:
-                    if os.environ.get("ASTRBOT_SYSTEMD") != "1":
-                        click.echo("Stopping AstrBot service...")
-                        subprocess.run(
-                            ["systemctl", "--user", "stop", "astrbot"], check=False
-                        )
-                    else:
-                        click.echo(
-                            "Skipping stop service (running as systemd service)."
-                        )
-
-                    click.echo("Disabling AstrBot service...")
-                    subprocess.run(
-                        ["systemctl", "--user", "disable", "astrbot"], check=False
-                    )
-
-                    click.echo(f"Removing service file: {service_path}")
-                    service_path.unlink()
-
-                    click.echo("Reloading systemd daemon...")
-                    subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
-                    click.echo("Systemd service uninstalled.")
-
-                except subprocess.CalledProcessError as e:
-                    click.echo(f"Failed to remove systemd service: {e}", err=True)
-                except Exception as e:
-                    click.echo(
-                        f"An error occurred during service removal: {e}", err=True
-                    )
-
-    # 2. Remove Data
-    if keep_data:
-        click.echo("Skipping data removal as requested.")
-        return
-
-    # Helper paths
     dot_astrbot = astrbot_paths.root / ".astrbot"
     lock_file = astrbot_paths.root / "astrbot.lock"
     data_dir = astrbot_paths.data
+    removable_paths: list[Path] = [dot_astrbot, lock_file]
+
+    if not keep_data:
+        removable_paths.insert(0, data_dir)
 
     # Check if this looks like an AstrBot root before blowing things up
     if not dot_astrbot.exists() and not data_dir.exists():
         click.echo("No AstrBot initialization found in current directory.")
         return
+
+    if keep_data:
+        click.echo("Keeping data directory as requested.")
 
     if yes or click.confirm(
         f"Are you sure you want to remove AstrBot data at {astrbot_paths.root}? \n"
@@ -83,18 +43,26 @@ def uninstall(yes: bool, keep_data: bool) -> None:
         default=False,
         abort=True,
     ):
-        if data_dir.exists():
-            click.echo(f"Removing directory: {data_dir}")
-            shutil.rmtree(data_dir)
+        removed_any = False
+        for path in removable_paths:
+            if not path.exists():
+                continue
+            removed_any = True
+            if path.is_dir():
+                click.echo(f"Removing directory: {path}")
+                shutil.rmtree(path)
+            else:
+                click.echo(f"Removing file: {path}")
+                path.unlink()
 
-        if dot_astrbot.exists():
-            click.echo(f"Removing file: {dot_astrbot}")
-            dot_astrbot.unlink()
+        if removed_any:
+            click.echo("AstrBot files removed successfully.")
+        else:
+            click.echo("No removable AstrBot files were found.")
 
-        if lock_file.exists():
-            click.echo(f"Removing file: {lock_file}")
-            lock_file.unlink()
-
-        click.echo("AstrBot data removed successfully.")
+        # TODO: Consider adding an explicit `--service` cleanup mode instead of
+        # touching systemd or other service managers during normal uninstall.
+        # TODO: Consider adding package-manager-specific uninstall helpers once
+        # the CLI can reliably detect the installation source.
         click.echo("uv: uv tool uninstall astrbot")
         click.echo("paru/yay: paru -R astrbot")

@@ -102,7 +102,7 @@ async def initialize_astrbot(
         else:
             await check_dashboard(astrbot_root)
     else:
-        click.echo("你可以使用在线面版（v4.14.4+），填写后端地址的方式来控制。")
+        click.echo("你可以使用在线面版（需支持配置后端）来控制。")
 
 
 @click.command()
