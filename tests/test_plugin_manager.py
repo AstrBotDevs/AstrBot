@@ -35,8 +35,10 @@ def _write_local_test_plugin(plugin_path: Path, repo_url: str):
         "author": "AstrBot Team",
         "desc": "Local test plugin",
     }
-    with open(plugin_path / "info.yaml", "w", encoding="utf-8") as f:
-        yaml.dump(metadata, f)
+    # Install flows resolve the final plugin directory from metadata.yaml.
+    for metadata_name in ("metadata.yaml", "info.yaml"):
+        with open(plugin_path / metadata_name, "w", encoding="utf-8") as f:
+            yaml.dump(metadata, f)
     with open(plugin_path / "main.py", "w", encoding="utf-8") as f:
         f.write("from astrbot.api.star import Star, Context, StarManager\n")
         f.write("@StarManager.register\n")
