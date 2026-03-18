@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Callable, Coroutine
 from typing import Any, cast
 
+import aiofiles
 import quart
 from requests import Response
 from wechatpy import WeChatClient, create_reply, parse_message
@@ -468,8 +469,8 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             )
             temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"weixin_offacc_{msg.media_id}.amr")
-            with open(path, "wb") as f:
-                f.write(resp.content)
+            async with aiofiles.open(path, "wb") as f:
+                await f.write(resp.content)
 
             try:
                 path_wav = os.path.join(

@@ -5,6 +5,8 @@ import os
 import uuid
 from io import BytesIO
 
+import aiofiles
+import anyio
 import lark_oapi as lark
 from lark_oapi.api.cardkit.v1 import (
     ContentCardElementRequest,
@@ -28,8 +30,16 @@ from lark_oapi.api.im.v1 import (
 
 from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import At, File, Plain, Record, Video
-from astrbot.api.message_components import Image as AstrBotImage
+from astrbot.api.message_components import (
+    At,
+    File,
+    Plain,
+    Record,
+    Video,
+)
+from astrbot.api.message_components import (
+    Image as AstrBotImage,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.media_utils import (
@@ -146,7 +156,8 @@ class LarkMessageEvent(AstrMessageEvent):
         Returns:
             成功返回file_key，失败返回None
         """
-        if not path or not os.path.exists(path):
+        path_obj = anyio.Path(path)
+        if not path or not await path_obj.exists():
             logger.error(f"[Lark] 文件不存在: {path}")
             return None
 
@@ -155,7 +166,7 @@ class LarkMessageEvent(AstrMessageEvent):
             return None
 
         try:
-            with open(path, "rb") as file_obj:
+            async with aiofiles.open(path, "rb") as file_obj:
                 body_builder = (
                     CreateFileRequestBody.builder()
                     .file_type(file_type)
@@ -217,8 +228,8 @@ class LarkMessageEvent(AstrMessageEvent):
                         temp_dir,
                         f"lark_image_{uuid.uuid4().hex[:8]}.jpg",
                     )
-                    with open(file_path, "wb") as f:
-                        f.write(BytesIO(image_data).getvalue())
+                    async with aiofiles.open(file_path, "wb") as f:
+                        await f.write(BytesIO(image_data).getvalue())
                 else:
                     file_path = comp.file if comp.file else ""
 
@@ -227,7 +238,9 @@ class LarkMessageEvent(AstrMessageEvent):
                         logger.error("[Lark] 图片路径为空，无法上传")
                         continue
                     try:
-                        image_file = open(file_path, "rb")
+                        image_file = await anyio.to_thread.run_sync(
+                            open, file_path, "rb"
+                        )
                     except Exception as e:
                         logger.error(f"[Lark] 无法打开图片文件: {e}")
                         continue
@@ -422,7 +435,10 @@ class LarkMessageEvent(AstrMessageEvent):
             logger.error(f"[Lark] 无法获取音频文件路径: {e}")
             return
 
-        if not original_audio_path or not os.path.exists(original_audio_path):
+        if (
+            not original_audio_path
+            or not await anyio.Path(original_audio_path).exists()
+        ):
             logger.error(f"[Lark] 音频文件不存在: {original_audio_path}")
             return
 
@@ -452,9 +468,9 @@ class LarkMessageEvent(AstrMessageEvent):
         )
 
         # 清理转换后的临时音频文件
-        if converted_audio_path and os.path.exists(converted_audio_path):
+        if converted_audio_path and await anyio.Path(converted_audio_path).exists():
             try:
-                os.remove(converted_audio_path)
+                await anyio.Path(converted_audio_path).unlink()
                 logger.debug(f"[Lark] 已删除转换后的音频文件: {converted_audio_path}")
             except Exception as e:
                 logger.warning(f"[Lark] 删除转换后的音频文件失败: {e}")
@@ -495,7 +511,10 @@ class LarkMessageEvent(AstrMessageEvent):
             logger.error(f"[Lark] 无法获取视频文件路径: {e}")
             return
 
-        if not original_video_path or not os.path.exists(original_video_path):
+        if (
+            not original_video_path
+            or not await anyio.Path(original_video_path).exists()
+        ):
             logger.error(f"[Lark] 视频文件不存在: {original_video_path}")
             return
 
@@ -525,9 +544,9 @@ class LarkMessageEvent(AstrMessageEvent):
         )
 
         # 清理转换后的临时视频文件
-        if converted_video_path and os.path.exists(converted_video_path):
+        if converted_video_path and await anyio.Path(converted_video_path).exists():
             try:
-                os.remove(converted_video_path)
+                await anyio.Path(converted_video_path).unlink()
                 logger.debug(f"[Lark] 已删除转换后的视频文件: {converted_video_path}")
             except Exception as e:
                 logger.warning(f"[Lark] 删除转换后的视频文件失败: {e}")

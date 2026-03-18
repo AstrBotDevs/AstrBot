@@ -97,7 +97,7 @@ class LogRoute(Route):
                 },
             ),
         )
-        response.timeout = None  # type: ignore
+        setattr(response, "timeout", None)
         return response
 
     async def log_history(self):

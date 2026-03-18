@@ -1,19 +1,38 @@
 <template>
-    <v-breadcrumbs :items="computedItems" class="base-folder-breadcrumb pa-0">
-        <template v-slot:prepend>
-            <v-icon size="small" class="mr-1">mdi-folder-outline</v-icon>
-        </template>
-        <template v-slot:item="{ item }">
-            <v-breadcrumbs-item :disabled="(item as any).disabled" @click="!(item as any).disabled && handleClick((item as any).folderId)"
-                :class="{ 'breadcrumb-link': !(item as any).disabled }">
-                <v-icon v-if="(item as any).isRoot" size="small" class="mr-1">mdi-home</v-icon>
-                {{ (item as any).title }}
-            </v-breadcrumbs-item>
-        </template>
-        <template v-slot:divider>
-            <v-icon size="small">mdi-chevron-right</v-icon>
-        </template>
-    </v-breadcrumbs>
+  <v-breadcrumbs
+    :items="computedItems"
+    class="base-folder-breadcrumb pa-0"
+  >
+    <template #prepend>
+      <v-icon
+        size="small"
+        class="mr-1"
+      >
+        mdi-folder-outline
+      </v-icon>
+    </template>
+    <template #item="{ item }">
+      <v-breadcrumbs-item
+        :disabled="(item as any).disabled"
+        :class="{ 'breadcrumb-link': !(item as any).disabled }"
+        @click="!(item as any).disabled && handleClick((item as any).folderId)"
+      >
+        <v-icon
+          v-if="(item as any).isRoot"
+          size="small"
+          class="mr-1"
+        >
+          mdi-home
+        </v-icon>
+        {{ (item as any).title }}
+      </v-breadcrumbs-item>
+    </template>
+    <template #divider>
+      <v-icon size="small">
+        mdi-chevron-right
+      </v-icon>
+    </template>
+  </v-breadcrumbs>
 </template>
 
 <script lang="ts">

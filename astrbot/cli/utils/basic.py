@@ -1,9 +1,13 @@
+from importlib import resources
 from pathlib import Path
 
 import click
 
+from astrbot.core.utils.astrbot_path import astrbot_paths
+
 # Static assets bundled inside the installed wheel (built by hatch_build.py).
-_BUNDLED_DIST = Path(__file__).parent.parent.parent / "dashboard" / "dist"
+# _BUNDLED_DIST = Path(__file__).parent.parent.parent / "dashboard" / "dist"
+_BUNDLED_DIST = resources.files("astrbot") / "dashboard" / "dist"
 
 
 def check_astrbot_root(path: str | Path) -> bool:
@@ -19,7 +23,7 @@ def check_astrbot_root(path: str | Path) -> bool:
 
 def get_astrbot_root() -> Path:
     """Get the AstrBot root directory path"""
-    return Path.cwd()
+    return astrbot_paths.root
 
 
 async def check_dashboard(astrbot_root: Path) -> None:
@@ -30,7 +34,7 @@ async def check_dashboard(astrbot_root: Path) -> None:
     from .version_comparator import VersionComparator
 
     # If the wheel ships bundled dashboard assets, no network download is needed.
-    if _BUNDLED_DIST.exists():
+    if _BUNDLED_DIST.is_dir():
         click.echo("Dashboard is bundled with the package – skipping download.")
         return
 
@@ -45,13 +49,16 @@ async def check_dashboard(astrbot_root: Path) -> None:
                     abort=True,
                 ):
                     click.echo("Installing dashboard...")
-                    await download_dashboard(
-                        path="data/dashboard.zip",
-                        extract_path=str(astrbot_root),
-                        version=f"v{VERSION}",
-                        latest=False,
-                    )
-                    click.echo("Dashboard installed successfully")
+                    try:
+                        await download_dashboard(
+                            path="data/dashboard.zip",
+                            extract_path=str(astrbot_root / "data"),
+                            version=f"v{VERSION}",
+                            latest=False,
+                        )
+                        click.echo("Dashboard installed successfully")
+                    except Exception as e:
+                        click.echo(f"Failed to install dashboard: {e}")
 
             case str():
                 if VersionComparator.compare_version(VERSION, dashboard_version) <= 0:
@@ -62,7 +69,7 @@ async def check_dashboard(astrbot_root: Path) -> None:
                     click.echo(f"Dashboard version: {version}")
                     await download_dashboard(
                         path="data/dashboard.zip",
-                        extract_path=str(astrbot_root),
+                        extract_path=str(astrbot_root / "data"),
                         version=f"v{VERSION}",
                         latest=False,
                     )
@@ -73,8 +80,8 @@ async def check_dashboard(astrbot_root: Path) -> None:
         click.echo("Initializing dashboard directory...")
         try:
             await download_dashboard(
-                path=str(astrbot_root / "dashboard.zip"),
-                extract_path=str(astrbot_root),
+                path=str(astrbot_root / "data" / "dashboard.zip"),
+                extract_path=str(astrbot_root / "data"),
                 version=f"v{VERSION}",
                 latest=False,
             )

@@ -8,7 +8,7 @@ export interface Conversation {
     updated_at: number;
 }
 
-export function useConversations(chatboxMode: boolean = false) {
+export function useConversations(chatboxMode = false) {
     const router = useRouter();
     const conversations = ref<Conversation[]>([]);
     const selectedConversations = ref<string[]>([]);

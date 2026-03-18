@@ -7,7 +7,8 @@ import asyncio
 import os
 import subprocess
 import uuid
-from pathlib import Path
+
+import anyio
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -78,7 +79,7 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
     # 生成输出文件路径
     if output_path is None:
         temp_dir = get_astrbot_temp_path()
-        os.makedirs(temp_dir, exist_ok=True)
+        await anyio.Path(temp_dir).mkdir(parents=True, exist_ok=True)
         output_path = os.path.join(temp_dir, f"media_audio_{uuid.uuid4().hex}.opus")
 
     try:
@@ -108,9 +109,9 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
 
         if process.returncode != 0:
             # 清理可能已生成但无效的临时文件
-            if output_path and os.path.exists(output_path):
+            if output_path and await anyio.Path(output_path).exists():
                 try:
-                    os.remove(output_path)
+                    await anyio.Path(output_path).unlink()
                     logger.debug(
                         f"[Media Utils] 已清理失败的opus输出文件: {output_path}"
                     )
@@ -157,7 +158,7 @@ async def convert_video_format(
     # 生成输出文件路径
     if output_path is None:
         temp_dir = get_astrbot_temp_path()
-        os.makedirs(temp_dir, exist_ok=True)
+        await anyio.Path(temp_dir).mkdir(parents=True, exist_ok=True)
         output_path = os.path.join(
             temp_dir,
             f"media_video_{uuid.uuid4().hex}.{output_format}",
@@ -183,9 +184,9 @@ async def convert_video_format(
 
         if process.returncode != 0:
             # 清理可能已生成但无效的临时文件
-            if output_path and os.path.exists(output_path):
+            if output_path and await anyio.Path(output_path).exists():
                 try:
-                    os.remove(output_path)
+                    await anyio.Path(output_path).unlink()
                     logger.debug(
                         f"[Media Utils] 已清理失败的{output_format}输出文件: {output_path}"
                     )
@@ -230,8 +231,8 @@ async def convert_audio_format(
         return audio_path
 
     if output_path is None:
-        temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = anyio.Path(get_astrbot_temp_path())
+        await temp_dir.mkdir(parents=True, exist_ok=True)
         output_path = str(temp_dir / f"media_audio_{uuid.uuid4().hex}.{output_format}")
 
     args = ["ffmpeg", "-y", "-i", audio_path]
@@ -249,9 +250,9 @@ async def convert_audio_format(
         )
         _, stderr = await process.communicate()
         if process.returncode != 0:
-            if output_path and os.path.exists(output_path):
+            if output_path and await anyio.Path(output_path).exists():
                 try:
-                    os.remove(output_path)
+                    await anyio.Path(output_path).unlink()
                 except OSError as e:
                     logger.warning(f"[Media Utils] 清理失败的音频输出文件时出错: {e}")
             error_msg = stderr.decode() if stderr else "未知错误"
@@ -286,8 +287,8 @@ async def extract_video_cover(
 ) -> str:
     """从视频中提取封面图（JPG）。"""
     if output_path is None:
-        temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = anyio.Path(get_astrbot_temp_path())
+        await temp_dir.mkdir(parents=True, exist_ok=True)
         output_path = str(temp_dir / f"media_cover_{uuid.uuid4().hex}.jpg")
 
     try:
@@ -306,9 +307,9 @@ async def extract_video_cover(
         )
         _, stderr = await process.communicate()
         if process.returncode != 0:
-            if output_path and os.path.exists(output_path):
+            if output_path and await anyio.Path(output_path).exists():
                 try:
-                    os.remove(output_path)
+                    await anyio.Path(output_path).unlink()
                 except OSError as e:
                     logger.warning(f"[Media Utils] 清理失败的视频封面文件时出错: {e}")
             error_msg = stderr.decode() if stderr else "未知错误"

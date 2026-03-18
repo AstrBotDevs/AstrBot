@@ -1,30 +1,50 @@
 <template>
-  <v-card elevation="1" class="platform-stat-card">
+  <v-card
+    elevation="1"
+    class="platform-stat-card"
+  >
     <v-card-text>
       <div class="platform-header">
         <div>
-          <div class="platform-title">{{ t('charts.platformStat.title') }}</div>
-          <div class="platform-subtitle">{{ t('charts.platformStat.subtitle') }}</div>
+          <div class="platform-title">
+            {{ t('charts.platformStat.title') }}
+          </div>
+          <div class="platform-subtitle">
+            {{ t('charts.platformStat.subtitle') }}
+          </div>
         </div>
       </div>
       
-      <v-divider class="my-3"></v-divider>
+      <v-divider class="my-3" />
       
-      <div v-if="platforms.length > 0" class="platform-list-container">
-        <v-list class="platform-list" density="compact">
+      <div
+        v-if="platforms.length > 0"
+        class="platform-list-container"
+      >
+        <v-list
+          class="platform-list"
+          density="compact"
+        >
           <v-list-item
             v-for="(platform, i) in sortedPlatforms"
             :key="i"
             :value="platform"
             class="platform-item"
           >
-            <template v-slot:prepend>
-              <div class="platform-rank" :class="{'top-rank': i < 3}">{{ i + 1 }}</div>
+            <template #prepend>
+              <div
+                class="platform-rank"
+                :class="{'top-rank': i < 3}"
+              >
+                {{ i + 1 }}
+              </div>
             </template>
             
-            <v-list-item-title class="platform-name">{{ platform.name }}</v-list-item-title>
+            <v-list-item-title class="platform-name">
+              {{ platform.name }}
+            </v-list-item-title>
             
-            <template v-slot:append>
+            <template #append>
               <div class="platform-count">
                 <span class="count-value">{{ platform.count }}</span>
                 <span class="count-label">{{ t('charts.platformStat.messageUnit') }}</span>
@@ -35,18 +55,30 @@
         
         <div class="platform-stats-summary">
           <div class="platform-stat-item">
-            <div class="stat-label">{{ t('charts.platformStat.platformCount') }}</div>
-            <div class="stat-value">{{ platforms.length }}</div>
+            <div class="stat-label">
+              {{ t('charts.platformStat.platformCount') }}
+            </div>
+            <div class="stat-value">
+              {{ platforms.length }}
+            </div>
           </div>
-          <v-divider vertical></v-divider>
+          <v-divider vertical />
           <div class="platform-stat-item">
-            <div class="stat-label">{{ t('charts.platformStat.mostActive') }}</div>
-            <div class="stat-value">{{ mostActivePlatform }}</div>
+            <div class="stat-label">
+              {{ t('charts.platformStat.mostActive') }}
+            </div>
+            <div class="stat-value">
+              {{ mostActivePlatform }}
+            </div>
           </div>
-          <v-divider vertical></v-divider>
+          <v-divider vertical />
           <div class="platform-stat-item">
-            <div class="stat-label">{{ t('charts.platformStat.totalPercentage') }}</div>
-            <div class="stat-value">{{ topPlatformPercentage }}%</div>
+            <div class="stat-label">
+              {{ t('charts.platformStat.totalPercentage') }}
+            </div>
+            <div class="stat-value">
+              {{ topPlatformPercentage }}%
+            </div>
           </div>
         </div>
         
@@ -59,13 +91,22 @@
             rounded
             class="platform-progress"
             :color="i === 0 ? 'primary' : i === 1 ? 'info' : i === 2 ? 'success' : 'grey-lighten-1'"
-          ></v-progress-linear>
+          />
         </div>
       </div>
       
-      <div v-else class="no-data">
-        <v-icon icon="mdi-information-outline" size="40" color="grey-lighten-1"></v-icon>
-        <div class="no-data-text">{{ t('charts.platformStat.noData') }}</div>
+      <div
+        v-else
+        class="no-data"
+      >
+        <v-icon
+          icon="mdi-information-outline"
+          size="40"
+          color="grey-lighten-1"
+        />
+        <div class="no-data-text">
+          {{ t('charts.platformStat.noData') }}
+        </div>
       </div>
     </v-card-text>
   </v-card>

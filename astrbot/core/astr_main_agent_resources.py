@@ -3,6 +3,7 @@ import json
 import os
 import uuid
 
+import anyio
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
@@ -69,7 +70,7 @@ TOOL_CALL_PROMPT = (
     "keep the conversation style consistent."
 )
 
-TOOL_CALL_PROMPT_SKILLS_LIKE_MODE = (
+TOOL_CALL_PROMPT_LAZY_LOAD_MODE = (
     "You MUST NOT return an empty response, especially after invoking a tool."
     " Before calling any tool, provide a brief explanatory message to the user stating the purpose of the tool call."
     " Tool schemas are provided in two stages: first only name and description; "
@@ -188,7 +189,12 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
 @dataclass
 class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     name: str = "send_message_to_user"
-    description: str = "Directly send message to the user. Only use this tool when you need to proactively message the user. Otherwise you can directly output the reply in the conversation."
+    description: str = (
+        "Send message to the user. "
+        "Supports various message types including `plain`, `image`, `record`, `video`, `file`, and `mention_user`. "
+        "Use this tool to send media files (`image`, `record`, `video`, `file`), "
+        "or when you need to proactively message the user(such as cron job). For normal text replies, you can output directly."
+    )
 
     parameters: dict = Field(
         default_factory=lambda: {
@@ -241,7 +247,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
         bool: indicates whether the file was downloaded from sandbox.
         """
-        if os.path.exists(path):
+        if await anyio.Path(path).exists():
             return path, False
 
         # Try to check if the file exists in the sandbox

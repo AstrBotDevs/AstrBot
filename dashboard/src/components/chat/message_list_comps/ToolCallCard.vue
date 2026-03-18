@@ -1,59 +1,99 @@
 <template>
-    <div class="tool-call-card" :class="{ 'is-dark': isDark, 'expanded': isExpanded }" :style="isDark ? {
-        backgroundColor: 'rgba(40, 60, 100, 0.4)',
-        borderColor: 'rgba(100, 140, 200, 0.4)'
-    } : {}">
-        <!-- Header -->
-        <div class="tool-call-header" :class="{ 'is-dark': isDark }" @click="toggleExpanded">
-            <v-icon size="small" class="tool-call-expand-icon" :class="{ 'expanded': isExpanded }">
-                mdi-chevron-right
-            </v-icon>
-            <v-icon size="small" class="tool-call-icon">mdi-wrench-outline</v-icon>
-            <div class="tool-call-info">
-                <span class="tool-call-name">{{ toolCall.name }}</span>
-            </div>
-            <span class="tool-call-status"
-                :class="{ 'status-running': !toolCall.finished_ts, 'status-finished': toolCall.finished_ts }">
-                <template v-if="toolCall.finished_ts">
-                    <v-icon size="x-small" class="status-icon">mdi-check-circle</v-icon>
-                    {{ formatDuration(toolCall.finished_ts - toolCall.ts) }}
-                </template>
-                <template v-else>
-                    <v-icon size="x-small" class="status-icon spinning">mdi-loading</v-icon>
-                    {{ elapsedTime }}
-                </template>
-            </span>
-        </div>
-
-        <!-- Details -->
-        <div v-if="isExpanded" class="tool-call-details" :style="isDark ? {
-            borderTopColor: 'rgba(100, 140, 200, 0.3)',
-            backgroundColor: 'rgba(30, 45, 70, 0.5)'
-        } : {}">
-            <!-- ID -->
-            <div class="tool-call-detail-row">
-                <span class="detail-label">ID:</span>
-                <code class="detail-value" :style="isDark ? { backgroundColor: 'transparent' } : {}">
-            {{ toolCall.id }}
-        </code>
-            </div>
-
-            <!-- Args -->
-            <div class="tool-call-detail-row">
-                <span class="detail-label">Args:</span>
-                <pre class="detail-value detail-json" :style="isDark ? { backgroundColor: 'transparent' } : {}">{{
-                    JSON.stringify(toolCall.args, null, 2) }}</pre>
-            </div>
-
-            <!-- Result -->
-            <div v-if="toolCall.result" class="tool-call-detail-row">
-                <span class="detail-label">Result:</span>
-                <pre class="detail-value detail-json detail-result"
-                    :style="isDark ? { backgroundColor: 'transparent' } : {}">{{
-            formattedResult }}</pre>
-            </div>
-        </div>
+  <div
+    class="tool-call-card"
+    :class="{ 'is-dark': isDark, 'expanded': isExpanded }"
+    :style="isDark ? {
+      backgroundColor: 'rgba(40, 60, 100, 0.4)',
+      borderColor: 'rgba(100, 140, 200, 0.4)'
+    } : {}"
+  >
+    <!-- Header -->
+    <div
+      class="tool-call-header"
+      :class="{ 'is-dark': isDark }"
+      @click="toggleExpanded"
+    >
+      <v-icon
+        size="small"
+        class="tool-call-expand-icon"
+        :class="{ 'expanded': isExpanded }"
+      >
+        mdi-chevron-right
+      </v-icon>
+      <v-icon
+        size="small"
+        class="tool-call-icon"
+      >
+        mdi-wrench-outline
+      </v-icon>
+      <div class="tool-call-info">
+        <span class="tool-call-name">{{ toolCall.name }}</span>
+      </div>
+      <span
+        class="tool-call-status"
+        :class="{ 'status-running': !toolCall.finished_ts, 'status-finished': toolCall.finished_ts }"
+      >
+        <template v-if="toolCall.finished_ts">
+          <v-icon
+            size="x-small"
+            class="status-icon"
+          >mdi-check-circle</v-icon>
+          {{ formatDuration(toolCall.finished_ts - toolCall.ts) }}
+        </template>
+        <template v-else>
+          <v-icon
+            size="x-small"
+            class="status-icon spinning"
+          >mdi-loading</v-icon>
+          {{ elapsedTime }}
+        </template>
+      </span>
     </div>
+
+    <!-- Details -->
+    <div
+      v-if="isExpanded"
+      class="tool-call-details"
+      :style="isDark ? {
+        borderTopColor: 'rgba(100, 140, 200, 0.3)',
+        backgroundColor: 'rgba(30, 45, 70, 0.5)'
+      } : {}"
+    >
+      <!-- ID -->
+      <div class="tool-call-detail-row">
+        <span class="detail-label">ID:</span>
+        <code
+          class="detail-value"
+          :style="isDark ? { backgroundColor: 'transparent' } : {}"
+        >
+          {{ toolCall.id }}
+        </code>
+      </div>
+
+      <!-- Args -->
+      <div class="tool-call-detail-row">
+        <span class="detail-label">Args:</span>
+        <pre
+          class="detail-value detail-json"
+          :style="isDark ? { backgroundColor: 'transparent' } : {}"
+        >{{
+        JSON.stringify(toolCall.args, null, 2) }}</pre>
+      </div>
+
+      <!-- Result -->
+      <div
+        v-if="toolCall.result"
+        class="tool-call-detail-row"
+      >
+        <span class="detail-label">Result:</span>
+        <pre
+          class="detail-value detail-json detail-result"
+          :style="isDark ? { backgroundColor: 'transparent' } : {}"
+        >{{
+        formattedResult }}</pre>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>

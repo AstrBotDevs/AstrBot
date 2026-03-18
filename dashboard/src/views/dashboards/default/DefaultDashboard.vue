@@ -1,7 +1,10 @@
 <template>
   <div class="dashboard-container">
     <v-slide-y-transition>
-      <v-row v-if="noticeTitle && noticeContent" class="notice-row">
+      <v-row
+        v-if="noticeTitle && noticeContent"
+        class="notice-row"
+      >
         <v-alert
           :type="noticeType"
           :text="noticeContent"
@@ -10,28 +13,40 @@
           class="dashboard-alert"
           variant="tonal"
           border="start"
-        ></v-alert>
+        />
       </v-row>
     </v-slide-y-transition>
     
     <!-- 主指标卡片行 -->
     <v-row class="stats-row">
-      <v-col cols="12" md="3">
+      <v-col
+        cols="12"
+        md="3"
+      >
         <v-slide-y-transition>
           <TotalMessage :stat="stat" />
         </v-slide-y-transition>
       </v-col>
-      <v-col cols="12" md="3">
+      <v-col
+        cols="12"
+        md="3"
+      >
         <v-slide-y-transition>
           <OnlinePlatform :stat="stat" />
         </v-slide-y-transition>
       </v-col>
-      <v-col cols="12" md="3">
+      <v-col
+        cols="12"
+        md="3"
+      >
         <v-slide-y-transition>
           <RunningTime :stat="stat" />
         </v-slide-y-transition>
       </v-col>
-      <v-col cols="12" md="3">
+      <v-col
+        cols="12"
+        md="3"
+      >
         <v-slide-y-transition>
           <MemoryUsage :stat="stat" />
         </v-slide-y-transition>
@@ -40,19 +55,30 @@
     
     <!-- 图表行 -->
     <v-row class="charts-row">
-      <v-col cols="12" lg="8">
+      <v-col
+        cols="12"
+        lg="8"
+      >
         <v-slide-y-transition>
           <MessageStat />
         </v-slide-y-transition>
       </v-col>
-      <v-col cols="12" lg="4">
+      <v-col
+        cols="12"
+        lg="4"
+      >
         <v-slide-y-transition>
           <PlatformStat :stat="stat" />
         </v-slide-y-transition>
       </v-col>
     </v-row>
     <div class="dashboard-footer">
-      <v-chip size="small" color="primary" variant="flat" prepend-icon="mdi-refresh">
+      <v-chip
+        size="small"
+        color="primary"
+        variant="flat"
+        prepend-icon="mdi-refresh"
+      >
         {{ t('lastUpdate') }}: {{ lastUpdated }}
       </v-chip>
       <v-btn 
@@ -61,9 +87,9 @@
         color="primary" 
         variant="text" 
         class="ml-2" 
-        @click="fetchData"
         :loading="isRefreshing"
-      ></v-btn>
+        @click="fetchData"
+      />
     </div>
   </div>
 </template>

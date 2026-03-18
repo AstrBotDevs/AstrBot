@@ -10,6 +10,7 @@
     "cancel": "Cancel",
     "save": "Save",
     "move": "Move",
+    "clone": "Clone",
     "addDialogPair": "Add Dialog Pair"
   },
   "labels": {
@@ -142,5 +143,17 @@
     "description": "Select a destination folder for \"{name}\"",
     "success": "Moved successfully",
     "error": "Failed to move"
+  },
+  "cloneDialog": {
+    "title": "Clone Persona",
+    "description": "Create a copy of \"{name}\" with a new ID",
+    "newPersonaId": "New Persona ID",
+    "newPersonaIdHint": "Enter a unique name for the cloned persona",
+    "success": "Persona cloned successfully",
+    "error": "Failed to clone persona",
+    "validation": {
+      "required": "Persona ID is required",
+      "exists": "This persona ID already exists"
+    }
   }
 }

@@ -4,7 +4,7 @@ import time
 import uuid
 from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from astrbot import logger
 from astrbot.core import db_helper
@@ -239,7 +239,7 @@ class WebChatAdapter(Platform):
             session_id=message.session_id,
         )
 
-        _, _, payload = message.raw_message  # type: ignore
+        _, _, payload = cast(tuple[Any, Any, dict[str, Any]], message.raw_message)
         message_event.set_extra("selected_provider", payload.get("selected_provider"))
         message_event.set_extra("selected_model", payload.get("selected_model"))
         message_event.set_extra(

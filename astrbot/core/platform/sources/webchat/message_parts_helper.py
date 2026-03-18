@@ -6,6 +6,8 @@ from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+import anyio
+
 from astrbot.core.db.po import Attachment
 from astrbot.core.message.components import (
     File,
@@ -139,14 +141,15 @@ async def parse_webchat_message_parts(
             continue
 
         file_path = Path(str(path))
-        if verify_media_path_exists and not file_path.exists():
+        if verify_media_path_exists and not await anyio.Path(file_path).exists():
             if strict:
                 raise ValueError(f"file not found: {file_path!s}")
             continue
 
-        file_path_str = (
-            str(file_path.resolve()) if verify_media_path_exists else str(file_path)
-        )
+        if verify_media_path_exists:
+            file_path_str = str(await anyio.Path(file_path).resolve())
+        else:
+            file_path_str = str(file_path)
         has_content = True
         if part_type == "image":
             components.append(Image.fromFileSystem(file_path_str))
@@ -339,7 +342,11 @@ async def create_attachment_part_from_existing_file(
     candidate_paths = [Path(attachments_dir) / basename]
     candidate_paths.extend(Path(p) / basename for p in fallback_dirs)
 
-    file_path = next((path for path in candidate_paths if path.exists()), None)
+    file_path = None
+    for path in candidate_paths:
+        if await anyio.Path(path).exists():
+            file_path = path
+            break
     if not file_path:
         return None
 
@@ -365,8 +372,8 @@ async def message_chain_to_storage_message_parts(
     insert_attachment: AttachmentInserter,
     attachments_dir: str | Path,
 ) -> list[dict]:
-    target_dir = Path(attachments_dir)
-    target_dir.mkdir(parents=True, exist_ok=True)
+    target_dir = anyio.Path(attachments_dir)
+    await target_dir.mkdir(parents=True, exist_ok=True)
 
     parts: list[dict] = []
     for comp in message_chain.chain:
@@ -441,13 +448,13 @@ async def _copy_file_to_attachment_part(
     attachments_dir: Path,
     display_name: str | None = None,
 ) -> dict | None:
-    src_path = Path(file_path)
-    if not src_path.exists() or not src_path.is_file():
+    src_path = anyio.Path(file_path)
+    if not await src_path.exists() or not await src_path.is_file():
         return None
 
     suffix = src_path.suffix
     target_path = attachments_dir / f"{uuid.uuid4().hex}{suffix}"
-    shutil.copy2(src_path, target_path)
+    shutil.copy2(str(src_path), str(target_path))
 
     mime_type, _ = mimetypes.guess_type(target_path.name)
     attachment = await insert_attachment(

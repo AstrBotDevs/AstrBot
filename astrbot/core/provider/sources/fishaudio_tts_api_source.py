@@ -3,6 +3,7 @@ import re
 import uuid
 from typing import Annotated, Literal
 
+import aiofiles
 import ormsgpack
 from httpx import AsyncClient
 from pydantic import BaseModel, conint
@@ -159,9 +160,9 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             if response.status_code == 200 and response.headers.get(
                 "content-type", ""
             ).startswith("audio/"):
-                with open(path, "wb") as f:
+                async with aiofiles.open(path, "wb") as f:
                     async for chunk in response.aiter_bytes():
-                        f.write(chunk)
+                        await f.write(chunk)
                 return path
             error_bytes = await response.aread()
             error_text = error_bytes.decode("utf-8", errors="replace")[:1024]

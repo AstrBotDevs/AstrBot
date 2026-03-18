@@ -3,8 +3,16 @@
     <div class="d-flex align-center justify-space-between mb-6">
       <div>
         <div class="d-flex align-center gap-2 mb-1">
-          <h2 class="text-h5 font-weight-bold">{{ tm('page.title') }}</h2>
-          <v-chip size="x-small" color="orange-darken-2" variant="tonal" label class="font-weight-bold">
+          <h2 class="text-h5 font-weight-bold">
+            {{ tm('page.title') }}
+          </h2>
+          <v-chip
+            size="x-small"
+            color="orange-darken-2"
+            variant="tonal"
+            label
+            class="font-weight-bold"
+          >
             {{ tm('page.beta') }}
           </v-chip>
         </div>
@@ -36,11 +44,17 @@
     </div>
 
     <!-- Global Settings Card -->
-    <v-card class="rounded-lg mb-6 border-thin" variant="flat" border>
+    <v-card
+      class="rounded-lg mb-6 border-thin"
+      variant="flat"
+      border
+    >
       <v-card-text>
         <div class="d-flex align-center justify-space-between">
           <div>
-            <div class="text-subtitle-1 font-weight-bold mb-1">{{ tm('section.globalSettings') || 'Global Settings' }}</div>
+            <div class="text-subtitle-1 font-weight-bold mb-1">
+              {{ tm('section.globalSettings') || 'Global Settings' }}
+            </div>
             <div class="text-caption text-medium-emphasis">
               {{ mainStateDescription }}
             </div>
@@ -50,7 +64,10 @@
         <v-divider class="my-4" />
 
         <v-row dense>
-          <v-col cols="12" md="6">
+          <v-col
+            cols="12"
+            md="6"
+          >
             <v-switch
               v-model="cfg.main_enable"
               :label="tm('switches.enable')"
@@ -67,7 +84,10 @@
               </template>
             </v-switch>
           </v-col>
-          <v-col cols="12" md="6">
+          <v-col
+            cols="12"
+            md="6"
+          >
             <v-switch
               v-model="cfg.remove_main_duplicate_tools"
               :disabled="!cfg.main_enable"
@@ -92,9 +112,20 @@
     <!-- Agents List Section -->
     <div class="d-flex align-center justify-space-between mb-4">
       <div class="d-flex align-center gap-2">
-        <v-icon icon="mdi-robot" color="primary" size="small" />
-        <div class="text-h6 font-weight-bold">{{ tm('section.title') }}</div>
-        <v-chip size="small" variant="tonal" color="primary" class="ml-2">
+        <v-icon
+          icon="mdi-robot"
+          color="primary"
+          size="small"
+        />
+        <div class="text-h6 font-weight-bold">
+          {{ tm('section.title') }}
+        </div>
+        <v-chip
+          size="small"
+          variant="tonal"
+          color="primary"
+          class="ml-2"
+        >
           {{ cfg.agents.length }}
         </v-chip>
       </div>
@@ -107,7 +138,10 @@
       </v-btn>
     </div>
 
-    <v-expansion-panels variant="popout" class="subagent-panels">
+    <v-expansion-panels
+      variant="popout"
+      class="subagent-panels"
+    >
       <v-expansion-panel
         v-for="(agent, idx) in cfg.agents"
         :key="agent.__key"
@@ -126,7 +160,10 @@
             />
 
             <!-- Agent Info -->
-            <div class="d-flex flex-column flex-grow-1" style="min-width: 0;">
+            <div
+              class="d-flex flex-column flex-grow-1"
+              style="min-width: 0;"
+            >
               <div class="d-flex align-center gap-2">
                 <span class="text-subtitle-1 font-weight-bold text-truncate">
                   {{ agent.name || tm('cards.unnamed') }}
@@ -138,7 +175,10 @@
             </div>
 
             <!-- Controls (stop propagation on clicks) -->
-            <div class="d-flex align-center gap-2 flex-shrink-0" @click.stop>
+            <div
+              class="d-flex align-center gap-2 flex-shrink-0"
+              @click.stop
+            >
               <v-switch
                 v-model="agent.enabled"
                 color="success"
@@ -161,7 +201,10 @@
           <v-divider class="mb-4" />
           <v-row>
             <!-- Left Column: Form -->
-            <v-col cols="12" md="6">
+            <v-col
+              cols="12"
+              md="6"
+            >
               <div class="d-flex flex-column gap-4">
                 <v-text-field
                   v-model="agent.name"
@@ -174,8 +217,14 @@
                 />
 
                 <div class="d-flex flex-column gap-1">
-                  <div class="text-caption text-medium-emphasis ml-1">{{ tm('form.providerLabel') }}</div>
-                  <v-card variant="outlined" class="pa-0 border-thin rounded bg-transparent" style="border-color: rgba(var(--v-border-color), var(--v-border-opacity));">
+                  <div class="text-caption text-medium-emphasis ml-1">
+                    {{ tm('form.providerLabel') }}
+                  </div>
+                  <v-card
+                    variant="outlined"
+                    class="pa-0 border-thin rounded bg-transparent"
+                    style="border-color: rgba(var(--v-border-color), var(--v-border-opacity));"
+                  >
                     <div class="pa-3">
                       <ProviderSelector
                         v-model="agent.provider_id"
@@ -189,8 +238,14 @@
                 </div>
 
                 <div class="d-flex flex-column gap-1">
-                  <div class="text-caption text-medium-emphasis ml-1">{{ tm('form.personaLabel') }}</div>
-                  <v-card variant="outlined" class="pa-0 border-thin rounded bg-transparent" style="border-color: rgba(var(--v-border-color), var(--v-border-opacity));">
+                  <div class="text-caption text-medium-emphasis ml-1">
+                    {{ tm('form.personaLabel') }}
+                  </div>
+                  <v-card
+                    variant="outlined"
+                    class="pa-0 border-thin rounded bg-transparent"
+                    style="border-color: rgba(var(--v-border-color), var(--v-border-opacity));"
+                  >
                     <div class="pa-3">
                       <PersonaSelector
                         v-model="agent.persona_id"
@@ -212,7 +267,10 @@
             </v-col>
 
             <!-- Right Column: Preview -->
-            <v-col cols="12" md="6">
+            <v-col
+              cols="12"
+              md="6"
+            >
               <div class="h-100">
                 <div class="text-caption font-weight-bold text-medium-emphasis mb-2 ml-1">
                   {{ tm('cards.personaPreview') }}
@@ -229,19 +287,44 @@
     </v-expansion-panels>
 
     <!-- Empty State -->
-    <div v-if="cfg.agents.length === 0" class="d-flex flex-column align-center justify-center py-12 text-medium-emphasis">
-      <v-icon icon="mdi-robot-off" size="64" class="mb-4 opacity-50" />
-      <div class="text-h6">{{ tm('empty.title') }}</div>
-      <div class="text-body-2 mb-4">{{ tm('empty.subtitle') }}</div>
-      <v-btn color="primary" variant="tonal" @click="addAgent">
+    <div
+      v-if="cfg.agents.length === 0"
+      class="d-flex flex-column align-center justify-center py-12 text-medium-emphasis"
+    >
+      <v-icon
+        icon="mdi-robot-off"
+        size="64"
+        class="mb-4 opacity-50"
+      />
+      <div class="text-h6">
+        {{ tm('empty.title') }}
+      </div>
+      <div class="text-body-2 mb-4">
+        {{ tm('empty.subtitle') }}
+      </div>
+      <v-btn
+        color="primary"
+        variant="tonal"
+        @click="addAgent"
+      >
         {{ tm('empty.action') }}
       </v-btn>
     </div>
 
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000" location="top">
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+      timeout="3000"
+      location="top"
+    >
       {{ snackbar.message }}
       <template #actions>
-         <v-btn variant="text" @click="snackbar.show = false">{{ tm('actions.close') }}</v-btn>
+        <v-btn
+          variant="text"
+          @click="snackbar.show = false"
+        >
+          {{ tm('actions.close') }}
+        </v-btn>
       </template>
     </v-snackbar>
   </div>

@@ -5,6 +5,8 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, NoReturn
 
+import anyio
+
 try:
     import aiohttp
     import websockets
@@ -555,7 +557,7 @@ class MisskeyAPI:
                 form.add_field("folderId", str(folder_id))
 
             try:
-                f = open(file_path, "rb")
+                f = await anyio.to_thread.run_sync(open, file_path, "rb")
             except FileNotFoundError as e:
                 logger.error(f"[Misskey API] 本地文件不存在: {file_path}")
                 raise APIError(f"File not found: {file_path}") from e

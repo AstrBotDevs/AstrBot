@@ -6,6 +6,7 @@ import random
 from collections.abc import AsyncGenerator
 from typing import cast
 
+import aiofiles
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
@@ -134,16 +135,14 @@ class ProviderGoogleGenAI(Provider):
         system_instruction: str | None = None,
         modalities: list[str] | None = None,
         temperature: float = 0.7,
+        streaming: bool = False,
     ) -> types.GenerateContentConfig:
         """准备查询配置"""
         if not modalities:
             modalities = ["TEXT"]
 
         # 流式输出不支持图片模态
-        if (
-            self.provider_settings.get("streaming_response", False)
-            and "IMAGE" in modalities
-        ):
+        if streaming and "IMAGE" in modalities:
             logger.warning("流式输出不支持图片模态，已自动降级为文本模态")
             modalities = ["TEXT"]
 
@@ -538,6 +537,7 @@ class ProviderGoogleGenAI(Provider):
                     system_instruction,
                     modalities,
                     temperature,
+                    streaming=False,
                 )
                 result = await self.client.models.generate_content(
                     model=model,
@@ -617,6 +617,7 @@ class ProviderGoogleGenAI(Provider):
                     payloads,
                     tools,
                     system_instruction,
+                    streaming=True,
                 )
                 result = await self.client.models.generate_content_stream(
                     model=model,
@@ -924,8 +925,8 @@ class ProviderGoogleGenAI(Provider):
         """将图片转换为 base64"""
         if image_url.startswith("base64://"):
             return image_url.replace("base64://", "data:image/jpeg;base64,")
-        with open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
+        async with aiofiles.open(image_url, "rb") as f:
+            image_bs64 = base64.b64encode(await f.read()).decode("utf-8")
             return "data:image/jpeg;base64," + image_bs64
 
     async def terminate(self) -> None:

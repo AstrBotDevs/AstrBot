@@ -176,7 +176,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     user=session_id,
                     conversation_id=conversation_id,
                     files=files_payload,
-                    timeout=self.timeout,
+                    request_timeout=self.timeout,
                 ):
                     logger.debug(f"dify resp chunk: {chunk}")
                     if chunk["event"] == "message" or chunk["event"] == "agent_message":
@@ -216,7 +216,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     },
                     user=session_id,
                     files=files_payload,
-                    timeout=self.timeout,
+                    request_timeout=self.timeout,
                 ):
                     logger.debug(f"dify workflow resp chunk: {chunk}")
                     match chunk["event"]:

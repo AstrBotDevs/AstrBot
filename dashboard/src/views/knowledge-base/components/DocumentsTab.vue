@@ -2,33 +2,66 @@
   <div class="documents-tab">
     <!-- 操作栏 -->
     <div class="action-bar mb-4">
-      <v-btn prepend-icon="mdi-upload" color="primary" variant="elevated" @click="showUploadDialog = true">
+      <v-btn
+        prepend-icon="mdi-upload"
+        color="primary"
+        variant="elevated"
+        @click="showUploadDialog = true"
+      >
         {{ t('documents.upload') }}
       </v-btn>
-      <v-text-field v-model="searchQuery" prepend-inner-icon="mdi-magnify" :placeholder="'搜索文档...'" variant="outlined"
-        density="compact" hide-details clearable style="max-width: 300px" />
+      <v-text-field
+        v-model="searchQuery"
+        prepend-inner-icon="mdi-magnify"
+        :placeholder="'搜索文档...'"
+        variant="outlined"
+        density="compact"
+        hide-details
+        clearable
+        style="max-width: 300px"
+      />
     </div>
 
     <!-- 文档列表 -->
     <v-card elevation="2">
-      <v-data-table :headers="headers" :items="documents" :loading="loading" :search="searchQuery" :items-per-page="10">
+      <v-data-table
+        :headers="headers"
+        :items="documents"
+        :loading="loading"
+        :search="searchQuery"
+        :items-per-page="10"
+      >
         <template #item.doc_name="{ item }">
           <div class="d-flex align-center gap-2">
-            <v-icon :color="getFileColor(item.file_type)" class="mr-2">
+            <v-icon
+              :color="getFileColor(item.file_type)"
+              class="mr-2"
+            >
               {{ getFileIcon(item.file_type) }}
             </v-icon>
-            <div class="flex-grow-1" style="padding: 4px 0px;">
+            <div
+              class="flex-grow-1"
+              style="padding: 4px 0px;"
+            >
               <span class="font-weight-medium">{{ item.doc_name }}</span>
               <!-- 上传进度 -->
-              <div v-if="item.uploading" class="mt-1">
+              <div
+                v-if="item.uploading"
+                class="mt-1"
+              >
                 <div class="text-caption text-medium-emphasis mb-1">
                   {{ getStageText(item.uploadProgress?.stage || 'waiting') }}
                   <span v-if="item.uploadProgress?.current">
                     ({{ item.uploadProgress.current }} / {{ item.uploadProgress.total }})
                   </span>
                 </div>
-                <v-progress-linear :model-value="getUploadPercentage(item)" color="primary" height="4" rounded
-                  striped />
+                <v-progress-linear
+                  :model-value="getUploadPercentage(item)"
+                  color="primary"
+                  height="4"
+                  rounded
+                  striped
+                />
               </div>
             </div>
           </div>
@@ -43,35 +76,74 @@
         </template>
 
         <template #item.actions="{ item }">
-          <v-btn icon="mdi-eye" variant="text" size="small" color="info" @click="viewDocument(item)" />
-          <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="confirmDelete(item)" />
+          <v-btn
+            icon="mdi-eye"
+            variant="text"
+            size="small"
+            color="info"
+            @click="viewDocument(item)"
+          />
+          <v-btn
+            icon="mdi-delete"
+            variant="text"
+            size="small"
+            color="error"
+            @click="confirmDelete(item)"
+          />
         </template>
 
         <template #no-data>
           <div class="text-center py-8">
-            <v-icon size="64" color="grey-lighten-2">mdi-file-document-outline</v-icon>
-            <p class="mt-4 text-medium-emphasis">{{ t('documents.empty') }}</p>
+            <v-icon
+              size="64"
+              color="grey-lighten-2"
+            >
+              mdi-file-document-outline
+            </v-icon>
+            <p class="mt-4 text-medium-emphasis">
+              {{ t('documents.empty') }}
+            </p>
           </div>
         </template>
       </v-data-table>
     </v-card>
 
     <!-- 上传对话框 -->
-    <v-dialog v-model="showUploadDialog" max-width="650px" persistent @after-enter="initUploadSettings">
+    <v-dialog
+      v-model="showUploadDialog"
+      max-width="650px"
+      persistent
+      @after-enter="initUploadSettings"
+    >
       <v-card>
         <v-card-title class="pa-4 d-flex align-center">
           <span class="text-h5">{{ t('upload.title') }}</span>
           <v-spacer />
-          <v-btn icon="mdi-close" variant="text" @click="closeUploadDialog" />
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            @click="closeUploadDialog"
+          />
         </v-card-title>
 
         <v-divider />
 
-        <v-tabs v-model="uploadMode" grow class="mb-4">
-          <v-tab value="file">{{ t('upload.fileUpload') }}</v-tab>
+        <v-tabs
+          v-model="uploadMode"
+          grow
+          class="mb-4"
+        >
+          <v-tab value="file">
+            {{ t('upload.fileUpload') }}
+          </v-tab>
           <v-tab value="url">
             {{ t('upload.fromUrl') }}
-            <v-badge color="warning" :content="t('upload.beta')" inline class="ml-2" />
+            <v-badge
+              color="warning"
+              :content="t('upload.beta')"
+              inline
+              class="ml-2"
+            />
           </v-tab>
         </v-tabs>
 
@@ -80,36 +152,82 @@
             <!-- 文件上传 -->
             <v-window-item value="file">
               <!-- 文件选择 -->
-              <div class="upload-dropzone" :class="{ 'dragover': isDragging }" @drop.prevent="handleDrop"
-                @dragover.prevent="isDragging = true" @dragleave="isDragging = false" @click="fileInput?.click()">
-                <v-icon size="64" color="primary">mdi-cloud-upload</v-icon>
-                <p class="mt-4 text-h6">{{ t('upload.dropzone') }}</p>
-                <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}.txt, .md, .pdf,
+              <div
+                class="upload-dropzone"
+                :class="{ 'dragover': isDragging }"
+                @drop.prevent="handleDrop"
+                @dragover.prevent="isDragging = true"
+                @dragleave="isDragging = false"
+                @click="fileInput?.click()"
+              >
+                <v-icon
+                  size="64"
+                  color="primary"
+                >
+                  mdi-cloud-upload
+                </v-icon>
+                <p class="mt-4 text-h6">
+                  {{ t('upload.dropzone') }}
+                </p>
+                <p class="text-caption text-medium-emphasis mt-2">
+                  {{ t('upload.supportedFormats') }}.txt, .md, .pdf,
                   .docx,
-                  .xls, .xlsx</p>
-                <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
-                <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
-                <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.pdf,.docx,.xls,.xlsx"
-                  @change="handleFileSelect" />
+                  .xls, .xlsx
+                </p>
+                <p class="text-caption text-medium-emphasis">
+                  {{ t('upload.maxSize') }}
+                </p>
+                <p class="text-caption text-medium-emphasis">
+                  最多可上传 10 个文件
+                </p>
+                <input
+                  ref="fileInput"
+                  type="file"
+                  multiple
+                  hidden
+                  accept=".txt,.md,.pdf,.docx,.xls,.xlsx"
+                  @change="handleFileSelect"
+                >
               </div>
 
-              <div v-if="selectedFiles.length > 0" class="mt-4">
+              <div
+                v-if="selectedFiles.length > 0"
+                class="mt-4"
+              >
                 <div class="d-flex align-center justify-space-between mb-2">
                   <span class="text-subtitle-2">已选择 {{ selectedFiles.length }} 个文件</span>
-                  <v-btn variant="text" size="small" @click="selectedFiles = []">清空</v-btn>
+                  <v-btn
+                    variant="text"
+                    size="small"
+                    @click="selectedFiles = []"
+                  >
+                    清空
+                  </v-btn>
                 </div>
                 <div class="files-list">
-                  <div v-for="(file, index) in selectedFiles" :key="index"
-                    class="file-item pa-3 mb-2 rounded bg-surface-variant">
+                  <div
+                    v-for="(file, index) in selectedFiles"
+                    :key="index"
+                    class="file-item pa-3 mb-2 rounded bg-surface-variant"
+                  >
                     <div class="d-flex align-center justify-space-between">
                       <div class="d-flex align-center gap-2">
                         <v-icon>{{ getFileIcon(file.name) }}</v-icon>
                         <div>
-                          <div class="font-weight-medium">{{ file.name }}</div>
-                          <div class="text-caption">{{ formatFileSize(file.size) }}</div>
+                          <div class="font-weight-medium">
+                            {{ file.name }}
+                          </div>
+                          <div class="text-caption">
+                            {{ formatFileSize(file.size) }}
+                          </div>
                         </div>
                       </div>
-                      <v-btn icon="mdi-close" variant="text" size="small" @click="removeFile(index)" />
+                      <v-btn
+                        icon="mdi-close"
+                        variant="text"
+                        size="small"
+                        @click="removeFile(index)"
+                      />
                     </div>
                   </div>
                 </div>
@@ -117,39 +235,85 @@
             </v-window-item>
 
             <!-- URL上传 -->
-            <v-window-item value="url" class="pt-2">
+            <v-window-item
+              value="url"
+              class="pt-2"
+            >
               <!-- Tavily Key 快速配置 -->
-              <div v-if="tavilyConfigStatus === 'not_configured' || tavilyConfigStatus === 'error'" class="mb-4">
-                <v-alert :type="tavilyConfigStatus === 'error' ? 'error' : 'info'" variant="tonal" density="compact">
+              <div
+                v-if="tavilyConfigStatus === 'not_configured' || tavilyConfigStatus === 'error'"
+                class="mb-4"
+              >
+                <v-alert
+                  :type="tavilyConfigStatus === 'error' ? 'error' : 'info'"
+                  variant="tonal"
+                  density="compact"
+                >
                   <div class="d-flex align-center justify-space-between">
                     <span>
                       {{ tavilyConfigStatus === 'error' ? '检查网页搜索配置失败' : '使用此功能需要配置 Tavily Key' }}
                     </span>
-                    <v-btn size="small" variant="flat" @click="showTavilyDialog = true">
+                    <v-btn
+                      size="small"
+                      variant="flat"
+                      @click="showTavilyDialog = true"
+                    >
                       配置
                     </v-btn>
                   </div>
                 </v-alert>
               </div>
 
-              <v-text-field v-model="uploadUrl" :label="t('upload.urlPlaceholder')" variant="outlined" clearable :disabled="tavilyConfigStatus === 'not_configured'"
-                autofocus :hint="t('upload.urlHint', { supported: 'HTML' })" persistent-hint />
+              <v-text-field
+                v-model="uploadUrl"
+                :label="t('upload.urlPlaceholder')"
+                variant="outlined"
+                clearable
+                :disabled="tavilyConfigStatus === 'not_configured'"
+                autofocus
+                :hint="t('upload.urlHint', { supported: 'HTML' })"
+                persistent-hint
+              />
             </v-window-item>
           </v-window>
 
           <!-- 清洗设置 (仅在URL模式下显示) -->
-          <div v-if="uploadMode === 'url'" class="mt-6">
+          <div
+            v-if="uploadMode === 'url'"
+            class="mt-6"
+          >
             <div class="d-flex align-center mb-4">
-              <h3 class="text-h6">{{ t('upload.cleaningSettings') }}</h3>
+              <h3 class="text-h6">
+                {{ t('upload.cleaningSettings') }}
+              </h3>
             </div>
             <v-row>
-              <v-col cols="12" sm="4">
-                <v-switch v-model="uploadSettings.enable_cleaning" :label="t('upload.enableCleaning')" color="primary" />
+              <v-col
+                cols="12"
+                sm="4"
+              >
+                <v-switch
+                  v-model="uploadSettings.enable_cleaning"
+                  :label="t('upload.enableCleaning')"
+                  color="primary"
+                />
               </v-col>
-              <v-col cols="12" sm="8">
-                <v-select v-model="uploadSettings.cleaning_provider_id" :items="llmProviders" item-title="id"
-                  item-value="id" :label="t('upload.cleaningProvider')" :hint="t('upload.cleaningProviderHint')"
-                  persistent-hint variant="outlined" density="compact" :disabled="!uploadSettings.enable_cleaning" />
+              <v-col
+                cols="12"
+                sm="8"
+              >
+                <v-select
+                  v-model="uploadSettings.cleaning_provider_id"
+                  :items="llmProviders"
+                  item-title="id"
+                  item-value="id"
+                  :label="t('upload.cleaningProvider')"
+                  :hint="t('upload.cleaningProviderHint')"
+                  persistent-hint
+                  variant="outlined"
+                  density="compact"
+                  :disabled="!uploadSettings.enable_cleaning"
+                />
               </v-col>
             </v-row>
           </div>
@@ -157,53 +321,113 @@
           <!-- 分块设置 -->
           <div class="mt-6">
             <div class="d-flex align-center mb-4">
-              <h3 class="text-h6">{{ t('upload.chunkSettings') }}</h3>
+              <h3 class="text-h6">
+                {{ t('upload.chunkSettings') }}
+              </h3>
             </div>
             <v-row>
-              <v-col cols="12" sm="6">
-                <v-text-field v-model.number="uploadSettings.chunk_size" :label="t('upload.chunkSize')"
-                  :hint="t('upload.chunkSizeHint')" persistent-hint type="number" variant="outlined" density="compact"
-                  :placeholder="props.kb?.chunk_size?.toString() || '512'" />
+              <v-col
+                cols="12"
+                sm="6"
+              >
+                <v-text-field
+                  v-model.number="uploadSettings.chunk_size"
+                  :label="t('upload.chunkSize')"
+                  :hint="t('upload.chunkSizeHint')"
+                  persistent-hint
+                  type="number"
+                  variant="outlined"
+                  density="compact"
+                  :placeholder="props.kb?.chunk_size?.toString() || '512'"
+                />
               </v-col>
-              <v-col cols="12" sm="6">
-                <v-text-field v-model.number="uploadSettings.chunk_overlap" :label="t('upload.chunkOverlap')"
-                  :hint="t('upload.chunkOverlapHint')" persistent-hint type="number" variant="outlined"
-                  density="compact" :placeholder="props.kb?.chunk_overlap?.toString() || '50'" />
+              <v-col
+                cols="12"
+                sm="6"
+              >
+                <v-text-field
+                  v-model.number="uploadSettings.chunk_overlap"
+                  :label="t('upload.chunkOverlap')"
+                  :hint="t('upload.chunkOverlapHint')"
+                  persistent-hint
+                  type="number"
+                  variant="outlined"
+                  density="compact"
+                  :placeholder="props.kb?.chunk_overlap?.toString() || '50'"
+                />
               </v-col>
             </v-row>
           </div>
 
           <div class="mt-2">
-            <h3 class="text-h6 mb-4">{{ t('upload.batchSettings') }}</h3>
+            <h3 class="text-h6 mb-4">
+              {{ t('upload.batchSettings') }}
+            </h3>
             <v-row>
-              <v-col cols="12" sm="4">
-                <v-text-field v-model.number="uploadSettings.batch_size" :label="t('upload.batchSize')" hint="每批处理的文本数量"
-                  persistent-hint type="number" variant="outlined" density="compact" />
+              <v-col
+                cols="12"
+                sm="4"
+              >
+                <v-text-field
+                  v-model.number="uploadSettings.batch_size"
+                  :label="t('upload.batchSize')"
+                  hint="每批处理的文本数量"
+                  persistent-hint
+                  type="number"
+                  variant="outlined"
+                  density="compact"
+                />
               </v-col>
-              <v-col cols="12" sm="4">
-                <v-text-field v-model.number="uploadSettings.tasks_limit" :label="t('upload.tasksLimit')"
-                  hint="并发任务数量限制" persistent-hint type="number" variant="outlined" density="compact" />
+              <v-col
+                cols="12"
+                sm="4"
+              >
+                <v-text-field
+                  v-model.number="uploadSettings.tasks_limit"
+                  :label="t('upload.tasksLimit')"
+                  hint="并发任务数量限制"
+                  persistent-hint
+                  type="number"
+                  variant="outlined"
+                  density="compact"
+                />
               </v-col>
-              <v-col cols="12" sm="4">
-                <v-text-field v-model.number="uploadSettings.max_retries" :label="t('upload.maxRetries')"
-                  hint="失败时的最大重试次数" persistent-hint type="number" variant="outlined" density="compact" />
+              <v-col
+                cols="12"
+                sm="4"
+              >
+                <v-text-field
+                  v-model.number="uploadSettings.max_retries"
+                  :label="t('upload.maxRetries')"
+                  hint="失败时的最大重试次数"
+                  persistent-hint
+                  type="number"
+                  variant="outlined"
+                  density="compact"
+                />
               </v-col>
             </v-row>
           </div>
-
-
-
         </v-card-text>
 
         <v-divider />
 
         <v-card-actions class="pa-4">
           <v-spacer />
-          <v-btn variant="text" @click="closeUploadDialog" :disabled="uploading">
+          <v-btn
+            variant="text"
+            :disabled="uploading"
+            @click="closeUploadDialog"
+          >
             {{ t('upload.cancel') }}
           </v-btn>
-          <v-btn color="primary" variant="elevated" @click="startUpload" :loading="uploading"
-            :disabled="isUploadDisabled">
+          <v-btn
+            color="primary"
+            variant="elevated"
+            :loading="uploading"
+            :disabled="isUploadDisabled"
+            @click="startUpload"
+          >
             {{ t('upload.submit') }}
           </v-btn>
         </v-card-actions>
@@ -211,21 +435,41 @@
     </v-dialog>
 
     <!-- 删除确认对话框 -->
-    <v-dialog v-model="showDeleteDialog" max-width="450px">
+    <v-dialog
+      v-model="showDeleteDialog"
+      max-width="450px"
+    >
       <v-card>
-        <v-card-title class="pa-4 text-h6">{{ t('documents.delete') }}</v-card-title>
+        <v-card-title class="pa-4 text-h6">
+          {{ t('documents.delete') }}
+        </v-card-title>
         <v-divider />
         <v-card-text class="pa-6">
           <p>{{ t('documents.deleteConfirm', { name: deleteTarget?.doc_name || '' }) }}</p>
-          <v-alert type="error" variant="tonal" density="compact" class="mt-4">
+          <v-alert
+            type="error"
+            variant="tonal"
+            density="compact"
+            class="mt-4"
+          >
             {{ t('documents.deleteWarning') }}
           </v-alert>
         </v-card-text>
         <v-divider />
         <v-card-actions class="pa-4">
           <v-spacer />
-          <v-btn variant="text" @click="showDeleteDialog = false">取消</v-btn>
-          <v-btn color="error" variant="elevated" @click="deleteDocument" :loading="deleting">
+          <v-btn
+            variant="text"
+            @click="showDeleteDialog = false"
+          >
+            取消
+          </v-btn>
+          <v-btn
+            color="error"
+            variant="elevated"
+            :loading="deleting"
+            @click="deleteDocument"
+          >
             删除
           </v-btn>
         </v-card-actions>
@@ -233,12 +477,18 @@
     </v-dialog>
 
     <!-- 消息提示 -->
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color">
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+    >
       {{ snackbar.text }}
     </v-snackbar>
 
     <!-- Tavily Key 配置对话框 -->
-    <TavilyKeyDialog v-model="showTavilyDialog" @success="onTavilyKeySet" />
+    <TavilyKeyDialog
+      v-model="showTavilyDialog"
+      @success="onTavilyKeySet"
+    />
   </div>
 </template>
 
@@ -285,7 +535,7 @@ const snackbar = ref({
   color: 'success'
 })
 
-const showSnackbar = (text: string, color: string = 'success') => {
+const showSnackbar = (text: string, color = 'success') => {
   snackbar.value.text = text
   snackbar.value.color = color
   snackbar.value.show = true

@@ -1,434 +1,827 @@
 <template>
-    <div class="flex-grow-1" style="display: flex; flex-direction: column; height: 100%;">
-        <div style="flex-grow: 1; width: 100%; border: 1px solid #eee; border-radius: 8px; padding: 16px">
-            <v-banner lines="one">
-                <template v-slot:text>
-                    建议您更换使用新版知识库功能。
-                </template>
-            </v-banner>
-            <!-- knowledge card -->
-            <div v-if="!installed" class="d-flex align-center justify-center flex-column"
-                style="flex-grow: 1; width: 100%; height: 100%;">
-                <h2>{{ tm('notInstalled.title') }}
-                    <v-icon class="ml-2" size="small" color="grey"
-                        @click="openUrl('https://astrbot.app/use/knowledge-base.html')">mdi-information-outline</v-icon>
-                </h2>
-                <v-btn style="margin-top: 16px;" variant="tonal" color="primary" @click="installPlugin"
-                    :loading="installing">
-                    {{ tm('notInstalled.install') }}
-                </v-btn>
-                <ConsoleDisplayer v-show="installing"
-                    style="background-color: #fff; max-height: 300px; margin-top: 16px; max-width: 100%"
-                    :show-level-btns="false"></ConsoleDisplayer>
-            </div>
-            <div v-else-if="kbCollections.length == 0" class="d-flex align-center justify-center flex-column"
-                style="flex-grow: 1; width: 100%; height: 100%;">
-                <h2>{{ tm('empty.title') }}</h2>
-                <v-btn style="margin-top: 16px;" variant="tonal" color="primary" @click="showCreateDialog = true">
-                    {{ tm('empty.create') }}
-                </v-btn>
-            </div>
-            <div v-else>
-                <h2 class="mb-4">{{ tm('list.title') }}
-                    <v-icon class="ml-2" size="x-small" color="grey"
-                        @click="openUrl('https://astrbot.app/use/knowledge-base.html')">mdi-information-outline</v-icon>
-                </h2>
-                <v-btn class="mb-4" prepend-icon="mdi-plus" variant="tonal" color="primary"
-                    @click="showCreateDialog = true">
-                    {{ tm('list.create') }}
-                </v-btn>
-                <v-btn class="mb-4 ml-4" prepend-icon="mdi-cog" variant="tonal" color="success"
-                    @click="$router.push('/extension?open_config=astrbot_plugin_knowledge_base')">
-                    {{ tm('list.config') }}
-                </v-btn>
-                <v-btn class="mb-4 ml-4" prepend-icon="mdi-update" variant="tonal" color="warning"
-                    @click="checkPluginUpdate" :loading="checkingUpdate">
-                    {{ tm('list.checkUpdate') }}
-                </v-btn>
-                <v-btn v-if="pluginHasUpdate" class="mb-4 ml-4" prepend-icon="mdi-download" variant="tonal"
-                    color="primary" @click="updatePlugin" :loading="updatingPlugin">
-                    {{ tm('list.updatePlugin', { version: pluginLatestVersion }) }}
-                </v-btn>
+  <div
+    class="flex-grow-1"
+    style="display: flex; flex-direction: column; height: 100%;"
+  >
+    <div style="flex-grow: 1; width: 100%; border: 1px solid #eee; border-radius: 8px; padding: 16px">
+      <v-banner lines="one">
+        <template #text>
+          建议您更换使用新版知识库功能。
+        </template>
+      </v-banner>
+      <!-- knowledge card -->
+      <div
+        v-if="!installed"
+        class="d-flex align-center justify-center flex-column"
+        style="flex-grow: 1; width: 100%; height: 100%;"
+      >
+        <h2>
+          {{ tm('notInstalled.title') }}
+          <v-icon
+            class="ml-2"
+            size="small"
+            color="grey"
+            @click="openUrl('https://astrbot.app/use/knowledge-base.html')"
+          >
+            mdi-information-outline
+          </v-icon>
+        </h2>
+        <v-btn
+          style="margin-top: 16px;"
+          variant="tonal"
+          color="primary"
+          :loading="installing"
+          @click="installPlugin"
+        >
+          {{ tm('notInstalled.install') }}
+        </v-btn>
+        <ConsoleDisplayer
+          v-show="installing"
+          style="background-color: #fff; max-height: 300px; margin-top: 16px; max-width: 100%"
+          :show-level-btns="false"
+        />
+      </div>
+      <div
+        v-else-if="kbCollections.length == 0"
+        class="d-flex align-center justify-center flex-column"
+        style="flex-grow: 1; width: 100%; height: 100%;"
+      >
+        <h2>{{ tm('empty.title') }}</h2>
+        <v-btn
+          style="margin-top: 16px;"
+          variant="tonal"
+          color="primary"
+          @click="showCreateDialog = true"
+        >
+          {{ tm('empty.create') }}
+        </v-btn>
+      </div>
+      <div v-else>
+        <h2 class="mb-4">
+          {{ tm('list.title') }}
+          <v-icon
+            class="ml-2"
+            size="x-small"
+            color="grey"
+            @click="openUrl('https://astrbot.app/use/knowledge-base.html')"
+          >
+            mdi-information-outline
+          </v-icon>
+        </h2>
+        <v-btn
+          class="mb-4"
+          prepend-icon="mdi-plus"
+          variant="tonal"
+          color="primary"
+          @click="showCreateDialog = true"
+        >
+          {{ tm('list.create') }}
+        </v-btn>
+        <v-btn
+          class="mb-4 ml-4"
+          prepend-icon="mdi-cog"
+          variant="tonal"
+          color="success"
+          @click="$router.push('/extension?open_config=astrbot_plugin_knowledge_base')"
+        >
+          {{ tm('list.config') }}
+        </v-btn>
+        <v-btn
+          class="mb-4 ml-4"
+          prepend-icon="mdi-update"
+          variant="tonal"
+          color="warning"
+          :loading="checkingUpdate"
+          @click="checkPluginUpdate"
+        >
+          {{ tm('list.checkUpdate') }}
+        </v-btn>
+        <v-btn
+          v-if="pluginHasUpdate"
+          class="mb-4 ml-4"
+          prepend-icon="mdi-download"
+          variant="tonal"
+          color="primary"
+          :loading="updatingPlugin"
+          @click="updatePlugin"
+        >
+          {{ tm('list.updatePlugin', { version: pluginLatestVersion }) }}
+        </v-btn>
 
-                <div class="kb-grid">
-                    <div v-for="(kb, index) in kbCollections" :key="index" class="kb-card"
-                        @click="openKnowledgeBase(kb)">
-                        <div class="book-spine"></div>
-                        <div class="book-content">
-                            <div class="emoji-container">
-                                <span class="kb-emoji">{{ kb.emoji || '🙂' }}</span>
-                            </div>
-                            <div class="kb-name">{{ kb.collection_name }}</div>
-                            <div class="kb-count">{{ kb.count || 0 }} {{ tm('list.knowledgeCount') }}</div>
-                            <div class="kb-actions">
-                                <v-btn icon variant="text" size="small" color="error" @click.stop="confirmDelete(kb)">
-                                    <v-icon>mdi-delete</v-icon>
-                                </v-btn>
-                            </div>
-                        </div>
-                    </div>
+        <div class="kb-grid">
+          <div
+            v-for="(kb, index) in kbCollections"
+            :key="index"
+            class="kb-card"
+            @click="openKnowledgeBase(kb)"
+          >
+            <div class="book-spine" />
+            <div class="book-content">
+              <div class="emoji-container">
+                <span class="kb-emoji">{{ kb.emoji || '🙂' }}</span>
+              </div>
+              <div class="kb-name">
+                {{ kb.collection_name }}
+              </div>
+              <div class="kb-count">
+                {{ kb.count || 0 }} {{ tm('list.knowledgeCount') }}
+              </div>
+              <div class="kb-actions">
+                <v-btn
+                  icon
+                  variant="text"
+                  size="small"
+                  color="error"
+                  @click.stop="confirmDelete(kb)"
+                >
+                  <v-icon>mdi-delete</v-icon>
+                </v-btn>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 创建知识库对话框 -->
+    <v-dialog
+      v-model="showCreateDialog"
+      max-width="500px"
+    >
+      <v-card>
+        <v-card-title class="text-h4">
+          {{ tm('createDialog.title') }}
+        </v-card-title>
+        <v-card-text>
+          <div style="width: 100%; display: flex; align-items: center; justify-content: center;">
+            <span
+              id="emoji-display"
+              @click="showEmojiPicker = true"
+            >
+              {{ newKB.emoji || '🙂' }}
+            </span>
+          </div>
+          <v-form @submit.prevent="submitCreateForm">
+            <v-text-field
+              v-model="newKB.name"
+              variant="outlined"
+              :label="tm('createDialog.nameLabel')"
+              required
+            />
+
+            <v-textarea
+              v-model="newKB.description"
+              :label="tm('createDialog.descriptionLabel')"
+              variant="outlined"
+              :placeholder="tm('createDialog.descriptionPlaceholder')"
+              rows="3"
+            />
+
+            <v-select
+              v-model="newKB.embedding_provider_id"
+              :items="embeddingProviderConfigs"
+              :item-props="embeddingModelProps"
+              :label="tm('createDialog.embeddingModelLabel')"
+              variant="outlined"
+              density="comfortable"
+            />
+
+            <v-select
+              v-model="newKB.rerank_provider_id"
+              :items="rerankProviderConfigs"
+              :item-props="rerankModelProps"
+              :label="tm('createDialog.rerankModelLabel')"
+              variant="outlined"
+              density="comfortable"
+            />
+
+            <small>{{ tm('createDialog.tips') }}</small>
+          </v-form>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn
+            color="error"
+            variant="text"
+            @click="showCreateDialog = false"
+          >
+            {{ tm('createDialog.cancel')
+            }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="text"
+            @click="submitCreateForm"
+          >
+            {{ tm('createDialog.create')
+            }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- 表情选择器对话框 -->
+    <v-dialog
+      v-model="showEmojiPicker"
+      max-width="400px"
+    >
+      <v-card>
+        <v-card-title class="text-h6">
+          {{ tm('emojiPicker.title') }}
+        </v-card-title>
+        <v-card-text>
+          <div class="emoji-picker">
+            <div
+              v-for="(category, catIndex) in emojiCategories"
+              :key="catIndex"
+              class="mb-4"
+            >
+              <div class="text-subtitle-2 mb-2">
+                {{ tm(`emojiPicker.categories.${category.key}`) }}
+              </div>
+              <div class="emoji-grid">
+                <div
+                  v-for="(emoji, emojiIndex) in category.emojis"
+                  :key="emojiIndex"
+                  class="emoji-item"
+                  @click="selectEmoji(emoji)"
+                >
+                  {{ emoji }}
                 </div>
-
+              </div>
             </div>
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn
+            color="primary"
+            variant="text"
+            @click="showEmojiPicker = false"
+          >
+            {{ tm('emojiPicker.close')
+            }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
+    <!-- 知识库内容管理对话框 -->
+    <v-dialog
+      v-model="showContentDialog"
+      max-width="1000px"
+    >
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <div class="me-2 emoji-sm">
+            {{ currentKB.emoji || '🙂' }}
+          </div>
+          <span>{{ currentKB.collection_name }} - {{ tm('contentDialog.title') }}</span>
+          <v-spacer />
+          <v-btn
+            variant="plain"
+            icon
+            @click="showContentDialog = false"
+          >
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+
+        <div
+          v-if="currentKB._embedding_provider_config"
+          class="px-6 py-2"
+        >
+          <v-chip
+            class="mr-2"
+            color="primary"
+            variant="tonal"
+            size="small"
+            rounded="sm"
+          >
+            <v-icon
+              start
+              size="small"
+            >
+              mdi-database
+            </v-icon>
+            {{ tm('contentDialog.embeddingModel') }}: {{
+              currentKB._embedding_provider_config.embedding_model }}
+          </v-chip>
+
+          <v-chip
+            v-if="currentKB.rerank_provider_id"
+            color="tertiary"
+            variant="tonal"
+            size="small"
+            rounded="sm"
+          >
+            <v-icon
+              start
+              size="small"
+            >
+              mdi-sort-variant
+            </v-icon>
+            重排序模型: {{ rerankProviderConfigs.
+              find(provider => provider.id === currentKB.rerank_provider_id)?.rerank_model || '未设置' }}
+          </v-chip>
+          <small style="margin-left: 8px;">💡 使用方式: 在聊天页中输入 "/kb use {{ currentKB.collection_name }}"</small>
         </div>
 
-        <!-- 创建知识库对话框 -->
-        <v-dialog v-model="showCreateDialog" max-width="500px">
-            <v-card>
-                <v-card-title class="text-h4">{{ tm('createDialog.title') }}</v-card-title>
-                <v-card-text>
+        <v-card-text>
+          <v-tabs v-model="activeTab">
+            <v-tab value="import">
+              导入数据
+            </v-tab>
+            <v-tab value="search">
+              {{ tm('contentDialog.tabs.search') }}
+            </v-tab>
+          </v-tabs>
 
-                    <div style="width: 100%; display: flex; align-items: center; justify-content: center;">
-                        <span id="emoji-display" @click="showEmojiPicker = true">
-                            {{ newKB.emoji || '🙂' }}
-                        </span>
-                    </div>
-                    <v-form @submit.prevent="submitCreateForm">
-
-
-                        <v-text-field variant="outlined" v-model="newKB.name" :label="tm('createDialog.nameLabel')"
-                            required></v-text-field>
-
-                        <v-textarea v-model="newKB.description" :label="tm('createDialog.descriptionLabel')"
-                            variant="outlined" :placeholder="tm('createDialog.descriptionPlaceholder')"
-                            rows="3"></v-textarea>
-
-                        <v-select v-model="newKB.embedding_provider_id" :items="embeddingProviderConfigs"
-                            :item-props="embeddingModelProps" :label="tm('createDialog.embeddingModelLabel')"
-                            variant="outlined" density="comfortable">
-                        </v-select>
-
-                        <v-select v-model="newKB.rerank_provider_id" :items="rerankProviderConfigs"
-                            :item-props="rerankModelProps" :label="tm('createDialog.rerankModelLabel')"
-                            variant="outlined" density="comfortable">
-                        </v-select>
-
-                        <small>{{ tm('createDialog.tips') }}</small>
-                    </v-form>
-                </v-card-text>
-                <v-card-actions>
-                    <v-spacer></v-spacer>
-                    <v-btn color="error" variant="text" @click="showCreateDialog = false">{{ tm('createDialog.cancel')
-                        }}</v-btn>
-                    <v-btn color="primary" variant="text" @click="submitCreateForm">{{ tm('createDialog.create')
-                        }}</v-btn>
-                </v-card-actions>
-            </v-card>
-        </v-dialog>
-
-        <!-- 表情选择器对话框 -->
-        <v-dialog v-model="showEmojiPicker" max-width="400px">
-            <v-card>
-                <v-card-title class="text-h6">{{ tm('emojiPicker.title') }}</v-card-title>
-                <v-card-text>
-                    <div class="emoji-picker">
-                        <div v-for="(category, catIndex) in emojiCategories" :key="catIndex" class="mb-4">
-                            <div class="text-subtitle-2 mb-2">{{ tm(`emojiPicker.categories.${category.key}`) }}</div>
-                            <div class="emoji-grid">
-                                <div v-for="(emoji, emojiIndex) in category.emojis" :key="emojiIndex" class="emoji-item"
-                                    @click="selectEmoji(emoji)">
-                                    {{ emoji }}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </v-card-text>
-                <v-card-actions>
-                    <v-spacer></v-spacer>
-                    <v-btn color="primary" variant="text" @click="showEmojiPicker = false">{{ tm('emojiPicker.close')
-                        }}</v-btn>
-                </v-card-actions>
-            </v-card>
-        </v-dialog>
-
-        <!-- 知识库内容管理对话框 -->
-        <v-dialog v-model="showContentDialog" max-width="1000px">
-            <v-card>
-                <v-card-title class="d-flex align-center">
-                    <div class="me-2 emoji-sm">{{ currentKB.emoji || '🙂' }}</div>
-                    <span>{{ currentKB.collection_name }} - {{ tm('contentDialog.title') }}</span>
-                    <v-spacer></v-spacer>
-                    <v-btn variant="plain" icon @click="showContentDialog = false">
-                        <v-icon>mdi-close</v-icon>
-                    </v-btn>
-                </v-card-title>
-
-                <div v-if="currentKB._embedding_provider_config" class="px-6 py-2">
-                    <v-chip class="mr-2" color="primary" variant="tonal" size="small" rounded="sm">
-                        <v-icon start size="small">mdi-database</v-icon>
-                        {{ tm('contentDialog.embeddingModel') }}: {{
-                            currentKB._embedding_provider_config.embedding_model }}
-                    </v-chip>
-
-                    <v-chip v-if="currentKB.rerank_provider_id" color="tertiary" variant="tonal" size="small"
-                        rounded="sm">
-                        <v-icon start size="small">mdi-sort-variant</v-icon>
-                        重排序模型: {{rerankProviderConfigs.
-                            find(provider => provider.id === currentKB.rerank_provider_id)?.rerank_model || '未设置'}}
-                    </v-chip>
-                    <small style="margin-left: 8px;">💡 使用方式: 在聊天页中输入 "/kb use {{ currentKB.collection_name }}"</small>
+          <v-window
+            v-model="activeTab"
+            class="mt-4"
+          >
+            <!-- 导入数据标签页 -->
+            <v-window-item value="import">
+              <div class="import-container pa-4">
+                <div class="mb-8">
+                  <h2>导入数据</h2>
+                  <p class="text-subtitle-1">
+                    选择数据源并导入内容到知识库
+                  </p>
                 </div>
 
-                <v-card-text>
-                    <v-tabs v-model="activeTab">
-                        <v-tab value="import">导入数据</v-tab>
-                        <v-tab value="search">{{ tm('contentDialog.tabs.search') }}</v-tab>
-                    </v-tabs>
+                <!-- 数据源选择下拉列表 -->
+                <v-select
+                  v-model="dataSource"
+                  :items="dataSourceOptions"
+                  :label="'数据源选择'"
+                  variant="outlined"
+                  item-title="title"
+                  item-value="value"
+                  prepend-inner-icon="mdi-database"
+                />
 
-                    <v-window v-model="activeTab" class="mt-4">
-                        <!-- 导入数据标签页 -->
-                        <v-window-item value="import">
-                            <div class="import-container pa-4">
-                                <div class="mb-8">
-                                    <h2>导入数据</h2>
-                                    <p class="text-subtitle-1">选择数据源并导入内容到知识库</p>
-                                </div>
+                <!-- 从文件导入 -->
+                <div
+                  v-if="dataSource === 'file'"
+                  class="mt-4"
+                >
+                  <div
+                    class="upload-zone"
+                    @dragover.prevent
+                    @drop.prevent="onFileDrop"
+                    @click="triggerFileInput"
+                  >
+                    <input
+                      ref="fileInput"
+                      type="file"
+                      style="display: none"
+                      @change="onFileSelected"
+                    >
+                    <v-icon
+                      size="48"
+                      color="primary"
+                    >
+                      mdi-cloud-upload
+                    </v-icon>
+                    <p class="mt-2">
+                      {{ tm('upload.dropzone') }}
+                    </p>
+                  </div>
 
-                                <!-- 数据源选择下拉列表 -->
-                                <v-select v-model="dataSource" :items="dataSourceOptions" :label="'数据源选择'"
-                                    variant="outlined" item-title="title" item-value="value"
-                                    prepend-inner-icon="mdi-database"></v-select>
+                  <!-- 分片长度和重叠长度设置 -->
+                  <v-card
+                    class="mt-4 chunk-settings-card"
+                    variant="outlined"
+                    color="grey-lighten-4"
+                  >
+                    <v-card-title class="pa-4 pb-0 d-flex align-center">
+                      <v-icon
+                        color="primary"
+                        class="mr-2"
+                      >
+                        mdi-puzzle-outline
+                      </v-icon>
+                      <span class="text-subtitle-1 font-weight-bold">{{
+                        tm('upload.chunkSettings.title') }}</span>
+                      <v-tooltip location="top">
+                        <template #activator="{ props }">
+                          <v-icon
+                            v-bind="props"
+                            class="ml-2"
+                            size="small"
+                            color="grey"
+                          >
+                            mdi-information-outline
+                          </v-icon>
+                        </template>
+                        <span>
+                          {{ tm('upload.chunkSettings.tooltip') }}
+                        </span>
+                      </v-tooltip>
+                    </v-card-title>
+                    <v-card-text class="pa-4 pt-2">
+                      <div
+                        class="d-flex flex-wrap"
+                        style="gap: 8px"
+                      >
+                        <v-text-field
+                          v-model="chunkSize"
+                          :label="tm('upload.chunkSettings.chunkSizeLabel')"
+                          type="number"
+                          :hint="tm('upload.chunkSettings.chunkSizeHint')"
+                          persistent-hint
+                          variant="outlined"
+                          density="comfortable"
+                          class="flex-grow-1 chunk-field"
+                          prepend-inner-icon="mdi-text-box-outline"
+                          min="50"
+                        />
 
-                                <!-- 从文件导入 -->
-                                <div v-if="dataSource === 'file'" class="mt-4">
-                                    <div class="upload-zone" @dragover.prevent @drop.prevent="onFileDrop"
-                                        @click="triggerFileInput">
-                                        <input type="file" ref="fileInput" style="display: none"
-                                            @change="onFileSelected" />
-                                        <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
-                                        <p class="mt-2">{{ tm('upload.dropzone') }}</p>
-                                    </div>
+                        <v-text-field
+                          v-model="overlap"
+                          :label="tm('upload.chunkSettings.overlapLabel')"
+                          type="number"
+                          :hint="tm('upload.chunkSettings.overlapHint')"
+                          persistent-hint
+                          variant="outlined"
+                          density="comfortable"
+                          class="flex-grow-1 chunk-field"
+                          prepend-inner-icon="mdi-vector-intersection"
+                          min="0"
+                        />
+                      </div>
+                    </v-card-text>
+                  </v-card>
 
-                                    <!-- 分片长度和重叠长度设置 -->
-                                    <v-card class="mt-4 chunk-settings-card" variant="outlined" color="grey-lighten-4">
-                                        <v-card-title class="pa-4 pb-0 d-flex align-center">
-                                            <v-icon color="primary" class="mr-2">mdi-puzzle-outline</v-icon>
-                                            <span class="text-subtitle-1 font-weight-bold">{{
-                                                tm('upload.chunkSettings.title') }}</span>
-                                            <v-tooltip location="top">
-                                                <template v-slot:activator="{ props }">
-                                                    <v-icon v-bind="props" class="ml-2" size="small" color="grey">
-                                                        mdi-information-outline
-                                                    </v-icon>
-                                                </template>
-                                                <span>
-                                                    {{ tm('upload.chunkSettings.tooltip') }}
-                                                </span>
-                                            </v-tooltip>
-                                        </v-card-title>
-                                        <v-card-text class="pa-4 pt-2">
-                                            <div class="d-flex flex-wrap" style="gap: 8px">
-                                                <v-text-field v-model="chunkSize"
-                                                    :label="tm('upload.chunkSettings.chunkSizeLabel')" type="number"
-                                                    :hint="tm('upload.chunkSettings.chunkSizeHint')" persistent-hint
-                                                    variant="outlined" density="comfortable"
-                                                    class="flex-grow-1 chunk-field"
-                                                    prepend-inner-icon="mdi-text-box-outline" min="50"></v-text-field>
+                  <div
+                    v-if="selectedFile"
+                    class="selected-files mt-4"
+                  >
+                    <div
+                      type="info"
+                      variant="tonal"
+                      class="d-flex align-center"
+                    >
+                      <div>
+                        <v-icon class="me-2">
+                          {{ getFileIcon(selectedFile.name) }}
+                        </v-icon>
+                        <span style="font-weight: 1000;">{{ selectedFile.name }}</span>
+                      </div>
+                      <v-btn
+                        size="small"
+                        color="error"
+                        variant="text"
+                        @click="selectedFile = null"
+                      >
+                        <v-icon>mdi-close</v-icon>
+                      </v-btn>
+                    </div>
 
-                                                <v-text-field v-model="overlap"
-                                                    :label="tm('upload.chunkSettings.overlapLabel')" type="number"
-                                                    :hint="tm('upload.chunkSettings.overlapHint')" persistent-hint
-                                                    variant="outlined" density="comfortable"
-                                                    class="flex-grow-1 chunk-field"
-                                                    prepend-inner-icon="mdi-vector-intersection" min="0"></v-text-field>
-                                            </div>
-                                        </v-card-text>
-                                    </v-card>
+                    <div class="text-center mt-4">
+                      <v-btn
+                        color="primary"
+                        variant="elevated"
+                        :loading="uploading"
+                        :disabled="!selectedFile"
+                        @click="uploadFile"
+                      >
+                        {{ tm('upload.upload') }}
+                      </v-btn>
+                    </div>
+                  </div>
 
-                                    <div class="selected-files mt-4" v-if="selectedFile">
-                                        <div type="info" variant="tonal" class="d-flex align-center">
-                                            <div>
-                                                <v-icon class="me-2">{{ getFileIcon(selectedFile.name) }}</v-icon>
-                                                <span style="font-weight: 1000;">{{ selectedFile.name }}</span>
-                                            </div>
-                                            <v-btn size="small" color="error" variant="text"
-                                                @click="selectedFile = null">
-                                                <v-icon>mdi-close</v-icon>
-                                            </v-btn>
-                                        </div>
+                  <div
+                    v-if="uploading"
+                    class="upload-progress mt-4"
+                  >
+                    <v-progress-linear
+                      indeterminate
+                      color="primary"
+                    />
+                  </div>
+                </div>
 
-                                        <div class="text-center mt-4">
-                                            <v-btn color="primary" variant="elevated" :loading="uploading"
-                                                :disabled="!selectedFile" @click="uploadFile">
-                                                {{ tm('upload.upload') }}
-                                            </v-btn>
-                                        </div>
-                                    </div>
+                <!-- 从URL导入 -->
+                <div
+                  v-if="dataSource === 'url'"
+                  class="from-url-container"
+                >
+                  <v-alert
+                    type="info"
+                    variant="tonal"
+                    class="mb-4"
+                    border
+                  >
+                    {{ tm('importFromUrl.preRequisite') }}
+                  </v-alert>
+                  <v-text-field
+                    v-model="importUrl"
+                    :label="tm('importFromUrl.urlLabel')"
+                    :placeholder="tm('importFromUrl.urlPlaceholder')"
+                    variant="outlined"
+                    class="mb-4"
+                    hide-details
+                  />
 
-                                    <div class="upload-progress mt-4" v-if="uploading">
-                                        <v-progress-linear indeterminate color="primary"></v-progress-linear>
-                                    </div>
-                                </div>
+                  <v-card
+                    class="mb-4"
+                    variant="outlined"
+                    color="grey-lighten-4"
+                  >
+                    <v-card-title class="pa-4 pb-0 d-flex align-center">
+                      <v-icon
+                        color="primary"
+                        class="mr-2"
+                      >
+                        mdi-cog-outline
+                      </v-icon>
+                      <span class="text-subtitle-1 font-weight-bold">{{
+                        tm('importFromUrl.optionsTitle') }}</span>
+                      <v-tooltip location="top">
+                        <template #activator="{ props }">
+                          <v-icon
+                            v-bind="props"
+                            class="ml-2"
+                            size="small"
+                            color="grey"
+                          >
+                            mdi-information-outline
+                          </v-icon>
+                        </template>
+                        <span>{{ tm('importFromUrl.tooltip') }}</span>
+                      </v-tooltip>
+                    </v-card-title>
+                    <v-card-text class="pa-4 pt-2">
+                      <v-row>
+                        <v-col
+                          cols="12"
+                          md="6"
+                        >
+                          <v-switch
+                            v-model="importOptions.use_llm_repair"
+                            hide-details
+                            :label="tm('importFromUrl.useLlmRepairLabel')"
+                            color="primary"
+                            inset
+                          />
+                        </v-col>
+                        <v-col
+                          cols="12"
+                          md="6"
+                        >
+                          <v-switch
+                            v-model="importOptions.use_clustering_summary"
+                            hide-details
+                            :label="tm('importFromUrl.useClusteringSummaryLabel')"
+                            color="primary"
+                            inset
+                          />
+                        </v-col>
+                        <v-row class="pa-4">
+                          <!-- Optional Repair Selector -->
+                          <v-col
+                            v-if="importOptions.use_llm_repair"
+                            :md="optionalSelectorColWidth"
+                            cols="12"
+                          >
+                            <v-select
+                              v-model="importOptions.repair_llm_provider_id"
+                              :items="llmProviderConfigs"
+                              item-value="id"
+                              :item-props="llmModelProps"
+                              :label="tm('importFromUrl.repairLlmProviderIdLabel')"
+                              variant="outlined"
+                              clearable
+                              hide-details
+                            />
+                          </v-col>
 
-                                <!-- 从URL导入 -->
-                                <div v-if="dataSource === 'url'" class="from-url-container">
-                                    <v-alert type="info" variant="tonal" class="mb-4" border>
-                                        {{ tm('importFromUrl.preRequisite') }}
-                                    </v-alert>
-                                    <v-text-field v-model="importUrl" :label="tm('importFromUrl.urlLabel')"
-                                        :placeholder="tm('importFromUrl.urlPlaceholder')" variant="outlined"
-                                        class="mb-4" hide-details></v-text-field>
+                          <!-- Optional Summary Selector -->
+                          <v-col
+                            v-if="importOptions.use_clustering_summary"
+                            :md="optionalSelectorColWidth"
+                            cols="12"
+                          >
+                            <v-select
+                              v-model="importOptions.summarize_llm_provider_id"
+                              :items="llmProviderConfigs"
+                              item-value="id"
+                              :item-props="llmModelProps"
+                              :label="tm('importFromUrl.summarizeLlmProviderIdLabel')"
+                              variant="outlined"
+                              clearable
+                              hide-details
+                            />
+                          </v-col>
 
-                                    <v-card class="mb-4" variant="outlined" color="grey-lighten-4">
-                                        <v-card-title class="pa-4 pb-0 d-flex align-center">
-                                            <v-icon color="primary" class="mr-2">mdi-cog-outline</v-icon>
-                                            <span class="text-subtitle-1 font-weight-bold">{{
-                                                tm('importFromUrl.optionsTitle') }}</span>
-                                            <v-tooltip location="top">
-                                                <template v-slot:activator="{ props }">
-                                                    <v-icon v-bind="props" class="ml-2" size="small"
-                                                        color="grey">mdi-information-outline</v-icon>
-                                                </template>
-                                                <span>{{ tm('importFromUrl.tooltip') }}</span>
-                                            </v-tooltip>
-                                        </v-card-title>
-                                        <v-card-text class="pa-4 pt-2">
-                                            <v-row>
-                                                <v-col cols="12" md="6">
-                                                    <v-switch hide-details v-model="importOptions.use_llm_repair"
-                                                        :label="tm('importFromUrl.useLlmRepairLabel')" color="primary"
-                                                        inset></v-switch>
-                                                </v-col>
-                                                <v-col cols="12" md="6">
-                                                    <v-switch v-model="importOptions.use_clustering_summary"
-                                                        hide-details
-                                                        :label="tm('importFromUrl.useClusteringSummaryLabel')"
-                                                        color="primary" inset></v-switch>
-                                                </v-col>
-                                                <v-row class="pa-4">
-                                                    <!-- Optional Repair Selector -->
-                                                    <v-col v-if="importOptions.use_llm_repair"
-                                                        :md="optionalSelectorColWidth" cols="12">
-                                                        <v-select v-model="importOptions.repair_llm_provider_id"
-                                                            :items="llmProviderConfigs" item-value="id"
-                                                            :item-props="llmModelProps"
-                                                            :label="tm('importFromUrl.repairLlmProviderIdLabel')"
-                                                            variant="outlined" clearable hide-details></v-select>
-                                                    </v-col>
+                          <v-col
+                            cols="12"
+                            md="6"
+                          >
+                            <v-select
+                              v-model="importOptions.embedding_provider_id"
+                              :items="embeddingProviderConfigs"
+                              item-value="id"
+                              :item-props="embeddingModelProps"
+                              :label="tm('importFromUrl.embeddingProviderIdLabel')"
+                              variant="outlined"
+                              clearable
+                              hide-details
+                            />
+                          </v-col>
+                          <v-col
+                            cols="12"
+                            md="3"
+                          >
+                            <v-text-field
+                              v-model="importOptions.chunk_size"
+                              :label="tm('importFromUrl.chunkSizeLabel')"
+                              type="number"
+                              variant="outlined"
+                              clearable
+                              hide-details
+                            />
+                          </v-col>
+                          <v-col
+                            cols="12"
+                            md="3"
+                          >
+                            <v-text-field
+                              v-model="importOptions.chunk_overlap"
+                              :label="tm('importFromUrl.chunkOverlapLabel')"
+                              type="number"
+                              variant="outlined"
+                              clearable
+                              hide-details
+                            />
+                          </v-col>
+                        </v-row>
+                      </v-row>
+                    </v-card-text>
+                  </v-card>
 
-                                                    <!-- Optional Summary Selector -->
-                                                    <v-col v-if="importOptions.use_clustering_summary"
-                                                        :md="optionalSelectorColWidth" cols="12">
-                                                        <v-select v-model="importOptions.summarize_llm_provider_id"
-                                                            :items="llmProviderConfigs" item-value="id"
-                                                            :item-props="llmModelProps"
-                                                            :label="tm('importFromUrl.summarizeLlmProviderIdLabel')"
-                                                            variant="outlined" clearable hide-details></v-select>
-                                                    </v-col>
+                  <div class="text-center">
+                    <v-btn
+                      color="primary"
+                      variant="elevated"
+                      :loading="importing"
+                      :disabled="!importUrl"
+                      @click="startImportFromUrl"
+                    >
+                      {{ tm('importFromUrl.startImport') }}
+                    </v-btn>
+                  </div>
+                </div>
+              </div>
+            </v-window-item>
 
-                                                    <v-col cols="12" md="6">
-                                                        <v-select v-model="importOptions.embedding_provider_id"
-                                                            :items="embeddingProviderConfigs" item-value="id"
-                                                            :item-props="embeddingModelProps"
-                                                            :label="tm('importFromUrl.embeddingProviderIdLabel')"
-                                                            variant="outlined" clearable hide-details></v-select>
-                                                    </v-col>
-                                                    <v-col cols="12" md="3">
-                                                        <v-text-field v-model="importOptions.chunk_size"
-                                                            :label="tm('importFromUrl.chunkSizeLabel')" type="number"
-                                                            variant="outlined" clearable hide-details></v-text-field>
-                                                    </v-col>
-                                                    <v-col cols="12" md="3">
-                                                        <v-text-field v-model="importOptions.chunk_overlap"
-                                                            :label="tm('importFromUrl.chunkOverlapLabel')" type="number"
-                                                            variant="outlined" clearable hide-details></v-text-field>
-                                                    </v-col>
-                                                </v-row>
-                                            </v-row>
-                                        </v-card-text>
-                                    </v-card>
+            <!-- 搜索内容标签页 -->
+            <v-window-item value="search">
+              <div class="search-container pa-4">
+                <v-form
+                  class="d-flex align-center"
+                  @submit.prevent="searchKnowledgeBase"
+                >
+                  <v-text-field
+                    :model-value="searchQuery"
+                    :label="tm('search.queryLabel')"
+                    append-icon="mdi-magnify"
+                    variant="outlined"
+                    class="flex-grow-1 me-2"
+                    :placeholder="tm('search.queryPlaceholder')"
+                    hide-details
+                    clearable
+                    @update:model-value="onSearchQueryInput"
+                    @click:append="searchKnowledgeBase"
+                    @keyup.enter="searchKnowledgeBase"
+                  />
 
-                                    <div class="text-center">
-                                        <v-btn color="primary" variant="elevated" :loading="importing"
-                                            :disabled="!importUrl" @click="startImportFromUrl">
-                                            {{ tm('importFromUrl.startImport') }}
-                                        </v-btn>
-                                    </div>
-                                </div>
-                            </div>
-                        </v-window-item>
+                  <v-select
+                    v-model="topK"
+                    :items="[3, 5, 10, 20]"
+                    :label="tm('search.resultCountLabel')"
+                    variant="outlined"
+                    style="max-width: 120px;"
+                    hide-details
+                  />
+                </v-form>
 
-                        <!-- 搜索内容标签页 -->
-                        <v-window-item value="search">
-                            <div class="search-container pa-4">
-                                <v-form @submit.prevent="searchKnowledgeBase" class="d-flex align-center">
-                                    <v-text-field :model-value="searchQuery"
-                                        @update:model-value="onSearchQueryInput" :label="tm('search.queryLabel')"
-                                        append-icon="mdi-magnify" variant="outlined" class="flex-grow-1 me-2"
-                                        @click:append="searchKnowledgeBase" @keyup.enter="searchKnowledgeBase"
-                                        :placeholder="tm('search.queryPlaceholder')" hide-details clearable></v-text-field>
+                <div class="search-results mt-4">
+                  <div v-if="searching">
+                    <v-progress-linear
+                      indeterminate
+                      color="primary"
+                    />
+                    <p class="text-center mt-4">
+                      {{ tm('search.searching') }}
+                    </p>
+                  </div>
 
-                                    <v-select v-model="topK" :items="[3, 5, 10, 20]"
-                                        :label="tm('search.resultCountLabel')" variant="outlined"
-                                        style="max-width: 120px;" hide-details></v-select>
-                                </v-form>
+                  <div v-else-if="searchResults.length > 0">
+                    <h3 class="mb-2">
+                      {{ tm('search.resultsTitle') }}
+                    </h3>
+                    <v-card
+                      v-for="(result, index) in searchResults"
+                      :key="index"
+                      class="mb-4 search-result-card"
+                      variant="outlined"
+                    >
+                      <v-card-text>
+                        <div class="d-flex align-center mb-2">
+                          <v-icon
+                            class="me-2"
+                            size="small"
+                            color="primary"
+                          >
+                            mdi-file-document-outline
+                          </v-icon>
+                          <span class="text-caption text-medium-emphasis">{{
+                            result.metadata.source }}</span>
+                          <v-spacer />
+                          <v-chip
+                            v-if="result.score"
+                            size="small"
+                            color="primary"
+                            variant="tonal"
+                          >
+                            {{ tm('search.relevance') }}: {{ Math.round(result.score * 100)
+                            }}%
+                          </v-chip>
+                        </div>
+                        <div class="search-content">
+                          {{ result.content }}
+                        </div>
+                      </v-card-text>
+                    </v-card>
+                  </div>
 
-                                <div class="search-results mt-4">
-                                    <div v-if="searching">
-                                        <v-progress-linear indeterminate color="primary"></v-progress-linear>
-                                        <p class="text-center mt-4">{{ tm('search.searching') }}</p>
-                                    </div>
+                  <div v-else-if="searchPerformed">
+                    <v-alert
+                      type="info"
+                      variant="tonal"
+                    >
+                      {{ tm('search.noResults') }}
+                    </v-alert>
+                  </div>
+                </div>
+              </div>
+            </v-window-item>
+          </v-window>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
 
-                                    <div v-else-if="searchResults.length > 0">
-                                        <h3 class="mb-2">{{ tm('search.resultsTitle') }}</h3>
-                                        <v-card v-for="(result, index) in searchResults" :key="index"
-                                            class="mb-4 search-result-card" variant="outlined">
-                                            <v-card-text>
-                                                <div class="d-flex align-center mb-2">
-                                                    <v-icon class="me-2" size="small"
-                                                        color="primary">mdi-file-document-outline</v-icon>
-                                                    <span class="text-caption text-medium-emphasis">{{
-                                                        result.metadata.source }}</span>
-                                                    <v-spacer></v-spacer>
-                                                    <v-chip v-if="result.score" size="small" color="primary"
-                                                        variant="tonal">
-                                                        {{ tm('search.relevance') }}: {{ Math.round(result.score * 100)
-                                                        }}%
-                                                    </v-chip>
-                                                </div>
-                                                <div class="search-content">{{ result.content }}</div>
-                                            </v-card-text>
-                                        </v-card>
-                                    </div>
+    <!-- 删除知识库确认对话框 -->
+    <v-dialog
+      v-model="showDeleteDialog"
+      max-width="400px"
+    >
+      <v-card>
+        <v-card-title class="text-h5">
+          {{ tm('deleteDialog.title') }}
+        </v-card-title>
+        <v-card-text>
+          <p>{{ tm('deleteDialog.confirmText', { name: deleteTarget.collection_name }) }}</p>
+          <p class="text-red">
+            {{ tm('deleteDialog.warning') }}
+          </p>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn
+            color="grey-darken-1"
+            variant="text"
+            @click="showDeleteDialog = false"
+          >
+            {{
+              tm('deleteDialog.cancel')
+            }}
+          </v-btn>
+          <v-btn
+            color="error"
+            variant="text"
+            :loading="deleting"
+            @click="deleteKnowledgeBase"
+          >
+            {{
+              tm('deleteDialog.delete') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
-                                    <div v-else-if="searchPerformed">
-                                        <v-alert type="info" variant="tonal">
-                                            {{ tm('search.noResults') }}
-                                        </v-alert>
-                                    </div>
-                                </div>
-                            </div>
-                        </v-window-item>
-                    </v-window>
-                </v-card-text>
-            </v-card>
-        </v-dialog>
-
-        <!-- 删除知识库确认对话框 -->
-        <v-dialog v-model="showDeleteDialog" max-width="400px">
-            <v-card>
-                <v-card-title class="text-h5">{{ tm('deleteDialog.title') }}</v-card-title>
-                <v-card-text>
-                    <p>{{ tm('deleteDialog.confirmText', { name: deleteTarget.collection_name }) }}</p>
-                    <p class="text-red">{{ tm('deleteDialog.warning') }}</p>
-                </v-card-text>
-                <v-card-actions>
-                    <v-spacer></v-spacer>
-                    <v-btn color="grey-darken-1" variant="text" @click="showDeleteDialog = false">{{
-                        tm('deleteDialog.cancel')
-                        }}</v-btn>
-                    <v-btn color="error" variant="text" @click="deleteKnowledgeBase" :loading="deleting">{{
-                        tm('deleteDialog.delete') }}</v-btn>
-                </v-card-actions>
-            </v-card>
-        </v-dialog>
-
-        <!-- 消息提示 -->
-        <v-snackbar v-model="snackbar.show" :color="snackbar.color">
-            {{ snackbar.text }}
-        </v-snackbar>
-    </div>
+    <!-- 消息提示 -->
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+    >
+      {{ snackbar.text }}
+    </v-snackbar>
+  </div>
 </template>
 
 <script>
@@ -580,6 +973,11 @@ export default {
     mounted() {
         this.checkPlugin();
         this.getProviderList();
+    },
+    beforeUnmount() {
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+        }
     },
     methods: {
         onSearchQueryInput(value) {
@@ -1165,11 +1563,6 @@ export default {
             }
             return response.data;
         },
-    },
-    beforeUnmount() {
-        if (this.pollingInterval) {
-            clearInterval(this.pollingInterval);
-        }
     },
 }
 </script>

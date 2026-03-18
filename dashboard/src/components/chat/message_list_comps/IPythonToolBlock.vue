@@ -1,24 +1,41 @@
 <template>
-    <div class="ipython-tool-block" :class="{ compact: !showHeader }">
-        <div v-if="displayExpanded" class="py-3 animate-fade-in">
-            <!-- Code Section -->
-            <div class="code-section">
-                <div v-if="shikiReady && code" class="code-highlighted"
-                    v-html="highlightedCode"></div>
-                <pre v-else class="code-fallback"
-                    :class="{ 'dark-theme': isDark }">{{ code || 'No code available' }}</pre>
-            </div>
+  <div
+    class="ipython-tool-block"
+    :class="{ compact: !showHeader }"
+  >
+    <div
+      v-if="displayExpanded"
+      class="py-3 animate-fade-in"
+    >
+      <!-- Code Section -->
+      <div class="code-section">
+        <div
+          v-if="shikiReady && code"
+          class="code-highlighted"
+          v-html="highlightedCode"
+        />
+        <pre
+          v-else
+          class="code-fallback"
+          :class="{ 'dark-theme': isDark }"
+        >{{ code || 'No code available' }}</pre>
+      </div>
 
-            <!-- Result Section -->
-            <div v-if="result" class="result-section">
-                <div class="result-label">
-                    {{ tm('ipython.output') }}:
-                </div>
-                <pre class="result-content"
-                    :class="{ 'dark-theme': isDark }">{{ formattedResult }}</pre>
-            </div>
+      <!-- Result Section -->
+      <div
+        v-if="result"
+        class="result-section"
+      >
+        <div class="result-label">
+          {{ tm('ipython.output') }}:
         </div>
+        <pre
+          class="result-content"
+          :class="{ 'dark-theme': isDark }"
+        >{{ formattedResult }}</pre>
+      </div>
     </div>
+  </div>
 </template>
 
 <script setup>

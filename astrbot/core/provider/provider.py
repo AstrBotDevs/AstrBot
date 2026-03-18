@@ -2,7 +2,10 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator
-from typing import TypeAlias, Union
+from typing import TypeAlias, Union, cast
+
+import aiofiles
+import anyio
 
 from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.tool import ToolSet
@@ -154,7 +157,7 @@ class Provider(AbstractProvider):
 
         """
         if False:  # pragma: no cover - make this an async generator for typing
-            yield None  # type: ignore
+            yield cast(LLMResponse, None)
         raise NotImplementedError()
 
     async def pop_record(self, context: list) -> None:
@@ -188,11 +191,11 @@ class Provider(AbstractProvider):
 
         return dicts
 
-    async def test(self, timeout: float = 45.0) -> None:
-        await asyncio.wait_for(
-            self.text_chat(prompt="REPLY `PONG` ONLY"),
-            timeout=timeout,
-        )
+    async def test(self, test_timeout: float = 45.0) -> None:
+        # Use anyio.fail_after to enforce timeout in async context.
+        # This avoids direct asyncio.wait_for usage inside async functions.
+        async with anyio.fail_after(test_timeout):
+            await self.text_chat(prompt="REPLY `PONG` ONLY")
 
 
 class STTProvider(AbstractProvider):
@@ -268,8 +271,8 @@ class TTSProvider(AbstractProvider):
                         # 调用原有的 get_audio 方法获取音频文件路径
                         audio_path = await self.get_audio(accumulated_text)
                         # 读取音频文件内容
-                        with open(audio_path, "rb") as f:
-                            audio_data = f.read()
+                        async with aiofiles.open(audio_path, "rb") as f:
+                            audio_data = await f.read()
                         await audio_queue.put((accumulated_text, audio_data))
                     except Exception:
                         # 出错时也要发送 None 结束标记
@@ -284,10 +287,11 @@ class TTSProvider(AbstractProvider):
         audio_path = await self.get_audio("hi")
 
         # 检查生成的音频文件是否有效
-        if not os.path.exists(audio_path):
+        audio_path_obj = anyio.Path(audio_path)
+        if not await audio_path_obj.exists():
             raise Exception("TTS test failed: audio file was not created")
 
-        file_size = os.path.getsize(audio_path)
+        file_size = (await audio_path_obj.stat()).st_size
         if file_size == 0:
             raise Exception(
                 "TTS test failed: generated audio file is empty (0 bytes). "

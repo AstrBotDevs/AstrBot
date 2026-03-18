@@ -1,6 +1,7 @@
 import os
 import uuid
 
+import anyio
 from openai import NOT_GIVEN, AsyncOpenAI
 
 from astrbot.core import logger
@@ -14,6 +15,10 @@ from astrbot.core.utils.tencent_record_helper import (
 from ..entities import ProviderType
 from ..provider import STTProvider
 from ..register import register_provider_adapter
+
+
+def _open_file_rb(path: str):
+    return open(path, "rb")
 
 
 @register_provider_adapter(
@@ -44,8 +49,8 @@ class ProviderOpenAIWhisperAPI(STTProvider):
         amr_header = b"#!AMR"
 
         try:
-            with open(file_path, "rb") as f:
-                file_header = f.read(8)
+            async with anyio.open_file(file_path, "rb") as f:
+                file_header = await f.read(8)
         except FileNotFoundError:
             return None
 
@@ -73,7 +78,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             await download_file(audio_url, path)
             audio_url = path
 
-        if not os.path.exists(audio_url):
+        if not await anyio.Path(audio_url).exists():
             raise FileNotFoundError(f"文件不存在: {audio_url}")
 
         if audio_url.endswith(".amr") or audio_url.endswith(".silk") or is_tencent:
@@ -100,15 +105,17 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
                 audio_url = output_path
 
+        file_obj = await anyio.to_thread.run_sync(_open_file_rb, audio_url)
         result = await self.client.audio.transcriptions.create(
             model=self.model_name,
-            file=("audio.wav", open(audio_url, "rb")),
+            file=("audio.wav", file_obj),
         )
+        file_obj.close()
 
         # remove temp file
-        if output_path and os.path.exists(output_path):
+        if output_path and await anyio.Path(output_path).exists():
             try:
-                os.remove(audio_url)
+                await anyio.Path(audio_url).unlink()
             except Exception as e:
                 logger.error(f"Failed to remove temp file {audio_url}: {e}")
         return result.text

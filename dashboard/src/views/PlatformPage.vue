@@ -1,37 +1,77 @@
 <template>
   <div class="platform-page">
-    <v-container fluid class="pa-0">
+    <v-container
+      fluid
+      class="pa-0"
+    >
       <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-8">
         <div>
           <h1 class="text-h1 font-weight-bold mb-2 d-flex align-center">
-            <v-icon color="black" class="me-2">mdi-robot</v-icon>{{ tm('title') }}
+            <v-icon
+              color="black"
+              class="me-2"
+            >
+              mdi-robot
+            </v-icon>{{ tm('title') }}
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-4">
             {{ tm('subtitle') }}
           </p>
         </div>
-        <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="updatingMode = false; showAddPlatformDialog = true"
-          rounded="xl" size="x-large">
+        <v-btn
+          color="primary"
+          prepend-icon="mdi-plus"
+          variant="tonal"
+          rounded="xl"
+          size="x-large"
+          @click="updatingMode = false; showAddPlatformDialog = true"
+        >
           {{ tm('addAdapter') }}
         </v-btn>
       </v-row>
 
       <div>
         <v-row v-if="(config_data.platform || []).length === 0">
-          <v-col cols="12" class="text-center pa-8">
-            <v-icon size="64" color="grey-lighten-1">mdi-connection</v-icon>
-            <p class="text-grey mt-4">{{ tm('emptyText') }}</p>
+          <v-col
+            cols="12"
+            class="text-center pa-8"
+          >
+            <v-icon
+              size="64"
+              color="grey-lighten-1"
+            >
+              mdi-connection
+            </v-icon>
+            <p class="text-grey mt-4">
+              {{ tm('emptyText') }}
+            </p>
           </v-col>
         </v-row>
 
         <v-row v-else>
-          <v-col v-for="(platform, index) in config_data.platform || []" :key="index" cols="12" md="6" lg="4" xl="3">
-            <item-card :item="platform" title-field="id" enabled-field="enable"
-              :bglogo="getPlatformIcon(platform.type || platform.id)" @toggle-enabled="platformStatusChange"
-              @delete="deletePlatform" @edit="editPlatform">
+          <v-col
+            v-for="(platform, index) in config_data.platform || []"
+            :key="index"
+            cols="12"
+            md="6"
+            lg="4"
+            xl="3"
+          >
+            <item-card
+              :item="platform"
+              title-field="id"
+              enabled-field="enable"
+              :bglogo="getPlatformIcon(platform.type || platform.id)"
+              @toggle-enabled="platformStatusChange"
+              @delete="deletePlatform"
+              @edit="editPlatform"
+            >
               <template #item-details="{ item }">
                 <!-- 平台运行状态 - 只在非运行状态或有错误时显示 -->
-                <div class="platform-status-row mb-2" v-if="getPlatformStat(item.id) && (getPlatformStat(item.id)?.status !== 'running' || getPlatformStat(item.id)?.error_count > 0)">
+                <div
+                  v-if="getPlatformStat(item.id) && (getPlatformStat(item.id)?.status !== 'running' || getPlatformStat(item.id)?.error_count > 0)"
+                  class="platform-status-row mb-2"
+                >
                   <!-- 状态 chip - 只在非 running 状态时显示 -->
                   <v-chip
                     v-if="getPlatformStat(item.id)?.status !== 'running'"
@@ -40,7 +80,12 @@
                     variant="tonal"
                     class="status-chip"
                   >
-                    <v-icon size="small" start>{{ getStatusIcon(getPlatformStat(item.id)?.status) }}</v-icon>
+                    <v-icon
+                      size="small"
+                      start
+                    >
+                      {{ getStatusIcon(getPlatformStat(item.id)?.status) }}
+                    </v-icon>
                     {{ tm('runtimeStatus.' + (getPlatformStat(item.id)?.status || 'unknown')) }}
                   </v-chip>
                   <!-- 错误数量提示 -->
@@ -53,11 +98,19 @@
                     :class="{ 'ms-2': getPlatformStat(item.id)?.status !== 'running' }"
                     @click.stop="showErrorDetails(item)"
                   >
-                    <v-icon size="small" start>mdi-bug</v-icon>
+                    <v-icon
+                      size="small"
+                      start
+                    >
+                      mdi-bug
+                    </v-icon>
                     {{ getPlatformStat(item.id)?.error_count }} {{ tm('runtimeStatus.errors') }}
                   </v-chip>
                 </div>
-                <div v-if="getPlatformStat(item.id)?.unified_webhook && item.webhook_uuid" class="webhook-info">
+                <div
+                  v-if="getPlatformStat(item.id)?.unified_webhook && item.webhook_uuid"
+                  class="webhook-info"
+                >
                   <v-chip
                     size="small"
                     color="primary"
@@ -65,7 +118,12 @@
                     class="webhook-chip"
                     @click.stop="openWebhookDialog(item.webhook_uuid)"
                   >
-                    <v-icon size="small" start>mdi-webhook</v-icon>
+                    <v-icon
+                      size="small"
+                      start
+                    >
+                      mdi-webhook
+                    </v-icon>
                     {{ tm('viewWebhook') }}
                   </v-chip>
                 </div>
@@ -76,12 +134,21 @@
       </div>
 
       <!-- 日志部分 -->
-      <v-card elevation="0" class="mt-4 mb-10">
+      <v-card
+        elevation="0"
+        class="mt-4 mb-10"
+      >
         <v-card-title class="d-flex align-center py-3 px-4">
-          <v-icon class="me-2">mdi-console-line</v-icon>
+          <v-icon class="me-2">
+            mdi-console-line
+          </v-icon>
           <span class="text-h4">{{ tm('logs.title') }}</span>
-          <v-spacer></v-spacer>
-          <v-btn variant="text" color="primary" @click="showConsole = !showConsole">
+          <v-spacer />
+          <v-btn
+            variant="text"
+            color="primary"
+            @click="showConsole = !showConsole"
+          >
             {{ showConsole ? tm('logs.collapse') : tm('logs.expand') }}
             <v-icon>{{ showConsole ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
           </v-btn>
@@ -89,27 +156,48 @@
 
 
         <v-expand-transition>
-          <v-card-text class="pa-0" v-if="showConsole">
-            <ConsoleDisplayer style="background-color: #1e1e1e; height: 300px; border-radius: 0"></ConsoleDisplayer>
+          <v-card-text
+            v-if="showConsole"
+            class="pa-0"
+          >
+            <ConsoleDisplayer style="background-color: #1e1e1e; height: 300px; border-radius: 0" />
           </v-card-text>
         </v-expand-transition>
       </v-card>
     </v-container>
 
     <!-- 添加平台适配器对话框 -->
-    <AddNewPlatform v-model:show="showAddPlatformDialog" :metadata="metadata" :config_data="config_data" ref="addPlatformDialog"
-      :updating-mode="updatingMode" :updating-platform-config="updatingPlatformConfig" @update="getConfig"
-      @show-toast="showToast" @refresh-config="getConfig"/>
+    <AddNewPlatform
+      ref="addPlatformDialog"
+      v-model:show="showAddPlatformDialog"
+      :metadata="metadata"
+      :config_data="config_data"
+      :updating-mode="updatingMode"
+      :updating-platform-config="updatingPlatformConfig"
+      @update="getConfig"
+      @show-toast="showToast"
+      @refresh-config="getConfig"
+    />
 
     <!-- Webhook URL 对话框 -->
-    <v-dialog v-model="showWebhookDialog" max-width="600">
+    <v-dialog
+      v-model="showWebhookDialog"
+      max-width="600"
+    >
       <v-card>
         <v-card-title class="d-flex align-center pa-4">
-          <v-icon class="me-2" color="primary">mdi-webhook</v-icon>
+          <v-icon
+            class="me-2"
+            color="primary"
+          >
+            mdi-webhook
+          </v-icon>
           {{ tm('webhookDialog.title') }}
         </v-card-title>
         <v-card-text class="px-4 pb-2">
-          <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('webhookDialog.description') }}</p>
+          <p class="text-body-2 text-medium-emphasis mb-3">
+            {{ tm('webhookDialog.description') }}
+          </p>
           <v-text-field
             :model-value="currentWebhookUrl"
             readonly
@@ -117,7 +205,7 @@
             hide-details
             class="webhook-url-field"
           >
-            <template v-slot:append-inner>
+            <template #append-inner>
               <v-btn
                 icon
                 size="small"
@@ -130,8 +218,12 @@
           </v-text-field>
         </v-card-text>
         <v-card-actions class="pa-4 pt-2">
-          <v-spacer></v-spacer>
-          <v-btn variant="tonal" color="primary" @click="showWebhookDialog = false">
+          <v-spacer />
+          <v-btn
+            variant="tonal"
+            color="primary"
+            @click="showWebhookDialog = false"
+          >
             {{ tm('webhookDialog.close') }}
           </v-btn>
         </v-card-actions>
@@ -139,25 +231,45 @@
     </v-dialog>
 
     <!-- 错误详情对话框 -->
-    <v-dialog v-model="showErrorDialog" max-width="700">
+    <v-dialog
+      v-model="showErrorDialog"
+      max-width="700"
+    >
       <v-card>
         <v-card-title class="d-flex align-center pa-4">
-          <v-icon class="me-2" color="error">mdi-alert-circle</v-icon>
+          <v-icon
+            class="me-2"
+            color="error"
+          >
+            mdi-alert-circle
+          </v-icon>
           {{ tm('errorDialog.title') }}
         </v-card-title>
-        <v-card-text class="px-4 pb-4" v-if="currentErrorPlatform">
+        <v-card-text
+          v-if="currentErrorPlatform"
+          class="px-4 pb-4"
+        >
           <div class="mb-3">
             <strong>{{ tm('errorDialog.platformId') }}:</strong> {{ currentErrorPlatform.id }}
           </div>
           <div class="mb-3">
             <strong>{{ tm('errorDialog.errorCount') }}:</strong> {{ currentErrorPlatform.error_count }}
           </div>
-          <div v-if="currentErrorPlatform.last_error" class="error-details">
+          <div
+            v-if="currentErrorPlatform.last_error"
+            class="error-details"
+          >
             <div class="mb-2">
               <strong>{{ tm('errorDialog.lastError') }}:</strong>
             </div>
-            <v-alert type="error" variant="tonal" class="mb-3">
-              <div class="error-message">{{ currentErrorPlatform.last_error.message }}</div>
+            <v-alert
+              type="error"
+              variant="tonal"
+              class="mb-3"
+            >
+              <div class="error-message">
+                {{ currentErrorPlatform.last_error.message }}
+              </div>
               <div class="error-time text-caption text-medium-emphasis mt-1">
                 {{ tm('errorDialog.occurredAt') }}: {{ new Date(currentErrorPlatform.last_error.timestamp).toLocaleString() }}
               </div>
@@ -171,8 +283,12 @@
           </div>
         </v-card-text>
         <v-card-actions class="pa-4 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="tonal" color="primary" @click="showErrorDialog = false">
+          <v-spacer />
+          <v-btn
+            variant="tonal"
+            color="primary"
+            @click="showErrorDialog = false"
+          >
             {{ tm('errorDialog.close') }}
           </v-btn>
         </v-card-actions>
@@ -180,8 +296,13 @@
     </v-dialog>
 
     <!-- 消息提示 -->
-    <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack"
-      location="top">
+    <v-snackbar
+      v-model="save_message_snack"
+      :timeout="3000"
+      elevation="24"
+      :color="save_message_success"
+      location="top"
+    >
       {{ save_message }}
     </v-snackbar>
   </div>
@@ -250,6 +371,21 @@ export default {
       currentErrorPlatform: null,
 
       store: useCommonStore()
+    }
+  },
+  computed: {
+    // 安全访问翻译的计算属性
+    messages() {
+      return {
+        updateSuccess: this.tm('messages.updateSuccess'),
+        addSuccess: this.tm('messages.addSuccess'),
+        deleteSuccess: this.tm('messages.deleteSuccess'),
+        statusUpdateSuccess: this.tm('messages.statusUpdateSuccess'),
+        deleteConfirm: this.tm('messages.deleteConfirm')
+      };
+    },
+    currentWebhookUrl() {
+      return this.getWebhookUrl(this.currentWebhookUuid);
     }
   },
 
@@ -546,21 +682,6 @@ export default {
       } catch (err) {
         this.showError(this.tm('webhookCopyFailed'));
       }
-    }
-  },
-  computed: {
-    // 安全访问翻译的计算属性
-    messages() {
-      return {
-        updateSuccess: this.tm('messages.updateSuccess'),
-        addSuccess: this.tm('messages.addSuccess'),
-        deleteSuccess: this.tm('messages.deleteSuccess'),
-        statusUpdateSuccess: this.tm('messages.statusUpdateSuccess'),
-        deleteConfirm: this.tm('messages.deleteConfirm')
-      };
-    },
-    currentWebhookUrl() {
-      return this.getWebhookUrl(this.currentWebhookUuid);
     }
   }
 }

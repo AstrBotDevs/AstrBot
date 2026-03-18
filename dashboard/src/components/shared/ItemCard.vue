@@ -1,9 +1,16 @@
 <template>
-  <v-card class="item-card hover-elevation" style="padding: 4px;" elevation="0">
+  <v-card
+    class="item-card hover-elevation"
+    style="padding: 4px;"
+    elevation="0"
+  >
     <v-card-title class="d-flex justify-space-between align-center pb-1 pt-3">
-      <span class="text-h2 text-truncate" :title="getItemTitle()">{{ getItemTitle() }}</span>
+      <span
+        class="text-h2 text-truncate"
+        :title="getItemTitle()"
+      >{{ getItemTitle() }}</span>
       <v-tooltip location="top">
-        <template v-slot:activator="{ props }">
+        <template #activator="{ props }">
           <v-switch
             color="primary"
             hide-details
@@ -13,38 +20,41 @@
             :disabled="loading || disableToggle"
             v-bind="props"
             @update:model-value="toggleEnabled"
-          ></v-switch>
+          />
         </template>
         <span>{{ getItemEnabled() ? t('core.common.itemCard.enabled') : t('core.common.itemCard.disabled') }}</span>
       </v-tooltip>
     </v-card-title>
 
     <v-card-text>
-      <slot name="item-details" :item="item"></slot>
+      <slot
+        name="item-details"
+        :item="item"
+      />
     </v-card-text>
 
-  <v-card-actions style="margin: 8px;">
-    <v-btn
-      variant="outlined"
-      color="error"
-      size="small"
-      rounded="xl"
-      :disabled="loading || disableDelete"
-      @click="$emit('delete', item)"
-    >
-      {{ t('core.common.itemCard.delete') }}
-    </v-btn>
-    <v-btn
-      v-if="showEditButton"
-      variant="tonal"
-      color="primary"
-      size="small"
-      rounded="xl"
-      :disabled="loading"
-      @click="$emit('edit', item)"
-    >
-      {{ t('core.common.itemCard.edit') }}
-    </v-btn>
+    <v-card-actions style="margin: 8px;">
+      <v-btn
+        variant="outlined"
+        color="error"
+        size="small"
+        rounded="xl"
+        :disabled="loading || disableDelete"
+        @click="$emit('delete', item)"
+      >
+        {{ t('core.common.itemCard.delete') }}
+      </v-btn>
+      <v-btn
+        v-if="showEditButton"
+        variant="tonal"
+        color="primary"
+        size="small"
+        rounded="xl"
+        :disabled="loading"
+        @click="$emit('edit', item)"
+      >
+        {{ t('core.common.itemCard.edit') }}
+      </v-btn>
       <v-btn
         v-if="showCopyButton"
         variant="tonal"
@@ -56,17 +66,24 @@
       >
         {{ t('core.common.itemCard.copy') }}
       </v-btn>
-      <slot name="actions" :item="item"></slot>
-      <v-spacer></v-spacer>
+      <slot
+        name="actions"
+        :item="item"
+      />
+      <v-spacer />
     </v-card-actions>
 
-    <div class="d-flex justify-end align-center" style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2;" v-if="bglogo">
+    <div
+      v-if="bglogo"
+      class="d-flex justify-end align-center"
+      style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2;"
+    >
       <v-img
         :src="bglogo"
         contain
         width="120"
         height="120"
-      ></v-img>
+      />
     </div>
   </v-card>
 </template>
@@ -76,10 +93,6 @@ import { useI18n } from '@/i18n/composables';
 
 export default {
   name: 'ItemCard',
-  setup() {
-    const { t } = useI18n();
-    return { t };
-  },
   props: {
     item: {
       type: Object,
@@ -119,6 +132,10 @@ export default {
     }
   },
   emits: ['toggle-enabled', 'delete', 'edit', 'copy'],
+  setup() {
+    const { t } = useI18n();
+    return { t };
+  },
   methods: {
     getItemTitle() {
       return this.item[this.titleField];

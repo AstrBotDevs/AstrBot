@@ -1,112 +1,208 @@
 <template>
-    <v-dialog v-model="isOpen" persistent max-width="600" max-height="80vh" scrollable>
-        <v-card>
-            <v-card-title>
-                {{ t('features.migration.dialog.title') }}
-            </v-card-title>
+  <v-dialog
+    v-model="isOpen"
+    persistent
+    max-width="600"
+    max-height="80vh"
+    scrollable
+  >
+    <v-card>
+      <v-card-title>
+        {{ t('features.migration.dialog.title') }}
+      </v-card-title>
 
-            <v-card-text class="pa-6">
-                <p class="mb-4">{{ t('features.migration.dialog.warning') }}</p>
+      <v-card-text class="pa-6">
+        <p class="mb-4">
+          {{ t('features.migration.dialog.warning') }}
+        </p>
 
 
-                <div v-if="migrationCompleted" class="text-center py-8">
-                    <v-icon size="64" color="success" class="mb-4">mdi-check-circle</v-icon>
-                    <h3 class="mb-4">{{ t('features.migration.dialog.completed') }}</h3>
-                    <p class="mb-4">{{ migrationResult?.message || t('features.migration.dialog.success') }}</p>
-                    <v-alert type="info" variant="tonal" class="mb-4">
-                        <template v-slot:prepend>
-                            <v-icon>mdi-information</v-icon>
-                        </template>
-                        {{ t('features.migration.dialog.restartRecommended') }}
-                    </v-alert>
-                </div>
+        <div
+          v-if="migrationCompleted"
+          class="text-center py-8"
+        >
+          <v-icon
+            size="64"
+            color="success"
+            class="mb-4"
+          >
+            mdi-check-circle
+          </v-icon>
+          <h3 class="mb-4">
+            {{ t('features.migration.dialog.completed') }}
+          </h3>
+          <p class="mb-4">
+            {{ migrationResult?.message || t('features.migration.dialog.success') }}
+          </p>
+          <v-alert
+            type="info"
+            variant="tonal"
+            class="mb-4"
+          >
+            <template #prepend>
+              <v-icon>mdi-information</v-icon>
+            </template>
+            {{ t('features.migration.dialog.restartRecommended') }}
+          </v-alert>
+        </div>
 
-                <div v-else-if="migrating" class="migration-in-progress">
-                    <div class="text-center py-4">
-                        <v-progress-circular indeterminate color="primary" class="mb-4"></v-progress-circular>
-                        <h3 class="mb-4">{{ t('features.migration.dialog.migrating') }}</h3>
-                        <p class="mb-4">{{ t('features.migration.dialog.migratingSubtitle') }}</p>
-                    </div>
-                    <div class="console-container">
-                        <ConsoleDisplayer ref="consoleDisplayer" :showLevelBtns="false" style="height: 300px;" />
-                    </div>
-                </div>
+        <div
+          v-else-if="migrating"
+          class="migration-in-progress"
+        >
+          <div class="text-center py-4">
+            <v-progress-circular
+              indeterminate
+              color="primary"
+              class="mb-4"
+            />
+            <h3 class="mb-4">
+              {{ t('features.migration.dialog.migrating') }}
+            </h3>
+            <p class="mb-4">
+              {{ t('features.migration.dialog.migratingSubtitle') }}
+            </p>
+          </div>
+          <div class="console-container">
+            <ConsoleDisplayer
+              ref="consoleDisplayer"
+              :show-level-btns="false"
+              style="height: 300px;"
+            />
+          </div>
+        </div>
 
-                <div v-else-if="loading" class="text-center py-8">
-                    <v-progress-circular indeterminate color="primary" class="mb-4"></v-progress-circular>
-                    <p>{{ t('features.migration.dialog.loading') }}</p>
-                </div>
+        <div
+          v-else-if="loading"
+          class="text-center py-8"
+        >
+          <v-progress-circular
+            indeterminate
+            color="primary"
+            class="mb-4"
+          />
+          <p>{{ t('features.migration.dialog.loading') }}</p>
+        </div>
 
-                <div v-else-if="error" class="text-center py-4">
-                    <v-alert type="error" variant="tonal" class="mb-4">
-                        <template v-slot:prepend>
-                            <v-icon>mdi-alert</v-icon>
-                        </template>
-                        {{ error }}
-                    </v-alert>
-                    <v-btn color="primary" @click="loadPlatforms">
-                        {{ t('features.migration.dialog.retry') }}
-                    </v-btn>
-                </div>
+        <div
+          v-else-if="error"
+          class="text-center py-4"
+        >
+          <v-alert
+            type="error"
+            variant="tonal"
+            class="mb-4"
+          >
+            <template #prepend>
+              <v-icon>mdi-alert</v-icon>
+            </template>
+            {{ error }}
+          </v-alert>
+          <v-btn
+            color="primary"
+            @click="loadPlatforms"
+          >
+            {{ t('features.migration.dialog.retry') }}
+          </v-btn>
+        </div>
 
-                <div v-else>
-                    <div v-if="platformGroups.length === 0" class="text-center py-4">
-                        <v-alert type="info" variant="tonal">
-                            <template v-slot:prepend>
-                                <v-icon>mdi-information</v-icon>
-                            </template>
-                            {{ t('features.migration.dialog.noPlatforms') }}
-                        </v-alert>
-                    </div>
+        <div v-else>
+          <div
+            v-if="platformGroups.length === 0"
+            class="text-center py-4"
+          >
+            <v-alert
+              type="info"
+              variant="tonal"
+            >
+              <template #prepend>
+                <v-icon>mdi-information</v-icon>
+              </template>
+              {{ t('features.migration.dialog.noPlatforms') }}
+            </v-alert>
+          </div>
 
-                    <div v-else>
-                        <div v-for="group in platformGroups" :key="group.type" class="mb-6">
-                            <v-card variant="outlined" v-if="group.platforms.length > 1">
-                                <v-card-subtitle class="py-2">
-                                    {{ group.type }}
-                                </v-card-subtitle>
+          <div v-else>
+            <div
+              v-for="group in platformGroups"
+              :key="group.type"
+              class="mb-6"
+            >
+              <v-card
+                v-if="group.platforms.length > 1"
+                variant="outlined"
+              >
+                <v-card-subtitle class="py-2">
+                  {{ group.type }}
+                </v-card-subtitle>
 
-                                <v-divider></v-divider>
+                <v-divider />
 
-                                <v-card-text style="padding: 16px;">
-                                    <small>请选择该平台类型下您主要使用的平台适配器。</small>
-                                    <v-radio-group v-model="selectedPlatforms[group.type]" :key="group.type"
-                                        hide-details>
-                                        <v-radio v-for="platform in group.platforms" :key="platform.id"
-                                            :value="platform.id" :label="getPlatformLabel(platform)" color="primary"
-                                            class="mb-1"></v-radio>
-                                    </v-radio-group>
-                                </v-card-text>
-                            </v-card>
-                        </div>
-                    </div>
-                </div>
-            </v-card-text>
+                <v-card-text style="padding: 16px;">
+                  <small>请选择该平台类型下您主要使用的平台适配器。</small>
+                  <v-radio-group
+                    :key="group.type"
+                    v-model="selectedPlatforms[group.type]"
+                    hide-details
+                  >
+                    <v-radio
+                      v-for="platform in group.platforms"
+                      :key="platform.id"
+                      :value="platform.id"
+                      :label="getPlatformLabel(platform)"
+                      color="primary"
+                      class="mb-1"
+                    />
+                  </v-radio-group>
+                </v-card-text>
+              </v-card>
+            </div>
+          </div>
+        </div>
+      </v-card-text>
 
-            <v-card-actions class="px-6 py-4">
-                <v-spacer></v-spacer>
-                <template v-if="migrationCompleted">
-                    <v-btn color="grey" variant="text" @click="handleClose">
-                        {{ t('core.common.close') }}
-                    </v-btn>
-                    <v-btn color="primary" variant="elevated" @click="restartAstrBot">
-                        {{ t('features.migration.dialog.restartNow') }}
-                    </v-btn>
-                </template>
-                <template v-else>
-                    <v-btn color="grey" variant="text" @click="handleCancel" :disabled="migrating">
-                        {{ t('core.common.cancel') }}
-                    </v-btn>
-                    <v-btn color="primary" variant="elevated" @click="handleMigration" :disabled="!canMigrate || migrating"
-                        :loading="migrating">
-                        {{ t('features.migration.dialog.startMigration') }}
-                    </v-btn>
-                </template>
-            </v-card-actions>
-        </v-card>
-    </v-dialog>
+      <v-card-actions class="px-6 py-4">
+        <v-spacer />
+        <template v-if="migrationCompleted">
+          <v-btn
+            color="grey"
+            variant="text"
+            @click="handleClose"
+          >
+            {{ t('core.common.close') }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="elevated"
+            @click="restartAstrBot"
+          >
+            {{ t('features.migration.dialog.restartNow') }}
+          </v-btn>
+        </template>
+        <template v-else>
+          <v-btn
+            color="grey"
+            variant="text"
+            :disabled="migrating"
+            @click="handleCancel"
+          >
+            {{ t('core.common.cancel') }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="elevated"
+            :disabled="!canMigrate || migrating"
+            :loading="migrating"
+            @click="handleMigration"
+          >
+            {{ t('features.migration.dialog.startMigration') }}
+          </v-btn>
+        </template>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
     
-    <WaitingForRestart ref="wfr"></WaitingForRestart>
+  <WaitingForRestart ref="wfr" />
 </template>
 
 <script setup>

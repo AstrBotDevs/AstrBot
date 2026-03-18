@@ -29,6 +29,7 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.astrbot_path import get_astrbot_root, get_astrbot_skills_path
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
@@ -56,9 +57,9 @@ class InternalAgentSubStage(Stage):
         self.max_step: int = settings.get("max_agent_step", 30)
         self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
         self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
-        if self.tool_schema_mode not in ("skills_like", "full"):
+        if self.tool_schema_mode not in ("lazy_load", "full"):
             logger.warning(
-                "Unsupported tool_schema_mode: %s, fallback to skills_like",
+                "Unsupported tool_schema_mode: %s, fallback to lazy_load",
                 self.tool_schema_mode,
             )
             self.tool_schema_mode = "full"
@@ -113,6 +114,14 @@ class InternalAgentSubStage(Stage):
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
+        # Build decoupled tool providers
+        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
+        from astrbot.core.cron.cron_tool_provider import CronToolProvider
+
+        _tool_providers = [ComputerToolProvider()]
+        if self.add_cron_tools:
+            _tool_providers.append(CronToolProvider())
+
         self.main_agent_cfg = MainAgentBuildConfig(
             tool_call_timeout=self.tool_call_timeout,
             tool_schema_mode=self.tool_schema_mode,
@@ -131,6 +140,7 @@ class InternalAgentSubStage(Stage):
             safety_mode_strategy=self.safety_mode_strategy,
             computer_use_runtime=self.computer_use_runtime,
             sandbox_cfg=self.sandbox_cfg,
+            tool_providers=_tool_providers,
             add_cron_tools=self.add_cron_tools,
             provider_settings=settings,
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
@@ -230,6 +240,8 @@ class InternalAgentSubStage(Stage):
                     if reset_coro:
                         await reset_coro
 
+                    effective_streaming_response = bool(agent_runner.streaming)
+
                     register_active_runner(event.unified_msg_origin, agent_runner)
                     runner_registered = True
                     action_type = event.get_extra("action_type")
@@ -238,7 +250,7 @@ class InternalAgentSubStage(Stage):
                         "astr_agent_prepare",
                         system_prompt=req.system_prompt,
                         tools=req.func_tool.names() if req.func_tool else [],
-                        stream=streaming_response,
+                        stream=effective_streaming_response,
                         chat_provider={
                             "id": provider.provider_config.get("id", ""),
                             "model": provider.get_model(),
@@ -292,7 +304,7 @@ class InternalAgentSubStage(Stage):
                                 user_aborted=agent_runner.was_aborted(),
                             )
 
-                    elif streaming_response and not stream_to_general:
+                    elif effective_streaming_response and not stream_to_general:
                         # 流式响应
                         event.set_result(
                             MessageEventResult()
@@ -368,7 +380,11 @@ class InternalAgentSubStage(Stage):
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
         except Exception as e:
-            logger.error(f"Error occurred while processing agent: {e}")
+            logger.exception(
+                "Error occurred while processing agent. root=%s skills=%s",
+                get_astrbot_root(),
+                get_astrbot_skills_path(),
+            )
             custom_error_message = extract_persona_custom_error_message_from_event(
                 event
             )

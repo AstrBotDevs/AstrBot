@@ -10,7 +10,7 @@ export function generateMissingKeys(
 ): string[] {
   const missing: string[] = [];
   
-  function traverse(source: any, target: any, path: string = '') {
+  function traverse(source: any, target: any, path = '') {
     for (const key in source) {
       const currentPath = path ? `${path}.${key}` : key;
       

@@ -14,24 +14,86 @@ Skills 目录路径：固定为数据目录下的 skills 目录
 """
 
 import os
+from importlib import resources
+from pathlib import Path
 
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
 
 
+class AstrbotPaths:
+    """Astrbot 项目路径管理类"""
+
+    def __init__(self) -> None:
+        self._root_override: Path | None = None
+
+    def _resolve_root(self) -> Path:
+        if path := os.environ.get("ASTRBOT_ROOT"):
+            return Path(path)
+        if is_packaged_desktop_runtime():
+            return Path().home() / ".astrbot"
+
+        return Path(os.getcwd())
+
+    @property
+    def root(self) -> Path:
+        if self._root_override is not None:
+            return self._root_override
+        return self._resolve_root()
+
+    @root.setter
+    def root(self, value: Path) -> None:
+        self._root_override = value
+
+    @property
+    def project_root(self) -> Path:
+        """获取项目根目录路径 (package root)"""
+        with resources.as_file(resources.files("astrbot")) as path:
+            return path
+
+    @property
+    def data(self) -> Path:
+        return self.root / "data"
+
+    @property
+    def config(self) -> Path:
+        return self.data / "config"
+
+    @property
+    def plugins(self) -> Path:
+        return self.data / "plugins"
+
+    @property
+    def temp(self) -> Path:
+        return self.data / "temp"
+
+    @property
+    def skills(self) -> Path:
+        return self.data / "skills"
+
+    @property
+    def site_packages(self) -> Path:
+        return self.data / "site-packages"
+
+    @property
+    def knowledge_base(self) -> Path:
+        return self.data / "knowledge_base"
+
+    @property
+    def backups(self) -> Path:
+        return self.data / "backups"
+
+
+astrbot_paths = AstrbotPaths()
+
+
 def get_astrbot_path() -> str:
     """获取Astrbot项目路径"""
-    return os.path.realpath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../"),
-    )
+    return str(astrbot_paths.project_root)
 
 
 def get_astrbot_root() -> str:
     """获取Astrbot根目录路径"""
-    if path := os.environ.get("ASTRBOT_ROOT"):
-        return os.path.realpath(path)
-    if is_packaged_desktop_runtime():
-        return os.path.realpath(os.path.join(os.path.expanduser("~"), ".astrbot"))
-    return os.path.realpath(os.getcwd())
+    return str(astrbot_paths.root)
 
 
 def get_astrbot_data_path() -> str:

@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.19.5"
+version = "4.21.0"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -65,6 +65,8 @@ dependencies = [
   "shipyard-neo-sdk>=0.2.0",
   "python-socks>=2.8.0",
   "packaging>=24.2",
+  "quart-cors>=0.8.0",
+  "anyio>=4.12.1",
 ]
 
 [dependency-groups]
@@ -94,14 +96,13 @@ select = [
   "Q",     # flake8-quotes
   "I",     # import-order
   "UP",    # pyupgrade
-  # "SIM", # flake8-simplify 
+  # "SIM", # flake8-simplify
 ]
 ignore = [
   "F403",
   "F405",
   "E501",
-  "ASYNC230", # TODO: handle ASYNC230 in AstrBot
-  "ASYNC240", # TODO: handle ASYNC240 in AstrBot
+
 ]
 
 [tool.pyright]

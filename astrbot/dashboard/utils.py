@@ -1,6 +1,7 @@
 import base64
 import traceback
 from io import BytesIO
+from typing import cast
 
 from astrbot.api import logger
 from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
@@ -81,7 +82,7 @@ async def generate_tsne_visualization(
                 index.reconstruct(i, vectors[i])
 
         # 获取查询向量
-        vec_db: FaissVecDB = kb_helper.vec_db  # type: ignore
+        vec_db = cast(FaissVecDB, kb_helper.vec_db)
         embedding_provider = vec_db.embedding_provider
         query_embedding = await embedding_provider.get_embedding(query)
         query_vector = np.array([query_embedding], dtype=np.float32)

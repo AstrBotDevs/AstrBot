@@ -1,5 +1,7 @@
 import os
 
+import anyio
+
 from astrbot.api import logger, sp
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.db import BaseDatabase
@@ -22,7 +24,7 @@ async def check_migration_needed_v4(db_helper: BaseDatabase) -> bool:
     data_dir = get_astrbot_data_path()
     data_v3_db = os.path.join(data_dir, "data_v3.db")
 
-    if not os.path.exists(data_v3_db):
+    if not await anyio.Path(data_v3_db).exists():
         return False
     migration_done = await db_helper.get_preference(
         "global",

@@ -1,9 +1,9 @@
 import asyncio
-import os
 import re
 import uuid
 from collections.abc import AsyncGenerator
-from pathlib import Path
+
+import anyio
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -160,8 +160,8 @@ class LineMessageEvent(AstrMessageEvent):
 
         try:
             video_path = await segment.convert_to_file_path()
-            temp_dir = Path(get_astrbot_temp_path())
-            temp_dir.mkdir(parents=True, exist_ok=True)
+            temp_dir = anyio.Path(get_astrbot_temp_path())
+            await temp_dir.mkdir(parents=True, exist_ok=True)
             thumb_path = temp_dir / f"line_video_preview_{uuid.uuid4().hex}.jpg"
 
             process = await asyncio.create_subprocess_exec(
@@ -178,7 +178,7 @@ class LineMessageEvent(AstrMessageEvent):
                 stderr=asyncio.subprocess.PIPE,
             )
             await process.communicate()
-            if process.returncode != 0 or not thumb_path.exists():
+            if process.returncode != 0 or not await thumb_path.exists():
                 return ""
 
             cover_seg = Image.fromFileSystem(str(thumb_path))
@@ -201,8 +201,8 @@ class LineMessageEvent(AstrMessageEvent):
     async def _resolve_file_size(segment: File) -> int:
         try:
             file_path = await segment.get_file(allow_return_url=False)
-            if file_path and os.path.exists(file_path):
-                return int(os.path.getsize(file_path))
+            if file_path and await anyio.Path(file_path).exists():
+                return int((await anyio.Path(file_path).stat()).st_size)
         except Exception as e:
             logger.debug("[LINE] resolve file size failed: %s", e)
         return 0

@@ -1,119 +1,219 @@
 <template>
-    <div class="folder-tree">
-        <!-- 搜索框 -->
-        <v-text-field v-model="searchQuery" :placeholder="tm('folder.searchPlaceholder')" prepend-inner-icon="mdi-magnify"
-            variant="outlined" density="compact" hide-details clearable class="mb-3" />
+  <div class="folder-tree">
+    <!-- 搜索框 -->
+    <v-text-field
+      v-model="searchQuery"
+      :placeholder="tm('folder.searchPlaceholder')"
+      prepend-inner-icon="mdi-magnify"
+      variant="outlined"
+      density="compact"
+      hide-details
+      clearable
+      class="mb-3"
+    />
 
-        <!-- 根目录节点 -->
-        <v-list density="compact" nav class="tree-list" bg-color="transparent">
-            <v-list-item :active="currentFolderId === null" @click="handleFolderClick(null)" rounded="lg"
-                :class="['root-item', { 'drag-over': isRootDragOver }]"
-                @dragover.prevent="handleRootDragOver" @dragleave="handleRootDragLeave" @drop.prevent="handleRootDrop">
-                <template v-slot:prepend>
-                    <v-icon>mdi-home</v-icon>
-                </template>
-                <v-list-item-title>{{ tm('folder.rootFolder') }}</v-list-item-title>
-            </v-list-item>
+    <!-- 根目录节点 -->
+    <v-list
+      density="compact"
+      nav
+      class="tree-list"
+      bg-color="transparent"
+    >
+      <v-list-item
+        :active="currentFolderId === null"
+        rounded="lg"
+        :class="['root-item', { 'drag-over': isRootDragOver }]"
+        @click="handleFolderClick(null)"
+        @dragover.prevent="handleRootDragOver"
+        @dragleave="handleRootDragLeave"
+        @drop.prevent="handleRootDrop"
+      >
+        <template #prepend>
+          <v-icon>mdi-home</v-icon>
+        </template>
+        <v-list-item-title>{{ tm('folder.rootFolder') }}</v-list-item-title>
+      </v-list-item>
 
-            <!-- 文件夹树 -->
-            <template v-if="!treeLoading">
-                <FolderTreeNode v-for="folder in filteredFolderTree" :key="folder.folder_id" :folder="folder"
-                    :depth="0" :current-folder-id="currentFolderId" :search-query="searchQuery"
-                    @folder-click="handleFolderClick" @folder-context-menu="handleContextMenu"
-                    @persona-dropped="$emit('persona-dropped', $event)" />
-            </template>
+      <!-- 文件夹树 -->
+      <template v-if="!treeLoading">
+        <FolderTreeNode
+          v-for="folder in filteredFolderTree"
+          :key="folder.folder_id"
+          :folder="folder"
+          :depth="0"
+          :current-folder-id="currentFolderId"
+          :search-query="searchQuery"
+          @folder-click="handleFolderClick"
+          @folder-context-menu="handleContextMenu"
+          @persona-dropped="$emit('persona-dropped', $event)"
+        />
+      </template>
 
-            <!-- 加载状态 -->
-            <div v-if="treeLoading" class="text-center pa-4">
-                <v-progress-circular indeterminate size="24" />
-            </div>
+      <!-- 加载状态 -->
+      <div
+        v-if="treeLoading"
+        class="text-center pa-4"
+      >
+        <v-progress-circular
+          indeterminate
+          size="24"
+        />
+      </div>
 
-            <!-- 空状态 -->
-            <div v-if="!treeLoading && folderTree.length === 0" class="text-center pa-4 text-medium-emphasis">
-                <v-icon size="32" class="mb-2">mdi-folder-outline</v-icon>
-                <div class="text-body-2">{{ tm('folder.noFolders') }}</div>
-            </div>
-        </v-list>
+      <!-- 空状态 -->
+      <div
+        v-if="!treeLoading && folderTree.length === 0"
+        class="text-center pa-4 text-medium-emphasis"
+      >
+        <v-icon
+          size="32"
+          class="mb-2"
+        >
+          mdi-folder-outline
+        </v-icon>
+        <div class="text-body-2">
+          {{ tm('folder.noFolders') }}
+        </div>
+      </div>
+    </v-list>
 
-        <!-- 右键菜单 -->
-        <v-menu v-model="contextMenu.show" :target="contextMenu.target as any" location="end" :close-on-content-click="true">
-            <v-list density="compact">
-                <v-list-item @click="openFolder">
-                    <template v-slot:prepend>
-                        <v-icon size="small">mdi-folder-open</v-icon>
-                    </template>
-                    <v-list-item-title>{{ tm('folder.contextMenu.open') }}</v-list-item-title>
-                </v-list-item>
-                <v-list-item @click="renameFolder">
-                    <template v-slot:prepend>
-                        <v-icon size="small">mdi-pencil</v-icon>
-                    </template>
-                    <v-list-item-title>{{ tm('folder.contextMenu.rename') }}</v-list-item-title>
-                </v-list-item>
-                <v-list-item @click="$emit('move-folder', contextMenu.folder)">
-                    <template v-slot:prepend>
-                        <v-icon size="small">mdi-folder-move</v-icon>
-                    </template>
-                    <v-list-item-title>{{ tm('folder.contextMenu.moveTo') }}</v-list-item-title>
-                </v-list-item>
-                <v-divider class="my-1" />
-                <v-list-item @click="confirmDeleteFolder" class="text-error">
-                    <template v-slot:prepend>
-                        <v-icon size="small" color="error">mdi-delete</v-icon>
-                    </template>
-                    <v-list-item-title>{{ tm('folder.contextMenu.delete') }}</v-list-item-title>
-                </v-list-item>
-            </v-list>
-        </v-menu>
+    <!-- 右键菜单 -->
+    <v-menu
+      v-model="contextMenu.show"
+      :target="contextMenu.target as any"
+      location="end"
+      :close-on-content-click="true"
+    >
+      <v-list density="compact">
+        <v-list-item @click="openFolder">
+          <template #prepend>
+            <v-icon size="small">
+              mdi-folder-open
+            </v-icon>
+          </template>
+          <v-list-item-title>{{ tm('folder.contextMenu.open') }}</v-list-item-title>
+        </v-list-item>
+        <v-list-item @click="renameFolder">
+          <template #prepend>
+            <v-icon size="small">
+              mdi-pencil
+            </v-icon>
+          </template>
+          <v-list-item-title>{{ tm('folder.contextMenu.rename') }}</v-list-item-title>
+        </v-list-item>
+        <v-list-item @click="$emit('move-folder', contextMenu.folder)">
+          <template #prepend>
+            <v-icon size="small">
+              mdi-folder-move
+            </v-icon>
+          </template>
+          <v-list-item-title>{{ tm('folder.contextMenu.moveTo') }}</v-list-item-title>
+        </v-list-item>
+        <v-divider class="my-1" />
+        <v-list-item
+          class="text-error"
+          @click="confirmDeleteFolder"
+        >
+          <template #prepend>
+            <v-icon
+              size="small"
+              color="error"
+            >
+              mdi-delete
+            </v-icon>
+          </template>
+          <v-list-item-title>{{ tm('folder.contextMenu.delete') }}</v-list-item-title>
+        </v-list-item>
+      </v-list>
+    </v-menu>
 
-        <!-- 重命名对话框 -->
-        <v-dialog v-model="renameDialog.show" max-width="400px" persistent>
-            <v-card>
-                <v-card-title>{{ tm('folder.renameDialog.title') }}</v-card-title>
-                <v-card-text>
-                    <v-text-field v-model="renameDialog.name" :label="tm('folder.form.name')"
-                        :rules="[v => !!v || tm('folder.validation.nameRequired')]" variant="outlined"
-                        density="comfortable" autofocus @keyup.enter="submitRename" />
-                </v-card-text>
-                <v-card-actions>
-                    <v-spacer />
-                    <v-btn variant="text" @click="renameDialog.show = false">
-                        {{ tm('buttons.cancel') }}
-                    </v-btn>
-                    <v-btn color="primary" variant="flat" @click="submitRename" :loading="renameDialog.loading"
-                        :disabled="!renameDialog.name">
-                        {{ tm('buttons.save') }}
-                    </v-btn>
-                </v-card-actions>
-            </v-card>
-        </v-dialog>
+    <!-- 重命名对话框 -->
+    <v-dialog
+      v-model="renameDialog.show"
+      max-width="400px"
+      persistent
+    >
+      <v-card>
+        <v-card-title>{{ tm('folder.renameDialog.title') }}</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="renameDialog.name"
+            :label="tm('folder.form.name')"
+            :rules="[v => !!v || tm('folder.validation.nameRequired')]"
+            variant="outlined"
+            density="comfortable"
+            autofocus
+            @keyup.enter="submitRename"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn
+            variant="text"
+            @click="renameDialog.show = false"
+          >
+            {{ tm('buttons.cancel') }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            :loading="renameDialog.loading"
+            :disabled="!renameDialog.name"
+            @click="submitRename"
+          >
+            {{ tm('buttons.save') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
-        <!-- 删除确认对话框 -->
-        <v-dialog v-model="deleteDialog.show" max-width="450px">
-            <v-card>
-                <v-card-title class="text-error">
-                    <v-icon class="mr-2" color="error">mdi-alert</v-icon>
-                    {{ tm('folder.deleteDialog.title') }}
-                </v-card-title>
-                <v-card-text>
-                    <p>{{ tm('folder.deleteDialog.message', { name: deleteDialog.folder?.name ?? '' }) }}</p>
-                    <p class="text-warning mt-2">
-                        <v-icon size="small" class="mr-1">mdi-information</v-icon>
-                        {{ tm('folder.deleteDialog.warning') }}
-                    </p>
-                </v-card-text>
-                <v-card-actions>
-                    <v-spacer />
-                    <v-btn variant="text" @click="deleteDialog.show = false">
-                        {{ tm('buttons.cancel') }}
-                    </v-btn>
-                    <v-btn color="error" variant="flat" @click="submitDelete" :loading="deleteDialog.loading">
-                        {{ tm('buttons.delete') }}
-                    </v-btn>
-                </v-card-actions>
-            </v-card>
-        </v-dialog>
-    </div>
+    <!-- 删除确认对话框 -->
+    <v-dialog
+      v-model="deleteDialog.show"
+      max-width="450px"
+    >
+      <v-card>
+        <v-card-title class="text-error">
+          <v-icon
+            class="mr-2"
+            color="error"
+          >
+            mdi-alert
+          </v-icon>
+          {{ tm('folder.deleteDialog.title') }}
+        </v-card-title>
+        <v-card-text>
+          <p>{{ tm('folder.deleteDialog.message', { name: deleteDialog.folder?.name ?? '' }) }}</p>
+          <p class="text-warning mt-2">
+            <v-icon
+              size="small"
+              class="mr-1"
+            >
+              mdi-information
+            </v-icon>
+            {{ tm('folder.deleteDialog.warning') }}
+          </p>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn
+            variant="text"
+            @click="deleteDialog.show = false"
+          >
+            {{ tm('buttons.cancel') }}
+          </v-btn>
+          <v-btn
+            color="error"
+            variant="flat"
+            :loading="deleteDialog.loading"
+            @click="submitDelete"
+          >
+            {{ tm('buttons.delete') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+  </div>
 </template>
 
 <script lang="ts">

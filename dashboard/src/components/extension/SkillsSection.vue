@@ -1,6 +1,10 @@
 <template>
   <div class="skills-page">
-    <v-container fluid class="pa-0" elevation="0">
+    <v-container
+      fluid
+      class="pa-0"
+      elevation="0"
+    >
       <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-4">
         <div>
           <v-btn
@@ -22,15 +26,30 @@
             {{ tm("skills.refresh") }}
           </v-btn>
         </div>
-        <v-btn-toggle v-model="mode" mandatory divided density="comfortable">
-          <v-btn value="local">{{ tm("skills.modeLocal") }}</v-btn>
-          <v-btn value="neo" :disabled="!neoEnabled">{{
-            tm("skills.modeNeo")
-          }}</v-btn>
+        <v-btn-toggle
+          v-model="mode"
+          mandatory
+          divided
+          density="comfortable"
+        >
+          <v-btn value="local">
+            {{ tm("skills.modeLocal") }}
+          </v-btn>
+          <v-btn
+            value="neo"
+            :disabled="!neoEnabled"
+          >
+            {{
+              tm("skills.modeNeo")
+            }}
+          </v-btn>
         </v-btn-toggle>
       </v-row>
 
-      <div v-if="mode === 'local'" class="px-2 pb-2 d-flex flex-column ga-2">
+      <div
+        v-if="mode === 'local'"
+        class="px-2 pb-2 d-flex flex-column ga-2"
+      >
         <small style="color: grey">{{ tm("skills.runtimeHint") }}</small>
         <v-alert
           v-if="runtime === 'sandbox' && !sandboxCache.ready"
@@ -43,7 +62,10 @@
         </v-alert>
       </div>
 
-      <div v-if="mode === 'neo' && !neoEnabled" class="px-3 pb-3">
+      <div
+        v-if="mode === 'neo' && !neoEnabled"
+        class="px-3 pb-3"
+      >
         <v-alert
           type="warning"
           variant="tonal"
@@ -59,15 +81,28 @@
           v-if="loading"
           indeterminate
           color="primary"
-        ></v-progress-linear>
+        />
 
-        <div v-else-if="skills.length === 0" class="text-center pa-8">
-          <v-icon size="64" color="grey-lighten-1">mdi-folder-open</v-icon>
-          <p class="text-grey mt-4">{{ tm("skills.empty") }}</p>
+        <div
+          v-else-if="skills.length === 0"
+          class="text-center pa-8"
+        >
+          <v-icon
+            size="64"
+            color="grey-lighten-1"
+          >
+            mdi-folder-open
+          </v-icon>
+          <p class="text-grey mt-4">
+            {{ tm("skills.empty") }}
+          </p>
           <small class="text-grey">{{ tm("skills.emptyHint") }}</small>
         </div>
 
-        <v-row v-else align="stretch">
+        <v-row
+          v-else
+          align="stretch"
+        >
           <v-col
             v-for="skill in skills"
             :key="skill.name"
@@ -100,12 +135,22 @@
                   <div
                     class="text-caption text-medium-emphasis skill-description"
                   >
-                    <v-icon size="small" class="me-1">mdi-text</v-icon>
+                    <v-icon
+                      size="small"
+                      class="me-1"
+                    >
+                      mdi-text
+                    </v-icon>
                     {{ item.description || tm("skills.noDescription") }}
                   </div>
                 </div>
                 <div class="text-caption text-medium-emphasis skill-path">
-                  <v-icon size="small" class="me-1">mdi-file-document</v-icon>
+                  <v-icon
+                    size="small"
+                    class="me-1"
+                  >
+                    mdi-file-document
+                  </v-icon>
                   {{ tm("skills.path") }}: {{ item.path }}
                 </div>
               </template>
@@ -117,8 +162,8 @@
                   rounded="xl"
                   :disabled="
                     itemLoading[item.name] ||
-                    false ||
-                    isSandboxPresetSkill(item)
+                      false ||
+                      isSandboxPresetSkill(item)
                   "
                   @click="downloadSkill(item)"
                 >
@@ -131,12 +176,17 @@
       </template>
 
       <template v-else-if="mode === 'neo' && neoEnabled">
-        <v-card class="mx-3 mb-4 pa-4 neo-filter-card" variant="outlined">
+        <v-card
+          class="mx-3 mb-4 pa-4 neo-filter-card"
+          variant="outlined"
+        >
           <div
             class="d-flex flex-wrap justify-space-between align-center ga-2 mb-3"
           >
             <div>
-              <div class="text-subtitle-1 font-weight-bold">Neo Skills</div>
+              <div class="text-subtitle-1 font-weight-bold">
+                Neo Skills
+              </div>
               <div class="text-caption text-medium-emphasis">
                 {{ tm("skills.neoFilterHint") }}
               </div>
@@ -152,7 +202,10 @@
           </div>
 
           <v-row class="ga-md-0 ga-2">
-            <v-col cols="12" md="4">
+            <v-col
+              cols="12"
+              md="4"
+            >
               <v-text-field
                 v-model="neoFilters.skill_key"
                 :label="tm('skills.neoSkillKey')"
@@ -162,7 +215,10 @@
                 variant="outlined"
               />
             </v-col>
-            <v-col cols="12" md="4">
+            <v-col
+              cols="12"
+              md="4"
+            >
               <v-select
                 v-model="neoFilters.status"
                 :label="tm('skills.neoStatus')"
@@ -175,7 +231,10 @@
                 variant="outlined"
               />
             </v-col>
-            <v-col cols="12" md="4">
+            <v-col
+              cols="12"
+              md="4"
+            >
               <v-select
                 v-model="neoFilters.stage"
                 :label="tm('skills.neoStage')"
@@ -195,24 +254,41 @@
           v-if="neoLoading"
           indeterminate
           color="primary"
-        ></v-progress-linear>
+        />
 
         <div class="mx-3 mb-3 d-flex flex-wrap ga-2">
-          <v-chip size="small" color="primary" variant="tonal"
-            >Candidates: {{ neoCandidates.length }}</v-chip
+          <v-chip
+            size="small"
+            color="primary"
+            variant="tonal"
           >
-          <v-chip size="small" color="indigo" variant="tonal"
-            >Releases: {{ neoReleases.length }}</v-chip
+            Candidates: {{ neoCandidates.length }}
+          </v-chip>
+          <v-chip
+            size="small"
+            color="indigo"
+            variant="tonal"
           >
-          <v-chip size="small" color="success" variant="tonal"
-            >Active: {{ activeReleaseCount }}</v-chip
+            Releases: {{ neoReleases.length }}
+          </v-chip>
+          <v-chip
+            size="small"
+            color="success"
+            variant="tonal"
           >
+            Active: {{ activeReleaseCount }}
+          </v-chip>
         </div>
 
-        <v-card class="mx-3 mb-4 neo-table-card" variant="outlined">
-          <v-card-title class="text-subtitle-1 font-weight-bold">{{
-            tm("skills.neoCandidates")
-          }}</v-card-title>
+        <v-card
+          class="mx-3 mb-4 neo-table-card"
+          variant="outlined"
+        >
+          <v-card-title class="text-subtitle-1 font-weight-bold">
+            {{
+              tm("skills.neoCandidates")
+            }}
+          </v-card-title>
           <v-data-table
             :headers="candidateHeaders"
             :items="neoCandidates"
@@ -282,10 +358,15 @@
           </v-data-table>
         </v-card>
 
-        <v-card class="mx-3 mb-4 neo-table-card" variant="outlined">
-          <v-card-title class="text-subtitle-1 font-weight-bold">{{
-            tm("skills.neoReleases")
-          }}</v-card-title>
+        <v-card
+          class="mx-3 mb-4 neo-table-card"
+          variant="outlined"
+        >
+          <v-card-title class="text-subtitle-1 font-weight-bold">
+            {{
+              tm("skills.neoReleases")
+            }}
+          </v-card-title>
           <v-data-table
             :headers="releaseHeaders"
             :items="neoReleases"
@@ -339,7 +420,11 @@
       </template>
     </v-container>
 
-    <v-dialog v-model="uploadDialog" max-width="880px" :persistent="uploading">
+    <v-dialog
+      v-model="uploadDialog"
+      max-width="880px"
+      :persistent="uploading"
+    >
       <v-card class="skills-upload-dialog">
         <v-card-title class="skills-upload-dialog__header px-6 pt-6 pb-2">
           <div class="skills-upload-dialog__heading">
@@ -364,26 +449,34 @@
           </p>
 
           <div class="skills-upload-structure-note">
-            <v-icon size="18">mdi-information-outline</v-icon>
+            <v-icon size="18">
+              mdi-information-outline
+            </v-icon>
             <span>{{ tm("skills.structureRequirement") }}</span>
           </div>
 
           <div class="skills-upload-capabilities">
             <div class="skills-upload-capability">
               <div class="skills-upload-capability__icon">
-                <v-icon size="18">mdi-layers-outline</v-icon>
+                <v-icon size="18">
+                  mdi-layers-outline
+                </v-icon>
               </div>
               <span>{{ tm("skills.abilityMultiple") }}</span>
             </div>
             <div class="skills-upload-capability">
               <div class="skills-upload-capability__icon">
-                <v-icon size="18">mdi-shield-check-outline</v-icon>
+                <v-icon size="18">
+                  mdi-shield-check-outline
+                </v-icon>
               </div>
               <span>{{ tm("skills.abilityValidate") }}</span>
             </div>
             <div class="skills-upload-capability">
               <div class="skills-upload-capability__icon">
-                <v-icon size="18">mdi-skip-next-circle-outline</v-icon>
+                <v-icon size="18">
+                  mdi-skip-next-circle-outline
+                </v-icon>
               </div>
               <span>{{ tm("skills.abilitySkip") }}</span>
             </div>
@@ -403,7 +496,9 @@
             @drop.prevent="handleUploadDrop"
           >
             <div class="skills-dropzone__icon">
-              <v-icon size="34">mdi-folder-zip-outline</v-icon>
+              <v-icon size="34">
+                mdi-folder-zip-outline
+              </v-icon>
             </div>
             <div class="text-h6 font-weight-medium">
               {{ tm("skills.dropzoneTitle") }}
@@ -421,10 +516,13 @@
               hidden
               accept=".zip"
               @change="handleUploadSelection"
-            />
+            >
           </div>
 
-          <div v-if="uploadItems.length > 0" class="skills-upload-summary">
+          <div
+            v-if="uploadItems.length > 0"
+            class="skills-upload-summary"
+          >
             <v-chip
               size="small"
               variant="flat"
@@ -479,7 +577,10 @@
             </v-chip>
           </div>
 
-          <div v-if="uploadItems.length > 0" class="skills-upload-list">
+          <div
+            v-if="uploadItems.length > 0"
+            class="skills-upload-list"
+          >
             <div class="skills-upload-list__header">
               <span>{{ tm("skills.fileListTitle") }}</span>
             </div>
@@ -489,7 +590,9 @@
               class="skills-upload-row"
             >
               <div class="skills-upload-row__meta">
-                <div class="skills-upload-row__name">{{ item.name }}</div>
+                <div class="skills-upload-row__name">
+                  {{ item.name }}
+                </div>
                 <div class="skills-upload-row__size">
                   {{ formatFileSize(item.size) }}
                 </div>
@@ -515,7 +618,10 @@
               </div>
             </div>
           </div>
-          <div v-else class="skills-upload-empty">
+          <div
+            v-else
+            class="skills-upload-empty"
+          >
             {{ tm("skills.fileListEmpty") }}
           </div>
         </v-card-text>
@@ -546,31 +652,51 @@
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="deleteDialog" max-width="400px">
+    <v-dialog
+      v-model="deleteDialog"
+      max-width="400px"
+    >
       <v-card>
         <v-card-title>{{ tm("skills.deleteTitle") }}</v-card-title>
         <v-card-text>{{ tm("skills.deleteMessage") }}</v-card-text>
         <v-card-actions class="d-flex justify-end">
-          <v-btn variant="text" @click="deleteDialog = false">{{
-            tm("skills.cancel")
-          }}</v-btn>
-          <v-btn color="error" :loading="deleting" @click="deleteSkill">
+          <v-btn
+            variant="text"
+            @click="deleteDialog = false"
+          >
+            {{
+              tm("skills.cancel")
+            }}
+          </v-btn>
+          <v-btn
+            color="error"
+            :loading="deleting"
+            @click="deleteSkill"
+          >
             {{ t("core.common.itemCard.delete") }}
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="payloadDialog.show" max-width="820px">
+    <v-dialog
+      v-model="payloadDialog.show"
+      max-width="820px"
+    >
       <v-card>
         <v-card-title>{{ tm("skills.neoPayloadTitle") }}</v-card-title>
         <v-card-text>
           <pre class="payload-preview">{{ payloadDialog.content }}</pre>
         </v-card-text>
         <v-card-actions class="d-flex justify-end">
-          <v-btn variant="text" @click="payloadDialog.show = false">{{
-            tm("skills.cancel")
-          }}</v-btn>
+          <v-btn
+            variant="text"
+            @click="payloadDialog.show = false"
+          >
+            {{
+              tm("skills.cancel")
+            }}
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

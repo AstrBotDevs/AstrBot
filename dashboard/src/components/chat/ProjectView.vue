@@ -1,47 +1,76 @@
 <template>
-    <div class="project-sessions-container fade-in">
-        <div class="project-header">
-            <div class="project-header-info">
-                <span class="project-header-emoji">{{ project?.emoji || '📁' }}</span>
-                <h2 class="project-header-title">{{ project?.title }}</h2>
-            </div>
-            <p class="project-header-description" v-if="project?.description">
-                {{ project.description }}
-            </p>
-        </div>
-
-        <div class="project-input-slot">
-            <slot></slot>
-        </div>
-
-        <v-card flat class="project-sessions-list">
-            <v-list v-if="sessions.length > 0">
-                <v-list-item v-for="session in sessions" :key="session.session_id"
-                    @click="$emit('selectSession', session.session_id)" class="project-session-item" rounded="lg">
-                    <v-list-item-title>
-                        {{ session.display_name || tm('conversation.newConversation') }}
-                    </v-list-item-title>
-                    <v-list-item-subtitle>
-                        {{ formatDate(session.updated_at) }}
-                    </v-list-item-subtitle>
-                    <template v-slot:append>
-                        <div class="session-actions">
-                            <v-btn icon="mdi-pencil" size="x-small" variant="text"
-                                class="edit-session-btn"
-                                @click.stop="$emit('editSessionTitle', session.session_id, session.display_name ?? '')" />
-                            <v-btn icon="mdi-delete" size="x-small" variant="text"
-                                class="delete-session-btn" color="error"
-                                @click.stop="handleDeleteSession(session)" />
-                        </div>
-                    </template>
-                </v-list-item>
-            </v-list>
-            <div v-else class="no-sessions-in-project">
-                <v-icon icon="mdi-message-off-outline" size="large" color="grey-lighten-1"></v-icon>
-                <p>{{ tm('project.noSessions') }}</p>
-            </div>
-        </v-card>
+  <div class="project-sessions-container fade-in">
+    <div class="project-header">
+      <div class="project-header-info">
+        <span class="project-header-emoji">{{ project?.emoji || '📁' }}</span>
+        <h2 class="project-header-title">
+          {{ project?.title }}
+        </h2>
+      </div>
+      <p
+        v-if="project?.description"
+        class="project-header-description"
+      >
+        {{ project.description }}
+      </p>
     </div>
+
+    <div class="project-input-slot">
+      <slot />
+    </div>
+
+    <v-card
+      flat
+      class="project-sessions-list"
+    >
+      <v-list v-if="sessions.length > 0">
+        <v-list-item
+          v-for="session in sessions"
+          :key="session.session_id"
+          class="project-session-item"
+          rounded="lg"
+          @click="$emit('selectSession', session.session_id)"
+        >
+          <v-list-item-title>
+            {{ session.display_name || tm('conversation.newConversation') }}
+          </v-list-item-title>
+          <v-list-item-subtitle>
+            {{ formatDate(session.updated_at) }}
+          </v-list-item-subtitle>
+          <template #append>
+            <div class="session-actions">
+              <v-btn
+                icon="mdi-pencil"
+                size="x-small"
+                variant="text"
+                class="edit-session-btn"
+                @click.stop="$emit('editSessionTitle', session.session_id, session.display_name ?? '')"
+              />
+              <v-btn
+                icon="mdi-delete"
+                size="x-small"
+                variant="text"
+                class="delete-session-btn"
+                color="error"
+                @click.stop="handleDeleteSession(session)"
+              />
+            </div>
+          </template>
+        </v-list-item>
+      </v-list>
+      <div
+        v-else
+        class="no-sessions-in-project"
+      >
+        <v-icon
+          icon="mdi-message-off-outline"
+          size="large"
+          color="grey-lighten-1"
+        />
+        <p>{{ tm('project.noSessions') }}</p>
+      </div>
+    </v-card>
+  </div>
 </template>
 
 <script setup lang="ts">

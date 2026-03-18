@@ -4,6 +4,8 @@ import time
 import traceback
 from collections.abc import AsyncGenerator
 
+import anyio
+
 from astrbot.core import logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
@@ -85,6 +87,21 @@ def _build_tool_result_status_message(
     if tool_result:
         status_msg = f"{status_msg}\n📎 返回结果: {tool_result}"
     return status_msg
+
+
+def _extract_final_streaming_chain(msg_chain: MessageChain) -> MessageChain | None:
+    if not msg_chain.chain:
+        return None
+
+    final_chain: list[BaseMessageComponent] = []
+    for comp in msg_chain.chain:
+        if isinstance(comp, Plain):
+            continue
+        final_chain.append(comp)
+
+    if not final_chain:
+        return None
+    return MessageChain(chain=final_chain, type=msg_chain.type)
 
 
 async def run_agent(
@@ -211,6 +228,11 @@ async def run_agent(
                         # display the reasoning content only when configured
                         continue
                     yield resp.data["chain"]  # MessageChain
+                elif resp.type == "llm_result":
+                    if final_chain := _extract_final_streaming_chain(
+                        resp.data["chain"]
+                    ):
+                        yield final_chain
             if not stop_watcher.done():
                 stop_watcher.cancel()
                 try:
@@ -509,8 +531,8 @@ async def _simulated_stream_tts(
                 audio_path = await tts_provider.get_audio(text)
 
                 if audio_path:
-                    with open(audio_path, "rb") as f:
-                        audio_data = f.read()
+                    async with await anyio.open_file(audio_path, "rb") as f:
+                        audio_data = await f.read()
                     await audio_queue.put((text, audio_data))
             except Exception as e:
                 logger.error(

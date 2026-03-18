@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
+import anyio
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import (
     GetMessageRequest,
@@ -428,13 +429,13 @@ class LarkPlatformAdapter(Platform):
             return None
 
         suffix = Path(file_name).suffix if file_name else default_suffix
-        temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = anyio.Path(get_astrbot_temp_path())
+        await temp_dir.mkdir(parents=True, exist_ok=True)
         temp_path = (
             temp_dir / f"lark_{message_type}_{file_name}_{uuid4().hex[:4]}{suffix}"
         )
-        temp_path.write_bytes(file_bytes)
-        return str(temp_path.resolve())
+        await temp_path.write_bytes(file_bytes)
+        return str(await temp_path.resolve())
 
     def _clean_expired_events(self) -> None:
         """清理超过 30 分钟的事件记录"""

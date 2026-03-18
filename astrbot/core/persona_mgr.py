@@ -44,6 +44,22 @@ class PersonaManager:
             raise ValueError(f"Persona with ID {persona_id} does not exist.")
         return persona
 
+    def get_persona_v3_by_id(self, persona_id: str | None) -> Personality | None:
+        """Resolve a v3 persona object by id.
+
+        - None/empty id returns None.
+        - "default" maps to in-memory DEFAULT_PERSONALITY.
+        - Otherwise search in personas_v3 by persona name.
+        """
+        if not persona_id:
+            return None
+        if persona_id == "default":
+            return DEFAULT_PERSONALITY
+        return next(
+            (persona for persona in self.personas_v3 if persona["name"] == persona_id),
+            None,
+        )
+
     async def get_default_persona_v3(
         self,
         umo: str | MessageSession | None = None,
@@ -54,12 +70,7 @@ class PersonaManager:
             "default_personality",
             "default",
         )
-        if not default_persona_id or default_persona_id == "default":
-            return DEFAULT_PERSONALITY
-        try:
-            return next(p for p in self.personas_v3 if p["name"] == default_persona_id)
-        except Exception:
-            return DEFAULT_PERSONALITY
+        return self.get_persona_v3_by_id(default_persona_id) or DEFAULT_PERSONALITY
 
     async def resolve_selected_persona(
         self,
@@ -334,6 +345,41 @@ class PersonaManager:
             custom_error_message=custom_error_message,
             folder_id=folder_id,
             sort_order=sort_order,
+        )
+        self.personas.append(new_persona)
+        self.get_v3_persona_data()
+        return new_persona
+
+    async def clone_persona(
+        self,
+        source_persona_id: str,
+        new_persona_id: str,
+    ) -> Persona:
+        """Clone an existing persona with a new ID.
+
+        Args:
+            source_persona_id: Source persona ID to clone from
+            new_persona_id: New persona ID for the clone
+
+        Returns:
+            The newly created persona clone
+        """
+        source_persona = await self.db.get_persona_by_id(source_persona_id)
+        if not source_persona:
+            raise ValueError(f"Persona with ID {source_persona_id} does not exist.")
+
+        if await self.db.get_persona_by_id(new_persona_id):
+            raise ValueError(f"Persona with ID {new_persona_id} already exists.")
+
+        new_persona = await self.db.insert_persona(
+            new_persona_id,
+            source_persona.system_prompt,
+            source_persona.begin_dialogs,
+            tools=source_persona.tools,
+            skills=source_persona.skills,
+            custom_error_message=source_persona.custom_error_message,
+            folder_id=source_persona.folder_id,
+            sort_order=source_persona.sort_order,
         )
         self.personas.append(new_persona)
         self.get_v3_persona_data()

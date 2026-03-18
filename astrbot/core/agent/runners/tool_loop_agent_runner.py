@@ -162,18 +162,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # These two are used for tool schema mode handling
         # We now have two modes:
         # - "full": use full tool schema for LLM calls, default.
-        # - "skills_like": use light tool schema for LLM calls, and re-query with param-only schema when needed.
+        # - "lazy_load": use light tool schema for LLM calls, and re-query with param-only schema when needed.
         #   Light tool schema does not include tool parameters.
         #   This can reduce token usage when tools have large descriptions.
         # See #4681
         self.tool_schema_mode = tool_schema_mode
         self._tool_schema_param_set = None
-        self._skill_like_raw_tool_set = None
-        if tool_schema_mode == "skills_like":
+        self._lazy_load_raw_tool_set = None
+        if tool_schema_mode == "lazy_load":
             tool_set = self.req.func_tool
             if not tool_set:
                 return
-            self._skill_like_raw_tool_set = tool_set
+            self._lazy_load_raw_tool_set = tool_set
             light_set = tool_set.get_light_tool_set()
             self._tool_schema_param_set = tool_set.get_param_only_tool_set()
             # MODIFIE the req.func_tool to use light tool schemas
@@ -263,7 +263,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                 if has_stream_output:
                     return
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 last_exception = exc
                 logger.warning(
                     "Chat Model %s request error: %s",
@@ -529,7 +529,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
-            if self.tool_schema_mode == "skills_like":
+            if self.tool_schema_mode == "lazy_load":
                 llm_resp, _ = await self._resolve_tool_exec(llm_resp)
 
             tool_call_result_blocks = []
@@ -665,6 +665,31 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
 
+        def _handle_image_content(
+            base64_data: str,
+            mime_type: str,
+            tool_call_id: str,
+            tool_name: str,
+            content_index: int,
+        ) -> _HandleFunctionToolsResult:
+            """Helper to cache image and return result for LLM visibility."""
+            cached_img = tool_image_cache.save_image(
+                base64_data=base64_data,
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                index=content_index,
+                mime_type=mime_type,
+            )
+            _append_tool_call_result(
+                tool_call_id,
+                (
+                    f"Image returned and cached at path='{cached_img.file_path}'. "
+                    f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
+                    f"with type='image' and path='{cached_img.file_path}'."
+                ),
+            )
+            return _HandleFunctionToolsResult.from_cached_image(cached_img)
+
         # 执行函数调用
         for func_tool_name, func_tool_args, func_tool_id in zip(
             llm_response.tools_call_name,
@@ -691,12 +716,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     return
 
                 if (
-                    self.tool_schema_mode == "skills_like"
-                    and self._skill_like_raw_tool_set
+                    self.tool_schema_mode == "lazy_load"
+                    and self._lazy_load_raw_tool_set
                 ):
-                    # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
+                    # in 'lazy_load' mode, raw.func_tool is light schema, does not have handler
                     # so we need to get the tool from the raw tool set
-                    func_tool = self._skill_like_raw_tool_set.get_tool(func_tool_name)
+                    func_tool = self._lazy_load_raw_tool_set.get_tool(func_tool_name)
                 else:
                     func_tool = req.func_tool.get_tool(func_tool_name)
 
@@ -758,69 +783,47 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     if isinstance(resp, CallToolResult):
                         res = resp
                         _final_resp = resp
-                        if isinstance(res.content[0], TextContent):
-                            _append_tool_call_result(
-                                func_tool_id,
-                                res.content[0].text,
-                            )
-                        elif isinstance(res.content[0], ImageContent):
-                            # Cache the image instead of sending directly
-                            cached_img = tool_image_cache.save_image(
-                                base64_data=res.content[0].data,
-                                tool_call_id=func_tool_id,
-                                tool_name=func_tool_name,
-                                index=0,
-                                mime_type=res.content[0].mimeType or "image/png",
-                            )
-                            _append_tool_call_result(
-                                func_tool_id,
-                                (
-                                    f"Image returned and cached at path='{cached_img.file_path}'. "
-                                    f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
-                                    f"with type='image' and path='{cached_img.file_path}'."
-                                ),
-                            )
-                            # Yield image info for LLM visibility (will be handled in step())
-                            yield _HandleFunctionToolsResult.from_cached_image(
-                                cached_img
-                            )
-                        elif isinstance(res.content[0], EmbeddedResource):
-                            resource = res.content[0].resource
-                            if isinstance(resource, TextResourceContents):
+                        # Process all content items in the result
+                        for content_index, content in enumerate(res.content):
+                            if isinstance(content, TextContent):
                                 _append_tool_call_result(
                                     func_tool_id,
-                                    resource.text,
+                                    content.text,
                                 )
-                            elif (
-                                isinstance(resource, BlobResourceContents)
-                                and resource.mimeType
-                                and resource.mimeType.startswith("image/")
-                            ):
+                            elif isinstance(content, ImageContent):
                                 # Cache the image instead of sending directly
-                                cached_img = tool_image_cache.save_image(
-                                    base64_data=resource.blob,
+                                yield _handle_image_content(
+                                    base64_data=content.data,
+                                    mime_type=content.mimeType or "image/png",
                                     tool_call_id=func_tool_id,
                                     tool_name=func_tool_name,
-                                    index=0,
-                                    mime_type=resource.mimeType,
+                                    content_index=content_index,
                                 )
-                                _append_tool_call_result(
-                                    func_tool_id,
-                                    (
-                                        f"Image returned and cached at path='{cached_img.file_path}'. "
-                                        f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
-                                        f"with type='image' and path='{cached_img.file_path}'."
-                                    ),
-                                )
-                                # Yield image info for LLM visibility
-                                yield _HandleFunctionToolsResult.from_cached_image(
-                                    cached_img
-                                )
-                            else:
-                                _append_tool_call_result(
-                                    func_tool_id,
-                                    "The tool has returned a data type that is not supported.",
-                                )
+                            elif isinstance(content, EmbeddedResource):
+                                resource = content.resource
+                                if isinstance(resource, TextResourceContents):
+                                    _append_tool_call_result(
+                                        func_tool_id,
+                                        resource.text,
+                                    )
+                                elif (
+                                    isinstance(resource, BlobResourceContents)
+                                    and resource.mimeType
+                                    and resource.mimeType.startswith("image/")
+                                ):
+                                    # Cache the image instead of sending directly
+                                    yield _handle_image_content(
+                                        base64_data=resource.blob,
+                                        mime_type=resource.mimeType,
+                                        tool_call_id=func_tool_id,
+                                        tool_name=func_tool_name,
+                                        content_index=content_index,
+                                    )
+                                else:
+                                    _append_tool_call_result(
+                                        func_tool_id,
+                                        "The tool has returned a data type that is not supported.",
+                                    )
 
                     elif resp is None:
                         # Tool 直接请求发送消息给用户
@@ -922,7 +925,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         llm_resp: LLMResponse,
     ) -> tuple[LLMResponse, ToolSet | None]:
-        """Used in 'skills_like' tool schema mode to re-query LLM with param-only tool schemas."""
+        """Used in 'lazy_load' tool schema mode to re-query LLM with param-only tool schemas."""
         tool_names = llm_resp.tools_call_name
         if not tool_names:
             return llm_resp, self.req.func_tool

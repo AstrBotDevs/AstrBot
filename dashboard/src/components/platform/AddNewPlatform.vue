@@ -1,11 +1,27 @@
 <template>
-  <v-dialog v-model="showDialog" max-width="800px" max-height="90%" @after-enter="prepareData">
+  <v-dialog
+    v-model="showDialog"
+    max-width="800px"
+    max-height="90%"
+    @after-enter="prepareData"
+  >
     <v-card
-      :title="updatingMode ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm('dialog.adapter')}` : tm('dialog.addPlatform')">
-  <v-card-text ref="dialogScrollContainer" class="pa-4 ml-2" style="overflow-y: auto;">
-        <div class="d-flex align-start" style="width: 100%;">
+      :title="updatingMode ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm('dialog.adapter')}` : tm('dialog.addPlatform')"
+    >
+      <v-card-text
+        ref="dialogScrollContainer"
+        class="pa-4 ml-2"
+        style="overflow-y: auto;"
+      >
+        <div
+          class="d-flex align-start"
+          style="width: 100%;"
+        >
           <div>
-            <v-icon icon="mdi-numeric-1-circle" class="mr-3"></v-icon>
+            <v-icon
+              icon="mdi-numeric-1-circle"
+              class="mr-3"
+            />
           </div>
           <div style="flex: 1;">
             <h3>
@@ -13,52 +29,87 @@
             </h3>
             <small style="color: grey;">{{ tm('createDialog.step1Hint') }}</small>
             <div>
-
               <div v-if="!updatingMode">
-                <v-select v-model="selectedPlatformType" :items="Object.keys(platformTemplates)" item-title="name"
-                  item-value="name" :label="tm('createDialog.platformTypeLabel')" variant="outlined" rounded="md" dense hide-details class="mt-6"
-                  style="max-width: 30%; min-width: 300px;">
-
-                  <template v-slot:item="{ props: itemProps, item }">
+                <v-select
+                  v-model="selectedPlatformType"
+                  :items="Object.keys(platformTemplates)"
+                  item-title="name"
+                  item-value="name"
+                  :label="tm('createDialog.platformTypeLabel')"
+                  variant="outlined"
+                  rounded="md"
+                  dense
+                  hide-details
+                  class="mt-6"
+                  style="max-width: 30%; min-width: 300px;"
+                >
+                  <template #item="{ props: itemProps, item }">
                     <v-list-item v-bind="itemProps">
-                      <template v-slot:prepend>
-                        <img :src="getPlatformIcon(platformTemplates[item.raw].type)"
-                          style="width: 32px; height: 32px; object-fit: contain; margin-right: 16px;" />
+                      <template #prepend>
+                        <img
+                          :src="getPlatformIcon(platformTemplates[item.raw].type)"
+                          style="width: 32px; height: 32px; object-fit: contain; margin-right: 16px;"
+                        >
                       </template>
                     </v-list-item>
                   </template>
-
                 </v-select>
-                <div class="mt-3" v-if="selectedPlatformConfig">
-                  <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
-                    <v-icon start>mdi-book-open-variant</v-icon>
+                <div
+                  v-if="selectedPlatformConfig"
+                  class="mt-3"
+                >
+                  <v-btn
+                    color="info"
+                    variant="tonal"
+                    class="mt-2"
+                    @click="openTutorial"
+                  >
+                    <v-icon start>
+                      mdi-book-open-variant
+                    </v-icon>
                     {{ tm('dialog.viewTutorial') }}
                   </v-btn>
                   <div class="mt-2">
-                    <AstrBotConfig :iterable="selectedPlatformConfig" :metadata="metadata['platform_group']?.metadata"
-                      metadataKey="platform" />
+                    <AstrBotConfig
+                      :iterable="selectedPlatformConfig"
+                      :metadata="metadata['platform_group']?.metadata"
+                      metadata-key="platform"
+                    />
                   </div>
                 </div>
               </div>
               <div v-else>
-                <v-text-field :label="tm('createDialog.platformTypeLabel')" variant="outlined" rounded="md" dense hide-details class="mt-6"
-                  style="max-width: 30%; min-width: 300px;" v-model="updatingPlatformConfig.type"
-                  disabled></v-text-field>
+                <v-text-field
+                  :model-value="updatingPlatformConfig.type"
+                  :label="tm('createDialog.platformTypeLabel')"
+                  variant="outlined"
+                  rounded="md"
+                  dense
+                  hide-details
+                  class="mt-6"
+                  style="max-width: 30%; min-width: 300px;"
+                  disabled
+                />
                 <div class="mt-3">
                   <div class="mt-2">
-                    <AstrBotConfig :iterable="updatingPlatformConfig" :metadata="metadata['platform_group']?.metadata"
-                      metadataKey="platform" />
+                    <AstrBotConfig
+                      :iterable="updatingPlatformConfig"
+                      :metadata="metadata['platform_group']?.metadata"
+                      metadata-key="platform"
+                    />
                   </div>
                 </div>
               </div>
-
             </div>
           </div>
         </div>
 
         <div class="d-flex align-start mt-6">
           <div>
-            <v-icon icon="mdi-numeric-2-circle" class="mr-3"></v-icon>
+            <v-icon
+              icon="mdi-numeric-2-circle"
+              class="mr-3"
+            />
           </div>
           <div style="flex: 1;">
             <div class="d-flex align-center justify-space-between">
@@ -67,46 +118,93 @@
                   <h3>
                     {{ tm('createDialog.configFileTitle') }}
                   </h3>
-                  <v-chip size="x-small" color="primary" variant="tonal" rounded="sm" class="ml-2"
-                    v-if="!updatingMode">{{ tm('createDialog.optional') }}</v-chip>
+                  <v-chip
+                    v-if="!updatingMode"
+                    size="x-small"
+                    color="primary"
+                    variant="tonal"
+                    rounded="sm"
+                    class="ml-2"
+                  >
+                    {{ tm('createDialog.optional') }}
+                  </v-chip>
                 </div>
                 <small style="color: grey;">{{ tm('createDialog.configHint') }}</small>
-                <small style="color: grey;" v-if="!updatingMode">{{ tm('createDialog.configDefaultHint') }}</small>
+                <small
+                  v-if="!updatingMode"
+                  style="color: grey;"
+                >{{ tm('createDialog.configDefaultHint') }}</small>
               </div>
               <div>
-                <v-btn variant="plain" icon @click="toggleConfigSection" class="mt-2">
+                <v-btn
+                  variant="plain"
+                  icon
+                  class="mt-2"
+                  @click="toggleConfigSection"
+                >
                   <v-icon>{{ showConfigSection ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
                 </v-btn>
               </div>
-
             </div>
 
             <div v-if="showConfigSection">
               <div v-if="!updatingMode">
-                <v-radio-group class="mt-2" v-model="aBConfigRadioVal" hide-details="true">
+                <v-radio-group
+                  v-model="aBConfigRadioVal"
+                  class="mt-2"
+                  hide-details="true"
+                >
                   <v-radio value="0">
-                    <template v-slot:label>
+                    <template #label>
                       <span>{{ tm('createDialog.useExistingConfig') }}</span>
                     </template>
                   </v-radio>
-                  <div class="d-flex align-center ml-10 my-2" v-if="aBConfigRadioVal === '0'">
-                    <v-select v-model="selectedAbConfId" :items="configInfoList" item-title="name"
-                      item-value="id" :label="tm('createDialog.selectConfigLabel')" variant="outlined" rounded="md" dense hide-details
-                      style="max-width: 30%; min-width: 200px;">
-                    </v-select>
-                    <v-btn icon variant="text" density="comfortable" class="ml-2"
-                      :disabled="!selectedAbConfId" @click="openConfigDrawer(selectedAbConfId)">
+                  <div
+                    v-if="aBConfigRadioVal === '0'"
+                    class="d-flex align-center ml-10 my-2"
+                  >
+                    <v-select
+                      v-model="selectedAbConfId"
+                      :items="configInfoList"
+                      item-title="name"
+                      item-value="id"
+                      :label="tm('createDialog.selectConfigLabel')"
+                      variant="outlined"
+                      rounded="md"
+                      dense
+                      hide-details
+                      style="max-width: 30%; min-width: 200px;"
+                    />
+                    <v-btn
+                      icon
+                      variant="text"
+                      density="comfortable"
+                      class="ml-2"
+                      :disabled="!selectedAbConfId"
+                      @click="openConfigDrawer(selectedAbConfId)"
+                    >
                       <v-icon>mdi-arrow-top-right-thick</v-icon>
                     </v-btn>
                   </div>
-                  <v-radio value="1" :label="tm('createDialog.createNewConfig')">
-                  </v-radio>
-                  <div class="d-flex align-center" v-if="aBConfigRadioVal === '1'">
-                    <v-text-field v-model="selectedAbConfId" :label="tm('createDialog.newConfigNameLabel')" variant="outlined" rounded="md" dense
-                      hide-details style="max-width: 30%; min-width: 200px;" class="ml-10 my-2">
-                    </v-text-field>
+                  <v-radio
+                    value="1"
+                    :label="tm('createDialog.createNewConfig')"
+                  />
+                  <div
+                    v-if="aBConfigRadioVal === '1'"
+                    class="d-flex align-center"
+                  >
+                    <v-text-field
+                      v-model="selectedAbConfId"
+                      :label="tm('createDialog.newConfigNameLabel')"
+                      variant="outlined"
+                      rounded="md"
+                      dense
+                      hide-details
+                      style="max-width: 30%; min-width: 200px;"
+                      class="ml-10 my-2"
+                    />
                   </div>
-
                 </v-radio-group>
 
                 <!-- 现有配置文件预览区域 -->
@@ -126,132 +224,268 @@
                 </div> -->
 
                 <!-- 新配置文件编辑区域 -->
-                <div v-if="aBConfigRadioVal === '1'" class="mt-4">
-                  <div v-if="newConfigLoading" class="d-flex justify-center py-4">
-                    <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                <div
+                  v-if="aBConfigRadioVal === '1'"
+                  class="mt-4"
+                >
+                  <div
+                    v-if="newConfigLoading"
+                    class="d-flex justify-center py-4"
+                  >
+                    <v-progress-circular
+                      indeterminate
+                      color="primary"
+                    />
                   </div>
-                  <div v-else-if="newConfigData && newConfigMetadata" class="config-preview-container">
-                    <h4 class="mb-3">{{ tm('createDialog.newConfigTitle') }}</h4>
-                    <AstrBotCoreConfigWrapper :metadata="newConfigMetadata" :config_data="newConfigData" />
+                  <div
+                    v-else-if="newConfigData && newConfigMetadata"
+                    class="config-preview-container"
+                  >
+                    <h4 class="mb-3">
+                      {{ tm('createDialog.newConfigTitle') }}
+                    </h4>
+                    <AstrBotCoreConfigWrapper
+                      :metadata="newConfigMetadata"
+                      :config_data="newConfigData"
+                    />
                   </div>
-                  <div v-else class="text-center py-4 text-grey">
+                  <div
+                    v-else
+                    class="text-center py-4 text-grey"
+                  >
                     <v-icon>mdi-information-outline</v-icon>
-                    <p class="mt-2">{{ tm('createDialog.newConfigLoadFailed') }}</p>
+                    <p class="mt-2">
+                      {{ tm('createDialog.newConfigLoadFailed') }}
+                    </p>
                   </div>
                 </div>
-
               </div>
 
               <div v-else>
                 <div class="mb-3 d-flex align-center justify-space-between">
                   <div>
-                    <v-btn v-if="isEditingRoutes" color="primary" variant="tonal" @click="addNewRoute" size="small">
-                      <v-icon start>mdi-plus</v-icon>
+                    <v-btn
+                      v-if="isEditingRoutes"
+                      color="primary"
+                      variant="tonal"
+                      size="small"
+                      @click="addNewRoute"
+                    >
+                      <v-icon start>
+                        mdi-plus
+                      </v-icon>
                       {{ tm('createDialog.addRouteRule') }}
                     </v-btn>
                   </div>
-                  <v-btn :color="isEditingRoutes ? 'grey' : 'primary'" variant="tonal" size="small"
-                    @click="toggleEditMode">
-                    <v-icon start>{{ isEditingRoutes ? 'mdi-eye' : 'mdi-pencil' }}</v-icon>
+                  <v-btn
+                    :color="isEditingRoutes ? 'grey' : 'primary'"
+                    variant="tonal"
+                    size="small"
+                    @click="toggleEditMode"
+                  >
+                    <v-icon start>
+                      {{ isEditingRoutes ? 'mdi-eye' : 'mdi-pencil' }}
+                    </v-icon>
                     {{ isEditingRoutes ? tm('createDialog.viewMode') : tm('createDialog.editMode') }}
                   </v-btn>
                 </div>
 
-                <v-data-table :headers="routeTableHeaders" :items="platformRoutes" item-value="umop"
-                  :no-data-text="tm('createDialog.noRouteRules')" hide-default-footer :items-per-page="-1" class="mt-2"
-                  variant="outlined">
-
-                  <template v-slot:item.source="{ item }">
-                    <div class="d-flex align-center" style="min-width: 250px;">
-                      <v-select v-if="isEditingRoutes" v-model="item.messageType" :items="messageTypeOptions"
-                        item-title="label" item-value="value" variant="outlined" density="compact" hide-details
-                        style="max-width: 140px;">
-                      </v-select>
+                <v-data-table
+                  :headers="routeTableHeaders"
+                  :items="platformRoutes"
+                  item-value="umop"
+                  :no-data-text="tm('createDialog.noRouteRules')"
+                  hide-default-footer
+                  :items-per-page="-1"
+                  class="mt-2"
+                  variant="outlined"
+                >
+                  <template #item.source="{ item }">
+                    <div
+                      class="d-flex align-center"
+                      style="min-width: 250px;"
+                    >
+                      <v-select
+                        v-if="isEditingRoutes"
+                        v-model="item.messageType"
+                        :items="messageTypeOptions"
+                        item-title="label"
+                        item-value="value"
+                        variant="outlined"
+                        density="compact"
+                        hide-details
+                        style="max-width: 140px;"
+                      />
                       <small v-else>{{ getMessageTypeLabel(item.messageType) }}</small>
                       <small class="mx-1">:</small>
-                      <v-text-field v-if="isEditingRoutes" v-model="item.sessionId" variant="outlined" density="compact"
-                        hide-details :placeholder="tm('createDialog.sessionIdPlaceholder')">
-                      </v-text-field>
+                      <v-text-field
+                        v-if="isEditingRoutes"
+                        v-model="item.sessionId"
+                        variant="outlined"
+                        density="compact"
+                        hide-details
+                        :placeholder="tm('createDialog.sessionIdPlaceholder')"
+                      />
                       <small v-else>{{ item.sessionId === '*' ? tm('createDialog.allSessions') : item.sessionId }}</small>
                     </div>
                   </template>
 
-                  <template v-slot:item.configId="{ item }">
+                  <template #item.configId="{ item }">
                     <div class="d-flex align-center">
-                      <v-select v-if="isEditingRoutes" v-model="item.configId" :items="configInfoList"
-                        item-title="name" item-value="id" variant="outlined" density="compact"
-                        style="min-width: 200px;" hide-details>
-                      </v-select>
+                      <v-select
+                        v-if="isEditingRoutes"
+                        v-model="item.configId"
+                        :items="configInfoList"
+                        item-title="name"
+                        item-value="id"
+                        variant="outlined"
+                        density="compact"
+                        style="min-width: 200px;"
+                        hide-details
+                      />
                       <div v-else>
                         <small>{{ getConfigName(item.configId) }}</small>
                       </div>
-                      <v-btn icon variant="text" density="compact" class="ml-2"
-                        :disabled="!item.configId" @click="openConfigDrawer(item.configId)">
-                        <v-icon size="18">mdi-arrow-top-right-thick</v-icon>
+                      <v-btn
+                        icon
+                        variant="text"
+                        density="compact"
+                        class="ml-2"
+                        :disabled="!item.configId"
+                        @click="openConfigDrawer(item.configId)"
+                      >
+                        <v-icon size="18">
+                          mdi-arrow-top-right-thick
+                        </v-icon>
                       </v-btn>
                     </div>
-                    <small v-if="configInfoList.findIndex(c => c.id === item.configId) === -1" style="color: red;"
-                      class="ml-2">{{ tm('createDialog.configMissing') }}</small>
+                    <small
+                      v-if="configInfoList.findIndex(c => c.id === item.configId) === -1"
+                      style="color: red;"
+                      class="ml-2"
+                    >{{ tm('createDialog.configMissing') }}</small>
                   </template>
 
-                  <template v-slot:item.actions="{ item, index }">
-                    <div v-if="isEditingRoutes" class="d-flex align-center">
-                      <v-btn icon size="x-small" variant="text" @click="moveRouteUp(index)" :disabled="index === 0">
+                  <template #item.actions="{ item, index }">
+                    <div
+                      v-if="isEditingRoutes"
+                      class="d-flex align-center"
+                    >
+                      <v-btn
+                        icon
+                        size="x-small"
+                        variant="text"
+                        :disabled="index === 0"
+                        @click="moveRouteUp(index)"
+                      >
                         <v-icon>mdi-arrow-up</v-icon>
                       </v-btn>
-                      <v-btn icon size="x-small" variant="text" @click="moveRouteDown(index)"
-                        :disabled="index === platformRoutes.length - 1">
+                      <v-btn
+                        icon
+                        size="x-small"
+                        variant="text"
+                        :disabled="index === platformRoutes.length - 1"
+                        @click="moveRouteDown(index)"
+                      >
                         <v-icon>mdi-arrow-down</v-icon>
                       </v-btn>
-                      <v-btn icon size="x-small" variant="text" color="error" @click="deleteRoute(index)">
+                      <v-btn
+                        icon
+                        size="x-small"
+                        variant="text"
+                        color="error"
+                        @click="deleteRoute(index)"
+                      >
                         <v-icon>mdi-delete</v-icon>
                       </v-btn>
                     </div>
-                    <span v-else class="text-grey">-</span>
+                    <span
+                      v-else
+                      class="text-grey"
+                    >-</span>
                   </template>
-
                 </v-data-table>
-                <small class="ml-2 mt-2 d-block" style="color: grey">{{ tm('createDialog.routeHint') }}</small>
+                <small
+                  class="ml-2 mt-2 d-block"
+                  style="color: grey"
+                >{{ tm('createDialog.routeHint') }}</small>
               </div>
             </div>
-
-
           </div>
         </div>
-
       </v-card-text>
 
       <v-card-actions>
-        <v-spacer></v-spacer>
-        <v-btn text @click="closeDialog">{{ tm('dialog.cancel') }}</v-btn>
-        <v-btn :disabled="!canSave" color="primary" v-if="!updatingMode" @click="newPlatform" :loading="loading">{{
-          tm('dialog.save') }}</v-btn>
-        <v-btn :disabled="!selectedAbConfId" color="primary" v-else @click="newPlatform" :loading="loading">{{
-          tm('dialog.save') }}</v-btn>
+        <v-spacer />
+        <v-btn
+          text
+          @click="closeDialog"
+        >
+          {{ tm('dialog.cancel') }}
+        </v-btn>
+        <v-btn
+          v-if="!updatingMode"
+          :disabled="!canSave"
+          color="primary"
+          :loading="loading"
+          @click="newPlatform"
+        >
+          {{
+            tm('dialog.save') }}
+        </v-btn>
+        <v-btn
+          v-else
+          :disabled="!selectedAbConfId"
+          color="primary"
+          :loading="loading"
+          @click="newPlatform"
+        >
+          {{
+            tm('dialog.save') }}
+        </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 
   <!-- ID冲突确认对话框 -->
-  <v-dialog v-model="showIdConflictDialog" max-width="450" persistent>
+  <v-dialog
+    v-model="showIdConflictDialog"
+    max-width="450"
+    persistent
+  >
     <v-card>
       <v-card-title class="text-h6 bg-warning d-flex align-center">
-        <v-icon start class="me-2">mdi-alert-circle-outline</v-icon>
+        <v-icon
+          start
+          class="me-2"
+        >
+          mdi-alert-circle-outline
+        </v-icon>
         {{ tm('dialog.idConflict.title') }}
       </v-card-title>
       <v-card-text class="py-4 text-body-1 text-medium-emphasis">
         {{ tm('dialog.idConflict.message', { id: conflictId }) }}
       </v-card-text>
       <v-card-actions>
-        <v-spacer></v-spacer>
-        <v-btn color="grey" variant="text" @click="handleIdConflictConfirm(false)">{{ tm('dialog.idConflict.confirm')
-        }}</v-btn>
+        <v-spacer />
+        <v-btn
+          color="grey"
+          variant="text"
+          @click="handleIdConflictConfirm(false)"
+        >
+          {{ tm('dialog.idConflict.confirm')
+          }}
+        </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 
   <!-- 安全警告对话框 -->
-  <v-dialog v-model="showOneBotEmptyTokenWarnDialog" max-width="600" persistent>
+  <v-dialog
+    v-model="showOneBotEmptyTokenWarnDialog"
+    max-width="600"
+    persistent
+  >
     <v-card>
       <v-card-title>
         {{ tm('dialog.securityWarning.title') }}
@@ -259,15 +493,22 @@
       <v-card-text class="py-4">
         <p>{{ tm('dialog.securityWarning.aiocqhttpTokenMissing') }}</p>
         <span><a
-            href="https://docs.astrbot.app/deploy/platform/aiocqhttp/napcat.html#%E9%99%84%E5%BD%95-%E5%A2%9E%E5%BC%BA%E8%BF%9E%E6%8E%A5%E5%AE%89%E5%85%A8%E6%80%A7"
-            target="_blank">{{ tm('dialog.securityWarning.learnMore') }}</a></span>
+          href="https://docs.astrbot.app/deploy/platform/aiocqhttp/napcat.html#%E9%99%84%E5%BD%95-%E5%A2%9E%E5%BC%BA%E8%BF%9E%E6%8E%A5%E5%AE%89%E5%85%A8%E6%80%A7"
+          target="_blank"
+        >{{ tm('dialog.securityWarning.learnMore') }}</a></span>
       </v-card-text>
       <v-card-actions class="px-4 pb-4">
-        <v-spacer></v-spacer>
-        <v-btn color="error" @click="handleOneBotEmptyTokenWarningDismiss(true)">
+        <v-spacer />
+        <v-btn
+          color="error"
+          @click="handleOneBotEmptyTokenWarningDismiss(true)"
+        >
           {{ tm('createDialog.warningContinue') }}
         </v-btn>
-        <v-btn color="primary" @click="handleOneBotEmptyTokenWarningDismiss(false)">
+        <v-btn
+          color="primary"
+          @click="handleOneBotEmptyTokenWarningDismiss(false)"
+        >
           {{ tm('createDialog.warningEditAgain') }}
         </v-btn>
       </v-card-actions>
@@ -282,21 +523,34 @@
     :scrim="true"
     @click:outside="closeConfigDrawer"
   >
-    <v-card class="config-drawer-card" elevation="12">
+    <v-card
+      class="config-drawer-card"
+      elevation="12"
+    >
       <div class="config-drawer-header">
         <div>
           <span class="text-h6">{{ tm('createDialog.configDrawerTitle') }}</span>
-          <div v-if="configDrawerTargetId" class="text-caption text-grey">
+          <div
+            v-if="configDrawerTargetId"
+            class="text-caption text-grey"
+          >
             {{ tm('createDialog.configDrawerIdLabel') }}: {{ configDrawerTargetId }}
           </div>
         </div>
-        <v-btn icon variant="text" @click="closeConfigDrawer">
+        <v-btn
+          icon
+          variant="text"
+          @click="closeConfigDrawer"
+        >
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </div>
-      <v-divider></v-divider>
+      <v-divider />
       <div class="config-drawer-content">
-        <ConfigPage v-if="showConfigDrawer" :initial-config-id="configDrawerTargetId" />
+        <ConfigPage
+          v-if="showConfigDrawer"
+          :initial-config-id="configDrawerTargetId"
+        />
       </div>
     </v-card>
   </v-overlay>
@@ -314,7 +568,6 @@ import ConfigPage from '@/views/ConfigPage.vue';
 export default {
   name: 'AddNewPlatform',
   components: { AstrBotConfig, AstrBotCoreConfigWrapper, ConfigPage },
-  emits: ['update:show', 'show-toast', 'refresh-config'],
   props: {
     show: {
       type: Boolean,
@@ -336,6 +589,11 @@ export default {
       type: Object,
       default: null
     }
+  },
+  emits: ['update:show', 'show-toast', 'refresh-config'],
+  setup() {
+    const { tm } = useModuleI18n('features/platform');
+    return { tm };
   },
   data() {
     return {
@@ -383,10 +641,6 @@ export default {
       // 保存更新前的平台 ID，防止用户修改 ID 后丢失原始定位
       originalUpdatingPlatformId: null,
     };
-  },
-  setup() {
-    const { tm } = useModuleI18n('features/platform');
-    return { tm };
   },
   computed: {
     showDialog: {
