@@ -37,6 +37,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.star.context import Context
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.tools.prompts import TOOL_CALL_PROMPT, TOOL_CALL_PROMPT_LAZY_LOAD_MODE
 
 LLM_SAFETY_MODE_SYSTEM_PROMPT = """You are running in Safe Mode.
 
@@ -60,24 +61,6 @@ SANDBOX_MODE_PROMPT = (
     # "Use shell commands such as grep, sed, awk to extract relevant information from the documentation as needed.\n"
 )
 
-TOOL_CALL_PROMPT = (
-    "When using tools: "
-    "never return an empty response; "
-    "briefly explain the purpose before calling a tool; "
-    "follow the tool schema exactly and do not invent parameters; "
-    "after execution, briefly summarize the result for the user; "
-    "keep the conversation style consistent."
-)
-
-TOOL_CALL_PROMPT_LAZY_LOAD_MODE = (
-    "You MUST NOT return an empty response, especially after invoking a tool."
-    " Before calling any tool, provide a brief explanatory message to the user stating the purpose of the tool call."
-    " Tool schemas are provided in two stages: first only name and description; "
-    "if you decide to use a tool, the full parameter schema will be provided in "
-    "a follow-up step. Do not guess arguments before you see the schema."
-    " After the tool call is completed, you must briefly summarize the results returned by the tool for the user."
-    " Keep the role-play and style consistent throughout the conversation."
-)
 
 
 CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT = (
