@@ -1,4 +1,3 @@
-from time import sleep
 from typing import AsyncGenerator
 
 from astrbot.core.mind_sim import Action, ActionOutput
@@ -61,9 +60,9 @@ class EndConversationAction(Action):
             yield ActionOutput(
                 action_name=self.instance_id or self.name,
                 type="reply",
-                content=f"{relpy}"
+                content=f"{relpy}",
+                metadata={"no_think": True},  # 标记不触发重新思考
             )
-            sleep(1)
         else:
             yield ActionOutput(
                 action_name=self.instance_id or self.name,

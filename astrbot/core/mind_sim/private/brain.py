@@ -208,10 +208,12 @@ class PrivateBrain:
             # 根据输出类型转换为对应的 MindEvent
             if output.type == "reply":
                 await self._event_queue.put(MindEvent.reply(output.content, output.metadata))
-                self._interrupt_event.set()
-                # reply 发出后打断 wait，让主思考决定下一步
-                self._interrupt_wait_pending = True
-                await self._schedule_think(f"动作 {output.action_name} 发出了回复")
+                # 检查是否标记了不触发重新思考（如 EndConversation 的回复）
+                if not (output.metadata and output.metadata.get("no_think")):
+                    self._interrupt_event.set()
+                    # reply 发出后打断 wait，让主思考决定下一步
+                    self._interrupt_wait_pending = True
+                    await self._schedule_think(f"动作 {output.action_name} 发出了回复")
             elif output.type == "typing":
                 await self._event_queue.put(MindEvent.typing())
             elif output.type == "error":

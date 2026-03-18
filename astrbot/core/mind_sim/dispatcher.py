@@ -54,6 +54,7 @@ class MindSimDispatcher:
             MindEvent: 事件流
         """
         session_id = ctx.session_id
+        is_new_instance = False
 
         # 获取或创建实例
         async with self._lock:
@@ -78,6 +79,7 @@ class MindSimDispatcher:
                     session_id=session_id,
                     handler=handler,
                 )
+                is_new_instance = True
             else:
                 instance = self._instances[session_id]
                 # 如果传入了新的 llm，更新已有实例
@@ -89,9 +91,14 @@ class MindSimDispatcher:
         # 发送消息到 Brain
         await instance.handler.handle_message(message, sender_id, sender_name)
 
-        # 返回 Brain 的输出事件流
-        async for event in instance.handler.get_event_stream():
-            yield event
+        # 只有首次创建实例或没有活跃的事件流时才监听
+        # 已有实例的后续消息只投递，不创建新的事件流监听器
+        if is_new_instance or not instance.handler._stream_active:
+            async for event in instance.handler.get_event_stream():
+                yield event
+        else:
+            # 已有活跃的事件流在监听，只需投递消息即可
+            logger.debug(f"[Dispatcher] 实例 {session_id} 已有活跃事件流，仅投递消息")
 
     async def get_instance(self, session_id: str) -> Optional["MindSimInstance"]:
         """获取已存在的实例

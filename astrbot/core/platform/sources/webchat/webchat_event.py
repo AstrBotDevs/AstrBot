@@ -169,17 +169,21 @@ class WebChatMessageEvent(AstrMessageEvent):
                 await web_chat_back_queue.put(payload)
                 continue
 
-            # if chain.type == "break" and final_data:
-            #     # 分割符
-            #     await web_chat_back_queue.put(
-            #         {
-            #             "type": "break",  # break means a segment end
-            #             "data": final_data,
-            #             "streaming": True,
-            #         },
-            #     )
-            #     final_data = ""
-            #     continue
+            # 处理 break 信号（高级人格多条回复分隔符）
+            if chain.type == "break" and final_data:
+                # 发送 break 信号，让前端知道这是一条独立的消息
+                await web_chat_back_queue.put(
+                    {
+                        "type": "break",  # break means a segment end
+                        "data": final_data,
+                        "reasoning": reasoning_content,
+                        "streaming": True,
+                        "message_id": message_id,
+                    },
+                )
+                final_data = ""
+                reasoning_content = ""
+                continue
 
             r = await WebChatMessageEvent._send(
                 message_id=message_id,
