@@ -500,7 +500,6 @@ export default {
     updatingPlatformConfig: {
       handler(newConfig) {
         if (this.updatingMode && newConfig && newConfig.id) {
-          this.stripRuntimeFields(newConfig);
           this.originalUpdatingPlatformId = newConfig.id;
           this.getPlatformConfigs(newConfig.id);
         }
