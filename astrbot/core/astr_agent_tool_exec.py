@@ -629,7 +629,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 default_template="I finished the task, here is the result: {result}",
                 logger=logger,
                 log_message="[background_task_summary_note_result] 模板格式化失败，回退使用默认模板。",
-                background_task_result=llm_resp.completion_text,
+                result=llm_resp.completion_text,
             )
         await persist_agent_history(
             ctx.conversation_manager,
