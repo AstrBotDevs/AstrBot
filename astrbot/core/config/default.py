@@ -1630,6 +1630,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "",
+                        "embedding_api_base_mode": "auto",
                         "embedding_model": "",
                         "embedding_dimensions": 1024,
                         "timeout": 20,
@@ -1936,6 +1937,11 @@ CONFIG_METADATA_2 = {
                     "embedding_api_base": {
                         "description": "API Base URL",
                         "type": "string",
+                    },
+                    "embedding_api_base_mode": {
+                        "description": "API Base URL Mode",
+                        "type": "string",
+                        "hint": "控制 API Base URL 的 /v1 后缀处理方式。auto: 自动判断（默认），如果 URL 不以 /v1 结尾则添加。force_v1: 强制添加 /v1 后缀。as_is: 保持原样不做修改。",
                     },
                     "volcengine_cluster": {
                         "type": "string",
