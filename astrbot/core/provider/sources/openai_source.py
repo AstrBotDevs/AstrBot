@@ -530,7 +530,9 @@ class ProviderOpenAIOfficial(Provider):
                         break
                 if not tool_found:
                     # Handle both object and string tool calls
-                    if hasattr(tool_call, "function") and hasattr(tool_call.function, "name"):
+                    if hasattr(tool_call, "function") and hasattr(
+                        tool_call.function, "name"
+                    ):
                         unhandled_tool_calls.append(tool_call.function.name)
                     else:
                         unhandled_tool_calls.append(str(tool_call))
