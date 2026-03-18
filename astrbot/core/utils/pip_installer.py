@@ -241,7 +241,7 @@ def _normalize_windows_native_build_path(path: str) -> str:
 
     for prefix in ("\\\\?\\UNC\\", "\\??\\UNC\\"):
         if normalized.startswith(prefix):
-            return ntpath.normpath(f"\\\\{normalized[len(prefix):]}")
+            return ntpath.normpath(f"\\\\{normalized[len(prefix) :]}")
 
     for prefix in ("\\\\?\\", "\\??\\"):
         if normalized.startswith(prefix):

@@ -227,7 +227,17 @@ async def test_run_pip_in_process_normalizes_crlf_without_extra_blank_lines(
 
 
 @pytest.mark.asyncio
-async def test_run_pip_in_process_injects_windows_runtime_build_env(monkeypatch):
+@pytest.mark.parametrize(
+    ("include_exists", "libs_exists"),
+    [
+        (True, True),
+        (True, False),
+        (False, True),
+    ],
+)
+async def test_run_pip_in_process_injects_windows_runtime_build_env(
+    monkeypatch, include_exists, libs_exists
+):
     runtime_executable = (
         r"\\?\C:\Users\buding\AppData\Local\AstrBot\backend\python\python.exe"
     )
@@ -251,6 +261,56 @@ async def test_run_pip_in_process_injects_windows_runtime_build_env(monkeypatch)
     monkeypatch.setattr(
         pip_installer_module.os.path,
         "isdir",
+        lambda path: (
+            (path == include_dir and include_exists)
+            or (path == libs_dir and libs_exists)
+        ),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._get_pip_main",
+        lambda: fake_pip_main,
+    )
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result == 0
+    expected_include = existing_include
+    expected_lib = existing_lib
+    if include_exists:
+        expected_include = f"{include_dir};{existing_include}"
+    if libs_exists:
+        expected_lib = f"{libs_dir};{existing_lib}"
+    assert observed_env == {"INCLUDE": expected_include, "LIB": expected_lib}
+    assert pip_installer_module.os.environ["INCLUDE"] == existing_include
+    assert pip_installer_module.os.environ["LIB"] == existing_lib
+
+
+@pytest.mark.asyncio
+async def test_run_pip_in_process_injects_windows_runtime_build_env_without_existing_paths(
+    monkeypatch,
+):
+    runtime_executable = (
+        r"\\?\C:\Users\buding\AppData\Local\AstrBot\backend\python\python.exe"
+    )
+    include_dir = r"C:\Users\buding\AppData\Local\AstrBot\backend\python\include"
+    libs_dir = r"C:\Users\buding\AppData\Local\AstrBot\backend\python\libs"
+    observed_env: dict[str, str | None] = {}
+
+    def fake_pip_main(args):
+        del args
+        observed_env["INCLUDE"] = pip_installer_module.os.environ.get("INCLUDE")
+        observed_env["LIB"] = pip_installer_module.os.environ.get("LIB")
+        return 0
+
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.delenv("INCLUDE", raising=False)
+    monkeypatch.delenv("LIB", raising=False)
+    monkeypatch.setattr(pip_installer_module.sys, "platform", "win32")
+    monkeypatch.setattr(pip_installer_module.sys, "executable", runtime_executable)
+    monkeypatch.setattr(
+        pip_installer_module.os.path,
+        "isdir",
         lambda path: path in {include_dir, libs_dir},
     )
     monkeypatch.setattr(
@@ -262,12 +322,80 @@ async def test_run_pip_in_process_injects_windows_runtime_build_env(monkeypatch)
     result = await installer._run_pip_in_process(["install", "demo-package"])
 
     assert result == 0
-    assert observed_env == {
-        "INCLUDE": f"{include_dir};{existing_include}",
-        "LIB": f"{libs_dir};{existing_lib}",
-    }
+    assert observed_env == {"INCLUDE": include_dir, "LIB": libs_dir}
+    assert ";" not in observed_env["INCLUDE"]
+    assert ";" not in observed_env["LIB"]
+    assert "INCLUDE" not in pip_installer_module.os.environ
+    assert "LIB" not in pip_installer_module.os.environ
+
+
+@pytest.mark.asyncio
+async def test_run_pip_in_process_does_not_modify_env_on_non_windows(monkeypatch):
+    existing_include = "/usr/local/include"
+    existing_lib = "/usr/local/lib"
+    observed_env: dict[str, str | None] = {}
+
+    def fake_pip_main(args):
+        del args
+        observed_env["INCLUDE"] = pip_installer_module.os.environ.get("INCLUDE")
+        observed_env["LIB"] = pip_installer_module.os.environ.get("LIB")
+        return 0
+
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.setenv("INCLUDE", existing_include)
+    monkeypatch.setenv("LIB", existing_lib)
+    monkeypatch.setattr(pip_installer_module.sys, "platform", "linux")
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._get_pip_main",
+        lambda: fake_pip_main,
+    )
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result == 0
+    assert observed_env == {"INCLUDE": existing_include, "LIB": existing_lib}
     assert pip_installer_module.os.environ["INCLUDE"] == existing_include
     assert pip_installer_module.os.environ["LIB"] == existing_lib
+
+
+@pytest.mark.asyncio
+async def test_run_pip_in_process_does_not_inject_env_when_not_packaged(monkeypatch):
+    runtime_executable = (
+        r"\\?\C:\Users\buding\AppData\Local\AstrBot\backend\python\python.exe"
+    )
+    include_dir = r"C:\Users\buding\AppData\Local\AstrBot\backend\python\include"
+    libs_dir = r"C:\Users\buding\AppData\Local\AstrBot\backend\python\libs"
+    observed_env: dict[str, str | None] = {}
+
+    def fake_pip_main(args):
+        del args
+        observed_env["INCLUDE"] = pip_installer_module.os.environ.get("INCLUDE")
+        observed_env["LIB"] = pip_installer_module.os.environ.get("LIB")
+        return 0
+
+    monkeypatch.delenv("ASTRBOT_DESKTOP_CLIENT", raising=False)
+    monkeypatch.delenv("INCLUDE", raising=False)
+    monkeypatch.delenv("LIB", raising=False)
+    monkeypatch.setattr(pip_installer_module.sys, "platform", "win32")
+    monkeypatch.setattr(pip_installer_module.sys, "executable", runtime_executable)
+    monkeypatch.setattr(
+        pip_installer_module.os.path,
+        "isdir",
+        lambda path: path in {include_dir, libs_dir},
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._get_pip_main",
+        lambda: fake_pip_main,
+    )
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result == 0
+    assert observed_env == {"INCLUDE": None, "LIB": None}
+    assert "INCLUDE" not in pip_installer_module.os.environ
+    assert "LIB" not in pip_installer_module.os.environ
 
 
 @pytest.mark.asyncio
