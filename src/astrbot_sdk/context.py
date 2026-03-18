@@ -585,13 +585,13 @@ class Context:
     ) -> asyncio.Task[Any]:
         task_desc = str(desc)
 
-        async def _await_future(future: asyncio.Future[Any]) -> Any:
+        async def _wrap_future(future: asyncio.Future[Any]) -> Any:
             return await future
 
         if isinstance(task, asyncio.Task):
             background_task = task
         elif asyncio.isfuture(task):
-            background_task = asyncio.create_task(_await_future(task))
+            background_task = asyncio.create_task(_wrap_future(task))
         elif asyncio.iscoroutine(task):
             background_task = asyncio.create_task(task)
         else:
@@ -609,14 +609,6 @@ class Context:
                 return
             try:
                 done_task.result()
-            except asyncio.CancelledError:
-                debug_logger = getattr(self.logger, "debug", None)
-                if callable(debug_logger):
-                    debug_logger(
-                        "SDK background task cancelled: plugin_id={} desc={}",
-                        self.plugin_id,
-                        task_desc,
-                    )
             except Exception:
                 exception_logger = getattr(self.logger, "exception", None)
                 if callable(exception_logger):
