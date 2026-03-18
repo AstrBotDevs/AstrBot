@@ -604,8 +604,9 @@ class ProviderOpenAIOfficial(Provider):
                         reasoning_content += str(part.get("think"))
                     else:
                         new_content.append(part)
-                message["content"] = new_content
-                # reasoning key is "reasoning_content"
+                # Some providers (Grok, etc.) reject empty content lists.
+                # When all parts were think blocks, fall back to None.
+                message["content"] = new_content or None
                 if reasoning_content:
                     message["reasoning_content"] = reasoning_content
 
