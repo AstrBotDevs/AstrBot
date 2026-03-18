@@ -772,3 +772,21 @@ class TestContextManager:
         # Recent should start with user
         if len(recent) > 0:
             assert recent[0].role == "user"
+
+    def test_split_history_with_zero_keep_recent(self):
+        """Test split_history handles zero keep_recent without indexing past the end."""
+        from astrbot.core.agent.context.compressor import split_history
+
+        messages = [
+            self.create_message("system", "System prompt"),
+            self.create_message("user", "msg1"),
+            self.create_message("assistant", "msg2"),
+            self.create_message("user", "msg3"),
+            self.create_message("assistant", "msg4"),
+        ]
+
+        system, to_summarize, recent = split_history(messages, keep_recent=0)
+
+        assert len(system) == 1
+        assert len(to_summarize) == 4
+        assert recent == []

@@ -120,6 +120,9 @@ def split_history(
     system_messages = messages[:first_non_system]
     non_system_messages = messages[first_non_system:]
 
+    if keep_recent <= 0:
+        return system_messages, non_system_messages, []
+
     if len(non_system_messages) <= keep_recent:
         return system_messages, [], non_system_messages
 
