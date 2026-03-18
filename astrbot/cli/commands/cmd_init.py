@@ -1,17 +1,30 @@
 import asyncio
+import json
 import os
 from pathlib import Path
 
 import click
 from filelock import FileLock, Timeout
 
+from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import astrbot_paths
 
 from ..utils import check_dashboard
+from .cmd_conf import (
+    _validate_dashboard_password,
+    ensure_config_file,
+    prompt_dashboard_password,
+    set_dashboard_credentials,
+)
 
 
 async def initialize_astrbot(
-    astrbot_root: Path, *, yes: bool, backend_only: bool
+    astrbot_root: Path,
+    *,
+    yes: bool,
+    backend_only: bool,
+    admin_username: str | None,
+    admin_password: str | None,
 ) -> None:
     """Execute AstrBot initialization logic"""
     dot_astrbot = astrbot_root / ".astrbot"
@@ -38,6 +51,44 @@ async def initialize_astrbot(
             f"{'Created' if not path.exists() else f'{name} Directory exists'}: {path}"
         )
 
+    config_path = astrbot_root / "data" / "cmd_config.json"
+    if not config_path.exists():
+        config_path.write_text(
+            json.dumps(DEFAULT_CONFIG, ensure_ascii=False, indent=2),
+            encoding="utf-8-sig",
+        )
+        click.echo(f"Created config file: {config_path}")
+
+    if admin_password and not admin_username:
+        raise click.ClickException(
+            "--admin-password requires --admin-username to be provided"
+        )
+
+    if admin_username:
+        password_hash = (
+            _validate_dashboard_password(admin_password)
+            if admin_password is not None
+            else None
+        )
+        if password_hash is None:
+            if yes or os.environ.get("ASTRBOT_SYSTEMD") == "1":
+                raise click.ClickException(
+                    "Non-interactive init requires --admin-password when --admin-username is set"
+                )
+            password_hash = prompt_dashboard_password("Dashboard admin password")
+
+        config = ensure_config_file()
+        set_dashboard_credentials(
+            config,
+            username=admin_username.strip(),
+            password_hash=password_hash,
+        )
+        config_path.write_text(
+            json.dumps(config, ensure_ascii=False, indent=2),
+            encoding="utf-8-sig",
+        )
+        click.echo(f"Configured dashboard admin username: {admin_username.strip()}")
+
     if not backend_only and (
         yes
         or click.confirm(
@@ -57,8 +108,26 @@ async def initialize_astrbot(
 @click.command()
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompts")
 @click.option("--backend-only", "-b", is_flag=True, help="Only initialize the backend")
-@click.option("--backup", help="Initialize from backup file", type=str)
-def init(yes: bool, backend_only: bool, backup: str | None) -> None:
+@click.option("--backup", "-f", help="Initialize from backup file", type=str)
+@click.option(
+    "-u",
+    "--admin-username",
+    type=str,
+    help="Set dashboard admin username during initialization",
+)
+@click.option(
+    "-p",
+    "--admin-password",
+    type=str,
+    help="Set dashboard admin password during initialization without prompting",
+)
+def init(
+    yes: bool,
+    backend_only: bool,
+    backup: str | None,
+    admin_username: str | None,
+    admin_password: str | None,
+) -> None:
     """Initialize AstrBot"""
     click.echo("Initializing AstrBot...")
 
@@ -72,7 +141,13 @@ def init(yes: bool, backend_only: bool, backup: str | None) -> None:
     try:
         with lock.acquire():
             asyncio.run(
-                initialize_astrbot(astrbot_root, yes=yes, backend_only=backend_only)
+                initialize_astrbot(
+                    astrbot_root,
+                    yes=yes,
+                    backend_only=backend_only,
+                    admin_username=admin_username,
+                    admin_password=admin_password,
+                )
             )
 
             if backup:

@@ -11,6 +11,11 @@ from astrbot.core.utils.astrbot_path import astrbot_paths
 from ..utils import check_astrbot_root
 
 
+def hash_dashboard_password(value: str) -> str:
+    """Hash Dashboard password for storage."""
+    return hashlib.md5(value.encode()).hexdigest()
+
+
 def _validate_log_level(value: str) -> str:
     """Validate log level"""
     value = value.upper()
@@ -43,7 +48,7 @@ def _validate_dashboard_password(value: str) -> str:
     """Validate Dashboard password"""
     if not value:
         raise click.ClickException("Password cannot be empty")
-    return hashlib.md5(value.encode()).hexdigest()
+    return hash_dashboard_password(value)
 
 
 def _validate_timezone(value: str) -> str:
@@ -110,6 +115,11 @@ def _save_config(config: dict[str, Any]) -> None:
     )
 
 
+def ensure_config_file() -> dict[str, Any]:
+    """Ensure config file exists and return parsed config."""
+    return _load_config()
+
+
 def _set_nested_item(obj: dict[str, Any], path: str, value: Any) -> None:
     """Set a value in a nested dictionary"""
     parts = path.split(".")
@@ -130,6 +140,34 @@ def _get_nested_item(obj: dict[str, Any], path: str) -> Any:
     for part in parts:
         obj = obj[part]
     return obj
+
+
+def prompt_dashboard_password(prompt: str = "Dashboard password") -> str:
+    """Prompt for dashboard password with confirmation."""
+    password = click.prompt(
+        prompt,
+        hide_input=True,
+        confirmation_prompt=True,
+        type=str,
+    )
+    return _validate_dashboard_password(password)
+
+
+def set_dashboard_credentials(
+    config: dict[str, Any],
+    *,
+    username: str | None = None,
+    password_hash: str | None = None,
+) -> None:
+    """Update dashboard credentials in config."""
+    if username is not None:
+        _set_nested_item(
+            config,
+            "dashboard.username",
+            _validate_dashboard_username(username),
+        )
+    if password_hash is not None:
+        _set_nested_item(config, "dashboard.password", password_hash)
 
 
 @click.group(name="conf")
@@ -213,3 +251,32 @@ def get_config(key: str | None = None) -> None:
                 click.echo(f"  {key}: {value}")
             except (KeyError, TypeError):
                 pass
+
+
+@conf.command(name="password")
+@click.option("-u", "--username", type=str, help="Update dashboard username as well")
+@click.option(
+    "-p",
+    "--password",
+    type=str,
+    help="Set dashboard password directly without interactive prompt",
+)
+def set_dashboard_password(username: str | None, password: str | None) -> None:
+    """Interactively manage dashboard password."""
+    config = _load_config()
+
+    password_hash = (
+        _validate_dashboard_password(password)
+        if password is not None
+        else prompt_dashboard_password()
+    )
+    set_dashboard_credentials(
+        config,
+        username=username.strip() if username is not None else None,
+        password_hash=password_hash,
+    )
+    _save_config(config)
+
+    if username is not None:
+        click.echo(f"Dashboard username updated: {username.strip()}")
+    click.echo("Dashboard password updated.")
