@@ -809,7 +809,7 @@
                         },
                         "emojis": {
                             "description": "Список эмодзи (Unicode)",
-                            "hint": "Telegram и Telethon Userbot используют эту общую настройку; доступен только фиксированный набор реакций Telegram."
+                            "hint": "Telegram и Telethon используют эту общую настройку; доступен только фиксированный набор реакций Telegram."
                         }
                     }
                 },

@@ -502,7 +502,7 @@ Platform-specific settings. Categorized by platform, then by feature group.
 
 #### `platform_specific.<platform>.pre_ack_emoji`
 
-When enabled, AstrBot sends a pre-reply emoji before requesting the LLM to inform the user that the request is being processed. This currently only takes effect in the Lark, Telegram, and Telethon Userbot platform adapters. Telegram and Telethon Userbot share the same configuration.
+When enabled, AstrBot sends a pre-reply emoji before requesting the LLM to inform the user that the request is being processed. This currently only takes effect in the Lark, Telegram, and Telethon platform adapters. Telegram and Telethon share the same configuration.
 
 ##### lark
 
@@ -512,7 +512,7 @@ When enabled, AstrBot sends a pre-reply emoji before requesting the LLM to infor
 ##### telegram
 
 - `enable`: Whether to enable pre-reply emojis for Telegram. Default is `false`.
-- `emojis`: List of pre-reply emojis. Default is `["✍️"]`. Telegram and Telethon Userbot share this list, and only Telegram's fixed reaction set is supported; refer to [reactions.txt](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9).
+- `emojis`: List of pre-reply emojis. Default is `["✍️"]`. Telegram and Telethon share this list, and only Telegram's fixed reaction set is supported; refer to [reactions.txt](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9).
 
 ##### discord
 

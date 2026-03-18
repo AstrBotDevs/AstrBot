@@ -3577,7 +3577,7 @@ CONFIG_METADATA_3 = {
                         "description": "表情列表（Unicode）",
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "Telegram 和 Telethon Userbot 共用此配置，且仅支持 Telegram 固定反应集合，参考：https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9",
+                        "hint": "Telegram 和 Telethon 共用此配置，且仅支持 Telegram 固定反应集合，参考：https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9",
                         "condition": {
                             "platform_specific.telegram.pre_ack_emoji.enable": True,
                         },

@@ -502,7 +502,7 @@ AstrBot WebUI 配置。
 
 #### `platform_specific.<platform>.pre_ack_emoji`
 
-启用后，当请求 LLM 前，AstrBot 会先发送一个预回复的表情以告知用户正在处理请求。此功能目前仅在飞书平台适配器、Telegram 和 Telethon Userbot 中生效。Telegram 与 Telethon Userbot 共用同一组配置。
+启用后，当请求 LLM 前，AstrBot 会先发送一个预回复的表情以告知用户正在处理请求。此功能目前仅在飞书平台适配器、Telegram 和 Telethon 中生效。Telegram 与 Telethon 共用同一组配置。
 
 ##### lark (飞书)
 
@@ -512,7 +512,7 @@ AstrBot WebUI 配置。
 ##### telegram
 
 - `enable`: 是否启用 Telegram 预回复表情。默认为 `false`。
-- `emojis`: 预回复的表情列表。默认为 `["✍️"]`。Telegram 和 Telethon Userbot 共用该列表，且仅支持固定反应集合，参考：[reactions.txt](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)
+- `emojis`: 预回复的表情列表。默认为 `["✍️"]`。Telegram 和 Telethon 共用该列表，且仅支持固定反应集合，参考：[reactions.txt](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)
 
 ##### discord
 

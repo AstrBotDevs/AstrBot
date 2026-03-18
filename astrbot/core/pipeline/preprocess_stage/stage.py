@@ -12,7 +12,9 @@ from ..context import PipelineContext
 from ..stage import Stage, register_stage
 
 TELEGRAM_PRE_ACK_CONFIG_DEFAULT = {"enable": False, "emojis": ["✍️"]}
-TELEGRAM_PRE_ACK_UNIFIED_PLATFORMS = frozenset({"telegram", "telethon_userbot"})
+TELEGRAM_PRE_ACK_UNIFIED_PLATFORMS = frozenset(
+    {"telegram", "telethon_userbot", "telethon_bot"}
+)
 
 
 @register_stage
@@ -98,7 +100,7 @@ class PreProcessStage(Stage):
                             break
 
     def _get_pre_ack_emoji_config(self, platform: str) -> dict:
-        """Resolve pre-ack emoji config, with Telegram shared by telethon_userbot."""
+        """Resolve pre-ack emoji config, with Telegram shared by Telethon."""
         platform_specific = self.config.get("platform_specific", {})
         if platform not in TELEGRAM_PRE_ACK_UNIFIED_PLATFORMS:
             return platform_specific.get(platform, {}).get("pre_ack_emoji", {}) or {}
@@ -106,12 +108,15 @@ class PreProcessStage(Stage):
         telegram_cfg = (
             platform_specific.get("telegram", {}).get("pre_ack_emoji", {}) or {}
         )
-        legacy_cfg = (
+        legacy_userbot_cfg = (
             platform_specific.get("telethon_userbot", {}).get("pre_ack_emoji", {}) or {}
         )
-        if (
-            telegram_cfg == TELEGRAM_PRE_ACK_CONFIG_DEFAULT
-            and legacy_cfg != TELEGRAM_PRE_ACK_CONFIG_DEFAULT
-        ):
-            return legacy_cfg
+        legacy_bot_cfg = (
+            platform_specific.get("telethon_bot", {}).get("pre_ack_emoji", {}) or {}
+        )
+        if telegram_cfg != TELEGRAM_PRE_ACK_CONFIG_DEFAULT:
+            return telegram_cfg
+        for legacy_cfg in (legacy_userbot_cfg, legacy_bot_cfg):
+            if legacy_cfg != TELEGRAM_PRE_ACK_CONFIG_DEFAULT:
+                return legacy_cfg
         return telegram_cfg
