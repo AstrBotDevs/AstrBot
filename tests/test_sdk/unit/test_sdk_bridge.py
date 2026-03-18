@@ -1,13 +1,14 @@
 # ruff: noqa: E402
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import sys
 from types import SimpleNamespace
 
 import pytest
-
 from astrbot_sdk.context import CancelToken
+from astrbot_sdk.decorators import ConversationMeta
 from astrbot_sdk.protocol.descriptors import (
     CommandTrigger,
     HandlerDescriptor,
@@ -77,6 +78,15 @@ class _CommandPlugin:
 class _RegexPlugin:
     async def capture(self, word: str):
         return {"text": word}
+
+
+class _ConversationPlugin:
+    def __init__(self) -> None:
+        self.started = False
+
+    async def chat(self, event, conversation, ctx):
+        self.started = True
+        conversation.end()
 
 
 @pytest.mark.unit
@@ -195,3 +205,48 @@ async def test_handler_dispatcher_derives_regex_args() -> None:
 
     assert result == {"sent_message": True, "stop": False, "call_llm": False}
     assert router.platform_sink.records[0].text == "sdk"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_conversation_command_consumes_trigger_message() -> None:
+    plugin = _ConversationPlugin()
+    router = MockCapabilityRouter()
+    peer = MockPeer(router)
+    dispatcher = HandlerDispatcher(
+        plugin_id="demo",
+        peer=peer,
+        handlers=[
+            LoadedHandler(
+                descriptor=HandlerDescriptor(
+                    id="demo:demo.chat",
+                    trigger=CommandTrigger(command="chat"),
+                ),
+                callable=plugin.chat,
+                owner=plugin,
+                plugin_id="demo",
+                conversation=ConversationMeta(timeout=60, mode="replace"),
+            )
+        ],
+    )
+
+    result = await dispatcher.invoke(
+        SimpleNamespace(
+            id="req-3",
+            input={
+                "handler_id": "demo:demo.chat",
+                "event": {
+                    "text": "chat",
+                    "session_id": "test-session",
+                    "user_id": "test-user",
+                    "platform": "test",
+                    "message_type": "private",
+                },
+            },
+        ),
+        CancelToken(),
+    )
+    await asyncio.sleep(0)
+
+    assert result == {"sent_message": False, "stop": True, "call_llm": False}
+    assert plugin.started is True
