@@ -1,7 +1,6 @@
 <template>
   <BaseFolderItemSelector
     :model-value="modelValue"
-    @update:model-value="handleUpdate"
     :folder-tree="folderTree"
     :items="currentPersonas as any"
     :tree-loading="treeLoading"
@@ -14,6 +13,7 @@
     item-name-field="persona_id"
     item-description-field="system_prompt"
     :display-value-formatter="formatDisplayValue"
+    @update:model-value="handleUpdate"
     @navigate="handleNavigate"
     @create="openCreatePersona"
     @edit="openEditPersona"
@@ -26,7 +26,8 @@
     :current-folder-id="currentFolderId ?? undefined"
     :current-folder-name="currentFolderName ?? undefined"
     @saved="handlePersonaSaved"
-    @error="handleError" />
+    @error="handleError"
+  />
 </template>
 
 <script setup lang="ts">

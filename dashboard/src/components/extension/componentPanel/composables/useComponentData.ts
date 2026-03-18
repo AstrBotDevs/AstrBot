@@ -24,7 +24,7 @@ export function useComponentData() {
   /**
    * 显示 Toast 消息
    */
-  const toast = (message: string, color: string = 'success') => {
+  const toast = (message: string, color = 'success') => {
     snackbar.message = message;
     snackbar.color = color;
     snackbar.show = true;

@@ -1,12 +1,19 @@
 <template>
-    <v-dialog v-model="visible" persistent max-width="400">
-        <v-card>
-            <v-card-title>{{ t('core.common.restart.waiting') }}</v-card-title>
-            <v-card-text>
-                <v-progress-linear indeterminate color="primary"></v-progress-linear>
-            </v-card-text>
-        </v-card>
-    </v-dialog>
+  <v-dialog
+    v-model="visible"
+    persistent
+    max-width="400"
+  >
+    <v-card>
+      <v-card-title>{{ t('core.common.restart.waiting') }}</v-card-title>
+      <v-card-text>
+        <v-progress-linear
+          indeterminate
+          color="primary"
+        />
+      </v-card-text>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script>

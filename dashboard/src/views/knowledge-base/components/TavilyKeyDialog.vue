@@ -1,12 +1,19 @@
 <template>
-  <v-dialog v-model="dialog" max-width="500px" persistent>
+  <v-dialog
+    v-model="dialog"
+    max-width="500px"
+    persistent
+  >
     <v-card>
       <v-card-title class="text-h5">
         配置 Tavily API Key
       </v-card-title>
       <v-card-text>
         <p class="mb-4 text-body-2 text-medium-emphasis">
-          为了使用基于网页的知识库功能，需要提供 Tavily API Key。您可以从 <a href="https://tavily.com/" target="_blank">Tavily 官网</a> 获取。
+          为了使用基于网页的知识库功能，需要提供 Tavily API Key。您可以从 <a
+            href="https://tavily.com/"
+            target="_blank"
+          >Tavily 官网</a> 获取。
         </p>
         <v-text-field
           v-model="apiKey"
@@ -21,10 +28,19 @@
       </v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn variant="text" @click="closeDialog" :disabled="saving">
+        <v-btn
+          variant="text"
+          :disabled="saving"
+          @click="closeDialog"
+        >
           取消
         </v-btn>
-        <v-btn color="primary" variant="elevated" @click="saveKey" :loading="saving">
+        <v-btn
+          color="primary"
+          variant="elevated"
+          :loading="saving"
+          @click="saveKey"
+        >
           保存
         </v-btn>
       </v-card-actions>

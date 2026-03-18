@@ -76,7 +76,7 @@ const desktopUpdateCurrentVersion = ref("-");
 const desktopUpdateLatestVersion = ref("-");
 const desktopUpdateStatus = ref("");
 
-const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
+const getAppUpdaterBridge = (): NonNullable<Window["astrbotAppUpdater"]> | null => {
   if (typeof window === "undefined") {
     return null;
   }
@@ -533,7 +533,13 @@ const isChristmas = computed(() => {
 </script>
 
 <template>
-  <v-app-bar elevation="0" :priority="0" height="70" class="px-0" app>
+  <v-app-bar
+    elevation="0"
+    :priority="0"
+    height="70"
+    class="px-0"
+    app
+  >
     <div class="fill-height d-flex align-center w-100 px-4">
       <!-- 桌面端标题栏拖拽区域 -->
       <div
@@ -547,7 +553,7 @@ const isChristmas = computed(() => {
           height: 30px;
           z-index: 9999;
         "
-      ></div>
+      />
 
       <div class="d-flex align-center">
         <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
@@ -582,22 +588,18 @@ const isChristmas = computed(() => {
         }"
         @click="handleLogoClick"
       >
-        <span class="logo-text Outfit"
-          >Astr<span class="logo-text bot-text-wrapper"
-            >Bot
-            <img
-              v-if="isChristmas"
-              src="@/assets/images/xmas-hat.png"
-              alt="Christmas hat"
-              class="xmas-hat"
-            /> </span
-        ></span>
+        <span class="logo-text Outfit">Astr<span class="logo-text bot-text-wrapper">Bot
+          <img
+            v-if="isChristmas"
+            src="@/assets/images/xmas-hat.png"
+            alt="Christmas hat"
+            class="xmas-hat"
+          > </span></span>
         <span
+          v-if="customizer.viewMode === 'chat'"
           class="logo-text logo-text-light Outfit"
           style="color: grey"
-          v-if="customizer.viewMode === 'chat'"
-          >ChatUI</span
-        >
+        >ChatUI</span>
         <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
       </div>
 
@@ -612,10 +614,18 @@ const isChristmas = computed(() => {
           group
           density="compact"
         >
-          <v-btn value="chat" prepend-icon="mdi-chat-processing-outline">
+          <v-btn
+            value="chat"
+            prepend-icon="mdi-chat-processing-outline"
+          >
             Chat
           </v-btn>
-          <v-btn value="bot" prepend-icon="mdi-robot-outline"> Bot </v-btn>
+          <v-btn
+            value="bot"
+            prepend-icon="mdi-robot-outline"
+          >
+            Bot
+          </v-btn>
         </v-btn-toggle>
       </div>
 
@@ -633,8 +643,11 @@ const isChristmas = computed(() => {
       </div>
 
       <!-- 功能菜单 -->
-      <StyledMenu offset="12" location="bottom end">
-        <template v-slot:activator="{ props: activatorProps }">
+      <StyledMenu
+        offset="12"
+        location="bottom end"
+      >
+        <template #activator="{ props: activatorProps }">
           <v-btn
             v-bind="activatorProps"
             size="small"
@@ -659,12 +672,22 @@ const isChristmas = computed(() => {
               color="primary"
               class="mobile-mode-toggle"
             >
-              <v-btn value="bot" size="small">
-                <v-icon start>mdi-robot</v-icon>
+              <v-btn
+                value="bot"
+                size="small"
+              >
+                <v-icon start>
+                  mdi-robot
+                </v-icon>
                 Bot
               </v-btn>
-              <v-btn value="chat" size="small">
-                <v-icon start>mdi-chat</v-icon>
+              <v-btn
+                value="chat"
+                size="small"
+              >
+                <v-icon start>
+                  mdi-chat
+                </v-icon>
                 Chat
               </v-btn>
             </v-btn-toggle>
@@ -681,25 +704,30 @@ const isChristmas = computed(() => {
           :location="$vuetify.display.xs ? 'bottom' : 'start center'"
           offset="8"
         >
-          <template v-slot:activator="{ props: languageMenuProps }">
+          <template #activator="{ props: languageMenuProps }">
             <v-list-item
               v-bind="languageMenuProps"
               class="styled-menu-item language-group-trigger"
               rounded="md"
             >
-              <template v-slot:prepend>
+              <template #prepend>
                 <v-icon>mdi-translate</v-icon>
               </template>
-              <v-list-item-title>{{
-                t("core.common.language")
-              }}</v-list-item-title>
-              <template v-slot:append>
+              <v-list-item-title>
+                {{
+                  t("core.common.language")
+                }}
+              </v-list-item-title>
+              <template #append>
                 <span class="language-group-current">{{
                   currentLanguage?.flag
                 }}</span>
-                <v-icon size="18" class="language-group-arrow"
-                  >mdi-chevron-right</v-icon
+                <v-icon
+                  size="18"
+                  class="language-group-arrow"
                 >
+                  mdi-chevron-right
+                </v-icon>
               </template>
             </v-list-item>
           </template>
@@ -710,19 +738,22 @@ const isChristmas = computed(() => {
             elevation="8"
             rounded="lg"
           >
-            <v-list density="compact" class="styled-menu-list pa-1">
+            <v-list
+              density="compact"
+              class="styled-menu-list pa-1"
+            >
               <v-list-item
                 v-for="lang in languages"
                 :key="lang.code"
                 :value="lang.code"
-                @click="changeLanguage(lang.code)"
                 :class="{
                   'styled-menu-item-active': currentLocale === lang.code,
                 }"
                 class="styled-menu-item"
                 rounded="md"
+                @click="changeLanguage(lang.code)"
               >
-                <template v-slot:prepend>
+                <template #prepend>
                   <span class="language-flag">{{ lang.flag }}</span>
                 </template>
                 <v-list-item-title>{{ lang.name }}</v-list-item-title>
@@ -733,11 +764,11 @@ const isChristmas = computed(() => {
 
         <!-- 主题切换 -->
         <v-list-item
-          @click="toggleTheme()"
           class="styled-menu-item"
           rounded="md"
+          @click="toggleTheme()"
         >
-          <template v-slot:prepend>
+          <template #prepend>
             <v-icon>
               {{
                 useCustomizerStore().isDarkTheme
@@ -757,54 +788,65 @@ const isChristmas = computed(() => {
 
         <!-- 更新按钮 -->
         <v-list-item
-          @click="handleUpdateClick"
           class="styled-menu-item"
           rounded="md"
+          @click="handleUpdateClick"
         >
-          <template v-slot:prepend>
+          <template #prepend>
             <v-icon>mdi-arrow-up-circle</v-icon>
           </template>
-          <v-list-item-title>{{
-            t("core.header.updateDialog.title")
-          }}</v-list-item-title>
+          <v-list-item-title>
+            {{
+              t("core.header.updateDialog.title")
+            }}
+          </v-list-item-title>
           <template
-            v-slot:append
             v-if="
               hasNewVersion || (dashboardHasNewVersion && !isDesktopReleaseMode)
             "
+            #append
           >
-            <v-chip size="x-small" color="primary" variant="tonal" class="ml-2"
-              >!</v-chip
+            <v-chip
+              size="x-small"
+              color="primary"
+              variant="tonal"
+              class="ml-2"
             >
+              !
+            </v-chip>
           </template>
         </v-list-item>
 
         <!-- 账户按钮 -->
         <v-list-item
-          @click="dialog = true"
           class="styled-menu-item"
           rounded="md"
+          @click="dialog = true"
         >
-          <template v-slot:prepend>
+          <template #prepend>
             <v-icon>mdi-account</v-icon>
           </template>
-          <v-list-item-title>{{
-            t("core.header.accountDialog.title")
-          }}</v-list-item-title>
+          <v-list-item-title>
+            {{
+              t("core.header.accountDialog.title")
+            }}
+          </v-list-item-title>
         </v-list-item>
 
         <!-- 退出登录 -->
         <v-list-item
-          @click="handleLogout"
           class="styled-menu-item"
           rounded="md"
+          @click="handleLogout"
         >
-          <template v-slot:prepend>
+          <template #prepend>
             <v-icon>mdi-logout</v-icon>
           </template>
-          <v-list-item-title>{{
-            t("core.header.buttons.logout")
-          }}</v-list-item-title>
+          <v-list-item-title>
+            {{
+              t("core.header.buttons.logout")
+            }}
+          </v-list-item-title>
         </v-list-item>
       </StyledMenu>
     </div>
@@ -834,10 +876,12 @@ const isChristmas = computed(() => {
             class="mb-4"
             indeterminate
             color="primary"
-          ></v-progress-linear>
+          />
 
           <div>
-            <h1 style="display: inline-block">{{ botCurrVersion }}</h1>
+            <h1 style="display: inline-block">
+              {{ botCurrVersion }}
+            </h1>
             <small style="margin-left: 4px">{{ updateStatus }}</small>
           </div>
 
@@ -860,22 +904,18 @@ const isChristmas = computed(() => {
           </div>
 
           <div class="mb-4 mt-4">
-            <small
-              >{{ t("core.header.updateDialog.tip") }}
-              {{ t("core.header.updateDialog.tipContinue") }}</small
-            >
+            <small>{{ t("core.header.updateDialog.tip") }}
+              {{ t("core.header.updateDialog.tipContinue") }}</small>
           </div>
 
           <!-- 发行版 -->
           <div>
             <div class="mb-4">
-              <small
-                >{{ t("core.header.updateDialog.dockerTip") }}
+              <small>{{ t("core.header.updateDialog.dockerTip") }}
                 <a href="https://containrrr.dev/watchtower/usage-overview/">{{
                   t("core.header.updateDialog.dockerTipLink")
                 }}</a>
-                {{ t("core.header.updateDialog.dockerTipContinue") }}</small
-              >
+                {{ t("core.header.updateDialog.dockerTipContinue") }}</small>
             </div>
 
             <v-alert
@@ -886,14 +926,14 @@ const isChristmas = computed(() => {
               variant="tonal"
               border="start"
             >
-              <template v-slot:prepend>
+              <template #prepend>
                 <v-icon>mdi-alert-circle-outline</v-icon>
               </template>
               <div class="text-body-2">
                 <strong>{{
                   t("core.header.updateDialog.preReleaseWarning.title")
                 }}</strong>
-                <br />
+                <br>
                 {{
                   t("core.header.updateDialog.preReleaseWarning.description")
                 }}
@@ -915,7 +955,7 @@ const isChristmas = computed(() => {
               item-key="name"
               :items-per-page="8"
             >
-              <template v-slot:item.tag_name="{ item }: { item: any }">
+              <template #item.tag_name="{ item }: { item: any }">
                 <div class="d-flex align-center">
                   <span>{{ item.tag_name }}</span>
                   <v-chip
@@ -930,29 +970,30 @@ const isChristmas = computed(() => {
                 </div>
               </template>
               <template
-                v-slot:item.body="{
+                #item.body="{
                   item,
                 }: {
                   item: { body: string; tag_name: string };
                 }"
               >
                 <v-btn
-                  @click="openReleaseNotesDialog(item.body, item.tag_name)"
                   rounded="xl"
                   variant="tonal"
                   color="primary"
                   size="x-small"
-                  >{{ t("core.header.updateDialog.table.view") }}</v-btn
+                  @click="openReleaseNotesDialog(item.body, item.tag_name)"
                 >
+                  {{ t("core.header.updateDialog.table.view") }}
+                </v-btn>
               </template>
               <template
-                v-slot:item.switch="{ item }: { item: { tag_name: string } }"
+                #item.switch="{ item }: { item: { tag_name: string } }"
               >
                 <v-btn
-                  @click="switchVersion(item.tag_name)"
                   rounded="xl"
                   variant="plain"
                   color="primary"
+                  @click="switchVersion(item.tag_name)"
                 >
                   {{ t("core.header.updateDialog.table.switch") }}
                 </v-btn>
@@ -960,19 +1001,17 @@ const isChristmas = computed(() => {
             </v-data-table>
           </div>
 
-          <v-divider class="mt-4 mb-4"></v-divider>
+          <v-divider class="mt-4 mb-4" />
           <div style="margin-top: 16px">
             <h3 class="mb-4">
               {{ t("core.header.updateDialog.dashboardUpdate.title") }}
             </h3>
             <div class="mb-4">
-              <small
-                >{{
-                  t("core.header.updateDialog.dashboardUpdate.currentVersion")
-                }}
-                {{ dashboardCurrentVersion }}</small
-              >
-              <br />
+              <small>{{
+                       t("core.header.updateDialog.dashboardUpdate.currentVersion")
+                     }}
+                {{ dashboardCurrentVersion }}</small>
+              <br>
             </div>
 
             <div class="mb-4">
@@ -981,7 +1020,7 @@ const isChristmas = computed(() => {
                   t("core.header.updateDialog.dashboardUpdate.hasNewVersion")
                 }}
               </p>
-              <p v-else="dashboardHasNewVersion">
+              <p v-else>
                 {{ t("core.header.updateDialog.dashboardUpdate.isLatest") }}
               </p>
             </div>
@@ -989,9 +1028,9 @@ const isChristmas = computed(() => {
             <v-btn
               color="primary"
               style="border-radius: 10px"
-              @click="updateDashboard()"
               :disabled="!dashboardHasNewVersion"
               :loading="updatingDashboardLoading"
+              @click="updateDashboard()"
             >
               {{
                 t("core.header.updateDialog.dashboardUpdate.downloadAndUpdate")
@@ -1001,7 +1040,7 @@ const isChristmas = computed(() => {
         </v-container>
       </v-card-text>
       <v-card-actions>
-        <v-spacer></v-spacer>
+        <v-spacer />
         <v-btn
           color="blue-darken-1"
           variant="text"
@@ -1014,7 +1053,10 @@ const isChristmas = computed(() => {
   </v-dialog>
 
   <!-- Release Notes Modal -->
-  <v-dialog v-model="releaseNotesDialog" max-width="800">
+  <v-dialog
+    v-model="releaseNotesDialog"
+    max-width="800"
+  >
     <v-card>
       <v-card-title class="text-h5">
         {{ t("core.header.updateDialog.releaseNotes.title") }}:
@@ -1028,7 +1070,7 @@ const isChristmas = computed(() => {
         />
       </v-card-text>
       <v-card-actions>
-        <v-spacer></v-spacer>
+        <v-spacer />
         <v-btn
           color="blue-darken-1"
           variant="text"
@@ -1040,7 +1082,10 @@ const isChristmas = computed(() => {
     </v-card>
   </v-dialog>
 
-  <v-dialog v-model="desktopUpdateDialog" max-width="460">
+  <v-dialog
+    v-model="desktopUpdateDialog"
+    max-width="460"
+  >
     <v-card>
       <v-card-title class="text-h3 pa-4 pl-6 pb-0">
         {{ t("core.header.updateDialog.desktopApp.title") }}
@@ -1049,7 +1094,11 @@ const isChristmas = computed(() => {
         <div class="mb-3">
           {{ t("core.header.updateDialog.desktopApp.message") }}
         </div>
-        <v-alert type="info" variant="tonal" density="compact">
+        <v-alert
+          type="info"
+          variant="tonal"
+          density="compact"
+        >
           <div>
             {{ t("core.header.updateDialog.desktopApp.currentVersion") }}
             <strong>{{ desktopUpdateCurrentVersion }}</strong>
@@ -1073,25 +1122,25 @@ const isChristmas = computed(() => {
         </div>
       </v-card-text>
       <v-card-actions>
-        <v-spacer></v-spacer>
+        <v-spacer />
         <v-btn
           color="grey"
           variant="text"
-          @click="cancelDesktopUpdate"
           :disabled="desktopUpdateInstalling"
+          @click="cancelDesktopUpdate"
         >
           {{ t("core.common.dialog.cancelButton") }}
         </v-btn>
         <v-btn
           color="primary"
           variant="flat"
-          @click="confirmDesktopUpdate"
           :loading="desktopUpdateInstalling"
           :disabled="
             desktopUpdateChecking ||
-            desktopUpdateInstalling ||
-            !desktopUpdateHasNewVersion
+              desktopUpdateInstalling ||
+              !desktopUpdateHasNewVersion
           "
+          @click="confirmDesktopUpdate"
         >
           {{ t("core.common.dialog.confirmButton") }}
         </v-btn>
@@ -1111,7 +1160,7 @@ const isChristmas = computed(() => {
           <Logo
             :title="t('core.header.logoTitle')"
             :subtitle="t('core.header.accountDialog.title')"
-          ></Logo>
+          />
         </div>
         <v-alert
           v-if="accountWarning"
@@ -1143,7 +1192,10 @@ const isChristmas = computed(() => {
           {{ accountEditStatus.message }}
         </v-alert>
 
-        <v-form v-model="formValid" @submit.prevent="accountEdit">
+        <v-form
+          v-model="formValid"
+          @submit.prevent="accountEdit"
+        >
           <v-text-field
             v-model="password"
             :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
@@ -1152,11 +1204,11 @@ const isChristmas = computed(() => {
             variant="outlined"
             required
             clearable
-            @click:append-inner="showPassword = !showPassword"
             prepend-inner-icon="mdi-lock-outline"
             hide-details="auto"
             class="mb-4"
-          ></v-text-field>
+            @click:append-inner="showPassword = !showPassword"
+          />
 
           <v-text-field
             v-model="newPassword"
@@ -1166,12 +1218,12 @@ const isChristmas = computed(() => {
             :label="t('core.header.accountDialog.form.newPassword')"
             variant="outlined"
             clearable
-            @click:append-inner="showNewPassword = !showNewPassword"
             prepend-inner-icon="mdi-lock-plus-outline"
             :hint="t('core.header.accountDialog.form.passwordHint')"
             persistent-hint
             class="mb-4"
-          ></v-text-field>
+            @click:append-inner="showNewPassword = !showNewPassword"
+          />
 
           <v-text-field
             v-model="confirmPassword"
@@ -1181,12 +1233,12 @@ const isChristmas = computed(() => {
             :label="t('core.header.accountDialog.form.confirmPassword')"
             variant="outlined"
             clearable
-            @click:append-inner="showConfirmPassword = !showConfirmPassword"
             prepend-inner-icon="mdi-lock-check-outline"
             :hint="t('core.header.accountDialog.form.confirmPasswordHint')"
             persistent-hint
             class="mb-4"
-          ></v-text-field>
+            @click:append-inner="showConfirmPassword = !showConfirmPassword"
+          />
 
           <v-text-field
             v-model="newUsername"
@@ -1198,7 +1250,7 @@ const isChristmas = computed(() => {
             :hint="t('core.header.accountDialog.form.usernameHint')"
             persistent-hint
             class="mb-3"
-          ></v-text-field>
+          />
         </v-form>
 
         <div class="text-caption text-medium-emphasis mt-2">
@@ -1206,25 +1258,25 @@ const isChristmas = computed(() => {
         </div>
       </v-card-text>
 
-      <v-divider></v-divider>
+      <v-divider />
 
       <v-card-actions class="pa-4">
-        <v-spacer></v-spacer>
+        <v-spacer />
         <v-btn
           v-if="!accountWarning"
           variant="tonal"
           color="secondary"
-          @click="dialog = false"
           :disabled="accountEditStatus.loading"
+          @click="dialog = false"
         >
           {{ t("core.header.accountDialog.actions.cancel") }}
         </v-btn>
         <v-btn
           color="primary"
-          @click="accountEdit"
           :loading="accountEditStatus.loading"
           :disabled="!formValid"
           prepend-icon="mdi-content-save"
+          @click="accountEdit"
         >
           {{ t("core.header.accountDialog.actions.save") }}
         </v-btn>
@@ -1233,7 +1285,10 @@ const isChristmas = computed(() => {
   </v-dialog>
 
   <!-- About 对话框 - 仅在 chat mode 下使用 -->
-  <v-dialog v-model="aboutDialog" width="600">
+  <v-dialog
+    v-model="aboutDialog"
+    width="600"
+  >
     <v-card>
       <v-card-text style="overflow-y: auto">
         <AboutPage />

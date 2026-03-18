@@ -1,29 +1,41 @@
 <template>
-  <v-card elevation="1" class="chart-card">
+  <v-card
+    elevation="1"
+    class="chart-card"
+  >
     <v-card-text>
       <div class="chart-header">
         <div>
-          <div class="chart-title">{{ t('charts.messageTrend.title') }}</div>
-          <div class="chart-subtitle">{{ t('charts.messageTrend.subtitle') }}</div>
+          <div class="chart-title">
+            {{ t('charts.messageTrend.title') }}
+          </div>
+          <div class="chart-subtitle">
+            {{ t('charts.messageTrend.subtitle') }}
+          </div>
         </div>
         
         <v-select 
-          color="primary" 
-          variant="outlined"
-          density="compact"
-          hide-details 
           v-model="selectedTimeRange" 
+          color="primary"
+          variant="outlined"
+          density="compact" 
+          hide-details 
           :items="timeRanges" 
           item-title="label" 
           item-value="value" 
           class="time-select"
+          return-object
+          single-line 
           @update:model-value="fetchMessageSeries"
-          return-object 
-          single-line
         >
-          <template v-slot:selection="{ item }">
+          <template #selection="{ item }">
             <div class="d-flex align-center">
-              <v-icon start size="small">mdi-calendar-range</v-icon>
+              <v-icon
+                start
+                size="small"
+              >
+                mdi-calendar-range
+              </v-icon>
               {{ item.raw.label }}
             </div>
           </template>
@@ -32,36 +44,61 @@
       
       <div class="chart-stats">
         <div class="stat-box">
-          <div class="stat-label">{{ t('charts.messageTrend.totalMessages') }}</div>
-          <div class="stat-number">{{ totalMessages }}</div>
+          <div class="stat-label">
+            {{ t('charts.messageTrend.totalMessages') }}
+          </div>
+          <div class="stat-number">
+            {{ totalMessages }}
+          </div>
         </div>
         
         <div class="stat-box">
-          <div class="stat-label">{{ t('charts.messageTrend.dailyAverage') }}</div>
-          <div class="stat-number">{{ dailyAverage }}</div>
+          <div class="stat-label">
+            {{ t('charts.messageTrend.dailyAverage') }}
+          </div>
+          <div class="stat-number">
+            {{ dailyAverage }}
+          </div>
         </div>
         
-        <div class="stat-box" :class="{'trend-up': growthRate > 0, 'trend-down': growthRate < 0}">
-          <div class="stat-label">{{ t('charts.messageTrend.growthRate') }}</div>
+        <div
+          class="stat-box"
+          :class="{'trend-up': growthRate > 0, 'trend-down': growthRate < 0}"
+        >
+          <div class="stat-label">
+            {{ t('charts.messageTrend.growthRate') }}
+          </div>
           <div class="stat-number">
-            <v-icon v-show="growthRate !== 0" size="small" :icon="growthRate > 0 ? 'mdi-arrow-up' : 'mdi-arrow-down'"></v-icon>
+            <v-icon
+              v-show="growthRate !== 0"
+              size="small"
+              :icon="growthRate > 0 ? 'mdi-arrow-up' : 'mdi-arrow-down'"
+            />
             {{ Math.abs(growthRate) }}%
           </div>
         </div>
       </div>
       
       <div class="chart-container">
-        <div v-if="loading" class="loading-overlay">
-          <v-progress-circular indeterminate color="primary"></v-progress-circular>
-          <div class="loading-text">{{ t('status.loading') }}</div>
+        <div
+          v-if="loading"
+          class="loading-overlay"
+        >
+          <v-progress-circular
+            indeterminate
+            color="primary"
+          />
+          <div class="loading-text">
+            {{ t('status.loading') }}
+          </div>
         </div>
         <apexchart 
+          ref="chart" 
           type="area" 
           height="280" 
           :options="chartOptions" 
-          :series="chartSeries" 
-          ref="chart"
-        ></apexchart>
+          :series="chartSeries"
+        />
       </div>
     </v-card-text>
   </v-card>

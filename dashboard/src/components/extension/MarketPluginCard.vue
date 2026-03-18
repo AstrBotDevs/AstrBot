@@ -81,7 +81,7 @@ const handleInstall = (plugin) => {
             border-radius: 8px;
             object-fit: cover;
           "
-        />
+        >
       </div>
 
       <div
@@ -108,23 +108,25 @@ const handleInstall = (plugin) => {
               plugin.display_name?.length
                 ? plugin.display_name
                 : showPluginFullName
-                ? plugin.name
-                : plugin.trimmedName
+                  ? plugin.name
+                  : plugin.trimmedName
             }}
           </span>
         </div>
 
-        <div class="d-flex align-center" style="gap: 4px; margin-bottom: 6px">
+        <div
+          class="d-flex align-center"
+          style="gap: 4px; margin-bottom: 6px"
+        >
           <v-icon
             icon="mdi-account"
             size="x-small"
             style="color: rgba(var(--v-theme-on-surface), 0.5)"
-          ></v-icon>
+          />
           <a
             v-if="plugin?.social_link"
             :href="plugin.social_link"
             target="_blank"
-            @click.stop
             class="text-subtitle-2 font-weight-medium"
             style="
               text-decoration: none;
@@ -133,6 +135,7 @@ const handleInstall = (plugin) => {
               overflow: hidden;
               text-overflow: ellipsis;
             "
+            @click.stop
           >
             {{ plugin.author }}
           </a>
@@ -156,7 +159,7 @@ const handleInstall = (plugin) => {
               icon="mdi-source-branch"
               size="x-small"
               style="margin-right: 2px"
-            ></v-icon>
+            />
             <span>{{ plugin.version }}</span>
           </div>
         </div>
@@ -186,7 +189,10 @@ const handleInstall = (plugin) => {
           />
         </div>
 
-        <div class="d-flex align-center" style="gap: 8px; margin-top: auto">
+        <div
+          class="d-flex align-center"
+          style="gap: 8px; margin-top: auto"
+        >
           <div
             v-if="plugin.stars !== undefined"
             class="d-flex align-center text-subtitle-2"
@@ -196,7 +202,7 @@ const handleInstall = (plugin) => {
               icon="mdi-star"
               size="x-small"
               style="margin-right: 2px"
-            ></v-icon>
+            />
             <span>{{ plugin.stars }}</span>
           </div>
           <div
@@ -208,7 +214,7 @@ const handleInstall = (plugin) => {
               icon="mdi-clock-outline"
               size="x-small"
               style="margin-right: 2px"
-            ></v-icon>
+            />
             <span>{{ new Date(plugin.updated_at).toLocaleString() }}</span>
           </div>
         </div>
@@ -229,8 +235,12 @@ const handleInstall = (plugin) => {
       >
         {{ tag === "danger" ? tm("tags.danger") : tag }}
       </v-chip>
-      <v-menu v-if="plugin.tags && plugin.tags.length > 2" open-on-hover offset-y>
-        <template v-slot:activator="{ props: menuProps }">
+      <v-menu
+        v-if="plugin.tags && plugin.tags.length > 2"
+        open-on-hover
+        offset-y
+      >
+        <template #activator="{ props: menuProps }">
           <v-chip
             v-bind="menuProps"
             color="grey"
@@ -242,14 +252,21 @@ const handleInstall = (plugin) => {
           </v-chip>
         </template>
         <v-list density="compact">
-          <v-list-item v-for="tag in plugin.tags.slice(2)" :key="tag">
-            <v-chip :color="tag === 'danger' ? 'error' : 'primary'" label size="small">
+          <v-list-item
+            v-for="tag in plugin.tags.slice(2)"
+            :key="tag"
+          >
+            <v-chip
+              :color="tag === 'danger' ? 'error' : 'primary'"
+              label
+              size="small"
+            >
               {{ tag === "danger" ? tm("tags.danger") : tag }}
             </v-chip>
           </v-list-item>
         </v-list>
       </v-menu>
-      <v-spacer></v-spacer>
+      <v-spacer />
       <v-btn
         v-if="plugin?.repo"
         color="secondary"
@@ -260,21 +277,31 @@ const handleInstall = (plugin) => {
         target="_blank"
         style="height: 32px"
       >
-        <v-icon icon="mdi-github" start size="small"></v-icon>
+        <v-icon
+          icon="mdi-github"
+          start
+          size="small"
+        />
         {{ tm("buttons.viewRepo") }}
       </v-btn>
       <v-btn
         v-if="!plugin?.installed"
         color="primary"
         size="small"
-        @click="handleInstall(plugin)"
         variant="flat"
         class="market-action-btn"
         style="height: 32px"
+        @click="handleInstall(plugin)"
       >
         {{ tm("buttons.install") }}
       </v-btn>
-      <v-chip v-else color="success" size="x-small" label style="height: 20px">
+      <v-chip
+        v-else
+        color="success"
+        size="x-small"
+        label
+        style="height: 20px"
+      >
         ✓ {{ tm("status.installed") }}
       </v-chip>
     </v-card-actions>

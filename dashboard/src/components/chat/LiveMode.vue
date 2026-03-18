@@ -1,13 +1,18 @@
 <template>
   <div class="live-mode-container">
     <div class="header-controls">
-      <v-btn icon="mdi-close" @click="handleClose" flat variant="text" />
+      <v-btn
+        icon="mdi-close"
+        flat
+        variant="text"
+        @click="handleClose"
+      />
       <v-btn
         :icon="isCodeMode ? 'mdi-code-tags-check' : 'mdi-code-tags'"
-        @click="toggleCodeMode"
         flat
         variant="text"
         :color="isCodeMode ? 'primary' : ''"
+        @click="toggleCodeMode"
       />
       <v-btn
         :icon="
@@ -15,22 +20,26 @@
             ? 'mdi-emoticon-confused'
             : 'mdi-emoticon-confused-outline'
         "
-        @click="toggleNervousMode"
         flat
         variant="text"
         :color="isNervousMode ? 'primary' : ''"
+        @click="toggleNervousMode"
       />
     </div>
 
-    <span style="color: gray; padding-left: 16px"
-      >We're developing Astr Live Mode on ChatUI & Desktop right now. Stay
-      tuned!</span
-    >
+    <span style="color: gray; padding-left: 16px">We're developing Astr Live Mode on ChatUI & Desktop right now. Stay
+      tuned!</span>
 
     <div class="live-mode-content">
-      <div class="center-circle-container" @click="handleCircleClick">
+      <div
+        class="center-circle-container"
+        @click="handleCircleClick"
+      >
         <!-- 爆炸效果层 -->
-        <div v-if="isExploding" class="explosion-wave"></div>
+        <div
+          v-if="isExploding"
+          class="explosion-wave"
+        />
 
         <SiriOrb
           :energy="orbEnergy"
@@ -44,7 +53,10 @@
       <div class="status-text">
         {{ statusText }}
       </div>
-      <div class="messages-container" v-if="messages.length > 0">
+      <div
+        v-if="messages.length > 0"
+        class="messages-container"
+      >
         <div
           v-for="(msg, index) in messages"
           :key="index"
@@ -57,40 +69,27 @@
         </div>
       </div>
 
-      <div class="metrics-container" v-if="Object.keys(metrics).length > 0">
-        <span v-if="metrics.wav_assemble_time"
-          >WAV Assemble:
-          {{ (metrics.wav_assemble_time * 1000).toFixed(0) }}ms</span
-        >
-        <span v-if="metrics.llm_ttft"
-          >LLM First Token Latency:
-          {{ (metrics.llm_ttft * 1000).toFixed(0) }}ms</span
-        >
-        <span v-if="metrics.llm_total_time"
-          >LLM Total Latency:
-          {{ (metrics.llm_total_time * 1000).toFixed(0) }}ms</span
-        >
-        <span v-if="metrics.tts_first_frame_time"
-          >TTS First Frame Latency:
-          {{ (metrics.tts_first_frame_time * 1000).toFixed(0) }}ms</span
-        >
-        <span v-if="metrics.tts_total_time"
-          >TTS Total Larency:
-          {{ (metrics.tts_total_time * 1000).toFixed(0) }}ms</span
-        >
-        <span v-if="metrics.speak_to_first_frame"
-          >Speak -> First TTS Frame:
-          {{ (metrics.speak_to_first_frame * 1000).toFixed(0) }}ms</span
-        >
-        <span v-if="metrics.wav_to_tts_total_time"
-          >Speak -> End:
-          {{ (metrics.wav_to_tts_total_time * 1000).toFixed(0) }}ms</span
-        >
+      <div
+        v-if="Object.keys(metrics).length > 0"
+        class="metrics-container"
+      >
+        <span v-if="metrics.wav_assemble_time">WAV Assemble:
+          {{ (metrics.wav_assemble_time * 1000).toFixed(0) }}ms</span>
+        <span v-if="metrics.llm_ttft">LLM First Token Latency:
+          {{ (metrics.llm_ttft * 1000).toFixed(0) }}ms</span>
+        <span v-if="metrics.llm_total_time">LLM Total Latency:
+          {{ (metrics.llm_total_time * 1000).toFixed(0) }}ms</span>
+        <span v-if="metrics.tts_first_frame_time">TTS First Frame Latency:
+          {{ (metrics.tts_first_frame_time * 1000).toFixed(0) }}ms</span>
+        <span v-if="metrics.tts_total_time">TTS Total Larency:
+          {{ (metrics.tts_total_time * 1000).toFixed(0) }}ms</span>
+        <span v-if="metrics.speak_to_first_frame">Speak -> First TTS Frame:
+          {{ (metrics.speak_to_first_frame * 1000).toFixed(0) }}ms</span>
+        <span v-if="metrics.wav_to_tts_total_time">Speak -> End:
+          {{ (metrics.wav_to_tts_total_time * 1000).toFixed(0) }}ms</span>
         <span v-if="metrics.stt">STT Provider: {{ metrics.stt }}</span>
         <span v-if="metrics.tts">TTS Provider: {{ metrics.tts }}</span>
-        <span v-if="metrics.chat_model"
-          >Chat Model: {{ metrics.chat_model }}</span
-        >
+        <span v-if="metrics.chat_model">Chat Model: {{ metrics.chat_model }}</span>
       </div>
     </div>
   </div>

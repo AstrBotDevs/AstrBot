@@ -1,7 +1,12 @@
 <template>
   <div class="file-config-item">
     <div class="d-flex align-center gap-2">
-      <v-btn size="small" color="primary" variant="tonal" @click="dialog = true">
+      <v-btn
+        size="small"
+        color="primary"
+        variant="tonal"
+        @click="dialog = true"
+      >
         {{ tm('fileUpload.button') }}
       </v-btn>
       <span class="text-caption text-medium-emphasis ml-2">
@@ -9,61 +14,123 @@
       </span>
     </div>
 
-    <v-dialog v-model="dialog" max-width="700">
-      <v-card class="file-dialog-card" variant="flat">
+    <v-dialog
+      v-model="dialog"
+      max-width="700"
+    >
+      <v-card
+        class="file-dialog-card"
+        variant="flat"
+      >
         <v-card-title class="d-flex align-center">
           <span class="text-h3">{{ tm('fileUpload.dialogTitle') }}</span>
           <v-spacer />
-          <v-btn icon="mdi-close" variant="text" @click="dialog = false" />
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            @click="dialog = false"
+          />
         </v-card-title>
 
         <v-card-text class="file-dialog-body">
-          <div v-if="mergedFileItems.length === 0" class="empty-text">
+          <div
+            v-if="mergedFileItems.length === 0"
+            class="empty-text"
+          >
             {{ tm('fileUpload.empty') }}
           </div>
 
-          <v-list density="compact" lines="one">
-            <v-list-item v-for="item in mergedFileItems" :key="item.path">
+          <v-list
+            density="compact"
+            lines="one"
+          >
+            <v-list-item
+              v-for="item in mergedFileItems"
+              :key="item.path"
+            >
               <template #prepend>
-                <v-icon size="18">mdi-file</v-icon>
+                <v-icon size="18">
+                  mdi-file
+                </v-icon>
               </template>
               <v-list-item-title class="file-name">
                 {{ getDisplayName(item.path) }}
               </v-list-item-title>
               <template #append>
                 <div class="d-flex align-center gap-1">
-                  <v-chip v-if="item.status !== 'ok'" size="x-small" :color="getStatusColor(item.status)"
-                    variant="tonal">
+                  <v-chip
+                    v-if="item.status !== 'ok'"
+                    size="x-small"
+                    :color="getStatusColor(item.status)"
+                    variant="tonal"
+                  >
                     {{ getStatusText(item.status) }}
                   </v-chip>
-                  <v-btn v-if="item.status === 'unconfigured'" icon="mdi-plus" size="x-small" variant="text"
-                    @click="addToConfig(item.path)" />
-                  <v-btn icon="mdi-delete" size="x-small" variant="text"
-                    @click="item.status === 'unconfigured' ? deletePhysicalFile(item.path) : deleteFile(item.path)" />
+                  <v-btn
+                    v-if="item.status === 'unconfigured'"
+                    icon="mdi-plus"
+                    size="x-small"
+                    variant="text"
+                    @click="addToConfig(item.path)"
+                  />
+                  <v-btn
+                    icon="mdi-delete"
+                    size="x-small"
+                    variant="text"
+                    @click="item.status === 'unconfigured' ? deletePhysicalFile(item.path) : deleteFile(item.path)"
+                  />
                 </div>
               </template>
             </v-list-item>
 
-            <v-divider v-if="mergedFileItems.length > 0" class="my-2" />
+            <v-divider
+              v-if="mergedFileItems.length > 0"
+              class="my-2"
+            />
 
-            <v-list-item class="upload-item" :class="{ dragover: isDragging }" @drop.prevent="handleDrop"
-              @dragover.prevent="isDragging = true" @dragleave="isDragging = false" @click="openFilePicker">
+            <v-list-item
+              class="upload-item"
+              :class="{ dragover: isDragging }"
+              @drop.prevent="handleDrop"
+              @dragover.prevent="isDragging = true"
+              @dragleave="isDragging = false"
+              @click="openFilePicker"
+            >
               <template #prepend>
-                <v-icon size="18" color="primary">mdi-plus</v-icon>
+                <v-icon
+                  size="18"
+                  color="primary"
+                >
+                  mdi-plus
+                </v-icon>
               </template>
               <v-list-item-title>{{ tm('fileUpload.dropzone') }}</v-list-item-title>
-              <v-list-item-subtitle v-if="allowedTypesText" class="upload-hint">
+              <v-list-item-subtitle
+                v-if="allowedTypesText"
+                class="upload-hint"
+              >
                 {{ tm('fileUpload.allowedTypes', { types: allowedTypesText }) }}
               </v-list-item-subtitle>
             </v-list-item>
           </v-list>
 
-          <input ref="fileInput" type="file" multiple hidden :accept="acceptAttr" @change="handleFileSelect" />
+          <input
+            ref="fileInput"
+            type="file"
+            multiple
+            hidden
+            :accept="acceptAttr"
+            @change="handleFileSelect"
+          >
         </v-card-text>
 
         <v-card-actions class="file-dialog-actions">
           <v-spacer />
-          <v-btn color="primary" variant="elevated" @click="dialog = false">
+          <v-btn
+            color="primary"
+            variant="elevated"
+            @click="dialog = false"
+          >
             {{ tm('fileUpload.done') }}
           </v-btn>
         </v-card-actions>

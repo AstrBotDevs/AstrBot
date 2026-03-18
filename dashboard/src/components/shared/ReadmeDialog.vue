@@ -71,31 +71,30 @@ onUnmounted(() => {
   if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
 });
 
-// 渲染后的 HTML
-const renderedHtml = computed(() => {
-  // 强制依赖 locale，确保语言切换时重新渲染
-  const _ = locale?.value;
-  if (!content.value) return "";
+md.renderer.rules.fence = (tokens, idx) => {
+  const token = tokens[idx];
+  const lang = token.info.trim() || "";
+  const code = token.content;
 
-  // 设置 fence 规则，直接使用当前作用域的 t 函数
-  md.renderer.rules.fence = (tokens, idx) => {
-    const token = tokens[idx];
-    const lang = token.info.trim() || "";
-    const code = token.content;
+  const highlighted =
+    lang && hljs.getLanguage(lang)
+      ? hljs.highlight(code, { language: lang }).value
+      : md.utils.escapeHtml(code);
 
-    const highlighted =
-      lang && hljs.getLanguage(lang)
-        ? hljs.highlight(code, { language: lang }).value
-        : md.utils.escapeHtml(code);
-
-    return `<div class="code-block-wrapper">
+  return `<div class="code-block-wrapper">
       ${lang ? `<span class="code-lang-label">${lang}</span>` : ""}
       <button class="copy-code-btn" title="${t("core.common.copy")}">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
       </button>
       <pre class="hljs"><code class="language-${lang}">${highlighted}</code></pre>
     </div>`;
-  };
+};
+
+// 渲染后的 HTML
+const renderedHtml = computed(() => {
+  // 强制依赖 locale，确保语言切换时重新渲染
+  const _ = locale?.value;
+  if (!content.value) return "";
 
   const rawHtml = md.render(content.value);
 
@@ -365,16 +364,29 @@ const showActionArea = computed(() => {
 </script>
 
 <template>
-  <v-dialog v-model="_show" width="800">
+  <v-dialog
+    v-model="_show"
+    width="800"
+  >
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
         <span class="text-h2 pa-2">{{ modeConfig.title }}</span>
-        <v-btn icon @click="_show = false" variant="text">
+        <v-btn
+          icon
+          variant="text"
+          @click="_show = false"
+        >
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
-      <v-card-text ref="scrollContainer" style="overflow-y: auto">
-        <div v-if="showActionArea" class="d-flex justify-space-between mb-4">
+      <v-card-text
+        ref="scrollContainer"
+        style="overflow-y: auto"
+      >
+        <div
+          v-if="showActionArea"
+          class="d-flex justify-space-between mb-4"
+        >
           <v-btn
             v-if="modeConfig.showGithubButton && repoUrl"
             color="primary"
@@ -403,25 +415,31 @@ const showActionArea = computed(() => {
             color="primary"
             size="64"
             class="mb-4"
-          ></v-progress-circular>
-          <p class="text-body-1 text-center">{{ modeConfig.loading }}</p>
+          />
+          <p class="text-body-1 text-center">
+            {{ modeConfig.loading }}
+          </p>
         </div>
 
         <div
           v-else-if="renderedHtml"
           class="markdown-body"
-          v-html="renderedHtml"
           @click="handleContainerClick"
-        ></div>
+          v-html="renderedHtml"
+        />
 
         <div
           v-else-if="error"
           class="d-flex flex-column align-center justify-center"
           style="height: 100%"
         >
-          <v-icon size="64" color="error" class="mb-4"
-            >mdi-alert-circle-outline</v-icon
+          <v-icon
+            size="64"
+            color="error"
+            class="mb-4"
           >
+            mdi-alert-circle-outline
+          </v-icon>
           <p class="text-body-1 text-center mb-2">
             {{ t("core.common.error") }}
           </p>
@@ -435,9 +453,13 @@ const showActionArea = computed(() => {
           class="d-flex flex-column align-center justify-center"
           style="height: 100%"
         >
-          <v-icon size="64" color="warning" class="mb-4"
-            >mdi-file-question-outline</v-icon
+          <v-icon
+            size="64"
+            color="warning"
+            class="mb-4"
           >
+            mdi-file-question-outline
+          </v-icon>
           <p class="text-body-1 text-center mb-2">
             {{ modeConfig.emptyTitle }}
           </p>
@@ -447,8 +469,12 @@ const showActionArea = computed(() => {
         </div>
       </v-card-text>
       <v-card-actions>
-        <v-spacer></v-spacer>
-        <v-btn color="primary" variant="tonal" @click="_show = false">
+        <v-spacer />
+        <v-btn
+          color="primary"
+          variant="tonal"
+          @click="_show = false"
+        >
           {{ t("core.common.close") }}
         </v-btn>
       </v-card-actions>

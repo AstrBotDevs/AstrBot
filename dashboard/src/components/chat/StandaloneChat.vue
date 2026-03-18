@@ -1,18 +1,25 @@
 <template>
-  <v-card class="standalone-chat-card" elevation="0" rounded="0">
+  <v-card
+    class="standalone-chat-card"
+    elevation="0"
+    rounded="0"
+  >
     <v-card-text class="standalone-chat-container">
       <div class="chat-layout">
         <!-- 聊天内容区域 -->
         <div class="chat-content-panel">
           <MessageList
             v-if="messages && messages.length > 0"
-            :messages="messages"
-            :isDark="isDark"
-            :isStreaming="isStreaming || isConvRunning"
-            @openImagePreview="openImagePreview"
             ref="messageList"
+            :messages="messages"
+            :is-dark="isDark"
+            :is-streaming="isStreaming || isConvRunning"
+            @openImagePreview="openImagePreview"
           />
-          <div class="welcome-container fade-in" v-else>
+          <div
+            v-else
+            class="welcome-container fade-in"
+          >
             <div class="welcome-title">
               <span>Hello, I'm</span>
               <span class="bot-name">AstrBot ⭐</span>
@@ -24,13 +31,14 @@
 
           <!-- 输入区域 -->
           <ChatInput
+            ref="chatInputRef"
             v-model:prompt="prompt"
-            :stagedImagesUrl="stagedImagesUrl"
-            :stagedAudioUrl="stagedAudioUrl"
+            :staged-images-url="stagedImagesUrl"
+            :staged-audio-url="stagedAudioUrl"
             :disabled="isStreaming"
             :is-running="isStreaming || isConvRunning"
-            :enableStreaming="enableStreaming"
-            :isRecording="isRecording"
+            :enable-streaming="enableStreaming"
+            :is-recording="isRecording"
             :session-id="currSessionId || null"
             :current-session="getCurrentSession"
             :config-id="configId"
@@ -43,8 +51,6 @@
             @stopRecording="handleStopRecording"
             @pasteImage="handlePaste"
             @fileSelect="handleFileSelect"
-            @openLiveMode=""
-            ref="chatInputRef"
           />
         </div>
       </div>
@@ -52,8 +58,15 @@
   </v-card>
 
   <!-- 图片预览对话框 -->
-  <v-dialog v-model="imagePreviewDialog" max-width="90vw" max-height="90vh">
-    <v-card class="image-preview-card" elevation="8">
+  <v-dialog
+    v-model="imagePreviewDialog"
+    max-width="90vw"
+    max-height="90vh"
+  >
+    <v-card
+      class="image-preview-card"
+      elevation="8"
+    >
       <v-card-title class="d-flex justify-space-between align-center pa-4">
         <span>{{ t("core.common.imagePreview") }}</span>
         <v-btn
@@ -63,7 +76,10 @@
         />
       </v-card-title>
       <v-card-text class="text-center pa-4">
-        <img :src="previewImageUrl" class="preview-image-large" />
+        <img
+          :src="previewImageUrl"
+          class="preview-image-large"
+        >
       </v-card-text>
     </v-card>
   </v-dialog>

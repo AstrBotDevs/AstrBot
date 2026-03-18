@@ -1,81 +1,145 @@
 <template>
-    <v-card class="persona-card" :class="{ 'dragging': isDragging }" rounded="lg" @click="$emit('view')" elevation="1" hover
-        draggable="true" @dragstart="handleDragStart" @dragend="handleDragEnd">
-        <v-card-title class="d-flex justify-space-between align-center">
-            <div class="text-truncate ml-2">{{ persona.persona_id }}</div>
-            <v-menu offset-y>
-                <template v-slot:activator="{ props }">
-                    <v-btn icon="mdi-dots-vertical" variant="text" size="small" v-bind="props" @click.stop />
-                </template>
-                <v-list density="compact">
-                    <v-list-item @click.stop="$emit('edit')">
-                        <template v-slot:prepend>
-                            <v-icon size="small">mdi-pencil</v-icon>
-                        </template>
-                        <v-list-item-title>{{ tm('buttons.edit') }}</v-list-item-title>
-                    </v-list-item>
-                    <v-list-item @click.stop="$emit('clone')">
-                        <template v-slot:prepend>
-                            <v-icon size="small">mdi-content-copy</v-icon>
-                        </template>
-                        <v-list-item-title>{{ tm('buttons.clone') }}</v-list-item-title>
-                    </v-list-item>
-                    <v-list-item @click.stop="$emit('move')">
-                        <template v-slot:prepend>
-                            <v-icon size="small">mdi-folder-move</v-icon>
-                        </template>
-                        <v-list-item-title>{{ tm('persona.contextMenu.moveTo') }}</v-list-item-title>
-                    </v-list-item>
-                    <v-divider class="my-1" />
-                    <v-list-item @click.stop="$emit('delete')" class="text-error">
-                        <template v-slot:prepend>
-                            <v-icon size="small" color="error">mdi-delete</v-icon>
-                        </template>
-                        <v-list-item-title>{{ tm('buttons.delete') }}</v-list-item-title>
-                    </v-list-item>
-                </v-list>
-            </v-menu>
-        </v-card-title>
+  <v-card
+    class="persona-card"
+    :class="{ 'dragging': isDragging }"
+    rounded="lg"
+    elevation="1"
+    hover
+    draggable="true"
+    @click="$emit('view')"
+    @dragstart="handleDragStart"
+    @dragend="handleDragEnd"
+  >
+    <v-card-title class="d-flex justify-space-between align-center">
+      <div class="text-truncate ml-2">
+        {{ persona.persona_id }}
+      </div>
+      <v-menu offset-y>
+        <template #activator="{ props }">
+          <v-btn
+            icon="mdi-dots-vertical"
+            variant="text"
+            size="small"
+            v-bind="props"
+            @click.stop
+          />
+        </template>
+        <v-list density="compact">
+          <v-list-item @click.stop="$emit('edit')">
+            <template #prepend>
+              <v-icon size="small">
+                mdi-pencil
+              </v-icon>
+            </template>
+            <v-list-item-title>{{ tm('buttons.edit') }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item @click.stop="$emit('clone')">
+            <template #prepend>
+              <v-icon size="small">
+                mdi-content-copy
+              </v-icon>
+            </template>
+            <v-list-item-title>{{ tm('buttons.clone') }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item @click.stop="$emit('move')">
+            <template #prepend>
+              <v-icon size="small">
+                mdi-folder-move
+              </v-icon>
+            </template>
+            <v-list-item-title>{{ tm('persona.contextMenu.moveTo') }}</v-list-item-title>
+          </v-list-item>
+          <v-divider class="my-1" />
+          <v-list-item
+            class="text-error"
+            @click.stop="$emit('delete')"
+          >
+            <template #prepend>
+              <v-icon
+                size="small"
+                color="error"
+              >
+                mdi-delete
+              </v-icon>
+            </template>
+            <v-list-item-title>{{ tm('buttons.delete') }}</v-list-item-title>
+          </v-list-item>
+        </v-list>
+      </v-menu>
+    </v-card-title>
 
-        <v-card-text>
-            <div class="system-prompt-preview">
-                {{ truncateText(persona.system_prompt, 100) }}
-            </div>
+    <v-card-text>
+      <div class="system-prompt-preview">
+        {{ truncateText(persona.system_prompt, 100) }}
+      </div>
 
-            <div class="mt-3 d-flex flex-wrap ga-1">
-                <v-chip v-if="persona.begin_dialogs && persona.begin_dialogs.length > 0" size="small" color="secondary"
-                    variant="tonal" prepend-icon="mdi-chat">
-                    {{ tm('labels.presetDialogs', { count: persona.begin_dialogs.length / 2 }) }}
-                </v-chip>
-                <v-chip v-if="persona.tools === null" size="small" color="success" variant="tonal"
-                    prepend-icon="mdi-tools">
-                    {{ tm('form.allToolsAvailable') }}
-                </v-chip>
-                <v-chip v-else-if="persona.tools && persona.tools.length > 0" size="small" color="primary" variant="tonal"
-                    prepend-icon="mdi-tools">
-                    {{ persona.tools.length }} {{ tm('persona.toolsCount') }}
-                </v-chip>
-                <v-chip v-if="persona.skills === null" size="small" color="success" variant="tonal"
-                    prepend-icon="mdi-lightning-bolt">
-                    {{ tm('form.allSkillsAvailable') }}
-                </v-chip>
-                <v-chip v-else-if="persona.skills && persona.skills.length > 0" size="small" color="primary"
-                    variant="tonal" prepend-icon="mdi-lightning-bolt">
-                    {{ persona.skills.length }} {{ tm('persona.skillsCount') }}
-                </v-chip>
-            </div>
+      <div class="mt-3 d-flex flex-wrap ga-1">
+        <v-chip
+          v-if="persona.begin_dialogs && persona.begin_dialogs.length > 0"
+          size="small"
+          color="secondary"
+          variant="tonal"
+          prepend-icon="mdi-chat"
+        >
+          {{ tm('labels.presetDialogs', { count: persona.begin_dialogs.length / 2 }) }}
+        </v-chip>
+        <v-chip
+          v-if="persona.tools === null"
+          size="small"
+          color="success"
+          variant="tonal"
+          prepend-icon="mdi-tools"
+        >
+          {{ tm('form.allToolsAvailable') }}
+        </v-chip>
+        <v-chip
+          v-else-if="persona.tools && persona.tools.length > 0"
+          size="small"
+          color="primary"
+          variant="tonal"
+          prepend-icon="mdi-tools"
+        >
+          {{ persona.tools.length }} {{ tm('persona.toolsCount') }}
+        </v-chip>
+        <v-chip
+          v-if="persona.skills === null"
+          size="small"
+          color="success"
+          variant="tonal"
+          prepend-icon="mdi-lightning-bolt"
+        >
+          {{ tm('form.allSkillsAvailable') }}
+        </v-chip>
+        <v-chip
+          v-else-if="persona.skills && persona.skills.length > 0"
+          size="small"
+          color="primary"
+          variant="tonal"
+          prepend-icon="mdi-lightning-bolt"
+        >
+          {{ persona.skills.length }} {{ tm('persona.skillsCount') }}
+        </v-chip>
+      </div>
 
-            <div class="mt-3 text-caption text-medium-emphasis">
-                {{ tm('labels.createdAt') }}: {{ formatDate(persona.created_at) }}
-            </div>
-        </v-card-text>
-    </v-card>
+      <div class="mt-3 text-caption text-medium-emphasis">
+        {{ tm('labels.createdAt') }}: {{ formatDate(persona.created_at) }}
+      </div>
+    </v-card-text>
+  </v-card>
 
-    <!-- Custom Drag Preview -->
-    <div ref="dragPreview" class="drag-preview">
-        <v-icon size="small" class="mr-2">mdi-account</v-icon>
-        <span class="text-subtitle-2">{{ persona.persona_id }}</span>
-    </div>
+  <!-- Custom Drag Preview -->
+  <div
+    ref="dragPreview"
+    class="drag-preview"
+  >
+    <v-icon
+      size="small"
+      class="mr-2"
+    >
+      mdi-account
+    </v-icon>
+    <span class="text-subtitle-2">{{ persona.persona_id }}</span>
+  </div>
 </template>
 
 <script lang="ts">

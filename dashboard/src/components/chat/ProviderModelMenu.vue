@@ -1,60 +1,117 @@
 <template>
-    <v-menu v-model="menuOpen" :close-on-content-click="false" location="top" @update:model-value="handleMenuToggle">
-        <template v-slot:activator="{ props: menuProps }">
-            <v-chip v-bind="menuProps" class="text-none provider-chip" variant="tonal" :size="chipSize">
-                <v-icon start size="14">mdi-creation</v-icon>
-                <span v-if="selectedProviderId">
-                    {{ selectedProviderId }}
-                </span>
-                <span v-else>Model</span>
-            </v-chip>
-        </template>
-        <v-card class="provider-menu-card" min-width="280" max-width="400">
-            <v-card-text class="pa-2">
-                <v-text-field
-                    v-model="searchQuery"
-                    placeholder="Search..."
-                    hide-details
-                    variant="plain"
-                    flat
-                    density="compact"
-                    prepend-inner-icon="mdi-magnify"
-                    class="ml-2 mb-2 mr-2"
-                    clearable
-                />
-                <v-list density="compact" nav class="provider-menu-list">
-                    <v-list-item v-for="provider in filteredProviders" :key="provider.id"
-                        :active="selectedProviderId === provider.id" @click="selectProvider(provider)" rounded="lg"
-                        class="provider-menu-item">
-                        <v-list-item-title class="text-body-2">{{ provider.id }}</v-list-item-title>
-                        <v-list-item-subtitle class="provider-subtitle">
-                            <span class="model-name">{{ provider.model }}</span>
-                            <span class="meta-icons">
-                                <v-tooltip text="支持图像输入" location="top" v-if="supportsImageInput(provider)">
-                                    <template v-slot:activator="{ props: tipProps }">
-                                        <v-icon v-bind="tipProps" size="12" color="grey">mdi-eye-outline</v-icon>
-                                    </template>
-                                </v-tooltip>
-                                <v-tooltip text="支持工具调用" location="top" v-if="supportsToolCall(provider)">
-                                    <template v-slot:activator="{ props: tipProps }">
-                                        <v-icon v-bind="tipProps" size="12" color="grey">mdi-wrench</v-icon>
-                                    </template>
-                                </v-tooltip>
-                                <v-tooltip text="支持推理" location="top" v-if="supportsReasoning(provider)">
-                                    <template v-slot:activator="{ props: tipProps }">
-                                        <v-icon v-bind="tipProps" size="12" color="grey">mdi-brain</v-icon>
-                                    </template>
-                                </v-tooltip>
-                            </span>
-                        </v-list-item-subtitle>
-                    </v-list-item>
-                </v-list>
-                <div v-if="providerConfigs.length === 0" class="empty-hint">
-                    No available models
-                </div>
-            </v-card-text>
-        </v-card>
-    </v-menu>
+  <v-menu
+    v-model="menuOpen"
+    :close-on-content-click="false"
+    location="top"
+    @update:model-value="handleMenuToggle"
+  >
+    <template #activator="{ props: menuProps }">
+      <v-chip
+        v-bind="menuProps"
+        class="text-none provider-chip"
+        variant="tonal"
+        :size="chipSize"
+      >
+        <v-icon
+          start
+          size="14"
+        >
+          mdi-creation
+        </v-icon>
+        <span v-if="selectedProviderId">
+          {{ selectedProviderId }}
+        </span>
+        <span v-else>Model</span>
+      </v-chip>
+    </template>
+    <v-card
+      class="provider-menu-card"
+      min-width="280"
+      max-width="400"
+    >
+      <v-card-text class="pa-2">
+        <v-text-field
+          v-model="searchQuery"
+          placeholder="Search..."
+          hide-details
+          variant="plain"
+          flat
+          density="compact"
+          prepend-inner-icon="mdi-magnify"
+          class="ml-2 mb-2 mr-2"
+          clearable
+        />
+        <v-list
+          density="compact"
+          nav
+          class="provider-menu-list"
+        >
+          <v-list-item
+            v-for="provider in filteredProviders"
+            :key="provider.id"
+            :active="selectedProviderId === provider.id"
+            rounded="lg"
+            class="provider-menu-item"
+            @click="selectProvider(provider)"
+          >
+            <v-list-item-title class="text-body-2">
+              {{ provider.id }}
+            </v-list-item-title>
+            <v-list-item-subtitle class="provider-subtitle">
+              <span class="model-name">{{ provider.model }}</span>
+              <span class="meta-icons">
+                <v-tooltip
+                  v-if="supportsImageInput(provider)"
+                  text="支持图像输入"
+                  location="top"
+                >
+                  <template #activator="{ props: tipProps }">
+                    <v-icon
+                      v-bind="tipProps"
+                      size="12"
+                      color="grey"
+                    >mdi-eye-outline</v-icon>
+                  </template>
+                </v-tooltip>
+                <v-tooltip
+                  v-if="supportsToolCall(provider)"
+                  text="支持工具调用"
+                  location="top"
+                >
+                  <template #activator="{ props: tipProps }">
+                    <v-icon
+                      v-bind="tipProps"
+                      size="12"
+                      color="grey"
+                    >mdi-wrench</v-icon>
+                  </template>
+                </v-tooltip>
+                <v-tooltip
+                  v-if="supportsReasoning(provider)"
+                  text="支持推理"
+                  location="top"
+                >
+                  <template #activator="{ props: tipProps }">
+                    <v-icon
+                      v-bind="tipProps"
+                      size="12"
+                      color="grey"
+                    >mdi-brain</v-icon>
+                  </template>
+                </v-tooltip>
+              </span>
+            </v-list-item-subtitle>
+          </v-list-item>
+        </v-list>
+        <div
+          v-if="providerConfigs.length === 0"
+          class="empty-hint"
+        >
+          No available models
+        </div>
+      </v-card-text>
+    </v-card>
+  </v-menu>
 </template>
 
 <script setup lang="ts">

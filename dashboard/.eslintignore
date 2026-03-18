@@ -1,0 +1,29 @@
+# ESLint ignore file for AstrBot dashboard
+# Skip dependency directories and build artifacts
+
+node_modules/
+dist/
+build/
+public/
+coverage/
+.vite/
+.cache/
+*.min.js
+*.bundle.js
+*.map
+
+# Dashboard-specific artifacts (when lint is run from repo root using --prefix)
+dashboard/dist/
+dashboard/node_modules/
+
+# Generated TypeScript declaration used by environment - can cause parser issues in some setups
+env.d.ts
+
+# Scripts and tooling files (often use newer syntax or are run in node env)
+scripts/**/*.mjs
+scripts/**/*.cjs
+
+# Misc
+*.log
+.idea/
+.vscode/

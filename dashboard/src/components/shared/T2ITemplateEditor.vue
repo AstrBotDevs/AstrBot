@@ -1,6 +1,11 @@
 <template>
-  <v-dialog v-model="dialog" max-width="1400px" persistent scrollable>
-    <template v-slot:activator="{ props }">
+  <v-dialog
+    v-model="dialog"
+    max-width="1400px"
+    persistent
+    scrollable
+  >
+    <template #activator="{ props }">
       <v-btn
         v-bind="props"
         variant="outlined"
@@ -15,8 +20,11 @@
     <v-card>
       <v-card-title class="d-flex align-center justify-space-between">
         <span>{{ tm('t2iTemplateEditor.dialogTitle') }}</span>
-        <v-spacer></v-spacer>
-        <div class="d-flex align-center gap-2" style="width: 60%">
+        <v-spacer />
+        <div
+          class="d-flex align-center gap-2"
+          style="width: 60%"
+        >
           <v-text-field
             v-if="isCreatingNew"
             v-model="editingName"
@@ -27,7 +35,7 @@
             class="flex-grow-1"
             autofocus
             :rules="[v => !!v || tm('t2iTemplateEditor.nameRequired')]"
-          ></v-text-field>
+          />
           <v-select
             v-else
             v-model="selectedTemplate"
@@ -41,9 +49,12 @@
             class="flex-grow-1"
             :loading="loading"
           >
-            <template v-slot:item="{ props, item }">
-              <v-list-item v-bind="props" :title="item.raw.name">
-                <template v-slot:append>
+            <template #item="{ props, item }">
+              <v-list-item
+                v-bind="props"
+                :title="item.raw.name"
+              >
+                <template #append>
                   <v-chip
                     v-if="item.raw.name === activeTemplate"
                     color="success"
@@ -59,8 +70,8 @@
                     color="primary"
                     size="small"
                     class="ml-2"
-                    @click.stop="setActiveTemplate(item.raw.name)"
                     :loading="applyLoading"
+                    @click.stop="setActiveTemplate(item.raw.name)"
                   >
                     {{ tm('t2iTemplateEditor.apply') }}
                   </v-btn>
@@ -79,55 +90,80 @@
       </v-card-title>
 
       <v-card-text class="pa-0">
-        <v-row no-gutters style="height: 70vh;">
+        <v-row
+          no-gutters
+          style="height: 70vh;"
+        >
           <!-- 左侧编辑器 -->
-          <v-col cols="6" class="d-flex flex-column">
-            <v-toolbar density="compact" color="surface-variant">
-              <v-toolbar-title class="text-subtitle-2">{{ tm('t2iTemplateEditor.templateEditor') }}</v-toolbar-title>
-              <v-spacer></v-spacer>
-              <div class="d-flex align-center pa-1" style="border: 1px solid rgba(0,0,0,0.1); border-radius: 8px;">
+          <v-col
+            cols="6"
+            class="d-flex flex-column"
+          >
+            <v-toolbar
+              density="compact"
+              color="surface-variant"
+            >
+              <v-toolbar-title class="text-subtitle-2">
+                {{ tm('t2iTemplateEditor.templateEditor') }}
+              </v-toolbar-title>
+              <v-spacer />
+              <div
+                class="d-flex align-center pa-1"
+                style="border: 1px solid rgba(0,0,0,0.1); border-radius: 8px;"
+              >
                 <v-btn
                   variant="text"
                   size="small"
-                  @click="newTemplate"
                   color="success"
+                  @click="newTemplate"
                 >
-                  <v-icon left>mdi-plus</v-icon>
+                  <v-icon left>
+                    mdi-plus
+                  </v-icon>
                   {{ tm('t2iTemplateEditor.new') }}
                 </v-btn>
-                <v-divider vertical class="mx-1"></v-divider>
+                <v-divider
+                  vertical
+                  class="mx-1"
+                />
                 <v-btn
                   variant="text"
                   size="small"
-                  @click="resetToDefault"
                   :loading="resetLoading"
                   color="warning"
+                  @click="resetToDefault"
                 >
                   {{ tm('t2iTemplateEditor.resetBase') }}
                 </v-btn>
                 <v-btn
                   variant="text"
                   size="small"
-                  @click="promptDelete"
                   color="error"
                   :disabled="isCreatingNew || selectedTemplate === 'base' || !selectedTemplate"
+                  @click="promptDelete"
                 >
                   {{ tm('t2iTemplateEditor.delete') }}
                 </v-btn>
-                <v-divider vertical class="mx-1"></v-divider>
+                <v-divider
+                  vertical
+                  class="mx-1"
+                />
                 <v-btn
                   variant="text"
                   size="small"
-                  @click="saveTemplate"
                   :loading="saveLoading"
                   color="primary"
                   :disabled="(isCreatingNew && !editingName) || (!isCreatingNew && !selectedTemplate)"
+                  @click="saveTemplate"
                 >
                   {{ tm('t2iTemplateEditor.save') }}
                 </v-btn>
               </div>
             </v-toolbar>
-            <div class="flex-grow-1" style="border-right: 1px solid rgba(0,0,0,0.1);">
+            <div
+              class="flex-grow-1"
+              style="border-right: 1px solid rgba(0,0,0,0.1);"
+            >
               <VueMonacoEditor
                 v-model:value="templateContent"
                 :theme="editorTheme"
@@ -139,15 +175,23 @@
           </v-col>
 
           <!-- 右侧预览 -->
-          <v-col cols="6" class="d-flex flex-column">
-            <v-toolbar density="compact" color="surface-variant">
-              <v-toolbar-title class="text-subtitle-2">{{ tm('t2iTemplateEditor.livePreview') }}</v-toolbar-title>
-              <v-spacer></v-spacer>
+          <v-col
+            cols="6"
+            class="d-flex flex-column"
+          >
+            <v-toolbar
+              density="compact"
+              color="surface-variant"
+            >
+              <v-toolbar-title class="text-subtitle-2">
+                {{ tm('t2iTemplateEditor.livePreview') }}
+              </v-toolbar-title>
+              <v-spacer />
               <v-btn
                 variant="text"
                 size="small"
-                @click="refreshPreview"
                 :loading="previewLoading"
+                @click="refreshPreview"
               >
                 {{ tm('t2iTemplateEditor.refreshPreview') }}
               </v-btn>
@@ -164,10 +208,18 @@
       </v-card-text>
 
       <v-card-actions class="px-6 py-4">
-        <v-row no-gutters class="align-center">
+        <v-row
+          no-gutters
+          class="align-center"
+        >
           <v-col>
             <div class="text-caption text-grey">
-              <v-icon size="16" class="mr-1">mdi-information</v-icon>
+              <v-icon
+                size="16"
+                class="mr-1"
+              >
+                mdi-information
+              </v-icon>
               {{ tm('t2iTemplateEditor.syntaxHint') }}
             </div>
           </v-col>
@@ -180,9 +232,9 @@
             </v-btn>
             <v-btn
               color="primary"
-              @click="promptApplyAndClose"
               :loading="saveLoading"
               :disabled="isCreatingNew || !selectedTemplate"
+              @click="promptApplyAndClose"
             >
               {{ tm('t2iTemplateEditor.saveAndApply') }}
             </v-btn>
@@ -192,50 +244,91 @@
     </v-card>
 
     <!-- 确认重置对话框 -->
-    <v-dialog v-model="resetDialog" max-width="400px">
+    <v-dialog
+      v-model="resetDialog"
+      max-width="400px"
+    >
       <v-card>
         <v-card-title>{{ tm('t2iTemplateEditor.confirmReset') }}</v-card-title>
         <v-card-text>
           {{ tm('t2iTemplateEditor.confirmResetMessage') }}
         </v-card-text>
         <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn text @click="resetDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="warning" @click="confirmReset" :loading="resetLoading">{{ tm('t2iTemplateEditor.confirmResetButton') }}</v-btn>
+          <v-spacer />
+          <v-btn
+            text
+            @click="resetDialog = false"
+          >
+            {{ t('core.common.cancel') }}
+          </v-btn>
+          <v-btn
+            color="warning"
+            :loading="resetLoading"
+            @click="confirmReset"
+          >
+            {{ tm('t2iTemplateEditor.confirmResetButton') }}
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
     <!-- 删除确认对话框 -->
-    <v-dialog v-model="deleteDialog" max-width="400px">
+    <v-dialog
+      v-model="deleteDialog"
+      max-width="400px"
+    >
       <v-card>
         <v-card-title>{{ tm('t2iTemplateEditor.confirmDelete') }}</v-card-title>
         <v-card-text>
           {{ tm('t2iTemplateEditor.confirmDeleteMessage', { name: selectedTemplate }) }}
         </v-card-text>
         <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn text @click="deleteDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="error" @click="confirmDelete" :loading="saveLoading">{{ tm('t2iTemplateEditor.confirmDeleteButton') }}</v-btn>
+          <v-spacer />
+          <v-btn
+            text
+            @click="deleteDialog = false"
+          >
+            {{ t('core.common.cancel') }}
+          </v-btn>
+          <v-btn
+            color="error"
+            :loading="saveLoading"
+            @click="confirmDelete"
+          >
+            {{ tm('t2iTemplateEditor.confirmDeleteButton') }}
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
     <!-- 保存并应用确认对话框 -->
-    <v-dialog v-model="applyAndCloseDialog" max-width="500px">
+    <v-dialog
+      v-model="applyAndCloseDialog"
+      max-width="500px"
+    >
       <v-card>
         <v-card-title>{{ tm('t2iTemplateEditor.confirmAction') }}</v-card-title>
         <v-card-text>
           {{ tm('t2iTemplateEditor.confirmApplyMessage', { name: selectedTemplate }) }}
         </v-card-text>
         <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn text @click="applyAndCloseDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="primary" @click="confirmApplyAndClose" :loading="saveLoading">{{ t('core.common.confirm') }}</v-btn>
+          <v-spacer />
+          <v-btn
+            text
+            @click="applyAndCloseDialog = false"
+          >
+            {{ t('core.common.cancel') }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            :loading="saveLoading"
+            @click="confirmApplyAndClose"
+          >
+            {{ t('core.common.confirm') }}
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
-
   </v-dialog>
 </template>
 

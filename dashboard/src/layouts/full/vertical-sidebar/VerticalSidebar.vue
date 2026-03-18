@@ -278,8 +278,8 @@ function openChangelogDialog() {
 
 <template>
   <v-navigation-drawer
-    left
     v-model="customizer.Sidebar_drawer"
+    left
     elevation="0"
     rail-width="80"
     app
@@ -288,37 +288,79 @@ function openChangelogDialog() {
     :rail="customizer.mini_sidebar"
   >
     <div class="sidebar-container">
-      <v-list :class="['pa-4', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': customizer.mini_sidebar }]" v-model:opened="openedItems" :open-strategy="'multiple'">
-        <template v-for="(item, i) in sidebarMenu" :key="item.title || item.to || `sidebar-item-${i}`">
-          <NavItem :item="item" class="leftPadding" />
+      <v-list
+        v-model:opened="openedItems"
+        :class="['pa-4', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': customizer.mini_sidebar }]"
+        :open-strategy="'multiple'"
+      >
+        <template
+          v-for="(item, i) in sidebarMenu"
+          :key="item.title || item.to || `sidebar-item-${i}`"
+        >
+          <NavItem
+            :item="item"
+            class="leftPadding"
+          />
         </template>
       </v-list>
-      <div class="sidebar-footer" v-if="!customizer.mini_sidebar">
-        <v-btn class="sidebar-footer-btn" size="small" variant="tonal" color="primary" to="/settings" prepend-icon="mdi-cog">
+      <div
+        v-if="!customizer.mini_sidebar"
+        class="sidebar-footer"
+      >
+        <v-btn
+          class="sidebar-footer-btn"
+          size="small"
+          variant="tonal"
+          color="primary"
+          to="/settings"
+          prepend-icon="mdi-cog"
+        >
           {{ t('core.navigation.settings') }}
         </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-note-text-outline"
-          @click="openChangelogDialog">
+        <v-btn
+          class="sidebar-footer-btn"
+          size="small"
+          variant="text"
+          prepend-icon="mdi-note-text-outline"
+          @click="openChangelogDialog"
+        >
           {{ t('core.navigation.changelog') }}
         </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-book-open-variant"
-          @click="toggleIframe">
+        <v-btn
+          class="sidebar-footer-btn"
+          size="small"
+          variant="text"
+          prepend-icon="mdi-book-open-variant"
+          @click="toggleIframe"
+        >
           {{ t('core.navigation.documentation') }}
         </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-frequently-asked-questions"
-          @click="openFaqLink">
+        <v-btn
+          class="sidebar-footer-btn"
+          size="small"
+          variant="text"
+          prepend-icon="mdi-frequently-asked-questions"
+          @click="openFaqLink"
+        >
           {{ t('core.navigation.faq') }}
         </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-github"
-          @click="openIframeLink('https://github.com/AstrBotDevs/AstrBot')">
+        <v-btn
+          class="sidebar-footer-btn"
+          size="small"
+          variant="text"
+          prepend-icon="mdi-github"
+          @click="openIframeLink('https://github.com/AstrBotDevs/AstrBot')"
+        >
           {{ t('core.navigation.github') }}
-           <v-chip
+          <v-chip
             v-if="starCount"
             size="x-small"
             variant="outlined"
             class="ml-2"
             style="font-weight: normal;"
-          >{{ formatNumber(starCount) }}</v-chip>
+          >
+            {{ formatNumber(starCount) }}
+          </v-chip>
         </v-btn>
       </div>
     </div>
@@ -326,10 +368,9 @@ function openChangelogDialog() {
     <div 
       v-if="!customizer.mini_sidebar && customizer.Sidebar_drawer"
       class="sidebar-resize-handle"
-      @mousedown="startSidebarResize"
       :class="{ 'resizing': isResizing }"
-    >
-    </div>
+      @mousedown="startSidebarResize"
+    />
   </v-navigation-drawer>
   
   <div
@@ -337,8 +378,11 @@ function openChangelogDialog() {
     id="draggable-iframe"
     :style="iframeStyle"
   >
-
-    <div :style="dragHeaderStyle" @mousedown="onMouseDown" @touchstart="onTouchStart">
+    <div
+      :style="dragHeaderStyle"
+      @mousedown="onMouseDown"
+      @touchstart="onTouchStart"
+    >
       <div style="display: flex; align-items: center;">
         <v-icon icon="mdi-cursor-move" />
         <span style="margin-left: 8px;">{{ t('core.navigation.drag') }}</span>
@@ -346,17 +390,17 @@ function openChangelogDialog() {
       <div style="display: flex; gap: 8px;">
         <v-btn
           icon
+          style="border-radius: 8px; border: 1px solid #ccc;"
           @click.stop="openIframeLink('https://astrbot.app')"
           @mousedown.stop
-          style="border-radius: 8px; border: 1px solid #ccc;"
         >
           <v-icon icon="mdi-open-in-new" />
         </v-btn>
         <v-btn
           icon
+          style="border-radius: 8px; border: 1px solid #ccc;"
           @click.stop="toggleIframe"
           @mousedown.stop
-          style="border-radius: 8px; border: 1px solid #ccc;"
         >
           <v-icon icon="mdi-close" />
         </v-btn>
@@ -365,7 +409,7 @@ function openChangelogDialog() {
     <iframe
       src="https://astrbot.app"
       style="width: 100%; height: calc(100% - 66px); border: none; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;"
-      ></iframe>
+    />
   </div>
 
   <!-- 更新日志对话框 -->

@@ -1,369 +1,681 @@
 <template>
-    <v-dialog v-model="isOpen" persistent max-width="700" scrollable>
-        <v-card>
-            <v-card-title class="d-flex align-center">
-                <v-icon class="mr-2">mdi-backup-restore</v-icon>
-                {{ t('features.settings.backup.dialog.title') }}
-            </v-card-title>
+  <v-dialog
+    v-model="isOpen"
+    persistent
+    max-width="700"
+    scrollable
+  >
+    <v-card>
+      <v-card-title class="d-flex align-center">
+        <v-icon class="mr-2">
+          mdi-backup-restore
+        </v-icon>
+        {{ t('features.settings.backup.dialog.title') }}
+      </v-card-title>
 
-            <v-card-text class="pa-6">
-                <!-- 选项卡 -->
-                <v-tabs v-model="activeTab" color="primary" class="mb-4">
-                    <v-tab value="export">
-                        <v-icon class="mr-2">mdi-export</v-icon>
-                        {{ t('features.settings.backup.tabs.export') }}
-                    </v-tab>
-                    <v-tab value="import">
-                        <v-icon class="mr-2">mdi-import</v-icon>
-                        {{ t('features.settings.backup.tabs.import') }}
-                    </v-tab>
-                    <v-tab value="list">
-                        <v-icon class="mr-2">mdi-format-list-bulleted</v-icon>
-                        {{ t('features.settings.backup.tabs.list') }}
-                    </v-tab>
-                </v-tabs>
+      <v-card-text class="pa-6">
+        <!-- 选项卡 -->
+        <v-tabs
+          v-model="activeTab"
+          color="primary"
+          class="mb-4"
+        >
+          <v-tab value="export">
+            <v-icon class="mr-2">
+              mdi-export
+            </v-icon>
+            {{ t('features.settings.backup.tabs.export') }}
+          </v-tab>
+          <v-tab value="import">
+            <v-icon class="mr-2">
+              mdi-import
+            </v-icon>
+            {{ t('features.settings.backup.tabs.import') }}
+          </v-tab>
+          <v-tab value="list">
+            <v-icon class="mr-2">
+              mdi-format-list-bulleted
+            </v-icon>
+            {{ t('features.settings.backup.tabs.list') }}
+          </v-tab>
+        </v-tabs>
 
-                <v-window v-model="activeTab">
-                    <!-- 导出标签页 -->
-                    <v-window-item value="export">
-                        <div v-if="exportStatus === 'idle'" class="text-center py-8">
-                            <v-icon size="64" color="primary" class="mb-4">mdi-cloud-upload</v-icon>
-                            <h3 class="mb-4">{{ t('features.settings.backup.export.title') }}</h3>
-                            <p class="mb-4 text-grey">{{ t('features.settings.backup.export.description') }}</p>
-                            <v-alert type="info" variant="tonal" class="mb-4 text-left">
-                                <template v-slot:prepend>
-                                    <v-icon>mdi-information</v-icon>
-                                </template>
-                                {{ t('features.settings.backup.export.includes') }}
-                            </v-alert>
-                            <v-btn color="primary" size="large" @click="startExport" :loading="exportStatus === 'processing'">
-                                <v-icon class="mr-2">mdi-export</v-icon>
-                                {{ t('features.settings.backup.export.button') }}
-                            </v-btn>
-                        </div>
+        <v-window v-model="activeTab">
+          <!-- 导出标签页 -->
+          <v-window-item value="export">
+            <div
+              v-if="exportStatus === 'idle'"
+              class="text-center py-8"
+            >
+              <v-icon
+                size="64"
+                color="primary"
+                class="mb-4"
+              >
+                mdi-cloud-upload
+              </v-icon>
+              <h3 class="mb-4">
+                {{ t('features.settings.backup.export.title') }}
+              </h3>
+              <p class="mb-4 text-grey">
+                {{ t('features.settings.backup.export.description') }}
+              </p>
+              <v-alert
+                type="info"
+                variant="tonal"
+                class="mb-4 text-left"
+              >
+                <template #prepend>
+                  <v-icon>mdi-information</v-icon>
+                </template>
+                {{ t('features.settings.backup.export.includes') }}
+              </v-alert>
+              <v-btn
+                color="primary"
+                size="large"
+                :loading="exportStatus === 'processing'"
+                @click="startExport"
+              >
+                <v-icon class="mr-2">
+                  mdi-export
+                </v-icon>
+                {{ t('features.settings.backup.export.button') }}
+              </v-btn>
+            </div>
 
-                        <div v-else-if="exportStatus === 'processing'" class="text-center py-8">
-                            <v-progress-circular indeterminate color="primary" size="64" class="mb-4"></v-progress-circular>
-                            <h3 class="mb-4">{{ t('features.settings.backup.export.processing') }}</h3>
-                            <p class="text-grey">{{ exportProgress.message || t('features.settings.backup.export.wait') }}</p>
-                            <v-progress-linear :model-value="exportProgress.current" :max="exportProgress.total" class="mt-4" color="primary"></v-progress-linear>
-                        </div>
+            <div
+              v-else-if="exportStatus === 'processing'"
+              class="text-center py-8"
+            >
+              <v-progress-circular
+                indeterminate
+                color="primary"
+                size="64"
+                class="mb-4"
+              />
+              <h3 class="mb-4">
+                {{ t('features.settings.backup.export.processing') }}
+              </h3>
+              <p class="text-grey">
+                {{ exportProgress.message || t('features.settings.backup.export.wait') }}
+              </p>
+              <v-progress-linear
+                :model-value="exportProgress.current"
+                :max="exportProgress.total"
+                class="mt-4"
+                color="primary"
+              />
+            </div>
 
-                        <div v-else-if="exportStatus === 'completed'" class="text-center py-8">
-                            <v-icon size="64" color="success" class="mb-4">mdi-check-circle</v-icon>
-                            <h3 class="mb-4">{{ t('features.settings.backup.export.completed') }}</h3>
-                            <p class="mb-4">{{ exportResult?.filename }}</p>
-                            <v-btn color="primary" @click="downloadBackup(exportResult?.filename)" class="mr-2">
-                                <v-icon class="mr-2">mdi-download</v-icon>
-                                {{ t('features.settings.backup.export.download') }}
-                            </v-btn>
-                            <v-btn color="grey" variant="text" @click="resetExport">
-                                {{ t('features.settings.backup.export.another') }}
-                            </v-btn>
-                        </div>
+            <div
+              v-else-if="exportStatus === 'completed'"
+              class="text-center py-8"
+            >
+              <v-icon
+                size="64"
+                color="success"
+                class="mb-4"
+              >
+                mdi-check-circle
+              </v-icon>
+              <h3 class="mb-4">
+                {{ t('features.settings.backup.export.completed') }}
+              </h3>
+              <p class="mb-4">
+                {{ exportResult?.filename }}
+              </p>
+              <v-btn
+                color="primary"
+                class="mr-2"
+                @click="downloadBackup(exportResult?.filename)"
+              >
+                <v-icon class="mr-2">
+                  mdi-download
+                </v-icon>
+                {{ t('features.settings.backup.export.download') }}
+              </v-btn>
+              <v-btn
+                color="grey"
+                variant="text"
+                @click="resetExport"
+              >
+                {{ t('features.settings.backup.export.another') }}
+              </v-btn>
+            </div>
 
-                        <div v-else-if="exportStatus === 'failed'" class="text-center py-8">
-                            <v-icon size="64" color="error" class="mb-4">mdi-alert-circle</v-icon>
-                            <h3 class="mb-4">{{ t('features.settings.backup.export.failed') }}</h3>
-                            <v-alert type="error" variant="tonal" class="mb-4">
-                                {{ exportError }}
-                            </v-alert>
-                            <v-btn color="primary" @click="resetExport">
-                                {{ t('features.settings.backup.export.retry') }}
-                            </v-btn>
-                        </div>
-                    </v-window-item>
+            <div
+              v-else-if="exportStatus === 'failed'"
+              class="text-center py-8"
+            >
+              <v-icon
+                size="64"
+                color="error"
+                class="mb-4"
+              >
+                mdi-alert-circle
+              </v-icon>
+              <h3 class="mb-4">
+                {{ t('features.settings.backup.export.failed') }}
+              </h3>
+              <v-alert
+                type="error"
+                variant="tonal"
+                class="mb-4"
+              >
+                {{ exportError }}
+              </v-alert>
+              <v-btn
+                color="primary"
+                @click="resetExport"
+              >
+                {{ t('features.settings.backup.export.retry') }}
+              </v-btn>
+            </div>
+          </v-window-item>
 
-                    <!-- 导入标签页 -->
-                    <v-window-item value="import">
-                        <!-- 步骤1: 选择文件 -->
-                        <div v-if="importStatus === 'idle'" class="py-4">
-                            <v-alert type="warning" variant="tonal" class="mb-4">
-                                <template v-slot:prepend>
-                                    <v-icon>mdi-alert</v-icon>
-                                </template>
-                                {{ t('features.settings.backup.import.warning') }}
-                            </v-alert>
+          <!-- 导入标签页 -->
+          <v-window-item value="import">
+            <!-- 步骤1: 选择文件 -->
+            <div
+              v-if="importStatus === 'idle'"
+              class="py-4"
+            >
+              <v-alert
+                type="warning"
+                variant="tonal"
+                class="mb-4"
+              >
+                <template #prepend>
+                  <v-icon>mdi-alert</v-icon>
+                </template>
+                {{ t('features.settings.backup.import.warning') }}
+              </v-alert>
 
-                            <v-file-input
-                                v-model="importFile"
-                                :label="t('features.settings.backup.import.selectFile')"
-                                accept=".zip"
-                                prepend-icon="mdi-file-upload"
-                                show-size
-                                class="mb-4"
-                            ></v-file-input>
+              <v-file-input
+                v-model="importFile"
+                :label="t('features.settings.backup.import.selectFile')"
+                accept=".zip"
+                prepend-icon="mdi-file-upload"
+                show-size
+                class="mb-4"
+              />
 
-                            <div class="d-flex justify-center">
-                                <v-btn
-                                    color="primary"
-                                    size="large"
-                                    @click="uploadAndCheck"
-                                    :disabled="!importFile"
-                                    :loading="importStatus === 'uploading'"
-                                >
-                                    <v-icon class="mr-2">mdi-upload</v-icon>
-                                    {{ t('features.settings.backup.import.uploadAndCheck') }}
-                                </v-btn>
-                            </div>
-                        </div>
-
-                        <!-- 步骤1.5: 上传中 -->
-                        <div v-else-if="importStatus === 'uploading'" class="text-center py-8">
-                            <v-icon size="64" color="primary" class="mb-4">mdi-cloud-upload</v-icon>
-                            <h3 class="mb-4">{{ t('features.settings.backup.import.uploading') }}</h3>
-                            <p class="text-grey mb-2">
-                                {{ uploadProgress.message || t('features.settings.backup.import.uploadWait') }}
-                            </p>
-                            <p class="text-grey-darken-1 mb-4">
-                                {{ formatFileSize(uploadProgress.uploaded) }} / {{ formatFileSize(uploadProgress.total) }}
-                                ({{ uploadProgress.percent }}%)
-                            </p>
-                            <v-progress-linear
-                                :model-value="uploadProgress.percent"
-                                :max="100"
-                                class="mt-2"
-                                color="primary"
-                                height="8"
-                                rounded
-                            ></v-progress-linear>
-                        </div>
-
-                        <!-- 步骤2: 确认导入 -->
-                        <div v-else-if="importStatus === 'confirm'" class="py-4">
-                            <v-alert
-                                :type="versionAlertType"
-                                variant="tonal"
-                                class="mb-4"
-                            >
-                                <template v-slot:prepend>
-                                    <v-icon>{{ versionAlertIcon }}</v-icon>
-                                </template>
-                                <div class="confirm-message">
-                                    <div class="text-h6 mb-2">{{ versionAlertTitle }}</div>
-                                    <div class="mb-2">
-                                        <strong>{{ t('features.settings.backup.import.version.backupVersion') }}:</strong> {{ checkResult?.backup_version }}<br>
-                                        <strong>{{ t('features.settings.backup.import.version.currentVersion') }}:</strong> {{ checkResult?.current_version }}
-                                    </div>
-                                    <div v-if="checkResult?.backup_time && checkResult?.backup_time !== '未知'" class="mb-2">
-                                        <strong>{{ t('features.settings.backup.import.version.backupTime') }}:</strong> {{ formatISODate(checkResult?.backup_time) }}
-                                    </div>
-                                    <div class="mt-3" style="white-space: pre-line;">{{ versionAlertMessage }}</div>
-                                </div>
-                            </v-alert>
-
-                            <!-- 备份摘要 -->
-                            <v-card variant="outlined" class="mb-4" v-if="checkResult?.backup_summary">
-                                <v-card-title class="text-subtitle-1">
-                                    <v-icon class="mr-2">mdi-package-variant</v-icon>
-                                    {{ t('features.settings.backup.import.backupContents') }}
-                                </v-card-title>
-                                <v-card-text>
-                                    <div class="d-flex flex-wrap ga-2">
-                                        <v-chip v-if="checkResult.backup_summary.tables?.length" size="small" color="primary" variant="tonal" :ripple="false" class="non-interactive-chip">
-                                            {{ checkResult.backup_summary.tables.length }} {{ t('features.settings.backup.import.tables') }}
-                                        </v-chip>
-                                        <v-chip v-if="checkResult.backup_summary.has_knowledge_bases" size="small" color="success" variant="tonal" :ripple="false" class="non-interactive-chip">
-                                            {{ t('features.settings.backup.import.knowledgeBases') }}
-                                        </v-chip>
-                                        <v-chip v-if="checkResult.backup_summary.has_config" size="small" color="info" variant="tonal" :ripple="false" class="non-interactive-chip">
-                                            {{ t('features.settings.backup.import.configFiles') }}
-                                        </v-chip>
-                                        <v-chip v-for="dir in (checkResult.backup_summary.directories || [])" :key="dir" size="small" color="warning" variant="tonal" :ripple="false" class="non-interactive-chip">
-                                            {{ dir }}
-                                        </v-chip>
-                                    </div>
-                                </v-card-text>
-                            </v-card>
-
-                            <!-- 警告信息 -->
-                            <v-alert v-if="checkResult?.warnings?.length" type="warning" variant="tonal" class="mb-4">
-                                <div v-for="(warning, idx) in checkResult.warnings" :key="idx">{{ warning }}</div>
-                            </v-alert>
-
-                            <div class="d-flex justify-center align-center mt-4" style="gap: 16px;">
-                                <v-btn
-                                    color="grey-darken-1"
-                                    variant="outlined"
-                                    size="large"
-                                    @click="resetImport"
-                                >
-                                    <v-icon class="mr-2">mdi-close</v-icon>
-                                    {{ t('core.common.cancel') }}
-                                </v-btn>
-                                <v-btn
-                                    v-if="checkResult?.can_import"
-                                    color="error"
-                                    size="large"
-                                    variant="flat"
-                                    @click="confirmImport"
-                                >
-                                    <v-icon class="mr-2">mdi-alert</v-icon>
-                                    {{ t('features.settings.backup.import.confirmImport') }}
-                                </v-btn>
-                            </div>
-                        </div>
-
-                        <!-- 步骤3: 导入进行中 -->
-                        <div v-else-if="importStatus === 'processing'" class="text-center py-8">
-                            <v-progress-circular indeterminate color="primary" size="64" class="mb-4"></v-progress-circular>
-                            <h3 class="mb-4">{{ t('features.settings.backup.import.processing') }}</h3>
-                            <p class="text-grey">{{ importProgress.message || t('features.settings.backup.import.wait') }}</p>
-                            <v-progress-linear :model-value="importProgress.current" :max="importProgress.total" class="mt-4" color="primary"></v-progress-linear>
-                        </div>
-
-                        <div v-else-if="importStatus === 'completed'" class="text-center py-8">
-                            <v-icon size="64" color="success" class="mb-4">mdi-check-circle</v-icon>
-                            <h3 class="mb-4">{{ t('features.settings.backup.import.completed') }}</h3>
-                            <v-alert type="info" variant="tonal" class="mb-4">
-                                {{ t('features.settings.backup.import.restartRequired') }}
-                            </v-alert>
-                            <v-btn color="primary" @click="restartAstrBot" class="mr-2">
-                                <v-icon class="mr-2">mdi-restart</v-icon>
-                                {{ t('features.settings.backup.import.restartNow') }}
-                            </v-btn>
-                            <v-btn color="grey" variant="text" @click="resetImport">
-                                {{ t('core.common.close') }}
-                            </v-btn>
-                        </div>
-
-                        <div v-else-if="importStatus === 'failed'" class="text-center py-8">
-                            <v-icon size="64" color="error" class="mb-4">mdi-alert-circle</v-icon>
-                            <h3 class="mb-4">{{ t('features.settings.backup.import.failed') }}</h3>
-                            <v-alert type="error" variant="tonal" class="mb-4">
-                                {{ importError }}
-                            </v-alert>
-                            <v-btn color="primary" @click="resetImport">
-                                {{ t('features.settings.backup.import.retry') }}
-                            </v-btn>
-                        </div>
-                    </v-window-item>
-
-                    <!-- 备份列表标签页 -->
-                    <v-window-item value="list">
-                        <div v-if="loadingList" class="text-center py-8">
-                            <v-progress-circular indeterminate color="primary"></v-progress-circular>
-                        </div>
-
-                        <div v-else-if="backupList.length === 0" class="text-center py-8">
-                            <v-icon size="64" color="grey" class="mb-4">mdi-folder-open-outline</v-icon>
-                            <p class="text-grey">{{ t('features.settings.backup.list.empty') }}</p>
-                        </div>
-
-                        <v-list v-else lines="two">
-                            <v-list-item
-                                v-for="backup in backupList"
-                                :key="backup.filename"
-                            >
-                                <template v-slot:prepend>
-                                    <v-icon :color="backup.type === 'uploaded' ? 'orange' : 'primary'">
-                                        {{ backup.type === 'uploaded' ? 'mdi-upload' : 'mdi-zip-box' }}
-                                    </v-icon>
-                                </template>
-
-                                <v-list-item-title>{{ backup.filename }}</v-list-item-title>
-                                <v-list-item-subtitle>
-                                    {{ formatFileSize(backup.size) }} · {{ formatDate(backup.created_at) }}
-                                    <v-chip size="x-small" color="primary" variant="tonal" class="ml-2">
-                                        v{{ backup.astrbot_version }}
-                                    </v-chip>
-                                    <v-chip v-if="backup.type === 'uploaded'" size="x-small" color="orange" variant="tonal" class="ml-1">
-                                        {{ t('features.settings.backup.list.uploaded') }}
-                                    </v-chip>
-                                </v-list-item-subtitle>
-
-                                <template v-slot:append>
-                                    <v-btn
-                                        icon="mdi-restore"
-                                        variant="text"
-                                        size="small"
-                                        color="success"
-                                        :title="t('features.settings.backup.list.restore')"
-                                        @click="restoreFromList(backup.filename)"
-                                    ></v-btn>
-                                    <v-btn
-                                        icon="mdi-pencil"
-                                        variant="text"
-                                        size="small"
-                                        :title="t('features.settings.backup.list.rename')"
-                                        @click="openRenameDialog(backup.filename)"
-                                    ></v-btn>
-                                    <v-btn icon="mdi-download" variant="text" size="small" @click="downloadBackup(backup.filename)"></v-btn>
-                                    <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="deleteBackup(backup.filename)"></v-btn>
-                                </template>
-                            </v-list-item>
-                        </v-list>
-
-                        <div class="d-flex justify-center mt-4">
-                            <v-btn color="primary" variant="text" @click="loadBackupList">
-                                <v-icon class="mr-2">mdi-refresh</v-icon>
-                                {{ t('features.settings.backup.list.refresh') }}
-                            </v-btn>
-                        </div>
-
-                        <!-- 提示信息 -->
-                        <p class="text-caption text-grey text-center mt-4">
-                            <v-icon size="small" class="mr-1">mdi-information-outline</v-icon>
-                            {{ t('features.settings.backup.list.ftpHint') }}
-                        </p>
-                    </v-window-item>
-                </v-window>
-            </v-card-text>
-
-            <v-card-actions class="px-6 py-4">
-                <v-spacer></v-spacer>
-                <v-btn color="grey" variant="text" @click="handleClose" :disabled="isProcessing">
-                    {{ t('core.common.close') }}
-                </v-btn>
-            </v-card-actions>
-        </v-card>
-    </v-dialog>
-
-    <!-- 重命名对话框 -->
-    <v-dialog v-model="renameDialogOpen" max-width="450" persistent>
-        <v-card>
-            <v-card-title>
-                <v-icon class="mr-2">mdi-pencil</v-icon>
-                {{ t('features.settings.backup.list.renameTitle') }}
-            </v-card-title>
-            <v-card-text>
-                <v-text-field
-                    v-model="renameNewName"
-                    :label="t('features.settings.backup.list.newName')"
-                    :rules="[renameValidationRule]"
-                    :error-messages="renameError"
-                    variant="outlined"
-                    density="comfortable"
-                    autofocus
-                    @keyup.enter="confirmRename"
+              <div class="d-flex justify-center">
+                <v-btn
+                  color="primary"
+                  size="large"
+                  :disabled="!importFile"
+                  :loading="importStatus === 'uploading'"
+                  @click="uploadAndCheck"
                 >
-                    <template v-slot:append-inner>
-                        <span class="text-grey">.zip</span>
-                    </template>
-                </v-text-field>
-                <p class="text-caption text-grey mt-1">
-                    {{ t('features.settings.backup.list.renameHint') }}
-                </p>
-            </v-card-text>
-            <v-card-actions>
-                <v-spacer></v-spacer>
-                <v-btn color="grey" variant="text" @click="closeRenameDialog">
-                    {{ t('core.common.cancel') }}
+                  <v-icon class="mr-2">
+                    mdi-upload
+                  </v-icon>
+                  {{ t('features.settings.backup.import.uploadAndCheck') }}
+                </v-btn>
+              </div>
+            </div>
+
+            <!-- 步骤1.5: 上传中 -->
+            <div
+              v-else-if="importStatus === 'uploading'"
+              class="text-center py-8"
+            >
+              <v-icon
+                size="64"
+                color="primary"
+                class="mb-4"
+              >
+                mdi-cloud-upload
+              </v-icon>
+              <h3 class="mb-4">
+                {{ t('features.settings.backup.import.uploading') }}
+              </h3>
+              <p class="text-grey mb-2">
+                {{ uploadProgress.message || t('features.settings.backup.import.uploadWait') }}
+              </p>
+              <p class="text-grey-darken-1 mb-4">
+                {{ formatFileSize(uploadProgress.uploaded) }} / {{ formatFileSize(uploadProgress.total) }}
+                ({{ uploadProgress.percent }}%)
+              </p>
+              <v-progress-linear
+                :model-value="uploadProgress.percent"
+                :max="100"
+                class="mt-2"
+                color="primary"
+                height="8"
+                rounded
+              />
+            </div>
+
+            <!-- 步骤2: 确认导入 -->
+            <div
+              v-else-if="importStatus === 'confirm'"
+              class="py-4"
+            >
+              <v-alert
+                :type="versionAlertType"
+                variant="tonal"
+                class="mb-4"
+              >
+                <template #prepend>
+                  <v-icon>{{ versionAlertIcon }}</v-icon>
+                </template>
+                <div class="confirm-message">
+                  <div class="text-h6 mb-2">
+                    {{ versionAlertTitle }}
+                  </div>
+                  <div class="mb-2">
+                    <strong>{{ t('features.settings.backup.import.version.backupVersion') }}:</strong> {{ checkResult?.backup_version }}<br>
+                    <strong>{{ t('features.settings.backup.import.version.currentVersion') }}:</strong> {{ checkResult?.current_version }}
+                  </div>
+                  <div
+                    v-if="checkResult?.backup_time && checkResult?.backup_time !== '未知'"
+                    class="mb-2"
+                  >
+                    <strong>{{ t('features.settings.backup.import.version.backupTime') }}:</strong> {{ formatISODate(checkResult?.backup_time) }}
+                  </div>
+                  <div
+                    class="mt-3"
+                    style="white-space: pre-line;"
+                  >
+                    {{ versionAlertMessage }}
+                  </div>
+                </div>
+              </v-alert>
+
+              <!-- 备份摘要 -->
+              <v-card
+                v-if="checkResult?.backup_summary"
+                variant="outlined"
+                class="mb-4"
+              >
+                <v-card-title class="text-subtitle-1">
+                  <v-icon class="mr-2">
+                    mdi-package-variant
+                  </v-icon>
+                  {{ t('features.settings.backup.import.backupContents') }}
+                </v-card-title>
+                <v-card-text>
+                  <div class="d-flex flex-wrap ga-2">
+                    <v-chip
+                      v-if="checkResult.backup_summary.tables?.length"
+                      size="small"
+                      color="primary"
+                      variant="tonal"
+                      :ripple="false"
+                      class="non-interactive-chip"
+                    >
+                      {{ checkResult.backup_summary.tables.length }} {{ t('features.settings.backup.import.tables') }}
+                    </v-chip>
+                    <v-chip
+                      v-if="checkResult.backup_summary.has_knowledge_bases"
+                      size="small"
+                      color="success"
+                      variant="tonal"
+                      :ripple="false"
+                      class="non-interactive-chip"
+                    >
+                      {{ t('features.settings.backup.import.knowledgeBases') }}
+                    </v-chip>
+                    <v-chip
+                      v-if="checkResult.backup_summary.has_config"
+                      size="small"
+                      color="info"
+                      variant="tonal"
+                      :ripple="false"
+                      class="non-interactive-chip"
+                    >
+                      {{ t('features.settings.backup.import.configFiles') }}
+                    </v-chip>
+                    <v-chip
+                      v-for="dir in (checkResult.backup_summary.directories || [])"
+                      :key="dir"
+                      size="small"
+                      color="warning"
+                      variant="tonal"
+                      :ripple="false"
+                      class="non-interactive-chip"
+                    >
+                      {{ dir }}
+                    </v-chip>
+                  </div>
+                </v-card-text>
+              </v-card>
+
+              <!-- 警告信息 -->
+              <v-alert
+                v-if="checkResult?.warnings?.length"
+                type="warning"
+                variant="tonal"
+                class="mb-4"
+              >
+                <div
+                  v-for="(warning, idx) in checkResult.warnings"
+                  :key="idx"
+                >
+                  {{ warning }}
+                </div>
+              </v-alert>
+
+              <div
+                class="d-flex justify-center align-center mt-4"
+                style="gap: 16px;"
+              >
+                <v-btn
+                  color="grey-darken-1"
+                  variant="outlined"
+                  size="large"
+                  @click="resetImport"
+                >
+                  <v-icon class="mr-2">
+                    mdi-close
+                  </v-icon>
+                  {{ t('core.common.cancel') }}
                 </v-btn>
                 <v-btn
-                    color="primary"
-                    variant="flat"
-                    @click="confirmRename"
-                    :loading="renameLoading"
-                    :disabled="!renameNewName || !!renameError"
+                  v-if="checkResult?.can_import"
+                  color="error"
+                  size="large"
+                  variant="flat"
+                  @click="confirmImport"
                 >
-                    {{ t('core.common.confirm') }}
+                  <v-icon class="mr-2">
+                    mdi-alert
+                  </v-icon>
+                  {{ t('features.settings.backup.import.confirmImport') }}
                 </v-btn>
-            </v-card-actions>
-        </v-card>
-    </v-dialog>
+              </div>
+            </div>
 
-    <WaitingForRestart ref="wfr"></WaitingForRestart>
+            <!-- 步骤3: 导入进行中 -->
+            <div
+              v-else-if="importStatus === 'processing'"
+              class="text-center py-8"
+            >
+              <v-progress-circular
+                indeterminate
+                color="primary"
+                size="64"
+                class="mb-4"
+              />
+              <h3 class="mb-4">
+                {{ t('features.settings.backup.import.processing') }}
+              </h3>
+              <p class="text-grey">
+                {{ importProgress.message || t('features.settings.backup.import.wait') }}
+              </p>
+              <v-progress-linear
+                :model-value="importProgress.current"
+                :max="importProgress.total"
+                class="mt-4"
+                color="primary"
+              />
+            </div>
+
+            <div
+              v-else-if="importStatus === 'completed'"
+              class="text-center py-8"
+            >
+              <v-icon
+                size="64"
+                color="success"
+                class="mb-4"
+              >
+                mdi-check-circle
+              </v-icon>
+              <h3 class="mb-4">
+                {{ t('features.settings.backup.import.completed') }}
+              </h3>
+              <v-alert
+                type="info"
+                variant="tonal"
+                class="mb-4"
+              >
+                {{ t('features.settings.backup.import.restartRequired') }}
+              </v-alert>
+              <v-btn
+                color="primary"
+                class="mr-2"
+                @click="restartAstrBot"
+              >
+                <v-icon class="mr-2">
+                  mdi-restart
+                </v-icon>
+                {{ t('features.settings.backup.import.restartNow') }}
+              </v-btn>
+              <v-btn
+                color="grey"
+                variant="text"
+                @click="resetImport"
+              >
+                {{ t('core.common.close') }}
+              </v-btn>
+            </div>
+
+            <div
+              v-else-if="importStatus === 'failed'"
+              class="text-center py-8"
+            >
+              <v-icon
+                size="64"
+                color="error"
+                class="mb-4"
+              >
+                mdi-alert-circle
+              </v-icon>
+              <h3 class="mb-4">
+                {{ t('features.settings.backup.import.failed') }}
+              </h3>
+              <v-alert
+                type="error"
+                variant="tonal"
+                class="mb-4"
+              >
+                {{ importError }}
+              </v-alert>
+              <v-btn
+                color="primary"
+                @click="resetImport"
+              >
+                {{ t('features.settings.backup.import.retry') }}
+              </v-btn>
+            </div>
+          </v-window-item>
+
+          <!-- 备份列表标签页 -->
+          <v-window-item value="list">
+            <div
+              v-if="loadingList"
+              class="text-center py-8"
+            >
+              <v-progress-circular
+                indeterminate
+                color="primary"
+              />
+            </div>
+
+            <div
+              v-else-if="backupList.length === 0"
+              class="text-center py-8"
+            >
+              <v-icon
+                size="64"
+                color="grey"
+                class="mb-4"
+              >
+                mdi-folder-open-outline
+              </v-icon>
+              <p class="text-grey">
+                {{ t('features.settings.backup.list.empty') }}
+              </p>
+            </div>
+
+            <v-list
+              v-else
+              lines="two"
+            >
+              <v-list-item
+                v-for="backup in backupList"
+                :key="backup.filename"
+              >
+                <template #prepend>
+                  <v-icon :color="backup.type === 'uploaded' ? 'orange' : 'primary'">
+                    {{ backup.type === 'uploaded' ? 'mdi-upload' : 'mdi-zip-box' }}
+                  </v-icon>
+                </template>
+
+                <v-list-item-title>{{ backup.filename }}</v-list-item-title>
+                <v-list-item-subtitle>
+                  {{ formatFileSize(backup.size) }} · {{ formatDate(backup.created_at) }}
+                  <v-chip
+                    size="x-small"
+                    color="primary"
+                    variant="tonal"
+                    class="ml-2"
+                  >
+                    v{{ backup.astrbot_version }}
+                  </v-chip>
+                  <v-chip
+                    v-if="backup.type === 'uploaded'"
+                    size="x-small"
+                    color="orange"
+                    variant="tonal"
+                    class="ml-1"
+                  >
+                    {{ t('features.settings.backup.list.uploaded') }}
+                  </v-chip>
+                </v-list-item-subtitle>
+
+                <template #append>
+                  <v-btn
+                    icon="mdi-restore"
+                    variant="text"
+                    size="small"
+                    color="success"
+                    :title="t('features.settings.backup.list.restore')"
+                    @click="restoreFromList(backup.filename)"
+                  />
+                  <v-btn
+                    icon="mdi-pencil"
+                    variant="text"
+                    size="small"
+                    :title="t('features.settings.backup.list.rename')"
+                    @click="openRenameDialog(backup.filename)"
+                  />
+                  <v-btn
+                    icon="mdi-download"
+                    variant="text"
+                    size="small"
+                    @click="downloadBackup(backup.filename)"
+                  />
+                  <v-btn
+                    icon="mdi-delete"
+                    variant="text"
+                    size="small"
+                    color="error"
+                    @click="deleteBackup(backup.filename)"
+                  />
+                </template>
+              </v-list-item>
+            </v-list>
+
+            <div class="d-flex justify-center mt-4">
+              <v-btn
+                color="primary"
+                variant="text"
+                @click="loadBackupList"
+              >
+                <v-icon class="mr-2">
+                  mdi-refresh
+                </v-icon>
+                {{ t('features.settings.backup.list.refresh') }}
+              </v-btn>
+            </div>
+
+            <!-- 提示信息 -->
+            <p class="text-caption text-grey text-center mt-4">
+              <v-icon
+                size="small"
+                class="mr-1"
+              >
+                mdi-information-outline
+              </v-icon>
+              {{ t('features.settings.backup.list.ftpHint') }}
+            </p>
+          </v-window-item>
+        </v-window>
+      </v-card-text>
+
+      <v-card-actions class="px-6 py-4">
+        <v-spacer />
+        <v-btn
+          color="grey"
+          variant="text"
+          :disabled="isProcessing"
+          @click="handleClose"
+        >
+          {{ t('core.common.close') }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- 重命名对话框 -->
+  <v-dialog
+    v-model="renameDialogOpen"
+    max-width="450"
+    persistent
+  >
+    <v-card>
+      <v-card-title>
+        <v-icon class="mr-2">
+          mdi-pencil
+        </v-icon>
+        {{ t('features.settings.backup.list.renameTitle') }}
+      </v-card-title>
+      <v-card-text>
+        <v-text-field
+          v-model="renameNewName"
+          :label="t('features.settings.backup.list.newName')"
+          :rules="[renameValidationRule]"
+          :error-messages="renameError"
+          variant="outlined"
+          density="comfortable"
+          autofocus
+          @keyup.enter="confirmRename"
+        >
+          <template #append-inner>
+            <span class="text-grey">.zip</span>
+          </template>
+        </v-text-field>
+        <p class="text-caption text-grey mt-1">
+          {{ t('features.settings.backup.list.renameHint') }}
+        </p>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn
+          color="grey"
+          variant="text"
+          @click="closeRenameDialog"
+        >
+          {{ t('core.common.cancel') }}
+        </v-btn>
+        <v-btn
+          color="primary"
+          variant="flat"
+          :loading="renameLoading"
+          :disabled="!renameNewName || !!renameError"
+          @click="confirmRename"
+        >
+          {{ t('core.common.confirm') }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <WaitingForRestart ref="wfr" />
 </template>
 
 <script setup>

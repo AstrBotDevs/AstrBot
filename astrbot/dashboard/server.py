@@ -151,7 +151,7 @@ class AstrBotDashboard:
         @self.app.route("/")
         async def index():
             if not self.enable_webui:
-                return "WebUI is disabled."
+                return "Buildin WebUI is disabled."
             try:
                 return await self.app.send_static_file("index.html")
             except werkzeug.exceptions.NotFound:
@@ -161,7 +161,7 @@ class AstrBotDashboard:
         @self.app.errorhandler(404)
         async def not_found(e):
             if not self.enable_webui:
-                return "WebUI is disabled."
+                return "Buildin WebUI is disabled."
             if request.path.startswith("/api/"):
                 return jsonify(Response().error("Not Found").to_json()), 404
             try:

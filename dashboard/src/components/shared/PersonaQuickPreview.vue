@@ -4,24 +4,46 @@
       <small>{{ tm('personaQuickPreview.title') }}</small>
     </div>
 
-    <div v-if="loading" class="preview-loading">
-      <v-progress-circular indeterminate size="18" width="2" color="primary" class="mr-2" />
+    <div
+      v-if="loading"
+      class="preview-loading"
+    >
+      <v-progress-circular
+        indeterminate
+        size="18"
+        width="2"
+        color="primary"
+        class="mr-2"
+      />
       <small class="text-grey">{{ tm('personaQuickPreview.loading') }}</small>
     </div>
 
-    <div v-else-if="!modelValue" class="preview-empty">
+    <div
+      v-else-if="!modelValue"
+      class="preview-empty"
+    >
       <small class="text-grey">{{ tm('personaQuickPreview.noPersonaSelected') }}</small>
     </div>
 
-    <div v-else-if="!personaData" class="preview-empty">
+    <div
+      v-else-if="!personaData"
+      class="preview-empty"
+    >
       <small class="text-grey">{{ tm('personaQuickPreview.personaNotFound') }}</small>
     </div>
 
-    <div v-else class="preview-content">
-      <div class="section-title">{{ tm('personaQuickPreview.systemPromptLabel') }}</div>
+    <div
+      v-else
+      class="preview-content"
+    >
+      <div class="section-title">
+        {{ tm('personaQuickPreview.systemPromptLabel') }}
+      </div>
       <pre class="prompt-content">{{ personaData.system_prompt || '' }}</pre>
 
-      <div class="section-title mt-3">{{ tm('personaQuickPreview.toolsLabel') }}</div>
+      <div class="section-title mt-3">
+        {{ tm('personaQuickPreview.toolsLabel') }}
+      </div>
       <div class="chip-wrap tools-wrap">
         <v-chip
           v-if="personaData.tools === null"
@@ -32,7 +54,12 @@
         >
           {{ tm('personaQuickPreview.allToolsWithCount', { count: allToolsCount }) }}
         </v-chip>
-        <div v-for="tool in resolvedTools" v-else :key="tool.name" class="tool-item">
+        <div
+          v-for="tool in resolvedTools"
+          v-else
+          :key="tool.name"
+          class="tool-item"
+        >
           <v-chip
             size="small"
             :color="tool.active === false ? 'warning' : 'primary'"
@@ -41,25 +68,39 @@
           >
             {{ tool.name }}
           </v-chip>
-          <v-tooltip v-if="tool.active === false" location="top">
-            <template v-slot:activator="{ props: tooltipProps }">
-              <small class="text-warning tool-inactive" v-bind="tooltipProps">
+          <v-tooltip
+            v-if="tool.active === false"
+            location="top"
+          >
+            <template #activator="{ props: tooltipProps }">
+              <small
+                class="text-warning tool-inactive"
+                v-bind="tooltipProps"
+              >
                 {{ tm('personaQuickPreview.toolInactive') }}
               </small>
             </template>
             {{ tm('personaQuickPreview.toolInactiveTooltip') }}
           </v-tooltip>
-          <small v-if="tool.origin || tool.origin_name" class="text-grey tool-meta">
+          <small
+            v-if="tool.origin || tool.origin_name"
+            class="text-grey tool-meta"
+          >
             <span v-if="tool.origin">{{ tm('personaQuickPreview.originLabel') }}: {{ tool.origin }}</span>
             <span v-if="tool.origin_name"> | {{ tm('personaQuickPreview.originNameLabel') }}: {{ tool.origin_name }}</span>
           </small>
         </div>
-        <small v-if="personaData.tools !== null && normalizedTools.length === 0" class="text-grey">
+        <small
+          v-if="personaData.tools !== null && normalizedTools.length === 0"
+          class="text-grey"
+        >
           {{ tm('personaQuickPreview.noTools') }}
         </small>
       </div>
 
-      <div class="section-title mt-3">{{ tm('personaQuickPreview.skillsLabel') }}</div>
+      <div class="section-title mt-3">
+        {{ tm('personaQuickPreview.skillsLabel') }}
+      </div>
       <div class="chip-wrap">
         <v-chip
           v-if="personaData.skills === null"
@@ -81,7 +122,10 @@
         >
           {{ skillName }}
         </v-chip>
-        <small v-if="personaData.skills !== null && normalizedSkills.length === 0" class="text-grey">
+        <small
+          v-if="personaData.skills !== null && normalizedSkills.length === 0"
+          class="text-grey"
+        >
           {{ tm('personaQuickPreview.noSkills') }}
         </small>
       </div>

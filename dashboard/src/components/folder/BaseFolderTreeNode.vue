@@ -1,36 +1,63 @@
 <template>
-    <div class="base-folder-tree-node">
-        <v-list-item :active="currentFolderId === folder.folder_id" @click.stop="$emit('folder-click', folder.folder_id)"
-            @contextmenu.prevent="handleContextMenu" rounded="lg" :style="{ paddingLeft: `${(depth + 1) * 16}px` }"
-            :class="['folder-item', { 'drag-over': isDragOver }]"
-            @dragover.prevent="handleDragOver" @dragleave="handleDragLeave" @drop.prevent="handleDrop">
-            <template v-slot:prepend>
-                <v-btn v-if="hasChildren" icon variant="text" size="x-small" @click.stop="toggleExpand"
-                    class="expand-btn">
-                    <v-icon size="16">{{ isExpanded ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
-                </v-btn>
-                <div v-else class="expand-placeholder"></div>
-                <v-icon :color="currentFolderId === folder.folder_id ? 'primary' : ''">
-                    {{ isExpanded ? 'mdi-folder-open' : 'mdi-folder' }}
-                </v-icon>
-            </template>
-            <v-list-item-title class="text-truncate">{{ folder.name }}</v-list-item-title>
-        </v-list-item>
+  <div class="base-folder-tree-node">
+    <v-list-item
+      :active="currentFolderId === folder.folder_id"
+      rounded="lg"
+      :style="{ paddingLeft: `${(depth + 1) * 16}px` }"
+      :class="['folder-item', { 'drag-over': isDragOver }]"
+      @click.stop="$emit('folder-click', folder.folder_id)"
+      @contextmenu.prevent="handleContextMenu"
+      @dragover.prevent="handleDragOver"
+      @dragleave="handleDragLeave"
+      @drop.prevent="handleDrop"
+    >
+      <template #prepend>
+        <v-btn
+          v-if="hasChildren"
+          icon
+          variant="text"
+          size="x-small"
+          class="expand-btn"
+          @click.stop="toggleExpand"
+        >
+          <v-icon size="16">
+            {{ isExpanded ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+          </v-icon>
+        </v-btn>
+        <div
+          v-else
+          class="expand-placeholder"
+        />
+        <v-icon :color="currentFolderId === folder.folder_id ? 'primary' : ''">
+          {{ isExpanded ? 'mdi-folder-open' : 'mdi-folder' }}
+        </v-icon>
+      </template>
+      <v-list-item-title class="text-truncate">
+        {{ folder.name }}
+      </v-list-item-title>
+    </v-list-item>
 
-        <!-- 子文件夹 -->
-        <v-expand-transition>
-            <div v-show="isExpanded && hasChildren">
-                <BaseFolderTreeNode v-for="child in folder.children" :key="child.folder_id" :folder="child" :depth="depth + 1"
-                    :current-folder-id="currentFolderId" :search-query="searchQuery"
-                    :expanded-folder-ids="expandedFolderIds" :accept-drop-types="acceptDropTypes"
-                    @folder-click="$emit('folder-click', $event)"
-                    @folder-context-menu="$emit('folder-context-menu', $event)"
-                    @item-dropped="$emit('item-dropped', $event)"
-                    @toggle-expansion="$emit('toggle-expansion', $event)"
-                    @set-expansion="$emit('set-expansion', $event)" />
-            </div>
-        </v-expand-transition>
-    </div>
+    <!-- 子文件夹 -->
+    <v-expand-transition>
+      <div v-show="isExpanded && hasChildren">
+        <BaseFolderTreeNode
+          v-for="child in folder.children"
+          :key="child.folder_id"
+          :folder="child"
+          :depth="depth + 1"
+          :current-folder-id="currentFolderId"
+          :search-query="searchQuery"
+          :expanded-folder-ids="expandedFolderIds"
+          :accept-drop-types="acceptDropTypes"
+          @folder-click="$emit('folder-click', $event)"
+          @folder-context-menu="$emit('folder-context-menu', $event)"
+          @item-dropped="$emit('item-dropped', $event)"
+          @toggle-expansion="$emit('toggle-expansion', $event)"
+          @set-expansion="$emit('set-expansion', $event)"
+        />
+      </div>
+    </v-expand-transition>
+  </div>
 </template>
 
 <script lang="ts">

@@ -1,32 +1,62 @@
 <template>
-  <div id="long-term-memory" class="flex-grow-1" style="display: flex; flex-direction: row; ">
-    <div id="graph-container"
-      style="flex-grow: 1; width: 100%; border: 1px solid #eee; border-radius: 8px; max-height: calc(100% - 40px);">
-    </div>
+  <div
+    id="long-term-memory"
+    class="flex-grow-1"
+    style="display: flex; flex-direction: row; "
+  >
+    <div
+      id="graph-container"
+      style="flex-grow: 1; width: 100%; border: 1px solid #eee; border-radius: 8px; max-height: calc(100% - 40px);"
+    />
     <!-- <div id="graph-container-nonono"
       style="display: flex; justify-content: center; align-items: center; width: 100%; font-weight: 1000; font-size: 24px;">
       加速开发中...
     </div> -->
-    <div id="graph-control-panel"
-      style="min-width: 450px; border: 1px solid #eee; border-radius: 8px; padding: 16px; padding-bottom: 0px; margin-left: 16px; max-height: calc(100% - 40px);">
+    <div
+      id="graph-control-panel"
+      style="min-width: 450px; border: 1px solid #eee; border-radius: 8px; padding: 16px; padding-bottom: 0px; margin-left: 16px; max-height: calc(100% - 40px);"
+    >
       <div>
         <!-- <span style="color: #333333;">可视化</span> -->
         <h3>{{ tm('filters.title') }}</h3>
         <div style="margin-top: 8px;">
-          <v-autocomplete v-model="searchUserId" density="compact" :items="userIdList" variant="outlined"
-            :label="tm('filters.userIdLabel')"></v-autocomplete>
+          <v-autocomplete
+            v-model="searchUserId"
+            density="compact"
+            :items="userIdList"
+            variant="outlined"
+            :label="tm('filters.userIdLabel')"
+          />
         </div>
         <div style="display: flex; gap: 8px;">
-          <v-btn color="primary" @click="onNodeSelect" variant="tonal">
-            <v-icon start>mdi-magnify</v-icon>
+          <v-btn
+            color="primary"
+            variant="tonal"
+            @click="onNodeSelect"
+          >
+            <v-icon start>
+              mdi-magnify
+            </v-icon>
             {{ tm('filters.filterButton') }}
           </v-btn>
-          <v-btn color="secondary" @click="resetFilter" variant="tonal">
-            <v-icon start>mdi-filter-remove</v-icon>
+          <v-btn
+            color="secondary"
+            variant="tonal"
+            @click="resetFilter"
+          >
+            <v-icon start>
+              mdi-filter-remove
+            </v-icon>
             {{ tm('filters.resetButton') }}
           </v-btn>
-          <v-btn color="primary" @click="refreshGraph" variant="tonal">
-            <v-icon start>mdi-refresh</v-icon>
+          <v-btn
+            color="primary"
+            variant="tonal"
+            @click="refreshGraph"
+          >
+            <v-icon start>
+              mdi-refresh
+            </v-icon>
             {{ tm('filters.refreshButton') }}
           </v-btn>
         </div>
@@ -35,36 +65,74 @@
       <!-- 新增搜索记忆功能 -->
       <div class="mt-4">
         <h3>{{ tm('search.title') }}</h3>
-        <v-card variant="outlined" class="mt-2 pa-3">
+        <v-card
+          variant="outlined"
+          class="mt-2 pa-3"
+        >
           <div>
-            <v-text-field :model-value="searchMemoryUserId"
-              @update:model-value="onSearchMemoryUserIdInput" :label="tm('search.userIdLabel')" variant="outlined" density="compact" hide-details
-              class="mb-2" clearable></v-text-field>
-            <v-text-field :model-value="searchQuery"
-              @update:model-value="onSearchQueryInput" :label="tm('search.queryLabel')" variant="outlined" density="compact" hide-details
-              @keyup.enter="searchMemory" class="mb-2" clearable></v-text-field>
-            <v-btn color="info" @click="searchMemory" :loading="isSearching" variant="tonal">
-              <v-icon start>mdi-text-search</v-icon>
+            <v-text-field
+              :model-value="searchMemoryUserId"
+              :label="tm('search.userIdLabel')"
+              variant="outlined"
+              density="compact"
+              hide-details
+              class="mb-2"
+              clearable
+              @update:model-value="onSearchMemoryUserIdInput"
+            />
+            <v-text-field
+              :model-value="searchQuery"
+              :label="tm('search.queryLabel')"
+              variant="outlined"
+              density="compact"
+              hide-details
+              class="mb-2"
+              clearable
+              @update:model-value="onSearchQueryInput"
+              @keyup.enter="searchMemory"
+            />
+            <v-btn
+              color="info"
+              :loading="isSearching"
+              variant="tonal"
+              @click="searchMemory"
+            >
+              <v-icon start>
+                mdi-text-search
+              </v-icon>
               {{ tm('search.searchButton') }}
             </v-btn>
           </div>
 
           <!-- 新增搜索结果展示区域 -->
-          <div v-if="searchResults.length > 0" class="mt-3">
-            <v-divider class="mb-3"></v-divider>
-            <div class="text-subtitle-1 mb-2">{{ tm('search.resultsTitle') }} ({{ searchResults.length }})</div>
+          <div
+            v-if="searchResults.length > 0"
+            class="mt-3"
+          >
+            <v-divider class="mb-3" />
+            <div class="text-subtitle-1 mb-2">
+              {{ tm('search.resultsTitle') }} ({{ searchResults.length }})
+            </div>
             <v-expansion-panels variant="accordion">
-              <v-expansion-panel v-for="(result, index) in searchResults" :key="index">
+              <v-expansion-panel
+                v-for="(result, index) in searchResults"
+                :key="index"
+              >
                 <v-expansion-panel-title>
                   <div>
-                    <span class="text-truncate d-inline-block" style="max-width: 300px;">{{ result.text.substring(0, 30)
-                      }}...</span>
+                    <span
+                      class="text-truncate d-inline-block"
+                      style="max-width: 300px;"
+                    >{{ result.text.substring(0, 30)
+                    }}...</span>
                     <span class="ms-2 text-caption text-grey">({{ tm('search.similarity') }}: {{ (result.score * 100).toFixed(1) }}%)</span>
                   </div>
                 </v-expansion-panel-title>
                 <v-expansion-panel-text>
                   <div>
-                    <div class="mb-2 text-body-1">{{ result.text }}</div>
+                    <div class="mb-2 text-body-1">
+                      {{ result.text }}
+                    </div>
                     <div class="d-flex">
                       <span class="text-caption text-grey">{{ tm('factDialog.docId') }}: {{ result.doc_id }}</span>
                     </div>
@@ -73,7 +141,10 @@
               </v-expansion-panel>
             </v-expansion-panels>
           </div>
-          <div v-else-if="hasSearched" class="mt-3 text-center text-body-1 text-grey">
+          <div
+            v-else-if="hasSearched"
+            class="mt-3 text-center text-body-1 text-grey"
+          >
             {{ tm('search.noResults') }}
           </div>
         </v-card>
@@ -82,27 +153,59 @@
       <!-- 新增添加记忆数据的表单 -->
       <div class="mt-4">
         <h3>{{ tm('addMemory.title') }}</h3>
-        <v-card variant="outlined" class="mt-2 pa-3">
+        <v-card
+          variant="outlined"
+          class="mt-2 pa-3"
+        >
           <v-form @submit.prevent="addMemoryData">
-            <v-textarea v-model="newMemoryText" :label="tm('addMemory.textLabel')" variant="outlined" rows="4" hide-details
-              class="mb-2"></v-textarea>
+            <v-textarea
+              v-model="newMemoryText"
+              :label="tm('addMemory.textLabel')"
+              variant="outlined"
+              rows="4"
+              hide-details
+              class="mb-2"
+            />
 
-            <v-text-field v-model="newMemoryUserId" :label="tm('addMemory.userIdLabel')" variant="outlined" density="compact"
-              hide-details></v-text-field>
+            <v-text-field
+              v-model="newMemoryUserId"
+              :label="tm('addMemory.userIdLabel')"
+              variant="outlined"
+              density="compact"
+              hide-details
+            />
 
-            <v-switch v-model="needSummarize" color="primary" :label="tm('addMemory.summarizeLabel')" hide-details></v-switch>
+            <v-switch
+              v-model="needSummarize"
+              color="primary"
+              :label="tm('addMemory.summarizeLabel')"
+              hide-details
+            />
 
-            <v-btn color="success" type="submit" :loading="isSubmitting" :disabled="!newMemoryText || !newMemoryUserId">
-              <v-icon start>mdi-plus</v-icon>
+            <v-btn
+              color="success"
+              type="submit"
+              :loading="isSubmitting"
+              :disabled="!newMemoryText || !newMemoryUserId"
+            >
+              <v-icon start>
+                mdi-plus
+              </v-icon>
               {{ tm('addMemory.addButton') }}
             </v-btn>
           </v-form>
         </v-card>
       </div>
 
-      <div v-if="selectedNode" class="mt-4">
+      <div
+        v-if="selectedNode"
+        class="mt-4"
+      >
         <h3>{{ tm('nodeDetails.title') }}</h3>
-        <v-card variant="outlined" class="mt-2 pa-3">
+        <v-card
+          variant="outlined"
+          class="mt-2 pa-3"
+        >
           <div v-if="selectedNode.id">
             <div class="d-flex justify-space-between">
               <span class="text-subtitle-2">{{ tm('nodeDetails.id') }}:</span>
@@ -142,9 +245,15 @@
         </v-card>
       </div>
 
-      <div v-if="graphStats" class="mt-4">
+      <div
+        v-if="graphStats"
+        class="mt-4"
+      >
         <h3>{{ tm('graphStats.title') }}</h3>
-        <v-card variant="outlined" class="mt-2 pa-3">
+        <v-card
+          variant="outlined"
+          class="mt-2 pa-3"
+        >
           <div class="d-flex justify-space-between">
             <span class="text-subtitle-2">{{ tm('graphStats.nodeCount') }}:</span>
             <span>{{ graphStats.nodeCount }}</span>
@@ -156,37 +265,78 @@
         </v-card>
       </div>
 
-      <v-dialog v-model="showFactDialog" max-width="550" scrollable>
+      <v-dialog
+        v-model="showFactDialog"
+        max-width="550"
+        scrollable
+      >
         <v-card class="fact-detail-card">
           <v-card-title class="d-flex align-center bg-primary text-white px-4 py-3">
-            <v-icon class="mr-2" color="white">mdi-memory</v-icon>
+            <v-icon
+              class="mr-2"
+              color="white"
+            >
+              mdi-memory
+            </v-icon>
             {{ tm('factDialog.title') }}
-            <v-spacer></v-spacer>
-            <v-btn icon variant="text" color="white" @click="showFactDialog = false">
+            <v-spacer />
+            <v-btn
+              icon
+              variant="text"
+              color="white"
+              @click="showFactDialog = false"
+            >
               <v-icon>mdi-close</v-icon>
             </v-btn>
           </v-card-title>
           
           <v-card-text class="px-4 pt-4 pb-0">
             <template v-if="selectedEdgeFactData">
-              <v-alert color="primary" variant="tonal" density="compact" class="mb-4">
-                <div class="text-body-1 font-weight-medium">{{ selectedEdgeFactData.text }}</div>
+              <v-alert
+                color="primary"
+                variant="tonal"
+                density="compact"
+                class="mb-4"
+              >
+                <div class="text-body-1 font-weight-medium">
+                  {{ selectedEdgeFactData.text }}
+                </div>
               </v-alert>
               
               <v-row>
                 <v-col cols="6">
                   <div class="d-flex align-center mb-2">
-                    <v-icon size="small" color="primary" class="mr-2">mdi-identifier</v-icon>
-                    <div class="text-subtitle-2">{{ tm('factDialog.id') }}</div>
+                    <v-icon
+                      size="small"
+                      color="primary"
+                      class="mr-2"
+                    >
+                      mdi-identifier
+                    </v-icon>
+                    <div class="text-subtitle-2">
+                      {{ tm('factDialog.id') }}
+                    </div>
                   </div>
-                  <div class="text-body-2 text-grey pa-1">{{ selectedEdgeFactData.id }}</div>
+                  <div class="text-body-2 text-grey pa-1">
+                    {{ selectedEdgeFactData.id }}
+                  </div>
                 </v-col>
                 <v-col cols="6">
                   <div class="d-flex align-center mb-2">
-                    <v-icon size="small" color="primary" class="mr-2">mdi-file-document-outline</v-icon>
-                    <div class="text-subtitle-2">{{ tm('factDialog.docId') }}</div>
+                    <v-icon
+                      size="small"
+                      color="primary"
+                      class="mr-2"
+                    >
+                      mdi-file-document-outline
+                    </v-icon>
+                    <div class="text-subtitle-2">
+                      {{ tm('factDialog.docId') }}
+                    </div>
                   </div>
-                  <div class="text-body-2 text-grey pa-1">{{ selectedEdgeFactData.doc_id }}</div>
+                  <div class="text-body-2 text-grey pa-1">
+                    {{ selectedEdgeFactData.doc_id }}
+                  </div>
                 </v-col>
               </v-row>
               
@@ -194,37 +344,83 @@
               <v-row class="mt-2">
                 <v-col cols="6">
                   <div class="d-flex align-center mb-2">
-                    <v-icon size="small" color="primary" class="mr-2">mdi-calendar-plus</v-icon>
-                    <div class="text-subtitle-2">{{ tm('factDialog.createdAt') }}</div>
+                    <v-icon
+                      size="small"
+                      color="primary"
+                      class="mr-2"
+                    >
+                      mdi-calendar-plus
+                    </v-icon>
+                    <div class="text-subtitle-2">
+                      {{ tm('factDialog.createdAt') }}
+                    </div>
                   </div>
-                  <div class="text-body-2 text-grey pa-1">{{ formatTime(selectedEdgeFactData.created_at) }}</div>
+                  <div class="text-body-2 text-grey pa-1">
+                    {{ formatTime(selectedEdgeFactData.created_at) }}
+                  </div>
                 </v-col>
                 <v-col cols="6">
                   <div class="d-flex align-center mb-2">
-                    <v-icon size="small" color="primary" class="mr-2">mdi-calendar-edit</v-icon>
-                    <div class="text-subtitle-2">{{ tm('factDialog.updatedAt') }}</div>
+                    <v-icon
+                      size="small"
+                      color="primary"
+                      class="mr-2"
+                    >
+                      mdi-calendar-edit
+                    </v-icon>
+                    <div class="text-subtitle-2">
+                      {{ tm('factDialog.updatedAt') }}
+                    </div>
                   </div>
-                  <div class="text-body-2 text-grey pa-1">{{ formatTime(selectedEdgeFactData.updated_at) }}</div>
+                  <div class="text-body-2 text-grey pa-1">
+                    {{ formatTime(selectedEdgeFactData.updated_at) }}
+                  </div>
                 </v-col>
               </v-row>
 
               <!-- 改进元数据展示，解析为键值对 -->
-              <div v-if="parsedMetadata && Object.keys(parsedMetadata).length > 0" class="mt-4">
+              <div
+                v-if="parsedMetadata && Object.keys(parsedMetadata).length > 0"
+                class="mt-4"
+              >
                 <div class="d-flex align-center mb-2">
-                  <v-icon size="small" color="primary" class="mr-2">mdi-database-cog</v-icon>
-                  <div class="text-subtitle-2">{{ tm('factDialog.metadata') }}</div>
+                  <v-icon
+                    size="small"
+                    color="primary"
+                    class="mr-2"
+                  >
+                    mdi-database-cog
+                  </v-icon>
+                  <div class="text-subtitle-2">
+                    {{ tm('factDialog.metadata') }}
+                  </div>
                 </div>
-                <v-card variant="outlined" class="metadata-table">
-                  <v-table density="compact" hover>
+                <v-card
+                  variant="outlined"
+                  class="metadata-table"
+                >
+                  <v-table
+                    density="compact"
+                    hover
+                  >
                     <thead>
                       <tr>
-                        <th class="text-left">{{ tm('factDialog.metadataKey') }}</th>
-                        <th class="text-left">{{ tm('factDialog.metadataValue') }}</th>
+                        <th class="text-left">
+                          {{ tm('factDialog.metadataKey') }}
+                        </th>
+                        <th class="text-left">
+                          {{ tm('factDialog.metadataValue') }}
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="(value, key) in parsedMetadata" :key="key">
-                        <td class="font-weight-medium">{{ key }}</td>
+                      <tr
+                        v-for="(value, key) in parsedMetadata"
+                        :key="key"
+                      >
+                        <td class="font-weight-medium">
+                          {{ key }}
+                        </td>
                         <td>{{ formatMetadataValue(value) }}</td>
                       </tr>
                     </tbody>
@@ -233,16 +429,34 @@
               </div>
             </template>
             
-            <div v-else class="text-center py-6">
-              <v-progress-circular indeterminate color="primary" size="50" width="5"></v-progress-circular>
-              <div class="mt-3 text-body-1">{{ tm('factDialog.loading') }}</div>
+            <div
+              v-else
+              class="text-center py-6"
+            >
+              <v-progress-circular
+                indeterminate
+                color="primary"
+                size="50"
+                width="5"
+              />
+              <div class="mt-3 text-body-1">
+                {{ tm('factDialog.loading') }}
+              </div>
             </div>
           </v-card-text>
           
-          <v-divider v-if="selectedEdgeFactData"></v-divider>
+          <v-divider v-if="selectedEdgeFactData" />
           
-          <v-card-actions class="pa-4" v-if="selectedEdgeFactData">
-            <v-btn block color="primary" variant="tonal" @click="showFactDialog = false">
+          <v-card-actions
+            v-if="selectedEdgeFactData"
+            class="pa-4"
+          >
+            <v-btn
+              block
+              color="primary"
+              variant="tonal"
+              @click="showFactDialog = false"
+            >
               {{ tm('factDialog.close') }}
             </v-btn>
           </v-card-actions>
@@ -254,7 +468,7 @@
 
 <script>
 import axios from 'axios';
-// import * as d3 from "d3"; // npm install d3
+import * as d3 from 'd3';
 import { useModuleI18n } from '@/i18n/composables';
 import { normalizeTextInput } from '@/utils/inputValue';
 

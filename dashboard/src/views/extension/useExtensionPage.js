@@ -149,6 +149,7 @@ export const useExtensionPage = () => {
   const showPluginInfoDialog = ref(false);
   const selectedPlugin = ref({});
   const curr_namespace = ref("");
+  const currentConfigPlugin = curr_namespace;
   const updatingAll = ref(false);
   
   const readmeDialog = reactive({

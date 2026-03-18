@@ -3,73 +3,163 @@
     <!-- 页面标题 -->
     <div class="page-header">
       <div>
-        <h1 class="text-h4 mb-2">{{ t('list.title') }}</h1>
-        <p class="text-subtitle-1 text-medium-emphasis">{{ t('list.subtitle') }}</p>
+        <h1 class="text-h4 mb-2">
+          {{ t('list.title') }}
+        </h1>
+        <p class="text-subtitle-1 text-medium-emphasis">
+          {{ t('list.subtitle') }}
+        </p>
       </div>
-      <v-btn icon="mdi-information-outline" variant="text" size="small" color="grey"
-        href="https://astrbot.app/use/knowledge-base.html" target="_blank" />
+      <v-btn
+        icon="mdi-information-outline"
+        variant="text"
+        size="small"
+        color="grey"
+        href="https://astrbot.app/use/knowledge-base.html"
+        target="_blank"
+      />
     </div>
 
     <!-- 操作按钮栏 -->
     <div class="action-bar mb-6">
-      <v-btn prepend-icon="mdi-plus" color="primary" variant="elevated" @click="showCreateDialog = true">
+      <v-btn
+        prepend-icon="mdi-plus"
+        color="primary"
+        variant="elevated"
+        @click="showCreateDialog = true"
+      >
         {{ t('list.create') }}
       </v-btn>
-      <v-btn prepend-icon="mdi-refresh" variant="tonal" @click="loadKnowledgeBases" :loading="loading">
+      <v-btn
+        prepend-icon="mdi-refresh"
+        variant="tonal"
+        :loading="loading"
+        @click="loadKnowledgeBases"
+      >
         {{ t('list.refresh') }}
       </v-btn>
     </div>
 
     <!-- 知识库网格 -->
-    <div v-if="loading && kbList.length === 0" class="loading-container">
-      <v-progress-circular indeterminate color="primary" size="64" />
-      <p class="mt-4 text-medium-emphasis">{{ t('list.loading') }}</p>
+    <div
+      v-if="loading && kbList.length === 0"
+      class="loading-container"
+    >
+      <v-progress-circular
+        indeterminate
+        color="primary"
+        size="64"
+      />
+      <p class="mt-4 text-medium-emphasis">
+        {{ t('list.loading') }}
+      </p>
     </div>
 
-    <div v-else-if="kbList.length > 0" class="kb-grid">
-      <v-card v-for="kb in kbList" :key="kb.kb_id" class="kb-card" elevation="2" hover
-        @click="navigateToDetail(kb.kb_id)">
+    <div
+      v-else-if="kbList.length > 0"
+      class="kb-grid"
+    >
+      <v-card
+        v-for="kb in kbList"
+        :key="kb.kb_id"
+        class="kb-card"
+        elevation="2"
+        hover
+        @click="navigateToDetail(kb.kb_id)"
+      >
         <div class="kb-card-content">
-          <div class="kb-emoji">{{ kb.emoji || '📚' }}</div>
-          <h3 class="kb-name">{{ kb.kb_name }}</h3>
-          <p class="kb-description text-medium-emphasis">{{ kb.description || '暂无描述' }}</p>
+          <div class="kb-emoji">
+            {{ kb.emoji || '📚' }}
+          </div>
+          <h3 class="kb-name">
+            {{ kb.kb_name }}
+          </h3>
+          <p class="kb-description text-medium-emphasis">
+            {{ kb.description || '暂无描述' }}
+          </p>
 
           <div class="kb-stats mt-4">
             <div class="stat-item">
-              <v-icon size="small" color="primary">mdi-file-document</v-icon>
+              <v-icon
+                size="small"
+                color="primary"
+              >
+                mdi-file-document
+              </v-icon>
               <span>{{ kb.doc_count || 0 }} {{ t('list.documents') }}</span>
             </div>
             <div class="stat-item">
-              <v-icon size="small" color="secondary">mdi-text-box</v-icon>
+              <v-icon
+                size="small"
+                color="secondary"
+              >
+                mdi-text-box
+              </v-icon>
               <span>{{ kb.chunk_count || 0 }} {{ t('list.chunks') }}</span>
             </div>
           </div>
 
           <div class="kb-actions">
-            <v-btn icon="mdi-pencil" size="small" variant="text" color="info" @click.stop="editKB(kb)" />
-            <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click.stop="confirmDelete(kb)" />
+            <v-btn
+              icon="mdi-pencil"
+              size="small"
+              variant="text"
+              color="info"
+              @click.stop="editKB(kb)"
+            />
+            <v-btn
+              icon="mdi-delete"
+              size="small"
+              variant="text"
+              color="error"
+              @click.stop="confirmDelete(kb)"
+            />
           </div>
         </div>
       </v-card>
     </div>
 
     <!-- 空状态 -->
-    <div v-else class="empty-state">
-      <v-icon size="100" color="grey-lighten-2">mdi-book-open-variant</v-icon>
-      <h2 class="mt-4">{{ t('list.empty') }}</h2>
-      <v-btn class="mt-6" prepend-icon="mdi-plus" color="primary" variant="elevated" size="large"
-        @click="showCreateDialog = true">
+    <div
+      v-else
+      class="empty-state"
+    >
+      <v-icon
+        size="100"
+        color="grey-lighten-2"
+      >
+        mdi-book-open-variant
+      </v-icon>
+      <h2 class="mt-4">
+        {{ t('list.empty') }}
+      </h2>
+      <v-btn
+        class="mt-6"
+        prepend-icon="mdi-plus"
+        color="primary"
+        variant="elevated"
+        size="large"
+        @click="showCreateDialog = true"
+      >
         {{ t('list.create') }}
       </v-btn>
     </div>
 
     <!-- 创建/编辑对话框 -->
-    <v-dialog v-model="showCreateDialog" max-width="600px" persistent>
+    <v-dialog
+      v-model="showCreateDialog"
+      max-width="600px"
+      persistent
+    >
       <v-card>
         <v-card-title class="d-flex align-center">
           <span class="text-h5">{{ editingKB ? t('edit.title') : t('create.title') }}</span>
           <v-spacer />
-          <v-btn icon="mdi-close" variant="text" @click="closeCreateDialog" />
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            @click="closeCreateDialog"
+          />
         </v-card-title>
 
         <v-divider />
@@ -77,24 +167,55 @@
         <v-card-text class="pa-6">
           <!-- Emoji 选择器 -->
           <div class="text-center mb-6">
-            <div class="emoji-display" @click="showEmojiPicker = true">
+            <div
+              class="emoji-display"
+              @click="showEmojiPicker = true"
+            >
               {{ formData.emoji }}
             </div>
-            <p class="text-caption text-medium-emphasis mt-2">{{ t('create.emojiLabel') }}</p>
+            <p class="text-caption text-medium-emphasis mt-2">
+              {{ t('create.emojiLabel') }}
+            </p>
           </div>
 
           <!-- 表单 -->
-          <v-form ref="formRef" @submit.prevent="submitForm">
-            <v-text-field v-model="formData.kb_name" :label="t('create.nameLabel')"
-              :placeholder="t('create.namePlaceholder')" variant="outlined"
-              :rules="[v => !!v || t('create.nameRequired')]" required class="mb-4" hint="后续如修改知识库名称，需重新在配置文件更新。" persistent-hint />
+          <v-form
+            ref="formRef"
+            @submit.prevent="submitForm"
+          >
+            <v-text-field
+              v-model="formData.kb_name"
+              :label="t('create.nameLabel')"
+              :placeholder="t('create.namePlaceholder')"
+              variant="outlined"
+              :rules="[v => !!v || t('create.nameRequired')]"
+              required
+              class="mb-4"
+              hint="后续如修改知识库名称，需重新在配置文件更新。"
+              persistent-hint
+            />
 
-            <v-textarea v-model="formData.description" :label="t('create.descriptionLabel')"
-              :placeholder="t('create.descriptionPlaceholder')" variant="outlined" rows="3" class="mb-4" />
+            <v-textarea
+              v-model="formData.description"
+              :label="t('create.descriptionLabel')"
+              :placeholder="t('create.descriptionPlaceholder')"
+              variant="outlined"
+              rows="3"
+              class="mb-4"
+            />
 
-            <v-select v-model="formData.embedding_provider_id" :items="embeddingProviders"
-              :item-title="item => item.embedding_model || item.id" :item-value="'id'"
-              :label="t('create.embeddingModelLabel')" variant="outlined" class="mb-4" :disabled="editingKB !== null" hint="嵌入模型选择后无法修改，如需更换请创建新的知识库。" persistent-hint>
+            <v-select
+              v-model="formData.embedding_provider_id"
+              :items="embeddingProviders"
+              :item-title="item => item.embedding_model || item.id"
+              :item-value="'id'"
+              :label="t('create.embeddingModelLabel')"
+              variant="outlined"
+              class="mb-4"
+              :disabled="editingKB !== null"
+              hint="嵌入模型选择后无法修改，如需更换请创建新的知识库。"
+              persistent-hint
+            >
               <template #item="{ props, item }">
                 <v-list-item v-bind="props">
                   <template #subtitle>
@@ -107,9 +228,16 @@
               </template>
             </v-select>
 
-            <v-select v-model="formData.rerank_provider_id" :items="rerankProviders"
-              :item-title="item => item.rerank_model || item.id" :item-value="'id'"
-              :label="t('create.rerankModelLabel')" variant="outlined" clearable class="mb-2">
+            <v-select
+              v-model="formData.rerank_provider_id"
+              :items="rerankProviders"
+              :item-title="item => item.rerank_model || item.id"
+              :item-value="'id'"
+              :label="t('create.rerankModelLabel')"
+              variant="outlined"
+              clearable
+              class="mb-2"
+            >
               <template #item="{ props, item }">
                 <v-list-item v-bind="props">
                   <template #subtitle>
@@ -125,10 +253,18 @@
 
         <v-card-actions class="pa-4">
           <v-spacer />
-          <v-btn variant="text" @click="closeCreateDialog">
+          <v-btn
+            variant="text"
+            @click="closeCreateDialog"
+          >
             {{ t('create.cancel') }}
           </v-btn>
-          <v-btn color="primary" variant="elevated" @click="submitForm" :loading="saving">
+          <v-btn
+            color="primary"
+            variant="elevated"
+            :loading="saving"
+            @click="submitForm"
+          >
             {{ editingKB ? t('edit.submit') : t('create.submit') }}
           </v-btn>
         </v-card-actions>
@@ -136,15 +272,31 @@
     </v-dialog>
 
     <!-- Emoji 选择器对话框 -->
-    <v-dialog v-model="showEmojiPicker" max-width="500px">
+    <v-dialog
+      v-model="showEmojiPicker"
+      max-width="500px"
+    >
       <v-card>
-        <v-card-title class="pa-4">{{ t('emoji.title') }}</v-card-title>
+        <v-card-title class="pa-4">
+          {{ t('emoji.title') }}
+        </v-card-title>
         <v-divider />
         <v-card-text class="pa-4">
-          <div v-for="category in emojiCategories" :key="category.key" class="mb-4">
-            <p class="text-subtitle-2 mb-2">{{ t(`emoji.categories.${category.key}`) }}</p>
+          <div
+            v-for="category in emojiCategories"
+            :key="category.key"
+            class="mb-4"
+          >
+            <p class="text-subtitle-2 mb-2">
+              {{ t(`emoji.categories.${category.key}`) }}
+            </p>
             <div class="emoji-grid">
-              <div v-for="emoji in category.emojis" :key="emoji" class="emoji-item" @click="selectEmoji(emoji)">
+              <div
+                v-for="emoji in category.emojis"
+                :key="emoji"
+                class="emoji-item"
+                @click="selectEmoji(emoji)"
+              >
                 {{ emoji }}
               </div>
             </div>
@@ -153,7 +305,10 @@
         <v-divider />
         <v-card-actions class="pa-4">
           <v-spacer />
-          <v-btn variant="text" @click="showEmojiPicker = false">
+          <v-btn
+            variant="text"
+            @click="showEmojiPicker = false"
+          >
             {{ t('emoji.close') }}
           </v-btn>
         </v-card-actions>
@@ -161,23 +316,42 @@
     </v-dialog>
 
     <!-- 删除确认对话框 -->
-    <v-dialog v-model="showDeleteDialog" max-width="450px" persistent>
+    <v-dialog
+      v-model="showDeleteDialog"
+      max-width="450px"
+      persistent
+    >
       <v-card>
-        <v-card-title class="pa-4 text-h6">{{ t('delete.title') }}</v-card-title>
+        <v-card-title class="pa-4 text-h6">
+          {{ t('delete.title') }}
+        </v-card-title>
         <v-divider />
         <v-card-text class="pa-6">
           <p>{{ t('delete.confirmText', { name: deleteTarget?.kb_name || '' }) }}</p>
-          <v-alert type="error" variant="tonal" density="compact" class="mt-4">
+          <v-alert
+            type="error"
+            variant="tonal"
+            density="compact"
+            class="mt-4"
+          >
             {{ t('delete.warning') }}
           </v-alert>
         </v-card-text>
         <v-divider />
         <v-card-actions class="pa-4">
           <v-spacer />
-          <v-btn variant="text" @click="cancelDelete">
+          <v-btn
+            variant="text"
+            @click="cancelDelete"
+          >
             {{ t('delete.cancel') }}
           </v-btn>
-          <v-btn color="error" variant="elevated" @click="deleteKB" :loading="deleting">
+          <v-btn
+            color="error"
+            variant="elevated"
+            :loading="deleting"
+            @click="deleteKB"
+          >
             {{ t('delete.confirm') }}
           </v-btn>
         </v-card-actions>
@@ -185,14 +359,19 @@
     </v-dialog>
 
     <!-- 消息提示 -->
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color">
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+    >
       {{ snackbar.text }}
     </v-snackbar>
 
-    <div class="position-absolute" style="bottom: 0px; right: 16px;">
+    <div
+      class="position-absolute"
+      style="bottom: 0px; right: 16px;"
+    >
       <small @click="router.push('/alkaid/knowledge-base')"><a style="text-decoration: underline; cursor: pointer;">切换到旧版知识库</a></small>
     </div>
-
   </div>
 </template>
 
@@ -427,7 +606,7 @@ const selectEmoji = (emoji: string) => {
 }
 
 // 显示通知
-const showSnackbar = (text: string, color: string = 'success') => {
+const showSnackbar = (text: string, color = 'success') => {
   snackbar.value.text = text
   snackbar.value.color = color
   snackbar.value.show = true

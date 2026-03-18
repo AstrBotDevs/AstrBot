@@ -628,7 +628,7 @@ export function useMessages(
         // 如果 message 是字符串 (旧格式)，转换为数组格式
         if (typeof message === 'string') {
             const parts: MessagePart[] = [];
-            let text = message;
+            const text = message;
 
             // 处理旧格式的特殊标记
             if (text.startsWith('[IMAGE]')) {
@@ -695,7 +695,7 @@ export function useMessages(
 
             const response = await axios.get('/api/chat/get_session?session_id=' + sessionId);
             isConvRunning.value = response.data.data.is_running || false;
-            let history = response.data.data.history;
+            const history = response.data.data.history;
 
             // 保存项目信息（如果存在）
             currentSessionProject.value = response.data.data.project || null;
@@ -714,7 +714,7 @@ export function useMessages(
 
             // 处理历史消息
             for (let i = 0; i < history.length; i++) {
-                let content = history[i].content;
+                const content = history[i].content;
                 await parseMessageContent(content);
             }
 
@@ -750,7 +750,7 @@ export function useMessages(
             const partType = f.type === 'image' ? 'image' :
                 f.type === 'record' ? 'record' : 'file';
             parts.push({
-                type: partType as 'image' | 'record' | 'file',
+                type: partType ,
                 attachment_id: f.attachment_id
             });
         }
@@ -793,7 +793,7 @@ export function useMessages(
 
         isStreaming.value = true;
 
-        while (true) {
+        for (;;) {
             try {
                 const { done, value } = await reader.read();
                 if (done) {
@@ -807,7 +807,7 @@ export function useMessages(
                 const lines = chunk.split('\n\n');
 
                 for (let i = 0; i < lines.length; i++) {
-                    let line = lines[i].trim();
+                    const line = lines[i].trim();
                     if (!line) continue;
 
                     let chunkJson: StreamChunk;
@@ -917,7 +917,7 @@ export function useMessages(
             const embeddedUrl = await getAttachment(f.attachment_id);
 
             userMessageParts.push({
-                type: partType as 'image' | 'record' | 'file',
+                type: partType ,
                 attachment_id: f.attachment_id,
                 filename: f.original_name,
                 embedded_url: partType !== 'file' ? embeddedUrl : undefined,

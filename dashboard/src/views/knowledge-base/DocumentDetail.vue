@@ -8,68 +8,131 @@
         @click="$router.push({ name: 'NativeKBDetail', params: { kbId } })"
       />
       <div class="header-content">
-        <h1 class="text-h4">{{ document.doc_name }}</h1>
-        <p class="text-subtitle-1 text-medium-emphasis mt-2">{{ t('title') }}</p>
+        <h1 class="text-h4">
+          {{ document.doc_name }}
+        </h1>
+        <p class="text-subtitle-1 text-medium-emphasis mt-2">
+          {{ t('title') }}
+        </p>
       </div>
     </div>
 
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading-container">
-      <v-progress-circular indeterminate color="primary" size="64" />
+    <div
+      v-if="loading"
+      class="loading-container"
+    >
+      <v-progress-circular
+        indeterminate
+        color="primary"
+        size="64"
+      />
     </div>
 
     <!-- 主内容 -->
-    <div v-else class="document-content">
+    <div
+      v-else
+      class="document-content"
+    >
       <!-- 文档信息卡片 -->
-      <v-card elevation="2" class="mb-6">
+      <v-card
+        elevation="2"
+        class="mb-6"
+      >
         <v-card-title>{{ t('info.title') }}</v-card-title>
         <v-divider />
         <v-card-text>
           <v-row>
-            <v-col cols="12" md="3">
+            <v-col
+              cols="12"
+              md="3"
+            >
               <div class="info-item">
-                <v-icon start>mdi-label</v-icon>
+                <v-icon start>
+                  mdi-label
+                </v-icon>
                 <div>
-                  <div class="text-caption text-medium-emphasis">{{ t('info.name') }}</div>
-                  <div class="text-body-1">{{ document.doc_name }}</div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t('info.name') }}
+                  </div>
+                  <div class="text-body-1">
+                    {{ document.doc_name }}
+                  </div>
                 </div>
               </div>
             </v-col>
-            <v-col cols="12" md="2">
+            <v-col
+              cols="12"
+              md="2"
+            >
               <div class="info-item">
-                <v-icon start :color="getFileColor(document.file_type)">
+                <v-icon
+                  start
+                  :color="getFileColor(document.file_type)"
+                >
                   {{ getFileIcon(document.file_type) }}
                 </v-icon>
                 <div>
-                  <div class="text-caption text-medium-emphasis">{{ t('info.type') }}</div>
-                  <div class="text-body-1">{{ document.file_type || '-' }}</div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t('info.type') }}
+                  </div>
+                  <div class="text-body-1">
+                    {{ document.file_type || '-' }}
+                  </div>
                 </div>
               </div>
             </v-col>
-            <v-col cols="12" md="2">
+            <v-col
+              cols="12"
+              md="2"
+            >
               <div class="info-item">
-                <v-icon start>mdi-file-chart</v-icon>
+                <v-icon start>
+                  mdi-file-chart
+                </v-icon>
                 <div>
-                  <div class="text-caption text-medium-emphasis">{{ t('info.size') }}</div>
-                  <div class="text-body-1">{{ formatFileSize(document.file_size) }}</div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t('info.size') }}
+                  </div>
+                  <div class="text-body-1">
+                    {{ formatFileSize(document.file_size) }}
+                  </div>
                 </div>
               </div>
             </v-col>
-            <v-col cols="12" md="2">
+            <v-col
+              cols="12"
+              md="2"
+            >
               <div class="info-item">
-                <v-icon start>mdi-text-box</v-icon>
+                <v-icon start>
+                  mdi-text-box
+                </v-icon>
                 <div>
-                  <div class="text-caption text-medium-emphasis">{{ t('info.chunkCount') }}</div>
-                  <div class="text-body-1">{{ document.chunk_count || 0 }}</div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t('info.chunkCount') }}
+                  </div>
+                  <div class="text-body-1">
+                    {{ document.chunk_count || 0 }}
+                  </div>
                 </div>
               </div>
             </v-col>
-            <v-col cols="12" md="3">
+            <v-col
+              cols="12"
+              md="3"
+            >
               <div class="info-item">
-                <v-icon start>mdi-calendar</v-icon>
+                <v-icon start>
+                  mdi-calendar
+                </v-icon>
                 <div>
-                  <div class="text-caption text-medium-emphasis">{{ t('info.createdAt') }}</div>
-                  <div class="text-body-1">{{ formatDate(document.created_at) }}</div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ t('info.createdAt') }}
+                  </div>
+                  <div class="text-body-1">
+                    {{ formatDate(document.created_at) }}
+                  </div>
                 </div>
               </div>
             </v-col>
@@ -81,7 +144,11 @@
       <v-card elevation="2">
         <v-card-title class="d-flex align-center pa-4">
           <span>{{ t('chunks.title') }}</span>
-          <v-chip class="ml-2" size="small" variant="tonal">
+          <v-chip
+            class="ml-2"
+            size="small"
+            variant="tonal"
+          >
             {{ totalChunks }} {{ t('chunks.title') }}
           </v-chip>
           <v-spacer />
@@ -108,7 +175,11 @@
             hide-default-footer
           >
             <template #item.chunk_index="{ item }">
-              <v-chip size="small" variant="tonal" color="primary">
+              <v-chip
+                size="small"
+                variant="tonal"
+                color="primary"
+              >
                 #{{ item.chunk_index + 1 }}
               </v-chip>
             </template>
@@ -120,7 +191,10 @@
             </template>
 
             <template #item.char_count="{ item }">
-              <v-chip size="small" variant="outlined">
+              <v-chip
+                size="small"
+                variant="outlined"
+              >
                 {{ item.char_count }} 字符
               </v-chip>
             </template>
@@ -145,15 +219,25 @@
 
             <template #no-data>
               <div class="text-center py-8">
-                <v-icon size="64" color="grey-lighten-2">mdi-text-box-outline</v-icon>
-                <p class="mt-4 text-medium-emphasis">{{ t('chunks.empty') }}</p>
+                <v-icon
+                  size="64"
+                  color="grey-lighten-2"
+                >
+                  mdi-text-box-outline
+                </v-icon>
+                <p class="mt-4 text-medium-emphasis">
+                  {{ t('chunks.empty') }}
+                </p>
               </div>
             </template>
           </v-data-table>
           
 
           <!-- 自定义分页器 -->
-          <div v-if="!searchQuery && totalChunks > 0" class="pa-4 d-flex align-center justify-space-between">
+          <div
+            v-if="!searchQuery && totalChunks > 0"
+            class="pa-4 d-flex align-center justify-space-between"
+          >
             <div class="text-caption text-medium-emphasis">
               {{ t('chunks.showing') }} {{ (page - 1) * pageSize + 1 }} - {{ Math.min(page * pageSize, totalChunks) }} / {{ totalChunks }}
             </div>
@@ -180,12 +264,20 @@
     </div>
 
     <!-- 查看分块对话框 -->
-    <v-dialog v-model="showViewDialog" max-width="800px" scrollable>
+    <v-dialog
+      v-model="showViewDialog"
+      max-width="800px"
+      scrollable
+    >
       <v-card>
         <v-card-title class="pa-4">
           <span>{{ t('view.title') }}</span>
           <v-spacer />
-          <v-btn icon="mdi-close" variant="text" @click="showViewDialog = false" />
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            @click="showViewDialog = false"
+          />
         </v-card-title>
         <v-divider />
         <v-card-text class="pa-6">
@@ -217,7 +309,9 @@
 
           <v-divider class="my-4" />
 
-          <div class="text-caption text-medium-emphasis mb-2">{{ t('view.content') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">
+            {{ t('view.content') }}
+          </div>
           <div class="chunk-content-view">
             {{ selectedChunk?.content }}
           </div>
@@ -225,7 +319,10 @@
         <v-divider />
         <v-card-actions class="pa-4">
           <v-spacer />
-          <v-btn variant="text" @click="showViewDialog = false">
+          <v-btn
+            variant="text"
+            @click="showViewDialog = false"
+          >
             {{ t('view.close') }}
           </v-btn>
         </v-card-actions>
@@ -233,7 +330,10 @@
     </v-dialog>
 
     <!-- 消息提示 -->
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color">
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+    >
       {{ snackbar.text }}
     </v-snackbar>
   </div>
@@ -274,7 +374,7 @@ const snackbar = ref({
   color: 'success'
 })
 
-const showSnackbar = (text: string, color: string = 'success') => {
+const showSnackbar = (text: string, color = 'success') => {
   snackbar.value.text = text
   snackbar.value.color = color
   snackbar.value.show = true

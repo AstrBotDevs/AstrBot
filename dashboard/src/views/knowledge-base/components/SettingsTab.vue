@@ -1,16 +1,23 @@
 <template>
   <div class="settings-tab">
     <v-card elevation="2">
-      <v-card-title class="pa-4">{{ t('settings.title') }}</v-card-title>
+      <v-card-title class="pa-4">
+        {{ t('settings.title') }}
+      </v-card-title>
       <v-divider />
 
       <v-card-text class="pa-6">
         <v-form ref="formRef">
           <!-- 基本设置 -->
-          <h3 class="text-h6 mb-4">{{ t('settings.basic') }}</h3>
+          <h3 class="text-h6 mb-4">
+            {{ t('settings.basic') }}
+          </h3>
 
           <v-row>
-            <v-col cols="12" md="6">
+            <v-col
+              cols="12"
+              md="6"
+            >
               <v-text-field
                 v-model.number="formData.chunk_size"
                 :label="t('settings.chunkSize')"
@@ -19,7 +26,10 @@
                 density="comfortable"
               />
             </v-col>
-            <v-col cols="12" md="6">
+            <v-col
+              cols="12"
+              md="6"
+            >
               <v-text-field
                 v-model.number="formData.chunk_overlap"
                 :label="t('settings.chunkOverlap')"
@@ -31,10 +41,15 @@
           </v-row>
 
           <!-- 检索设置 -->
-          <h3 class="text-h6 mb-4 mt-6">{{ t('settings.retrieval') }}</h3>
+          <h3 class="text-h6 mb-4 mt-6">
+            {{ t('settings.retrieval') }}
+          </h3>
 
           <v-row>
-            <v-col cols="12" md="6">
+            <v-col
+              cols="12"
+              md="6"
+            >
               <v-text-field
                 v-model.number="formData.top_k_dense"
                 :label="t('settings.topKDense')"
@@ -43,7 +58,10 @@
                 density="comfortable"
               />
             </v-col>
-            <v-col cols="12" md="6">
+            <v-col
+              cols="12"
+              md="6"
+            >
               <v-text-field
                 v-model.number="formData.top_k_sparse"
                 :label="t('settings.topKSparse')"
@@ -64,10 +82,15 @@
           </v-row>
 
           <!-- 模型设置 -->
-          <h3 class="text-h6 mb-4 mt-6">{{ t('settings.embeddingProvider') }}</h3>
+          <h3 class="text-h6 mb-4 mt-6">
+            {{ t('settings.embeddingProvider') }}
+          </h3>
 
           <v-row>
-            <v-col cols="12" md="6">
+            <v-col
+              cols="12"
+              md="6"
+            >
               <v-select
                 v-model="formData.embedding_provider_id"
                 :items="embeddingProviders"
@@ -76,11 +99,14 @@
                 :label="t('settings.embeddingProvider')"
                 variant="outlined"
                 density="comfortable"
-                @update:model-value="handleEmbeddingProviderChange"
                 :disabled="true"
+                @update:model-value="handleEmbeddingProviderChange"
               />
             </v-col>
-            <v-col cols="12" md="6">
+            <v-col
+              cols="12"
+              md="6"
+            >
               <v-select
                 v-model="formData.rerank_provider_id"
                 :items="rerankProviders"
@@ -94,11 +120,20 @@
             </v-col>
           </v-row>
 
-          <v-alert type="info" variant="tonal" class="mt-4">
+          <v-alert
+            type="info"
+            variant="tonal"
+            class="mt-4"
+          >
             {{ t('settings.tips') }}
           </v-alert>
 
-          <v-alert type="warning" variant="tonal" class="mt-4" v-if="showEmbeddingWarning">
+          <v-alert
+            v-if="showEmbeddingWarning"
+            type="warning"
+            variant="tonal"
+            class="mt-4"
+          >
             <strong>注意:</strong> 修改嵌入模型会导致现有的向量数据失效,建议重新上传文档。不同的嵌入模型生成的向量不兼容,可能导致检索结果不准确。
           </v-alert>
         </v-form>
@@ -112,8 +147,8 @@
           color="primary"
           variant="elevated"
           prepend-icon="mdi-content-save"
-          @click="saveSettings"
           :loading="saving"
+          @click="saveSettings"
         >
           {{ t('settings.save') }}
         </v-btn>
@@ -121,19 +156,32 @@
     </v-card>
 
     <!-- 消息提示 -->
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color">
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+    >
       {{ snackbar.text }}
     </v-snackbar>
 
     <!-- Embedding Provider修改确认对话框 -->
-    <v-dialog v-model="embeddingChangeDialog" max-width="500px" persistent>
+    <v-dialog
+      v-model="embeddingChangeDialog"
+      max-width="500px"
+      persistent
+    >
       <v-card>
         <v-card-title class="bg-warning text-white">
-          <v-icon class="mr-2">mdi-alert</v-icon>
+          <v-icon class="mr-2">
+            mdi-alert
+          </v-icon>
           确认修改嵌入模型
         </v-card-title>
         <v-card-text class="pa-6">
-          <v-alert type="warning" variant="tonal" class="mb-4">
+          <v-alert
+            type="warning"
+            variant="tonal"
+            class="mb-4"
+          >
             <strong>警告:</strong> 修改嵌入模型将导致以下影响:
           </v-alert>
           <ul class="text-body-2">
@@ -148,10 +196,17 @@
         </v-card-text>
         <v-card-actions class="pa-4">
           <v-spacer />
-          <v-btn variant="text" @click="cancelEmbeddingChange">
+          <v-btn
+            variant="text"
+            @click="cancelEmbeddingChange"
+          >
             取消
           </v-btn>
-          <v-btn color="warning" variant="elevated" @click="confirmEmbeddingChange">
+          <v-btn
+            color="warning"
+            variant="elevated"
+            @click="confirmEmbeddingChange"
+          >
             确认修改
           </v-btn>
         </v-card-actions>
@@ -189,7 +244,7 @@ const snackbar = ref({
   color: 'success'
 })
 
-const showSnackbar = (text: string, color: string = 'success') => {
+const showSnackbar = (text: string, color = 'success') => {
   snackbar.value.text = text
   snackbar.value.color = color
   snackbar.value.show = true

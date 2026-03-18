@@ -2,9 +2,21 @@
   <div class="cron-page">
     <div class="d-flex align-center justify-space-between mb-4">
       <div>
-        <div class="d-flex align-center" style="gap: 8px;">
-          <h2 class="text-h5 font-weight-bold">{{ tm('page.title') }}</h2>
-          <v-chip size="x-small" color="orange-darken-2" variant="tonal" label>{{ tm('page.beta') }}</v-chip>
+        <div
+          class="d-flex align-center"
+          style="gap: 8px;"
+        >
+          <h2 class="text-h5 font-weight-bold">
+            {{ tm('page.title') }}
+          </h2>
+          <v-chip
+            size="x-small"
+            color="orange-darken-2"
+            variant="tonal"
+            label
+          >
+            {{ tm('page.beta') }}
+          </v-chip>
         </div>
         <div class="text-body-2 text-medium-emphasis">
           {{ tm('page.subtitle') }}
@@ -14,51 +26,117 @@
           <span v-else>{{ tm('page.proactive.unsupported') }}</span>
         </div>
       </div>
-      <div class="d-flex align-center" style="gap: 8px;">
-        <v-btn variant="tonal" color="primary" @click="openCreate">{{ tm('actions.create') }}</v-btn>
-        <v-btn variant="tonal" color="primary" :loading="loading" @click="loadJobs">{{ tm('actions.refresh') }}</v-btn>
+      <div
+        class="d-flex align-center"
+        style="gap: 8px;"
+      >
+        <v-btn
+          variant="tonal"
+          color="primary"
+          @click="openCreate"
+        >
+          {{ tm('actions.create') }}
+        </v-btn>
+        <v-btn
+          variant="tonal"
+          color="primary"
+          :loading="loading"
+          @click="loadJobs"
+        >
+          {{ tm('actions.refresh') }}
+        </v-btn>
       </div>
     </div>
 
-    <v-card class="rounded-lg" variant="flat">
+    <v-card
+      class="rounded-lg"
+      variant="flat"
+    >
       <v-card-text>
         <div class="d-flex align-center justify-space-between mb-3">
-          <div class="text-subtitle-1 font-weight-bold">{{ tm('table.title') }}</div>
+          <div class="text-subtitle-1 font-weight-bold">
+            {{ tm('table.title') }}
+          </div>
         </div>
 
-        <v-alert v-if="!jobs.length && !loading" type="info" variant="tonal">{{ tm('table.empty') }}</v-alert>
+        <v-alert
+          v-if="!jobs.length && !loading"
+          type="info"
+          variant="tonal"
+        >
+          {{ tm('table.empty') }}
+        </v-alert>
 
-        <v-data-table :items="jobs" :headers="headers" :loading="loading" item-key="job_id" density="comfortable"
-          class="elevation-0">
+        <v-data-table
+          :items="jobs"
+          :headers="headers"
+          :loading="loading"
+          item-key="job_id"
+          density="comfortable"
+          class="elevation-0"
+        >
           <template #item.name="{ item }">
             <div class="py-4">
-              <div class="font-weight-medium">{{ item.name }}</div>
-              <div class="text-caption text-medium-emphasis">{{ item.description }}</div>
+              <div class="font-weight-medium">
+                {{ item.name }}
+              </div>
+              <div class="text-caption text-medium-emphasis">
+                {{ item.description }}
+              </div>
             </div>
           </template>
           <template #item.type="{ item }">
-            <v-chip size="small" :color="item.run_once ? 'orange' : 'primary'" variant="tonal">
+            <v-chip
+              size="small"
+              :color="item.run_once ? 'orange' : 'primary'"
+              variant="tonal"
+            >
               {{ jobTypeLabel(item) }}
             </v-chip>
           </template>
           <template #item.cron_expression="{ item }">
-            <div v-if="item.run_once">{{ formatTime(item.run_at) }}</div>
+            <div v-if="item.run_once">
+              {{ formatTime(item.run_at) }}
+            </div>
             <div v-else>
               <div>{{ item.cron_expression || tm('table.notAvailable') }}</div>
-              <div class="text-caption text-medium-emphasis">{{ item.timezone || tm('table.timezoneLocal') }}</div>
+              <div class="text-caption text-medium-emphasis">
+                {{ item.timezone || tm('table.timezoneLocal') }}
+              </div>
             </div>
           </template>
           <template #item.session="{ item }">
             <div>{{ item.session || tm('table.notAvailable') }}</div>
           </template>
-          <template #item.next_run_time="{ item }">{{ formatTime(item.next_run_time) }}</template>
-          <template #item.last_run_at="{ item }">{{ formatTime(item.last_run_at) }}</template>
-          <template #item.note="{ item }">{{ item.note || tm('table.notAvailable') }}</template>
+          <template #item.next_run_time="{ item }">
+            {{ formatTime(item.next_run_time) }}
+          </template>
+          <template #item.last_run_at="{ item }">
+            {{ formatTime(item.last_run_at) }}
+          </template>
+          <template #item.note="{ item }">
+            {{ item.note || tm('table.notAvailable') }}
+          </template>
           <template #item.actions="{ item }">
-            <div class="d-flex align-center flex-nowrap" style="gap: 12px; min-width: 140px;">
-              <v-switch v-model="item.enabled" inset density="compact" hide-details color="primary"
-                class="mt-0" @change="toggleJob(item)" />
-              <v-btn size="small" variant="text" color="error" @click="deleteJob(item)">
+            <div
+              class="d-flex align-center flex-nowrap"
+              style="gap: 12px; min-width: 140px;"
+            >
+              <v-switch
+                v-model="item.enabled"
+                inset
+                density="compact"
+                hide-details
+                color="primary"
+                class="mt-0"
+                @change="toggleJob(item)"
+              />
+              <v-btn
+                size="small"
+                variant="text"
+                color="error"
+                @click="deleteJob(item)"
+              >
                 {{ tm('actions.delete') }}
               </v-btn>
             </div>
@@ -67,33 +145,97 @@
       </v-card-text>
     </v-card>
 
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="2600">
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+      timeout="2600"
+    >
       {{ snackbar.message }}
     </v-snackbar>
 
-    <v-dialog v-model="createDialog" max-width="560">
+    <v-dialog
+      v-model="createDialog"
+      max-width="560"
+    >
       <v-card>
-        <v-card-title class="text-h6">{{ tm('form.title') }}</v-card-title>
+        <v-card-title class="text-h6">
+          {{ tm('form.title') }}
+        </v-card-title>
         <v-card-subtitle class="text-body-2 text-medium-emphasis">
           {{ tm('form.chatHint') }}
         </v-card-subtitle>
         <v-card-text>
-          <v-switch v-model="newJob.run_once" :label="tm('form.runOnce')" inset color="primary" hide-details />
-          <v-text-field v-model="newJob.name" :label="tm('form.name')" variant="outlined" density="comfortable" />
-          <v-text-field v-model="newJob.note" :label="tm('form.note')" variant="outlined" density="comfortable" />
-          <v-text-field v-if="!newJob.run_once" v-model="newJob.cron_expression" :label="tm('form.cron')"
-            :placeholder="tm('form.cronPlaceholder')" variant="outlined" density="comfortable" />
-          <v-text-field v-else v-model="newJob.run_at" :label="tm('form.runAt')" type="datetime-local"
-            variant="outlined" density="comfortable" />
-          <v-text-field v-model="newJob.session" :label="tm('form.session')" variant="outlined" density="comfortable" />
-          <v-text-field v-model="newJob.timezone" :label="tm('form.timezone')" variant="outlined"
-            density="comfortable" />
-          <v-switch v-model="newJob.enabled" :label="tm('form.enabled')" inset color="primary" hide-details />
+          <v-switch
+            v-model="newJob.run_once"
+            :label="tm('form.runOnce')"
+            inset
+            color="primary"
+            hide-details
+          />
+          <v-text-field
+            v-model="newJob.name"
+            :label="tm('form.name')"
+            variant="outlined"
+            density="comfortable"
+          />
+          <v-text-field
+            v-model="newJob.note"
+            :label="tm('form.note')"
+            variant="outlined"
+            density="comfortable"
+          />
+          <v-text-field
+            v-if="!newJob.run_once"
+            v-model="newJob.cron_expression"
+            :label="tm('form.cron')"
+            :placeholder="tm('form.cronPlaceholder')"
+            variant="outlined"
+            density="comfortable"
+          />
+          <v-text-field
+            v-else
+            v-model="newJob.run_at"
+            :label="tm('form.runAt')"
+            type="datetime-local"
+            variant="outlined"
+            density="comfortable"
+          />
+          <v-text-field
+            v-model="newJob.session"
+            :label="tm('form.session')"
+            variant="outlined"
+            density="comfortable"
+          />
+          <v-text-field
+            v-model="newJob.timezone"
+            :label="tm('form.timezone')"
+            variant="outlined"
+            density="comfortable"
+          />
+          <v-switch
+            v-model="newJob.enabled"
+            :label="tm('form.enabled')"
+            inset
+            color="primary"
+            hide-details
+          />
         </v-card-text>
         <v-card-actions class="justify-end">
-          <v-btn variant="text" @click="createDialog = false">{{ tm('actions.cancel') }}</v-btn>
-          <v-btn variant="tonal" color="primary" :loading="creating" @click="createJob">{{ tm('actions.submit')
-            }}</v-btn>
+          <v-btn
+            variant="text"
+            @click="createDialog = false"
+          >
+            {{ tm('actions.cancel') }}
+          </v-btn>
+          <v-btn
+            variant="tonal"
+            color="primary"
+            :loading="creating"
+            @click="createJob"
+          >
+            {{ tm('actions.submit')
+            }}
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

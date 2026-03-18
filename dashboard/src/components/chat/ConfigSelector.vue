@@ -1,75 +1,112 @@
 <template>
-    <div>
-        <v-list-item
-            class="styled-menu-item"
-            rounded="md"
-            @click="openDialog"
-            :disabled="loadingConfigs || saving"
-        >
-            <template v-slot:prepend>
-                <v-icon icon="mdi-cog-outline" size="small"></v-icon>
-            </template>
-            <v-list-item-title>
-                {{ tm('config.title') }}
-            </v-list-item-title>
-            <v-list-item-subtitle class="text-caption">
-                {{ selectedConfigLabel }}
-            </v-list-item-subtitle>
-            <template v-slot:append>
-                <v-icon icon="mdi-chevron-right" size="small" class="text-medium-emphasis"></v-icon>
-            </template>
-        </v-list-item>
+  <div>
+    <v-list-item
+      class="styled-menu-item"
+      rounded="md"
+      :disabled="loadingConfigs || saving"
+      @click="openDialog"
+    >
+      <template #prepend>
+        <v-icon
+          icon="mdi-cog-outline"
+          size="small"
+        />
+      </template>
+      <v-list-item-title>
+        {{ tm('config.title') }}
+      </v-list-item-title>
+      <v-list-item-subtitle class="text-caption">
+        {{ selectedConfigLabel }}
+      </v-list-item-subtitle>
+      <template #append>
+        <v-icon
+          icon="mdi-chevron-right"
+          size="small"
+          class="text-medium-emphasis"
+        />
+      </template>
+    </v-list-item>
 
-        <v-dialog v-model="dialog" max-width="480">
-            <v-card>
-                <v-card-title class="d-flex align-center justify-space-between">
-                    <span>选择配置文件</span>
-                    <v-btn icon variant="text" @click="closeDialog">
-                        <v-icon>mdi-close</v-icon>
-                    </v-btn>
-                </v-card-title>
-                <v-card-text>
-                    <div v-if="loadingConfigs" class="text-center py-6">
-                        <v-progress-circular indeterminate color="primary"></v-progress-circular>
-                    </div>
+    <v-dialog
+      v-model="dialog"
+      max-width="480"
+    >
+      <v-card>
+        <v-card-title class="d-flex align-center justify-space-between">
+          <span>选择配置文件</span>
+          <v-btn
+            icon
+            variant="text"
+            @click="closeDialog"
+          >
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-card-text>
+          <div
+            v-if="loadingConfigs"
+            class="text-center py-6"
+          >
+            <v-progress-circular
+              indeterminate
+              color="primary"
+            />
+          </div>
 
-                    <v-list v-else class="config-list" density="comfortable">
-                        <v-list-item
-                            v-for="config in configOptions"
-                            :key="config.id"
-                            :active="tempSelectedConfig === config.id"
-                            rounded="lg"
-                            variant="text"
-                            @click="tempSelectedConfig = config.id"
-                        >
-                            <v-list-item-title>{{ config.name }}</v-list-item-title>
-                            <v-list-item-subtitle class="text-caption text-grey">
-                                {{ config.id }}
-                            </v-list-item-subtitle>
-                            <template #append>
-                                <v-icon v-if="tempSelectedConfig === config.id" color="primary">mdi-check</v-icon>
-                            </template>
-                        </v-list-item>
-                        <div v-if="configOptions.length === 0" class="text-center text-body-2 text-medium-emphasis">
-                            暂无可选配置，请先在配置页创建。
-                        </div>
-                    </v-list>
-                </v-card-text>
-                <v-card-actions>
-                    <v-spacer></v-spacer>
-                    <v-btn variant="text" @click="closeDialog">取消</v-btn>
-                    <v-btn
-                        color="primary"
-                        @click="confirmSelection"
-                        :disabled="!tempSelectedConfig"
-                        :loading="saving"
-                    >
-                        应用
-                    </v-btn>
-                </v-card-actions>
-            </v-card>
-        </v-dialog>
-    </div>
+          <v-list
+            v-else
+            class="config-list"
+            density="comfortable"
+          >
+            <v-list-item
+              v-for="config in configOptions"
+              :key="config.id"
+              :active="tempSelectedConfig === config.id"
+              rounded="lg"
+              variant="text"
+              @click="tempSelectedConfig = config.id"
+            >
+              <v-list-item-title>{{ config.name }}</v-list-item-title>
+              <v-list-item-subtitle class="text-caption text-grey">
+                {{ config.id }}
+              </v-list-item-subtitle>
+              <template #append>
+                <v-icon
+                  v-if="tempSelectedConfig === config.id"
+                  color="primary"
+                >
+                  mdi-check
+                </v-icon>
+              </template>
+            </v-list-item>
+            <div
+              v-if="configOptions.length === 0"
+              class="text-center text-body-2 text-medium-emphasis"
+            >
+              暂无可选配置，请先在配置页创建。
+            </div>
+          </v-list>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn
+            variant="text"
+            @click="closeDialog"
+          >
+            取消
+          </v-btn>
+          <v-btn
+            color="primary"
+            :disabled="!tempSelectedConfig"
+            :loading="saving"
+            @click="confirmSelection"
+          >
+            应用
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+  </div>
 </template>
 
 <script setup lang="ts">

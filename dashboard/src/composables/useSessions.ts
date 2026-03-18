@@ -13,7 +13,7 @@ export interface Session {
     created_at: string;
 }
 
-export function useSessions(chatboxMode: boolean = false) {
+export function useSessions(chatboxMode = false) {
     const router = useRouter();
     const sessions = ref<Session[]>([]);
     const selectedSessions = ref<string[]>([]);

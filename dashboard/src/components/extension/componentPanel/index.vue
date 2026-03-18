@@ -155,16 +155,35 @@ watch(viewMode, async (mode) => {
 <template>
   <v-row>
     <v-col cols="12">
-      <v-card variant="flat" style="background-color: transparent">
+      <v-card
+        variant="flat"
+        style="background-color: transparent"
+      >
         <v-card-text style="padding: 20px 12px; padding-top: 0px;">
           <div class="d-flex justify-space-between align-center mb-6 flex-wrap ga-3">
-            <v-btn-toggle v-model="viewMode" color="primary" variant="outlined" density="comfortable" mandatory>
+            <v-btn-toggle
+              v-model="viewMode"
+              color="primary"
+              variant="outlined"
+              density="comfortable"
+              mandatory
+            >
               <v-btn value="commands">
-                <v-icon size="18" class="mr-1">mdi-console-line</v-icon>
+                <v-icon
+                  size="18"
+                  class="mr-1"
+                >
+                  mdi-console-line
+                </v-icon>
                 {{ tm('type.command') }}
               </v-btn>
               <v-btn value="tools">
-                <v-icon size="18" class="mr-1">mdi-function-variant</v-icon>
+                <v-icon
+                  size="18"
+                  class="mr-1"
+                >
+                  mdi-function-variant
+                </v-icon>
                 {{ tmTool('functionTools.title') }}
               </v-btn>
             </v-btn-toggle>
@@ -185,30 +204,46 @@ watch(viewMode, async (mode) => {
           <div v-if="viewMode === 'commands'">
             <CommandFilters
               :plugin-filter="pluginFilter"
-              @update:plugin-filter="pluginFilter = $event"
               :type-filter="typeFilter"
-              @update:type-filter="typeFilter = $event"
               :permission-filter="permissionFilter"
-              @update:permission-filter="permissionFilter = $event"
               :status-filter="statusFilter"
-              @update:status-filter="statusFilter = $event"
               :show-system-plugins="showSystemPlugins"
-              @update:show-system-plugins="showSystemPlugins = $event"
               :search-query="searchQuery"
-              @update:search-query="searchQuery = $event"
               :available-plugins="availablePlugins"
               :has-system-plugin-conflict="hasSystemPluginConflict"
               :effective-show-system-plugins="effectiveShowSystemPlugins"
+              @update:plugin-filter="pluginFilter = $event"
+              @update:type-filter="typeFilter = $event"
+              @update:permission-filter="permissionFilter = $event"
+              @update:status-filter="statusFilter = $event"
+              @update:show-system-plugins="showSystemPlugins = $event"
+              @update:search-query="searchQuery = $event"
             >
               <template #stats>
                 <div class="d-flex align-center">
-                  <v-icon size="18" color="primary" class="mr-1">mdi-console-line</v-icon>
+                  <v-icon
+                    size="18"
+                    color="primary"
+                    class="mr-1"
+                  >
+                    mdi-console-line
+                  </v-icon>
                   <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('summary.total') }}:</span>
                   <span class="text-body-1 font-weight-bold text-primary">{{ filteredCommands.length }}</span>
                 </div>
-                <v-divider vertical class="mx-1" style="height: 20px;" />
+                <v-divider
+                  vertical
+                  class="mx-1"
+                  style="height: 20px;"
+                />
                 <div class="d-flex align-center">
-                  <v-icon size="18" color="error" class="mr-1">mdi-close-circle-outline</v-icon>
+                  <v-icon
+                    size="18"
+                    color="error"
+                    class="mr-1"
+                  >
+                    mdi-close-circle-outline
+                  </v-icon>
                   <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('summary.disabled') }}:</span>
                   <span class="text-body-1 font-weight-bold text-error">{{ summary.disabled }}</span>
                 </div>
@@ -223,8 +258,10 @@ watch(viewMode, async (mode) => {
               prominent
               border="start"
             >
-              <template v-slot:prepend>
-                <v-icon size="28">mdi-alert-circle</v-icon>
+              <template #prepend>
+                <v-icon size="28">
+                  mdi-alert-circle
+                </v-icon>
               </template>
               <v-alert-title class="text-subtitle-1 font-weight-bold">
                 {{ tm('conflictAlert.title') }}
@@ -233,7 +270,12 @@ watch(viewMode, async (mode) => {
                 {{ tm('conflictAlert.description', { count: summary.conflicts }) }}
               </div>
               <div class="text-body-2 mt-2">
-                <v-icon size="16" class="mr-1">mdi-lightbulb-outline</v-icon>
+                <v-icon
+                  size="16"
+                  class="mr-1"
+                >
+                  mdi-lightbulb-outline
+                </v-icon>
                 {{ tm('conflictAlert.hint') }}
               </div>
             </v-alert>
@@ -255,24 +297,40 @@ watch(viewMode, async (mode) => {
               <div style="min-width: 240px; max-width: 380px; flex: 1;">
                 <v-text-field
                   :model-value="toolSearch"
-                  @update:model-value="toolSearch = normalizeTextInput($event)"
                   prepend-inner-icon="mdi-magnify"
                   :label="tmTool('functionTools.search')"
                   variant="outlined"
                   density="compact"
                   hide-details
                   clearable
+                  @update:model-value="toolSearch = normalizeTextInput($event)"
                 />
               </div>
               <div class="d-flex align-center ga-2">
                 <div class="d-flex align-center">
-                  <v-icon size="18" color="primary" class="mr-1">mdi-function-variant</v-icon>
+                  <v-icon
+                    size="18"
+                    color="primary"
+                    class="mr-1"
+                  >
+                    mdi-function-variant
+                  </v-icon>
                   <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('summary.total') }}:</span>
                   <span class="text-body-1 font-weight-bold text-primary">{{ filteredTools.length }}</span>
                 </div>
-                <v-divider vertical class="mx-1" style="height: 20px;" />
+                <v-divider
+                  vertical
+                  class="mx-1"
+                  style="height: 20px;"
+                />
                 <div class="d-flex align-center">
-                  <v-icon size="18" color="success" class="mr-1">mdi-check-circle-outline</v-icon>
+                  <v-icon
+                    size="18"
+                    color="success"
+                    class="mr-1"
+                  >
+                    mdi-check-circle-outline
+                  </v-icon>
                   <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('status.enabled') }}:</span>
                   <span class="text-body-1 font-weight-bold text-success">{{ filteredTools.filter(t => t.active).length }}</span>
                 </div>
@@ -293,25 +351,30 @@ watch(viewMode, async (mode) => {
   <!-- 重命名对话框 -->
   <RenameDialog
     :show="renameDialog.show"
-    @update:show="renameDialog.show = $event"
     :new-name="renameDialog.newName"
-    @update:new-name="renameDialog.newName = $event"
     :aliases="renameDialog.aliases"
-    @update:aliases="renameDialog.aliases = $event"
     :command="renameDialog.command"
     :loading="renameDialog.loading"
+    @update:show="renameDialog.show = $event"
+    @update:new-name="renameDialog.newName = $event"
+    @update:aliases="renameDialog.aliases = $event"
     @confirm="handleConfirmRename"
   />
 
   <!-- 详情对话框 -->
   <DetailsDialog
     :show="detailsDialog.show"
-    @update:show="detailsDialog.show = $event"
     :command="detailsDialog.command"
+    @update:show="detailsDialog.show = $event"
   />
 
   <!-- Snackbar -->
-  <v-snackbar :timeout="2000" elevation="24" :color="snackbar.color" v-model="snackbar.show">
+  <v-snackbar
+    v-model="snackbar.show"
+    :timeout="2000"
+    elevation="24"
+    :color="snackbar.color"
+  >
     {{ snackbar.message }}
   </v-snackbar>
 </template>

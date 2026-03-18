@@ -1,19 +1,33 @@
 <template>
   <div class="provider-page">
-    <v-container fluid class="pa-0">
+    <v-container
+      fluid
+      class="pa-0"
+    >
       <!-- 页面标题 -->
       <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-4">
         <div>
           <h1 class="text-h1 font-weight-bold mb-2">
-            <v-icon color="black" class="me-2">mdi-creation</v-icon>{{ tm('title') }}
+            <v-icon
+              color="black"
+              class="me-2"
+            >
+              mdi-creation
+            </v-icon>{{ tm('title') }}
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-4">
             {{ tm('subtitle') }}
           </p>
         </div>
         <div v-if="selectedProviderType !== 'chat_completion'">
-          <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddProviderDialog = true"
-            rounded="xl" size="x-large">
+          <v-btn
+            color="primary"
+            prepend-icon="mdi-plus"
+            variant="tonal"
+            rounded="xl"
+            size="x-large"
+            @click="showAddProviderDialog = true"
+          >
             {{ tm('providers.addProvider') }}
           </v-btn>
         </div>
@@ -21,17 +35,36 @@
 
       <div>
         <!-- Provider Type 标签页 -->
-        <v-tabs v-model="selectedProviderType" bg-color="transparent" class="mb-4">
-          <v-tab v-for="type in providerTypes" :key="type.value" :value="type.value" class="font-weight-medium px-3">
-            <v-icon start>{{ type.icon }}</v-icon>
+        <v-tabs
+          v-model="selectedProviderType"
+          bg-color="transparent"
+          class="mb-4"
+        >
+          <v-tab
+            v-for="type in providerTypes"
+            :key="type.value"
+            :value="type.value"
+            class="font-weight-medium px-3"
+          >
+            <v-icon start>
+              {{ type.icon }}
+            </v-icon>
             {{ type.label }}
           </v-tab>
         </v-tabs>
 
         <!-- Chat Completion: 左侧列表 + 右侧上下卡片布局 -->
-        <div v-if="selectedProviderType === 'chat_completion'" class="d-flex align-center justify-center">
+        <div
+          v-if="selectedProviderType === 'chat_completion'"
+          class="d-flex align-center justify-center"
+        >
           <v-row style="max-width: 1500px; ">
-            <v-col cols="12" md="4" lg="3" class="pr-md-4">
+            <v-col
+              cols="12"
+              md="4"
+              lg="3"
+              class="pr-md-4"
+            >
               <ProviderSourcesPanel
                 :displayed-provider-sources="displayedProviderSources"
                 :selected-provider-source="selectedProviderSource"
@@ -45,20 +78,43 @@
               />
             </v-col>
 
-            <v-col cols="12" md="8" lg="9">
-              <v-card class="provider-config-card h-100" elevation="0" style="overflow-y: auto;">
+            <v-col
+              cols="12"
+              md="8"
+              lg="9"
+            >
+              <v-card
+                class="provider-config-card h-100"
+                elevation="0"
+                style="overflow-y: auto;"
+              >
                 <v-card-title class="d-flex align-center justify-space-between flex-wrap ga-3 pt-4 pl-5">
-                  <div class="d-flex align-center ga-3" v-if="selectedProviderSource">
+                  <div
+                    v-if="selectedProviderSource"
+                    class="d-flex align-center ga-3"
+                  >
                     <div>
-                      <div class="text-h4 font-weight-bold">{{ selectedProviderSource.id }}</div>
-                      <div class="text-caption text-medium-emphasis">{{ selectedProviderSource.api_base || 'N/A' }}
+                      <div class="text-h4 font-weight-bold">
+                        {{ selectedProviderSource.id }}
+                      </div>
+                      <div class="text-caption text-medium-emphasis">
+                        {{ selectedProviderSource.api_base || 'N/A' }}
                       </div>
                     </div>
                   </div>
 
-                  <div class="d-flex align-center ga-2" v-if="selectedProviderSource">
-                    <v-btn color="success" prepend-icon="mdi-check" :loading="savingSource"
-                      :disabled="!isSourceModified" @click="saveProviderSource" variant="flat">
+                  <div
+                    v-if="selectedProviderSource"
+                    class="d-flex align-center ga-2"
+                  >
+                    <v-btn
+                      color="success"
+                      prepend-icon="mdi-check"
+                      :loading="savingSource"
+                      :disabled="!isSourceModified"
+                      variant="flat"
+                      @click="saveProviderSource"
+                    >
                       {{ tm('providerSources.save') }}
                     </v-btn>
                   </div>
@@ -67,26 +123,42 @@
                 <v-card-text>
                   <template v-if="selectedProviderSource">
                     <div>
-                      <AstrBotConfig v-if="basicSourceConfig" :iterable="basicSourceConfig" :metadata="providerSourceSchema"
-                        metadataKey="provider" :is-editing="true" />
+                      <AstrBotConfig
+                        v-if="basicSourceConfig"
+                        :iterable="basicSourceConfig"
+                        :metadata="providerSourceSchema"
+                        metadata-key="provider"
+                        :is-editing="true"
+                      />
                     </div>
 
-                    <v-expansion-panels variant="accordion" class="mb-2">
-                      <v-expansion-panel elevation="0" class="border rounded-lg">
+                    <v-expansion-panels
+                      variant="accordion"
+                      class="mb-2"
+                    >
+                      <v-expansion-panel
+                        elevation="0"
+                        class="border rounded-lg"
+                      >
                         <v-expansion-panel-title>
                           <span class="font-weight-medium">{{ tm('providerSources.advancedConfig') }}</span>
                         </v-expansion-panel-title>
                         <v-expansion-panel-text>
-                          <AstrBotConfig v-if="advancedSourceConfig" :iterable="advancedSourceConfig"
-                            :metadata="providerSourceSchema" metadataKey="provider" :is-editing="true" />
+                          <AstrBotConfig
+                            v-if="advancedSourceConfig"
+                            :iterable="advancedSourceConfig"
+                            :metadata="providerSourceSchema"
+                            metadata-key="provider"
+                            :is-editing="true"
+                          />
                         </v-expansion-panel-text>
                       </v-expansion-panel>
                     </v-expansion-panels>
 
                     <ProviderModelsPanel
+                      v-model:model-search="modelSearch"
                       :entries="filteredMergedModelEntries"
                       :available-count="availableModels.length"
-                      v-model:model-search="modelSearch"
                       :loading-models="loadingModels"
                       :is-source-modified="isSourceModified"
                       :supports-image-input="supportsImageInput"
@@ -104,9 +176,19 @@
                       @add-model-provider="addModelProvider"
                     />
                   </template>
-                  <div v-else class="text-center py-8 text-medium-emphasis">
-                    <v-icon size="48" color="grey-lighten-1">mdi-cursor-default-click</v-icon>
-                    <p class="mt-2">{{ tm('providerSources.selectHint') }}</p>
+                  <div
+                    v-else
+                    class="text-center py-8 text-medium-emphasis"
+                  >
+                    <v-icon
+                      size="48"
+                      color="grey-lighten-1"
+                    >
+                      mdi-cursor-default-click
+                    </v-icon>
+                    <p class="mt-2">
+                      {{ tm('providerSources.selectHint') }}
+                    </p>
                   </div>
                 </v-card-text>
               </v-card>
@@ -117,27 +199,62 @@
         <!-- 其他类型: 卡片布局 -->
         <template v-else>
           <v-row v-if="filteredProviders.length === 0">
-            <v-col cols="12" class="text-center pa-8">
-              <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
-              <p class="text-grey mt-4">{{ getEmptyText() }}</p>
+            <v-col
+              cols="12"
+              class="text-center pa-8"
+            >
+              <v-icon
+                size="64"
+                color="grey-lighten-1"
+              >
+                mdi-api-off
+              </v-icon>
+              <p class="text-grey mt-4">
+                {{ getEmptyText() }}
+              </p>
             </v-col>
           </v-row>
           <v-row v-else>
-            <v-col v-for="(provider, index) in filteredProviders" :key="index" cols="12" md="6" lg="4" xl="3">
-              <item-card :item="provider" title-field="id" enabled-field="enable"
-                :loading="isProviderTesting(provider.id)" @toggle-enabled="toggleProviderEnable(provider, !provider.enable)"
-                :bglogo="getProviderIcon(provider.provider)" @delete="deleteProvider" @edit="configExistingProvider"
-                @copy="copyProvider" :show-copy-button="true">
-
+            <v-col
+              v-for="(provider, index) in filteredProviders"
+              :key="index"
+              cols="12"
+              md="6"
+              lg="4"
+              xl="3"
+            >
+              <item-card
+                :item="provider"
+                title-field="id"
+                enabled-field="enable"
+                :loading="isProviderTesting(provider.id)"
+                :bglogo="getProviderIcon(provider.provider)"
+                :show-copy-button="true"
+                @toggle-enabled="toggleProviderEnable(provider, !provider.enable)"
+                @delete="deleteProvider"
+                @edit="configExistingProvider"
+                @copy="copyProvider"
+              >
                 <template #item-details="{ item }">
                   <!-- 测试状态 chip -->
-                  <v-tooltip v-if="getProviderStatus(item.id)" location="top" max-width="300">
-                    <template v-slot:activator="{ props }">
-                      <v-chip v-bind="props" :color="getStatusColor(getProviderStatus(item.id).status)" size="small">
-                        <v-icon start size="small">
+                  <v-tooltip
+                    v-if="getProviderStatus(item.id)"
+                    location="top"
+                    max-width="300"
+                  >
+                    <template #activator="{ props }">
+                      <v-chip
+                        v-bind="props"
+                        :color="getStatusColor(getProviderStatus(item.id).status)"
+                        size="small"
+                      >
+                        <v-icon
+                          start
+                          size="small"
+                        >
                           {{ getProviderStatus(item.id).status === 'available' ? 'mdi-check-circle' :
                             getProviderStatus(item.id).status === 'unavailable' ? 'mdi-alert-circle' :
-                              'mdi-clock-outline' }}
+                            'mdi-clock-outline' }}
                         </v-icon>
                         {{ getStatusText(getProviderStatus(item.id).status) }}
                       </v-chip>
@@ -149,8 +266,15 @@
                   </v-tooltip>
                 </template>
                 <template #actions="{ item }">
-                  <v-btn style="z-index: 100000;" variant="tonal" color="info" rounded="xl" size="small"
-                    :loading="isProviderTesting(item.id)" @click="testSingleProvider(item)">
+                  <v-btn
+                    style="z-index: 100000;"
+                    variant="tonal"
+                    color="info"
+                    rounded="xl"
+                    size="small"
+                    :loading="isProviderTesting(item.id)"
+                    @click="testSingleProvider(item)"
+                  >
                     {{ tm('availability.test') }}
                   </v-btn>
                 </template>
@@ -162,42 +286,88 @@
     </v-container>
 
     <!-- 添加提供商对话框 -->
-    <AddNewProvider v-model:show="showAddProviderDialog" :metadata="configSchema"
-      @select-template="selectProviderTemplate" />
+    <AddNewProvider
+      v-model:show="showAddProviderDialog"
+      :metadata="configSchema"
+      @select-template="selectProviderTemplate"
+    />
 
     <!-- 手动添加模型对话框 -->
-    <v-dialog v-model="showManualModelDialog" max-width="400">
+    <v-dialog
+      v-model="showManualModelDialog"
+      max-width="400"
+    >
       <v-card :title="tm('models.manualDialogTitle')">
         <v-card-text class="py-4">
-          <v-text-field v-model="manualModelId" :label="tm('models.manualDialogModelLabel')" flat variant="solo-filled" autofocus clearable></v-text-field>
-          <v-text-field :model-value="manualProviderId" flat variant="solo-filled" :label="tm('models.manualDialogPreviewLabel')" persistent-hint
-            :hint="tm('models.manualDialogPreviewHint')"></v-text-field>
+          <v-text-field
+            v-model="manualModelId"
+            :label="tm('models.manualDialogModelLabel')"
+            flat
+            variant="solo-filled"
+            autofocus
+            clearable
+          />
+          <v-text-field
+            :model-value="manualProviderId"
+            flat
+            variant="solo-filled"
+            :label="tm('models.manualDialogPreviewLabel')"
+            persistent-hint
+            :hint="tm('models.manualDialogPreviewHint')"
+          />
         </v-card-text>
         <v-card-actions class="pa-4">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="showManualModelDialog = false">取消</v-btn>
-          <v-btn color="primary" @click="confirmManualModel">添加</v-btn>
+          <v-spacer />
+          <v-btn
+            variant="text"
+            @click="showManualModelDialog = false"
+          >
+            取消
+          </v-btn>
+          <v-btn
+            color="primary"
+            @click="confirmManualModel"
+          >
+            添加
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
     <!-- 配置对话框 -->
-    <v-dialog v-model="showProviderCfg" width="900" persistent>
+    <v-dialog
+      v-model="showProviderCfg"
+      width="900"
+      persistent
+    >
       <v-card
-        :title="updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') + ` ${newSelectedProviderName} ` + tm('dialogs.config.provider')">
+        :title="updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') + ` ${newSelectedProviderName} ` + tm('dialogs.config.provider')"
+      >
         <v-card-text class="py-4">
-          <AstrBotConfig :iterable="newSelectedProviderConfig" :metadata="configSchema"
-            metadataKey="provider" :is-editing="updatingMode" />
+          <AstrBotConfig
+            :iterable="newSelectedProviderConfig"
+            :metadata="configSchema"
+            metadata-key="provider"
+            :is-editing="updatingMode"
+          />
         </v-card-text>
 
-        <v-divider></v-divider>
+        <v-divider />
 
         <v-card-actions class="pa-4">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="showProviderCfg = false" :disabled="loading">
+          <v-spacer />
+          <v-btn
+            variant="text"
+            :disabled="loading"
+            @click="showProviderCfg = false"
+          >
             {{ tm('dialogs.config.cancel') }}
           </v-btn>
-          <v-btn color="primary" @click="newProvider" :loading="loading">
+          <v-btn
+            color="primary"
+            :loading="loading"
+            @click="newProvider"
+          >
             {{ tm('dialogs.config.save') }}
           </v-btn>
         </v-card-actions>
@@ -205,20 +375,35 @@
     </v-dialog>
 
     <!-- 已配置模型编辑对话框 -->
-    <v-dialog v-model="showProviderEditDialog" width="800">
+    <v-dialog
+      v-model="showProviderEditDialog"
+      width="800"
+    >
       <v-card :title="providerEditData?.id || tm('dialogs.config.editTitle')">
         <v-card-text class="py-4">
           <small style="color: gray;">不建议修改 ID，可能会导致指向该模型的相关配置（如默认模型、插件相关配置等）失效。旧版本 AstrBot 的 “提供商 ID” 是下方的 “ID”。</small>
-          <AstrBotConfig v-if="providerEditData" :iterable="providerEditData" :metadata="configSchema"
-            metadataKey="provider" :is-editing="true" />
+          <AstrBotConfig
+            v-if="providerEditData"
+            :iterable="providerEditData"
+            :metadata="configSchema"
+            metadata-key="provider"
+            :is-editing="true"
+          />
         </v-card-text>
         <v-card-actions class="pa-4">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="showProviderEditDialog = false"
-            :disabled="savingProviders.includes(providerEditData?.id)">
+          <v-spacer />
+          <v-btn
+            variant="text"
+            :disabled="savingProviders.includes(providerEditData?.id)"
+            @click="showProviderEditDialog = false"
+          >
             {{ tm('dialogs.config.cancel') }}
           </v-btn>
-          <v-btn color="primary" @click="saveEditedProvider" :loading="savingProviders.includes(providerEditData?.id)">
+          <v-btn
+            color="primary"
+            :loading="savingProviders.includes(providerEditData?.id)"
+            @click="saveEditedProvider"
+          >
             {{ tm('dialogs.config.save') }}
           </v-btn>
         </v-card-actions>
@@ -226,15 +411,29 @@
     </v-dialog>
 
     <!-- 消息提示 -->
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="top">
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+      :timeout="3000"
+      location="top"
+    >
       {{ snackbar.message }}
     </v-snackbar>
 
     <!-- Agent Runner 测试提示对话框 -->
-    <v-dialog v-model="showAgentRunnerDialog" max-width="520" persistent>
+    <v-dialog
+      v-model="showAgentRunnerDialog"
+      max-width="520"
+      persistent
+    >
       <v-card>
         <v-card-title class="text-h3 d-flex align-center">
-          <v-icon start class="me-2">mdi-information</v-icon>
+          <v-icon
+            start
+            class="me-2"
+          >
+            mdi-information
+          </v-icon>
           请前往「配置文件」页测试 Agent 执行器
         </v-card-title>
         <v-card-text class="py-4 text-body-1 text-medium-emphasis">
@@ -247,9 +446,21 @@
           要让机器人应用这个 Agent 执行器，你也需要前往修改 Agent 执行器。
         </v-card-text>
         <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn color="grey" variant="text" @click="showAgentRunnerDialog = false">好的</v-btn>
-          <v-btn color="primary" variant="flat" @click="goToConfigPage">点击前往</v-btn>
+          <v-spacer />
+          <v-btn
+            color="grey"
+            variant="text"
+            @click="showAgentRunnerDialog = false"
+          >
+            好的
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            @click="goToConfigPage"
+          >
+            点击前往
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -420,7 +631,7 @@ function configExistingProvider(provider) {
   const mergeConfigWithOrder = (target, source, reference) => {
     if (source && typeof source === 'object' && !Array.isArray(source)) {
       for (let key in source) {
-        if (source.hasOwnProperty(key)) {
+        if (Object.hasOwn(source, key)) {
           if (typeof source[key] === 'object' && source[key] !== null) {
             target[key] = Array.isArray(source[key]) ? [...source[key]] : { ...source[key] }
           } else {

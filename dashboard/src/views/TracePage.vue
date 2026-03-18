@@ -45,7 +45,13 @@ onMounted(() => {
   <div style="height: 100%; display: flex; flex-direction: column;">
     <div class="trace-header">
       <div class="trace-info">
-        <v-icon size="small" color="info" class="mr-2">mdi-information-outline</v-icon>
+        <v-icon
+          size="small"
+          color="info"
+          class="mr-2"
+        >
+          mdi-information-outline
+        </v-icon>
         <span class="trace-hint">{{ tm('hint') }}</span>
       </div>
       <div class="trace-controls">

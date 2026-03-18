@@ -46,54 +46,86 @@ const getPermissionLabel = (permission: string): string => {
 </script>
 
 <template>
-  <v-dialog :model-value="show" @update:model-value="emit('update:show', $event)" max-width="500">
+  <v-dialog
+    :model-value="show"
+    max-width="500"
+    @update:model-value="emit('update:show', $event)"
+  >
     <v-card v-if="command">
-      <v-card-title class="text-h5">{{ tm('dialogs.details.title') }}</v-card-title>
+      <v-card-title class="text-h5">
+        {{ tm('dialogs.details.title') }}
+      </v-card-title>
       <v-card-text>
         <v-list density="compact">
           <v-list-item>
-            <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.type') }}</v-list-item-title>
+            <v-list-item-title class="font-weight-bold">
+              {{ tm('dialogs.details.type') }}
+            </v-list-item-title>
             <v-list-item-subtitle>
               <v-chip
                 :color="getTypeInfo(command.type).color"
                 size="small"
                 variant="tonal"
               >
-                <v-icon start size="14">{{ getTypeInfo(command.type).icon }}</v-icon>
+                <v-icon
+                  start
+                  size="14"
+                >
+                  {{ getTypeInfo(command.type).icon }}
+                </v-icon>
                 {{ getTypeInfo(command.type).text }}
               </v-chip>
             </v-list-item-subtitle>
           </v-list-item>
           <v-list-item>
-            <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.handler') }}</v-list-item-title>
+            <v-list-item-title class="font-weight-bold">
+              {{ tm('dialogs.details.handler') }}
+            </v-list-item-title>
             <v-list-item-subtitle><code>{{ command.handler_name }}</code></v-list-item-subtitle>
           </v-list-item>
           <v-list-item>
-            <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.module') }}</v-list-item-title>
+            <v-list-item-title class="font-weight-bold">
+              {{ tm('dialogs.details.module') }}
+            </v-list-item-title>
             <v-list-item-subtitle><code>{{ command.module_path }}</code></v-list-item-subtitle>
           </v-list-item>
           <v-list-item>
-            <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.originalCommand') }}</v-list-item-title>
+            <v-list-item-title class="font-weight-bold">
+              {{ tm('dialogs.details.originalCommand') }}
+            </v-list-item-title>
             <v-list-item-subtitle><code>{{ command.original_command }}</code></v-list-item-subtitle>
           </v-list-item>
           <v-list-item>
-            <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.effectiveCommand') }}</v-list-item-title>
+            <v-list-item-title class="font-weight-bold">
+              {{ tm('dialogs.details.effectiveCommand') }}
+            </v-list-item-title>
             <v-list-item-subtitle><code>{{ command.effective_command }}</code></v-list-item-subtitle>
           </v-list-item>
           <v-list-item v-if="command.parent_signature">
-            <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.parentGroup') }}</v-list-item-title>
+            <v-list-item-title class="font-weight-bold">
+              {{ tm('dialogs.details.parentGroup') }}
+            </v-list-item-title>
             <v-list-item-subtitle><code>{{ command.parent_signature }}</code></v-list-item-subtitle>
           </v-list-item>
           <v-list-item v-if="command.aliases.length > 0">
-            <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.aliases') }}</v-list-item-title>
+            <v-list-item-title class="font-weight-bold">
+              {{ tm('dialogs.details.aliases') }}
+            </v-list-item-title>
             <v-list-item-subtitle>
-              <v-chip v-for="alias in command.aliases" :key="alias" size="small" class="mr-1">
+              <v-chip
+                v-for="alias in command.aliases"
+                :key="alias"
+                size="small"
+                class="mr-1"
+              >
                 {{ alias }}
               </v-chip>
             </v-list-item-subtitle>
           </v-list-item>
           <v-list-item v-if="command.is_group && command.sub_commands?.length > 0">
-            <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.subCommands') }}</v-list-item-title>
+            <v-list-item-title class="font-weight-bold">
+              {{ tm('dialogs.details.subCommands') }}
+            </v-list-item-title>
             <v-list-item-subtitle>
               <div class="d-flex flex-wrap ga-1 mt-1">
                 <v-chip 
@@ -108,24 +140,40 @@ const getPermissionLabel = (permission: string): string => {
             </v-list-item-subtitle>
           </v-list-item>
           <v-list-item>
-            <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.permission') }}</v-list-item-title>
+            <v-list-item-title class="font-weight-bold">
+              {{ tm('dialogs.details.permission') }}
+            </v-list-item-title>
             <v-list-item-subtitle>
-              <v-chip :color="getPermissionColor(command.permission)" size="small">
+              <v-chip
+                :color="getPermissionColor(command.permission)"
+                size="small"
+              >
                 {{ getPermissionLabel(command.permission) }}
               </v-chip>
             </v-list-item-subtitle>
           </v-list-item>
           <v-list-item v-if="command.has_conflict">
-            <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.conflictStatus') }}</v-list-item-title>
+            <v-list-item-title class="font-weight-bold">
+              {{ tm('dialogs.details.conflictStatus') }}
+            </v-list-item-title>
             <v-list-item-subtitle>
-              <v-chip color="warning" size="small">{{ tm('status.conflict') }}</v-chip>
+              <v-chip
+                color="warning"
+                size="small"
+              >
+                {{ tm('status.conflict') }}
+              </v-chip>
             </v-list-item-subtitle>
           </v-list-item>
         </v-list>
       </v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn color="primary" variant="text" @click="emit('update:show', false)">
+        <v-btn
+          color="primary"
+          variant="text"
+          @click="emit('update:show', false)"
+        >
           {{ t('core.actions.close') }}
         </v-btn>
       </v-card-actions>

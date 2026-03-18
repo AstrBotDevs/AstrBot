@@ -1,11 +1,17 @@
 <template>
-    <BaseFolderTreeNode :folder="folder" :depth="depth" :current-folder-id="currentFolderId"
-        :search-query="searchQuery" :expanded-folder-ids="expandedFolderIds" :accept-drop-types="['persona']"
-        @folder-click="$emit('folder-click', $event)"
-        @folder-context-menu="handleContextMenu"
-        @item-dropped="handleItemDropped"
-        @toggle-expansion="toggleFolderExpansion"
-        @set-expansion="handleSetExpansion" />
+  <BaseFolderTreeNode
+    :folder="folder"
+    :depth="depth"
+    :current-folder-id="currentFolderId"
+    :search-query="searchQuery"
+    :expanded-folder-ids="expandedFolderIds"
+    :accept-drop-types="['persona']"
+    @folder-click="$emit('folder-click', $event)"
+    @folder-context-menu="handleContextMenu"
+    @item-dropped="handleItemDropped"
+    @toggle-expansion="toggleFolderExpansion"
+    @set-expansion="handleSetExpansion"
+  />
 </template>
 
 <script lang="ts">
