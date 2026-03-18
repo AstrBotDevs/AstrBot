@@ -39,24 +39,10 @@ from .util import (
 )
 
 MAX_FILE_BYTES = 500 * 1024 * 1024
-RUNTIME_PLATFORM_FIELD_KEYS = frozenset({"logo_token"})
 
 
 def _resolve_path(path: Path) -> Path:
     return path.resolve(strict=False)
-
-
-def strip_platform_runtime_fields(
-    config: Any,
-    runtime_field_keys: frozenset[str] = RUNTIME_PLATFORM_FIELD_KEYS,
-) -> Any:
-    if not isinstance(config, dict):
-        return config
-
-    cleaned_config = dict(config)
-    for key in runtime_field_keys:
-        cleaned_config.pop(key, None)
-    return cleaned_config
 
 
 def try_cast(value: Any, type_: str):
@@ -1259,7 +1245,7 @@ class ConfigRoute(Route):
         return Response().ok({"files": files}).__dict__
 
     async def post_new_platform(self):
-        new_platform_config = strip_platform_runtime_fields(await request.json)
+        new_platform_config = await request.json
 
         # 如果是支持统一 webhook 模式的平台，生成 webhook_uuid
         ensure_platform_webhook_config(new_platform_config)
@@ -1288,9 +1274,7 @@ class ConfigRoute(Route):
     async def post_update_platform(self):
         update_platform_config = await request.json
         origin_platform_id = update_platform_config.get("id", None)
-        new_config = strip_platform_runtime_fields(
-            update_platform_config.get("config", None)
-        )
+        new_config = update_platform_config.get("config", None)
         if not origin_platform_id or not new_config:
             return Response().error("参数错误").__dict__
 
@@ -1371,8 +1355,19 @@ class ConfigRoute(Route):
             return
 
         try:
+            # 获取平台适配器类
+            platform_cls = platform_cls_map.get(platform.name)
+            if not platform_cls:
+                logger.warning(f"Platform class not found for {platform.name}")
+                return
+
+            # Resolve the adapter module path before consulting the cache so
+            # hot-reloaded plugins do not reuse tokens tied to a previous path.
+            module_file = inspect.getfile(platform_cls)
+            plugin_dir = os.path.dirname(module_file)
+            cache_key = f"{platform.name}:{module_file}:{platform.logo_path}"
+
             # 检查缓存
-            cache_key = f"{platform.name}:{platform.logo_path}"
             if cache_key in self._logo_token_cache:
                 cached_token = self._logo_token_cache[cache_key]
                 if not await file_token_service.check_token_expired(cached_token):
@@ -1381,16 +1376,6 @@ class ConfigRoute(Route):
                         f"Using cached logo token for platform {platform.name}"
                     )
                     return
-
-            # 获取平台适配器类
-            platform_cls = platform_cls_map.get(platform.name)
-            if not platform_cls:
-                logger.warning(f"Platform class not found for {platform.name}")
-                return
-
-            # 获取插件目录路径
-            module_file = inspect.getfile(platform_cls)
-            plugin_dir = os.path.dirname(module_file)
 
             # 解析logo文件路径
             logo_file_path = os.path.join(plugin_dir, platform.logo_path)

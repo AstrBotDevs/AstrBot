@@ -309,8 +309,7 @@ import { useModuleI18n } from '@/i18n/composables';
 import {
   getPlatformIcon,
   getPlatformDescription,
-  getTutorialLink,
-  stripPlatformRuntimeFields
+  getTutorialLink
 } from '@/utils/platformUtils';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
@@ -452,9 +451,7 @@ export default {
   watch: {
     selectedPlatformType(newType) {
       if (newType && this.platformTemplates[newType]) {
-        this.selectedPlatformConfig = this.stripRuntimeFields(
-          JSON.parse(JSON.stringify(this.platformTemplates[newType]))
-        );
+        this.selectedPlatformConfig = JSON.parse(JSON.stringify(this.platformTemplates[newType]));
       } else {
         this.selectedPlatformConfig = null;
       }
@@ -529,13 +526,9 @@ export default {
     }
   },
   methods: {
-    stripRuntimeFields(config) {
-      return stripPlatformRuntimeFields(config);
-    },
     getPlatformIcon(platformType) {
       return getPlatformIcon(platformType, {
         metadata: this.metadata,
-        platformTemplates: this.platformTemplates,
       });
     },
     getPlatformDescription,
@@ -671,7 +664,7 @@ export default {
         // 更新平台配置
         let resp = await axios.post('/api/config/platform/update', {
           id: id,
-          config: this.stripRuntimeFields(this.updatingPlatformConfig)
+          config: this.updatingPlatformConfig
         })
 
         if (resp.data.status === 'error') {
@@ -723,7 +716,7 @@ export default {
         // 先保存平台配置
         const res = await axios.post(
           '/api/config/platform/new',
-          this.stripRuntimeFields(this.selectedPlatformConfig)
+          this.selectedPlatformConfig
         );
 
         // 平台保存成功后，处理配置文件
