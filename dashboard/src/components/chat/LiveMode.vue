@@ -337,13 +337,22 @@ function connectWebSocket(): Promise<void> {
 
     if (apiBase) {
       if (apiBase.startsWith("https://")) {
-        wsBase = apiBase.replace("https://", "wss://");
+        const wsUrl = new URL(apiBase);
+        wsUrl.protocol = "wss:";
+        wsBase = wsUrl.toString();
       } else if (apiBase.startsWith("http://")) {
-        wsBase = apiBase.replace("http://", "ws://");
+        const wsUrl = new URL(apiBase);
+        wsUrl.protocol = "ws:";
+        wsBase = wsUrl.toString();
       } else {
-        const protocol =
-          window.location.protocol === "https:" ? "wss://" : "ws://";
-        wsBase = protocol + apiBase;
+        if (apiBase.startsWith("/")) {
+          const baseUrl = new URL(apiBase, window.location.origin);
+          baseUrl.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+          wsBase = `${baseUrl.protocol}//${baseUrl.host}${baseUrl.pathname}`;
+        } else {
+          const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+          wsBase = `${protocol}//${apiBase}`;
+        }
       }
       wsBase = wsBase.replace(/\/+$/, "");
     } else {
