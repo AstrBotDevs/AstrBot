@@ -8,6 +8,7 @@ requires-python = ">=3.12"
 keywords = ["Astrbot", "Astrbot Module", "Astrbot Plugin"]
 
 dependencies = [
+  "astrbot-sdk",
   "aiocqhttp>=1.4.4",
   "aiodocker>=0.24.0",
   "aiohttp>=3.11.18",
@@ -74,6 +75,9 @@ dev = [
   "pytest-cov>=6.2.1",
   "ruff>=0.15.0",
 ]
+
+[tool.uv.sources]
+astrbot-sdk = { path = "./astrbot-sdk", editable = true }
 
 [project.scripts]
 astrbot = "astrbot.cli.__main__:cli"

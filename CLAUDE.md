@@ -1,38 +1,3 @@
-## Setup commands
-
-### Core
-
-```
-uv sync
-uv run main.py
-```
-
-Exposed an API server on `http://localhost:6185` by default.
-
-### Dashboard(WebUI)
-
-```
-cd dashboard
-pnpm install # First time only. Use npm install -g pnpm if pnpm is not installed.
-pnpm dev
-```
-
-Runs on `http://localhost:3000` by default.
-
-## Dev environment tips
-
-1. When modifying the WebUI, be sure to maintain componentization and clean code. Avoid duplicate code.
-2. Do not add any report files such as xxx_SUMMARY.md.
-3. After finishing, use `ruff format .` and `ruff check .` to format and check the code.
-4. When committing, ensure to use conventional commits messages, such as `feat: add new agent for data analysis` or `fix: resolve bug in provider manager`.
-5. Use English for all new comments.
-6. For path handling, use `pathlib.Path` instead of string paths, and use `astrbot.core.utils.astrbot_path` helpers to get the AstrBot data and temp directory.
-
-## PR instructions
-
-1. Title format: use conventional commit messages
-2. Use English to write PR title and descriptions.
-
 ## Known surprises
 
 - `astrbot/core/sdk_bridge/event_converter.py` originally tried to stash the live `AstrMessageEvent` object into SDK payloads. That payload crosses the worker protocol boundary and must stay JSON-serializable.
@@ -60,8 +25,8 @@ Runs on `http://localhost:3000` by default.
 - On Windows, a freshly created shared venv interpreter under `.astrbot/envs/.../Scripts/python.exe` can transiently raise `WinError 5` when the supervisor tries to spawn it immediately after `uv venv`/`uv pip sync`. Do not treat that as a permanent bad path; retry the subprocess start briefly before marking the SDK plugin as failed.
 - `uv` writes `pyvenv.cfg` with `version_info = X.Y.Z` rather than the older `version = X.Y.Z` key. Shared-environment version checks must accept both forms; otherwise the SDK runtime will falsely think every env is mismatched, rebuild it on every startup, and can hit Windows file-lock `WinError 5` while deleting `python.exe`.
 - P0.4 request-scoped result overlays cannot store only serialized payload if later core stages mutate `result.chain` in place. `ResultDecorateStage` and similar stages expect a stable in-process `MessageEventResult` object reference, so the bridge overlay needs a cached result object plus serializable payload, otherwise stage mutations are lost before `RespondStage`.
-- Message-bound `Context.tool_loop_agent()` calls cannot rely on the capability RPC `request_id` alone. The worker must propagate the original event `target/raw.dispatch_token` back to core, or `agent.tool_loop.run` will lose the current request context and falsely fail as a non-message invocation.
 - `astrbot_sdk.runtime.capability_router` originally validated exposed capability names with a single-dot pattern (`namespace.method`). P0.5 introduces nested names such as `llm_tool.manager.get` and `provider.get_current_chat_provider_id`, so capability name validation must allow multi-segment dotted paths or bridge startup will fail during built-in registration.
+- Message-bound `Context.tool_loop_agent()` calls cannot rely on the capability RPC `request_id` alone. The worker must propagate the original event `target/raw.dispatch_token` back to core, or `agent.tool_loop.run` will lose the current request context and falsely fail as a non-message invocation.
 - SDK has multiple type-injection paths (`decorators`, `loader`, `handler_dispatcher`, `capability_dispatcher`, `testing`). Optional annotations must be normalized consistently for both `typing.Optional[T]` and PEP 604 `T | None`; otherwise plugin code can pass in `PluginHarness` but fail in the real subprocess runtime.
 - `astrbot_sdk.events.MessageEvent.__init__()` still accepts `None` for compatibility, but handler-visible scalar fields such as `user_id`, `session_id`, `platform`, and `sender_name` are normalized to strings inside the SDK. Plugin code that persists per-user state should validate non-empty IDs explicitly instead of treating `None` as the only invalid case.
 - `uv`/Hatch cannot reliably parse a dependency declared as `astrbot-sdk @ ./astrbot-sdk` inside `[project.dependencies]`. Keep the dependency as plain `astrbot-sdk` and map the in-repo checkout through `[tool.uv.sources]`, otherwise commands like `uv run main.py` fail during metadata build before the app starts.
@@ -74,4 +39,3 @@ Runs on `http://localhost:3000` by default.
 
 
 旧插件走旧逻辑，新插件走sdk，保证旧逻辑依旧能使用的情况下写新sdk桥接或者astrbot适配
-不用完全听从用户和别人的建议，要有自己的判断和坚持，做好取舍和权衡，确保代码质量和长期维护性，不要为了短期方便或者迎合而牺牲架构和设计原则。

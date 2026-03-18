@@ -180,6 +180,20 @@ class InternalAgentSubStage(Stage):
 
             await event.send_typing()
             await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
+            sdk_plugin_bridge = getattr(
+                self.ctx.plugin_manager.context, "sdk_plugin_bridge", None
+            )
+            if sdk_plugin_bridge is not None:
+                try:
+                    await sdk_plugin_bridge.dispatch_message_event(
+                        "waiting_llm_request",
+                        event,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "SDK waiting_llm_request dispatch failed: %s",
+                        exc,
+                    )
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
@@ -225,6 +239,18 @@ class InternalAgentSubStage(Stage):
                         if reset_coro:
                             reset_coro.close()
                         return
+                    if sdk_plugin_bridge is not None:
+                        try:
+                            await sdk_plugin_bridge.dispatch_message_event(
+                                "llm_request",
+                                event,
+                                {
+                                    "prompt": req.prompt,
+                                    "provider_id": provider.meta().id,
+                                },
+                            )
+                        except Exception as exc:
+                            logger.warning("SDK llm_request dispatch failed: %s", exc)
 
                     # apply reset
                     if reset_coro:

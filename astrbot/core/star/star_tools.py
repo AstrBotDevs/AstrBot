@@ -28,12 +28,6 @@ from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
-    AiocqhttpMessageEvent,
-)
-from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
-    AiocqhttpAdapter,
-)
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_map
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -103,6 +97,13 @@ class StarTools:
             raise ValueError("StarTools not initialized")
         platforms = cls._context.platform_manager.get_insts()
         if platform == "aiocqhttp":
+            from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
+                AiocqhttpMessageEvent,
+            )
+            from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
+                AiocqhttpAdapter,
+            )
+
             adapter = next(
                 (p for p in platforms if isinstance(p, AiocqhttpAdapter)),
                 None,
@@ -183,6 +184,13 @@ class StarTools:
             raise ValueError("StarTools not initialized")
         platforms = cls._context.platform_manager.get_insts()
         if platform == "aiocqhttp":
+            from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
+                AiocqhttpMessageEvent,
+            )
+            from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
+                AiocqhttpAdapter,
+            )
+
             adapter = next(
                 (p for p in platforms if isinstance(p, AiocqhttpAdapter)),
                 None,

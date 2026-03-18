@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 import asyncio
 import hashlib
@@ -5,11 +7,9 @@ import re
 import uuid
 from collections.abc import AsyncGenerator
 from time import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from astrbot import logger
-from astrbot.core.agent.tool import ToolSet
-from astrbot.core.db.po import Conversation
 from astrbot.core.message.components import (
     At,
     AtAll,
@@ -22,13 +22,17 @@ from astrbot.core.message.components import (
 )
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.trace import TraceSpan
 
 from .astrbot_message import AstrBotMessage, Group
 from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
+
+if TYPE_CHECKING:
+    from astrbot.core.agent.tool import ToolSet
+    from astrbot.core.db.po import Conversation
+    from astrbot.core.provider.entities import ProviderRequest
 
 
 class AstrMessageEvent(abc.ABC):
@@ -418,6 +422,8 @@ class AstrMessageEvent(abc.ABC):
             contexts = []
         if len(contexts) > 0 and conversation:
             conversation = None
+
+        from astrbot.core.provider.entities import ProviderRequest
 
         return ProviderRequest(
             prompt=prompt,

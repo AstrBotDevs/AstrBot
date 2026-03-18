@@ -1,0 +1,553 @@
+# ruff: noqa: E402
+from __future__ import annotations
+
+import sys
+import types
+from functools import partial
+from pathlib import Path
+
+import pytest
+
+
+def _install_optional_dependency_stubs() -> None:
+    def install(name: str, attrs: dict[str, object]) -> None:
+        if name in sys.modules:
+            return
+        module = types.ModuleType(name)
+        for key, value in attrs.items():
+            setattr(module, key, value)
+        sys.modules[name] = module
+
+    install(
+        "faiss",
+        {
+            "read_index": lambda *args, **kwargs: None,
+            "write_index": lambda *args, **kwargs: None,
+            "IndexFlatL2": type("IndexFlatL2", (), {}),
+            "IndexIDMap": type("IndexIDMap", (), {}),
+            "normalize_L2": lambda *args, **kwargs: None,
+        },
+    )
+    install("pypdf", {"PdfReader": type("PdfReader", (), {})})
+    install(
+        "jieba",
+        {
+            "cut": lambda text, *args, **kwargs: text.split(),
+            "lcut": lambda text, *args, **kwargs: text.split(),
+        },
+    )
+    install("rank_bm25", {"BM25Okapi": type("BM25Okapi", (), {})})
+    install(
+        "aiocqhttp",
+        {
+            "CQHttp": type("CQHttp", (), {}),
+            "Event": type("Event", (), {}),
+        },
+    )
+    install(
+        "aiocqhttp.exceptions",
+        {"ActionFailed": type("ActionFailed", (Exception,), {})},
+    )
+
+
+_install_optional_dependency_stubs()
+
+from astrbot_sdk import MessageSession
+from astrbot_sdk.clients.registry import HandlerMetadata
+from astrbot_sdk.errors import AstrBotError
+from astrbot_sdk.events import MessageEvent
+from astrbot_sdk.protocol.descriptors import (
+    CommandTrigger,
+    HandlerDescriptor,
+    ParamSpec,
+)
+from astrbot_sdk.testing import MockContext
+
+from astrbot.core.message.components import Plain
+from astrbot.core.message.message_event_result import (
+    MessageChain,
+    MessageEventResult,
+    ResultContentType,
+)
+from astrbot.core.pipeline.respond.stage import RespondStage
+from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
+from astrbot.core.sdk_bridge.event_converter import EventConverter
+from astrbot.core.sdk_bridge.plugin_bridge import SdkPluginBridge
+
+
+@pytest.mark.unit
+def test_message_event_extensions_and_local_stop_control() -> None:
+    event = MessageEvent.from_payload(
+        {
+            "text": "hello",
+            "session_id": "test-platform:private:user-1",
+            "platform": "test-platform",
+            "platform_id": "test-platform-id",
+            "message_type": "private",
+            "self_id": "bot-1",
+            "sender_name": "Tester",
+            "is_admin": True,
+        }
+    )
+
+    assert event.unified_msg_origin == "test-platform:private:user-1"
+    assert event.get_session_id() == "test-platform:private:user-1"
+    assert event.get_platform_id() == "test-platform-id"
+    assert event.get_message_type() == "private"
+    assert event.is_private_chat() is True
+    assert event.is_admin() is True
+
+    event.stop_event()
+    assert event.is_stopped() is True
+    event.continue_event()
+    assert event.is_stopped() is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_mock_context_system_tools_and_memory_stats() -> None:
+    ctx = MockContext(plugin_id="sdk-demo")
+
+    data_dir = await ctx.get_data_dir()
+    assert isinstance(data_dir, Path)
+    assert data_dir.name == "sdk-demo"
+
+    image_result = await ctx.text_to_image("hello sdk")
+    assert image_result == "mock://text_to_image/hello sdk"
+
+    html_result = await ctx.html_render("card.html", {"title": "AstrBot"})
+    assert html_result == "mock://html_render/card.html"
+
+    await ctx.memory.save("profile", {"name": "AstrBot"})
+    await ctx.memory.save_with_ttl("temp", {"value": "cached"}, 60)
+    stats = await ctx.memory.stats()
+
+    assert stats["total_items"] == 2
+    assert stats["plugin_id"] == "sdk-demo"
+    assert stats["ttl_entries"] == 1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_platform_client_accepts_message_session() -> None:
+    ctx = MockContext(plugin_id="sdk-demo")
+    session = MessageSession(
+        platform_id="test-platform",
+        message_type="private",
+        session_id="user-42",
+    )
+
+    await ctx.platform.send(session, "hello session")
+
+    assert len(ctx.sent_messages) == 1
+    assert ctx.sent_messages[0].session_id == "test-platform:private:user-42"
+    assert ctx.sent_messages[0].text == "hello session"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_mock_context_p0_6_platform_and_session_managers() -> None:
+    ctx = MockContext(plugin_id="sdk-demo")
+    session = "test-platform:group:room-7"
+    ctx.router.set_session_plugin_config(
+        session,
+        disabled_plugins=["sdk-disabled"],
+    )
+    ctx.router.set_session_service_config(
+        session,
+        llm_enabled=False,
+        tts_enabled=False,
+    )
+    ctx.router.upsert_plugin(
+        metadata={
+            "name": "sdk-disabled",
+            "display_name": "sdk-disabled",
+            "reserved": False,
+        },
+        config={},
+    )
+    ctx.router.upsert_plugin(
+        metadata={
+            "name": "sdk-reserved",
+            "display_name": "sdk-reserved",
+            "reserved": True,
+        },
+        config={},
+    )
+
+    await ctx.platform.send_by_session(session, "hello proactive")
+    group = await MessageEvent.from_payload(
+        {
+            "text": "hello",
+            "session_id": session,
+            "platform": "test-platform",
+            "platform_id": "test-platform",
+            "message_type": "group",
+        },
+        context=ctx,
+    ).get_group()
+    members = await ctx.platform.get_members(session)
+    handlers = await ctx.session_plugins.filter_handlers_by_session(
+        session,
+        [
+            HandlerMetadata(
+                plugin_name="sdk-disabled",
+                handler_full_name="sdk-disabled:main.on_message",
+                trigger_type="message",
+                event_types=[],
+                enabled=True,
+                group_path=[],
+            ),
+            HandlerMetadata(
+                plugin_name="sdk-reserved",
+                handler_full_name="sdk-reserved:main.on_message",
+                trigger_type="message",
+                event_types=[],
+                enabled=True,
+                group_path=[],
+            ),
+        ],
+    )
+
+    assert ctx.sent_messages[-1].session_id == session
+    assert ctx.sent_messages[-1].chain == [
+        {"type": "text", "data": {"text": "hello proactive"}}
+    ]
+    assert group is not None
+    assert group["group_id"] == "room-7"
+    assert len(members) == 2
+    assert (
+        await ctx.session_plugins.is_plugin_enabled_for_session(session, "sdk-disabled")
+        is False
+    )
+    assert [item.plugin_name for item in handlers] == ["sdk-reserved"]
+    assert await ctx.session_services.is_llm_enabled_for_session(session) is False
+    assert await ctx.session_services.should_process_llm_request(session) is False
+    await ctx.session_services.set_llm_status_for_session(session, True)
+    assert await ctx.session_services.is_llm_enabled_for_session(session) is True
+    assert await ctx.session_services.is_tts_enabled_for_session(session) is False
+    assert await ctx.session_services.should_process_tts_request(session) is False
+    await ctx.session_services.set_tts_status_for_session(session, True)
+    assert await ctx.session_services.is_tts_enabled_for_session(session) is True
+
+
+@pytest.mark.unit
+def test_message_session_round_trip() -> None:
+    session = MessageSession.from_str("demo-platform:group:room-7")
+
+    assert session.platform_id == "demo-platform"
+    assert session.message_type == "group"
+    assert session.session_id == "room-7"
+    assert str(session) == "demo-platform:group:room-7"
+
+
+class _EventConverterProbe:
+    def __init__(self) -> None:
+        self.is_wake = False
+        self.is_at_or_wake_command = False
+        self.unified_msg_origin = "demo-platform:private:user-1"
+        self._extras = {
+            "serializable": {"value": 1},
+            "callback": partial(str.upper, "demo"),
+        }
+
+    def get_message_type(self):
+        return types.SimpleNamespace(value="private")
+
+    def get_platform_id(self) -> str:
+        return "demo-platform-id"
+
+    def get_message_str(self) -> str:
+        return "demo text"
+
+    def get_sender_id(self) -> str:
+        return "user-1"
+
+    def get_group_id(self) -> str | None:
+        return None
+
+    def get_platform_name(self) -> str:
+        return "demo-platform"
+
+    def get_self_id(self) -> str:
+        return "bot-1"
+
+    def get_sender_name(self) -> str:
+        return "Tester"
+
+    def is_admin(self) -> bool:
+        return False
+
+    def get_message_outline(self) -> str:
+        return "demo outline"
+
+    def get_extra(self, key: str | None = None, default=None):
+        if key is None:
+            return self._extras
+        return self._extras.get(key, default)
+
+    def get_messages(self):
+        return [Plain("demo", convert=False)]
+
+
+@pytest.mark.unit
+def test_event_converter_sanitizes_non_serializable_extras() -> None:
+    payload = EventConverter.core_to_sdk(
+        _EventConverterProbe(),
+        dispatch_token="dispatch-1",
+        plugin_id="sdk-demo",
+        request_id="req-1",
+    )
+
+    assert payload["extras"] == {"serializable": {"value": 1}}
+    assert "callback" not in payload["extras"]
+
+
+@pytest.mark.unit
+def test_respond_stage_sdk_outline_supports_list_and_message_chain() -> None:
+    chain_list = [Plain("hello", convert=False), Plain(" world", convert=False)]
+
+    assert RespondStage._message_outline_for_sdk_event(chain_list) == "hello  world"
+    assert (
+        RespondStage._message_outline_for_sdk_event(MessageChain(chain_list))
+        == "hello  world"
+    )
+    assert RespondStage._message_outline_for_sdk_event(None) == ""
+
+
+@pytest.mark.unit
+def test_result_decorate_stage_sdk_outline_supports_list_and_message_chain() -> None:
+    chain_list = [Plain("hello", convert=False), Plain(" world", convert=False)]
+
+    assert (
+        ResultDecorateStage._message_outline_for_sdk_event(chain_list) == "hello  world"
+    )
+    assert (
+        ResultDecorateStage._message_outline_for_sdk_event(MessageChain(chain_list))
+        == "hello  world"
+    )
+    assert ResultDecorateStage._message_outline_for_sdk_event(None) == ""
+
+
+class _OverlayFakeStarContext:
+    def __init__(self) -> None:
+        self.registered_web_apis = []
+        self.cron_manager = object()
+
+    def get_all_stars(self) -> list[object]:
+        return []
+
+
+class _OverlayFakeEvent:
+    def __init__(self) -> None:
+        self.call_llm = False
+        self._result = MessageEventResult(chain=[Plain("legacy", convert=False)])
+        self._sdk_dispatch_token = "dispatch-1"
+
+    def get_result(self) -> MessageEventResult | None:
+        return self._result
+
+
+class _DecoratingResultFakeBridge:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, str]]] = []
+
+    def get_effective_result(
+        self, event: _DecoratingResultFakeEvent
+    ) -> MessageEventResult | None:
+        return event.get_result()
+
+    async def dispatch_message_event(
+        self,
+        event_type: str,
+        event: _DecoratingResultFakeEvent,
+        payload: dict[str, str],
+    ) -> None:
+        self.calls.append((event_type, payload))
+
+
+class _DecoratingResultFakeEvent:
+    def __init__(self) -> None:
+        self.plugins_name: list[str] = []
+        self._stopped = False
+        self._result = MessageEventResult(
+            chain=[Plain("legacy", convert=False)],
+            result_content_type=ResultContentType.STREAMING_FINISH,
+        )
+
+    def get_result(self) -> MessageEventResult | None:
+        return self._result
+
+    def is_stopped(self) -> bool:
+        return self._stopped
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_result_decorate_stage_dispatches_sdk_outline_for_legacy_chain_list() -> (
+    None
+):
+    stage = ResultDecorateStage()
+    bridge = _DecoratingResultFakeBridge()
+    event = _DecoratingResultFakeEvent()
+
+    stage.sdk_plugin_bridge = bridge
+    stage.content_safe_check_reply = False
+    stage.content_safe_check_stage = None
+
+    async for _ in stage.process(event):
+        pass
+
+    assert bridge.calls == [
+        ("decorating_result", {"message_outline": "legacy"}),
+    ]
+
+
+@pytest.mark.unit
+def test_sdk_request_overlay_controls_llm_result_and_whitelist() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    event = _OverlayFakeEvent()
+    request_id = "req-1"
+
+    bridge._request_id_to_token[request_id] = "dispatch-1"
+    bridge._request_overlays["dispatch-1"] = bridge._ensure_request_overlay(
+        "dispatch-1",
+        should_call_llm=False,
+    )
+
+    assert bridge.get_effective_should_call_llm(event) is False
+    assert bridge.request_llm_for_request(request_id) is True
+    assert bridge.get_effective_should_call_llm(event) is True
+
+    payload = {
+        "type": "chain",
+        "chain": [{"type": "plain", "data": {"text": "overlay"}}],
+    }
+    assert bridge.set_result_for_request(request_id, payload) is True
+    effective_result = bridge.get_effective_result(event)
+    assert effective_result is not None
+    assert effective_result.chain.get_plain_text() == "overlay"
+
+    effective_result.chain.chain.append(Plain("cached", convert=False))
+    result_payload = bridge.get_result_payload_for_request(request_id)
+    assert result_payload is not None
+    assert result_payload["chain"][1]["data"]["text"] == "cached"
+
+    assert (
+        bridge.set_handler_whitelist_for_request(request_id, {"sdk-a", "sdk-b"}) is True
+    )
+    assert bridge.get_handler_whitelist_for_request(request_id) == {
+        "sdk-a",
+        "sdk-b",
+    }
+
+    assert bridge.clear_result_for_request(request_id) is True
+    assert bridge.get_effective_result(event) is None
+
+
+@pytest.mark.unit
+def test_sdk_bridge_dynamic_command_routes_register_and_match() -> None:
+    class _RouteFakeEvent:
+        def __init__(self, text: str) -> None:
+            self._text = text
+
+        def get_message_type(self):
+            return types.SimpleNamespace(value="private")
+
+        def get_group_id(self) -> str:
+            return ""
+
+        def get_sender_id(self) -> str:
+            return "user-1"
+
+        def get_platform_name(self) -> str:
+            return "test-platform"
+
+        def get_message_str(self) -> str:
+            return self._text
+
+        def is_admin(self) -> bool:
+            return False
+
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    descriptor = HandlerDescriptor(
+        id="sdk-demo:demo.echo",
+        trigger=CommandTrigger(command="noop"),
+        param_specs=[ParamSpec(name="phrase", type="greedy_str")],
+    )
+    handler_ref = types.SimpleNamespace(descriptor=descriptor, declaration_order=0)
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-demo",
+            load_order=0,
+            handlers=[handler_ref],
+            dynamic_command_routes=[],
+            session=object(),
+        )
+    }
+
+    bridge.register_dynamic_command_route(
+        plugin_id="sdk-demo",
+        command_name="hello",
+        handler_full_name="sdk-demo:demo.echo",
+        desc="dynamic hello",
+        priority=6,
+    )
+    matches = bridge._match_handlers(_RouteFakeEvent("hello world"))
+
+    assert len(matches) == 1
+    assert matches[0].handler_id == "sdk-demo:demo.echo"
+    assert matches[0].args == {"phrase": "world"}
+
+    with pytest.raises(AstrBotError, match="must belong to the caller plugin"):
+        bridge.register_dynamic_command_route(
+            plugin_id="sdk-demo",
+            command_name="hello",
+            handler_full_name="other:demo.echo",
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_mock_context_registry_client_round_trip() -> None:
+    ctx = MockContext(plugin_id="sdk-demo")
+    ctx.router.set_plugin_handlers(
+        "sdk-demo",
+        [
+            {
+                "plugin_name": "sdk-demo",
+                "handler_full_name": "sdk-demo:demo.on_waiting",
+                "trigger_type": "event",
+                "event_types": ["waiting_llm_request"],
+                "enabled": True,
+                "group_path": [],
+            }
+        ],
+    )
+
+    handlers = await ctx.registry.get_handlers_by_event_type("waiting_llm_request")
+    assert len(handlers) == 1
+    assert handlers[0].handler_full_name == "sdk-demo:demo.on_waiting"
+
+    handler = await ctx.registry.get_handler_by_full_name("sdk-demo:demo.on_waiting")
+    assert handler is not None
+    assert handler.plugin_name == "sdk-demo"
+
+    request_id = "req-registry-whitelist"
+    set_result = await ctx.router.execute(
+        "system.event.handler_whitelist.set",
+        {"plugin_names": ["sdk-demo"]},
+        stream=False,
+        cancel_token=None,
+        request_id=request_id,
+    )
+    assert set_result == {"plugin_names": ["sdk-demo"]}
+    get_result = await ctx.router.execute(
+        "system.event.handler_whitelist.get",
+        {},
+        stream=False,
+        cancel_token=None,
+        request_id=request_id,
+    )
+    assert get_result == {"plugin_names": ["sdk-demo"]}

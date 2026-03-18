@@ -9,7 +9,6 @@ import uuid
 import zipfile
 from pathlib import Path
 
-import aiohttp
 import certifi
 import psutil
 from PIL import Image
@@ -17,6 +16,12 @@ from PIL import Image
 from .astrbot_path import get_astrbot_data_path, get_astrbot_path, get_astrbot_temp_path
 
 logger = logging.getLogger("astrbot")
+
+
+def _get_aiohttp():
+    import aiohttp
+
+    return aiohttp
 
 
 def on_error(func, path, exc_info) -> None:
@@ -70,6 +75,7 @@ async def download_image_by_url(
     path: str | None = None,
 ) -> str:
     """下载图片, 返回 path"""
+    aiohttp = _get_aiohttp()
     try:
         ssl_context = ssl.create_default_context(
             cafile=certifi.where(),
@@ -125,6 +131,7 @@ async def download_image_by_url(
 
 async def download_file(url: str, path: str, show_progress: bool = False) -> None:
     """从指定 url 下载文件到指定路径 path"""
+    aiohttp = _get_aiohttp()
     try:
         ssl_context = ssl.create_default_context(
             cafile=certifi.where(),

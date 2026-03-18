@@ -585,6 +585,24 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if awaitable is None:
             raise ValueError("Tool must have a valid handler or override 'run' method.")
 
+        sdk_plugin_bridge = getattr(
+            run_context.context.context, "sdk_plugin_bridge", None
+        )
+        if sdk_plugin_bridge is not None:
+            try:
+                await sdk_plugin_bridge.dispatch_message_event(
+                    "calling_func_tool",
+                    event,
+                    {
+                        "tool_name": tool.name,
+                        "tool_args": json.loads(
+                            json.dumps(tool_args, ensure_ascii=False, default=str)
+                        ),
+                    },
+                )
+            except Exception as exc:
+                logger.warning("SDK calling_func_tool dispatch failed: %s", exc)
+
         wrapper = call_local_llm_tool(
             context=run_context,
             handler=awaitable,
