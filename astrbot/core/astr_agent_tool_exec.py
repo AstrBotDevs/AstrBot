@@ -653,10 +653,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 "background_task_summary_note_result", ""
             )
             try:
-                result = background_task_summary_note_result.format(result=llm_resp.completion_text)
+                summary_note_result = background_task_summary_note_result.format(result=llm_resp.completion_text)
             except Exception:
-                result = f"I finished the task, here is the result: {llm_resp.completion_text}"
-            summary_note += result
+                summary_note_result = f"I finished the task, here is the result: {llm_resp.completion_text}"
+            summary_note += summary_note_result
         await persist_agent_history(
             ctx.conversation_manager,
             event=cron_event,
