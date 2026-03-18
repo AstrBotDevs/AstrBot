@@ -426,7 +426,8 @@ class CronJobManager:
                     "cron_task_summary_note_result 文案格式化失败，已退回默认格式",
                     exc_info=True,
                 )
-                summary_note += f"I finished this job, here is the result: {llm_resp.completion_text}"
+                result_prompt = f"I finished this job, here is the result: {llm_resp.completion_text}"
+            summary_note += result_prompt
 
         await persist_agent_history(
             self.ctx.conversation_manager,
