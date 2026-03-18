@@ -19,6 +19,7 @@
     "components": "Handlers"
   },
   "conversation": "Conversations",
+  "groupSettings": "Group Settings",
   "sessionManagement": "Custom Rules",
   "console": "Console",
   "trace": "Trace",

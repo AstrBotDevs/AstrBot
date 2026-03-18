@@ -30,6 +30,7 @@ from .routes.live_chat import LiveChatRoute
 from .routes.platform import PlatformRoute
 from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
+from .routes.group_settings import GroupSettingsRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
 
@@ -128,6 +129,11 @@ class AstrBotDashboard:
         self.conversation_route = ConversationRoute(self.context, db, core_lifecycle)
         self.file_route = FileRoute(self.context)
         self.session_management_route = SessionManagementRoute(
+            self.context,
+            db,
+            core_lifecycle,
+        )
+        self.group_settings_route = GroupSettingsRoute(
             self.context,
             db,
             core_lifecycle,

@@ -1,0 +1,72 @@
+{
+  "title": "Group Settings",
+  "settingsCount": "settings",
+  "buttons": {
+    "refresh": "Refresh",
+    "add": "Add Setting",
+    "edit": "Edit",
+    "delete": "Delete",
+    "batchDelete": "Batch Delete",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "search": {
+    "placeholder": "Search groups..."
+  },
+  "table": {
+    "umo": "Group Source",
+    "platform": "Platform",
+    "messageType": "Message Type",
+    "groupId": "Group ID",
+    "provider": "Provider",
+    "persona": "Persona",
+    "model": "Model",
+    "setBy": "Set By",
+    "setAt": "Set At",
+    "actions": "Actions"
+  },
+  "dialog": {
+    "addTitle": "Add Group Setting",
+    "editTitle": "Edit Group Setting",
+    "umoLabel": "UMO (Unified Message Origin)",
+    "umoHint": "Format: platform:message_type:group_id, e.g., qq:group:123456",
+    "providerLabel": "Provider",
+    "providerHint": "Select the provider for this group",
+    "personaLabel": "Persona",
+    "personaHint": "Select the persona for this group",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "deleteDialog": {
+    "title": "Confirm Delete",
+    "message": "Are you sure you want to delete this group setting? Global configuration will be used after deletion.",
+    "confirm": "Delete",
+    "cancel": "Cancel"
+  },
+  "batchDeleteDialog": {
+    "title": "Confirm Batch Delete",
+    "message": "Are you sure you want to delete {count} selected group settings? Global configuration will be used after deletion.",
+    "confirm": "Delete",
+    "cancel": "Cancel"
+  },
+  "empty": {
+    "title": "No Group Settings",
+    "description": "Click 'Add Setting' to configure custom provider and persona for specific groups"
+  },
+  "validation": {
+    "umoRequired": "UMO is required",
+    "umoFormat": "Invalid UMO format, should contain colon separators"
+  },
+  "messages": {
+    "loadFailed": "Failed to load group settings",
+    "saveFailed": "Failed to save setting",
+    "updateSuccess": "Setting updated",
+    "addSuccess": "Setting added",
+    "deleteSuccess": "Setting deleted",
+    "deleteFailed": "Failed to delete setting",
+    "batchDeleteSuccess": "Successfully deleted {count} settings",
+    "batchDeletePartial": "Delete completed: {success} succeeded, {fail} failed",
+    "batchDeleteFailed": "Batch delete failed",
+    "nothingToSave": "Please select at least one setting to save"
+  }
+}

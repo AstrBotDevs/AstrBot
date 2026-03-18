@@ -102,6 +102,11 @@ const sidebarItem: menu[] = [
         to: '/conversation'
       },
       {
+        title: 'core.navigation.groupSettings',
+        icon: 'mdi-account-group',
+        to: '/group-settings'
+      },
+      {
         title: 'core.navigation.sessionManagement',
         icon: 'mdi-pencil-ruler',
         to: '/session-management'
