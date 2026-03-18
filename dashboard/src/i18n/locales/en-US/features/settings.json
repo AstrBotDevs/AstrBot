@@ -51,6 +51,11 @@
       "subtitle": "Customize theme primary and secondary colors. Changes apply immediately and are stored locally in your browser.",
       "primary": "Primary Color",
       "secondary": "Secondary Color"
+    },
+    "autoSync": {
+      "title": "Auto-Switch Light/Dark Theme",
+      "subtitle": "Automatically switch between light and dark themes based on your system's appearance setting.",
+      "label": "Enable Auto-Switch"
     }
   },
   "reset": {

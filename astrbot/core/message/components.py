@@ -29,6 +29,8 @@ import sys
 import uuid
 from enum import Enum
 
+import anyio
+
 if sys.version_info >= (3, 14):
     from pydantic import BaseModel
 else:
@@ -36,7 +38,14 @@ else:
 
 from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file, download_image_by_url, file_to_base64
+from astrbot.core.utils.io import download_file, download_image_by_url
+
+
+async def _file_to_base64_async(file_path: str) -> str:
+    async with await anyio.open_file(file_path, "rb") as f:
+        data_bytes = await f.read()
+        base64_str = base64.b64encode(data_bytes).decode()
+    return "base64://" + base64_str
 
 
 class ComponentType(str, Enum):
@@ -158,18 +167,18 @@ class Record(BaseMessageComponent):
             return self.file[8:]
         if self.file.startswith("http"):
             file_path = await download_image_by_url(self.file)
-            return os.path.abspath(file_path)
+            return str(await anyio.Path(file_path).resolve())
         if self.file.startswith("base64://"):
             bs64_data = self.file.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
             file_path = os.path.join(
                 get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.jpg"
             )
-            with open(file_path, "wb") as f:
-                f.write(image_bytes)
-            return os.path.abspath(file_path)
-        if os.path.exists(self.file):
-            return os.path.abspath(self.file)
+            async with await anyio.open_file(file_path, "wb") as f:
+                await f.write(image_bytes)
+            return str(await anyio.Path(file_path).resolve())
+        if await anyio.Path(self.file).exists():
+            return str(await anyio.Path(self.file).resolve())
         raise Exception(f"not a valid file: {self.file}")
 
     async def convert_to_base64(self) -> str:
@@ -183,14 +192,14 @@ class Record(BaseMessageComponent):
         if not self.file:
             raise Exception(f"not a valid file: {self.file}")
         if self.file.startswith("file:///"):
-            bs64_data = file_to_base64(self.file[8:])
+            bs64_data = await _file_to_base64_async(self.file[8:])
         elif self.file.startswith("http"):
             file_path = await download_image_by_url(self.file)
-            bs64_data = file_to_base64(file_path)
+            bs64_data = await _file_to_base64_async(file_path)
         elif self.file.startswith("base64://"):
             bs64_data = self.file
-        elif os.path.exists(self.file):
-            bs64_data = file_to_base64(self.file)
+        elif await anyio.Path(self.file).exists():
+            bs64_data = await _file_to_base64_async(self.file)
         else:
             raise Exception(f"not a valid file: {self.file}")
         bs64_data = bs64_data.removeprefix("base64://")
@@ -256,11 +265,11 @@ class Video(BaseMessageComponent):
                 get_astrbot_temp_path(), f"videoseg_{uuid.uuid4().hex}"
             )
             await download_file(url, video_file_path)
-            if os.path.exists(video_file_path):
-                return os.path.abspath(video_file_path)
+            if await anyio.Path(video_file_path).exists():
+                return str(await anyio.Path(video_file_path).resolve())
             raise Exception(f"download failed: {url}")
-        if os.path.exists(url):
-            return os.path.abspath(url)
+        if await anyio.Path(url).exists():
+            return str(await anyio.Path(url).resolve())
         raise Exception(f"not a valid file: {url}")
 
     async def register_to_file_service(self) -> str:
@@ -449,18 +458,18 @@ class Image(BaseMessageComponent):
             return url[8:]
         if url.startswith("http"):
             image_file_path = await download_image_by_url(url)
-            return os.path.abspath(image_file_path)
+            return str(await anyio.Path(image_file_path).resolve())
         if url.startswith("base64://"):
             bs64_data = url.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
             image_file_path = os.path.join(
                 get_astrbot_temp_path(), f"imgseg_{uuid.uuid4()}.jpg"
             )
-            with open(image_file_path, "wb") as f:
-                f.write(image_bytes)
-            return os.path.abspath(image_file_path)
-        if os.path.exists(url):
-            return os.path.abspath(url)
+            async with await anyio.open_file(image_file_path, "wb") as f:
+                await f.write(image_bytes)
+            return str(await anyio.Path(image_file_path).resolve())
+        if await anyio.Path(url).exists():
+            return str(await anyio.Path(url).resolve())
         raise Exception(f"not a valid file: {url}")
 
     async def convert_to_base64(self) -> str:
@@ -475,14 +484,14 @@ class Image(BaseMessageComponent):
         if not url:
             raise ValueError("No valid file or URL provided")
         if url.startswith("file:///"):
-            bs64_data = file_to_base64(url[8:])
+            bs64_data = await _file_to_base64_async(url[8:])
         elif url.startswith("http"):
             image_file_path = await download_image_by_url(url)
-            bs64_data = file_to_base64(image_file_path)
+            bs64_data = await _file_to_base64_async(image_file_path)
         elif url.startswith("base64://"):
             bs64_data = url
-        elif os.path.exists(url):
-            bs64_data = file_to_base64(url)
+        elif await anyio.Path(url).exists():
+            bs64_data = await _file_to_base64_async(url)
         else:
             raise Exception(f"not a valid file: {url}")
         bs64_data = bs64_data.removeprefix("base64://")
@@ -761,8 +770,8 @@ class File(BaseMessageComponent):
                 ):
                     path = path[1:]
 
-            if os.path.exists(path):
-                return os.path.abspath(path)
+            if await anyio.Path(path).exists():
+                return str(await anyio.Path(path).resolve())
 
         if self.url:
             await self._download_file()
@@ -777,7 +786,7 @@ class File(BaseMessageComponent):
                         and path[2] == ":"
                     ):
                         path = path[1:]
-                return os.path.abspath(path)
+                return str(await anyio.Path(path).resolve())
 
         return ""
 
@@ -793,7 +802,7 @@ class File(BaseMessageComponent):
             filename = f"fileseg_{uuid.uuid4().hex}"
         file_path = os.path.join(download_dir, filename)
         await download_file(self.url, file_path)
-        self.file_ = os.path.abspath(file_path)
+        self.file_ = str(await anyio.Path(file_path).resolve())
 
     async def register_to_file_service(self) -> str:
         """将文件注册到文件服务。

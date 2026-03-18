@@ -162,18 +162,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # These two are used for tool schema mode handling
         # We now have two modes:
         # - "full": use full tool schema for LLM calls, default.
-        # - "skills_like": use light tool schema for LLM calls, and re-query with param-only schema when needed.
+        # - "lazy_load": use light tool schema for LLM calls, and re-query with param-only schema when needed.
         #   Light tool schema does not include tool parameters.
         #   This can reduce token usage when tools have large descriptions.
         # See #4681
         self.tool_schema_mode = tool_schema_mode
         self._tool_schema_param_set = None
-        self._skill_like_raw_tool_set = None
-        if tool_schema_mode == "skills_like":
+        self._lazy_load_raw_tool_set = None
+        if tool_schema_mode == "lazy_load":
             tool_set = self.req.func_tool
             if not tool_set:
                 return
-            self._skill_like_raw_tool_set = tool_set
+            self._lazy_load_raw_tool_set = tool_set
             light_set = tool_set.get_light_tool_set()
             self._tool_schema_param_set = tool_set.get_param_only_tool_set()
             # MODIFIE the req.func_tool to use light tool schemas
@@ -529,7 +529,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
-            if self.tool_schema_mode == "skills_like":
+            if self.tool_schema_mode == "lazy_load":
                 llm_resp, _ = await self._resolve_tool_exec(llm_resp)
 
             tool_call_result_blocks = []
@@ -716,12 +716,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     return
 
                 if (
-                    self.tool_schema_mode == "skills_like"
-                    and self._skill_like_raw_tool_set
+                    self.tool_schema_mode == "lazy_load"
+                    and self._lazy_load_raw_tool_set
                 ):
-                    # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
+                    # in 'lazy_load' mode, raw.func_tool is light schema, does not have handler
                     # so we need to get the tool from the raw tool set
-                    func_tool = self._skill_like_raw_tool_set.get_tool(func_tool_name)
+                    func_tool = self._lazy_load_raw_tool_set.get_tool(func_tool_name)
                 else:
                     func_tool = req.func_tool.get_tool(func_tool_name)
 
@@ -925,7 +925,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         llm_resp: LLMResponse,
     ) -> tuple[LLMResponse, ToolSet | None]:
-        """Used in 'skills_like' tool schema mode to re-query LLM with param-only tool schemas."""
+        """Used in 'lazy_load' tool schema mode to re-query LLM with param-only tool schemas."""
         tool_names = llm_resp.tools_call_name
         if not tool_names:
             return llm_resp, self.req.func_tool

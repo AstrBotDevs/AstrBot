@@ -1,9 +1,10 @@
 import asyncio
-import os
 import platform
 import time
 import uuid
 from urllib.parse import unquote, urlparse
+
+import anyio
 
 
 class FileTokenService:
@@ -28,12 +29,14 @@ class FileTokenService:
             await self._cleanup_expired_tokens()
             return file_token not in self.staged_files
 
-    async def register_file(self, file_path: str, timeout: float | None = None) -> str:
+    async def register_file(
+        self, file_path: str, expire_seconds: float | None = None
+    ) -> str:
         """向令牌服务注册一个文件。
 
         Args:
             file_path(str): 文件路径
-            timeout(float): 超时时间，单位秒（可选）
+            expire_seconds(float): 超时时间，单位秒（可选）
 
         Returns:
             str: 一个单次令牌
@@ -59,14 +62,14 @@ class FileTokenService:
         async with self.lock:
             await self._cleanup_expired_tokens()
 
-            if not os.path.exists(local_path):
+            if not await anyio.Path(local_path).exists():
                 raise FileNotFoundError(
                     f"文件不存在: {local_path} (原始输入: {file_path})",
                 )
 
             file_token = str(uuid.uuid4())
             expire_time = time.time() + (
-                timeout if timeout is not None else self.default_timeout
+                expire_seconds if expire_seconds is not None else self.default_timeout
             )
             # 存储转换后的真实路径
             self.staged_files[file_token] = (local_path, expire_time)
@@ -93,6 +96,6 @@ class FileTokenService:
                 raise KeyError(f"无效或过期的文件 token: {file_token}")
 
             file_path, _ = self.staged_files.pop(file_token)
-            if not os.path.exists(file_path):
+            if not await anyio.Path(file_path).exists():
                 raise FileNotFoundError(f"文件不存在: {file_path}")
             return file_path

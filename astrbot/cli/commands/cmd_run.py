@@ -7,7 +7,9 @@ from pathlib import Path
 import click
 from filelock import FileLock, Timeout
 
-from ..utils import check_astrbot_root, check_dashboard, get_astrbot_root
+from astrbot.core.utils.astrbot_path import astrbot_paths
+
+from ..utils import check_astrbot_root, check_dashboard
 
 
 async def run_astrbot(astrbot_root: Path) -> None:
@@ -51,7 +53,7 @@ def run(reload: bool, host: str, port: str, backend_only: bool, log_level: str) 
     """Run AstrBot"""
     try:
         os.environ["ASTRBOT_CLI"] = "1"
-        astrbot_root = get_astrbot_root()
+        astrbot_root = astrbot_paths.root
 
         if not check_astrbot_root(astrbot_root):
             raise click.ClickException(

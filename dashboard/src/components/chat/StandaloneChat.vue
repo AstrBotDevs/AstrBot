@@ -74,7 +74,6 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import axios from "axios";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import { useTheme } from "vuetify";
 import MessageList from "@/components/chat/MessageList.vue";
 import ChatInput from "@/components/chat/ChatInput.vue";
 import { useMessages } from "@/composables/useMessages";
@@ -181,9 +180,7 @@ const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 // 输入状态
 const prompt = ref("");
 
-const isDark = computed(
-  () => useCustomizerStore().uiTheme === "PurpleThemeDark",
-);
+const isDark = computed(() => useCustomizerStore().isDarkTheme);
 
 function openImagePreview(imageUrl: string) {
   previewImageUrl.value = imageUrl;

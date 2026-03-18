@@ -25,7 +25,7 @@ TOOL_CALL_PROMPT = (
     "keep the conversation style consistent."
 )
 
-TOOL_CALL_PROMPT_SKILLS_LIKE_MODE = (
+TOOL_CALL_PROMPT_LAZY_LOAD_MODE = (
     "You MUST NOT return an empty response, especially after invoking a tool."
     " Before calling any tool, provide a brief explanatory message to the user stating the purpose of the tool call."
     " Tool schemas are provided in two stages: first only name and description; "

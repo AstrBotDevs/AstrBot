@@ -6,7 +6,9 @@ from typing import Any
 
 import click
 
-from ..utils import check_astrbot_root, get_astrbot_root
+from astrbot.core.utils.astrbot_path import astrbot_paths
+
+from ..utils import check_astrbot_root
 
 
 def _validate_log_level(value: str) -> str:
@@ -77,13 +79,13 @@ CONFIG_VALIDATORS: dict[str, Callable[[str], Any]] = {
 
 def _load_config() -> dict[str, Any]:
     """Load or initialize config file"""
-    root = get_astrbot_root()
+    root = astrbot_paths.root
     if not check_astrbot_root(root):
         raise click.ClickException(
             f"{root} is not a valid AstrBot root directory. Use 'astrbot init' to initialize",
         )
 
-    config_path = root / "data" / "cmd_config.json"
+    config_path = astrbot_paths.data / "cmd_config.json"
     if not config_path.exists():
         from astrbot.core.config.default import DEFAULT_CONFIG
 
@@ -100,7 +102,7 @@ def _load_config() -> dict[str, Any]:
 
 def _save_config(config: dict[str, Any]) -> None:
     """Save config file"""
-    config_path = get_astrbot_root() / "data" / "cmd_config.json"
+    config_path = astrbot_paths.data / "cmd_config.json"
 
     config_path.write_text(
         json.dumps(config, ensure_ascii=False, indent=2),

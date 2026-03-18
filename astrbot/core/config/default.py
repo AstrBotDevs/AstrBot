@@ -468,7 +468,6 @@ CONFIG_METADATA_2 = {
                         "type": "kook",
                         "enable": False,
                         "kook_bot_token": "",
-                        "kook_bot_nickname": "",
                         "kook_reconnect_delay": 1,
                         "kook_max_reconnect_delay": 60,
                         "kook_max_retry_delay": 60,
@@ -879,11 +878,6 @@ CONFIG_METADATA_2 = {
                         "description": "机器人 Token",
                         "type": "string",
                         "hint": "必填项。从 KOOK 开发者平台获取的机器人 Token。",
-                    },
-                    "kook_bot_nickname": {
-                        "description": "Bot Nickname",
-                        "type": "string",
-                        "hint": "可选项。若发送者昵称与此值一致，将忽略该消息以避免广播风暴。",
                     },
                     "kook_reconnect_delay": {
                         "description": "重连延迟",
@@ -3311,9 +3305,9 @@ CONFIG_METADATA_3 = {
                     "provider_settings.tool_schema_mode": {
                         "description": "工具调用模式",
                         "type": "string",
-                        "options": ["skills_like", "full"],
-                        "labels": ["Skills-like（两阶段）", "Full（完整参数）"],
-                        "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
+                        "options": ["lazy_load", "full"],
+                        "labels": ["Lazy Load（两阶段）", "Full（完整参数）"],
+                        "hint": "Lazy Load 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },

@@ -210,7 +210,6 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { useTheme } from 'vuetify';
 import MessageList from '@/components/chat/MessageList.vue';
 import ConversationSidebar from '@/components/chat/ConversationSidebar.vue';
 import ChatInput from '@/components/chat/ChatInput.vue';
@@ -243,7 +242,6 @@ const route = useRoute();
 const { t } = useI18n();
 const { tm } = useModuleI18n('features/chat');
 const { warning: toastWarning } = useToast();
-const theme = useTheme();
 const customizer = useCustomizerStore();
 
 // UI 状态
@@ -340,7 +338,7 @@ interface ReplyInfo {
 }
 const replyTo = ref<ReplyInfo | null>(null);
 
-const isDark = computed(() => useCustomizerStore().uiTheme === 'PurpleThemeDark');
+const isDark = computed(() => customizer.isDarkTheme);
 const sendShortcut = ref<SendShortcut>('shift_enter');
 
 function setSendShortcut(mode: SendShortcut) {
@@ -380,10 +378,9 @@ watch(() => customizer.chatSidebarOpen, (val) => {
     }
 });
 
+// 使用新的逻辑切换主题
 function toggleTheme() {
-    const newTheme = customizer.uiTheme === 'PurpleTheme' ? 'PurpleThemeDark' : 'PurpleTheme';
-    customizer.SET_UI_THEME(newTheme);
-    theme.global.name.value = newTheme;
+    customizer.TOGGLE_DARK_MODE();
 }
 
 function toggleFullscreen() {

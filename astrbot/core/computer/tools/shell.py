@@ -62,7 +62,9 @@ class ExecuteShellTool(FunctionTool):
                 umo=context.context.event.unified_msg_origin
             )
             try:
-                timeout = int(config.get("provider_settings", {}).get("tool_call_timeout", 30))
+                timeout = int(
+                    config.get("provider_settings", {}).get("tool_call_timeout", 30)
+                )
             except (ValueError, TypeError):
                 timeout = 30
             result = await sb.shell.exec(

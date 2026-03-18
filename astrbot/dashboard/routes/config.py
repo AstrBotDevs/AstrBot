@@ -1377,7 +1377,7 @@ class ConfigRoute(Route):
             if os.path.exists(logo_file_path):
                 logo_token = await file_token_service.register_file(
                     logo_file_path,
-                    timeout=3600,
+                    expire_seconds=3600,
                 )
                 platform_logo_tokens[platform.name] = logo_token
 

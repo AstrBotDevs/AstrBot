@@ -65,6 +65,7 @@ dependencies = [
   "python-socks>=2.8.0",
   "packaging>=24.2",
   "quart-cors>=0.8.0",
+  "anyio>=4.12.1",
 ]
 
 [dependency-groups]
@@ -100,8 +101,7 @@ ignore = [
   "F403",
   "F405",
   "E501",
-  "ASYNC230", # TODO: handle ASYNC230 in AstrBot
-  "ASYNC240", # TODO: handle ASYNC240 in AstrBot
+
 ]
 
 [tool.pyright]
