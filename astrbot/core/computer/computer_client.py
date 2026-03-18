@@ -214,7 +214,7 @@ def parse_description(text: str) -> str:
     if end_idx is None:
         return ""
 
-    frontmatter = "\n".join(lines[1:end_idx])
+    frontmatter = "\\n".join(lines[1:end_idx])
     try:
         import yaml
     except ImportError:
@@ -488,6 +488,11 @@ async def get_booter(
             from .booters.boxlite import BoxliteBooter
 
             client = BoxliteBooter()
+        elif booter_type == "bwrap":
+            from .booters.bwrap import BwrapBooter
+
+            rw_binds = sandbox_cfg.get("bwrap_rw_binds", [])
+            client = BwrapBooter(rw_binds=rw_binds)
         else:
             raise ValueError(f"Unknown booter type: {booter_type}")
 

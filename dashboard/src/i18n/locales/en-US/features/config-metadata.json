@@ -193,6 +193,10 @@
           "shipyard_max_sessions": {
             "description": "Shipyard Max Sessions",
             "hint": "Maximum number of Shipyard sessions an instance can handle."
+          },
+          "bwrap_rw_binds": {
+            "description": "Bubblewrap RW Binds",
+            "hint": "Extra read-write mount directories for Bubblewrap sandbox (press Enter to add, multiple allowed. /tmp and /var/tmp are RW by default, and the entire host system is mounted RO in the same location by default)."
           }
         }
       }
