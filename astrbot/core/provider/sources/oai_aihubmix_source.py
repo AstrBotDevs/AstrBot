@@ -1,3 +1,6 @@
+from collections.abc import MutableMapping
+from typing import cast
+
 from ..register import register_provider_adapter
 from .openai_source import ProviderOpenAIOfficial
 
@@ -14,4 +17,7 @@ class ProviderAIHubMix(ProviderOpenAIOfficial):
         super().__init__(provider_config, provider_settings)
         # Reference to: https://aihubmix.com/appstore
         # Use this code can enjoy 10% off prices for AIHubMix API calls.
-        self.client._custom_headers["APP-Code"] = "KRLC5702"  # type: ignore
+        custom_headers = cast(
+            MutableMapping[str, str], getattr(self.client, "_custom_headers")
+        )
+        custom_headers["APP-Code"] = "KRLC5702"

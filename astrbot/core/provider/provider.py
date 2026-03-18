@@ -2,7 +2,7 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator
-from typing import TypeAlias, Union
+from typing import TypeAlias, Union, cast
 
 import aiofiles
 import anyio
@@ -157,7 +157,7 @@ class Provider(AbstractProvider):
 
         """
         if False:  # pragma: no cover - make this an async generator for typing
-            yield None  # type: ignore
+            yield cast(LLMResponse, None)
         raise NotImplementedError()
 
     async def pop_record(self, context: list) -> None:

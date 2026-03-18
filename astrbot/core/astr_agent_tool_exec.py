@@ -152,7 +152,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         task_id=task_id,
                         **tool_args,
                     )
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     logger.error(
                         f"Background task {task_id} failed: {e!s}",
                         exc_info=True,
@@ -399,7 +399,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     task_id=task_id,
                     **tool_args,
                 )
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.error(
                     f"Background handoff {task_id} ({tool.name}) failed: {e!s}",
                     exc_info=True,

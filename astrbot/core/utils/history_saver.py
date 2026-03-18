@@ -20,7 +20,7 @@ async def persist_agent_history(
     history = []
     try:
         history = json.loads(req.conversation.history or "[]")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Failed to parse conversation history: %s", exc)
     history.append({"role": "user", "content": "Output your last task result below."})
     history.append({"role": "assistant", "content": summary_note})

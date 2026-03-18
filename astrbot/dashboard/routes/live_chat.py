@@ -95,7 +95,7 @@ class LiveChatSession:
             logger.error(f"[Live Chat] 组装 WAV 文件失败: {e}", exc_info=True)
             return None, 0.0
 
-    def cleanup(self) -> None:
+    async def cleanup(self) -> None:
         """清理临时文件"""
         if self.temp_audio_path and await anyio.Path(self.temp_audio_path).exists():
             try:
@@ -179,7 +179,7 @@ class LiveChatRoute(Route):
             # 清理会话
             if session_id in self.sessions:
                 await self._cleanup_chat_subscriptions(live_session)
-                live_session.cleanup()
+                await live_session.cleanup()
                 del self.sessions[session_id]
             logger.info(f"[Live Chat] WebSocket 连接关闭: {username}")
 

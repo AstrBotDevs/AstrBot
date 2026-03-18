@@ -366,7 +366,7 @@ class KnowledgeBaseRoute(Route):
                 return Response().error("缺少参数 embedding_provider_id").__dict__
             prv = await kb_manager.provider_manager.get_provider_by_id(
                 embedding_provider_id,
-            )  # type: ignore
+            )
             if not prv or not isinstance(prv, EmbeddingProvider):
                 return (
                     Response().error(f"嵌入模型不存在或类型错误({type(prv)})").__dict__
@@ -381,11 +381,13 @@ class KnowledgeBaseRoute(Route):
                 return Response().error(f"测试嵌入模型失败: {e!s}").__dict__
             # pre-check rerank
             if rerank_provider_id:
-                rerank_prv: RerankProvider = (
-                    await kb_manager.provider_manager.get_provider_by_id(
-                        rerank_provider_id,
-                    )
-                )  # type: ignore
+                rerank_prv = await kb_manager.provider_manager.get_provider_by_id(
+                    rerank_provider_id,
+                )
+                if rerank_prv is not None and not isinstance(
+                    rerank_prv, RerankProvider
+                ):
+                    return Response().error("重排序模型类型错误").__dict__
                 if not rerank_prv:
                     return Response().error("重排序模型不存在").__dict__
                 # 检查重排序模型可用性

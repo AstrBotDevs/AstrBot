@@ -192,7 +192,7 @@ async def _apply_kb(
                 req.system_prompt += (
                     f"\n\n[Related Knowledge Base Results]:\n{kb_result}"
                 )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error("Error occurred while retrieving knowledge base: %s", exc)
     else:
         if req.func_tool is None:
@@ -451,7 +451,7 @@ async def _ensure_img_caption(
                 TextPart(text=f"<image_caption>{caption}</image_caption>")
             )
             req.image_urls = []
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("处理图片描述失败: %s", exc)
 
 
@@ -563,7 +563,7 @@ def _append_system_reminders(
             try:
                 now = datetime.datetime.now(zoneinfo.ZoneInfo(timezone))
                 current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.error("时区设置错误: %s, 使用本地时区", exc)
         if not current_time:
             current_time = (
@@ -1011,7 +1011,7 @@ async def build_main_agent(
                             req.image_urls.append(image_ref)
                             fallback_quoted_image_count += 1
                             _append_quoted_image_attachment(req, image_ref)
-                    except Exception as exc:  # noqa: BLE001
+                    except Exception as exc:
                         logger.warning(
                             "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
                             event.unified_msg_origin,
@@ -1032,7 +1032,7 @@ async def build_main_agent(
     if config.file_extract_enabled:
         try:
             await _apply_file_extract(event, req, config)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error("Error occurred while applying file extract: %s", exc)
 
     if not req.prompt and not req.image_urls:

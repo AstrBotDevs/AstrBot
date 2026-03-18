@@ -205,7 +205,7 @@ class CronJobManager:
                 await self._run_active_agent_job(job, start_time=start_time)
             else:
                 raise ValueError(f"Unknown cron job type: {job.job_type}")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             status = "failed"
             last_error = str(e)
             logger.error(f"Cron job {job_id} failed: {e!s}", exc_info=True)
@@ -286,7 +286,7 @@ class CronJobManager:
                 if isinstance(session_str, MessageSession)
                 else MessageSession.from_str(session_str)
             )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(f"Invalid session for cron job: {e}")
             return
 

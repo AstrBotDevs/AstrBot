@@ -1,3 +1,6 @@
+from collections.abc import MutableMapping
+from typing import cast
+
 from ..register import register_provider_adapter
 from .openai_source import ProviderOpenAIOfficial
 
@@ -13,10 +16,9 @@ class ProviderOpenRouter(ProviderOpenAIOfficial):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         # Reference to: https://openrouter.ai/docs/api/reference/overview#headers
-        self.client._custom_headers["HTTP-Referer"] = (  # type: ignore
-            "https://github.com/AstrBotDevs/AstrBot"
+        custom_headers = cast(
+            MutableMapping[str, str], getattr(self.client, "_custom_headers")
         )
-        self.client._custom_headers["X-OpenRouter-Title"] = "AstrBot"  # type: ignore
-        self.client._custom_headers["X-OpenRouter-Categories"] = (
-            "general-chat,personal-agent"  # type: ignore
-        )
+        custom_headers["HTTP-Referer"] = "https://github.com/AstrBotDevs/AstrBot"
+        custom_headers["X-OpenRouter-Title"] = "AstrBot"
+        custom_headers["X-OpenRouter-Categories"] = "general-chat,personal-agent"

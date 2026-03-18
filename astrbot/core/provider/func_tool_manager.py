@@ -578,7 +578,7 @@ class FunctionToolManager:
         """安全清理单个 MCP 客户端，避免清理异常中断主流程。"""
         try:
             await mcp_client.cleanup()
-        except Exception as cleanup_exc:  # noqa: BLE001 - only log here
+        except Exception as cleanup_exc:  # only log here
             logger.error(
                 f"Failed to cleanup MCP client resources {name}: {cleanup_exc}"
             )

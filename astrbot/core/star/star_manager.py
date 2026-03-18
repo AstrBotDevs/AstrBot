@@ -160,7 +160,7 @@ class PluginManager:
         self.updator = PluginUpdator()
 
         self.context = context
-        self.context._star_manager = self  # type: ignore
+        self.context._star_manager = self
         StarTools.initialize(context)
 
         self.config = config
@@ -910,6 +910,9 @@ class PluginManager:
                     assert metadata.module_path is not None, (
                         f"插件 {metadata.name} 的模块路径为空。"
                     )
+                    assert metadata.star_cls is not None, (
+                        f"插件 {metadata.name} 的实例为空。"
+                    )
 
                     # 绑定 handler
                     related_handlers = (
@@ -920,7 +923,7 @@ class PluginManager:
                     for handler in related_handlers:
                         handler.handler = functools.partial(
                             handler.handler,
-                            metadata.star_cls,  # type: ignore
+                            metadata.star_cls,
                         )
                     # 绑定 llm_tool handler
                     for func_tool in llm_tools.func_list:
@@ -942,7 +945,7 @@ class PluginManager:
                                 ft.handler_module_path = metadata.module_path
                                 ft.handler = functools.partial(
                                     ft.handler,
-                                    metadata.star_cls,  # type: ignore
+                                    metadata.star_cls,
                                 )
                             if ft.name in inactivated_llm_tools:
                                 ft.active = False
