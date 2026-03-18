@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import inspect
 import re
-import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, get_type_hints
@@ -50,6 +49,11 @@ from .protocol.descriptors import (
     ScheduleTrigger,
 )
 from .protocol.messages import InvokeMessage
+from .runtime._command_matching import (
+    build_command_args,
+    build_regex_args,
+    match_command_name,
+)
 from .runtime._streaming import StreamExecution
 from .runtime.handler_dispatcher import CapabilityDispatcher, HandlerDispatcher
 from .runtime.loader import (
@@ -554,11 +558,11 @@ class PluginHarness:
             match = re.search(command_name, text)
             if match is None:
                 return None
-            return self._build_regex_args(loaded.descriptor.param_specs, match)
-        remainder = self._match_command_name(text.strip(), command_name)
+            return build_regex_args(loaded.descriptor.param_specs, match)
+        remainder = match_command_name(text, command_name)
         if remainder is None:
             return None
-        return self._build_command_args(loaded.descriptor.param_specs, remainder)
+        return build_command_args(loaded.descriptor.param_specs, remainder)
 
     def _match_handler(
         self,
@@ -600,10 +604,10 @@ class PluginHarness:
         for command_name in [trigger.command, *trigger.aliases]:
             if not command_name:
                 continue
-            match = self._match_command_name(text, command_name)
+            match = match_command_name(text, command_name)
             if match is None:
                 continue
-            return self._build_command_args(loaded.descriptor.param_specs, match)
+            return build_command_args(loaded.descriptor.param_specs, match)
         return None
 
     def _match_message_trigger(
@@ -619,7 +623,7 @@ class PluginHarness:
             match = re.search(trigger.regex, text)
             if match is None:
                 return None
-            return self._build_regex_args(loaded.descriptor.param_specs, match)
+            return build_regex_args(loaded.descriptor.param_specs, match)
         if trigger.keywords and not any(
             keyword in text for keyword in trigger.keywords
         ):
@@ -700,51 +704,6 @@ class PluginHarness:
         if event_payload.get("user_id"):
             return "private"
         return "other"
-
-    @staticmethod
-    def _match_command_name(text: str, command_name: str) -> str | None:
-        if text == command_name:
-            return ""
-        if text.startswith(f"{command_name} "):
-            return text[len(command_name) :].strip()
-        return None
-
-    def _build_command_args(self, param_specs, remainder: str) -> dict[str, Any]:
-        if not param_specs or not remainder:
-            return {}
-        if len(param_specs) == 1:
-            return {param_specs[0].name: remainder}
-        tokens = self._split_command_remainder(remainder)
-        if not tokens:
-            return {}
-        values: dict[str, Any] = {}
-        for index, spec in enumerate(param_specs):
-            if index >= len(tokens):
-                break
-            if spec.type == "greedy_str":
-                values[spec.name] = " ".join(tokens[index:])
-                break
-            values[spec.name] = tokens[index]
-        return values
-
-    def _build_regex_args(self, param_specs, match: re.Match[str]) -> dict[str, Any]:
-        named = {
-            key: value for key, value in match.groupdict().items() if value is not None
-        }
-        names = [spec.name for spec in param_specs if spec.name not in named]
-        positional = [value for value in match.groups() if value is not None]
-        for index, value in enumerate(positional):
-            if index >= len(names):
-                break
-            named[names[index]] = value
-        return named
-
-    @staticmethod
-    def _split_command_remainder(remainder: str) -> list[str]:
-        try:
-            return shlex.split(remainder)
-        except ValueError:
-            return remainder.split()
 
     @staticmethod
     def _resolve_lifecycle_hook(instance: Any, method_name: str):

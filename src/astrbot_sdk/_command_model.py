@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import inspect
-import shlex
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,6 +8,7 @@ from pydantic import BaseModel
 
 from ._typing_utils import unwrap_optional
 from .errors import AstrBotError
+from .runtime._command_matching import split_command_remainder
 
 COMMAND_MODEL_DOCS_URL = "https://docs.astrbot.org/sdk/parameter-injection"
 
@@ -75,7 +75,7 @@ def parse_command_model_remainder(
     model_param: ResolvedCommandModelParam,
     command_name: str,
 ) -> CommandModelParseResult:
-    tokens = _split_command_remainder(remainder)
+    tokens = split_command_remainder(remainder)
     if any(token in {"-h", "--help"} for token in tokens):
         return CommandModelParseResult(
             help_text=format_command_model_help(command_name, model_param.model_cls)
@@ -208,15 +208,6 @@ def _command_parse_error(message: str) -> AstrBotError:
         message,
         docs_url=COMMAND_MODEL_DOCS_URL,
     )
-
-
-def _split_command_remainder(remainder: str) -> list[str]:
-    if not remainder:
-        return []
-    try:
-        return shlex.split(remainder)
-    except ValueError:
-        return remainder.split()
 
 
 def _is_injected_parameter(name: str, annotation: Any) -> bool:

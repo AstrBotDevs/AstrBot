@@ -28,7 +28,15 @@ fork-docs/
 tmp/
 openspec/
 scripts/
-docs/zh/reference
+cs/
+test_plugin/astrbot_plugin_interface_coverage
+docs/
+astrbot_sdk/
+!src/astrbot_sdk/
+!src/astrbot_sdk/**
+src/astrbot_sdk/**/__pycache__/
+src/astrbot_sdk/**/*.py[cod]
+COMMAND_MATCH_REFACTOR_REPORT.md
 
 # Virtual environments
 .venv/

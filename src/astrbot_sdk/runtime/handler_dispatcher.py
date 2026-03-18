@@ -25,7 +25,6 @@ from __future__ import annotations
 import asyncio
 import inspect
 import re
-import shlex
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, cast, get_type_hints
@@ -62,6 +61,11 @@ from ..schedule import ScheduleContext
 from ..session_waiter import SessionWaiterManager
 from ..star import Star
 from .capability_dispatcher import CapabilityDispatcher
+from ._command_matching import (
+    build_command_args,
+    build_regex_args,
+    match_command_name,
+)
 from .limiter import LimiterEngine
 from .loader import LoadedHandler
 
@@ -289,7 +293,7 @@ class HandlerDispatcher:
         if isinstance(trigger, CommandTrigger):
             param_specs = loaded.descriptor.param_specs
             for command_name in [trigger.command, *trigger.aliases]:
-                remainder = self._match_command_name(event.text, command_name)
+                remainder = match_command_name(event.text, command_name)
                 if remainder is not None:
                     model_param = resolve_command_model_param(loaded.callable)
                     if model_param is not None:
@@ -298,8 +302,8 @@ class HandlerDispatcher:
                             "__command_name__": command_name,
                         }
                     if param_specs:
-                        return self._build_command_args(param_specs, remainder)
-                    return self._build_command_args(
+                        return build_command_args(param_specs, remainder)
+                    return build_command_args(
                         [
                             ParamSpec(name=name, type="str")
                             for name in self._legacy_arg_parameter_names(
@@ -314,8 +318,8 @@ class HandlerDispatcher:
             if match is None:
                 return {}
             if loaded.descriptor.param_specs:
-                return self._build_regex_args(loaded.descriptor.param_specs, match)
-            return self._build_regex_args(
+                return build_regex_args(loaded.descriptor.param_specs, match)
+            return build_regex_args(
                 [
                     ParamSpec(name=name, type="str")
                     for name in self._legacy_arg_parameter_names(loaded.callable)
@@ -711,49 +715,6 @@ class HandlerDispatcher:
         return False
 
     @staticmethod
-    def _match_command_name(text: str, command_name: str) -> str | None:
-        normalized = text.strip()
-        if normalized == command_name:
-            return ""
-        if normalized.startswith(f"{command_name} "):
-            return normalized[len(command_name) :].strip()
-        return None
-
-    @classmethod
-    def _build_command_args(
-        cls, param_specs: Sequence[ParamSpec], remainder: str
-    ) -> dict[str, Any]:
-        if not param_specs or not remainder:
-            return {}
-        if len(param_specs) == 1:
-            return {param_specs[0].name: remainder}
-        parts = cls._split_command_remainder(remainder)
-        values: dict[str, Any] = {}
-        for index, spec in enumerate(param_specs):
-            if index >= len(parts):
-                break
-            if spec.type == "greedy_str":
-                values[spec.name] = " ".join(parts[index:])
-                break
-            values[spec.name] = parts[index]
-        return values
-
-    @classmethod
-    def _build_regex_args(
-        cls, param_specs: Sequence[ParamSpec], match: re.Match[str]
-    ) -> dict[str, Any]:
-        named = {
-            key: value for key, value in match.groupdict().items() if value is not None
-        }
-        names = [spec.name for spec in param_specs if spec.name not in named]
-        positional = [value for value in match.groups() if value is not None]
-        for index, value in enumerate(positional):
-            if index >= len(names):
-                break
-            named[names[index]] = value
-        return named
-
-    @staticmethod
     def _parse_handler_args(
         param_specs: Sequence[ParamSpec],
         args: dict[str, Any],
@@ -819,13 +780,6 @@ class HandlerDispatcher:
             return ScheduleContext.from_payload(event_payload)
         except Exception:
             return None
-
-    @staticmethod
-    def _split_command_remainder(remainder: str) -> list[str]:
-        try:
-            return shlex.split(remainder)
-        except ValueError:
-            return remainder.split()
 
     @classmethod
     def _legacy_arg_parameter_names(cls, handler) -> list[str]:
