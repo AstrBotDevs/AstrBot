@@ -50,19 +50,12 @@ def strip_platform_runtime_fields(
     config: Any,
     runtime_field_keys: frozenset[str] = RUNTIME_PLATFORM_FIELD_KEYS,
 ) -> Any:
-    if isinstance(config, list):
-        return [
-            strip_platform_runtime_fields(item, runtime_field_keys) for item in config
-        ]
-
     if not isinstance(config, dict):
         return config
 
-    cleaned_config: dict[Any, Any] = {}
-    for key, value in config.items():
-        if key in runtime_field_keys:
-            continue
-        cleaned_config[key] = strip_platform_runtime_fields(value, runtime_field_keys)
+    cleaned_config = dict(config)
+    for key in runtime_field_keys:
+        cleaned_config.pop(key, None)
     return cleaned_config
 
 

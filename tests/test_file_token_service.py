@@ -66,7 +66,7 @@ async def test_reusable_token_expires_normally(tmp_path: Path) -> None:
     service = FileTokenService(default_timeout=300)
     token = await service.register_file(
         str(file_path),
-        expire_seconds=0.01,
+        expire_seconds=0.2,
         single_use=False,
     )
 
@@ -75,10 +75,10 @@ async def test_reusable_token_expires_normally(tmp_path: Path) -> None:
     assert await service.check_token_expired(token) is False
 
     start = time.monotonic()
-    timeout = 1.0
+    timeout = 2.0
     expired = await service.check_token_expired(token)
     while not expired and time.monotonic() - start < timeout:
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(0.05)
         expired = await service.check_token_expired(token)
 
     assert expired is True

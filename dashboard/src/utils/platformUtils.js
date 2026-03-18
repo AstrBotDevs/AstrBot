@@ -40,8 +40,6 @@ const BUILTIN_PLATFORM_ICON_MAP = {
   ).href,
   satori: new URL("@/assets/images/platform_logos/satori.png", import.meta.url)
     .href,
-  Satori: new URL("@/assets/images/platform_logos/satori.png", import.meta.url)
-    .href,
   misskey: new URL("@/assets/images/platform_logos/misskey.png", import.meta.url)
     .href,
   line: new URL("@/assets/images/platform_logos/line.png", import.meta.url).href,
@@ -50,24 +48,14 @@ const BUILTIN_PLATFORM_ICON_MAP = {
 const DEFAULT_RUNTIME_PLATFORM_KEYS = ['logo_token'];
 
 export function stripPlatformRuntimeFields(config, runtimeKeys = DEFAULT_RUNTIME_PLATFORM_KEYS) {
-  if (Array.isArray(config)) {
-    return config.map((item) => stripPlatformRuntimeFields(item, runtimeKeys));
-  }
-
   if (!config || typeof config !== 'object') {
     return config;
   }
 
-  const runtimeKeySet = new Set(runtimeKeys);
-  const cleanedConfig = {};
-
-  for (const [key, value] of Object.entries(config)) {
-    if (runtimeKeySet.has(key)) {
-      continue;
-    }
-    cleanedConfig[key] = stripPlatformRuntimeFields(value, runtimeKeys);
+  const cleanedConfig = { ...config };
+  for (const key of runtimeKeys) {
+    delete cleanedConfig[key];
   }
-
   return cleanedConfig;
 }
 
@@ -94,7 +82,8 @@ export function getPlatformIcon(name, options = {}) {
     return `/api/file/${dynamicLogoToken}`;
   }
 
-  return BUILTIN_PLATFORM_ICON_MAP[name] || defaultPluginIcon;
+  const normalizedName = typeof name === 'string' ? name.toLowerCase() : name;
+  return BUILTIN_PLATFORM_ICON_MAP[normalizedName] || defaultPluginIcon;
 }
 
 /**
