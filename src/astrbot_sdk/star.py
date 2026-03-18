@@ -125,7 +125,7 @@ class Star(PluginKVStoreMixin):
         logger.error("handler 执行失败\n{}", traceback.format_exc())
 
     async def on_error(self, error: Exception, event, ctx) -> None:
-        await self.default_on_error(error, event, ctx)
+        await Star.default_on_error(error, event, ctx)
 
     @classmethod
     def __astrbot_is_new_star__(cls) -> bool:
