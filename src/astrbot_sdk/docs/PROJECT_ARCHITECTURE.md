@@ -343,11 +343,11 @@ HandlerDispatcher 支持参数注入，优先级为：
 | 客户端 | 主要方法 | 对应 Capability |
 |--------|---------|-----------------|
 | `LLMClient` | `chat()`, `chat_raw()`, `stream_chat()` | `llm.*` |
-| `MemoryClient` | `search()`, `save()`, `get()`, `delete()`, `stats()` | `memory.*` |
-| `DBClient` | `get()`, `set()`, `delete()`, `list()`, `watch()` | `db.*` |
+| `MemoryClient` | `search()`, `save()`, `save_with_ttl()`, `get()`, `get_many()`, `delete()`, `delete_many()`, `stats()` | `memory.*` |
+| `DBClient` | `get()`, `set()`, `get_many()`, `set_many()`, `delete()`, `list()`, `watch()` | `db.*` |
 | `PlatformClient` | `send()`, `send_image()`, `send_chain()`, `get_members()` | `platform.*` |
 | `HTTPClient` | `register_api()`, `unregister_api()`, `list_apis()` | `http.*` |
-| `MetadataClient` | `get_plugin()`, `list_plugins()`, `get_plugin_config()` | `metadata.*` |
+| `MetadataClient` | `get_plugin()`, `list_plugins()`, `get_current_plugin()`, `get_plugin_config()` | `metadata.*` |
 
 ---
 
@@ -511,7 +511,7 @@ await ctx.platform.send_chain(event.session_id, chain)
 
 ### 完整文档目录
 
-SDK 文档按学习路径组织，位于 `astrbot-sdk/src/astrbot_sdk/docs/`：
+SDK 文档按学习路径组织，位于 `src/astrbot_sdk/docs/`：
 
 | 级别 | 文档 | 内容 |
 |------|------|------|
@@ -546,10 +546,10 @@ SDK 文档按学习路径组织，位于 `astrbot-sdk/src/astrbot_sdk/docs/`：
 
 - **SDK 版本**: v4.0
 - **协议版本**: P0.6
-- **Python 要求**: >= 3.10
+- **Python 要求**: >=3.12
 - **推荐版本**: 3.12+
 
 ---
 
 > 本文档基于 AstrBot SDK v4 架构文档整理
-> 详细内容请查阅 `astrbot-sdk/src/astrbot_sdk/docs/` 目录下的完整文档
+> 详细内容请查阅 `src/astrbot_sdk/docs/` 目录下的完整文档
