@@ -2156,7 +2156,8 @@ CONFIG_METADATA_2 = {
                     "max_tokens": {
                         "description": "最大输出 Token 数",
                         "type": "int",
-                        "hint": "控制模型单次回复的最大 token 数量。Anthropic 默认 4096。如果回复经常被截断，可以适当调大。",
+                        "hint": "控制模型单次回复的最大 token 数量。仅对 Anthropic 类型的提供商生效。默认 4096。如果回复经常被截断，可以适当调大。",
+                        "provider_type_filter": ["anthropic_chat_completion"],
                     },
                     "minimax-group-id": {
                         "type": "string",
