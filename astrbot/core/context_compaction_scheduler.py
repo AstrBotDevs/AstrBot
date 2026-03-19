@@ -70,12 +70,29 @@ class PeriodicContextCompactionScheduler:
         self._running_lock = asyncio.Lock()
         self._token_counter = EstimateTokenCounter()
         self._bootstrapped = False
+        self._last_report: dict[str, Any] | None = None
+        self._last_started_at: str | None = None
+        self._last_finished_at: str | None = None
+        self._last_error: str | None = None
+
+    def get_status(self) -> dict[str, Any]:
+        cfg = self._load_config()
+        return {
+            "running": self._running_lock.locked(),
+            "bootstrapped": self._bootstrapped,
+            "stop_requested": self._stop_event.is_set(),
+            "config": cfg,
+            "last_started_at": self._last_started_at,
+            "last_finished_at": self._last_finished_at,
+            "last_error": self._last_error,
+            "last_report": self._last_report,
+        }
 
     async def run(self) -> None:
         logger.info("[ContextCompact] scheduler started")
         while not self._stop_event.is_set():
             cfg = self._load_config()
-            wait_seconds = max(5, int(cfg["interval_minutes"])) * 60
+            wait_seconds = self._resolve_wait_seconds(cfg)
 
             if not cfg["enabled"]:
                 await self._sleep_or_stop(wait_seconds)
@@ -105,6 +122,7 @@ class PeriodicContextCompactionScheduler:
                     report.get("elapsed_sec", 0.0),
                 )
             except Exception as exc:
+                self._last_error = str(exc)
                 logger.error(
                     "[ContextCompact] scheduler run error: %s",
                     exc,
@@ -118,18 +136,23 @@ class PeriodicContextCompactionScheduler:
     async def stop(self) -> None:
         self._stop_event.set()
 
-    async def run_once(self, reason: str = "manual") -> dict[str, Any]:
+    async def run_once(
+        self,
+        reason: str = "manual",
+        max_conversations_override: int | None = None,
+    ) -> dict[str, Any]:
         """Run one compaction sweep.
 
         Exposed so future admin command/cron endpoints can trigger ad-hoc compaction.
         """
         async with self._running_lock:
+            self._last_started_at = self._now_iso()
             cfg = self._load_config()
             started = time.monotonic()
             stats = _CompactionStats()
 
             if not cfg["enabled"] and reason == "scheduled":
-                return {
+                report = {
                     "reason": reason,
                     "scanned": 0,
                     "compacted": 0,
@@ -138,8 +161,14 @@ class PeriodicContextCompactionScheduler:
                     "elapsed_sec": 0.0,
                     "message": "disabled",
                 }
+                self._last_report = report
+                self._last_finished_at = self._now_iso()
+                self._last_error = None
+                return report
 
             max_to_compact = max(1, int(cfg["max_conversations_per_run"]))
+            if max_conversations_override is not None:
+                max_to_compact = max(1, int(max_conversations_override))
             max_to_scan = max(max_to_compact, int(cfg["max_scan_per_run"]))
             scan_page_size = max(10, int(cfg["scan_page_size"]))
 
@@ -180,7 +209,7 @@ class PeriodicContextCompactionScheduler:
                 page += 1
 
             elapsed = time.monotonic() - started
-            return {
+            report = {
                 "reason": reason,
                 "scanned": stats.scanned,
                 "compacted": stats.compacted,
@@ -188,12 +217,20 @@ class PeriodicContextCompactionScheduler:
                 "failed": stats.failed,
                 "elapsed_sec": elapsed,
             }
+            self._last_report = report
+            self._last_finished_at = self._now_iso()
+            self._last_error = None
+            return report
 
     async def _sleep_or_stop(self, seconds: int) -> None:
         try:
             await asyncio.wait_for(self._stop_event.wait(), timeout=seconds)
         except asyncio.TimeoutError:
             return
+
+    @staticmethod
+    def _resolve_wait_seconds(cfg: dict[str, Any]) -> int:
+        return max(1, int(cfg["interval_minutes"])) * 60
 
     def _load_config(self) -> dict[str, Any]:
         default_conf = self.config_manager.default_conf
@@ -227,11 +264,12 @@ class PeriodicContextCompactionScheduler:
         cfg["min_idle_minutes"] = self._to_int(cfg.get("min_idle_minutes"), 15, 0)
         cfg["min_messages"] = self._to_int(cfg.get("min_messages"), 14, 2)
         cfg["target_tokens"] = self._to_int(cfg.get("target_tokens"), 4096, 512)
-        cfg["trigger_tokens"] = self._to_int(
-            cfg.get("trigger_tokens"),
-            max(int(cfg["target_tokens"] * 1.5), cfg["target_tokens"] + 1),
-            512,
-        )
+        trigger_default = max(int(cfg["target_tokens"] * 1.5), cfg["target_tokens"] + 1)
+        raw_trigger = raw_cfg.get("trigger_tokens")
+        if raw_trigger is None or (isinstance(raw_trigger, str) and not raw_trigger):
+            cfg["trigger_tokens"] = trigger_default
+        else:
+            cfg["trigger_tokens"] = self._to_int(raw_trigger, trigger_default, 512)
         if cfg["trigger_tokens"] <= cfg["target_tokens"]:
             cfg["trigger_tokens"] = cfg["target_tokens"] + 1
         cfg["max_rounds"] = self._to_int(cfg.get("max_rounds"), 3, 1)
@@ -553,3 +591,7 @@ class PeriodicContextCompactionScheduler:
         except Exception:
             parsed = default
         return max(parsed, min_value)
+
+    @staticmethod
+    def _now_iso() -> str:
+        return datetime.now(timezone.utc).isoformat()

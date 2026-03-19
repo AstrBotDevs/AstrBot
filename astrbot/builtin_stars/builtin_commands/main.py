@@ -4,6 +4,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from .commands import (
     AdminCommands,
     AlterCmdCommands,
+    ContextCompactionCommands,
     ConversationCommands,
     HelpCommand,
     LLMCommands,
@@ -26,6 +27,7 @@ class Main(star.Star):
         self.plugin_c = PluginCommands(self.context)
         self.admin_c = AdminCommands(self.context)
         self.conversation_c = ConversationCommands(self.context)
+        self.ctxcompact_c = ContextCompactionCommands(self.context)
         self.provider_c = ProviderCommands(self.context)
         self.persona_c = PersonaCommands(self.context)
         self.alter_cmd_c = AlterCmdCommands(self.context)
@@ -126,6 +128,27 @@ class Main(star.Star):
     ) -> None:
         """查看或者切换 LLM Provider"""
         await self.provider_c.provider(event, idx, idx2)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command_group("ctxcompact")
+    def ctxcompact(self) -> None:
+        """上下文定时压缩管理"""
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @ctxcompact.command("status")
+    async def ctxcompact_status(self, event: AstrMessageEvent) -> None:
+        """查看定时上下文压缩状态"""
+        await self.ctxcompact_c.status(event)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @ctxcompact.command("run")
+    async def ctxcompact_run(
+        self,
+        event: AstrMessageEvent,
+        limit: int | None = None,
+    ) -> None:
+        """手动触发一次上下文压缩（可选 limit 覆盖本次压缩会话数）"""
+        await self.ctxcompact_c.run(event, limit)
 
     @filter.command("reset")
     async def reset(self, message: AstrMessageEvent) -> None:

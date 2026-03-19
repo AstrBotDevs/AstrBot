@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from astrbot.core.context_compaction_scheduler import PeriodicContextCompactionScheduler
 
 
@@ -40,6 +42,111 @@ def test_load_config_normalizes_values() -> None:
     assert cfg["target_tokens"] == 1024
     assert cfg["trigger_tokens"] == 1025
     assert cfg["max_rounds"] == 2
+
+
+@pytest.mark.parametrize(
+    ("raw_enabled", "expected"),
+    [
+        ("true", True),
+        ("false", False),
+        ("1", True),
+        ("0", False),
+        ("yes", True),
+        ("no", False),
+        ("unknown", False),
+    ],
+)
+def test_load_config_enabled_bool_parsing(raw_enabled: str, expected: bool) -> None:
+    scheduler = _build_scheduler(
+        {
+            "periodic_context_compaction": {
+                "enabled": raw_enabled,
+            }
+        }
+    )
+
+    cfg = scheduler._load_config()
+    assert cfg["enabled"] is expected
+
+
+@pytest.mark.parametrize(
+    ("raw_cfg", "expected_interval", "expected_scan_page_size", "expected_min_messages"),
+    [
+        ({"interval_minutes": 0, "scan_page_size": 1, "min_messages": 0}, 1, 10, 2),
+        (
+            {"interval_minutes": -3, "scan_page_size": -5, "min_messages": -1},
+            1,
+            10,
+            2,
+        ),
+        (
+            {"interval_minutes": "0", "scan_page_size": "1", "min_messages": "0"},
+            1,
+            10,
+            2,
+        ),
+    ],
+)
+def test_load_config_clamps_numeric_minimums(
+    raw_cfg: dict,
+    expected_interval: int,
+    expected_scan_page_size: int,
+    expected_min_messages: int,
+) -> None:
+    scheduler = _build_scheduler({"periodic_context_compaction": raw_cfg})
+    cfg = scheduler._load_config()
+
+    assert cfg["interval_minutes"] == expected_interval
+    assert cfg["scan_page_size"] == expected_scan_page_size
+    assert cfg["min_messages"] == expected_min_messages
+
+
+@pytest.mark.parametrize(
+    ("raw_cfg", "expected_target", "expected_trigger"),
+    [
+        ({"target_tokens": 1024}, 1024, 1536),
+        ({"target_tokens": 1024, "trigger_tokens": None}, 1024, 1536),
+        ({"target_tokens": 1024, "trigger_tokens": 512}, 1024, 1025),
+        ({"target_tokens": 1024, "trigger_tokens": "512"}, 1024, 1025),
+        ({"target_tokens": 1024, "trigger_tokens": 2048}, 1024, 2048),
+        ({"target_tokens": 10}, 512, 768),
+    ],
+)
+def test_load_config_token_threshold_normalization(
+    raw_cfg: dict,
+    expected_target: int,
+    expected_trigger: int,
+) -> None:
+    scheduler = _build_scheduler({"periodic_context_compaction": raw_cfg})
+    cfg = scheduler._load_config()
+
+    assert cfg["target_tokens"] == expected_target
+    assert cfg["trigger_tokens"] == expected_trigger
+
+
+@pytest.mark.parametrize("raw_value", [None, 1, "not-a-dict", []])
+def test_load_config_falls_back_for_non_dict(raw_value) -> None:
+    scheduler = _build_scheduler({"periodic_context_compaction": raw_value})
+    cfg = scheduler._load_config()
+
+    assert cfg == scheduler._DEFAULTS
+
+
+def test_resolve_wait_seconds_uses_normalized_interval() -> None:
+    cfg = {"interval_minutes": 1}
+    assert PeriodicContextCompactionScheduler._resolve_wait_seconds(cfg) == 60
+
+
+def test_get_status_returns_runtime_snapshot() -> None:
+    scheduler = _build_scheduler(
+        {"periodic_context_compaction": {"enabled": True, "interval_minutes": 3}}
+    )
+    status = scheduler.get_status()
+
+    assert status["running"] is False
+    assert status["config"]["enabled"] is True
+    assert status["config"]["interval_minutes"] == 3
+    assert status["last_report"] is None
 
 
 def test_sanitize_message_dict_keeps_supported_parts() -> None:
