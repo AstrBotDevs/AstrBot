@@ -6,6 +6,7 @@ on:
 
 jobs:
   title-format:
+    if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -13,7 +14,7 @@ jobs:
 
     steps:
       - name: Validate PR title
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const title = (context.payload.pull_request.title || "").trim();

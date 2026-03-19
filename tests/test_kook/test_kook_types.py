@@ -16,6 +16,9 @@ from astrbot.core.platform.sources.kook.kook_types import (
     InviteModule,
     KmarkdownElement,
     KookCardMessage,
+    KookMessageSignal,
+    KookModuleType,
+    KookWebsocketEvent,
     ParagraphStructure,
     PlainTextElement,
     SectionModule,
@@ -77,7 +80,7 @@ def test_all_kook_card_type():
             FileModule(
                 src="https://img.kookapp.cn/attachments/2023-01/05/63b645851ff19.svg",
                 title="test5",
-                type="file",
+                type=KookModuleType.FILE,
             ),
             CountdownModule(
                 endTime=1772343427360,
@@ -105,3 +108,41 @@ def test_all_kook_card_type():
         ],
     ).to_json(indent=4, ensure_ascii=False)
     assert json_output == expect_json_data
+
+@pytest.mark.parametrize(
+    "expected_json_data_filename",
+    [
+        ("kook_ws_event_group_message.json"),
+        ("kook_ws_event_hello.json"),
+        ("kook_ws_event_message_with_card_1.json"),
+        ("kook_ws_event_message_with_card_2.json"),
+        ("kook_ws_event_ping.json"),
+        ("kook_ws_event_pong.json"),
+        ("kook_ws_event_private_message.json"),
+        ("kook_ws_event_private_system_message.json"),
+        ("kook_ws_event_reconnect_err.json"),
+        ("kook_ws_event_resume_ack.json"),
+        ("kook_ws_event_resume.json"),
+        
+    ],
+)
+def test_websocket_event_type_parse(expected_json_data_filename:str):
+    expected_json_data_str =(TEST_DATA_DIR / expected_json_data_filename).read_text(encoding="utf-8")
+    event = KookWebsocketEvent.from_json(
+        expected_json_data_str,
+    )
+    event_dict = event.to_dict(mode="json",exclude_unset=True,exclude_none=False)
+    assert event_dict == json.loads(expected_json_data_str)
+
+
+def test_websocket_event_create():
+    ping_data = KookWebsocketEvent(
+        signal=KookMessageSignal.PING,
+        data=None,
+        sn=0,
+    )
+    assert ping_data.to_dict(mode="json")== {
+        "s": KookMessageSignal.PING.value,
+        "sn": 0,
+    }
+    
