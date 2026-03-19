@@ -1188,8 +1188,21 @@
       "embedding_api_base": {
         "description": "API Base URL"
       },
+      "send_dimensions_param": {
+        "description": "Send dimensions parameter",
+        "hint": "When enabled, AstrBot sends embedding_dimensions to the upstream embedding API as dimensions. Disable this for OpenAI-compatible services that only need the local vector size and do not support the dimensions parameter."
+      },
       "openai_embedding": {
         "hint": "OpenAI Embedding automatically appends /v1 at request time."
+      },
+      "openai_compatible_embedding": {
+        "hint": "AstrBot appends /v1 only when the API Base URL has no path. Existing paths such as /api/paas/v4 or /api/v3 are preserved as-is."
+      },
+      "zhipu_embedding": {
+        "hint": "The Zhipu preset defaults to https://open.bigmodel.cn/api/paas/v4 and embedding-3, and keeps the /api/paas/v4 path unchanged."
+      },
+      "volcengine_embedding": {
+        "hint": "The Volcengine preset defaults to https://ark.cn-beijing.volces.com/api/v3 and doubao-embedding-vision, and keeps the /api/v3 path unchanged. AstrBot still uses this model for text input only."
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding does not require manually adding /v1beta."

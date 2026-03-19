@@ -15,6 +15,7 @@ from werkzeug.datastructures import FileStorage
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.provider.sources import openai_compatible_embedding_source
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.pip_installer import PipInstallError
@@ -105,6 +106,85 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok" and "platform" in data["data"]
+
+
+@pytest.mark.asyncio
+async def test_provider_template_exposes_openai_compatible_embedding_presets(
+    app: Quart,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+    response = await test_client.get(
+        "/api/config/provider/template",
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+
+    templates = data["data"]["config_schema"]["provider"]["config_template"]
+    assert "OpenAI Compatible Embedding" in templates
+    assert "Zhipu Embedding" in templates
+    assert "Volcengine Embedding" in templates
+    assert templates["OpenAI Compatible Embedding"]["type"] == (
+        "openai_compatible_embedding"
+    )
+
+
+class _FakeDashboardEmbeddingsAPI:
+    async def create(self, **kwargs):
+        return SimpleNamespace(
+            data=[SimpleNamespace(embedding=[0.1, 0.2, 0.3, 0.4])],
+        )
+
+
+class _FakeDashboardAsyncOpenAI:
+    def __init__(self, **kwargs) -> None:
+        self.kwargs = kwargs
+        self.embeddings = _FakeDashboardEmbeddingsAPI()
+
+    async def close(self):
+        return None
+
+
+@pytest.mark.asyncio
+async def test_get_embedding_dim_supports_openai_compatible_embedding(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    test_client = app.test_client()
+    monkeypatch.setattr(
+        openai_compatible_embedding_source,
+        "AsyncOpenAI",
+        _FakeDashboardAsyncOpenAI,
+    )
+
+    response = await test_client.post(
+        "/api/config/provider/get_embedding_dim",
+        json={
+            "provider_config": {
+                "id": "dashboard-openai-compatible-embedding",
+                "type": "openai_compatible_embedding",
+                "provider_type": "embedding",
+                "embedding_api_key": "test-key",
+                "embedding_api_base": "https://example.com",
+                "embedding_model": "text-embedding-3-small",
+                "embedding_dimensions": 2048,
+                "send_dimensions_param": False,
+                "timeout": 20,
+                "proxy": "",
+                "enable": True,
+            }
+        },
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["embedding_dimensions"] == 4
 
 
 @pytest.mark.asyncio

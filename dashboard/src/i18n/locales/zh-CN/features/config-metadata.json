@@ -1190,8 +1190,21 @@
       "embedding_api_base": {
         "description": "API Base URL"
       },
+      "send_dimensions_param": {
+        "description": "透传 dimensions 参数",
+        "hint": "启用后，会把 embedding_dimensions 作为 dimensions 参数发送给上游嵌入接口。对于只需要本地向量维度、但不支持 dimensions 参数的 OpenAI 兼容服务，请关闭此项。"
+      },
       "openai_embedding": {
         "hint": "OpenAI Embedding 会在请求时自动补上 /v1。"
+      },
+      "openai_compatible_embedding": {
+        "hint": "如果 API Base URL 不带路径，AstrBot 会自动补上 /v1；如果已经带了 /api/paas/v4 或 /api/v3 这类路径，则保持原样。"
+      },
+      "zhipu_embedding": {
+        "hint": "智谱预设默认使用 https://open.bigmodel.cn/api/paas/v4 和 embedding-3，并保留 /api/paas/v4 路径不变。"
+      },
+      "volcengine_embedding": {
+        "hint": "火山预设默认使用 https://ark.cn-beijing.volces.com/api/v3 和 doubao-embedding-vision，并保留 /api/v3 路径不变。AstrBot 当前仍只按文本输入使用该模型。"
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding 无需手动添加 /v1beta。"

@@ -50,36 +50,11 @@ const filteredIterable = computed(() => {
 
 const providerHint = computed(() => {
   const hint = props.iterable?.hint
-  if (typeof hint !== 'string' || !hint) return ''
-
-  if (
-    hint === 'provider_group.provider.openai_embedding.hint'
-    || hint === 'provider_group.provider.gemini_embedding.hint'
-  ) {
-    return ''
-  }
-
-  return hint
+  return typeof hint === 'string' ? hint : ''
 })
 
-const getItemHint = (itemKey, itemMeta) => {
-  if (itemMeta?.hint) return itemMeta.hint
-
-  if (itemKey !== 'embedding_api_base') return ''
-
-  const providerType = props.iterable?.type
-  if (providerType === 'openai_embedding') {
-    return getRaw('provider_group.provider.openai_embedding.hint')
-      ? 'provider_group.provider.openai_embedding.hint'
-      : ''
-  }
-  if (providerType === 'gemini_embedding') {
-    return getRaw('provider_group.provider.gemini_embedding.hint')
-      ? 'provider_group.provider.gemini_embedding.hint'
-      : ''
-  }
-
-  return ''
+const getItemHint = (_itemKey, itemMeta) => {
+  return itemMeta?.hint || ''
 }
 
 const dialog = ref(false)

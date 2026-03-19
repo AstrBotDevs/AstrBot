@@ -1193,8 +1193,21 @@
             "embedding_api_base": {
                 "description": "Адрес прокси-сервера"
             },
+            "send_dimensions_param": {
+                "description": "Передавать параметр dimensions",
+                "hint": "Если включено, AstrBot отправляет embedding_dimensions в upstream embedding API как параметр dimensions. Отключите это для OpenAI-совместимых сервисов, которым нужен только локальный размер вектора и которые не поддерживают параметр dimensions."
+            },
             "openai_embedding": {
                 "hint": "OpenAI Embedding автоматически добавляет /v1 при запросе."
+            },
+            "openai_compatible_embedding": {
+                "hint": "AstrBot добавляет /v1 только если в API Base URL нет пути. Уже заданные пути, такие как /api/paas/v4 или /api/v3, сохраняются без изменений."
+            },
+            "zhipu_embedding": {
+                "hint": "Пресет Zhipu по умолчанию использует https://open.bigmodel.cn/api/paas/v4 и embedding-3, сохраняя путь /api/paas/v4 без изменений."
+            },
+            "volcengine_embedding": {
+                "hint": "Пресет Volcengine по умолчанию использует https://ark.cn-beijing.volces.com/api/v3 и doubao-embedding-vision, сохраняя путь /api/v3 без изменений. Сейчас AstrBot использует эту модель только для текстового ввода."
             },
             "gemini_embedding": {
                 "hint": "Gemini Embedding не требует ручного добавления /v1beta."

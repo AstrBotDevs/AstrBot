@@ -10,11 +10,19 @@
 
 Open the service provider page, click "Add Service Provider", and select Embedding.
 
-Currently, AstrBot supports embedding vector services compatible with OpenAI API and Gemini API.
+AstrBot now includes built-in presets for OpenAI-compatible Embedding, Zhipu Embedding, Volcengine Embedding, and Gemini Embedding.
+
+If you want to connect another OpenAI-compatible embedding service, use `OpenAI Compatible Embedding` first. When `embedding api base` only contains the host, AstrBot automatically appends `/v1`. If the URL already contains a path such as Zhipu `/api/paas/v4` or Volcengine Ark `/api/v3`, AstrBot preserves that path as-is.
 
 Click on the provider card above to enter the configuration page and fill in the configuration.
 
 After completing the configuration, click Save.
+
+> [!NOTE]
+> `OpenAI Compatible Embedding` includes a `send_dimensions_param` switch. When enabled, AstrBot sends `embedding_dimensions` to the upstream embedding API as the `dimensions` parameter. Disable it for OpenAI-compatible services that only need the local vector size and do not support `dimensions`.
+
+> [!NOTE]
+> The Volcengine preset defaults to `doubao-embedding-vision`. AstrBot's knowledge-base pipeline is still text chunking plus text embedding only, so this integration uses the model with text input only and does not add multimodal knowledge-base support yet,although it is a multimodal embedding model.
 
 ## Configuring Reranker Model (Optional)
 
