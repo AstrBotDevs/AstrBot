@@ -503,6 +503,7 @@ class ProviderOpenAIOfficial(Provider):
             func_name_ls = []
             tool_call_ids = []
             tool_call_extra_content_dict = {}
+            unhandled_tool_calls = []
             for tool_call in choice.message.tool_calls:
                 if isinstance(tool_call, str):
                     # workaround for #1359
@@ -511,6 +512,7 @@ class ProviderOpenAIOfficial(Provider):
                     # 工具集未提供
                     # Should be unreachable
                     raise Exception("工具集未提供")
+                tool_found = False
                 for tool in tools.func_list:
                     if (
                         tool_call.type == "function"
@@ -529,6 +531,23 @@ class ProviderOpenAIOfficial(Provider):
                         extra_content = getattr(tool_call, "extra_content", None)
                         if extra_content is not None:
                             tool_call_extra_content_dict[tool_call.id] = extra_content
+                        tool_found = True
+                        break
+                if not tool_found:
+                    # Handle both object and string tool calls
+                    if hasattr(tool_call, "function") and hasattr(
+                        tool_call.function, "name"
+                    ):
+                        unhandled_tool_calls.append(tool_call.function.name)
+                    else:
+                        unhandled_tool_calls.append(str(tool_call))
+            # Only log warning if some tools were processed successfully
+            # (avoid redundant logging when error will be raised shortly)
+            if unhandled_tool_calls and args_ls:
+                logger.warning(
+                    f"Some tool calls were not found in registered tools: {unhandled_tool_calls}. "
+                    f"This may indicate that MCP tools are still loading or failed to load."
+                )
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls
@@ -540,6 +559,23 @@ class ProviderOpenAIOfficial(Provider):
                 "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。",
             )
         if llm_response.completion_text is None and not llm_response.tools_call_args:
+            if choice.message.tool_calls and tools is not None:
+                # Tool calls were present but no matching tools found
+                tool_names = []
+                for tc in choice.message.tool_calls:
+                    if hasattr(tc, "function") and hasattr(tc.function, "name"):
+                        tool_names.append(tc.function.name)
+                    else:
+                        tool_names.append(str(tc))
+                logger.error(
+                    f"Tool calls requested but no matching tools found in func_list. "
+                    f"Requested: {tool_names}, Available: {[t.name for t in tools.func_list]}. "
+                    f"MCP tools may still be loading."
+                )
+                raise Exception(
+                    f"AI requested tools that are not yet available: {tool_names}. "
+                    f"Please wait a few seconds after startup before sending messages."
+                )
             logger.error(f"API 返回的 completion 无法解析：{completion}。")
             raise Exception(f"API 返回的 completion 无法解析：{completion}。")
 
