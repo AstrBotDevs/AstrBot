@@ -1,7 +1,7 @@
 import json
 from typing import Protocol, runtime_checkable
 
-from ..message import Message, TextPart
+from ..message import AudioURLPart, ImageURLPart, Message, TextPart, ThinkPart
 
 
 @runtime_checkable
@@ -28,9 +28,19 @@ class TokenCounter(Protocol):
         ...
 
 
+# 图片/音频 token 开销估算值，参考 OpenAI vision pricing:
+# low-res ~85 tokens, high-res ~170 per 512px tile, 通常几百到上千。
+# 这里取一个保守中位数，宁可偏高触发压缩也不要偏低导致 API 报错。
+IMAGE_TOKEN_ESTIMATE = 765
+AUDIO_TOKEN_ESTIMATE = 500
+
+
 class EstimateTokenCounter:
     """Estimate token counter implementation.
     Provides a simple estimation of token count based on character types.
+
+    Supports multimodal content: images, audio, and thinking parts
+    are all counted so that the context compressor can trigger in time.
     """
 
     def count_tokens(
@@ -45,12 +55,16 @@ class EstimateTokenCounter:
             if isinstance(content, str):
                 total += self._estimate_tokens(content)
             elif isinstance(content, list):
-                # 处理多模态内容
                 for part in content:
                     if isinstance(part, TextPart):
                         total += self._estimate_tokens(part.text)
+                    elif isinstance(part, ThinkPart):
+                        total += self._estimate_tokens(part.think)
+                    elif isinstance(part, ImageURLPart):
+                        total += IMAGE_TOKEN_ESTIMATE
+                    elif isinstance(part, AudioURLPart):
+                        total += AUDIO_TOKEN_ESTIMATE
 
-            # 处理 Tool Calls
             if msg.tool_calls:
                 for tc in msg.tool_calls:
                     tc_str = json.dumps(tc if isinstance(tc, dict) else tc.model_dump())
