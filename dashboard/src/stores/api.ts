@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import axios from "axios";
+import { getApiBaseUrl, setApiBaseUrl } from "@/utils/request";
 
 export type ApiPreset = {
   name: string;
@@ -10,7 +10,7 @@ export const useApiStore = defineStore({
   id: "api",
   state: () => ({
     // 优先从 localStorage 读取用户手动设置的地址
-    apiBaseUrl: localStorage.getItem("apiBaseUrl") || "",
+    apiBaseUrl: getApiBaseUrl() || localStorage.getItem("apiBaseUrl") || "",
     configPresets: [] as ApiPreset[],
     customPresets: JSON.parse(
       localStorage.getItem("customPresets") || "[]",
@@ -53,8 +53,7 @@ export const useApiStore = defineStore({
         localStorage.removeItem("apiBaseUrl");
       }
 
-      // 立即更新 axios 配置
-      axios.defaults.baseURL = cleanUrl;
+      setApiBaseUrl(cleanUrl);
     },
 
     /**
@@ -63,7 +62,7 @@ export const useApiStore = defineStore({
      */
     init() {
       if (this.apiBaseUrl) {
-        axios.defaults.baseURL = this.apiBaseUrl;
+        this.apiBaseUrl = setApiBaseUrl(this.apiBaseUrl);
       }
     },
   },
