@@ -263,7 +263,7 @@ class AstrBotDashboard:
         )
 
     def _init_plugin_route_index(self):
-        """将插件路由索引，避免 O(n) 查找"""
+        """将插件路由索引,避免 O(n) 查找"""
         self._plugin_route_map: dict[tuple[str, str], Callable] = {}
 
         for (
@@ -562,7 +562,7 @@ class AstrBotDashboard:
 
         if not local_ips:
             parts.append(
-                "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问。\n"
+                "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问｡\n"
             )
 
         logger.info("".join(parts))

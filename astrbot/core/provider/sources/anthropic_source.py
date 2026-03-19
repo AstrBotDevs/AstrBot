@@ -89,10 +89,10 @@ class ProviderAnthropic(Provider):
         """准备 Anthropic API 的请求 payload
 
         Args:
-            messages: OpenAI 格式的消息列表，包含用户输入和系统提示等信息
+            messages: OpenAI 格式的消息列表,包含用户输入和系统提示等信息
         Returns:
             system_prompt: 系统提示内容
-            new_messages: 处理后的消息列表，去除系统提示
+            new_messages: 处理后的消息列表,去除系统提示
 
         """
         system_prompt = ""
@@ -255,7 +255,7 @@ class ProviderAnthropic(Provider):
         logger.debug(f"completion: {completion}")
 
         if len(completion.content) == 0:
-            raise Exception("API 返回的 completion 为空。")
+            raise Exception("API 返回的 completion 为空｡")
 
         llm_response = LLMResponse(role="assistant")
 
@@ -342,7 +342,7 @@ class ProviderAnthropic(Provider):
                             id=id,
                         )
                     elif event.content_block.type == "tool_use":
-                        # 工具使用块开始，初始化缓冲区
+                        # 工具使用块开始,初始化缓冲区
                         tool_use_buffer[event.index] = {
                             "id": event.content_block.id,
                             "name": event.content_block.name,
@@ -414,7 +414,7 @@ class ProviderAnthropic(Provider):
                                 id=id,
                             )
                         except json.JSONDecodeError:
-                            # JSON 解析失败，跳过这个工具调用
+                            # JSON 解析失败,跳过这个工具调用
                             logger.warning(f"工具调用参数 JSON 解析失败: {tool_info}")
 
                         # 清理缓冲区
@@ -570,7 +570,7 @@ class ProviderAnthropic(Provider):
         image_urls: list[str] | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
     ):
-        """组装上下文，支持文本和图片"""
+        """组装上下文,支持文本和图片"""
 
         async def resolve_image_url(image_url: str) -> dict | None:
             if image_url.startswith("http"):
@@ -583,7 +583,7 @@ class ProviderAnthropic(Provider):
                 image_data, mime_type = await self.encode_image_bs64(image_url)
 
             if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                logger.warning(f"图片 {image_url} 得到的结果为空,将忽略｡")
                 return None
 
             return {
@@ -601,17 +601,17 @@ class ProviderAnthropic(Provider):
 
         content = []
 
-        # 1. 用户原始发言（OpenAI 建议：用户发言在前）
+        # 1. 用户原始发言(OpenAI 建议:用户发言在前)
         if text:
             content.append({"type": "text", "text": text})
         elif image_urls:
-            # 如果没有文本但有图片，添加占位文本
+            # 如果没有文本但有图片,添加占位文本
             content.append({"type": "text", "text": "[图片]"})
         elif extra_user_content_parts:
-            # 如果只有额外内容块，也需要添加占位文本
+            # 如果只有额外内容块,也需要添加占位文本
             content.append({"type": "text", "text": " "})
 
-        # 2. 额外的内容块（系统提醒、指令等）
+        # 2. 额外的内容块(系统提醒､指令等)
         if extra_user_content_parts:
             for block in extra_user_content_parts:
                 if isinstance(block, TextPart):
@@ -630,7 +630,7 @@ class ProviderAnthropic(Provider):
                 if image_dict:
                     content.append(image_dict)
 
-        # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
+        # 如果只有主文本且没有额外内容块和图片,返回简单格式以保持向后兼容
         if (
             text
             and not extra_user_content_parts
@@ -644,7 +644,7 @@ class ProviderAnthropic(Provider):
         return {"role": "user", "content": content}
 
     async def encode_image_bs64(self, image_url: str) -> tuple[str, str]:
-        """将图片转换为 base64，同时检测实际 MIME 类型"""
+        """将图片转换为 base64,同时检测实际 MIME 类型"""
         if image_url.startswith("base64://"):
             raw_base64 = image_url.replace("base64://", "")
             try:

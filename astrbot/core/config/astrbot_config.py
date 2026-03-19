@@ -17,11 +17,11 @@ class RateLimitStrategy(enum.Enum):
 
 
 class AstrBotConfig(dict):
-    """从配置文件中加载的配置，支持直接通过点号操作符访问根配置项。
+    """从配置文件中加载的配置,支持直接通过点号操作符访问根配置项｡
 
-    - 初始化时会将传入的 default_config 与配置文件进行比对，如果配置文件中缺少配置项则会自动插入默认值并进行一次写入操作。会递归检查配置项。
-    - 如果配置文件路径对应的文件不存在，则会自动创建并写入默认配置。
-    - 如果传入了 schema，将会通过 schema 解析出 default_config，此时传入的 default_config 会被忽略。
+    - 初始化时会将传入的 default_config 与配置文件进行比对,如果配置文件中缺少配置项则会自动插入默认值并进行一次写入操作｡会递归检查配置项｡
+    - 如果配置文件路径对应的文件不存在,则会自动创建并写入默认配置｡
+    - 如果传入了 schema,将会通过 schema 解析出 default_config,此时传入的 default_config 会被忽略｡
     """
 
     config_path: str
@@ -36,7 +36,7 @@ class AstrBotConfig(dict):
     ) -> None:
         super().__init__()
 
-        # 调用父类的 __setattr__ 方法，防止保存配置时将此属性写入配置文件
+        # 调用父类的 __setattr__ 方法,防止保存配置时将此属性写入配置文件
         object.__setattr__(self, "config_path", config_path)
         object.__setattr__(self, "default_config", default_config)
         object.__setattr__(self, "schema", schema)
@@ -57,7 +57,7 @@ class AstrBotConfig(dict):
                 conf_str = conf_str[1:]
             conf = json.loads(conf_str)
 
-        # 检查配置完整性，并插入
+        # 检查配置完整性,并插入
         has_new = self.check_config_integrity(default_config, conf)
         self.update(conf)
         if has_new:
@@ -73,7 +73,7 @@ class AstrBotConfig(dict):
             for k, v in schema.items():
                 if v["type"] not in DEFAULT_VALUE_MAP:
                     raise TypeError(
-                        f"不受支持的配置类型 {v['type']}。支持的类型有：{DEFAULT_VALUE_MAP.keys()}",
+                        f"不受支持的配置类型 {v['type']}｡支持的类型有:{DEFAULT_VALUE_MAP.keys()}",
                     )
                 if "default" in v:
                     default = v["default"]
@@ -93,7 +93,7 @@ class AstrBotConfig(dict):
         return conf
 
     def check_config_integrity(self, refer_conf: dict, conf: dict, path=""):
-        """检查配置完整性，如果有新的配置项或顺序不一致则返回 True"""
+        """检查配置完整性,如果有新的配置项或顺序不一致则返回 True"""
         has_new = False
 
         # 创建一个新的有序字典以保持参考配置的顺序
@@ -102,19 +102,19 @@ class AstrBotConfig(dict):
         # 先按照参考配置的顺序添加配置项
         for key, value in refer_conf.items():
             if key not in conf:
-                # 配置项不存在，插入默认值
+                # 配置项不存在,插入默认值
                 path_ = path + "." + key if path else key
-                logger.info(f"检查到配置项 {path_} 不存在，已插入默认值 {value}")
+                logger.info(f"检查到配置项 {path_} 不存在,已插入默认值 {value}")
                 new_conf[key] = value
                 has_new = True
             elif conf[key] is None:
-                # 配置项为 None，使用默认值
+                # 配置项为 None,使用默认值
                 new_conf[key] = value
                 has_new = True
             elif isinstance(value, dict):
                 # 递归检查子配置项
                 if not isinstance(conf[key], dict):
-                    # 类型不匹配，使用默认值
+                    # 类型不匹配,使用默认值
                     new_conf[key] = value
                     has_new = True
                 else:
@@ -134,15 +134,15 @@ class AstrBotConfig(dict):
         for key in list(conf.keys()):
             if key not in refer_conf:
                 path_ = path + "." + key if path else key
-                logger.info(f"检查到配置项 {path_} 不存在，将从当前配置中删除")
+                logger.info(f"检查到配置项 {path_} 不存在,将从当前配置中删除")
                 has_new = True
 
         # 顺序不一致也算作变更
         if list(conf.keys()) != list(new_conf.keys()):
             if path:
-                logger.info(f"检查到配置项 {path} 的子项顺序不一致，已重新排序")
+                logger.info(f"检查到配置项 {path} 的子项顺序不一致,已重新排序")
             else:
-                logger.info("检查到配置项顺序不一致，已重新排序")
+                logger.info("检查到配置项顺序不一致,已重新排序")
             has_new = True
 
         # 更新原始配置
@@ -154,7 +154,7 @@ class AstrBotConfig(dict):
     def save_config(self, replace_config: dict | None = None) -> None:
         """将配置写入文件
 
-        如果传入 replace_config，则将配置替换为 replace_config
+        如果传入 replace_config,则将配置替换为 replace_config
         """
         if replace_config:
             self.update(replace_config)

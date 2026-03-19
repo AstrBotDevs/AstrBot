@@ -272,7 +272,7 @@ class KBSQLiteDatabase:
             return {}
 
         metadata_map: dict[str, dict] = {}
-        # SQLite 参数上限为 999，分片查询避免超限
+        # SQLite 参数上限为 999,分片查询避免超限
         chunk_size = 900
         doc_id_list = list(doc_ids)
 

@@ -288,7 +288,7 @@ class TestGetSessionConv:
         conv_mgr.new_conversation = AsyncMock(return_value="new-conv-id")
         conv_mgr.get_conversation = AsyncMock(return_value=None)
 
-        with pytest.raises(RuntimeError, match="无法创建新的对话。"):
+        with pytest.raises(RuntimeError, match="无法创建新的对话｡"):
             await module._get_session_conv(mock_event, mock_context)
 
 
@@ -442,7 +442,7 @@ class TestApplyFileExtract:
 
             await module._apply_file_extract(mock_event, req, sample_config)
 
-        assert req.prompt == "总结一下文件里面讲了什么？"
+        assert req.prompt == "总结一下文件里面讲了什么?"
 
     @pytest.mark.asyncio
     async def test_file_extract_no_api_key(self, mock_event):

@@ -15,8 +15,8 @@ from .shared_preferences_v3 import sp as sp_v3
 from .sqlite_v3 import SQLiteDatabase as SQLiteV3DatabaseV3
 
 """
-1. 迁移旧的 webchat_conversation 表到新的 conversation 表。
-2. 迁移旧的 platform 到新的 platform_stats 表。
+1. 迁移旧的 webchat_conversation 表到新的 conversation 表｡
+2. 迁移旧的 platform 到新的 platform_stats 表｡
 """
 
 
@@ -68,7 +68,7 @@ async def migration_conversation_table(
                     )
                     if not conv:
                         logger.info(
-                            f"未找到该条旧会话对应的具体数据: {conversation}, 跳过。",
+                            f"未找到该条旧会话对应的具体数据: {conversation}, 跳过｡",
                         )
                         continue
                     if ":" not in conv.user_id:
@@ -95,7 +95,7 @@ async def migration_conversation_table(
                         f"迁移旧会话 {conversation.get('cid', 'unknown')} 失败: {e}",
                         exc_info=True,
                     )
-    logger.info(f"成功迁移 {total_cnt} 条旧的会话数据到新表。")
+    logger.info(f"成功迁移 {total_cnt} 条旧的会话数据到新表｡")
 
 
 async def migration_platform_table(
@@ -110,13 +110,13 @@ async def migration_platform_table(
         - datetime.datetime(2023, 4, 10, tzinfo=datetime.timezone.utc)
     ).total_seconds()
     offset_sec = int(secs_from_2023_4_10_to_now)
-    logger.info(f"迁移旧平台数据，offset_sec: {offset_sec} 秒。")
+    logger.info(f"迁移旧平台数据,offset_sec: {offset_sec} 秒｡")
     stats = db_helper_v3.get_base_stats(offset_sec=offset_sec)
     logger.info(f"迁移 {len(stats.platform)} 条旧的平台数据到新的表中...")
     platform_stats_v3 = stats.platform
 
     if not platform_stats_v3:
-        logger.info("没有找到旧平台数据，跳过迁移。")
+        logger.info("没有找到旧平台数据,跳过迁移｡")
         return
 
     first_time_stamp = platform_stats_v3[0].timestamp
@@ -174,7 +174,7 @@ async def migration_platform_table(
                         f"迁移平台统计数据失败: {platform_id}, {platform_type}, 时间戳: {bucket_end}",
                         exc_info=True,
                     )
-    logger.info(f"成功迁移 {len(platform_stats_v3)} 条旧的平台数据到新表。")
+    logger.info(f"成功迁移 {len(platform_stats_v3)} 条旧的平台数据到新表｡")
 
 
 async def migration_webchat_data(
@@ -206,7 +206,7 @@ async def migration_webchat_data(
                     )
                     if not conv:
                         logger.info(
-                            f"未找到该条旧会话对应的具体数据: {conversation}, 跳过。",
+                            f"未找到该条旧会话对应的具体数据: {conversation}, 跳过｡",
                         )
                         continue
                     if ":" in conv.user_id:
@@ -230,15 +230,15 @@ async def migration_webchat_data(
                         exc_info=True,
                     )
 
-    logger.info(f"成功迁移 {total_cnt} 条旧的 WebChat 会话数据到新表。")
+    logger.info(f"成功迁移 {total_cnt} 条旧的 WebChat 会话数据到新表｡")
 
 
 async def migration_persona_data(
     db_helper: BaseDatabase,
     astrbot_config: AstrBotConfig,
 ) -> None:
-    """迁移 Persona 数据到新的表中。
-    旧的 Persona 数据存储在 preference 中，新的 Persona 数据存储在 persona 表中。
+    """迁移 Persona 数据到新的表中｡
+    旧的 Persona 数据存储在 preference 中,新的 Persona 数据存储在 persona 表中｡
     """
     v3_persona_config: list[dict] = astrbot_config.get("persona", [])
     total_personas = len(v3_persona_config)
@@ -270,10 +270,10 @@ async def migration_persona_data(
                 begin_dialogs=begin_dialogs,
             )
             logger.info(
-                f"迁移 Persona {persona['name']}({persona_new.system_prompt[:30]}...) 到新表成功。",
+                f"迁移 Persona {persona['name']}({persona_new.system_prompt[:30]}...) 到新表成功｡",
             )
         except Exception as e:
-            logger.error(f"解析 Persona 配置失败：{e}")
+            logger.error(f"解析 Persona 配置失败:{e}")
 
 
 async def migration_preferences(
@@ -293,7 +293,7 @@ async def migration_preferences(
         value = sp_v3.get(key)
         if value is not None:
             await sp.put_async("global", "global", key, value)
-            logger.info(f"迁移全局偏好设置 {key} 成功，值: {value}")
+            logger.info(f"迁移全局偏好设置 {key} 成功,值: {value}")
 
     # 2. umo scope migration
     session_conversation = sp_v3.get("session_conversation", default={})
@@ -305,7 +305,7 @@ async def migration_preferences(
             platform_id = get_platform_id(platform_id_map, session.platform_name)
             session.platform_id = platform_id
             await sp.put_async("umo", str(session), "sel_conv_id", conversation_id)
-            logger.info(f"迁移会话 {umo} 的对话数据到新表成功，平台 ID: {platform_id}")
+            logger.info(f"迁移会话 {umo} 的对话数据到新表成功,平台 ID: {platform_id}")
         except Exception as e:
             logger.error(f"迁移会话 {umo} 的对话数据失败: {e}", exc_info=True)
 
@@ -320,7 +320,7 @@ async def migration_preferences(
 
             await sp.put_async("umo", str(session), "session_service_config", config)
 
-            logger.info(f"迁移会话 {umo} 的服务配置到新表成功，平台 ID: {platform_id}")
+            logger.info(f"迁移会话 {umo} 的服务配置到新表成功,平台 ID: {platform_id}")
         except Exception as e:
             logger.error(f"迁移会话 {umo} 的服务配置失败: {e}", exc_info=True)
 
@@ -353,7 +353,7 @@ async def migration_preferences(
                     provider_id,
                 )
             logger.info(
-                f"迁移会话 {umo} 的提供商偏好到新表成功，平台 ID: {platform_id}",
+                f"迁移会话 {umo} 的提供商偏好到新表成功,平台 ID: {platform_id}",
             )
         except Exception as e:
             logger.error(f"迁移会话 {umo} 的提供商偏好失败: {e}", exc_info=True)

@@ -161,7 +161,7 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                 and "items" in meta
                 and isinstance(value[0], dict)
             ):
-                # 当前仅针对 list[dict] 的情况进行类型校验，以适配 AstrBot 中 platform、provider 的配置
+                # 当前仅针对 list[dict] 的情况进行类型校验,以适配 AstrBot 中 platform､provider 的配置
                 for item in value:
                     validate(item, meta["items"], path=f"{path}{key}.")
             elif meta["type"] == "object" and isinstance(value, dict):
@@ -279,8 +279,8 @@ async def _validate_neo_connectivity(
 
     if not access_token:
         return (
-            "⚠️ 未找到 Bay API Key。请填写访问令牌，"
-            "或确保 Bay 的 credentials.json 可被自动发现。"
+            "⚠️ 未找到 Bay API Key｡请填写访问令牌,"
+            "或确保 Bay 的 credentials.json 可被自动发现｡"
         )
 
     # Connectivity check
@@ -295,11 +295,11 @@ async def _validate_neo_connectivity(
             ) as resp:
                 if resp.status != 200:
                     return (
-                        f"⚠️ Bay 健康检查失败 (HTTP {resp.status})，"
+                        f"⚠️ Bay 健康检查失败 (HTTP {resp.status}),"
                         f"请确认 Bay 正在运行: {endpoint}"
                     )
     except Exception:
-        return f"⚠️ 无法连接 Bay ({endpoint})，请确认 Bay 已启动。"
+        return f"⚠️ 无法连接 Bay ({endpoint}),请确认 Bay 已启动｡"
 
     return None
 
@@ -345,7 +345,7 @@ class ConfigRoute(Route):
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
         self.config: AstrBotConfig = core_lifecycle.astrbot_config
-        self._logo_token_cache = {}  # 缓存logo token，避免重复注册
+        self._logo_token_cache = {}  # 缓存logo token,避免重复注册
         self.acm = core_lifecycle.astrbot_config_mgr
         self.ucr = core_lifecycle.umop_config_router
         self.routes = {
@@ -393,7 +393,7 @@ class ConfigRoute(Route):
         self.register_routes()
 
     async def delete_provider_source(self):
-        """删除 provider_source，并更新关联的 providers"""
+        """删除 provider_source,并更新关联的 providers"""
         post_data = await request.json
         if not post_data:
             return Response().error("缺少配置数据").to_json()
@@ -435,7 +435,7 @@ class ConfigRoute(Route):
         return Response().ok(message="删除 provider source 成功").to_json()
 
     async def update_provider_source(self):
-        """更新或新增 provider_source，并重载关联的 providers"""
+        """更新或新增 provider_source,并重载关联的 providers"""
         post_data = await request.json
         if not post_data:
             return Response().error("缺少配置数据").to_json()
@@ -464,7 +464,7 @@ class ConfigRoute(Route):
                     .to_json()
                 )
 
-        # 查找旧的 provider_source，若不存在则追加为新配置
+        # 查找旧的 provider_source,若不存在则追加为新配置
         target_idx = next(
             (i for i, ps in enumerate(provider_sources) if ps.get("id") == original_id),
             -1,
@@ -493,7 +493,7 @@ class ConfigRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(str(e)).to_json()
 
-        # 重载受影响的 providers，使新的 source 配置生效
+        # 重载受影响的 providers,使新的 source 配置生效
         reload_errors = []
         prov_mgr = self.core_lifecycle.provider_manager
         for provider in affected_providers:
@@ -506,7 +506,7 @@ class ConfigRoute(Route):
         if reload_errors:
             return (
                 Response()
-                .error("更新成功，但部分提供商重载失败: " + ", ".join(reload_errors))
+                .error("更新成功,但部分提供商重载失败: " + ", ".join(reload_errors))
                 .to_json()
             )
 
@@ -703,7 +703,7 @@ class ConfigRoute(Route):
             return Response().error(f"更新配置文件失败: {e!s}").to_json()
 
     async def _test_single_provider(self, provider):
-        """辅助函数：测试单个 provider 的可用性"""
+        """辅助函数:测试单个 provider 的可用性"""
         meta = provider.meta()
         provider_name = provider.provider_config.get("id", "Unknown Provider")
         provider_capability_type = meta.provider_type
@@ -745,7 +745,7 @@ class ConfigRoute(Route):
         log_fn=logger.error,
     ):
         log_fn(message)
-        # 记录更详细的traceback信息，但只在是严重错误时
+        # 记录更详细的traceback信息,但只在是严重错误时
         if status_code == 500:
             log_fn(traceback.format_exc())
         return Response().error(message).to_json()
@@ -874,7 +874,7 @@ class ConfigRoute(Route):
             if not provider_type:
                 return Response().error("provider_config 缺少 type 字段").to_json()
 
-            # 首次添加某类提供商时，provider_cls_map 可能尚未注册该适配器
+            # 首次添加某类提供商时,provider_cls_map 可能尚未注册该适配器
             if provider_type not in provider_cls_map:
                 try:
                     self.core_lifecycle.provider_manager.dynamic_import_provider(
@@ -885,7 +885,7 @@ class ConfigRoute(Route):
                     return (
                         Response()
                         .error(
-                            "提供商适配器加载失败，请检查提供商类型配置或查看服务端日志"
+                            "提供商适配器加载失败,请检查提供商类型配置或查看服务端日志"
                         )
                         .to_json()
                     )
@@ -931,7 +931,7 @@ class ConfigRoute(Route):
     async def get_provider_source_models(self):
         """获取指定 provider_source 支持的模型列表
 
-        本质上会临时初始化一个 Provider 实例，调用 get_models() 获取模型列表，然后销毁实例
+        本质上会临时初始化一个 Provider 实例,调用 get_models() 获取模型列表,然后销毁实例
         """
         provider_source_id = request.args.get("source_id")
         if not provider_source_id:
@@ -993,7 +993,7 @@ class ConfigRoute(Route):
             # 临时实例化 provider
             inst = cls_type(provider_source, {})
 
-            # 如果有 initialize 方法，调用它
+            # 如果有 initialize 方法,调用它
             init_fn = getattr(inst, "initialize", None)
             if inspect.iscoroutinefunction(init_fn):
                 await init_fn()
@@ -1008,7 +1008,7 @@ class ConfigRoute(Route):
                 if meta:
                     metadata_map[model_id] = meta
 
-            # 销毁实例（如果有 terminate 方法）
+            # 销毁实例(如果有 terminate 方法)
             terminate_fn = getattr(inst, "terminate", None)
             if inspect.iscoroutinefunction(terminate_fn):
                 await terminate_fn()
@@ -1052,7 +1052,7 @@ class ConfigRoute(Route):
             # Non-blocking Bay connectivity check
             warning = await _validate_neo_connectivity(config)
             if warning:
-                return Response().ok(None, f"保存成功。{warning}").to_json()
+                return Response().ok(None, f"保存成功｡{warning}").to_json()
             return Response().ok(None, "保存成功~").to_json()
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -1066,7 +1066,7 @@ class ConfigRoute(Route):
             await self.core_lifecycle.plugin_manager.reload(plugin_name)
             return (
                 Response()
-                .ok(None, f"保存插件 {plugin_name} 成功~ 机器人正在热重载插件。")
+                .ok(None, f"保存插件 {plugin_name} 成功~ 机器人正在热重载插件｡")
                 .to_json()
             )
         except Exception as e:
@@ -1081,10 +1081,10 @@ class ConfigRoute(Route):
     def _resolve_config_file_scope(
         self,
     ) -> tuple[str, str, str, StarMetadata, AstrBotConfig]:
-        """将请求参数解析为一个明确的配置作用域。
+        """将请求参数解析为一个明确的配置作用域｡
 
-        当前支持的 scope：
-        - scope=plugin：name=<plugin_name>，key=<config_key_path>
+        当前支持的 scope:
+        - scope=plugin:name=<plugin_name>,key=<config_key_path>
         """
 
         scope = request.args.get("scope") or "plugin"
@@ -1103,7 +1103,7 @@ class ConfigRoute(Route):
         return scope, name, key_path, md, md.config
 
     async def upload_config_file(self):
-        """上传文件到插件数据目录（用于某个 file 类型配置项）。"""
+        """上传文件到插件数据目录(用于某个 file 类型配置项)｡"""
 
         try:
             _scope, name, key_path, _md, config = self._resolve_config_file_scope()
@@ -1182,7 +1182,7 @@ class ConfigRoute(Route):
         return Response().ok({"uploaded": uploaded, "errors": errors}).to_json()
 
     async def delete_config_file(self):
-        """删除插件数据目录中的文件。"""
+        """删除插件数据目录中的文件｡"""
 
         scope = request.args.get("scope") or "plugin"
         name = request.args.get("name")
@@ -1218,7 +1218,7 @@ class ConfigRoute(Route):
         return Response().ok(None, "Deleted").to_json()
 
     async def get_config_file_list(self):
-        """获取配置项对应目录下的文件列表。"""
+        """获取配置项对应目录下的文件列表｡"""
 
         try:
             _, name, key_path, _, config = self._resolve_config_file_scope()
@@ -1262,7 +1262,7 @@ class ConfigRoute(Route):
     async def post_new_platform(self):
         new_platform_config = await request.json
 
-        # 如果是支持统一 webhook 模式的平台，生成 webhook_uuid
+        # 如果是支持统一 webhook 模式的平台,生成 webhook_uuid
         ensure_platform_webhook_config(new_platform_config)
 
         self.config["platform"].append(new_platform_config)
@@ -1296,7 +1296,7 @@ class ConfigRoute(Route):
         if origin_platform_id != new_config.get("id", None):
             return Response().error("机器人名称不允许修改").to_json()
 
-        # 如果是支持统一 webhook 模式的平台，且启用了统一 webhook 模式，确保有 webhook_uuid
+        # 如果是支持统一 webhook 模式的平台,且启用了统一 webhook 模式,确保有 webhook_uuid
         ensure_platform_webhook_config(new_config)
 
         for i, platform in enumerate(self.config["platform"]):
@@ -1326,7 +1326,7 @@ class ConfigRoute(Route):
             )
         except Exception as e:
             return Response().error(str(e)).to_json()
-        return Response().ok(None, "更新成功，已经实时生效~").to_json()
+        return Response().ok(None, "更新成功,已经实时生效~").to_json()
 
     async def post_delete_platform(self):
         platform_id = await request.json
@@ -1356,10 +1356,10 @@ class ConfigRoute(Route):
             )
         except Exception as e:
             return Response().error(str(e)).to_json()
-        return Response().ok(None, "删除成功，已经实时生效。").to_json()
+        return Response().ok(None, "删除成功,已经实时生效｡").to_json()
 
     async def get_llm_tools(self):
-        """获取函数调用工具。包含了本地加载的以及 MCP 服务的工具"""
+        """获取函数调用工具｡包含了本地加载的以及 MCP 服务的工具"""
         tool_mgr = self.core_lifecycle.provider_manager.llm_tools
         tools = tool_mgr.get_func_desc_openai_style()
         return Response().ok(tools).to_json()
@@ -1434,7 +1434,7 @@ class ConfigRoute(Route):
     def _inject_platform_metadata_with_i18n(
         self, platform, metadata, platform_i18n_translations: dict
     ):
-        """将配置元数据注入到 metadata 中并处理国际化键转换。"""
+        """将配置元数据注入到 metadata 中并处理国际化键转换｡"""
         metadata["platform_group"]["metadata"]["platform"].setdefault("items", {})
         platform_items_to_inject = copy.deepcopy(platform.config_metadata)
 
@@ -1487,7 +1487,7 @@ class ConfigRoute(Route):
                     platform.default_config_tmpl
                 )
 
-                # 注入配置元数据（在 convert_to_i18n_keys 之后，使用国际化键）
+                # 注入配置元数据(在 convert_to_i18n_keys 之后,使用国际化键)
                 if platform.config_metadata:
                     self._inject_platform_metadata_with_i18n(
                         platform, metadata, platform_i18n_translations
@@ -1526,7 +1526,7 @@ class ConfigRoute(Route):
                     break
                 ret["config"] = (
                     plugin_md.config
-                )  # 这是自定义的 Dict 类（AstrBotConfig）
+                )  # 这是自定义的 Dict 类(AstrBotConfig)
                 ret["metadata"] = {
                     plugin_name: {
                         "description": f"{plugin_name} 配置",

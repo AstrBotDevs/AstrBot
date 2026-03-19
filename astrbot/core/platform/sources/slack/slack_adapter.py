@@ -29,7 +29,7 @@ from .slack_event import SlackMessageEvent
 
 @register_platform_adapter(
     "slack",
-    "适用于 Slack 的消息平台适配器，支持 Socket Mode 和 Webhook Mode。",
+    "适用于 Slack 的消息平台适配器,支持 Socket Mode 和 Webhook Mode｡",
     support_streaming_message=False,
 )
 class SlackAdapter(Platform):
@@ -65,7 +65,7 @@ class SlackAdapter(Platform):
 
         self.metadata = PlatformMetadata(
             name="slack",
-            description="适用于 Slack 的消息平台适配器，支持 Socket Mode 和 Webhook Mode。",
+            description="适用于 Slack 的消息平台适配器,支持 Socket Mode 和 Webhook Mode｡",
             id=cast(str, self.config.get("id")),
             support_streaming_message=False,
         )
@@ -357,21 +357,21 @@ class SlackAdapter(Platform):
                 self._handle_webhook_event,
             )
 
-            # 如果启用统一 webhook 模式，则不启动独立服务器
+            # 如果启用统一 webhook 模式,则不启动独立服务器
             webhook_uuid = self.config.get("webhook_uuid")
             if self.unified_webhook_mode and webhook_uuid:
                 log_webhook_info(f"{self.meta().id}(Slack)", webhook_uuid)
-                # 保持运行状态，等待 shutdown
+                # 保持运行状态,等待 shutdown
                 await self.webhook_client.shutdown_event.wait()
             else:
                 logger.info(
-                    f"Slack 适配器 (Webhook Mode) 启动中，监听 {self.webhook_host}:{self.webhook_port}{self.webhook_path}...",
+                    f"Slack 适配器 (Webhook Mode) 启动中,监听 {self.webhook_host}:{self.webhook_port}{self.webhook_path}...",
                 )
                 await self.webhook_client.start()
 
         else:
             raise ValueError(
-                f"不支持的连接模式: {self.connection_mode}，请使用 'socket' 或 'webhook'",
+                f"不支持的连接模式: {self.connection_mode},请使用 'socket' 或 'webhook'",
             )
 
     async def _handle_webhook_event(self, event_data: dict) -> None:

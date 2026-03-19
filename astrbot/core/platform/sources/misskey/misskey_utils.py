@@ -7,7 +7,7 @@ from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 
 
 class FileIDExtractor:
-    """从 API 响应中提取文件 ID 的帮助类（无状态）。"""
+    """从 API 响应中提取文件 ID 的帮助类(无状态)｡"""
 
     @staticmethod
     def extract_file_id(result: Any) -> str | None:
@@ -31,7 +31,7 @@ class FileIDExtractor:
 
 
 class MessagePayloadBuilder:
-    """构建不同类型消息负载的帮助类（无状态）。"""
+    """构建不同类型消息负载的帮助类(无状态)｡"""
 
     @staticmethod
     def build_chat_payload(
@@ -84,14 +84,14 @@ def serialize_message_chain(chain: list[Any]) -> tuple[str, bool]:
         if isinstance(component, Comp.Plain):
             return component.text
         if isinstance(component, Comp.File):
-            # 为文件组件返回占位符，但适配器仍会处理原组件
+            # 为文件组件返回占位符,但适配器仍会处理原组件
             return "[文件]"
         if isinstance(component, Comp.Image):
-            # 为图片组件返回占位符，但适配器仍会处理原组件
+            # 为图片组件返回占位符,但适配器仍会处理原组件
             return "[图片]"
         if isinstance(component, Comp.At):
             has_at = True
-            # 优先使用name字段（用户名），如果没有则使用qq字段
+            # 优先使用name字段(用户名),如果没有则使用qq字段
             # 这样可以避免在Misskey中生成 @<user_id> 这样的无效提及
             if hasattr(component, "name") and component.name:
                 return f"@{component.name}"
@@ -126,7 +126,7 @@ def resolve_message_visibility(
 ) -> tuple[str, list[str] | None]:
     """解析 Misskey 消息的可见性设置
 
-    可以从 user_cache 或 raw_message 中解析，支持两种调用方式：
+    可以从 user_cache 或 raw_message 中解析,支持两种调用方式:
     1. 基于 user_cache: resolve_message_visibility(user_id, user_cache, self_id)
     2. 基于 raw_message: resolve_message_visibility(raw_message=raw_message, self_id=self_id)
     """
@@ -177,7 +177,7 @@ def resolve_visibility_from_raw_message(
     raw_message: dict[str, Any],
     self_id: str | None = None,
 ) -> tuple[str, list[str] | None]:
-    """从原始消息数据中解析可见性设置（已弃用，使用 resolve_message_visibility 替代）"""
+    """从原始消息数据中解析可见性设置(已弃用,使用 resolve_message_visibility 替代)"""
     return resolve_message_visibility(raw_message=raw_message, self_id=self_id)
 
 
@@ -246,15 +246,15 @@ def add_at_mention_if_needed(
     user_info: dict[str, Any] | None,
     has_at: bool = False,
 ) -> str:
-    """如果需要且没有@用户，则添加@用户
+    """如果需要且没有@用户,则添加@用户
 
-    注意：仅在有有效的username时才添加@提及，避免使用用户ID
+    注意:仅在有有效的username时才添加@提及,避免使用用户ID
     """
     if has_at or not user_info:
         return text
 
     username = user_info.get("username")
-    # 如果没有username，则不添加@提及，返回原文本
+    # 如果没有username,则不添加@提及,返回原文本
     # 这样可以避免生成 @<user_id> 这样的无效提及
     if not username:
         return text
@@ -286,7 +286,7 @@ def process_files(
     files: list,
     include_text_parts: bool = True,
 ) -> list:
-    """处理文件列表，添加到消息组件中并返回文本描述"""
+    """处理文件列表,添加到消息组件中并返回文本描述"""
     file_parts = []
     for file_info in files:
         component, part_text = create_file_component(file_info)
@@ -297,7 +297,7 @@ def process_files(
 
 
 def format_poll(poll: dict[str, Any]) -> str:
-    """将 Misskey 的 poll 对象格式化为可读字符串。"""
+    """将 Misskey 的 poll 对象格式化为可读字符串｡"""
     if not poll or not isinstance(poll, dict):
         return ""
     multiple = poll.get("multiple", False)
@@ -378,7 +378,7 @@ def process_at_mention(
     bot_username: str,
     client_self_id: str,
 ) -> tuple[list[str], str]:
-    """处理@提及逻辑，返回消息部分列表和处理后的文本"""
+    """处理@提及逻辑,返回消息部分列表和处理后的文本"""
     message_parts = []
 
     if not raw_text:
@@ -418,7 +418,7 @@ def cache_user_info(
             "nickname": sender_info["nickname"],
             "visibility": raw_data.get("visibility", "public"),
             "visible_user_ids": raw_data.get("visibleUserIds", []),
-            # 保存原消息ID，用于回复时作为reply_id
+            # 保存原消息ID,用于回复时作为reply_id
             "reply_to_note_id": raw_data.get("id"),
         }
 
@@ -449,16 +449,16 @@ def cache_room_info(
 async def resolve_component_url_or_path(
     comp: Any,
 ) -> tuple[str | None, str | None]:
-    """尝试从组件解析可上传的远程 URL 或本地路径。
+    """尝试从组件解析可上传的远程 URL 或本地路径｡
 
-    返回 (url_candidate, local_path)。两者可能都为 None。
-    这个函数尽量不抛异常，调用方可按需处理 None。
+    返回 (url_candidate, local_path)｡两者可能都为 None｡
+    这个函数尽量不抛异常,调用方可按需处理 None｡
     """
     url_candidate = None
     local_path = None
 
     async def _get_str_value(coro_or_val):
-        """辅助函数：统一处理协程或普通值"""
+        """辅助函数:统一处理协程或普通值"""
         try:
             if hasattr(coro_or_val, "__await__"):
                 result = await coro_or_val
@@ -513,7 +513,7 @@ async def resolve_component_url_or_path(
 
 
 def summarize_component_for_log(comp: Any) -> dict[str, Any]:
-    """生成适合日志的组件属性字典（尽量不抛异常）。"""
+    """生成适合日志的组件属性字典(尽量不抛异常)｡"""
     attrs = {}
     for a in ("file", "url", "path", "src", "source", "name"):
         try:
@@ -531,7 +531,7 @@ async def upload_local_with_retries(
     preferred_name: str | None,
     folder_id: str | None,
 ) -> str | None:
-    """尝试本地上传，返回 file id 或 None。如果文件类型不允许则直接失败。"""
+    """尝试本地上传,返回 file id 或 None｡如果文件类型不允许则直接失败｡"""
     try:
         res = await api.upload_file(local_path, preferred_name, folder_id)
         if isinstance(res, dict):
@@ -541,7 +541,7 @@ async def upload_local_with_retries(
             if fid:
                 return str(fid)
     except Exception:
-        # 上传失败，直接返回 None，让上层处理错误
+        # 上传失败,直接返回 None,让上层处理错误
         return None
 
     return None

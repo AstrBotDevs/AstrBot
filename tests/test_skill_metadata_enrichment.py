@@ -54,12 +54,12 @@ def test_parse_frontmatter_multiline_literal_description():
         "---\n"
         "name: humanizer-zh\n"
         "description: |\n"
-        "  去除文本中的 AI 生成痕迹。\n"
-        "  适用于编辑或审阅文本，使其听起来更自然。\n"
+        "  去除文本中的 AI 生成痕迹｡\n"
+        "  适用于编辑或审阅文本,使其听起来更自然｡\n"
         "---\n"
     )
     assert _parse_frontmatter_description(text) == (
-        "去除文本中的 AI 生成痕迹。\n适用于编辑或审阅文本，使其听起来更自然。"
+        "去除文本中的 AI 生成痕迹｡\n适用于编辑或审阅文本,使其听起来更自然｡"
     )
 
 
@@ -68,12 +68,12 @@ def test_parse_frontmatter_multiline_folded_description():
         "---\n"
         "name: humanizer-zh\n"
         "description: >\n"
-        "  去除文本中的 AI 生成痕迹。\n"
-        "  适用于编辑或审阅文本，使其听起来更自然。\n"
+        "  去除文本中的 AI 生成痕迹｡\n"
+        "  适用于编辑或审阅文本,使其听起来更自然｡\n"
         "---\n"
     )
     assert _parse_frontmatter_description(text) == (
-        "去除文本中的 AI 生成痕迹。 适用于编辑或审阅文本，使其听起来更自然。"
+        "去除文本中的 AI 生成痕迹｡ 适用于编辑或审阅文本,使其听起来更自然｡"
     )
 
 
@@ -325,7 +325,7 @@ def test_build_skills_prompt_preserves_safe_unicode_sandbox_description():
     skills = [
         SkillInfo(
             name="sandbox-skill",
-            description="抓取网页摘要，并总结 café 内容",
+            description="抓取网页摘要,并总结 café 内容",
             path="/workspace/skills/sandbox-skill/SKILL.md",
             active=True,
             source_type="sandbox_only",
@@ -337,7 +337,7 @@ def test_build_skills_prompt_preserves_safe_unicode_sandbox_description():
 
     prompt = build_skills_prompt(skills)
 
-    assert "抓取网页摘要，并总结 café 内容" in prompt
+    assert "抓取网页摘要,并总结 café 内容" in prompt
 
 
 def test_build_skills_prompt_preserves_safe_arabic_sandbox_description():

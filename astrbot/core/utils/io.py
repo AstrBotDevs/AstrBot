@@ -97,7 +97,7 @@ async def download_image_by_url(
                         await f.write(await resp.read())
                     return path
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        # 关闭SSL验证（仅在证书验证失败时作为fallback）
+        # 关闭SSL验证(仅在证书验证失败时作为fallback)
         logger.warning(
             f"SSL certificate verification failed for {url}. "
             "Disabling SSL verification (CERT_NONE) as a fallback. "
@@ -164,9 +164,9 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                                 end="",
                             )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        # 关闭SSL验证（仅在证书验证失败时作为fallback）
+        # 关闭SSL验证(仅在证书验证失败时作为fallback)
         logger.warning(
-            "SSL 证书验证失败，已关闭 SSL 验证（不安全，仅用于临时下载）。请检查目标服务器的证书配置。"
+            "SSL 证书验证失败,已关闭 SSL 验证(不安全,仅用于临时下载)｡请检查目标服务器的证书配置｡"
         )
         logger.warning(
             f"SSL certificate verification failed for {url}. "
@@ -218,7 +218,7 @@ def get_local_ip_addresses() -> list[IPv4Address | IPv6Address]:
             if addr.family == socket.AF_INET:
                 network_ips.append(ip_address(addr.address))
             elif addr.family == socket.AF_INET6:
-                # 过滤掉 IPv6 的 link-local 地址（fe80:...）
+                # 过滤掉 IPv6 的 link-local 地址(fe80:...)
                 ip = ip_address(addr.address.split("%")[0])  # 处理带 zone index 的情况
                 if not ip.is_link_local:
                     network_ips.append(ip)
@@ -303,15 +303,15 @@ async def download_dashboard(
             try:
                 with zipfile.ZipFile(str(cache_path), "r") as z:
                     if z.testzip() is None:
-                        logger.info("缓存文件校验通过，将直接使用缓存。")
+                        logger.info("缓存文件校验通过,将直接使用缓存｡")
                         if str(cache_path) != str(zip_path):
                             shutil.copy(str(cache_path), str(zip_path))
                         use_cache = True
                     else:
-                        logger.warning("缓存文件损坏，将重新下载。")
+                        logger.warning("缓存文件损坏,将重新下载｡")
                         await cache_path.unlink()
             except zipfile.BadZipFile:
-                logger.warning("缓存文件损坏 (BadZipFile)，将重新下载。")
+                logger.warning("缓存文件损坏 (BadZipFile),将重新下载｡")
                 await cache_path.unlink()
         if not use_cache:
             if latest or len(str(version)) != 40:
@@ -342,7 +342,7 @@ async def download_dashboard(
                     except Exception as e:
                         if not latest:
                             logger.warning(
-                                f"下载指定版本({version})失败: {e}，尝试下载最新版本。"
+                                f"下载指定版本({version})失败: {e},尝试下载最新版本｡"
                             )
                             await download_dashboard(
                                 path=path,

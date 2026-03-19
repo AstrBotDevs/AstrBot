@@ -59,9 +59,9 @@ class KookModuleType(str, Enum):
 ThemeType = Literal[
     "primary", "success", "danger", "warning", "info", "secondary", "none", "invisible"
 ]
-"""主题，可选的值为：primary, success, danger, warning, info, secondary, none.默认为 primary，为 none 时不显示侧边框。"""
+"""主题,可选的值为:primary, success, danger, warning, info, secondary, none.默认为 primary,为 none 时不显示侧边框｡"""
 SizeType = Literal["xs", "sm", "md", "lg"]
-"""大小，可选值为：xs, sm, md, lg, 一般默认为 lg"""
+"""大小,可选值为:xs, sm, md, lg, 一般默认为 lg"""
 
 SectionMode = Literal["left", "right"]
 CountdownMode = Literal["day", "hour", "second"]
@@ -144,10 +144,10 @@ class ButtonElement(KookCardModelBase):
     type: Literal[KookModuleType.BUTTON] = KookModuleType.BUTTON
     theme: ThemeType = "primary"
     value: str = ""
-    """当为 link 时，会跳转到 value 代表的链接;
-当为 return-val 时，系统会通过系统消息将消息 id,点击用户 id 和 value 发回给发送者，发送者可以根据自己的需求进行处理,消息事件参见button 点击事件。私聊和频道内均可使用按钮点击事件。"""
+    """当为 link 时,会跳转到 value 代表的链接;
+当为 return-val 时,系统会通过系统消息将消息 id,点击用户 id 和 value 发回给发送者,发送者可以根据自己的需求进行处理,消息事件参见button 点击事件｡私聊和频道内均可使用按钮点击事件｡"""
     click: Literal["", "link", "return-val"] = ""
-    """click 代表用户点击的事件,默认为""，代表无任何事件。"""
+    """click 代表用户点击的事件,默认为"",代表无任何事件｡"""
 
 
 AnyElement = PlainTextElement | KmarkdownElement | ImageElement | ButtonElement | str
@@ -180,7 +180,7 @@ class ImageGroupModule(KookCardModelBase):
 
 
 class ContainerModule(KookCardModelBase):
-    """1 到多张图片的组合，与图片组模块(ImageGroupModule)不同，图片并不会裁切为正方形。多张图片会纵向排列。"""
+    """1 到多张图片的组合,与图片组模块(ImageGroupModule)不同,图片并不会裁切为正方形｡多张图片会纵向排列｡"""
 
     elements: list[ImageElement]
     type: Literal[KookModuleType.CONTAINER] = KookModuleType.CONTAINER
@@ -216,7 +216,7 @@ class FileModule(KookCardModelBase):
 
 
 class CountdownModule(KookCardModelBase):
-    """startTime 和 endTime 为毫秒时间戳，startTime 和 endTime 不能小于服务器当前时间戳。"""
+    """startTime 和 endTime 为毫秒时间戳,startTime 和 endTime 不能小于服务器当前时间戳｡"""
 
     endTime: int
     """毫秒时间戳"""
@@ -252,7 +252,7 @@ AnyModule = Annotated[
 class KookCardMessage(KookBaseDataClass):
     """卡片定义文档详见 : https://developer.kookapp.cn/doc/cardmessage
     此类型不能直接to_json后发送,因为kook要求卡片容器json顶层必须是**列表**
-    若要发送卡片消息，请使用KookCardMessageContainer
+    若要发送卡片消息,请使用KookCardMessageContainer
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -262,7 +262,7 @@ class KookCardMessage(KookBaseDataClass):
     color: str | None = None
     """16 进制色值"""
     modules: list[AnyModule] = Field(default_factory=list)
-    """单个 card 模块数量不限制，但是一条消息中所有卡片的模块数量之和最多是 50"""
+    """单个 card 模块数量不限制,但是一条消息中所有卡片的模块数量之和最多是 50"""
 
     def add_module(self, module: AnyModule):
         self.modules.append(module)
@@ -300,9 +300,9 @@ class KookMessageSignal(IntEnum):
     HELLO = 1
     """server->client  客户端连接 ws 时, 服务端返回握手结果"""
     PING = 2
-    """client->server  心跳，ping"""
+    """client->server  心跳,ping"""
     PONG = 3
-    """server->client  心跳，pong"""
+    """server->client  心跳,pong"""
     RESUME = 4
     """client->server  resume, 恢复会话"""
     RECONNECT = 5
@@ -442,7 +442,7 @@ class KookWebsocketEvent(KookBaseDataClass):
     @model_validator(mode="before")
     @classmethod
     def _inject_signal_into_data(cls, data: Any) -> Any:
-        """在解析前，把外层的 s 同步到内层的 d 中，供 discriminator 使用"""
+        """在解析前,把外层的 s 同步到内层的 d 中,供 discriminator 使用"""
         if isinstance(data, dict):
             s_value = data.get("s")
             d_value = data.get("d")

@@ -100,7 +100,7 @@ class ToolsRoute(Route):
                     if key != "active":  # active 已经处理
                         server_info[key] = value
 
-                # 如果MCP客户端已初始化，从客户端获取工具名称
+                # 如果MCP客户端已初始化,从客户端获取工具名称
                 for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
                     if name_key == name:
                         mcp_client = runtime.client
@@ -249,7 +249,7 @@ class ToolsRoute(Route):
                         server_config[key] = value
                     only_update_active = False
 
-            # 如果只更新活动状态，保留原始配置
+            # 如果只更新活动状态,保留原始配置
             if only_update_active and isinstance(old_config, dict):
                 for key, value in old_config.items():
                     if key != "active":  # 除了active之外的所有字段都保留

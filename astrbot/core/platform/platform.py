@@ -38,7 +38,7 @@ class Platform(abc.ABC):
         super().__init__()
         # 平台配置
         self.config = config
-        # 维护了消息平台的事件队列，EventBus 会从这里取出事件并处理。
+        # 维护了消息平台的事件队列,EventBus 会从这里取出事件并处理｡
         self._event_queue = event_queue
         self.client_self_id = uuid.uuid4().hex
 
@@ -118,15 +118,15 @@ class Platform(abc.ABC):
 
     @abc.abstractmethod
     def run(self) -> Coroutine[Any, Any, None]:
-        """得到一个平台的运行实例，需要返回一个协程对象。"""
+        """得到一个平台的运行实例,需要返回一个协程对象｡"""
         raise NotImplementedError
 
     async def terminate(self) -> None:
-        """终止一个平台的运行实例。"""
+        """终止一个平台的运行实例｡"""
 
     @abc.abstractmethod
     def meta(self) -> PlatformMetadata:
-        """得到一个平台的元数据。"""
+        """得到一个平台的元数据｡"""
         raise NotImplementedError
 
     async def send_by_session(
@@ -134,30 +134,30 @@ class Platform(abc.ABC):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
-        """通过会话发送消息。该方法旨在让插件能够直接通过**可持久化的会话数据**发送消息，而不需要保存 event 对象。
+        """通过会话发送消息｡该方法旨在让插件能够直接通过**可持久化的会话数据**发送消息,而不需要保存 event 对象｡
 
-        异步方法。
+        异步方法｡
         """
         await Metric.upload(msg_event_tick=1, adapter_name=self.meta().name)
 
     def commit_event(self, event: AstrMessageEvent) -> None:
-        """提交一个事件到事件队列。"""
+        """提交一个事件到事件队列｡"""
         self._event_queue.put_nowait(event)
 
     def get_client(self) -> object:
-        """获取平台的客户端对象。"""
+        """获取平台的客户端对象｡"""
 
     async def webhook_callback(self, request: Any) -> Any:
-        """统一 Webhook 回调入口。
+        """统一 Webhook 回调入口｡
 
-        支持统一 Webhook 模式的平台需要实现此方法。
-        当 Dashboard 收到 /api/platform/webhook/{uuid} 请求时，会调用此方法。
+        支持统一 Webhook 模式的平台需要实现此方法｡
+        当 Dashboard 收到 /api/platform/webhook/{uuid} 请求时,会调用此方法｡
 
         Args:
             request: Quart 请求对象
 
         Returns:
-            响应内容，格式取决于具体平台的要求
+            响应内容,格式取决于具体平台的要求
 
         Raises:
             NotImplementedError: 平台未实现统一 Webhook 模式

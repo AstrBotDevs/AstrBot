@@ -1,4 +1,4 @@
-"""企业微信智能机器人 webhook 推送客户端。"""
+"""企业微信智能机器人 webhook 推送客户端｡"""
 
 from __future__ import annotations
 
@@ -19,11 +19,11 @@ from astrbot.core.utils.media_utils import convert_audio_format
 
 
 class WecomAIBotWebhookError(RuntimeError):
-    """企业微信 webhook 推送异常。"""
+    """企业微信 webhook 推送异常｡"""
 
 
 class WecomAIBotWebhookClient:
-    """企业微信智能机器人 webhook 消息推送客户端。"""
+    """企业微信智能机器人 webhook 消息推送客户端｡"""
 
     def __init__(self, webhook_url: str, timeout_seconds: int = 15) -> None:
         self.webhook_url = webhook_url.strip()
@@ -191,7 +191,7 @@ class WecomAIBotWebhookClient:
                 await flush_markdown_buffer(markdown_buffer)
                 file_path = await component.get_file()
                 if not file_path:
-                    logger.warning("文件消息缺少有效文件路径，已跳过: %s", component)
+                    logger.warning("文件消息缺少有效文件路径,已跳过: %s", component)
                     continue
                 await self.send_file(Path(file_path))
             elif isinstance(component, Video):
@@ -220,7 +220,7 @@ class WecomAIBotWebhookClient:
                             )
             else:
                 logger.warning(
-                    "企业微信消息推送暂不支持组件类型 %s，已跳过",
+                    "企业微信消息推送暂不支持组件类型 %s,已跳过",
                     type(component).__name__,
                 )
 

@@ -93,7 +93,7 @@ async def initialize_astrbot(
     if not backend_only and (
         yes
         or click.confirm(
-            "是否需要集成式 WebUI？（个人电脑推荐，服务器不推荐）",
+            "是否需要集成式 WebUI?(个人电脑推荐,服务器不推荐)",
             default=True,
         )
     ):
@@ -103,7 +103,7 @@ async def initialize_astrbot(
         else:
             await check_dashboard(astrbot_root)
     else:
-        click.echo("你可以使用在线面版（需支持配置后端）来控制。")
+        click.echo("你可以使用在线面版(需支持配置后端)来控制｡")
 
 
 @click.command()

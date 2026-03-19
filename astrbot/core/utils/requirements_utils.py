@@ -253,7 +253,7 @@ def _iter_requirement_lines(
     resolved_path = os.path.realpath(requirements_path)
     if resolved_path in visited:
         logger.warning(
-            "检测到循环依赖的 requirements 包含: %s，将跳过该文件", resolved_path
+            "检测到循环依赖的 requirements 包含: %s,将跳过该文件", resolved_path
         )
         return
     visited.add(resolved_path)
@@ -304,7 +304,7 @@ def extract_requirement_names(requirements_path: str) -> set[str]:
             name for name, _ in iter_requirements(requirements_path=requirements_path)
         }
     except Exception as exc:
-        logger.warning("读取依赖文件失败，跳过冲突检测: %s", exc)
+        logger.warning("读取依赖文件失败,跳过冲突检测: %s", exc)
         return set()
 
 
@@ -335,7 +335,7 @@ def collect_installed_distribution_versions(paths: list[str]) -> dict[str, str] 
                 continue
             installed.setdefault(distribution_name, version)
     except Exception as exc:
-        logger.warning("读取已安装依赖失败，跳过缺失依赖预检查: %s", exc)
+        logger.warning("读取已安装依赖失败,跳过缺失依赖预检查: %s", exc)
         return None
     return installed
 
@@ -347,7 +347,7 @@ def _load_requirement_lines_for_precheck(
         requirement_lines = list(_iter_requirement_lines(requirements_path))
     except Exception as exc:
         logger.warning(
-            "预检查缺失依赖失败，将回退到完整安装: %s (%s)",
+            "预检查缺失依赖失败,将回退到完整安装: %s (%s)",
             requirements_path,
             exc,
         )
@@ -372,7 +372,7 @@ def _load_requirement_lines_for_precheck(
     )
     if fallback_line is not None:
         logger.info(
-            "缺失依赖预检查发现无法安全裁剪的 option/direct-reference 行，将回退到完整安装: %s (%s)",
+            "缺失依赖预检查发现无法安全裁剪的 option/direct-reference 行,将回退到完整安装: %s (%s)",
             requirements_path,
             fallback_line,
         )
@@ -426,7 +426,7 @@ def build_missing_requirements_install_lines(
         if parsed is None:
             if looks_like_direct_reference(line) or line.startswith(("-", "--")):
                 logger.debug(
-                    "缺失依赖行筛选回退到完整安装：requirements 中包含无法安全裁剪的 option/direct-reference 行: %s (%s)",
+                    "缺失依赖行筛选回退到完整安装:requirements 中包含无法安全裁剪的 option/direct-reference 行: %s (%s)",
                     requirements_path,
                     line,
                 )
@@ -462,7 +462,7 @@ def plan_missing_requirements_install(
         return None
     if missing and not install_lines:
         logger.warning(
-            "预检查缺失依赖成功，但无法映射到可安装 requirement 行，将回退到完整安装: %s -> %s",
+            "预检查缺失依赖成功,但无法映射到可安装 requirement 行,将回退到完整安装: %s -> %s",
             requirements_path,
             sorted(missing),
         )

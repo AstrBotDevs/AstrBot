@@ -265,14 +265,14 @@ class LineMessageEvent(AstrMessageEvent):
             return await super().send_streaming(generator, use_fallback)
 
         buffer = ""
-        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
+        pattern = re.compile(r"[^｡?!~…]+[｡?!~…]+")
 
         async for chain in generator:
             if isinstance(chain, MessageChain):
                 for comp in chain.chain:
                     if isinstance(comp, Plain):
                         buffer += comp.text
-                        if any(p in buffer for p in "。？！~…"):
+                        if any(p in buffer for p in "｡?!~…"):
                             buffer = await self.process_buffer(buffer, pattern)
                     else:
                         await self.send(MessageChain(chain=[comp]))

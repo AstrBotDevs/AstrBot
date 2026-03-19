@@ -13,13 +13,13 @@ class ContextTruncator:
         )
 
     def fix_messages(self, messages: list[Message]) -> list[Message]:
-        """修复消息列表，确保 tool call 和 tool response 的配对关系有效。
+        """修复消息列表,确保 tool call 和 tool response 的配对关系有效｡
 
-        此方法确保：
+        此方法确保:
         1. 每个 `tool` 消息前面都有一个包含 tool_calls 的 `assistant` 消息
         2. 每个包含 tool_calls 的 `assistant` 消息后面都有对应的 `tool` 响应
 
-        这是 OpenAI Chat Completions API 规范的要求（Gemini 对此执行严格检查）。
+        这是 OpenAI Chat Completions API 规范的要求(Gemini 对此执行严格检查)｡
         """
         if not messages:
             return messages
@@ -41,17 +41,17 @@ class ContextTruncator:
                 # 只有在有挂起的 assistant(tool_calls) 时才记录 tool 响应
                 if pending_assistant is not None:
                     pending_tools.append(msg)
-                # else: 孤立的 tool 消息，直接忽略
+                # else: 孤立的 tool 消息,直接忽略
                 continue
 
             if self._has_tool_calls(msg):
-                # 遇到新的 assistant(tool_calls) 前，先处理旧的 pending 链
+                # 遇到新的 assistant(tool_calls) 前,先处理旧的 pending 链
                 flush_pending_if_valid()
                 pending_assistant = msg
                 continue
 
-            # 非 tool，且不含 tool_calls 的消息
-            # 先结束任何 pending 链，再正常追加
+            # 非 tool,且不含 tool_calls 的消息
+            # 先结束任何 pending 链,再正常追加
             flush_pending_if_valid()
             fixed_messages.append(msg)
 
@@ -66,9 +66,9 @@ class ContextTruncator:
         keep_most_recent_turns: int,
         drop_turns: int = 1,
     ) -> list[Message]:
-        """截断上下文列表，确保不超过最大长度。
-        一个 turn 包含一个 user 消息和一个 assistant 消息。
-        这个方法会保证截断后的上下文列表符合 OpenAI 的上下文格式。
+        """截断上下文列表,确保不超过最大长度｡
+        一个 turn 包含一个 user 消息和一个 assistant 消息｡
+        这个方法会保证截断后的上下文列表符合 OpenAI 的上下文格式｡
 
         Args:
             messages: 上下文列表
@@ -99,7 +99,7 @@ class ContextTruncator:
         else:
             truncated_contexts = non_system_messages[-num_to_keep * 2 :]
 
-        # 找到第一个 role 为 user 的索引，确保上下文格式正确
+        # 找到第一个 role 为 user 的索引,确保上下文格式正确
         index = next(
             (i for i, item in enumerate(truncated_contexts) if item.role == "user"),
             None,
@@ -116,7 +116,7 @@ class ContextTruncator:
         messages: list[Message],
         drop_turns: int = 1,
     ) -> list[Message]:
-        """丢弃最旧的 N 个对话轮次。"""
+        """丢弃最旧的 N 个对话轮次｡"""
         if drop_turns <= 0:
             return messages
 
@@ -151,7 +151,7 @@ class ContextTruncator:
         self,
         messages: list[Message],
     ) -> list[Message]:
-        """对半砍策略，删除 50% 的消息"""
+        """对半砍策略,删除 50% 的消息"""
         if len(messages) <= 2:
             return messages
 

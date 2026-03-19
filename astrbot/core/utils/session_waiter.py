@@ -41,8 +41,8 @@ class SessionController:
         """保持这个会话
 
         Args:
-            timeout (float): 必填。会话超时时间。
-            当 reset_timeout 设置为 True 时, 代表重置超时时间, timeout 必须 > 0, 如果 <= 0 则立即结束会话。
+            timeout (float): 必填｡会话超时时间｡
+            当 reset_timeout 设置为 True 时, 代表重置超时时间, timeout 必须 > 0, 如果 <= 0 则立即结束会话｡
             当 reset_timeout 设置为 False 时, 代表继续维持原来的超时时间, 新 timeout = 原来剩余的timeout + timeout (可以 < 0)
 
         """
@@ -97,7 +97,7 @@ class SessionFilter:
 
 class DefaultSessionFilter(SessionFilter):
     def filter(self, event: AstrMessageEvent) -> str:
-        """默认实现，返回统一消息来源字符串作为会话标识符"""
+        """默认实现,返回统一消息来源字符串作为会话标识符"""
         return event.unified_msg_origin
 
 
@@ -188,10 +188,10 @@ class SessionWaiter:
 
 
 def session_waiter(timeout: int = 30, record_history_chains: bool = False):
-    """装饰器：自动将函数注册为 SessionWaiter 处理函数，并等待外部输入触发执行。
+    """装饰器:自动将函数注册为 SessionWaiter 处理函数,并等待外部输入触发执行｡
 
-    :param timeout: 超时时间（秒）
-    :param record_history_chain: 是否自动记录历史消息链。可以通过 controller.get_history_chains() 获取。深拷贝。
+    :param timeout: 超时时间(秒)
+    :param record_history_chain: 是否自动记录历史消息链｡可以通过 controller.get_history_chains() 获取｡深拷贝｡
     """
 
     def decorator(

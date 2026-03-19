@@ -1,6 +1,6 @@
 """AstrBot 备份模块共享常量
 
-此文件定义了导出器和导入器共享的常量，确保两端配置一致。
+此文件定义了导出器和导入器共享的常量,确保两端配置一致｡
 """
 
 from sqlmodel import SQLModel
@@ -60,10 +60,10 @@ KB_METADATA_MODELS: dict[str, type[SQLModel]] = {
 def get_backup_directories() -> dict[str, str]:
     """获取需要备份的目录列表
 
-    使用 astrbot_path 模块动态获取路径，支持通过环境变量 ASTRBOT_ROOT 自定义根目录。
+    使用 astrbot_path 模块动态获取路径,支持通过环境变量 ASTRBOT_ROOT 自定义根目录｡
 
     Returns:
-        dict: 键为备份文件中的目录名称，值为目录的绝对路径
+        dict: 键为备份文件中的目录名称,值为目录的绝对路径
     """
     return {
         "plugins": get_astrbot_plugin_path(),  # 插件本体

@@ -55,7 +55,7 @@ class LarkPlatformAdapter(Platform):
         self.connection_mode = platform_config.get("lark_connection_mode", "socket")
 
         if not self.bot_name:
-            logger.warning("未设置飞书机器人名称，@ 机器人可能得不到回复。")
+            logger.warning("未设置飞书机器人名称,@ 机器人可能得不到回复｡")
 
         # 初始化 WebSocket 长连接相关配置
         async def on_msg_event_recv(event: lark.im.v1.P2ImMessageReceiveV1) -> None:
@@ -455,7 +455,7 @@ class LarkPlatformAdapter(Platform):
             event_id: 事件ID
 
         Returns:
-            True 表示重复事件，False 表示新事件
+            True 表示重复事件,False 表示新事件
         """
         self._clean_expired_events()
         if event_id in self.event_id_timestamps:
@@ -531,7 +531,7 @@ class LarkPlatformAdapter(Platform):
             for m in message.mentions:
                 if m.id is None:
                     continue
-                # 飞书 open_id 可能是 None，这里做个防护
+                # 飞书 open_id 可能是 None,这里做个防护
                 open_id = m.id.open_id if m.id.open_id else ""
                 at_list[m.key] = Comp.At(qq=open_id, name=m.name)
 
@@ -625,14 +625,14 @@ class LarkPlatformAdapter(Platform):
         if self.connection_mode == "webhook":
             # Webhook 模式
             if self.webhook_server is None:
-                logger.error("[Lark] Webhook 模式已启用，但 webhook_server 未初始化")
+                logger.error("[Lark] Webhook 模式已启用,但 webhook_server 未初始化")
                 return
 
             webhook_uuid = self.config.get("webhook_uuid")
             if webhook_uuid:
                 log_webhook_info(f"{self.meta().id}(飞书 Webhook)", webhook_uuid)
             else:
-                logger.warning("[Lark] Webhook 模式已启用，但未配置 webhook_uuid")
+                logger.warning("[Lark] Webhook 模式已启用,但未配置 webhook_uuid")
         else:
             # 长连接模式
             await self.client._connect()

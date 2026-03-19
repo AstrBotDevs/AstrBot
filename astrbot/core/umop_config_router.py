@@ -27,7 +27,7 @@ class UmopConfigRouter:
 
     @staticmethod
     def _split_umo(umo: str) -> tuple[str, str, str] | None:
-        """将 UMO 拆分为 3 个部分，同时保留 session_id 中的 ':'"""
+        """将 UMO 拆分为 3 个部分,同时保留 session_id 中的 ':'"""
         if not isinstance(umo, str):
             return None
         parts = umo.split(":", 2)
@@ -52,7 +52,7 @@ class UmopConfigRouter:
             umo (str): UMO 字符串
 
         Returns:
-            str | None: 配置文件 ID，如果没有找到则返回 None
+            str | None: 配置文件 ID,如果没有找到则返回 None
 
         """
         for pattern, conf_id in self.umop_to_conf_id.items():
@@ -64,8 +64,8 @@ class UmopConfigRouter:
         """更新路由表
 
         Args:
-            new_routing (dict[str, str]): 新的 UMOP 到配置文件 ID 的映射。umo 由三个部分组成 [platform_id]:[message_type]:[session_id]。
-                umop 可以是 "::" (代表所有), 可以是 "[platform_id]::" (代表指定平台下的所有类型消息和会话)。
+            new_routing (dict[str, str]): 新的 UMOP 到配置文件 ID 的映射｡umo 由三个部分组成 [platform_id]:[message_type]:[session_id]｡
+                umop 可以是 "::" (代表所有), 可以是 "[platform_id]::" (代表指定平台下的所有类型消息和会话)｡
 
         Raises:
             ValueError: 如果 new_routing 中的 key 格式不正确

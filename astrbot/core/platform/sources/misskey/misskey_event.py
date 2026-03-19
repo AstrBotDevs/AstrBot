@@ -41,13 +41,13 @@ class MisskeyPlatformEvent(AstrMessageEvent):
         return any(message_trimmed.startswith(prefix) for prefix in system_prefixes)
 
     async def send(self, message: MessageChain) -> None:
-        """发送消息，使用适配器的完整上传和发送逻辑"""
+        """发送消息,使用适配器的完整上传和发送逻辑"""
         try:
             logger.debug(
-                f"[MisskeyEvent] send 方法被调用，消息链包含 {len(message.chain)} 个组件",
+                f"[MisskeyEvent] send 方法被调用,消息链包含 {len(message.chain)} 个组件",
             )
 
-            # 使用适配器的 send_by_session 方法，它包含文件上传逻辑
+            # 使用适配器的 send_by_session 方法,它包含文件上传逻辑
             from astrbot.core.platform.message_session import MessageSession
             from astrbot.core.platform.message_type import MessageType
 
@@ -78,7 +78,7 @@ class MisskeyPlatformEvent(AstrMessageEvent):
                 content, has_at = serialize_message_chain(message.chain)
 
                 if not content:
-                    logger.debug("[MisskeyEvent] 内容为空，跳过发送")
+                    logger.debug("[MisskeyEvent] 内容为空,跳过发送")
                     return
 
                 original_message_id = getattr(self.message_obj, "message_id", None)
@@ -145,14 +145,14 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             return await super().send_streaming(generator, use_fallback)
 
         buffer = ""
-        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
+        pattern = re.compile(r"[^｡?!~…]+[｡?!~…]+")
 
         async for chain in generator:
             if isinstance(chain, MessageChain):
                 for comp in chain.chain:
                     if isinstance(comp, Plain):
                         buffer += comp.text
-                        if any(p in buffer for p in "。？！~…"):
+                        if any(p in buffer for p in "｡?!~…"):
                             buffer = await self.process_buffer(buffer, pattern)
                     else:
                         await self.send(MessageChain(chain=[comp]))

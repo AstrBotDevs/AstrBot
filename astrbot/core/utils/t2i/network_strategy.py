@@ -36,7 +36,7 @@ class NetworkRenderStrategy(RenderStrategy):
         return self.template_manager.get_template(name)
 
     async def get_official_endpoints(self) -> None:
-        """获取官方的 t2i 端点列表。"""
+        """获取官方的 t2i 端点列表｡"""
         try:
             async with aiohttp.ClientSession(
                 trust_env=True,

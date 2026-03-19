@@ -1,4 +1,4 @@
-"""企业微信智能机器人事件处理模块，处理消息事件的发送和接收"""
+"""企业微信智能机器人事件处理模块,处理消息事件的发送和接收"""
 
 import asyncio
 from collections.abc import Awaitable, Callable
@@ -113,7 +113,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                             },
                         )
                     else:
-                        logger.warning("图片数据为空，跳过")
+                        logger.warning("图片数据为空,跳过")
                 except Exception as e:
                     logger.error("处理图片消息失败: %s", e)
             else:
@@ -204,7 +204,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         await super().send(MessageChain([]))
 
     async def send_streaming(self, generator, use_fallback=False) -> None:
-        """流式发送消息，参考webchat的send_streaming设计"""
+        """流式发送消息,参考webchat的send_streaming设计"""
         final_data = ""
         raw = self.message_obj.raw_message
         assert isinstance(raw, dict), (
@@ -296,7 +296,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             await super().send_streaming(generator, use_fallback)
             return
 
-        # 企业微信智能机器人不支持增量发送，因此我们需要在这里将增量内容累积起来，按间隔推送
+        # 企业微信智能机器人不支持增量发送,因此我们需要在这里将增量内容累积起来,按间隔推送
         increment_plain = ""
         last_stream_update_time = 0.0
 

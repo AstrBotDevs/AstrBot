@@ -188,7 +188,7 @@ class TelegramPlatformAdapter(Platform):
                     for cmd_name, description in cmd_info_list:
                         if cmd_name in command_dict:
                             logger.warning(
-                                f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
+                                f"命令名 '{cmd_name}' 重复注册,将使用首次注册的定义: "
                                 f"'{command_dict[cmd_name]}'"
                             )
                         command_dict.setdefault(cmd_name, description)
@@ -202,7 +202,7 @@ class TelegramPlatformAdapter(Platform):
         handler_metadata,
         skip_commands: set,
     ) -> list[tuple[str, str]] | None:
-        """从事件过滤器中提取指令信息，包括所有别名"""
+        """从事件过滤器中提取指令信息,包括所有别名"""
         cmd_names = []
         is_group = False
         if isinstance(event_filter, CommandFilter) and event_filter.command_name:
@@ -270,11 +270,11 @@ class TelegramPlatformAdapter(Platform):
         context: ContextTypes.DEFAULT_TYPE,
         get_reply=True,
     ) -> AstrBotMessage | None:
-        """转换 Telegram 的消息对象为 AstrBotMessage 对象。
+        """转换 Telegram 的消息对象为 AstrBotMessage 对象｡
 
-        @param update: Telegram 的 Update 对象。
-        @param context: Telegram 的 Context 对象。
-        @param get_reply: 是否获取回复消息。这个参数是为了防止多个回复嵌套。
+        @param update: Telegram 的 Update 对象｡
+        @param context: Telegram 的 Context 对象｡
+        @param get_reply: 是否获取回复消息｡这个参数是为了防止多个回复嵌套｡
         """
         if not update.message:
             logger.warning("Received an update without a message.")
@@ -363,7 +363,7 @@ class TelegramPlatformAdapter(Platform):
                             entity.offset + 1 : entity.offset + entity.length
                         ]
                         message.message.append(Comp.At(qq=name, name=name))
-                        # 如果mention是当前bot则移除；否则保留
+                        # 如果mention是当前bot则移除;否则保留
                         if name.lower() == context.bot.username.lower():
                             plain_text = (
                                 plain_text[: entity.offset]

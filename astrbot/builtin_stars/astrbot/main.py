@@ -50,7 +50,7 @@ class Main(star.Star):
                 """主动回复"""
                 provider = self.context.get_using_provider(event.unified_msg_origin)
                 if not provider:
-                    logger.error("未找到任何 LLM 提供商。请先配置。无法主动回复")
+                    logger.error("未找到任何 LLM 提供商｡请先配置｡无法主动回复")
                     return
                 try:
                     conv = None
@@ -60,7 +60,7 @@ class Main(star.Star):
 
                     if not session_curr_cid:
                         logger.error(
-                            "当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 序号 切换或者 /new 创建一个会话。",
+                            "当前未处于对话状态,无法主动回复,请确保 平台设置->会话隔离(unique_session) 未开启,并使用 /switch 序号 切换或者 /new 创建一个会话｡",
                         )
                         return
 
@@ -72,7 +72,7 @@ class Main(star.Star):
                     prompt = event.message_str
 
                     if not conv:
-                        logger.error("未找到对话，无法主动回复")
+                        logger.error("未找到对话,无法主动回复")
                         return
 
                     yield event.request_llm(
@@ -88,7 +88,7 @@ class Main(star.Star):
     async def decorate_llm_req(
         self, event: AstrMessageEvent, req: ProviderRequest
     ) -> None:
-        """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
+        """在请求 LLM 前注入人格信息､Identifier､时间､回复内容等 System Prompt"""
         if self.ltm and self.ltm_enabled(event):
             try:
                 await self.ltm.on_req_llm(event, req)

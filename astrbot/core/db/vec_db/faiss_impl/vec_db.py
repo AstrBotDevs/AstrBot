@@ -41,7 +41,7 @@ class FaissVecDB(BaseVecDB):
         metadata: dict | None = None,
         id: str | None = None,
     ) -> int:
-        """插入一条文本和其对应向量，自动生成 ID 并保持一致性。"""
+        """插入一条文本和其对应向量,自动生成 ID 并保持一致性｡"""
         metadata = metadata or {}
         str_id = id or str(uuid.uuid4())  # 使用 UUID 作为原始 ID
 
@@ -65,10 +65,10 @@ class FaissVecDB(BaseVecDB):
         max_retries: int = 3,
         progress_callback=None,
     ) -> list[int]:
-        """批量插入文本和其对应向量，自动生成 ID 并保持一致性。
+        """批量插入文本和其对应向量,自动生成 ID 并保持一致性｡
 
         Args:
-            progress_callback: 进度回调函数，接收参数 (current, total)
+            progress_callback: 进度回调函数,接收参数 (current, total)
 
         """
         metadatas = metadatas or [{} for _ in contents]
@@ -108,13 +108,13 @@ class FaissVecDB(BaseVecDB):
         rerank: bool = False,
         metadata_filters: dict | None = None,
     ) -> list[Result]:
-        """搜索最相似的文档。
+        """搜索最相似的文档｡
 
         Args:
             query (str): 查询文本
             k (int): 返回的最相似文档的数量
             fetch_k (int): 在根据 metadata 过滤前从 FAISS 中获取的数量
-            rerank (bool): 是否使用重排序。这需要在实例化时提供 rerank_provider, 如果未提供并且 rerank 为 True, 不会抛出异常。
+            rerank (bool): 是否使用重排序｡这需要在实例化时提供 rerank_provider, 如果未提供并且 rerank 为 True, 不会抛出异常｡
             metadata_filters (dict): 元数据过滤器
 
         Returns:
@@ -166,7 +166,7 @@ class FaissVecDB(BaseVecDB):
         return top_k_results
 
     async def delete(self, doc_id: str) -> None:
-        """删除一条文档块（chunk）"""
+        """删除一条文档块(chunk)"""
         # 获得对应的 int id
         result = await self.document_storage.get_document_by_doc_id(doc_id)
         int_id = result["id"] if result else None

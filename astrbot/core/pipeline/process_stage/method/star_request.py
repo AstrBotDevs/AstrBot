@@ -62,7 +62,7 @@ class StarRequestSubStage(Stage):
                 )
 
                 if not event.is_stopped() and event.is_at_or_wake_command:
-                    ret = f":(\n\n在调用插件 {md.name} 的处理函数 {handler.handler_name} 时出现异常：{e}"
+                    ret = f":(\n\n在调用插件 {md.name} 的处理函数 {handler.handler_name} 时出现异常:{e}"
                     event.set_result(MessageEventResult().message(ret))
                     yield
                     event.clear_result()

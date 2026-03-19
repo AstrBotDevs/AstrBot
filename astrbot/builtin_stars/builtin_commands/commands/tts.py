@@ -12,7 +12,7 @@ class TTSCommand:
         self.context = context
 
     async def tts(self, event: AstrMessageEvent) -> None:
-        """开关文本转语音（会话级别）"""
+        """开关文本转语音(会话级别)"""
         umo = event.unified_msg_origin
         ses_tts = await SessionServiceManager.is_tts_enabled_for_session(umo)
         cfg = self.context.get_config(umo=umo)
@@ -27,10 +27,10 @@ class TTSCommand:
         if new_status and not tts_enable:
             event.set_result(
                 MessageEventResult().message(
-                    f"{status_text}当前会话的文本转语音。但 TTS 功能在配置中未启用，请前往 WebUI 开启。",
+                    f"{status_text}当前会话的文本转语音｡但 TTS 功能在配置中未启用,请前往 WebUI 开启｡",
                 ),
             )
         else:
             event.set_result(
-                MessageEventResult().message(f"{status_text}当前会话的文本转语音。"),
+                MessageEventResult().message(f"{status_text}当前会话的文本转语音｡"),
             )

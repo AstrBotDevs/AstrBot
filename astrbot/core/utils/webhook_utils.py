@@ -73,7 +73,7 @@ def ensure_platform_webhook_config(platform_cfg: dict) -> bool:
         platform_cfg (dict): 平台配置字典
 
     Returns:
-        bool: 如果生成了 webhook_uuid 则返回 True，否则返回 False
+        bool: 如果生成了 webhook_uuid 则返回 True,否则返回 False
     """
     pt = platform_cfg.get("type", "")
     if pt in WEBHOOK_SUPPORTED_PLATFORMS and not platform_cfg.get("webhook_uuid"):

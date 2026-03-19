@@ -39,7 +39,7 @@ class KookClient:
                 "Authorization": f"Bot {self.config.token}",
             }
         )
-        self.event_callback = event_callback  # 回调函数，用于处理接收到的事件
+        self.event_callback = event_callback  # 回调函数,用于处理接收到的事件
         self.ws = None
         self.heartbeat_task = None
         self._stop_event = asyncio.Event()  # 用于通知连接结束
@@ -71,7 +71,7 @@ class KookClient:
             async with self._http_client.get(url) as resp:
                 if resp.status != 200:
                     logger.error(
-                        f"[KOOK] 获取机器人账号信息失败，状态码: {resp.status} , {await resp.text()}"
+                        f"[KOOK] 获取机器人账号信息失败,状态码: {resp.status} , {await resp.text()}"
                     )
                     return
                 try:
@@ -114,7 +114,7 @@ class KookClient:
         try:
             async with self._http_client.get(url, params=params) as resp:
                 if resp.status != 200:
-                    logger.error(f"[KOOK] 获取gateway失败，状态码: {resp.status}")
+                    logger.error(f"[KOOK] 获取gateway失败,状态码: {resp.status}")
                     return None
 
                 resp_content = KookGatewayIndexResponse.from_dict(await resp.json())
@@ -184,7 +184,7 @@ class KookClient:
             while self.running:
                 try:
                     if self.ws is None:
-                        logger.error("[KOOK] WebSocket 对象丢失，结束监听流程。")
+                        logger.error("[KOOK] WebSocket 对象丢失,结束监听流程｡")
                         break
 
                     msg = await asyncio.wait_for(self.ws.recv(), timeout=10)
@@ -208,7 +208,7 @@ class KookClient:
                     continue
 
                 except asyncio.TimeoutError:
-                    # 超时检查，继续循环
+                    # 超时检查,继续循环
                     continue
                 except websockets.exceptions.ConnectionClosed:
                     logger.warning("[KOOK] WebSocket连接已关闭")
@@ -258,11 +258,11 @@ class KookClient:
 
         if code == 0:
             self.session_id = data.session_id
-            logger.info(f"[KOOK] 握手成功，session_id: {self.session_id}")
+            logger.info(f"[KOOK] 握手成功,session_id: {self.session_id}")
         else:
-            logger.error(f"[KOOK] 握手失败，错误码: {code}")
+            logger.error(f"[KOOK] 握手失败,错误码: {code}")
             if code == 40103:  # token过期
-                logger.error("[KOOK] Token已过期，需要重新获取")
+                logger.error("[KOOK] Token已过期,需要重新获取")
             self.running = False
 
     async def _handle_pong(self):
@@ -281,7 +281,7 @@ class KookClient:
     async def _handle_resume_ack(self, data: KookResumeAckEventData):
         """处理RESUME确认"""
         self.session_id = data.session_id
-        logger.info(f"[KOOK] Resume成功，session_id: {self.session_id}")
+        logger.info(f"[KOOK] Resume成功,session_id: {self.session_id}")
 
     async def _heartbeat_loop(self):
         """心跳循环"""
@@ -309,14 +309,14 @@ class KookClient:
                 ):
                     self.heartbeat_failed_count += 1
                     logger.warning(
-                        f"[KOOK] 心跳超时，失败次数: {self.heartbeat_failed_count}"
+                        f"[KOOK] 心跳超时,失败次数: {self.heartbeat_failed_count}"
                     )
 
                     if (
                         self.heartbeat_failed_count
                         >= self.config.max_heartbeat_failures
                     ):
-                        logger.error("[KOOK] 心跳失败次数过多，准备重连")
+                        logger.error("[KOOK] 心跳失败次数过多,准备重连")
                         self.running = False
                         break
 

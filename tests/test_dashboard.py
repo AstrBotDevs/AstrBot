@@ -39,13 +39,13 @@ async def core_lifecycle_td(tmp_path_factory):
     try:
         yield core_lifecycle
     finally:
-        # 优先停止核心生命周期以释放资源（包括关闭 MCP 等后台任务）
+        # 优先停止核心生命周期以释放资源(包括关闭 MCP 等后台任务)
         try:
             _stop_res = core_lifecycle.stop()
             if asyncio.iscoroutine(_stop_res):
                 await _stop_res
         except Exception:
-            # 停止过程中如有异常，不影响后续清理
+            # 停止过程中如有异常,不影响后续清理
             pass
 
 
@@ -286,7 +286,7 @@ async def test_plugins(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
-    """测试插件 API 端点，使用 Mock 避免真实网络调用。"""
+    """测试插件 API 端点,使用 Mock 避免真实网络调用｡"""
     test_client = app.test_client()
 
     # 已经安装的插件
@@ -455,16 +455,16 @@ async def test_check_update(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
-    """测试检查更新 API，使用 Mock 避免真实网络调用。"""
+    """测试检查更新 API,使用 Mock 避免真实网络调用｡"""
     test_client = app.test_client()
 
     # Mock 更新检查和网络请求
     async def mock_check_update(*args, **kwargs):
-        """Mock 更新检查，返回无新版本。"""
+        """Mock 更新检查,返回无新版本｡"""
         return None  # None 表示没有新版本
 
     async def mock_get_dashboard_version(*args, **kwargs):
-        """Mock Dashboard 版本获取。"""
+        """Mock Dashboard 版本获取｡"""
         from astrbot.core.config.default import VERSION
 
         return f"v{VERSION}"  # 返回当前版本

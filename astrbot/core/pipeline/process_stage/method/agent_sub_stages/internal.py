@@ -260,7 +260,7 @@ class InternalAgentSubStage(Stage):
                     # 检测 Live Mode
                     if action_type == "live":
                         # Live Mode: 使用 run_live_agent
-                        logger.info("[Internal Agent] 检测到 Live Mode，启用 TTS 处理")
+                        logger.info("[Internal Agent] 检测到 Live Mode,启用 TTS 处理")
 
                         # 获取 TTS Provider
                         tts_provider = (
@@ -271,10 +271,10 @@ class InternalAgentSubStage(Stage):
 
                         if not tts_provider:
                             logger.warning(
-                                "[Live Mode] TTS Provider 未配置，将使用普通流式模式"
+                                "[Live Mode] TTS Provider 未配置,将使用普通流式模式"
                             )
 
-                        # 使用 run_live_agent，总是使用流式响应
+                        # 使用 run_live_agent,总是使用流式响应
                         event.set_result(
                             MessageEventResult()
                             .set_result_content_type(ResultContentType.STREAMING_RESULT)
@@ -357,7 +357,7 @@ class InternalAgentSubStage(Stage):
                         resp=final_resp.completion_text if final_resp else None,
                     )
 
-                    # 检查事件是否被停止，如果被停止则不保存历史记录
+                    # 检查事件是否被停止,如果被停止则不保存历史记录
                     if not event.is_stopped() or agent_runner.was_aborted():
                         await self._save_to_history(
                             event,
@@ -430,7 +430,7 @@ class InternalAgentSubStage(Stage):
             and not req.tool_calls_result
             and not user_aborted
         ):
-            logger.debug("LLM 响应为空，不保存记录。")
+            logger.debug("LLM 响应为空,不保存记录｡")
             return
 
         message_to_save = []

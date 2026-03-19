@@ -1,6 +1,6 @@
-"""Telegram 模块 Mock 工具。
+"""Telegram 模块 Mock 工具｡
 
-提供统一的 Telegram 相关模块 mock 设置，避免在测试文件中重复定义。
+提供统一的 Telegram 相关模块 mock 设置,避免在测试文件中重复定义｡
 """
 
 import sys
@@ -10,7 +10,7 @@ import pytest
 
 
 def create_mock_telegram_modules():
-    """创建 Telegram 相关的 mock 模块。
+    """创建 Telegram 相关的 mock 模块｡
 
     Returns:
         dict: 包含 telegram 和相关模块的 mock 对象
@@ -61,9 +61,9 @@ def create_mock_telegram_modules():
 
 @pytest.fixture(scope="module", autouse=True)
 def mock_telegram_modules():
-    """Mock Telegram 相关模块的 fixture。
+    """Mock Telegram 相关模块的 fixture｡
 
-    自动应用于使用此 fixture 的测试模块。
+    自动应用于使用此 fixture 的测试模块｡
     """
     mocks = create_mock_telegram_modules()
     monkeypatch = pytest.MonkeyPatch()
@@ -92,11 +92,11 @@ def mock_telegram_modules():
 
 
 class MockTelegramBuilder:
-    """构建 Telegram 测试 mock 对象的工具类。"""
+    """构建 Telegram 测试 mock 对象的工具类｡"""
 
     @staticmethod
     def create_bot():
-        """创建 mock Telegram bot 实例。"""
+        """创建 mock Telegram bot 实例｡"""
         bot = MagicMock()
         bot.username = "test_bot"
         bot.id = 12345678
@@ -115,7 +115,7 @@ class MockTelegramBuilder:
 
     @staticmethod
     def create_application():
-        """创建 mock Telegram Application 实例。"""
+        """创建 mock Telegram Application 实例｡"""
         from tests.fixtures.helpers import NoopAwaitable
 
         app = MagicMock()
@@ -133,7 +133,7 @@ class MockTelegramBuilder:
 
     @staticmethod
     def create_scheduler():
-        """创建 mock APScheduler 实例。"""
+        """创建 mock APScheduler 实例｡"""
         scheduler = MagicMock()
         scheduler.add_job = MagicMock()
         scheduler.start = MagicMock()

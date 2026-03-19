@@ -22,7 +22,7 @@ from .route import Response, Route, RouteContext
 class KnowledgeBaseRoute(Route):
     """知识库管理路由
 
-    提供知识库、文档、检索、会话配置等 API 接口
+    提供知识库､文档､检索､会话配置等 API 接口
     """
 
     def __init__(
@@ -256,7 +256,7 @@ class KnowledgeBaseRoute(Route):
                         task_id, file_idx, file_name
                     )
 
-                    # 调用 upload_document，传入 pre_chunked_text
+                    # 调用 upload_document,传入 pre_chunked_text
                     doc = await kb_helper.upload_document(
                         file_name=file_name,
                         file_content=None,  # 预切片模式下不需要原始内容
@@ -303,7 +303,7 @@ class KnowledgeBaseRoute(Route):
         Query 参数:
         - page: 页码 (默认 1)
         - page_size: 每页数量 (默认 20)
-        - refresh_stats: 是否刷新统计信息 (默认 false，首次加载时可设为 true)
+        - refresh_stats: 是否刷新统计信息 (默认 false,首次加载时可设为 true)
         """
         try:
             kb_manager = self._get_kb_manager()
@@ -375,7 +375,7 @@ class KnowledgeBaseRoute(Route):
                 vec = await prv.get_embedding("astrbot")
                 if len(vec) != prv.get_dim():
                     raise ValueError(
-                        f"嵌入向量维度不匹配，实际是 {len(vec)}，然而配置是 {prv.get_dim()}",
+                        f"嵌入向量维度不匹配,实际是 {len(vec)},然而配置是 {prv.get_dim()}",
                     )
             except Exception as e:
                 return Response().error(f"测试嵌入模型失败: {e!s}").__dict__
@@ -401,7 +401,7 @@ class KnowledgeBaseRoute(Route):
                 except Exception as e:
                     return (
                         Response()
-                        .error(f"测试重排序模型失败: {e!s}，请检查平台日志输出。")
+                        .error(f"测试重排序模型失败: {e!s},请检查平台日志输出｡")
                         .__dict__
                     )
 
@@ -642,12 +642,12 @@ class KnowledgeBaseRoute(Route):
         """上传文档
 
         支持两种方式:
-        1. multipart/form-data 文件上传（支持多文件，最多10个）
-        2. JSON 格式 base64 编码上传（支持多文件，最多10个）
+        1. multipart/form-data 文件上传(支持多文件,最多10个)
+        2. JSON 格式 base64 编码上传(支持多文件,最多10个)
 
         Form Data (multipart/form-data):
         - kb_id: 知识库 ID (必填)
-        - file: 文件对象 (必填，可多个，字段名为 file, file1, file2, ... 或 files[])
+        - file: 文件对象 (必填,可多个,字段名为 file, file1, file2, ... 或 files[])
 
         JSON Body (application/json):
         - kb_id: 知识库 ID (必填)
@@ -656,7 +656,7 @@ class KnowledgeBaseRoute(Route):
           - file_content: base64 编码的文件内容 (必填)
 
         返回:
-        - task_id: 任务ID，用于查询上传进度和结果
+        - task_id: 任务ID,用于查询上传进度和结果
         """
         try:
             kb_manager = self._get_kb_manager()
@@ -790,7 +790,7 @@ class KnowledgeBaseRoute(Route):
 
         for doc in documents:
             if "file_name" not in doc or "chunks" not in doc:
-                raise ValueError("文档格式错误，必须包含 file_name 和 chunks")
+                raise ValueError("文档格式错误,必须包含 file_name 和 chunks")
             if not isinstance(doc["chunks"], list):
                 raise ValueError("chunks 必须是列表")
             if not all(
@@ -896,11 +896,11 @@ class KnowledgeBaseRoute(Route):
                 "status": status,
             }
 
-            # 如果任务正在处理，返回进度信息
+            # 如果任务正在处理,返回进度信息
             if status == "processing" and task_id in self.upload_progress:
                 response_data["progress"] = self.upload_progress[task_id]
 
-            # 如果任务完成，返回结果
+            # 如果任务完成,返回结果
             if status == "completed":
                 response_data["result"] = task_info["result"]
                 # 清理已完成的任务
@@ -908,7 +908,7 @@ class KnowledgeBaseRoute(Route):
                 # if task_id in self.upload_progress:
                 #     del self.upload_progress[task_id]
 
-            # 如果任务失败，返回错误信息
+            # 如果任务失败,返回错误信息
             if status == "failed":
                 response_data["error"] = task_info["error"]
 
@@ -1073,7 +1073,7 @@ class KnowledgeBaseRoute(Route):
         - query: 查询文本 (必填)
         - kb_ids: 知识库 ID 列表 (必填)
         - top_k: 返回结果数量 (可选, 默认 5)
-        - debug: 是否启用调试模式，返回 t-SNE 可视化图片 (可选, 默认 False)
+        - debug: 是否启用调试模式,返回 t-SNE 可视化图片 (可选, 默认 False)
         """
         try:
             kb_manager = self._get_kb_manager()
@@ -1105,7 +1105,7 @@ class KnowledgeBaseRoute(Route):
                 "query": query,
             }
 
-            # Debug 模式：生成 t-SNE 可视化
+            # Debug 模式:生成 t-SNE 可视化
             if debug:
                 try:
                     img_base64 = await generate_tsne_visualization(
@@ -1142,7 +1142,7 @@ class KnowledgeBaseRoute(Route):
         - max_retries: 最大重试次数 (可选, 默认3)
 
         返回:
-        - task_id: 任务ID，用于查询上传进度和结果
+        - task_id: 任务ID,用于查询上传进度和结果
         """
         try:
             kb_manager = self._get_kb_manager()

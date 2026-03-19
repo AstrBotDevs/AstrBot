@@ -382,7 +382,7 @@ class ShipyardNeoBooter(ComputerBooter):
         """Pick the best profile for this session.
 
         Resolution order:
-        1. User-specified profile (non-empty, non-default) → use as-is.
+        1. User-specified profile (non-empty, non-default) ￫ use as-is.
         2. Query ``GET /v1/profiles`` and pick the profile with the most
            capabilities, preferring profiles that include ``"browser"``.
         3. Fall back to :attr:`DEFAULT_PROFILE`.
@@ -391,7 +391,7 @@ class ShipyardNeoBooter(ComputerBooter):
         misconfigured token, and silently falling back would just delay the
         real failure to ``create_sandbox``.
         """
-        # User explicitly set a profile → honour it
+        # User explicitly set a profile ￫ honour it
         if self._profile and self._profile != self.DEFAULT_PROFILE:
             logger.info(
                 "[Computer] profile_selected mode=user profile=%s",

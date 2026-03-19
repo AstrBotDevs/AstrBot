@@ -13,11 +13,11 @@ from .custom_filter import CustomFilter
 
 
 class GreedyStr(str):
-    """标记指令完成其他参数接收后的所有剩余文本。"""
+    """标记指令完成其他参数接收后的所有剩余文本｡"""
 
 
 def unwrap_optional(annotation) -> tuple:
-    """去掉 Optional[T] / Union[T, None] / T|None，返回 T"""
+    """去掉 Optional[T] / Union[T, None] / T|None,返回 T"""
     args = typing.get_args(annotation)
     non_none_args = [a for a in args if a is not type(None)]
     if len(non_none_args) == 1:
@@ -27,7 +27,7 @@ def unwrap_optional(annotation) -> tuple:
     return ()
 
 
-# 标准指令受到 wake_prefix 的制约。
+# 标准指令受到 wake_prefix 的制约｡
 class CommandFilter(HandlerFilter):
     """标准指令过滤器"""
 
@@ -66,11 +66,11 @@ class CommandFilter(HandlerFilter):
     def init_handler_md(self, handle_md: StarHandlerMetadata) -> None:
         self.handler_md = handle_md
         signature = inspect.signature(self.handler_md.handler)
-        self.handler_params = {}  # 参数名 -> 参数类型，如果有默认值则为默认值
+        self.handler_params = {}  # 参数名 -> 参数类型,如果有默认值则为默认值
         idx = 0
         for k, v in signature.parameters.items():
             if idx < 2:
-                # 忽略前两个参数，即 self 和 event
+                # 忽略前两个参数,即 self 和 event
                 idx += 1
                 continue
             if v.default == inspect.Parameter.empty:
@@ -95,7 +95,7 @@ class CommandFilter(HandlerFilter):
         params: list[Any],
         param_type: dict[str, type],
     ) -> dict[str, Any]:
-        """将参数列表 params 根据 param_type 转换为参数字典。"""
+        """将参数列表 params 根据 param_type 转换为参数字典｡"""
         result = {}
         param_items = list(param_type.items())
         for i, (param_name, param_type_or_default_val) in enumerate(param_items):
@@ -105,7 +105,7 @@ class CommandFilter(HandlerFilter):
                 # GreedyStr 必须是最后一个参数
                 if i != len(param_items) - 1:
                     raise ValueError(
-                        f"参数 '{param_name}' (GreedyStr) 必须是最后一个参数。",
+                        f"参数 '{param_name}' (GreedyStr) 必须是最后一个参数｡",
                     )
 
                 # 将剩余的所有部分合并成一个字符串
@@ -121,7 +121,7 @@ class CommandFilter(HandlerFilter):
                 ):
                     # 是类型
                     raise ValueError(
-                        f"必要参数缺失。该指令完整参数: {self.print_types()}",
+                        f"必要参数缺失｡该指令完整参数: {self.print_types()}",
                     )
                 # 是默认值
                 result[param_name] = param_type_or_default_val
@@ -134,7 +134,7 @@ class CommandFilter(HandlerFilter):
                         else:
                             result[param_name] = params[i]
                     elif isinstance(param_type_or_default_val, str):
-                        # 如果 param_type_or_default_val 是字符串，直接赋值
+                        # 如果 param_type_or_default_val 是字符串,直接赋值
                         result[param_name] = params[i]
                     elif isinstance(param_type_or_default_val, bool):
                         # 处理布尔类型
@@ -145,7 +145,7 @@ class CommandFilter(HandlerFilter):
                             result[param_name] = False
                         else:
                             raise ValueError(
-                                f"参数 {param_name} 必须是布尔值（true/false, yes/no, 1/0）。",
+                                f"参数 {param_name} 必须是布尔值(true/false, yes/no, 1/0)｡",
                             )
                     elif isinstance(param_type_or_default_val, int):
                         result[param_name] = int(params[i])
@@ -161,14 +161,14 @@ class CommandFilter(HandlerFilter):
                                 # 只有一个非 NoneType 类型
                                 result[param_name] = nn_types[0](params[i])
                             else:
-                                # 没有或者有多个非 NoneType 类型，这里我们暂时直接赋值为原始值。
+                                # 没有或者有多个非 NoneType 类型,这里我们暂时直接赋值为原始值｡
                                 # NOTE: 目前还没有做类型校验
                                 result[param_name] = params[i]
                         else:
                             result[param_name] = param_type_or_default_val(params[i])
                 except ValueError:
                     raise ValueError(
-                        f"参数 {param_name} 类型错误。完整参数: {self.print_types()}",
+                        f"参数 {param_name} 类型错误｡完整参数: {self.print_types()}",
                     )
         return result
 

@@ -1,5 +1,5 @@
 """企业微信智能机器人 API 客户端
-处理消息加密解密、API 调用等
+处理消息加密解密､API 调用等
 """
 
 import base64
@@ -59,14 +59,14 @@ class WecomAIBotAPIClient:
             )
 
             if ret != WecomAIBotConstants.SUCCESS:
-                logger.error(f"消息解密失败，错误码: {ret}")
+                logger.error(f"消息解密失败,错误码: {ret}")
                 return ret, None
 
             # 解析 JSON
             if decrypted_msg:
                 try:
                     message_data = json.loads(decrypted_msg)
-                    logger.debug(f"解密成功，消息内容: {message_data}")
+                    logger.debug(f"解密成功,消息内容: {message_data}")
                     return WecomAIBotConstants.SUCCESS, message_data
                 except json.JSONDecodeError as e:
                     logger.error(f"JSON 解析失败: {e}, 原始消息: {decrypted_msg}")
@@ -93,14 +93,14 @@ class WecomAIBotAPIClient:
             timestamp: 时间戳
 
         Returns:
-            加密后的消息，失败时返回 None
+            加密后的消息,失败时返回 None
 
         """
         try:
             ret, encrypted_msg = self.wxcpt.EncryptMsg(plain_message, nonce, timestamp)
 
             if ret != WecomAIBotConstants.SUCCESS:
-                logger.error(f"消息加密失败，错误码: {ret}")
+                logger.error(f"消息加密失败,错误码: {ret}")
                 return None
 
             logger.debug("消息加密成功")
@@ -138,7 +138,7 @@ class WecomAIBotAPIClient:
             )
 
             if ret != WecomAIBotConstants.SUCCESS:
-                logger.error(f"URL 验证失败，错误码: {ret}")
+                logger.error(f"URL 验证失败,错误码: {ret}")
                 return "verify fail"
 
             logger.info("URL 验证成功")
@@ -157,7 +157,7 @@ class WecomAIBotAPIClient:
 
         Args:
             image_url: 加密图片的 URL
-            aes_key_base64: Base64 编码的 AES 密钥，如果为 None 则使用实例的密钥
+            aes_key_base64: Base64 编码的 AES 密钥,如果为 None 则使用实例的密钥
 
         Returns:
             (是否成功, 图片数据或错误信息)
@@ -170,12 +170,12 @@ class WecomAIBotAPIClient:
             async with aiohttp.ClientSession() as session:
                 async with session.get(image_url, timeout=15) as response:
                     if response.status != 200:
-                        error_msg = f"图片下载失败，状态码: {response.status}"
+                        error_msg = f"图片下载失败,状态码: {response.status}"
                         logger.error(error_msg)
                         return False, error_msg
 
                     encrypted_data = await response.read()
-                    logger.info(f"图片下载成功，大小: {len(encrypted_data)} 字节")
+                    logger.info(f"图片下载成功,大小: {len(encrypted_data)} 字节")
 
             # 准备解密密钥
             if aes_key_base64 is None:
@@ -203,7 +203,7 @@ class WecomAIBotAPIClient:
                 raise ValueError("无效的填充长度 (大于32字节)")
 
             decrypted_data = decrypted_data[:-pad_len]
-            logger.info(f"图片解密成功，解密后大小: {len(decrypted_data)} 字节")
+            logger.info(f"图片解密成功,解密后大小: {len(decrypted_data)} 字节")
 
             return True, decrypted_data
 
@@ -333,7 +333,7 @@ class WecomAIBotMessageParser:
             data: 消息数据
 
         Returns:
-            文本内容，解析失败返回 None
+            文本内容,解析失败返回 None
 
         """
         try:
@@ -350,7 +350,7 @@ class WecomAIBotMessageParser:
             data: 消息数据
 
         Returns:
-            图片 URL，解析失败返回 None
+            图片 URL,解析失败返回 None
 
         """
         try:
@@ -367,7 +367,7 @@ class WecomAIBotMessageParser:
             data: 消息数据
 
         Returns:
-            流消息数据，解析失败返回 None
+            流消息数据,解析失败返回 None
 
         """
         try:
@@ -390,7 +390,7 @@ class WecomAIBotMessageParser:
             data: 消息数据
 
         Returns:
-            消息项列表，解析失败返回 None
+            消息项列表,解析失败返回 None
 
         """
         try:
@@ -407,7 +407,7 @@ class WecomAIBotMessageParser:
             data: 消息数据
 
         Returns:
-            事件数据，解析失败返回 None
+            事件数据,解析失败返回 None
 
         """
         try:

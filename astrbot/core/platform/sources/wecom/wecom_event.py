@@ -57,15 +57,15 @@ class WecomPlatformEvent(AstrMessageEvent):
             cut_position = end
             for i in range(end, start, -1):
                 if i < len(plain) and plain[i - 1] in [
-                    "。",
-                    "！",
-                    "？",
+                    "｡",
+                    "!",
+                    "?",
                     ".",
                     "!",
                     "?",
                     "\n",
                     ";",
-                    "；",
+                    ";",
                 ]:
                     cut_position = i
                     break
@@ -87,7 +87,7 @@ class WecomPlatformEvent(AstrMessageEvent):
             # 微信客服
             kf_message_api = getattr(self.client, "kf_message", None)
             if not isinstance(kf_message_api, WeChatKFMessage):
-                logger.warning("未找到微信客服发送消息方法。")
+                logger.warning("未找到微信客服发送消息方法｡")
                 return
 
             user_id = self.get_sender_id()
@@ -184,7 +184,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                             response["media_id"],
                         )
                 else:
-                    logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
+                    logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}｡")
         else:
             # 企业微信应用
             for comp in message.chain:
@@ -284,7 +284,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                             response["media_id"],
                         )
                 else:
-                    logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
+                    logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}｡")
 
         await super().send(message)
 

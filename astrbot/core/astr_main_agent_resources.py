@@ -371,7 +371,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     return (
                         f"error: unsupported message type '{msg_type}' at index {idx}."
                     )
-            except Exception as exc:  # 捕获组件构造异常，避免直接抛出
+            except Exception as exc:  # 捕获组件构造异常,避免直接抛出
                 return f"error: failed to build messages[{idx}] component: {exc}"
 
         try:
@@ -418,7 +418,7 @@ async def retrieve_knowledge_base(
         # 会话级配置
         kb_ids = session_config.get("kb_ids", [])
 
-        # 如果配置为空列表，明确表示不使用知识库
+        # 如果配置为空列表,明确表示不使用知识库
         if not kb_ids:
             logger.info(f"[知识库] 会话 {umo} 已被配置为不使用知识库")
             return
@@ -444,18 +444,18 @@ async def retrieve_knowledge_base(
         if not kb_names:
             return
 
-        logger.debug(f"[知识库] 使用会话级配置，知识库数量: {len(kb_names)}")
+        logger.debug(f"[知识库] 使用会话级配置,知识库数量: {len(kb_names)}")
     else:
         kb_names = config.get("kb_names", [])
         top_k = config.get("kb_final_top_k", 5)
-        logger.debug(f"[知识库] 使用全局配置，知识库数量: {len(kb_names)}")
+        logger.debug(f"[知识库] 使用全局配置,知识库数量: {len(kb_names)}")
 
     top_k_fusion = config.get("kb_fusion_top_k", 20)
 
     if not kb_names:
         return
 
-    logger.debug(f"[知识库] 开始检索知识库，数量: {len(kb_names)}, top_k={top_k}")
+    logger.debug(f"[知识库] 开始检索知识库,数量: {len(kb_names)}, top_k={top_k}")
     kb_context = await kb_mgr.retrieve(
         query=query,
         kb_names=kb_names,

@@ -147,9 +147,9 @@ class WebChatMessageEvent(AstrMessageEvent):
             conversation_id,
         )
         async for chain in generator:
-            # 处理音频流（Live Mode）
+            # 处理音频流(Live Mode)
             if chain.type == "audio_chunk":
-                # 音频流数据，直接发送
+                # 音频流数据,直接发送
                 audio_b64 = ""
                 text = None
 

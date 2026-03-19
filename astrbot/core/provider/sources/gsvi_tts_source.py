@@ -54,7 +54,7 @@ class ProviderGSVITTS(TTSProvider):
                 else:
                     error_text = await response.text()
                     raise Exception(
-                        f"GSVI TTS API 请求失败，状态码: {response.status}，错误: {error_text}",
+                        f"GSVI TTS API 请求失败,状态码: {response.status},错误: {error_text}",
                     )
 
         return path

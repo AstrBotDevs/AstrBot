@@ -31,7 +31,7 @@ class AlterCmdCommands(CommandParserMixin):
         if token.len < 3:
             await event.send(
                 MessageChain().message(
-                    "该指令用于设置指令或指令组的权限。\n"
+                    "该指令用于设置指令或指令组的权限｡\n"
                     "格式: /alter_cmd <cmd_name> <admin/member>\n"
                     "例1: /alter_cmd c1 admin 将 c1 设为管理员指令\n"
                     "例2: /alter_cmd g1 c1 admin 将 g1 指令组的 c1 子指令设为管理员指令\n"
@@ -56,11 +56,11 @@ class AlterCmdCommands(CommandParserMixin):
             private = reset_cfg.get("private", "member")
 
             config_menu = f"""reset命令权限细粒度配置
-                当前配置：
+                当前配置:
                 1. 群聊+会话隔离开: {group_unique_on}
                 2. 群聊+会话隔离关: {group_unique_off}
                 3. 私聊: {private}
-                修改指令格式：
+                修改指令格式:
                 /alter_cmd reset scene <场景编号> <admin/member>
                 例如: /alter_cmd reset scene 2 member"""
             await event.send(MessageChain().message(config_menu))
@@ -82,7 +82,7 @@ class AlterCmdCommands(CommandParserMixin):
 
             if perm_type not in ["admin", "member"]:
                 await event.send(
-                    MessageChain().message("权限类型错误，只能是 admin 或 member"),
+                    MessageChain().message("权限类型错误,只能是 admin 或 member"),
                 )
                 return
 
@@ -101,7 +101,7 @@ class AlterCmdCommands(CommandParserMixin):
 
         if cmd_type not in ["admin", "member"]:
             await event.send(
-                MessageChain().message("指令类型错误，可选类型有 admin, member"),
+                MessageChain().message("指令类型错误,可选类型有 admin, member"),
             )
             return
 
@@ -168,6 +168,6 @@ class AlterCmdCommands(CommandParserMixin):
         cmd_group_str = "指令组" if cmd_group else "指令"
         await event.send(
             MessageChain().message(
-                f"已将「{cmd_name}」{cmd_group_str} 的权限级别调整为 {cmd_type}。",
+                f"已将｢{cmd_name}｣{cmd_group_str} 的权限级别调整为 {cmd_type}｡",
             ),
         )

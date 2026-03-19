@@ -14,7 +14,7 @@ class ProviderXAI(ProviderOpenAIOfficial):
         super().__init__(provider_config, provider_settings)
 
     def _maybe_inject_xai_search(self, payloads: dict) -> None:
-        """当开启 xAI 原生搜索时，向请求体注入 Live Search 参数。
+        """当开启 xAI 原生搜索时,向请求体注入 Live Search 参数｡
 
         - 仅在 provider_config.xai_native_search 为 True 时生效
         - 默认注入 {"mode": "auto"}
