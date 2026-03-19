@@ -69,6 +69,7 @@ from typing import Any, Literal, TypeAlias, cast
 import yaml
 
 from .._command_model import resolve_command_model_param
+from .._injected_params import is_framework_injected_parameter
 from .._typing_utils import unwrap_optional
 from ..decorators import (
     ConversationMeta,
@@ -86,7 +87,6 @@ from ..protocol.descriptors import (
     ParamSpec,
     ScheduleTrigger,
 )
-from ..schedule import ScheduleContext
 from ..types import GreedyStr
 from .environment_groups import (
     EnvironmentGroup,
@@ -223,31 +223,7 @@ def _iter_discoverable_names(instance: Any) -> list[str]:
 
 
 def _is_injected_parameter(annotation: Any, parameter_name: str) -> bool:
-    if parameter_name in {
-        "event",
-        "ctx",
-        "context",
-        "sched",
-        "schedule",
-        "conversation",
-        "conv",
-    }:
-        return True
-    normalized, _is_optional = unwrap_optional(annotation)
-    if normalized is None:
-        return False
-    if normalized in {ScheduleContext}:
-        return True
-    if isinstance(normalized, type):
-        from ..context import Context
-        from ..conversation import ConversationSession
-        from ..events import MessageEvent
-
-        return issubclass(
-            normalized,
-            (Context, MessageEvent, ScheduleContext, ConversationSession),
-        )
-    return False
+    return is_framework_injected_parameter(parameter_name, annotation)
 
 
 def _param_type_name(annotation: Any) -> tuple[ParamTypeName, OptionalInnerType, bool]:

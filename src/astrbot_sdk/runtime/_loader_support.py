@@ -18,10 +18,10 @@ import inspect
 import typing
 from typing import Any, Literal, TypeAlias, cast
 
+from .._injected_params import is_framework_injected_parameter
 from .._typing_utils import unwrap_optional
 from ..decorators import get_capability_meta, get_handler_meta
 from ..protocol.descriptors import ParamSpec
-from ..schedule import ScheduleContext
 from ..types import GreedyStr
 
 ParamTypeName: TypeAlias = Literal[
@@ -31,19 +31,7 @@ OptionalInnerType: TypeAlias = Literal["str", "int", "float", "bool"] | None
 
 
 def is_injected_parameter(annotation: Any, parameter_name: str) -> bool:
-    if parameter_name in {"event", "ctx", "context", "sched", "schedule"}:
-        return True
-    normalized, _is_optional = unwrap_optional(annotation)
-    if normalized is None:
-        return False
-    if normalized in {ScheduleContext}:
-        return True
-    if isinstance(normalized, type):
-        from ..context import Context
-        from ..events import MessageEvent
-
-        return issubclass(normalized, (Context, MessageEvent, ScheduleContext))
-    return False
+    return is_framework_injected_parameter(parameter_name, annotation)
 
 
 def param_type_name(annotation: Any) -> tuple[ParamTypeName, OptionalInnerType, bool]:
