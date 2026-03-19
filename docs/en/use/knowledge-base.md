@@ -10,7 +10,7 @@
 
 Open the service provider page, click "Add Service Provider", and select Embedding.
 
-AstrBot now includes built-in presets for OpenAI-compatible Embedding, Zhipu Embedding, Volcengine Embedding, and Gemini Embedding.
+AstrBot now includes built-in presets for OpenAI-compatible Embedding, Zhipu Embedding, Volcengine Embedding, Ollama Embedding, and Gemini Embedding.
 
 If you want to connect another OpenAI-compatible embedding service, use `OpenAI Compatible Embedding` first. When `embedding api base` only contains the host, AstrBot automatically appends `/v1`. If the URL already contains a path such as Zhipu `/api/paas/v4` or Volcengine Ark `/api/v3`, AstrBot preserves that path as-is.
 
@@ -23,6 +23,9 @@ After completing the configuration, click Save.
 
 > [!NOTE]
 > The Volcengine preset defaults to `doubao-embedding-vision`. AstrBot's knowledge-base pipeline is still text chunking plus text embedding only, so this integration uses the model with text input only and does not add multimodal knowledge-base support yet,although it is a multimodal embedding model.
+
+> [!NOTE]
+> The Ollama preset defaults to local `http://127.0.0.1:11434`, model `embeddinggemma`, and 768 dimensions. Before using it, run `ollama pull embeddinggemma` locally and make sure the Ollama service is running.
 
 ## Configuring Reranker Model (Optional)
 

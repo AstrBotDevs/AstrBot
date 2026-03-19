@@ -127,9 +127,11 @@ async def test_provider_template_exposes_openai_compatible_embedding_presets(
     assert "OpenAI Compatible Embedding" in templates
     assert "Zhipu Embedding" in templates
     assert "Volcengine Embedding" in templates
+    assert "Ollama Embedding" in templates
     assert templates["OpenAI Compatible Embedding"]["type"] == (
         "openai_compatible_embedding"
     )
+    assert templates["Ollama Embedding"]["provider"] == "ollama"
 
 
 class _FakeDashboardEmbeddingsAPI:

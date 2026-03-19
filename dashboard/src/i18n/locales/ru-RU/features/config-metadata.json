@@ -1209,6 +1209,9 @@
             "volcengine_embedding": {
                 "hint": "Пресет Volcengine по умолчанию использует https://ark.cn-beijing.volces.com/api/v3 и doubao-embedding-vision, сохраняя путь /api/v3 без изменений. Сейчас AstrBot использует эту модель только для текстового ввода."
             },
+            "ollama_embedding": {
+                "hint": "Пресет Ollama по умолчанию использует локальный http://127.0.0.1:11434, модель embeddinggemma и размерность 768. API key по умолчанию равен ollama только для совместимости с OpenAI SDK; сам Ollama его игнорирует."
+            },
             "gemini_embedding": {
                 "hint": "Gemini Embedding не требует ручного добавления /v1beta."
             },

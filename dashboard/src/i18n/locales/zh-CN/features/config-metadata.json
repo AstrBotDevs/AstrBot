@@ -1206,6 +1206,9 @@
       "volcengine_embedding": {
         "hint": "火山预设默认使用 https://ark.cn-beijing.volces.com/api/v3 和 doubao-embedding-vision，并保留 /api/v3 路径不变。AstrBot 当前仍只按文本输入使用该模型。"
       },
+      "ollama_embedding": {
+        "hint": "Ollama 预设默认使用本地 http://127.0.0.1:11434、模型 embeddinggemma、维度 768。API Key 默认填 ollama，仅用于兼容 OpenAI SDK，Ollama 会忽略它。"
+      },
       "gemini_embedding": {
         "hint": "Gemini Embedding 无需手动添加 /v1beta。"
       },

@@ -1204,6 +1204,9 @@
       "volcengine_embedding": {
         "hint": "The Volcengine preset defaults to https://ark.cn-beijing.volces.com/api/v3 and doubao-embedding-vision, and keeps the /api/v3 path unchanged. AstrBot still uses this model for text input only."
       },
+      "ollama_embedding": {
+        "hint": "The Ollama preset defaults to local http://127.0.0.1:11434, model embeddinggemma, and 768 dimensions. The API key defaults to ollama only for OpenAI SDK compatibility, and Ollama ignores it."
+      },
       "gemini_embedding": {
         "hint": "Gemini Embedding does not require manually adding /v1beta."
       },

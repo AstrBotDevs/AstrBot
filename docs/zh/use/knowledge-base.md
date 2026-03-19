@@ -11,7 +11,7 @@
 
 打开服务提供商页面，点击新增服务提供商，选择 Embedding。
 
-目前 AstrBot 内置了通用 OpenAI-compatible Embedding、智谱 Embedding、火山 Embedding 和 Gemini Embedding。
+目前 AstrBot 内置了通用 OpenAI-compatible Embedding、智谱 Embedding、火山 Embedding、Ollama Embedding 和 Gemini Embedding。
 
 如果你要接入其他兼容 OpenAI API 的嵌入服务，优先选择 `OpenAI Compatible Embedding`。当 `embedding api base` 只填写域名时，AstrBot 会自动补上 `/v1`；如果你填写的是带路径的地址，例如智谱的 `/api/paas/v4` 或火山 Ark 的 `/api/v3`，AstrBot 会保持原样，不会额外拼接 `/v1`。
 
@@ -24,6 +24,9 @@
 
 > [!NOTE]
 > 火山预设默认模型为 `doubao-embedding-vision`。AstrBot 当前的知识库链路仍然只按文本分块和文本 embedding 工作，所以本次接入只会按文本输入使用该模型，不代表已经支持多模态知识库。
+
+> [!NOTE]
+> Ollama 预设默认指向本地 `http://127.0.0.1:11434`，模型为 `embeddinggemma`，默认维度为 768。开始使用前请先在本机执行 `ollama pull embeddinggemma`，并确保 Ollama 服务已经启动。
 
 ## 配置重排序模型（可选）
 
