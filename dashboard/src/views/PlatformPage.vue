@@ -310,6 +310,7 @@
 
 <script>
 import axios from '@/utils/request';
+import { resolveApiUrl } from '@/utils/request';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
@@ -659,9 +660,6 @@ export default {
 
     getWebhookUrl(webhookUuid) {
       let callbackBase = this.config_data.callback_api_base || '';
-      if (!callbackBase) {
-        callbackBase = "http(s)://<your-domain-or-ip>";
-      }
       if (callbackBase) {
         return `${callbackBase.replace(/\/$/, '')}/api/platform/webhook/${webhookUuid}`;
       }
