@@ -86,6 +86,10 @@ def webui_group() -> None:
     pass
 
 
+# Export a stable symbol expected by the command registry
+webui = webui_group
+
+
 @webui_group.command(name="install")
 @click.option("--root", type=str, required=False, help="AstrBot root directory")
 def webui_install(root: str | None) -> None:
