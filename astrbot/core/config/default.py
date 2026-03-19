@@ -96,6 +96,24 @@ DEFAULT_CONFIG = {
         ),
         "llm_compress_keep_recent": 6,
         "llm_compress_provider_id": "",
+        "periodic_context_compaction": {
+            "enabled": False,
+            "interval_minutes": 30,
+            "startup_delay_seconds": 120,
+            "max_conversations_per_run": 8,
+            "max_scan_per_run": 120,
+            "scan_page_size": 40,
+            "min_idle_minutes": 15,
+            "min_messages": 14,
+            "target_tokens": 4096,
+            "trigger_tokens": 6144,
+            "max_rounds": 3,
+            "truncate_turns": 1,
+            "keep_recent": 6,
+            "provider_id": "",
+            "instruction": "",
+            "dry_run": False,
+        },
         "max_context_length": -1,
         "dequeue_context_length": 1,
         "streaming_response": False,
@@ -2509,6 +2527,59 @@ CONFIG_METADATA_2 = {
                     "prompt_prefix": {
                         "type": "string",
                     },
+                    "periodic_context_compaction": {
+                        "type": "object",
+                        "items": {
+                            "enabled": {
+                                "type": "bool",
+                            },
+                            "interval_minutes": {
+                                "type": "int",
+                            },
+                            "startup_delay_seconds": {
+                                "type": "int",
+                            },
+                            "max_conversations_per_run": {
+                                "type": "int",
+                            },
+                            "max_scan_per_run": {
+                                "type": "int",
+                            },
+                            "scan_page_size": {
+                                "type": "int",
+                            },
+                            "min_idle_minutes": {
+                                "type": "int",
+                            },
+                            "min_messages": {
+                                "type": "int",
+                            },
+                            "target_tokens": {
+                                "type": "int",
+                            },
+                            "trigger_tokens": {
+                                "type": "int",
+                            },
+                            "max_rounds": {
+                                "type": "int",
+                            },
+                            "truncate_turns": {
+                                "type": "int",
+                            },
+                            "keep_recent": {
+                                "type": "int",
+                            },
+                            "provider_id": {
+                                "type": "string",
+                            },
+                            "instruction": {
+                                "type": "string",
+                            },
+                            "dry_run": {
+                                "type": "bool",
+                            },
+                        },
+                    },
                     "max_context_length": {
                         "type": "int",
                     },
@@ -3193,6 +3264,150 @@ CONFIG_METADATA_3 = {
                         "hint": "留空时将降级为“按对话轮数截断”的策略。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.enabled": {
+                        "description": "启用定时历史压缩",
+                        "type": "bool",
+                        "hint": "后台定时扫描会话历史，使用 LLM 摘要旧消息并回写对话历史，实现多轮 compact context。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.interval_minutes": {
+                        "description": "定时间隔（分钟）",
+                        "type": "int",
+                        "hint": "每隔多少分钟执行一次压缩扫描。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.startup_delay_seconds": {
+                        "description": "启动延迟（秒）",
+                        "type": "int",
+                        "hint": "AstrBot 启动后，等待指定秒数再执行首次压缩任务。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.max_conversations_per_run": {
+                        "description": "单次最多压缩会话数",
+                        "type": "int",
+                        "hint": "每次任务最多实际压缩多少个会话。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.max_scan_per_run": {
+                        "description": "单次最多扫描会话数",
+                        "type": "int",
+                        "hint": "每次任务最多扫描多少会话（包括被跳过的会话）。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.scan_page_size": {
+                        "description": "分页扫描大小",
+                        "type": "int",
+                        "hint": "扫描 conversations 表时每页读取条数。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.min_idle_minutes": {
+                        "description": "最小静默时长（分钟）",
+                        "type": "int",
+                        "hint": "会话最近更新时间小于该值时跳过，避免压缩活跃会话。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.min_messages": {
+                        "description": "最小消息条数",
+                        "type": "int",
+                        "hint": "少于该消息条数的会话不参与压缩。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.target_tokens": {
+                        "description": "目标 Token 阈值",
+                        "type": "int",
+                        "hint": "压缩目标上下文大小（token 估算值）。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.trigger_tokens": {
+                        "description": "触发 Token 阈值",
+                        "type": "int",
+                        "hint": "会话估算 token 超过此值才触发压缩。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.max_rounds": {
+                        "description": "每会话最大压缩轮数",
+                        "type": "int",
+                        "hint": "单个会话一次任务内最多执行几轮摘要压缩（实现 multiple compact context）。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.truncate_turns": {
+                        "description": "截断轮数（后备）",
+                        "type": "int",
+                        "hint": "LLM 压缩后仍超限时，按轮截断的每次丢弃轮数。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.keep_recent": {
+                        "description": "保留最近轮数",
+                        "type": "int",
+                        "hint": "压缩时始终保留最近 N 轮消息。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.provider_id": {
+                        "description": "压缩模型提供商 ID",
+                        "type": "string",
+                        "_special": "select_provider",
+                        "hint": "留空时按会话当前模型执行压缩。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.instruction": {
+                        "description": "定时压缩提示词",
+                        "type": "text",
+                        "hint": "留空时复用 provider_settings.llm_compress_instruction。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.dry_run": {
+                        "description": "演练模式（不回写）",
+                        "type": "bool",
+                        "hint": "开启后只记录日志，不实际写回数据库。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
