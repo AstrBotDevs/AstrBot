@@ -3439,7 +3439,7 @@ CONFIG_METADATA_3 = {
                         "description": "白名单 ID 列表",
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "使用 /sid 获取 ID。",
+                        "hint": "使用 /sid 获取 ID。当白名单列表为空时，代表不启用白名单（即所有 ID 都在白名单内）。",
                     },
                     "platform_settings.id_whitelist_log": {
                         "description": "输出日志",
