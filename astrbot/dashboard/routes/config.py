@@ -1380,18 +1380,24 @@ class ConfigRoute(Route):
             plugin_dir = os.path.dirname(module_file)
             cache_key = f"{platform.name}:{module_file}:{platform.logo_path}"
 
+            # 解析logo文件路径
+            logo_file_path = os.path.join(plugin_dir, platform.logo_path)
+
             # 检查缓存
             if cache_key in self._logo_token_cache:
                 cached_token = self._logo_token_cache[cache_key]
-                if not await file_token_service.check_token_expired(cached_token):
+                if (
+                    not await file_token_service.check_token_expired(
+                        cached_token,
+                    )
+                    and await anyio.Path(logo_file_path).exists()
+                ):
                     platform_logo_tokens[platform.name] = cached_token
                     logger.debug(
                         f"Using cached logo token for platform {platform.name}"
                     )
                     return
-
-            # 解析logo文件路径
-            logo_file_path = os.path.join(plugin_dir, platform.logo_path)
+                self._logo_token_cache.pop(cache_key, None)
 
             # 检查文件是否存在并注册令牌
             if await anyio.Path(logo_file_path).exists():

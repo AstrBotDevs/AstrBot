@@ -349,8 +349,14 @@ class PluginRoute(Route):
     async def get_plugin_logo_token(self, logo_path: str):
         try:
             if token := self._logo_cache.get(logo_path):
-                if not await file_token_service.check_token_expired(token):
-                    return self._logo_cache[logo_path]
+                if (
+                    not await file_token_service.check_token_expired(
+                        token,
+                    )
+                    and await anyio.Path(logo_path).exists()
+                ):
+                    return token
+                self._logo_cache.pop(logo_path, None)
             token = await file_token_service.register_file(
                 logo_path,
                 expire_seconds=300,
