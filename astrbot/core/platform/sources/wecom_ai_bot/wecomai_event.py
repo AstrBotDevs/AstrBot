@@ -135,6 +135,8 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain | None) -> None:
         """发送消息"""
+        if message is None:
+            return
         raw = self.message_obj.raw_message
         assert isinstance(raw, dict), (
             "wecom_ai_bot platform event raw_message should be a dict"
