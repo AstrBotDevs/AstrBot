@@ -205,10 +205,9 @@ async def test_compact_one_conversation_dry_run_reports_skipped() -> None:
         token_usage=0,
         updated_at=None,
     )
-    scheduler._check_eligibility = lambda _conv, _cfg: SimpleNamespace(  # type: ignore[method-assign]
-        eligible=True,
-        messages=[Message(role="user", content="before")],
-        before_tokens=100,
+    scheduler._check_eligibility = lambda _conv, _cfg: (  # type: ignore[method-assign]
+        [Message(role="user", content="before")],
+        100,
     )
     scheduler._resolve_provider = AsyncMock(return_value=object())  # type: ignore[method-assign]
     scheduler._run_compaction_rounds = AsyncMock(  # type: ignore[method-assign]
