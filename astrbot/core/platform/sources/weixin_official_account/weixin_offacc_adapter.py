@@ -33,10 +33,7 @@ from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .weixin_offacc_event import WeixinOfficialAccountPlatformEvent
 
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
+from typing import override
 
 
 class WeixinOfficialAccountServer:
@@ -186,8 +183,7 @@ class WeixinOfficialAccountServer:
                         return _reply_text(cached_xml)
                     else:
                         return _reply_text(
-                            cached_xml
-                            + "\n【后续消息还在缓冲中,回复任意文字继续获取】"
+                            cached_xml + "\n【后续消息还在缓冲中,回复任意文字继续获取】"
                         )
 
                 task: asyncio.Task | None = cast(asyncio.Task | None, state.get("task"))
@@ -248,9 +244,7 @@ class WeixinOfficialAccountServer:
             # create new trigger when state is empty, and store state in buffer
             logger.debug(f"wx new trigger: user={from_user} msg_id={msg_id}")
             preview = self._preview(msg)
-            placeholder = (
-                f"【正在思考'{preview}'中,已思考0s,回复任意文字尝试获取回复】"
-            )
+            placeholder = f"【正在思考'{preview}'中,已思考0s,回复任意文字尝试获取回复】"
             logger.info(
                 f"wx start task: user={from_user} msg_id={msg_id} preview={preview}"
             )
@@ -380,7 +374,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                     )  # wait for 180s
                 logger.debug(f"Got future result: {result}")
                 return result
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.info(f"callback 处理消息超时: message_id={msg.id}")
                 return create_reply("处理消息超时,请稍后再试｡", msg)
             except Exception as e:

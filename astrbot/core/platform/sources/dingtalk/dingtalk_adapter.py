@@ -226,9 +226,7 @@ class DingtalkPlatformAdapter(Platform):
                     elif "type" in content and content["type"] == "picture":
                         download_code = cast(str, content.get("downloadCode") or "")
                         if not download_code:
-                            logger.warning(
-                                "钉钉富文本图片消息缺少 downloadCode,已跳过"
-                            )
+                            logger.warning("钉钉富文本图片消息缺少 downloadCode,已跳过")
                             continue
                         if not robot_code:
                             logger.error(

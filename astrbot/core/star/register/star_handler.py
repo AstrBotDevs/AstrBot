@@ -14,18 +14,24 @@ from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.provider.func_tool_manager import PY_TO_JSON_TYPE, SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
-
-from ..filter.command import CommandFilter
-from ..filter.command_group import CommandGroupFilter
-from ..filter.custom_filter import CustomFilterAnd, CustomFilterOr
-from ..filter.event_message_type import EventMessageType, EventMessageTypeFilter
-from ..filter.permission import PermissionType, PermissionTypeFilter
-from ..filter.platform_adapter_type import (
+from astrbot.core.star.filter.command import CommandFilter
+from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.filter.custom_filter import CustomFilterAnd, CustomFilterOr
+from astrbot.core.star.filter.event_message_type import (
+    EventMessageType,
+    EventMessageTypeFilter,
+)
+from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
+from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
     PlatformAdapterTypeFilter,
 )
-from ..filter.regex import RegexFilter
-from ..star_handler import EventType, StarHandlerMetadata, star_handlers_registry
+from astrbot.core.star.filter.regex import RegexFilter
+from astrbot.core.star.star_handler import (
+    EventType,
+    StarHandlerMetadata,
+    star_handlers_registry,
+)
 
 
 def get_handler_full_name(

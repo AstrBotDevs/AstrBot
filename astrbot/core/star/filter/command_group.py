@@ -49,10 +49,10 @@ class CommandGroupFilter(HandlerFilter):
 
         if not parent_cmd_names:
             # 根节点
-            return [self.group_name] + list(self.alias)
+            return [self.group_name, *list(self.alias)]
 
         result = []
-        candidates = [self.group_name] + list(self.alias)
+        candidates = [self.group_name, *list(self.alias)]
         for parent_cmd_name in parent_cmd_names:
             for candidate in candidates:
                 result.append(parent_cmd_name + " " + candidate)
@@ -94,7 +94,7 @@ class CommandGroupFilter(HandlerFilter):
                     parts.append(
                         sub_filter.print_cmd_tree(
                             sub_filter.sub_command_filters,
-                            prefix + "￨   ",
+                            prefix + "|   ",
                             event=event,
                             cfg=cfg,
                         )

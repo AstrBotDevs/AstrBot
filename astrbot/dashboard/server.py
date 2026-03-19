@@ -8,7 +8,6 @@ from collections.abc import Callable
 from datetime import datetime
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from pathlib import Path
-from typing import Protocol
 
 import anyio
 import jwt
@@ -62,10 +61,6 @@ from .routes.api_key import ALL_OPEN_API_SCOPES
 
 # Static assets shipped inside the wheel (built during `hatch build`).
 _BUNDLED_DIST = Path(__file__).parent / "dist"
-
-
-class _AddrWithPort(Protocol):
-    port: int
 
 
 APP: Quart

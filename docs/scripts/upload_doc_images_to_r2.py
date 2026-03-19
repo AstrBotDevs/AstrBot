@@ -6,7 +6,6 @@ import logging
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 from collections.abc import Iterable, Sequence
 from pathlib import Path

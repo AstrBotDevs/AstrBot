@@ -169,6 +169,8 @@ class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
         from .star_tools import StarTools
 
+        self.tasks = set()
+
         self.updator = PluginUpdator()
 
         self.context = context
@@ -195,7 +197,9 @@ class PluginManager:
 
         self.failed_plugin_info = ""
         if os.getenv("ASTRBOT_RELOAD", "0") == "1":
-            asyncio.create_task(self._watch_plugins_changes())
+            _watch_plugins_changes = asyncio.create_task(self._watch_plugins_changes())
+            self.tasks.add(_watch_plugins_changes)
+            _watch_plugins_changes.add_done_callback(self.tasks.discard)
 
     async def _watch_plugins_changes(self) -> None:
         """监视插件文件变化"""
@@ -1247,12 +1251,13 @@ class PluginManager:
 
         """
         # this metric is for displaying plugins installation count in webui
-        asyncio.create_task(
+        _task_install_star = asyncio.create_task(
             Metric.upload(
                 et="install_star",
                 repo=repo_url,
             ),
         )
+        self.tasks.add(_task_install_star)
 
         async with self._pm_lock:
             plugin_path = ""
@@ -1688,8 +1693,7 @@ class PluginManager:
             )
             if not success:
                 raise Exception(
-                    error_message
-                    or f"安装插件 {dir_name} 失败,请检查插件依赖或兼容性｡"
+                    error_message or f"安装插件 {dir_name} 失败,请检查插件依赖或兼容性｡"
                 )
 
             # Get the plugin metadata to return repo info
@@ -1724,12 +1728,14 @@ class PluginManager:
                 }
 
                 if plugin.repo:
-                    asyncio.create_task(
+                    _task_install_star_f = asyncio.create_task(
                         Metric.upload(
                             et="install_star_f",  # install star
                             repo=plugin.repo,
                         ),
                     )
+                    self.tasks.add(_task_install_star_f)
+                    _task_install_star_f.add_done_callback(self.tasks.discard)
 
             return plugin_info
         except Exception as e:

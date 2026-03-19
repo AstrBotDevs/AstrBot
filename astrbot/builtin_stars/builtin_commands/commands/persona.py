@@ -199,9 +199,7 @@ class PersonaCommands:
                 )
                 force_warn_msg = ""
                 if force_applied_persona_id:
-                    force_warn_msg = (
-                        "提醒:由于自定义规则,您现在切换的人格将不会生效｡"
-                    )
+                    force_warn_msg = "提醒:由于自定义规则,您现在切换的人格将不会生效｡"
 
                 message.set_result(
                     MessageEventResult().message(

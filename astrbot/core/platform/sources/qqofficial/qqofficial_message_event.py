@@ -428,9 +428,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             ):
                 raise
 
-            logger.warning(
-                "[QQOfficial] markdown 发送被拒绝,回退到 content 模式重试｡"
-            )
+            logger.warning("[QQOfficial] markdown 发送被拒绝,回退到 content 模式重试｡")
             fallback_payload = payload.copy()
             fallback_payload.pop("markdown", None)
             fallback_payload["content"] = plain_text
@@ -555,7 +553,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         markdown: message.MarkdownPayload | None = None,
         keyboard: message.Keyboard | None = None,
         stream: dict | None = None,
-    ) -> message.Message:
+    ) -> message.Message | None:
         payload = locals()
         payload.pop("self", None)
         # QQ API does not accept stream.id=None; remove it when not yet assigned

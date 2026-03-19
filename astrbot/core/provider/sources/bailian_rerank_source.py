@@ -191,9 +191,7 @@ class BailianRerankProvider(RerankProvider):
 
         # 检查限制
         if len(documents) > 500:
-            logger.warning(
-                f"文档数量({len(documents)})超过限制(500),将截断前500个文档"
-            )
+            logger.warning(f"文档数量({len(documents)})超过限制(500),将截断前500个文档")
             documents = documents[:500]
 
         try:

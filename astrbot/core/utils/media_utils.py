@@ -38,7 +38,7 @@ async def get_media_duration(file_path: str) -> int | None:
             stderr=subprocess.PIPE,
         )
 
-        stdout, stderr = await process.communicate()
+        stdout, _stderr = await process.communicate()
 
         if process.returncode == 0 and stdout:
             duration_seconds = float(stdout.decode().strip())
@@ -105,7 +105,7 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
             stderr=subprocess.PIPE,
         )
 
-        stdout, stderr = await process.communicate()
+        _stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
             # 清理可能已生成但无效的临时文件
@@ -180,7 +180,7 @@ async def convert_video_format(
             stderr=subprocess.PIPE,
         )
 
-        stdout, stderr = await process.communicate()
+        _stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
             # 清理可能已生成但无效的临时文件

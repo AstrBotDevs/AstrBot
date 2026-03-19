@@ -19,6 +19,7 @@ class SessionController:
     """控制一个 Session 是否已经结束"""
 
     def __init__(self) -> None:
+        self.tasks = set()
         self.future = asyncio.Future()
         self.current_event: asyncio.Event | None = None
         """当前正在等待的所用的异步事件"""
@@ -69,13 +70,17 @@ class SessionController:
         self.current_event = new_event
         self.timeout = timeout
 
-        asyncio.create_task(self._holding(new_event, timeout))  # 开始新的 keep
+        _holding_task = asyncio.create_task(
+            self._holding(new_event, timeout)
+        )  # 开始新的 keep
+        self.tasks.add(_holding_task)
+        _holding_task.add_done_callback(self.tasks.discard)
 
     async def _holding(self, event: asyncio.Event, timeout: float) -> None:
         """等待事件结束或超时"""
         try:
             await asyncio.wait_for(event.wait(), timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             if not self.future.done():
                 self.future.set_exception(TimeoutError("等待超时"))
         except asyncio.CancelledError:

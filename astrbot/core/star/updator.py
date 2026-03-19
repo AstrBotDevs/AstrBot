@@ -3,11 +3,10 @@ import shutil
 import zipfile
 
 from astrbot.core import logger
+from astrbot.core.updator import RepoZipUpdator
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
 from astrbot.core.utils.io import on_error, remove_dir
-
-from ..star.star import StarMetadata
-from ..updator import RepoZipUpdator
+from astrbot.star.star import StarMetadata
 
 
 class PluginUpdator(RepoZipUpdator):

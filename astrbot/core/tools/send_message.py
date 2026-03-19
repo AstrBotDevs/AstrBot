@@ -169,7 +169,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if path:
                         (
                             local_path,
-                            file_from_sandbox,
+                            _file_from_sandbox,
                         ) = await self._resolve_path_from_sandbox(context, path)
                         components.append(Comp.Video.fromFileSystem(path=local_path))
                     elif url:
@@ -188,7 +188,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if path:
                         (
                             local_path,
-                            file_from_sandbox,
+                            _file_from_sandbox,
                         ) = await self._resolve_path_from_sandbox(context, path)
                         components.append(Comp.File(name=name, file=local_path))
                     elif url:

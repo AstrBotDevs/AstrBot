@@ -1524,9 +1524,7 @@ class ConfigRoute(Route):
             if plugin_md.name == plugin_name:
                 if not plugin_md.config:
                     break
-                ret["config"] = (
-                    plugin_md.config
-                )  # 这是自定义的 Dict 类(AstrBotConfig)
+                ret["config"] = plugin_md.config  # 这是自定义的 Dict 类(AstrBotConfig)
                 ret["metadata"] = {
                     plugin_name: {
                         "description": f"{plugin_name} 配置",

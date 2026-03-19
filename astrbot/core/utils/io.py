@@ -144,7 +144,9 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
-                    print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
+                    logger.info(
+                        f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}"
+                    )
                 async with await anyio.open_file(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
@@ -159,9 +161,8 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                                 else 1
                             )
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            print(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
-                                end="",
+                            logger.info(
+                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s"
                             )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证(仅在证书验证失败时作为fallback)
@@ -183,7 +184,9 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
-                    print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
+                    logger.info(
+                        f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}"
+                    )
                 async with await anyio.open_file(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
@@ -194,12 +197,11 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                         if show_progress:
                             elapsed_time = time.time() - start_time
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            print(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
-                                end="",
+                            logger.info(
+                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s"
                             )
     if show_progress:
-        print()
+        logger.info("下载完成")
 
 
 def file_to_base64(file_path: str) -> str:

@@ -142,9 +142,7 @@ def _select_provider(
         if not provider:
             logger.error("未找到指定的提供商: %s｡", sel_provider)
         if not isinstance(provider, Provider):
-            logger.error(
-                "选择的提供商类型无效(%s),跳过 LLM 请求处理｡", type(provider)
-            )
+            logger.error("选择的提供商类型无效(%s),跳过 LLM 请求处理｡", type(provider))
             return None
         return provider
     try:

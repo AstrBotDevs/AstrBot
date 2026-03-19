@@ -6,7 +6,8 @@
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 from unittest.mock import AsyncMock, MagicMock
 
 from astrbot.core.message.components import BaseMessageComponent

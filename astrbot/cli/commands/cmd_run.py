@@ -47,7 +47,6 @@ import os
 import re
 import sys
 import traceback
-from collections.abc import Iterable
 from pathlib import Path
 
 import click
@@ -165,68 +164,6 @@ def parse_service_config_file(
     return parsed
 
 
-def find_autodetected_template(
-    candidates: Iterable[Path] | None = None,
-) -> Path | None:
-    """Try to locate a likely 'config.template' automatically.
-
-    Heuristics used (in order):
-      - If explicit environment variables point to a template, use them.
-      - Provided candidates (if any).
-      - Look up from current file location for a sibling 'config.template' within ancestor directories.
-      - Common system / user locations.
-    """
-    # Env overrides
-    for envvar in (
-        "AUR_CONFIG_PATH",
-        "ASTRBOT_CONFIG_TEMPLATE",
-        "SERVICE_CONFIG",
-        "CONFIG_TEMPLATE",
-    ):
-        val = os.environ.get(envvar)
-        if val:
-            p = Path(val)
-            if p.exists():
-                return p
-
-    # Provided explicit candidates
-    if candidates:
-        for c in candidates:
-            try:
-                p = Path(c)
-            except TypeError:
-                continue
-            if p.exists():
-                return p
-
-    # Search upward from this file for a 'config.template' (useful for AUR checkout)
-    here = Path(__file__).resolve()
-    for parent in [here] + list(here.parents)[:6]:
-        p = parent / "config.template"
-        if p.exists():
-            return p
-        # also check a sibling directory named 'astrbot-git' or 'AstrBot' that might contain the file
-        for sibling in ("astrbot-git", "AstrBot", "astrbot"):
-            candidate = parent / sibling / "config.template"
-            if candidate.exists():
-                return candidate
-
-    # Common locations
-    common = [
-        Path.cwd() / "config.template",
-        Path.cwd() / ".env",
-        Path("/etc/astrbot/config.template"),
-        Path("/var/lib/astrbot/config.template"),
-        Path.home() / ".config" / "astrbot" / "config.template",
-        Path.home() / "astrbot-git" / "config.template",
-    ]
-    for p in common:
-        if p.exists():
-            return p
-
-    return None
-
-
 async def run_astrbot(astrbot_root: Path) -> None:
     """Run AstrBot"""
     from astrbot.core import LogBroker, LogManager, db_helper, logger
@@ -315,7 +252,7 @@ def run(
 
         # --- Step 1: If a service config is provided, read and parse it to local overrides ---
         parsed_service: dict[str, str] = {}
-        # If explicit config path provided, use it. Otherwise attempt autodetection.
+        # If explicit config path provided, use it.
         svc_path: Path | None = None
         if service_config:
             candidate = Path(service_config)
@@ -329,13 +266,6 @@ def run(
 
             if svc_path is not None:
                 parsed_service = parse_service_config_file(svc_path)
-        else:
-            # Auto-detect possible config.template (AUR or other)
-            autodetected = find_autodetected_template()
-            if autodetected:
-                # prefer 'config.template' but don't force; parse if found
-                parsed_service = parse_service_config_file(autodetected)
-                svc_path = autodetected
 
         # Local variables (CLI args) should keep the highest precedence.
         # Apply parsed service values only if CLI didn't supply them.

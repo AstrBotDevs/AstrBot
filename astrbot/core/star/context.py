@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from asyncio import Queue
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Protocol
 
 from deprecated import deprecated
@@ -65,7 +65,7 @@ class Context:
     registered_web_apis: list = []
 
     # 向后兼容的变量
-    _register_tasks: list[Coroutine[object, object, object]] = []
+    _register_tasks: list[Awaitable[Any]] = []
     _star_manager: StarManagerProtocol | None = None
 
     def __init__(
@@ -373,9 +373,7 @@ class Context:
         if prov is None:
             return None
         if not isinstance(prov, Provider):
-            raise ValueError(
-                f"该会话来源的对话模型(提供商)的类型不正确: {type(prov)}"
-            )
+            raise ValueError(f"该会话来源的对话模型(提供商)的类型不正确: {type(prov)}")
         return prov
 
     def get_using_tts_provider(self, umo: str | None = None) -> TTSProvider | None:
@@ -679,7 +677,7 @@ class Context:
             )
         star_handlers_registry.append(md)
 
-    def register_task(self, task: Awaitable, desc: str) -> None:
+    def register_task(self, task: Awaitable[Any], desc: str) -> None:
         """[DEPRECATED]注册一个异步任务｡
 
         Args:
