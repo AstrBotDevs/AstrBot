@@ -1,12 +1,28 @@
 <template>
-    <v-chip v-if="domain" class="ref-chip" size="x-small" variant="flat"
-        :style="chipStyle" :href="url"
-        target="_blank" clickable>
-        <v-icon start size="x-small" color>mdi-link-variant</v-icon>
-        <span>{{ domain }}</span>
-
-    </v-chip>
-    <span v-else class="ref-fallback" :style="fallbackStyle">{{ 'site' }}</span>
+  <v-chip
+    v-if="domain"
+    class="ref-chip"
+    size="x-small"
+    variant="flat"
+    :style="chipStyle"
+    :href="url"
+    target="_blank"
+    clickable
+  >
+    <v-icon
+      start
+      size="x-small"
+      color
+    >
+      mdi-link-variant
+    </v-icon>
+    <span>{{ domain }}</span>
+  </v-chip>
+  <span
+    v-else
+    class="ref-fallback"
+    :style="fallbackStyle"
+  >{{ 'site' }}</span>
 </template>
 
 <script setup>

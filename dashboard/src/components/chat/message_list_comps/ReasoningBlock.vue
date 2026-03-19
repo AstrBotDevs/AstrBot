@@ -1,18 +1,37 @@
 <template>
-    <div class="reasoning-block" :class="{ 'reasoning-block--dark': isDark }">
-        <div class="reasoning-header" @click="toggleExpanded">
-            <v-icon size="small" class="reasoning-icon" :class="{ 'rotate-90': isExpanded }">
-                mdi-chevron-right
-            </v-icon>
-            <span class="reasoning-title">
-                {{ tm('reasoning.thinking') }}
-            </span>
-        </div>
-        <div v-if="isExpanded" class="reasoning-content animate-fade-in">
-            <MarkdownRender :key="`reasoning-${isDark ? 'dark' : 'light'}`" :content="reasoning" class="reasoning-text markdown-content"
-                :typewriter="false" :is-dark="isDark" :style="isDark ? { opacity: '0.85' } : {}" />
-        </div>
+  <div
+    class="reasoning-block"
+    :class="{ 'reasoning-block--dark': isDark }"
+  >
+    <div
+      class="reasoning-header"
+      @click="toggleExpanded"
+    >
+      <v-icon
+        size="small"
+        class="reasoning-icon"
+        :class="{ 'rotate-90': isExpanded }"
+      >
+        mdi-chevron-right
+      </v-icon>
+      <span class="reasoning-title">
+        {{ tm('reasoning.thinking') }}
+      </span>
     </div>
+    <div
+      v-if="isExpanded"
+      class="reasoning-content animate-fade-in"
+    >
+      <MarkdownRender
+        :key="`reasoning-${isDark ? 'dark' : 'light'}`"
+        :content="reasoning"
+        class="reasoning-text markdown-content"
+        :typewriter="false"
+        :is-dark="isDark"
+        :style="isDark ? { opacity: '0.85' } : {}"
+      />
+    </div>
+  </div>
 </template>
 
 <script setup>

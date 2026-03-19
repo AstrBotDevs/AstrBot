@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { ref, useCssModule } from 'vue';
-import { useAuthStore } from '@/stores/auth';
-import { Form } from 'vee-validate';
-import md5 from 'js-md5';
-import { useModuleI18n } from '@/i18n/composables';
+import { ref, useCssModule } from "vue";
+import { useAuthStore } from "@/stores/auth";
+import { Form } from "vee-validate";
+import md5 from "js-md5";
+import { useModuleI18n } from "@/i18n/composables";
 
-const { tm: t } = useModuleI18n('features/auth');
+const { tm: t } = useModuleI18n("features/auth");
 
 const valid = ref(false);
 const show1 = ref(false);
-const password = ref('');
-const username = ref('');
+const password = ref("");
+const username = ref("");
 const loading = ref(false);
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -19,46 +19,86 @@ async function validate(values: any, { setErrors }: any) {
 
   // md5加密
   let password_ = password.value;
-  if (password.value != '') {
-    // @ts-ignore
-    password_ = md5(password.value);
+  if (password.value != "") {
+    // js-md5 在不同的模块解析下可能被视为一个不可调用的命名空间。
+    // 在这里通过类型断言为一个可调用签名，既能通过类型检查，又保留运行时行为。
+    password_ = (md5 as unknown as (s: string) => string)(password.value);
   }
 
   const authStore = useAuthStore();
-  // @ts-ignore
-  authStore.returnUrl = new URLSearchParams(window.location.search).get('redirect');
-  return authStore.login(username.value, password_).then((res) => {
-    console.log(res);
-    loading.value = false;
-  }).catch((err) => {
-    setErrors({ apiError: err });
-    loading.value = false;
-  });
+  const redirectParam = new URLSearchParams(window.location.search).get(
+    "redirect",
+  );
+  // 将 string | null 显式断言为与 store 兼容的类型，避免因 store 初始状态推断不完整而导致的编译错误
+  authStore.returnUrl = redirectParam as unknown as string | null;
+  return authStore
+    .login(username.value, password_)
+    .then((res) => {
+      console.log(res);
+      loading.value = false;
+    })
+    .catch((err) => {
+      setErrors({ apiError: err });
+      loading.value = false;
+    });
 }
-
 </script>
 
 <template>
-  <Form @submit="validate" class="mt-4 login-form" v-slot="{ errors, isSubmitting }">
-    <v-text-field v-model="username" :label="t('username')" class="mb-6 input-field" required hide-details="auto"
-      variant="outlined" prepend-inner-icon="mdi-account" :disabled="loading"></v-text-field>
+  <Form
+    v-slot="{ errors, isSubmitting }"
+    class="mt-4 login-form"
+    @submit="validate"
+  >
+    <v-text-field
+      v-model="username"
+      :label="t('username')"
+      class="mb-6 input-field"
+      required
+      hide-details="auto"
+      variant="outlined"
+      prepend-inner-icon="mdi-account"
+      :disabled="loading"
+    />
 
-    <v-text-field v-model="password" :label="t('password')" required variant="outlined" hide-details="auto"
-      :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'" :type="show1 ? 'text' : 'password'"
-      @click:append="show1 = !show1" class="pwd-input" prepend-inner-icon="mdi-lock" :disabled="loading"></v-text-field>
+    <v-text-field
+      v-model="password"
+      :label="t('password')"
+      required
+      variant="outlined"
+      hide-details="auto"
+      :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
+      :type="show1 ? 'text' : 'password'"
+      class="pwd-input"
+      prepend-inner-icon="mdi-lock"
+      :disabled="loading"
+      @click:append="show1 = !show1"
+    />
 
     <div class="mt-2">
-      <small style="color: grey;">{{ t('defaultHint') }}</small>
+      <small style="color: grey">{{ t("defaultHint") }}</small>
     </div>
 
-
-    <v-btn color="secondary" :loading="isSubmitting || loading" block class="login-btn mt-8" variant="flat" size="large"
-      :disabled="valid" type="submit">
-      <span class="login-btn-text">{{ t('login') }}</span>
+    <v-btn
+      color="secondary"
+      :loading="isSubmitting || loading"
+      block
+      class="login-btn mt-8"
+      variant="flat"
+      size="large"
+      :disabled="valid"
+      type="submit"
+    >
+      <span class="login-btn-text">{{ t("login") }}</span>
     </v-btn>
 
     <div v-if="errors.apiError" class="mt-4 error-container">
-      <v-alert color="error" variant="tonal" icon="mdi-alert-circle" border="start">
+      <v-alert
+        color="error"
+        variant="tonal"
+        icon="mdi-alert-circle"
+        border="start"
+      >
         {{ errors.apiError }}
       </v-alert>
     </div>

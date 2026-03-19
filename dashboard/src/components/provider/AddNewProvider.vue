@@ -1,72 +1,138 @@
 <template>
-    <v-dialog v-model="showDialog" max-width="1100px" min-height="95%">
-        <v-card :title="tm('dialogs.addProvider.title')">
-            <v-card-text style="overflow-y: auto;">
-                <v-tabs v-model="activeProviderTab" grow>
-                    <v-tab value="agent_runner" class="font-weight-medium px-3">
-                        <v-icon start>mdi-cogs</v-icon>
-                        {{ tm('dialogs.addProvider.tabs.agentRunner') }}
-                    </v-tab>
-                    <v-tab value="speech_to_text" class="font-weight-medium px-3">
-                        <v-icon start>mdi-microphone-message</v-icon>
-                        {{ tm('dialogs.addProvider.tabs.speechToText') }}
-                    </v-tab>
-                    <v-tab value="text_to_speech" class="font-weight-medium px-3">
-                        <v-icon start>mdi-volume-high</v-icon>
-                        {{ tm('dialogs.addProvider.tabs.textToSpeech') }}
-                    </v-tab>
-                    <v-tab value="embedding" class="font-weight-medium px-3">
-                        <v-icon start>mdi-code-json</v-icon>
-                        {{ tm('dialogs.addProvider.tabs.embedding') }}
-                    </v-tab>
-                    <v-tab value="rerank" class="font-weight-medium px-3">
-                        <v-icon start>mdi-compare-vertical</v-icon>
-                        {{ tm('dialogs.addProvider.tabs.rerank') }}
-                    </v-tab>
-                </v-tabs>
+  <v-dialog
+    v-model="showDialog"
+    max-width="1100px"
+    min-height="95%"
+  >
+    <v-card :title="tm('dialogs.addProvider.title')">
+      <v-card-text style="overflow-y: auto;">
+        <v-tabs
+          v-model="activeProviderTab"
+          grow
+        >
+          <v-tab
+            value="agent_runner"
+            class="font-weight-medium px-3"
+          >
+            <v-icon start>
+              mdi-cogs
+            </v-icon>
+            {{ tm('dialogs.addProvider.tabs.agentRunner') }}
+          </v-tab>
+          <v-tab
+            value="speech_to_text"
+            class="font-weight-medium px-3"
+          >
+            <v-icon start>
+              mdi-microphone-message
+            </v-icon>
+            {{ tm('dialogs.addProvider.tabs.speechToText') }}
+          </v-tab>
+          <v-tab
+            value="text_to_speech"
+            class="font-weight-medium px-3"
+          >
+            <v-icon start>
+              mdi-volume-high
+            </v-icon>
+            {{ tm('dialogs.addProvider.tabs.textToSpeech') }}
+          </v-tab>
+          <v-tab
+            value="embedding"
+            class="font-weight-medium px-3"
+          >
+            <v-icon start>
+              mdi-code-json
+            </v-icon>
+            {{ tm('dialogs.addProvider.tabs.embedding') }}
+          </v-tab>
+          <v-tab
+            value="rerank"
+            class="font-weight-medium px-3"
+          >
+            <v-icon start>
+              mdi-compare-vertical
+            </v-icon>
+            {{ tm('dialogs.addProvider.tabs.rerank') }}
+          </v-tab>
+        </v-tabs>
 
-                <v-window v-model="activeProviderTab" class="mt-4">
-                    <v-window-item
-                        v-for="tabType in ['chat_completion', 'agent_runner', 'speech_to_text', 'text_to_speech', 'embedding', 'rerank']"
-                        :key="tabType" :value="tabType">
-                        <v-row class="mt-1">
-                            <v-col v-for="(template, name) in getTemplatesByType(tabType)" :key="name" cols="12" sm="6"
-                                md="4">
-                                <v-card variant="outlined" hover class="provider-card"
-                                    @click="selectProviderTemplate(name)">
-                                    <div class="provider-card-content">
-                                        <div class="provider-card-text">
-                                            <v-card-title class="provider-card-title">{{ name }}</v-card-title>
-                                            <v-card-text
-                                                class="text-caption text-medium-emphasis provider-card-description">
-                                                {{ getProviderDescription(template, name) }}
-                                            </v-card-text>
-                                        </div>
-                                        <div class="provider-card-logo">
-                                            <img :src="getProviderIcon(template.provider)"
-                                                v-if="getProviderIcon(template.provider)" class="provider-logo-img">
-                                            <div v-else class="provider-logo-fallback">
-                                                {{ name[0].toUpperCase() }}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </v-card>
-                            </v-col>
-                            <v-col v-if="Object.keys(getTemplatesByType(tabType)).length === 0" cols="12">
-                                <v-alert type="info" variant="tonal">
-                                    {{ tm('dialogs.addProvider.noTemplates') }}
-                                </v-alert>
-                            </v-col>
-                        </v-row>
-                    </v-window-item>
-                </v-window>
-            </v-card-text>
-            <v-card-actions>
-                <v-spacer></v-spacer>
-                <v-btn text @click="closeDialog">{{ tm('dialogs.config.cancel') }}</v-btn>
-            </v-card-actions>
-        </v-card>
-    </v-dialog>
+        <v-window
+          v-model="activeProviderTab"
+          class="mt-4"
+        >
+          <v-window-item
+            v-for="tabType in ['chat_completion', 'agent_runner', 'speech_to_text', 'text_to_speech', 'embedding', 'rerank']"
+            :key="tabType"
+            :value="tabType"
+          >
+            <v-row class="mt-1">
+              <v-col
+                v-for="(template, name) in getTemplatesByType(tabType)"
+                :key="name"
+                cols="12"
+                sm="6"
+                md="4"
+              >
+                <v-card
+                  variant="outlined"
+                  hover
+                  class="provider-card"
+                  @click="selectProviderTemplate(name)"
+                >
+                  <div class="provider-card-content">
+                    <div class="provider-card-text">
+                      <v-card-title class="provider-card-title">
+                        {{ name }}
+                      </v-card-title>
+                      <v-card-text
+                        class="text-caption text-medium-emphasis provider-card-description"
+                      >
+                        {{ getProviderDescription(template, name) }}
+                      </v-card-text>
+                    </div>
+                    <div class="provider-card-logo">
+                      <img
+                        v-if="getProviderIcon(template.provider)"
+                        :src="getProviderIcon(template.provider)"
+                        class="provider-logo-img"
+                      >
+                      <div
+                        v-else
+                        class="provider-logo-fallback"
+                      >
+                        {{ name[0].toUpperCase() }}
+                      </div>
+                    </div>
+                  </div>
+                </v-card>
+              </v-col>
+              <v-col
+                v-if="Object.keys(getTemplatesByType(tabType)).length === 0"
+                cols="12"
+              >
+                <v-alert
+                  type="info"
+                  variant="tonal"
+                >
+                  {{ tm('dialogs.addProvider.noTemplates') }}
+                </v-alert>
+              </v-col>
+            </v-row>
+          </v-window-item>
+        </v-window>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn
+          text
+          @click="closeDialog"
+        >
+          {{ tm('dialogs.config.cancel') }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script>

@@ -6,6 +6,7 @@ from typing import Any, cast
 import discord
 from discord.abc import GuildChannel, Messageable, PrivateChannel
 from discord.channel import DMChannel
+from discord.errors import HTTPException
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -22,7 +23,10 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
-from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
+from astrbot.core.star.star_handler import (
+    StarHandlerMetadata,
+    star_handlers_registry,
+)
 
 from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
@@ -336,23 +340,8 @@ class DiscordPlatformAdapter(Platform):
                 logger.info("[Discord] polling_task 已取消。")
             except Exception as e:
                 logger.warning(f"[Discord] polling_task 取消异常: {e}")
-        logger.info("[Discord] 正在清理已注册的斜杠指令... (step 2)")
-        # 清理指令
-        if self.enable_command_register and self.client:
-            try:
-                await asyncio.wait_for(
-                    self.client.sync_commands(
-                        commands=[],
-                        guild_ids=[self.guild_id] if self.guild_id else None,
-                    ),
-                    timeout=10,
-                )
-                logger.info("[Discord] 指令清理完成。")
-            except asyncio.TimeoutError:
-                logger.warning("[Discord] 清理指令超时，跳过。")
-            except Exception as e:
-                logger.error(f"[Discord] 清理指令时发生错误: {e}", exc_info=True)
-        logger.info("[Discord] 正在关闭 Discord 客户端... (step 3)")
+        logger.info("[Discord] 跳过斜杠指令清理，避免重启时重复创建命令。")
+        logger.info("[Discord] 正在关闭 Discord 客户端... (step 2)")
         if self.client and hasattr(self.client, "close"):
             try:
                 await asyncio.wait_for(self.client.close(), timeout=10)
@@ -414,8 +403,16 @@ class DiscordPlatformAdapter(Platform):
 
         # 使用 Pycord 的方法同步指令
         # 注意：这可能需要一些时间，并且有频率限制
-        await self.client.sync_commands()
-        logger.info("[Discord] 指令同步完成。")
+        try:
+            await self.client.sync_commands()
+            logger.info("[Discord] 指令同步完成。")
+        except HTTPException as exc:
+            if getattr(exc, "code", None) == 30034:
+                logger.warning(
+                    "[Discord] 跳过指令同步：已达到 Discord 每日 application command create 限额。"
+                )
+                return
+            raise
 
     def _create_dynamic_callback(self, cmd_name: str):
         """为每个指令动态创建一个异步回调函数"""

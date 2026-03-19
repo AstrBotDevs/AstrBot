@@ -1,6 +1,11 @@
 <template>
-    <BaseCreateFolderDialog v-model="showDialog" :parent-folder-id="parentFolderId" :labels="labels"
-        @create="handleCreate" ref="baseDialog" />
+  <BaseCreateFolderDialog
+    ref="baseDialog"
+    v-model="showDialog"
+    :parent-folder-id="parentFolderId"
+    :labels="labels"
+    @create="handleCreate"
+  />
 </template>
 
 <script lang="ts">

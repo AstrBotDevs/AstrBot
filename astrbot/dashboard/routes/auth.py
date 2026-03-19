@@ -5,6 +5,10 @@ import jwt
 from quart import request
 
 from astrbot import logger
+from astrbot.cli.commands.cmd_conf import (
+    DEFAULT_DASHBOARD_PASSWORD_MD5,
+    DEFAULT_DASHBOARD_PASSWORD_SHA256,
+)
 from astrbot.core import DEMO_MODE
 
 from .route import Response, Route, RouteContext
@@ -21,13 +25,17 @@ class AuthRoute(Route):
 
     async def login(self):
         username = self.config["dashboard"]["username"]
-        password = self.config["dashboard"]["password"]
+        stored_password_hash = self.config["dashboard"]["password"]
         post_data = await request.json
-        if post_data["username"] == username and post_data["password"] == password:
+        if post_data["username"] == username and self._matches_dashboard_password(
+            stored_password_hash,
+            post_data,
+        ):
             change_pwd_hint = False
             if (
                 username == "astrbot"
-                and password == "77b90590a8945a7d36c963981a307dc9"
+                and stored_password_hash
+                in {DEFAULT_DASHBOARD_PASSWORD_MD5, DEFAULT_DASHBOARD_PASSWORD_SHA256}
                 and not DEMO_MODE
             ):
                 change_pwd_hint = True
@@ -55,10 +63,10 @@ class AuthRoute(Route):
                 .__dict__
             )
 
-        password = self.config["dashboard"]["password"]
+        stored_password_hash = self.config["dashboard"]["password"]
         post_data = await request.json
 
-        if post_data["password"] != password:
+        if not self._matches_dashboard_password(stored_password_hash, post_data):
             return Response().error("原密码错误").__dict__
 
         new_pwd = post_data.get("new_password", None)
@@ -90,3 +98,17 @@ class AuthRoute(Route):
             raise ValueError("JWT secret is not set in the cmd_config.")
         token = jwt.encode(payload, jwt_token, algorithm="HS256")
         return token
+
+    @staticmethod
+    def _matches_dashboard_password(
+        stored_password_hash: str,
+        post_data: dict | None,
+    ) -> bool:
+        if not isinstance(post_data, dict):
+            return False
+        provided_hashes = {
+            str(post_data.get("password", "") or "").strip().lower(),
+            str(post_data.get("password_md5", "") or "").strip().lower(),
+        }
+        provided_hashes.discard("")
+        return stored_password_hash in provided_hashes

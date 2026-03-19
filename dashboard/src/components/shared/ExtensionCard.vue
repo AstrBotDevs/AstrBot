@@ -165,13 +165,16 @@ const viewChangelog = () => {
                 location="top"
                 :text="
                   extension.display_name?.length &&
-                  extension.display_name !== extension.name
+                    extension.display_name !== extension.name
                     ? `${extension.display_name} (${extension.name})`
                     : extension.name
                 "
               >
-                <template v-slot:activator="{ props: titleTooltipProps }">
-                  <span v-bind="titleTooltipProps" class="extension-title__text">{{
+                <template #activator="{ props: titleTooltipProps }">
+                  <span
+                    v-bind="titleTooltipProps"
+                    class="extension-title__text"
+                  >{{
                     extension.display_name?.length
                       ? extension.display_name
                       : extension.name
@@ -179,10 +182,10 @@ const viewChangelog = () => {
                 </template>
               </v-tooltip>
               <v-tooltip
-                location="top"
                 v-if="extension?.has_update && !marketMode"
+                location="top"
               >
-                <template v-slot:activator="{ props: tooltipProps }">
+                <template #activator="{ props: tooltipProps }">
                   <v-icon
                     v-bind="tooltipProps"
                     color="warning"
@@ -191,19 +194,21 @@ const viewChangelog = () => {
                     size="small"
                     style="cursor: pointer"
                     @click.stop="updateExtension"
-                  ></v-icon>
+                  />
                 </template>
-                <span
-                  >{{ tm("card.status.hasUpdate") }}:
-                  {{ extension.online_version }}</span
-                >
+                <span>{{ tm("card.status.hasUpdate") }}:
+                  {{ extension.online_version }}</span>
               </v-tooltip>
             </p>
 
             <template v-if="!marketMode">
               <v-tooltip location="left">
-                <template v-slot:activator="{ props: tooltipProps }">
-                  <div v-bind="tooltipProps" class="extension-switch-wrap" @click.stop>
+                <template #activator="{ props: tooltipProps }">
+                  <div
+                    v-bind="tooltipProps"
+                    class="extension-switch-wrap"
+                    @click.stop
+                  >
                     <v-switch
                       :model-value="extension.activated"
                       color="success"
@@ -211,7 +216,7 @@ const viewChangelog = () => {
                       hide-details
                       inset
                       @update:model-value="toggleActivation"
-                    ></v-switch>
+                    />
                   </div>
                 </template>
                 <span>{{
@@ -222,27 +227,32 @@ const viewChangelog = () => {
             <template v-else>
               <div class="extension-market-menu-wrap">
                 <v-menu offset-y>
-                  <template v-slot:activator="{ props: menuProps }">
+                  <template #activator="{ props: menuProps }">
                     <v-btn
+                      v-if="extension?.repo"
                       icon
                       variant="text"
                       aria-label="more"
-                      v-if="extension?.repo"
                       :href="extension?.repo"
                       target="_blank"
                     >
-                      <v-icon icon="mdi-github"></v-icon>
+                      <v-icon icon="mdi-github" />
                     </v-btn>
-                    <v-btn v-bind="menuProps" icon variant="text" aria-label="more">
-                      <v-icon icon="mdi-dots-vertical"></v-icon>
+                    <v-btn
+                      v-bind="menuProps"
+                      icon
+                      variant="text"
+                      aria-label="more"
+                    >
+                      <v-icon icon="mdi-dots-vertical" />
                     </v-btn>
                   </template>
 
                   <v-list>
                     <v-list-item @click="viewReadme">
-                      <v-list-item-title
-                        >📄 {{ tm("buttons.viewDocs") }}</v-list-item-title
-                      >
+                      <v-list-item-title>
+                        📄 {{ tm("buttons.viewDocs") }}
+                      </v-list-item-title>
                     </v-list-item>
 
                     <v-list-item
@@ -250,14 +260,16 @@ const viewChangelog = () => {
                       @click="installExtension"
                     >
                       <v-list-item-title>
-                        {{ tm("buttons.install") }}</v-list-item-title
-                      >
+                        {{ tm("buttons.install") }}
+                      </v-list-item-title>
                     </v-list-item>
 
                     <v-list-item v-if="marketMode && extension?.installed">
-                      <v-list-item-title class="text--disabled">{{
-                        tm("status.installed")
-                      }}</v-list-item-title>
+                      <v-list-item-title class="text--disabled">
+                        {{
+                          tm("status.installed")
+                        }}
+                      </v-list-item-title>
                     </v-list-item>
                   </v-list>
                 </v-menu>
@@ -272,13 +284,20 @@ const viewChangelog = () => {
                 :alt="extension.name"
                 class="extension-logo"
                 @error="logoLoadFailed = true"
-              />
+              >
             </div>
 
             <div class="extension-meta-group">
               <div class="extension-chip-group d-flex flex-wrap">
-                <v-chip color="primary" label size="small">
-                  <v-icon icon="mdi-source-branch" start></v-icon>
+                <v-chip
+                  color="primary"
+                  label
+                  size="small"
+                >
+                  <v-icon
+                    icon="mdi-source-branch"
+                    start
+                  />
                   {{ extension.version }}
                 </v-chip>
                 <v-chip
@@ -289,7 +308,10 @@ const viewChangelog = () => {
                   style="cursor: pointer"
                   @click="updateExtension"
                 >
-                  <v-icon icon="mdi-arrow-up-bold" start></v-icon>
+                  <v-icon
+                    icon="mdi-arrow-up-bold"
+                    start
+                  />
                   {{ extension.online_version }}
                 </v-chip>
                 <v-chip
@@ -297,10 +319,13 @@ const viewChangelog = () => {
                   color="primary"
                   label
                   size="small"
-                  @click="viewHandlers"
                   style="cursor: pointer"
+                  @click="viewHandlers"
                 >
-                  <v-icon icon="mdi-cogs" start></v-icon>
+                  <v-icon
+                    icon="mdi-cogs"
+                    start
+                  />
                   {{ extension.handlers?.length
                   }}{{ tm("card.status.handlersCount") }}
                 </v-chip>
@@ -337,11 +362,17 @@ const viewChangelog = () => {
       </div>
     </v-card-text>
 
-    <v-card-actions class="extension-actions" @click.stop>
+    <v-card-actions
+      class="extension-actions"
+      @click.stop
+    >
       <template v-if="!marketMode">
-        <v-spacer></v-spacer>
-        <v-tooltip location="top" :text="tm('buttons.viewDocs')">
-          <template v-slot:activator="{ props: actionProps }">
+        <v-spacer />
+        <v-tooltip
+          location="top"
+          :text="tm('buttons.viewDocs')"
+        >
+          <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
               icon="mdi-book-open-page-variant"
@@ -349,12 +380,15 @@ const viewChangelog = () => {
               variant="tonal"
               color="info"
               @click="viewReadme"
-            ></v-btn>
+            />
           </template>
         </v-tooltip>
 
-        <v-tooltip location="top" :text="tm('card.actions.pluginConfig')">
-          <template v-slot:activator="{ props: actionProps }">
+        <v-tooltip
+          location="top"
+          :text="tm('card.actions.pluginConfig')"
+        >
+          <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
               icon="mdi-cog"
@@ -362,12 +396,16 @@ const viewChangelog = () => {
               variant="tonal"
               color="primary"
               @click="configure"
-            ></v-btn>
+            />
           </template>
         </v-tooltip>
 
-        <v-tooltip v-if="extension?.repo" location="top" :text="tm('buttons.viewRepo')">
-          <template v-slot:activator="{ props: actionProps }">
+        <v-tooltip
+          v-if="extension?.repo"
+          location="top"
+          :text="tm('buttons.viewRepo')"
+        >
+          <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
               icon="mdi-github"
@@ -376,12 +414,15 @@ const viewChangelog = () => {
               color="secondary"
               :href="extension.repo"
               target="_blank"
-            ></v-btn>
+            />
           </template>
         </v-tooltip>
 
-        <v-tooltip location="top" :text="tm('card.actions.reloadPlugin')">
-          <template v-slot:activator="{ props: actionProps }">
+        <v-tooltip
+          location="top"
+          :text="tm('card.actions.reloadPlugin')"
+        >
+          <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
               icon="mdi-refresh"
@@ -389,11 +430,14 @@ const viewChangelog = () => {
               variant="tonal"
               color="primary"
               @click="reloadExtension"
-            ></v-btn>
+            />
           </template>
         </v-tooltip>
 
-        <StyledMenu location="top end" offset="8">
+        <StyledMenu
+          location="top end"
+          offset="8"
+        >
           <template #activator="{ props: menuProps }">
             <v-btn
               v-bind="menuProps"
@@ -401,28 +445,48 @@ const viewChangelog = () => {
               size="small"
               variant="tonal"
               color="secondary"
-            ></v-btn>
+            />
           </template>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-information" @click="viewHandlers">
+          <v-list-item
+            class="styled-menu-item"
+            prepend-icon="mdi-information"
+            @click="viewHandlers"
+          >
             <v-list-item-title>{{ tm("buttons.viewInfo") }}</v-list-item-title>
           </v-list-item>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-update" @click="updateExtension">
-            <v-list-item-title>{{
-              extension.has_update
-                ? tm("card.actions.updateTo") + " " + extension.online_version
-                : tm("card.actions.reinstall")
-            }}</v-list-item-title>
+          <v-list-item
+            class="styled-menu-item"
+            prepend-icon="mdi-update"
+            @click="updateExtension"
+          >
+            <v-list-item-title>
+              {{
+                extension.has_update
+                  ? tm("card.actions.updateTo") + " " + extension.online_version
+                  : tm("card.actions.reinstall")
+              }}
+            </v-list-item-title>
           </v-list-item>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-delete" @click="uninstallExtension">
-            <v-list-item-title class="text-error">{{ tm("card.actions.uninstallPlugin") }}</v-list-item-title>
+          <v-list-item
+            class="styled-menu-item"
+            prepend-icon="mdi-delete"
+            @click="uninstallExtension"
+          >
+            <v-list-item-title class="text-error">
+              {{ tm("card.actions.uninstallPlugin") }}
+            </v-list-item-title>
           </v-list-item>
         </StyledMenu>
       </template>
       <template v-else>
-        <v-btn color="primary" size="small" @click="viewReadme">
+        <v-btn
+          color="primary"
+          size="small"
+          @click="viewReadme"
+        >
           {{ tm("buttons.viewDocs") }}
         </v-btn>
       </template>

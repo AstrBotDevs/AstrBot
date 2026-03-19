@@ -18,6 +18,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_plugin_path,
     get_astrbot_root,
     get_astrbot_site_packages_path,
+    get_astrbot_skills_path,
     get_astrbot_temp_path,
 )
 from astrbot.core.utils.io import (
@@ -59,6 +60,7 @@ def check_env() -> None:
     os.makedirs(get_astrbot_plugin_path(), exist_ok=True)
     os.makedirs(get_astrbot_temp_path(), exist_ok=True)
     os.makedirs(get_astrbot_knowledge_base_path(), exist_ok=True)
+    os.makedirs(get_astrbot_skills_path(), exist_ok=True)
     os.makedirs(site_packages_path, exist_ok=True)
 
     # 针对问题 #181 的临时解决方案

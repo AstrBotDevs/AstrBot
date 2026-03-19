@@ -79,37 +79,49 @@ class PluginDependencyInstallError(Exception):
         self.error = error
 
 
-@contextlib.contextmanager
-def _temporary_filtered_requirements_file(
+@contextlib.asynccontextmanager
+async def _temporary_filtered_requirements_file(
     *,
     install_lines: tuple[str, ...],
 ):
     filtered_requirements_path: str | None = None
     temp_dir = get_astrbot_temp_path()
 
-    try:
-        os.makedirs(temp_dir, exist_ok=True)
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix="_plugin_requirements.txt",
-            delete=False,
-            dir=temp_dir,
-            encoding="utf-8",
-        ) as filtered_requirements_file:
-            filtered_requirements_file.write("\n".join(install_lines) + "\n")
-            filtered_requirements_path = filtered_requirements_file.name
+    # Create temp dir without blocking the event loop
+    await to_thread.run_sync(functools.partial(os.makedirs, temp_dir, exist_ok=True))
 
-        yield filtered_requirements_path
-    finally:
-        if filtered_requirements_path and os.path.exists(filtered_requirements_path):
-            try:
-                os.remove(filtered_requirements_path)
-            except OSError as exc:
-                logger.warning(
-                    "删除临时插件依赖文件失败：%s（路径：%s）",
-                    exc,
-                    filtered_requirements_path,
-                )
+    try:
+
+        def _create_temp():
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix="_plugin_requirements.txt",
+                delete=False,
+                dir=temp_dir,
+                encoding="utf-8",
+            ) as filtered_requirements_file:
+                filtered_requirements_file.write("\n".join(install_lines) + "\n")
+                return filtered_requirements_file.name
+
+        filtered_requirements_path = await to_thread.run_sync(_create_temp)
+
+        try:
+            yield filtered_requirements_path
+        finally:
+            if filtered_requirements_path and os.path.exists(
+                filtered_requirements_path
+            ):
+                try:
+                    await to_thread.run_sync(os.remove, filtered_requirements_path)
+                except OSError as exc:
+                    logger.warning(
+                        "删除临时插件依赖文件失败：%s（路径：%s）",
+                        exc,
+                        filtered_requirements_path,
+                    )
+    except Exception:
+        # Let exceptions propagate to callers (do not swallow)
+        raise
 
 
 async def _install_requirements_with_precheck(
@@ -147,7 +159,7 @@ async def _install_requirements_with_precheck(
         f"{requirements_path} -> {sorted(install_plan.missing_names)}"
     )
 
-    with _temporary_filtered_requirements_file(
+    async with _temporary_filtered_requirements_file(
         install_lines=install_plan.install_lines,
     ) as filtered_requirements_path:
         await pip_installer.install(requirements_path=filtered_requirements_path)

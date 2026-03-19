@@ -2,8 +2,8 @@
 
 ## 创建 AstrBot Discord 平台适配器
 
-进入消息平台，点击新增适配器，找到 Discord 并点击进入 Discord 配置页。
-
+进入机器人，点击新增适配器，找到 Discord 并点击进入 Discord 配置页。
+> 旧版本`机器人`为`消息平台`
 ![点击创建机器人，选择discord类型](https://files.astrbot.app/docs/source/images/discord/image.png)
 
 ![选项从上到下依次是 1.机器人名称 2. 启用 3. Bot token 4. Discord 代理地址 5. 是否自动将插件指令注册为 Discord 斜杠指令 6. discord_guild_id_for_debug 7.Discord 活动名称](https://files.astrbot.app/docs/source/images/discord/image-3.png)

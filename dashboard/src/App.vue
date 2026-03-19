@@ -1,14 +1,28 @@
 <template>
-  <RouterView></RouterView>
+  <RouterView />
   <WaitingForRestart ref="globalWaitingRef" />
 
   <!-- 全局唯一 snackbar -->
-  <v-snackbar v-if="toastStore.current" v-model="snackbarShow" :color="toastStore.current.color"
-    :timeout="toastStore.current.timeout" :multi-line="toastStore.current.multiLine"
-    :location="toastStore.current.location" close-on-back>
+  <v-snackbar
+    v-if="toastStore.current"
+    v-model="snackbarShow"
+    :color="toastStore.current.color"
+    :timeout="toastStore.current.timeout"
+    :multi-line="toastStore.current.multiLine"
+    :location="toastStore.current.location"
+    close-on-back
+  >
     {{ toastStore.current.message }}
-    <template #actions v-if="toastStore.current.closable">
-      <v-btn variant="text" @click="snackbarShow = false">关闭</v-btn>
+    <template
+      v-if="toastStore.current.closable"
+      #actions
+    >
+      <v-btn
+        variant="text"
+        @click="snackbarShow = false"
+      >
+        关闭
+      </v-btn>
     </template>
   </v-snackbar>
 </template>

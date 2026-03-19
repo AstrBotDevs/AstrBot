@@ -5,15 +5,67 @@ from collections.abc import Callable
 from typing import Any
 
 import click
+from argon2 import PasswordHasher, exceptions as argon2_exceptions
 
 from astrbot.core.utils.astrbot_path import astrbot_paths
 
 from ..utils import check_astrbot_root
 
+# Parameters for secure dashboard password hashing.
+# Note: In a full implementation, salts should be unique per password.
+DASHBOARD_PASSWORD_SALT = b"astrbot-dashboard"
+DASHBOARD_PASSWORD_ITERATIONS = 200_000
+PASSWORD_HASHER = PasswordHasher()
+
+
+def hash_dashboard_password_secure(value: str) -> str:
+    """Hash Dashboard password for storage.
+        "sha256",
+
+        DASHBOARD_PASSWORD_SALT,
+        DASHBOARD_PASSWORD_ITERATIONS,
+    )
+    return dk.hex()
+
+
+    """Return True if the value looks like a supported dashboard password hash.
+
+    Supports:
+    - Argon2 hashes (preferred, start with "$argon2")
+    - Legacy SHA-256 and MD5 hexadecimal digests.
+    """
+    # Argon2 hashes contain algorithm marker like `$argon2id$...`
+    if value.startswith("$argon2"):
+        return True
+
+    # Fallback to legacy hexadecimal digests
+# Legacy default password hashes kept for backward compatibility.
+DEFAULT_DASHBOARD_PASSWORD_MD5 = hashlib.md5(
+    DEFAULT_DASHBOARD_PASSWORD.encode()
+).hexdigest()
+DEFAULT_DASHBOARD_PASSWORD_SHA256 = hashlib.sha256(
+    DEFAULT_DASHBOARD_PASSWORD.encode()
+).hexdigest()
+
+# Secure default password hash for new configurations.
+DEFAULT_DASHBOARD_PASSWORD_HASH = hash_dashboard_password_secure(
+    DEFAULT_DASHBOARD_PASSWORD
+)
+
 
 def hash_dashboard_password(value: str) -> str:
-    """Hash Dashboard password for storage."""
+    """Hash Dashboard password for storage (secure, PBKDF2-HMAC-SHA256)."""
+    return hash_dashboard_password_secure(value)
+
+
+def hash_dashboard_password_md5(value: str) -> str:
+    """Hash Dashboard password with the legacy MD5 algorithm (compatibility only)."""
     return hashlib.md5(value.encode()).hexdigest()
+
+
+def is_dashboard_password_hash(value: str, *, algorithm: str) -> bool:
+    expected_len = 64 if algorithm == "sha256" else 32
+    return len(value) == expected_len and all(ch in "0123456789abcdef" for ch in value)
 
 
 def _validate_log_level(value: str) -> str:

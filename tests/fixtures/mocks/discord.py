@@ -68,6 +68,11 @@ def create_mock_discord_modules():
     mock_discord.errors.ConnectionClosed = Exception
     mock_discord.errors.NotFound = Exception
     mock_discord.errors.Forbidden = Exception
+    mock_discord.errors.HTTPException = type(
+        "HTTPException",
+        (Exception,),
+        {},
+    )
 
     # Mock discord.abc
     mock_discord.abc = MagicMock()

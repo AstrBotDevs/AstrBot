@@ -10,6 +10,7 @@
   },
   "actions": {
     "save": "保存配置",
+    "refresh": "重新读取文件",
     "delete": "删除这项",
     "add": "添加",
     "reset": "重置为默认",
@@ -32,6 +33,8 @@
     "saveSuccess": "配置保存成功",
     "saveError": "配置保存失败",
     "loadError": "配置加载失败",
+    "refreshSuccess": "已从文件重新读取配置",
+    "refreshError": "重新读取配置失败",
     "deleteSuccess": "删除成功",
     "deleteError": "删除失败",
     "updateSuccess": "更新成功",
@@ -121,9 +124,11 @@
       "save": "保存",
       "saveAndSwitch": "保存并切换",
       "discardAndSwitch": "放弃更改并切换",
+      "cancelReload": "取消刷新",
       "closeCard": "关闭弹窗",
       "confirm": "确定",
       "cancel": "取消"
-    }
+    },
+    "reloadConfig": "重新从文件读取配置会丢弃当前未保存的更改，是否继续？"
   }
 }

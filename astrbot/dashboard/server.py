@@ -29,7 +29,35 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.io import get_local_ip_addresses
 
-from .routes import *
+from .routes import (
+    ApiKeyRoute,
+    AuthRoute,
+    BackupRoute,
+    ChatRoute,
+    ChatUIProjectRoute,
+    CommandRoute,
+    ConfigRoute,
+    ConversationRoute,
+    CronRoute,
+    FileRoute,
+    KnowledgeBaseRoute,
+    LiveChatRoute,
+    LogRoute,
+    OpenApiRoute,
+    PersonaRoute,
+    PlatformRoute,
+    PluginRoute,
+    Response,
+    RouteContext,
+    SessionManagementRoute,
+    SkillsRoute,
+    StaticFileRoute,
+    StatRoute,
+    SubAgentRoute,
+    T2iRoute,
+    ToolsRoute,
+    UpdateRoute,
+)
 from .routes.api_key import ALL_OPEN_API_SCOPES
 
 # Static assets shipped inside the wheel (built during `hatch build`).
@@ -151,7 +179,7 @@ class AstrBotDashboard:
         @self.app.route("/")
         async def index():
             if not self.enable_webui:
-                return "WebUI is disabled."
+                return "Buildin WebUI is disabled."
             try:
                 return await self.app.send_static_file("index.html")
             except werkzeug.exceptions.NotFound:
@@ -161,7 +189,7 @@ class AstrBotDashboard:
         @self.app.errorhandler(404)
         async def not_found(e):
             if not self.enable_webui:
-                return "WebUI is disabled."
+                return "Buildin WebUI is disabled."
             if request.path.startswith("/api/"):
                 return jsonify(Response().error("Not Found").to_json()), 404
             try:
@@ -188,6 +216,7 @@ class AstrBotDashboard:
         PluginRoute(
             self.context, self.core_lifecycle, self.core_lifecycle.plugin_manager
         )
+
         self.command_route = CommandRoute(self.context)
         self.cr = ConfigRoute(self.context, self.core_lifecycle)
         self.lr = LogRoute(self.context, self.core_lifecycle.log_broker)

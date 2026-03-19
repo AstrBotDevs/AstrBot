@@ -29,6 +29,7 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.astrbot_path import get_astrbot_root, get_astrbot_skills_path
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
@@ -379,7 +380,11 @@ class InternalAgentSubStage(Stage):
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
         except Exception as e:
-            logger.error(f"Error occurred while processing agent: {e}")
+            logger.exception(
+                "Error occurred while processing agent. root=%s skills=%s",
+                get_astrbot_root(),
+                get_astrbot_skills_path(),
+            )
             custom_error_message = extract_persona_custom_error_message_from_event(
                 event
             )

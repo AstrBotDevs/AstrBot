@@ -624,12 +624,19 @@ class ConfigRoute(Route):
         """获取指定 AstrBot 配置文件"""
         abconf_id = request.args.get("id")
         system_config = request.args.get("system_config", "0").lower() == "1"
+        reload_from_file = request.args.get("reload_from_file", "0").lower() == "1"
         if not abconf_id and not system_config:
             return Response().error("缺少配置文件 ID").__dict__
 
         try:
             if system_config:
                 abconf = self.acm.confs["default"]
+                if reload_from_file:
+                    abconf = AstrBotConfig(
+                        config_path=abconf.config_path,
+                        default_config=abconf.default_config,
+                        schema=abconf.schema,
+                    )
                 metadata = ConfigMetadataI18n.convert_to_i18n_keys(
                     CONFIG_METADATA_3_SYSTEM
                 )
@@ -637,9 +644,15 @@ class ConfigRoute(Route):
             if abconf_id is None:
                 raise ValueError("abconf_id cannot be None")
             abconf = self.acm.confs[abconf_id]
+            if reload_from_file:
+                abconf = AstrBotConfig(
+                    config_path=abconf.config_path,
+                    default_config=abconf.default_config,
+                    schema=abconf.schema,
+                )
             metadata = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
             return Response().ok({"config": abconf, "metadata": metadata}).__dict__
-        except ValueError as e:
+        except (ValueError, KeyError) as e:
             return Response().error(str(e)).__dict__
 
     async def delete_abconf(self):

@@ -3,6 +3,7 @@
  */
 
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import { resolveApiUrl } from "@/utils/request";
 
 const BUILTIN_PLATFORM_ICON_MAP = {
   aiocqhttp: new URL("@/assets/images/platform_logos/onebot.png", import.meta.url)
@@ -60,7 +61,7 @@ function getDynamicPlatformLogoToken(name, options) {
 export function getPlatformIcon(name, options = {}) {
   const dynamicLogoToken = getDynamicPlatformLogoToken(name, options);
   if (dynamicLogoToken) {
-    return `/api/file/${dynamicLogoToken}`;
+    return resolveApiUrl(`/api/file/${dynamicLogoToken}`);
   }
 
   const normalizedName = typeof name === 'string' ? name.toLowerCase() : name;

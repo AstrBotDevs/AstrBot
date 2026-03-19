@@ -1,118 +1,207 @@
 <template>
-    <template v-for="(renderPart, renderIndex) in getRenderParts(parts)" :key="renderPart.key">
-        <!-- Grouped Tool Calls (consecutive tool_call parts) -->
-        <div v-if="renderPart.type === 'tool_group'" class="tool-call-compact">
-            <transition-group name="tool-call-item" tag="div" class="tool-call-items">
-                <ToolCallItem v-for="(toolCall, tcIndex) in renderPart.toolCalls" :key="toolCall.id" :is-dark="isDark">
-                    <template #label="{ expanded }">
-                        <v-icon size="x-small" v-if="toolCall.name.includes('web_search') || toolCall.name.includes('tavily')">
-                            mdi-web
-                        </v-icon>
-                        <v-icon size="x-small" v-else-if="toolCall.name === 'astrbot_execute_shell'">
-                            mdi-console-line
-                        </v-icon>
-                        <v-icon size="x-small" v-else>
-                            mdi-wrench
-                        </v-icon>
-                        {{ tm('actions.toolCallUsed', { name: toolCall.name }) }}
-                        <span style="opacity: 0.6;">{{ toolCall.finished_ts ? formatDuration(toolCall.finished_ts -
-                            toolCall.ts) : getElapsedTime(toolCall.ts) }}</span>
-                        <v-icon size="x-small" class="tool-call-chevron" :class="{ rotated: expanded }">
-                            mdi-chevron-right
-                        </v-icon>
-                    </template>
-                    <template #details>
-                        <div class="tool-call-detail-row">
-                            <span class="detail-label">ID:</span>
-                            <code class="detail-value">{{ toolCall.id }}</code>
-                        </div>
-                        <div class="tool-call-detail-row">
-                            <span class="detail-label">Args:</span>
-                            <pre class="detail-value detail-json">{{ formatToolArgs(toolCall.args) }}</pre>
-                        </div>
-                        <div v-if="toolCall.result" class="tool-call-detail-row">
-                            <span class="detail-label">Result:</span>
-                            <pre
-                                class="detail-value detail-json detail-result">{{ formatToolResult(toolCall.result) }}</pre>
-                        </div>
-                    </template>
-                </ToolCallItem>
-            </transition-group>
-        </div>
-
-        <!-- iPython Tool Block -->
-        <ToolCallItem v-else-if="renderPart.type === 'ipython'" :is-dark="isDark" style="margin: 8px 0 4px;">
-            <template #label="{ expanded }">
-                <v-icon size="x-small">
-                    mdi-code-json
-                </v-icon>
-                <span class="ipython-label">{{ tm('actions.pythonCodeAnalysis') }}</span>
-                <span style="opacity: 0.6;">{{ renderPart.toolCall.finished_ts ?
-                    formatDuration(renderPart.toolCall.finished_ts -
-                        renderPart.toolCall.ts) : getElapsedTime(renderPart.toolCall.ts) }}</span>
-                <v-icon size="small" class="ipython-icon" :class="{ rotated: expanded }">
-                    mdi-chevron-right
-                </v-icon>
-            </template>
-            <template #details>
-                <IPythonToolBlock :tool-call="renderPart.toolCall" :is-dark="isDark" :show-header="false"
-                    :force-expanded="true" />
-            </template>
+  <template
+    v-for="(renderPart, renderIndex) in getRenderParts(parts)"
+    :key="renderPart.key"
+  >
+    <!-- Grouped Tool Calls (consecutive tool_call parts) -->
+    <div
+      v-if="renderPart.type === 'tool_group'"
+      class="tool-call-compact"
+    >
+      <transition-group
+        name="tool-call-item"
+        tag="div"
+        class="tool-call-items"
+      >
+        <ToolCallItem
+          v-for="(toolCall, tcIndex) in renderPart.toolCalls"
+          :key="toolCall.id"
+          :is-dark="isDark"
+        >
+          <template #label="{ expanded }">
+            <v-icon
+              v-if="toolCall.name.includes('web_search') || toolCall.name.includes('tavily')"
+              size="x-small"
+            >
+              mdi-web
+            </v-icon>
+            <v-icon
+              v-else-if="toolCall.name === 'astrbot_execute_shell'"
+              size="x-small"
+            >
+              mdi-console-line
+            </v-icon>
+            <v-icon
+              v-else
+              size="x-small"
+            >
+              mdi-wrench
+            </v-icon>
+            {{ tm('actions.toolCallUsed', { name: toolCall.name }) }}
+            <span style="opacity: 0.6;">{{ toolCall.finished_ts ? formatDuration(toolCall.finished_ts -
+              toolCall.ts) : getElapsedTime(toolCall.ts) }}</span>
+            <v-icon
+              size="x-small"
+              class="tool-call-chevron"
+              :class="{ rotated: expanded }"
+            >
+              mdi-chevron-right
+            </v-icon>
+          </template>
+          <template #details>
+            <div class="tool-call-detail-row">
+              <span class="detail-label">ID:</span>
+              <code class="detail-value">{{ toolCall.id }}</code>
+            </div>
+            <div class="tool-call-detail-row">
+              <span class="detail-label">Args:</span>
+              <pre class="detail-value detail-json">{{ formatToolArgs(toolCall.args) }}</pre>
+            </div>
+            <div
+              v-if="toolCall.result"
+              class="tool-call-detail-row"
+            >
+              <span class="detail-label">Result:</span>
+              <pre
+                class="detail-value detail-json detail-result"
+              >{{ formatToolResult(toolCall.result) }}</pre>
+            </div>
+          </template>
         </ToolCallItem>
+      </transition-group>
+    </div>
 
-        <!-- Text (Markdown) -->
-        <MarkdownRender
-            v-else-if="renderPart.part.type === 'plain' && renderPart.part.text && renderPart.part.text.trim()"
-            :key="`${renderPart.key}-${isDark ? 'dark' : 'light'}`"
-            custom-id="message-list" :custom-html-tags="['ref']" :content="renderPart.part.text" :typewriter="false"
-            class="markdown-content" :is-dark="isDark" />
+    <!-- iPython Tool Block -->
+    <ToolCallItem
+      v-else-if="renderPart.type === 'ipython'"
+      :is-dark="isDark"
+      style="margin: 8px 0 4px;"
+    >
+      <template #label="{ expanded }">
+        <v-icon size="x-small">
+          mdi-code-json
+        </v-icon>
+        <span class="ipython-label">{{ tm('actions.pythonCodeAnalysis') }}</span>
+        <span style="opacity: 0.6;">{{ renderPart.toolCall.finished_ts ?
+          formatDuration(renderPart.toolCall.finished_ts -
+            renderPart.toolCall.ts) : getElapsedTime(renderPart.toolCall.ts) }}</span>
+        <v-icon
+          size="small"
+          class="ipython-icon"
+          :class="{ rotated: expanded }"
+        >
+          mdi-chevron-right
+        </v-icon>
+      </template>
+      <template #details>
+        <IPythonToolBlock
+          :tool-call="renderPart.toolCall"
+          :is-dark="isDark"
+          :show-header="false"
+          :force-expanded="true"
+        />
+      </template>
+    </ToolCallItem>
 
-        <!-- Image -->
-        <div v-else-if="renderPart.part.type === 'image' && renderPart.part.embedded_url" class="embedded-images">
-            <div class="embedded-image">
-                <img :src="renderPart.part.embedded_url" class="bot-embedded-image"
-                    @click="emitOpenImage(renderPart.part.embedded_url)" />
-            </div>
-        </div>
+    <!-- Text (Markdown) -->
+    <MarkdownRender
+      v-else-if="renderPart.part.type === 'plain' && renderPart.part.text && renderPart.part.text.trim()"
+      :key="`${renderPart.key}-${isDark ? 'dark' : 'light'}`"
+      custom-id="message-list"
+      :custom-html-tags="['ref']"
+      :content="renderPart.part.text"
+      :typewriter="false"
+      class="markdown-content"
+      :is-dark="isDark"
+    />
 
-        <!-- Audio -->
-        <div v-else-if="renderPart.part.type === 'record' && renderPart.part.embedded_url" class="embedded-audio">
-            <audio controls class="audio-player">
-                <source :src="renderPart.part.embedded_url" type="audio/wav">
-                {{ t('messages.errors.browser.audioNotSupported') }}
-            </audio>
-        </div>
+    <!-- Image -->
+    <div
+      v-else-if="renderPart.part.type === 'image' && renderPart.part.embedded_url"
+      class="embedded-images"
+    >
+      <div class="embedded-image">
+        <img
+          :src="renderPart.part.embedded_url"
+          class="bot-embedded-image"
+          @click="emitOpenImage(renderPart.part.embedded_url)"
+        >
+      </div>
+    </div>
 
-        <!-- Files -->
-        <div v-else-if="renderPart.part.type === 'file' && renderPart.part.embedded_file" class="embedded-files">
-            <div class="embedded-file">
-                <a v-if="renderPart.part.embedded_file.url" :href="renderPart.part.embedded_file.url"
-                    :download="renderPart.part.embedded_file.filename" class="file-link" :class="{ 'is-dark': isDark }"
-                    :style="isDark ? {
-                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                        borderColor: 'rgba(255, 255, 255, 0.1)',
-                        color: 'var(--v-theme-secondary)'
-                    } : {}">
-                    <v-icon size="small" class="file-icon"
-                        :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}">mdi-file-document-outline</v-icon>
-                    <span class="file-name">{{ renderPart.part.embedded_file.filename }}</span>
-                </a>
-                <a v-else @click="emitDownloadFile(renderPart.part.embedded_file)" class="file-link file-link-download"
-                    :class="{ 'is-dark': isDark }" :style="isDark ? {
-                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                        borderColor: 'rgba(255, 255, 255, 0.1)',
-                        color: 'var(--v-theme-secondary)'
-                    } : {}">
-                    <v-icon size="small" class="file-icon"
-                        :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}">mdi-file-document-outline</v-icon>
-                    <span class="file-name">{{ renderPart.part.embedded_file.filename }}</span>
-                    <v-icon v-if="downloadingFiles?.has(renderPart.part.embedded_file.attachment_id)" size="small"
-                        class="download-icon">mdi-loading mdi-spin</v-icon>
-                    <v-icon v-else size="small" class="download-icon">mdi-download</v-icon>
-                </a>
-            </div>
-        </div>
-    </template>
+    <!-- Audio -->
+    <div
+      v-else-if="renderPart.part.type === 'record' && renderPart.part.embedded_url"
+      class="embedded-audio"
+    >
+      <audio
+        controls
+        class="audio-player"
+      >
+        <source
+          :src="renderPart.part.embedded_url"
+          type="audio/wav"
+        >
+        {{ t('messages.errors.browser.audioNotSupported') }}
+      </audio>
+    </div>
+
+    <!-- Files -->
+    <div
+      v-else-if="renderPart.part.type === 'file' && renderPart.part.embedded_file"
+      class="embedded-files"
+    >
+      <div class="embedded-file">
+        <a
+          v-if="renderPart.part.embedded_file.url"
+          :href="renderPart.part.embedded_file.url"
+          :download="renderPart.part.embedded_file.filename"
+          class="file-link"
+          :class="{ 'is-dark': isDark }"
+          :style="isDark ? {
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            color: 'var(--v-theme-secondary)'
+          } : {}"
+        >
+          <v-icon
+            size="small"
+            class="file-icon"
+            :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}"
+          >mdi-file-document-outline</v-icon>
+          <span class="file-name">{{ renderPart.part.embedded_file.filename }}</span>
+        </a>
+        <a
+          v-else
+          class="file-link file-link-download"
+          :class="{ 'is-dark': isDark }"
+          :style="isDark ? {
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            color: 'var(--v-theme-secondary)'
+          } : {}"
+          @click="emitDownloadFile(renderPart.part.embedded_file)"
+        >
+          <v-icon
+            size="small"
+            class="file-icon"
+            :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}"
+          >mdi-file-document-outline</v-icon>
+          <span class="file-name">{{ renderPart.part.embedded_file.filename }}</span>
+          <v-icon
+            v-if="downloadingFiles?.has(renderPart.part.embedded_file.attachment_id)"
+            size="small"
+            class="download-icon"
+          >mdi-loading mdi-spin</v-icon>
+          <v-icon
+            v-else
+            size="small"
+            class="download-icon"
+          >mdi-download</v-icon>
+        </a>
+      </div>
+    </div>
+  </template>
 </template>
 
 <script setup>

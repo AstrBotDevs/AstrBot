@@ -90,18 +90,20 @@ select = [
   "F",     # Pyflakes
   "W",     # pycodestyle warnings
   "E",     # pycodestyle errors
+  "I",     # isort
+  "UP",    # pyupgrade
   "ASYNC", # flake8-async
   "C4",    # flake8-comprehensions
+  "T10",   # flake8-debugger
+  "T20",   # flake8-print
+  "PYI",   # flake8-pyi
+  "PT",    # flake8-pytest-style
   "Q",     # flake8-quotes
-  "I",     # import-order
-  "UP",    # pyupgrade
-  # "SIM", # flake8-simplify
+  "TID",   # flake8-tidy-imports
+  "RUF",   # Ruff-specific rules
 ]
 ignore = [
-  "F403",
-  "F405",
   "E501",
-
 ]
 
 [tool.pyright]

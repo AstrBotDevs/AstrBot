@@ -1,28 +1,56 @@
 <script setup>
 import { useCommonStore } from '@/stores/common';
-import axios from 'axios';
+import axios from '@/utils/request';
 import { EventSourcePolyfill } from 'event-source-polyfill';
+import { resolveApiUrl } from '@/utils/request';
 </script>
 
 <template>
   <div>
-    <div class="filter-controls mb-2" v-if="showLevelBtns">
-      <v-chip-group v-model="selectedLevels" column multiple>
-        <v-chip v-for="level in logLevels" :key="level" :color="getLevelColor(level)" filter variant="flat" size="small"
-          :text-color="level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'" class="font-weight-medium">
+    <div
+      v-if="showLevelBtns"
+      class="filter-controls mb-2"
+    >
+      <v-chip-group
+        v-model="selectedLevels"
+        column
+        multiple
+      >
+        <v-chip
+          v-for="level in logLevels"
+          :key="level"
+          :color="getLevelColor(level)"
+          filter
+          variant="flat"
+          size="small"
+          :text-color="level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'"
+          class="font-weight-medium"
+        >
           {{ level }}
         </v-chip>
       </v-chip-group>
     </div>
 
-    <div id="term" style="background-color: #1e1e1e; padding: 16px; border-radius: 8px; overflow-y:auto; height: 100%">
-    </div>
+    <div
+      id="term"
+      style="background-color: #1e1e1e; padding: 16px; border-radius: 8px; overflow-y:auto; height: 100%"
+    />
   </div>
 </template>
 
 <script>
 export default {
   name: 'ConsoleDisplayer',
+  props: {
+    historyNum: {
+      type: String,
+      default: "-1"
+    },
+    showLevelBtns: {
+      type: Boolean,
+      default: true
+    }
+  },
   data() {
     return {
       autoScroll: true,
@@ -59,16 +87,6 @@ export default {
       return useCommonStore();
     },
   },
-  props: {
-    historyNum: {
-      type: String,
-      default: "-1"
-    },
-    showLevelBtns: {
-      type: Boolean,
-      default: true
-    }
-  },
   watch: {
     selectedLevels: {
       handler() {
@@ -103,7 +121,7 @@ export default {
       
       const token = localStorage.getItem('token');
 
-      this.eventSource = new EventSourcePolyfill('/api/live-log', {
+      this.eventSource = new EventSourcePolyfill(resolveApiUrl('/api/live-log'), {
         headers: {
             'Authorization': token ? `Bearer ${token}` : ''
         },
