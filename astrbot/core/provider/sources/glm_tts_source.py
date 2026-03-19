@@ -23,6 +23,8 @@ class ProviderGLMTTS(TTSProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.api_key: str = provider_config.get("api_key", "")
+        if not self.api_key:
+            raise ValueError("GLM-TTS requires api_key to be configured")
         self.model_name: str = provider_config.get("model", "glm-tts")
         self.voice: str = provider_config.get("glm_tts_voice", "tongtong")
         self.speed: float = provider_config.get("glm_tts_speed", 1.0)
@@ -31,7 +33,6 @@ class ProviderGLMTTS(TTSProvider):
         self.api_base: str = "https://open.bigmodel.cn/api/paas/v4/audio/speech"
 
     async def get_audio(self, text: str) -> str:
-        """Convert text to speech using BigModel GLM-TTS API."""
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",

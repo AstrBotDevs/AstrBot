@@ -30,6 +30,8 @@ class ProviderGLMASR(STTProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.api_key: str = provider_config.get("api_key", "")
+        if not self.api_key:
+            raise ValueError("GLM-ASR requires api_key to be configured")
         self.model_name: str = provider_config.get("model", "glm-asr-2512")
         self.timeout: int = provider_config.get("timeout", 120)
         self.api_base: str = "https://open.bigmodel.cn/api/paas/v4/audio/transcriptions"
@@ -56,13 +58,16 @@ class ProviderGLMASR(STTProvider):
             "Content-Type": "application/json",
         }
 
+        downloaded_path = None
         output_path = None
 
         if audio_url.startswith("http"):
             temp_dir = get_astrbot_temp_path()
-            local_path = os.path.join(temp_dir, f"glm_asr_{uuid.uuid4().hex[:8]}.input")
-            await download_file(audio_url, local_path)
-            audio_url = local_path
+            downloaded_path = os.path.join(
+                temp_dir, f"glm_asr_{uuid.uuid4().hex[:8]}.input"
+            )
+            await download_file(audio_url, downloaded_path)
+            audio_url = downloaded_path
 
         if not os.path.exists(audio_url):
             raise FileNotFoundError(f"Audio file not found: {audio_url}")
@@ -71,7 +76,9 @@ class ProviderGLMASR(STTProvider):
 
         if file_format in ["silk", "amr"]:
             temp_dir = get_astrbot_temp_path()
-            output_path = os.path.join(temp_dir, f"glm_asr_{uuid.uuid4().hex[:8]}.wav")
+            output_path = os.path.join(
+                temp_dir, f"glm_asr_{uuid.uuid4().hex[:8]}.wav"
+            )
 
             logger.info(f"Converting {file_format} file to wav for GLM-ASR...")
             if file_format == "silk":
@@ -99,7 +106,9 @@ class ProviderGLMASR(STTProvider):
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        logger.error(f"GLM-ASR API error: {response.status}, body: {error_text}")
+                        logger.error(
+                            f"GLM-ASR API error: {response.status}, body: {error_text}"
+                        )
                         response.raise_for_status()
 
                     result = await response.json()
@@ -119,11 +128,11 @@ class ProviderGLMASR(STTProvider):
                     os.remove(output_path)
                 except Exception as e:
                     logger.warning(f"Failed to remove temp file {output_path}: {e}")
-            if audio_url.endswith(".input") and os.path.exists(audio_url):
+            if downloaded_path and os.path.exists(downloaded_path):
                 try:
-                    os.remove(audio_url)
+                    os.remove(downloaded_path)
                 except Exception as e:
-                    logger.warning(f"Failed to remove temp file {audio_url}: {e}")
+                    logger.warning(f"Failed to remove temp file {downloaded_path}: {e}")
 
     async def terminate(self):
         pass
