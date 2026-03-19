@@ -164,7 +164,7 @@ def test_sanitize_message_dict_keeps_supported_parts() -> None:
         ],
     }
 
-    sanitized = scheduler._sanitize_message_dict(raw)
+    sanitized = scheduler._history_parser.sanitize_message_dict(raw)
 
     assert sanitized is not None
     assert sanitized["role"] == "assistant"

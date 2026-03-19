@@ -81,6 +81,33 @@ async def test_status_with_runtime_report() -> None:
 
 
 @pytest.mark.asyncio
+async def test_status_includes_last_error_line() -> None:
+    scheduler = _build_scheduler()
+    scheduler._last_report = {
+        "reason": "manual_command",
+        "scanned": 1,
+        "compacted": 0,
+        "skipped": 1,
+        "failed": 0,
+        "elapsed_sec": 0.3,
+    }
+    scheduler._last_error = "mock error"
+
+    command = ContextCompactionCommands(
+        context=SimpleNamespace(context_compaction_scheduler=scheduler)
+    )
+    event = SimpleNamespace(send=AsyncMock())
+
+    await command.status(event)
+
+    event.send.assert_awaited_once()
+    chain = event.send.await_args.args[0]
+    text = chain.get_plain_text(with_other_comps_mark=True)
+    assert "最近任务[manual_command]" in text
+    assert "最近错误：mock error" in text
+
+
+@pytest.mark.asyncio
 async def test_run_with_invalid_limit() -> None:
     scheduler = _build_scheduler()
     scheduler.run_once = AsyncMock()
@@ -125,3 +152,24 @@ async def test_run_triggers_scheduler_once() -> None:
     text = chain.get_plain_text(with_other_comps_mark=True)
     assert "手动触发完成" in text
     assert "compacted=3" in text
+
+
+@pytest.mark.asyncio
+async def test_run_reports_error_when_scheduler_raises() -> None:
+    scheduler = _build_scheduler()
+    scheduler.run_once = AsyncMock(side_effect=RuntimeError("mock boom"))
+
+    command = ContextCompactionCommands(
+        context=SimpleNamespace(context_compaction_scheduler=scheduler)
+    )
+    event = SimpleNamespace(send=AsyncMock())
+
+    await command.run(event, 2)
+
+    scheduler.run_once.assert_awaited_once_with(
+        reason="manual_command",
+        max_conversations_override=2,
+    )
+    chain = event.send.await_args.args[0]
+    text = chain.get_plain_text(with_other_comps_mark=True)
+    assert text.startswith("触发压缩失败:")

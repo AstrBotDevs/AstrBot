@@ -5,7 +5,7 @@ import json
 import time
 from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from astrbot import logger
@@ -14,6 +14,7 @@ from astrbot.core.agent.context.manager import ContextManager
 from astrbot.core.agent.context.token_counter import EstimateTokenCounter
 from astrbot.core.agent.message import Message
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.config.default import PERIODIC_CONTEXT_COMPACTION_DEFAULTS
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db.po import ConversationV2
 from astrbot.core.provider.entities import ProviderType
@@ -199,24 +200,7 @@ class PeriodicContextCompactionScheduler:
     conversation-body compaction to keep long sessions lightweight.
     """
 
-    _DEFAULTS = {
-        "enabled": False,
-        "interval_minutes": 30,
-        "startup_delay_seconds": 120,
-        "max_conversations_per_run": 8,
-        "max_scan_per_run": 120,
-        "scan_page_size": 40,
-        "min_idle_minutes": 15,
-        "min_messages": 14,
-        "target_tokens": 4096,
-        "trigger_tokens": 6144,
-        "max_rounds": 3,
-        "truncate_turns": 1,
-        "keep_recent": 6,
-        "provider_id": "",
-        "instruction": "",
-        "dry_run": False,
-    }
+    _DEFAULTS = dict(PERIODIC_CONTEXT_COMPACTION_DEFAULTS)
 
     def __init__(
         self,
@@ -333,7 +317,10 @@ class PeriodicContextCompactionScheduler:
                 max_conversations_override,
             )
 
-            async for conv in self._iter_candidate_conversations(scan_page_size):
+            async for conv in self._iter_candidate_conversations(
+                scan_page_size=scan_page_size,
+                cfg=cfg,
+            ):
                 if (
                     self._stop_event.is_set()
                     or stats.scanned >= max_to_scan
@@ -374,12 +361,21 @@ class PeriodicContextCompactionScheduler:
     async def _iter_candidate_conversations(
         self,
         scan_page_size: int,
+        cfg: dict[str, Any],
     ) -> AsyncIterator[ConversationV2]:
+        updated_before: datetime | None = None
+        if cfg["min_idle_minutes"] > 0:
+            updated_before = datetime.now(timezone.utc) - timedelta(
+                minutes=int(cfg["min_idle_minutes"]),
+            )
+
         page = 1
         while not self._stop_event.is_set():
             conversations, total = await self.conversation_manager.db.get_filtered_conversations(
                 page=page,
                 page_size=scan_page_size,
+                updated_before=updated_before,
+                min_messages=cfg["min_messages"],
             )
             if not conversations:
                 break
@@ -528,7 +524,7 @@ class PeriodicContextCompactionScheduler:
         if not self._is_idle_enough(conv.updated_at, cfg["min_idle_minutes"]):
             return _EligibilityResult(eligible=False, messages=[], before_tokens=0)
 
-        messages = self._parse_history(history)
+        messages = self._history_parser.parse(history)
         if len(messages) < cfg["min_messages"]:
             return _EligibilityResult(eligible=False, messages=[], before_tokens=0)
 
@@ -693,26 +689,6 @@ class PeriodicContextCompactionScheduler:
         if at.tzinfo is None:
             at = at.replace(tzinfo=timezone.utc)
         return (now - at).total_seconds() >= (min_idle_minutes * 60)
-
-    def _parse_history(self, history: Iterable[Any]) -> list[Message]:
-        return self._history_parser.parse(history)
-
-    def _sanitize_message_dict(self, item: dict[str, Any]) -> dict[str, Any] | None:
-        return self._history_parser.sanitize_message_dict(item)
-
-    def _sanitize_content(self, content: Any, role: str) -> str | list[dict] | None:
-        return self._history_parser.sanitize_content(content, role)
-
-    def _sanitize_list_content(self, content: list[Any]) -> str | list[dict]:
-        return self._history_parser.sanitize_list_content(content)
-
-    def _sanitize_content_part(
-        self,
-        part: dict[str, Any],
-        parts: list[dict[str, Any]],
-        fallback_texts: list[str],
-    ) -> None:
-        self._history_parser.sanitize_content_part(part, parts, fallback_texts)
 
     @staticmethod
     def _messages_equal(a: list[Message], b: list[Message]) -> bool:

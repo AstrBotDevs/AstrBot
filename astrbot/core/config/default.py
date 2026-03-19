@@ -18,6 +18,25 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
     "line",
 ]
 
+PERIODIC_CONTEXT_COMPACTION_DEFAULTS = {
+    "enabled": False,
+    "interval_minutes": 30,
+    "startup_delay_seconds": 120,
+    "max_conversations_per_run": 8,
+    "max_scan_per_run": 120,
+    "scan_page_size": 40,
+    "min_idle_minutes": 15,
+    "min_messages": 14,
+    "target_tokens": 4096,
+    "trigger_tokens": 6144,
+    "max_rounds": 3,
+    "truncate_turns": 1,
+    "keep_recent": 6,
+    "provider_id": "",
+    "instruction": "",
+    "dry_run": False,
+}
+
 # 默认配置
 DEFAULT_CONFIG = {
     "config_version": 2,
@@ -96,24 +115,7 @@ DEFAULT_CONFIG = {
         ),
         "llm_compress_keep_recent": 6,
         "llm_compress_provider_id": "",
-        "periodic_context_compaction": {
-            "enabled": False,
-            "interval_minutes": 30,
-            "startup_delay_seconds": 120,
-            "max_conversations_per_run": 8,
-            "max_scan_per_run": 120,
-            "scan_page_size": 40,
-            "min_idle_minutes": 15,
-            "min_messages": 14,
-            "target_tokens": 4096,
-            "trigger_tokens": 6144,
-            "max_rounds": 3,
-            "truncate_turns": 1,
-            "keep_recent": 6,
-            "provider_id": "",
-            "instruction": "",
-            "dry_run": False,
-        },
+        "periodic_context_compaction": dict(PERIODIC_CONTEXT_COMPACTION_DEFAULTS),
         "max_context_length": -1,
         "dequeue_context_length": 1,
         "streaming_response": False,
