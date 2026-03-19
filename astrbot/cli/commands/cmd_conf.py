@@ -5,6 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 import click
+from argon2 import PasswordHasher, exceptions as argon2_exceptions
 
 from astrbot.core.utils.astrbot_path import astrbot_paths
 
@@ -17,19 +18,35 @@ DEFAULT_DASHBOARD_PASSWORD = "astrbot"
 # Note: In a full implementation, salts should be unique per password.
 DASHBOARD_PASSWORD_SALT = b"astrbot-dashboard"
 DASHBOARD_PASSWORD_ITERATIONS = 200_000
+PASSWORD_HASHER = PasswordHasher()
 
 
 def hash_dashboard_password_secure(value: str) -> str:
-    """Securely hash a Dashboard password using PBKDF2-HMAC-SHA256."""
-    dk = hashlib.pbkdf2_hmac(
+    """Hash Dashboard password for storage.
         "sha256",
+    Uses Argon2 for new passwords to provide a computationally expensive,
+    salted hash suitable for password storage.
+    """
+    return PASSWORD_HASHER.hash(value)
         value.encode(),
+
         DASHBOARD_PASSWORD_SALT,
         DASHBOARD_PASSWORD_ITERATIONS,
     )
     return dk.hex()
 
 
+    """Return True if the value looks like a supported dashboard password hash.
+
+    Supports:
+    - Argon2 hashes (preferred, start with "$argon2")
+    - Legacy SHA-256 and MD5 hexadecimal digests.
+    """
+    # Argon2 hashes contain algorithm marker like `$argon2id$...`
+    if value.startswith("$argon2"):
+        return True
+
+    # Fallback to legacy hexadecimal digests
 # Legacy default password hashes kept for backward compatibility.
 DEFAULT_DASHBOARD_PASSWORD_MD5 = hashlib.md5(
     DEFAULT_DASHBOARD_PASSWORD.encode()
