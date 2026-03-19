@@ -13,7 +13,7 @@ def resolve_openai_compatible_base_url(
         mode: How to handle the /v1 suffix:
             - "auto": Add /v1 if not present (default).
             - "force_v1": Always add /v1 suffix.
-            - "as_is": Keep the URL as-is without modification.
+            - "as_is": Keep the URL unchanged (including trailing slashes).
         default_base: Default base URL to use if api_base is empty.
 
     Returns:
@@ -24,7 +24,8 @@ def resolve_openai_compatible_base_url(
         return default_base
 
     if mode == "as_is":
-        return api_base.removesuffix("/")
+        # Return URL unchanged to preserve exact configuration
+        return api_base
 
     if mode == "force_v1":
         api_base = api_base.removesuffix("/")

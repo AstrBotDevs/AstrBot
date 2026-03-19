@@ -1941,6 +1941,7 @@ CONFIG_METADATA_2 = {
                     "embedding_api_base_mode": {
                         "description": "API Base URL Mode",
                         "type": "string",
+                        "enum": ["auto", "force_v1", "as_is"],
                         "hint": "控制 API Base URL 的 /v1 后缀处理方式。auto: 自动判断（默认），如果 URL 不以 /v1 结尾则添加。force_v1: 强制添加 /v1 后缀。as_is: 保持原样不做修改。",
                     },
                     "volcengine_cluster": {
