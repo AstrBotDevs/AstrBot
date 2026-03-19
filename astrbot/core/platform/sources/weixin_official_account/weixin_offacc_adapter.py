@@ -1,10 +1,9 @@
 import asyncio
 import os
-import sys
 import time
 import uuid
 from collections.abc import Callable, Coroutine
-from typing import Any, cast
+from typing import Any, cast, override
 
 import aiofiles
 import quart
@@ -32,8 +31,6 @@ from astrbot.core.utils.media_utils import convert_audio_to_wav
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .weixin_offacc_event import WeixinOfficialAccountPlatformEvent
-
-from typing import override
 
 
 class WeixinOfficialAccountServer:
