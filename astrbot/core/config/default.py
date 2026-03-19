@@ -1113,6 +1113,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "proxy": "",
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
+                        "max_tokens": 4096,
                     },
                     "Moonshot": {
                         "id": "moonshot",
@@ -2151,6 +2152,11 @@ CONFIG_METADATA_2 = {
                                 "hint": "type 为 'adaptive' 时控制思考深度。默认 'high'。'max' 仅限 Opus 4.6。参见: https://platform.claude.com/docs/en/build-with-claude/effort",
                             },
                         },
+                    },
+                    "max_tokens": {
+                        "description": "最大输出 Token 数",
+                        "type": "int",
+                        "hint": "控制模型单次回复的最大 token 数量。Anthropic 默认 4096。如果回复经常被截断，可以适当调大。",
                     },
                     "minimax-group-id": {
                         "type": "string",

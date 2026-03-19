@@ -233,7 +233,7 @@ class ProviderAnthropic(Provider):
         extra_body = self.provider_config.get("custom_extra_body", {})
 
         if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 1024
+            payloads["max_tokens"] = self.provider_config.get("max_tokens", 4096)
         self._apply_thinking_config(payloads)
 
         try:
@@ -318,7 +318,7 @@ class ProviderAnthropic(Provider):
         reasoning_signature = ""
 
         if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 1024
+            payloads["max_tokens"] = self.provider_config.get("max_tokens", 4096)
         self._apply_thinking_config(payloads)
 
         async with self.client.messages.stream(
