@@ -14,6 +14,8 @@ def resolve_openai_compatible_base_url(
             - "auto": Add /v1 if not present (default).
             - "force_v1": Always add /v1 suffix.
             - "as_is": Keep the URL unchanged (including trailing slashes).
+              Note: With as_is mode, provide only the base URL without /embeddings path,
+              as the OpenAI SDK will append /embeddings automatically.
         default_base: Default base URL to use if api_base is empty.
 
     Returns:
@@ -25,15 +27,11 @@ def resolve_openai_compatible_base_url(
 
     if mode == "as_is":
         # Return URL unchanged to preserve exact configuration
+        # Note: In this mode, users should provide base URL without /embeddings path
+        # as the OpenAI SDK will append /embeddings automatically
         return api_base
 
-    if mode == "force_v1":
-        api_base = api_base.removesuffix("/")
-        if not api_base.endswith("/v1"):
-            api_base = f"{api_base}/v1"
-        return api_base
-
-    # mode == "auto"
+    # Both "auto" and "force_v1" modes ensure URL ends with /v1
     api_base = api_base.removesuffix("/")
     if not api_base.endswith("/v1"):
         api_base = f"{api_base}/v1"

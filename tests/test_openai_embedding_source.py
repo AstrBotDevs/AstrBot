@@ -147,13 +147,13 @@ async def test_openai_embedding_provider_with_v1_already_present():
 
 @pytest.mark.asyncio
 async def test_openai_embedding_provider_with_trailing_slash():
-    """Test OpenAI Embedding provider removes trailing slash in as_is mode."""
+    """Test OpenAI Embedding provider keeps URL unchanged in as_is mode."""
     provider = _make_provider(
         {"embedding_api_base": "https://api.example.com/", "embedding_api_base_mode": "as_is"}
     )
     try:
-        # The provider removes trailing slash, but OpenAI client adds it back
-        assert str(provider.client.base_url) == "https://api.example.com"
+        # The provider returns URL unchanged, OpenAI client adds trailing slash
+        assert str(provider.client.base_url) == "https://api.example.com/"
     finally:
         await provider.terminate()
 
