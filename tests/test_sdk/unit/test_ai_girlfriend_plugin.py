@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from pathlib import Path
 
 import pytest
 from astrbot_sdk._testing_support import MockContext, MockMessageEvent
@@ -11,7 +12,13 @@ from astrbot_sdk.llm.entities import ProviderRequest
 
 _PLUGIN_SPEC = importlib.util.spec_from_file_location(
     "astrbot_sdk_ai_girlfriend_test",
-    "d:\\GitObjectsOwn\\AstrBot\\data\\sdk_plugins\\ai_girlfriend\\main.py",
+    str(
+        Path(__file__).resolve().parents[3]
+        / "data"
+        / "sdk_plugins"
+        / "ai_girlfriend"
+        / "main.py"
+    ),
 )
 assert _PLUGIN_SPEC is not None
 assert _PLUGIN_SPEC.loader is not None

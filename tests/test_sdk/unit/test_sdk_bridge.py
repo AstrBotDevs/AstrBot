@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -26,7 +27,13 @@ from astrbot_sdk.testing import MockCapabilityRouter, MockPeer
 
 _TRIGGER_CONVERTER_SPEC = importlib.util.spec_from_file_location(
     "astrbot_sdk_bridge_trigger_converter_test",
-    "d:\\GitObjectsOwn\\AstrBot\\astrbot\\core\\sdk_bridge\\trigger_converter.py",
+    str(
+        Path(__file__).resolve().parents[3]
+        / "astrbot"
+        / "core"
+        / "sdk_bridge"
+        / "trigger_converter.py"
+    ),
 )
 assert _TRIGGER_CONVERTER_SPEC is not None
 assert _TRIGGER_CONVERTER_SPEC.loader is not None

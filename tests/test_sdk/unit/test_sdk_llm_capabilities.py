@@ -505,7 +505,7 @@ async def test_core_provider_bridge_specialized_capabilities(
     embedding_provider = _FakeEmbeddingProvider()
     rerank_provider = _FakeRerankProvider()
     monkeypatch.setattr(
-        "astrbot.core.sdk_bridge.capability_bridge._get_runtime_provider_types",
+        "astrbot.core.sdk_bridge.capabilities.provider._get_runtime_provider_types",
         lambda: (
             _FakeSTTProvider,
             _FakeTTSProvider,
@@ -589,7 +589,7 @@ async def test_core_provider_bridge_rejects_provider_type_mismatch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "astrbot.core.sdk_bridge.capability_bridge._get_runtime_provider_types",
+        "astrbot.core.sdk_bridge.capabilities.provider._get_runtime_provider_types",
         lambda: (
             _FakeSTTProvider,
             _FakeTTSProvider,
