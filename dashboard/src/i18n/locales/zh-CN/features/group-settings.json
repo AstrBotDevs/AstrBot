@@ -8,7 +8,8 @@
     "delete": "删除",
     "batchDelete": "批量删除",
     "save": "保存",
-    "cancel": "取消"
+    "cancel": "取消",
+    "clear": "清除"
   },
   "search": {
     "placeholder": "搜索群聊..."
@@ -52,9 +53,6 @@
   "empty": {
     "title": "暂无群聊设置",
     "description": "点击「添加设置」为特定群聊配置自定义的模型提供商和人格设定"
-  },
-  "buttons": {
-    "clear": "清除"
   },
   "validation": {
     "umoRequired": "UMO 不能为空",

@@ -8,7 +8,8 @@
     "delete": "Delete",
     "batchDelete": "Batch Delete",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "clear": "Clear"
   },
   "search": {
     "placeholder": "Search groups..."
@@ -52,9 +53,6 @@
   "empty": {
     "title": "No Group Settings",
     "description": "Click 'Add Setting' to configure custom provider and persona for specific groups"
-  },
-  "buttons": {
-    "clear": "Clear"
   },
   "validation": {
     "umoRequired": "UMO is required",
