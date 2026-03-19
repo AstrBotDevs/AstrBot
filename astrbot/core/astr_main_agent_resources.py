@@ -190,52 +190,93 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     name: str = "send_message_to_user"
     description: str = (
         "Send message to the user. "
-        "Supports various message types including `plain`, `image`, `record`, `video`, `file`, and `mention_user`. "
-        "Use this tool to send media files (`image`, `record`, `video`, `file`), "
-        "or when you need to proactively message the user(such as cron job). For normal text replies, you can output directly."
+        "Use flat parameters only. "
+        "Exactly one primary payload is allowed per call: `text` OR `path` OR `url`. "
+        "`mention_user_id` can be combined with one primary payload, or used alone. "
+        "For `path`/`url`, media type is inferred automatically from file extension."
     )
 
     parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
-                "messages": {
-                    "type": "array",
-                    "description": "An ordered list of message components to send. `mention_user` type can be used to mention the user.",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "type": {
-                                "type": "string",
-                                "description": (
-                                    "Component type. One of: "
-                                    "plain, image, record, video, file, mention_user. Record is voice message."
-                                ),
-                            },
-                            "text": {
-                                "type": "string",
-                                "description": "Text content for `plain` type.",
-                            },
-                            "path": {
-                                "type": "string",
-                                "description": "File path for `image`, `record`, or `file` types. Both local path and sandbox path are supported.",
-                            },
-                            "url": {
-                                "type": "string",
-                                "description": "URL for `image`, `record`, or `file` types.",
-                            },
-                            "mention_user_id": {
-                                "type": "string",
-                                "description": "User ID to mention for `mention_user` type.",
-                            },
-                        },
-                        "required": ["type"],
-                    },
+                "text": {
+                    "type": "string",
+                    "description": "Plain text content.",
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Local path or sandbox path to a media/file.",
+                },
+                "url": {
+                    "type": "string",
+                    "description": "Remote media/file URL.",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Optional file name when inferred type is `file`.",
+                },
+                "mention_user_id": {
+                    "type": "string",
+                    "description": "Optional user ID to mention. Can be combined with one primary payload.",
+                },
+                "session": {
+                    "type": "string",
+                    "description": "Optional target session. Defaults to current session.",
                 },
             },
-            "required": ["messages"],
         }
     )
+
+    _IMAGE_EXTS = {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".bmp",
+        ".tif",
+        ".tiff",
+        ".ico",
+        ".heic",
+        ".heif",
+        ".avif",
+    }
+    _AUDIO_EXTS = {
+        ".mp3",
+        ".wav",
+        ".m4a",
+        ".aac",
+        ".flac",
+        ".ogg",
+        ".opus",
+        ".amr",
+        ".wma",
+    }
+    _VIDEO_EXTS = {
+        ".mp4",
+        ".mkv",
+        ".mov",
+        ".avi",
+        ".webm",
+        ".m4v",
+        ".flv",
+        ".wmv",
+        ".3gp",
+        ".mpeg",
+        ".mpg",
+    }
+
+    def _infer_component_type_from_ref(self, ref: str) -> str:
+        clean_ref = str(ref).split("?", 1)[0].split("#", 1)[0]
+        ext = os.path.splitext(clean_ref)[1].lower()
+        if ext in self._IMAGE_EXTS:
+            return "image"
+        if ext in self._AUDIO_EXTS:
+            return "record"
+        if ext in self._VIDEO_EXTS:
+            return "video"
+        return "file"
 
     async def _resolve_path_from_sandbox(
         self, context: ContextWrapper[AstrAgentContext], path: str
@@ -276,102 +317,65 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
         session = kwargs.get("session") or context.context.event.unified_msg_origin
-        messages = kwargs.get("messages")
-
-        if not isinstance(messages, list) or not messages:
-            return "error: messages parameter is empty or invalid."
-
         components: list[Comp.BaseMessageComponent] = []
+        text = str(kwargs.get("text", "")).strip()
+        path = kwargs.get("path")
+        url = kwargs.get("url")
+        name = kwargs.get("name")
+        mention_user_id = kwargs.get("mention_user_id")
 
-        for idx, msg in enumerate(messages):
-            if not isinstance(msg, dict):
-                return f"error: messages[{idx}] should be an object."
+        primary_count = 0
+        if text:
+            primary_count += 1
+        if path:
+            primary_count += 1
+        if url:
+            primary_count += 1
 
-            msg_type = str(msg.get("type", "")).lower()
-            if not msg_type:
-                return f"error: messages[{idx}].type is required."
+        if primary_count > 1:
+            return "error: only one primary payload is allowed per call (`text` OR `path` OR `url`)."
+        if primary_count == 0 and not mention_user_id:
+            return "error: missing payload. Provide one of `text`, `path`, `url`, or provide `mention_user_id`."
 
-            file_from_sandbox = False
+        if mention_user_id:
+            components.append(Comp.At(qq=mention_user_id))
 
-            try:
-                if msg_type == "plain":
-                    text = str(msg.get("text", "")).strip()
-                    if not text:
-                        return f"error: messages[{idx}].text is required for plain component."
-                    components.append(Comp.Plain(text=text))
-                elif msg_type == "image":
-                    path = msg.get("path")
-                    url = msg.get("url")
-                    if path:
-                        (
-                            local_path,
-                            file_from_sandbox,
-                        ) = await self._resolve_path_from_sandbox(context, path)
-                        components.append(Comp.Image.fromFileSystem(path=local_path))
-                    elif url:
-                        components.append(Comp.Image.fromURL(url=url))
-                    else:
-                        return f"error: messages[{idx}] must include path or url for image component."
-                elif msg_type == "record":
-                    path = msg.get("path")
-                    url = msg.get("url")
-                    if path:
-                        (
-                            local_path,
-                            file_from_sandbox,
-                        ) = await self._resolve_path_from_sandbox(context, path)
-                        components.append(Comp.Record.fromFileSystem(path=local_path))
-                    elif url:
-                        components.append(Comp.Record.fromURL(url=url))
-                    else:
-                        return f"error: messages[{idx}] must include path or url for record component."
-                elif msg_type == "video":
-                    path = msg.get("path")
-                    url = msg.get("url")
-                    if path:
-                        (
-                            local_path,
-                            file_from_sandbox,
-                        ) = await self._resolve_path_from_sandbox(context, path)
-                        components.append(Comp.Video.fromFileSystem(path=local_path))
-                    elif url:
-                        components.append(Comp.Video.fromURL(url=url))
-                    else:
-                        return f"error: messages[{idx}] must include path or url for video component."
-                elif msg_type == "file":
-                    path = msg.get("path")
-                    url = msg.get("url")
-                    name = (
-                        msg.get("text")
-                        or (os.path.basename(path) if path else "")
-                        or (os.path.basename(url) if url else "")
+        try:
+            if text:
+                components.append(Comp.Plain(text=text))
+            elif path:
+                component_type = self._infer_component_type_from_ref(path)
+                local_path, _ = await self._resolve_path_from_sandbox(context, path)
+                if component_type == "image":
+                    components.append(Comp.Image.fromFileSystem(path=local_path))
+                elif component_type == "record":
+                    components.append(Comp.Record.fromFileSystem(path=local_path))
+                elif component_type == "video":
+                    components.append(Comp.Video.fromFileSystem(path=local_path))
+                else:
+                    file_name = (
+                        (str(name).strip() if name is not None else "")
+                        or os.path.basename(local_path)
                         or "file"
                     )
-                    if path:
-                        (
-                            local_path,
-                            file_from_sandbox,
-                        ) = await self._resolve_path_from_sandbox(context, path)
-                        components.append(Comp.File(name=name, file=local_path))
-                    elif url:
-                        components.append(Comp.File(name=name, url=url))
-                    else:
-                        return f"error: messages[{idx}] must include path or url for file component."
-                elif msg_type == "mention_user":
-                    mention_user_id = msg.get("mention_user_id")
-                    if not mention_user_id:
-                        return f"error: messages[{idx}].mention_user_id is required for mention_user component."
-                    components.append(
-                        Comp.At(
-                            qq=mention_user_id,
-                        ),
-                    )
+                    components.append(Comp.File(name=file_name, file=local_path))
+            elif url:
+                component_type = self._infer_component_type_from_ref(url)
+                if component_type == "image":
+                    components.append(Comp.Image.fromURL(url=url))
+                elif component_type == "record":
+                    components.append(Comp.Record.fromURL(url=url))
+                elif component_type == "video":
+                    components.append(Comp.Video.fromURL(url=url))
                 else:
-                    return (
-                        f"error: unsupported message type '{msg_type}' at index {idx}."
+                    file_name = (
+                        (str(name).strip() if name is not None else "")
+                        or os.path.basename(str(url).split("?", 1)[0].split("#", 1)[0])
+                        or "file"
                     )
-            except Exception as exc:  # 捕获组件构造异常，避免直接抛出
-                return f"error: failed to build messages[{idx}] component: {exc}"
+                    components.append(Comp.File(name=file_name, url=url))
+        except Exception as exc:
+            return f"error: failed to build message component: {exc}"
 
         try:
             target_session = (
