@@ -18,9 +18,8 @@ import inspect
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, get_type_hints
+from typing import Any
 
-from ._injected_params import is_framework_injected_parameter
 from ._star_runtime import bind_star_runtime
 from ._testing_support import (
     InMemoryDB,
@@ -729,32 +728,6 @@ class PluginHarness:
         if hook is not None and callable(hook):
             return hook
         return None
-
-    def _legacy_arg_parameter_names(self, handler) -> list[str]:
-        try:
-            signature = inspect.signature(handler)
-        except (TypeError, ValueError):
-            return []
-        try:
-            type_hints = get_type_hints(handler)
-        except Exception:
-            type_hints = {}
-        names: list[str] = []
-        for parameter in signature.parameters.values():
-            if parameter.kind not in (
-                inspect.Parameter.POSITIONAL_ONLY,
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            ):
-                continue
-            if self._is_injected_parameter(
-                parameter.name, type_hints.get(parameter.name)
-            ):
-                continue
-            names.append(parameter.name)
-        return names
-
-    def _is_injected_parameter(self, name: str, annotation: Any) -> bool:
-        return is_framework_injected_parameter(name, annotation)
 
     def _next_request_id(self, prefix: str) -> str:
         self._request_counter += 1

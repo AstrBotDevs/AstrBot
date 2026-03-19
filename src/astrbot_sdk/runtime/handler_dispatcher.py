@@ -35,7 +35,7 @@ from .._command_model import (
     parse_command_model_remainder,
     resolve_command_model_param,
 )
-from .._injected_params import is_framework_injected_parameter
+from .._injected_params import legacy_arg_parameter_names
 from .._invocation_context import caller_plugin_scope
 from .._plugin_logger import PluginLogger
 from .._star_runtime import bind_star_runtime
@@ -333,9 +333,7 @@ class HandlerDispatcher:
                     return build_command_args(
                         [
                             ParamSpec(name=name, type="str")
-                            for name in self._legacy_arg_parameter_names(
-                                loaded.callable
-                            )
+                            for name in legacy_arg_parameter_names(loaded.callable)
                         ],
                         remainder,
                     )
@@ -349,7 +347,7 @@ class HandlerDispatcher:
             return build_regex_args(
                 [
                     ParamSpec(name=name, type="str")
-                    for name in self._legacy_arg_parameter_names(loaded.callable)
+                    for name in legacy_arg_parameter_names(loaded.callable)
                 ],
                 match,
             )
@@ -921,34 +919,6 @@ class HandlerDispatcher:
             return ScheduleContext.from_payload(event_payload)
         except Exception:
             return None
-
-    @classmethod
-    def _legacy_arg_parameter_names(cls, handler) -> list[str]:
-        try:
-            signature = inspect.signature(handler)
-        except (TypeError, ValueError):
-            return []
-        try:
-            type_hints = get_type_hints(handler)
-        except Exception:
-            type_hints = {}
-        names: list[str] = []
-        for parameter in signature.parameters.values():
-            if parameter.kind not in (
-                inspect.Parameter.POSITIONAL_ONLY,
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            ):
-                continue
-            if cls._is_injected_parameter(
-                parameter.name, type_hints.get(parameter.name)
-            ):
-                continue
-            names.append(parameter.name)
-        return names
-
-    @classmethod
-    def _is_injected_parameter(cls, name: str, annotation: Any) -> bool:
-        return is_framework_injected_parameter(name, annotation)
 
     async def _handle_error(
         self,
