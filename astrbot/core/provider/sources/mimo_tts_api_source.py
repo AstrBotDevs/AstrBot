@@ -132,9 +132,10 @@ class ProviderMiMoTTSAPI(TTSProvider):
             ) from exc
 
         data = response.json()
-        audio_data = (
-            data.get("choices", [{}])[0].get("message", {}).get("audio", {}).get("data")
-        )
+        choices = data.get("choices") or []
+        first_choice = choices[0] if choices else {}
+        message = first_choice.get("message", {})
+        audio_data = message.get("audio", {}).get("data")
         if not audio_data:
             raise Exception(f"MiMo TTS API returned no audio payload: {data}")
 
