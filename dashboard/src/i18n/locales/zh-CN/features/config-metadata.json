@@ -699,11 +699,11 @@
       "platform_settings": {
         "enable_id_white_list": {
           "description": "启用白名单",
-          "hint": "启用后,只有在白名单内的会话会被响应。"
+          "hint": "启用后,只有在白名单内的会话会被响应，白名单列表为空时代表不启用白名单（所有 ID 都会被放行）。"
         },
         "id_whitelist": {
           "description": "白名单 ID 列表",
-          "hint": "使用 /sid 获取 ID。"
+          "hint": "使用 /sid 获取 ID。列表为空时表示该白名单不启用（即所有 ID 都在白名单内）。"
         },
         "id_whitelist_log": {
           "description": "输出日志",

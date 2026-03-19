@@ -697,11 +697,11 @@
       "platform_settings": {
         "enable_id_white_list": {
           "description": "Enable Whitelist",
-          "hint": "When enabled, only sessions in the whitelist will be responded to."
+          "hint": "When enabled, only sessions in the whitelist will be responded to. If the whitelist is empty, the whitelist is disabled and all IDs are allowed."
         },
         "id_whitelist": {
           "description": "Whitelist ID List",
-          "hint": "Use /sid to get IDs."
+          "hint": "Use /sid to get IDs. If the list is empty, it means whitelist is disabled (all IDs are in the whitelist)."
         },
         "id_whitelist_log": {
           "description": "Output Logs",
