@@ -1198,10 +1198,10 @@
                 "hint": "Если включено, AstrBot отправляет embedding_dimensions в upstream embedding API как параметр dimensions. Отключите это для OpenAI-совместимых сервисов, которым нужен только локальный размер вектора и которые не поддерживают параметр dimensions."
             },
             "openai_embedding": {
-                "hint": "OpenAI Embedding автоматически добавляет /v1 при запросе."
+                "hint": "OpenAI Embedding сохранён для существующих конфигураций и стандартных /v1 endpoint-ов. Он автоматически добавляет /v1 и по-прежнему отправляет dimensions, если задан embedding_dimensions."
             },
             "openai_compatible_embedding": {
-                "hint": "AstrBot добавляет /v1 только если в API Base URL нет пути. Уже заданные пути, такие как /api/paas/v4 или /api/v3, сохраняются без изменений."
+                "hint": "Используйте этот вариант для более широкого круга OpenAI-совместимых embedding-сервисов. AstrBot добавляет /v1 только если в API Base URL нет пути, а уже заданные пути, такие как /api/paas/v4 или /api/v3, сохраняются без изменений. В отличие от старого OpenAI Embedding, здесь можно явно управлять передачей dimensions."
             },
             "zhipu_embedding": {
                 "hint": "Пресет Zhipu по умолчанию использует https://open.bigmodel.cn/api/paas/v4 и embedding-3, сохраняя путь /api/paas/v4 без изменений."

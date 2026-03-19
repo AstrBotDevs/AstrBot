@@ -1195,10 +1195,10 @@
         "hint": "启用后，会把 embedding_dimensions 作为 dimensions 参数发送给上游嵌入接口。对于只需要本地向量维度、但不支持 dimensions 参数的 OpenAI 兼容服务，请关闭此项。"
       },
       "openai_embedding": {
-        "hint": "OpenAI Embedding 会在请求时自动补上 /v1。"
+        "hint": "OpenAI Embedding 保留给已有配置和标准 /v1 接口使用，会在请求时自动补上 /v1，并在填写 embedding_dimensions 时继续直接发送 dimensions。"
       },
       "openai_compatible_embedding": {
-        "hint": "如果 API Base URL 不带路径，AstrBot 会自动补上 /v1；如果已经带了 /api/paas/v4 或 /api/v3 这类路径，则保持原样。"
+        "hint": "用于更广义的 OpenAI 兼容 embedding 服务。如果 API Base URL 不带路径，AstrBot 会自动补上 /v1；如果已经带了 /api/paas/v4 或 /api/v3 这类路径，则保持原样。相比旧的 OpenAI Embedding，这里还可以显式控制是否透传 dimensions。"
       },
       "zhipu_embedding": {
         "hint": "智谱预设默认使用 https://open.bigmodel.cn/api/paas/v4 和 embedding-3，并保留 /api/paas/v4 路径不变。"
