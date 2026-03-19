@@ -228,4 +228,3 @@ class PlatformCapabilityMixin(CapabilityRouterBridgeBase):
             ),
             call_handler=self._platform_manager_get_stats,
         )
-
