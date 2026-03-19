@@ -528,6 +528,8 @@ class ProviderGoogleGenAI(Provider):
 
         conversation = self._prepare_conversation(payloads)
         temperature = payloads.get("temperature", 0.7)
+        empty_parts_retry_count = 0
+        max_empty_parts_retries = 3
 
         result: types.GenerateContentResponse | None = None
         while True:
@@ -550,7 +552,9 @@ class ProviderGoogleGenAI(Provider):
                     logger.error(f"请求失败, 返回的 candidates 为空: {result}")
                     raise Exception("请求失败, 返回的 candidates 为空。")
 
-                if result.candidates[0].finish_reason == types.FinishReason.RECITATION:
+                candidate = result.candidates[0]
+
+                if candidate.finish_reason == types.FinishReason.RECITATION:
                     if temperature > 2:
                         raise Exception("温度参数已超过最大值2，仍然发生recitation")
                     temperature += 0.2
@@ -558,6 +562,26 @@ class ProviderGoogleGenAI(Provider):
                         f"发生了recitation，正在提高温度至{temperature:.1f}重试...",
                     )
                     continue
+
+                if (
+                    candidate.finish_reason == types.FinishReason.STOP
+                    and candidate.content
+                    and not candidate.content.parts
+                ):
+                    if empty_parts_retry_count < max_empty_parts_retries:
+                        empty_parts_retry_count += 1
+                        logger.warning(
+                            "Gemini 返回 STOP 但 candidate.content.parts 为空，正在重试(%s/%s): %s",
+                            empty_parts_retry_count,
+                            max_empty_parts_retries,
+                            candidate,
+                        )
+                        await asyncio.sleep(0.2)
+                        continue
+                    logger.warning(
+                        "Gemini 在 %s 次重试后仍返回空的 candidate.content.parts，将沿用现有失败逻辑。",
+                        max_empty_parts_retries,
+                    )
 
                 break
 
