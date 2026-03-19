@@ -62,7 +62,7 @@ docker compose up -d
 
 ### 参考：`config.yaml` 完整示例（附说明）
 
-如果您准备自行调整 `Shipyard Neo` 的部署参数，可以直接参考下面这份基于 [`refs/shipyard-neo/deploy/docker/config.yaml`](refs/shipyard-neo/deploy/docker/config.yaml) 整理的完整示例。它保留了默认结构，并额外加上了中文注释，便于理解每个配置项的用途。
+如果您准备自行调整 `Shipyard Neo` 的部署参数，可以直接参考下面这份基于 [`deploy/docker/config.yaml`](https://github.com/AstrBotDevs/shipyard-neo/blob/main/deploy/docker/config.yaml) 整理的完整示例。它保留了默认结构，并额外加上了中文注释，便于理解每个配置项的用途。
 
 > [!TIP]
 > 其中最少需要修改的是 `security.api_key`。如果不清楚其他参数的作用，建议先保持默认值，仅按需调整 profile、资源限制和 warm pool 配置。
@@ -266,18 +266,7 @@ gc:
 
 对 AstrBot 而言，当前会按请求的 `session_id` 维度缓存沙箱 booter；在主 Agent 默认流程下，这个 `session_id` 通常等于消息会话标识 `unified_msg_origin`。因此，同一消息会话的后续请求通常会继续复用同一个 Neo sandbox；如果沙箱失效，则会自动重建。
 
-需要注意的是：
-
-- `Shipyard Neo Sandbox TTL` 是 sandbox 的生命周期上限
-- profile 还定义了独立的 `idle_timeout`
-- AstrBot 发起能力调用时，通常会刷新 idle timeout，而不是直接改写 TTL
-- `keepalive` 语义是延长空闲超时，不会自动启动新的会话，也不会延长 TTL
-
-数据持久化方面：
-
-- 工作区数据保存在 Cargo 中，根目录为 `/workspace`
-- 即使底层 Session 被回收或重建，只要 sandbox / cargo 仍然存在，工作区文件通常仍会保留
-- 浏览器 profile 的状态数据通常也会随工作区一并持久化，例如 `/workspace/.browser/profile/`
+关于 TTL 与数据持久化的更详细说明，请参考下文的 [`关于 Shipyard Neo Sandbox TTL`](docs/zh/use/astrbot-agent-sandbox.md) 与 [`关于沙盒环境的数据持久化`](docs/zh/use/astrbot-agent-sandbox.md) 小节。
 
 ## 旧方案：Shipyard
 

@@ -62,7 +62,7 @@ After deployment:
 
 ### Reference: Full `config.yaml` Example (with Notes)
 
-If you want to customize the deployment parameters of `Shipyard Neo`, you can refer to the complete example below, adapted from [`refs/shipyard-neo/deploy/docker/config.yaml`](refs/shipyard-neo/deploy/docker/config.yaml). It keeps the default structure and adds explanatory notes to make each option easier to understand.
+If you want to customize the deployment parameters of `Shipyard Neo`, you can refer to the complete example below, adapted from [`deploy/docker/config.yaml`](https://github.com/AstrBotDevs/shipyard-neo/blob/main/deploy/docker/config.yaml). It keeps the default structure and adds explanatory notes to make each option easier to understand.
 
 > [!TIP]
 > The minimum required change is `security.api_key`. If you are not sure what the other options do, it is usually best to keep the defaults first and only adjust profiles, resource limits, and warm pool settings as needed.
@@ -267,18 +267,7 @@ A practical way to think about this file:
 
 From AstrBot's perspective, the current implementation caches the sandbox booter by request `session_id`; in the default main-agent flow, this `session_id` usually equals the message-session identifier `unified_msg_origin`. As a result, follow-up requests from the same message session will usually continue using the same Neo sandbox; if the sandbox becomes unavailable, it will be rebuilt automatically.
 
-Important notes:
-
-- `Shipyard Neo Sandbox TTL` is the upper lifetime bound of the sandbox
-- The selected profile also defines a separate `idle_timeout`
-- When AstrBot performs capability calls, it usually refreshes the idle timeout rather than directly extending the TTL
-- `keepalive` extends only the idle timeout; it does not automatically start a new session and does not extend the TTL
-
-For persistence:
-
-- Workspace data is stored in Cargo, with `/workspace` as the root
-- Even if the underlying Session is recycled or rebuilt, workspace files are usually retained as long as the sandbox / cargo still exists
-- Browser-profile state is usually persisted together with the workspace as well, for example under `/workspace/.browser/profile/`
+For more detailed explanations of TTL and persistence behavior, see the later sections on [`Shipyard Neo Sandbox TTL`](docs/en/use/astrbot-agent-sandbox.md) and [`Data Persistence in the Sandbox Environment`](docs/en/use/astrbot-agent-sandbox.md).
 
 ## Legacy Option: Shipyard
 
