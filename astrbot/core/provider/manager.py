@@ -387,6 +387,10 @@ class ProviderManager:
                 from .sources.whisper_api_source import (
                     ProviderOpenAIWhisperAPI as ProviderOpenAIWhisperAPI,
                 )
+            case "mimo_stt_api":
+                from .sources.mimo_stt_api_source import (
+                    ProviderMiMoSTTAPI as ProviderMiMoSTTAPI,
+                )
             case "openai_whisper_selfhost":
                 from .sources.whisper_selfhosted_source import (
                     ProviderOpenAIWhisperSelfHost as ProviderOpenAIWhisperSelfHost,

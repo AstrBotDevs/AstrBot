@@ -1392,17 +1392,25 @@
                 "description": "Таймаут (сек)",
                 "hint": "Максимальное время ожидания ответа."
             },
+            "mimo-stt-system-prompt": {
+                "description": "Системный промпт",
+                "hint": "System prompt, который управляет поведением MiMo STT при распознавании."
+            },
+            "mimo-stt-user-prompt": {
+                "description": "Пользовательский промпт",
+                "hint": "Дополнительный user prompt для MiMo STT, который помогает задать формат результата."
+            },
             "openai-tts-voice": {
                 "description": "API Base URL",
                 "hint": "Голоса OpenAI TTS: alloy, echo и др."
             },
             "mimo-tts-voice": {
                 "description": "Голос",
-                "hint": "Имя голоса MiMo TTS. По умолчанию 'mimo_default'."
+                "hint": "Имя голоса MiMo TTS. Поддерживаются значения 'mimo_default', 'default_en' и 'default_zh'."
             },
             "mimo-tts-format": {
                 "description": "Формат вывода",
-                "hint": "Формат аудио, создаваемого MiMo TTS, например 'wav'."
+                "hint": "Формат аудио, создаваемого MiMo TTS. Поддерживаются 'wav', 'mp3' и 'pcm'."
             },
             "mimo-tts-style-prompt": {
                 "description": "Подсказка стиля",

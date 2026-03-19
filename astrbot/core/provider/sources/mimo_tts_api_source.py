@@ -1,54 +1,21 @@
 import base64
 import uuid
-from pathlib import Path
-
-import httpx
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
 from ..register import register_provider_adapter
-from astrbot import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-
-def normalize_timeout(timeout: int | str | None) -> int | None:
-    if timeout in (None, ""):
-        return None
-    if isinstance(timeout, str):
-        return int(timeout)
-    return timeout
-
-
-def build_headers(api_key: str) -> dict[str, str]:
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["api-key"] = api_key
-        headers["Authorization"] = f"Bearer {api_key}"
-    return headers
-
-
-def get_temp_dir() -> Path:
-    temp_dir = Path(get_astrbot_temp_path())
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    return temp_dir
-
-
-def create_http_client(timeout: int | None, proxy: str) -> httpx.AsyncClient:
-    client_kwargs: dict[str, object] = {
-        "timeout": timeout,
-        "follow_redirects": True,
-    }
-    if proxy:
-        logger.info("[MiMo API] Using proxy: %s", proxy)
-        client_kwargs["proxy"] = proxy
-    return httpx.AsyncClient(**client_kwargs)
-
-
-def build_api_url(api_base: str) -> str:
-    normalized_api_base = api_base.rstrip("/")
-    if normalized_api_base.endswith("/chat/completions"):
-        return normalized_api_base
-    return normalized_api_base + "/chat/completions"
+from .mimo_api_common import (
+    DEFAULT_MIMO_API_BASE,
+    DEFAULT_MIMO_TTS_MODEL,
+    DEFAULT_MIMO_TTS_SEED_TEXT,
+    DEFAULT_MIMO_TTS_VOICE,
+    MiMoAPIError,
+    build_api_url,
+    build_headers,
+    create_http_client,
+    get_temp_dir,
+    normalize_timeout,
+)
 
 
 @register_provider_adapter(
@@ -64,21 +31,17 @@ class ProviderMiMoTTSAPI(TTSProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key = provider_config.get("api_key", "")
-        self.api_base = provider_config.get(
-            "api_base",
-            "https://api.xiaomimimo.com/v1",
-        )
+        self.api_base = provider_config.get("api_base", DEFAULT_MIMO_API_BASE)
         self.proxy = provider_config.get("proxy", "")
         self.timeout = normalize_timeout(provider_config.get("timeout", 20))
-        self.voice = provider_config.get("mimo-tts-voice", "mimo_default")
+        self.voice = provider_config.get("mimo-tts-voice", DEFAULT_MIMO_TTS_VOICE)
         self.audio_format = provider_config.get("mimo-tts-format", "wav")
         self.style_prompt = provider_config.get("mimo-tts-style-prompt", "")
         self.dialect = provider_config.get("mimo-tts-dialect", "")
         self.seed_text = provider_config.get(
-            "mimo-tts-seed-text",
-            "Hello, MiMo, have you had lunch?",
+            "mimo-tts-seed-text", DEFAULT_MIMO_TTS_SEED_TEXT
         )
-        self.set_model(provider_config.get("model", "mimo-v2-tts"))
+        self.set_model(provider_config.get("model", DEFAULT_MIMO_TTS_MODEL))
         self.client = create_http_client(self.timeout, self.proxy)
 
     def _build_user_prompt(self) -> str:
@@ -127,7 +90,7 @@ class ProviderMiMoTTSAPI(TTSProvider):
             response.raise_for_status()
         except Exception as exc:
             error_text = response.text[:1024]
-            raise Exception(
+            raise MiMoAPIError(
                 f"MiMo TTS API request failed: HTTP {response.status_code}, response: {error_text}"
             ) from exc
 
@@ -137,7 +100,7 @@ class ProviderMiMoTTSAPI(TTSProvider):
         message = first_choice.get("message", {})
         audio_data = message.get("audio", {}).get("data")
         if not audio_data:
-            raise Exception(f"MiMo TTS API returned no audio payload: {data}")
+            raise MiMoAPIError(f"MiMo TTS API returned no audio payload: {data}")
 
         output_path = (
             get_temp_dir() / f"mimo_tts_api_{uuid.uuid4()}.{self.audio_format}"

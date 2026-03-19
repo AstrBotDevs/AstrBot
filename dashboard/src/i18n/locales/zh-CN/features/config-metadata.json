@@ -1389,17 +1389,25 @@
         "description": "超时时间",
         "hint": "超时时间，单位为秒。"
       },
+      "mimo-stt-system-prompt": {
+        "description": "系统提示词",
+        "hint": "用于指导 MiMo STT 转录行为的 system prompt。"
+      },
+      "mimo-stt-user-prompt": {
+        "description": "用户提示词",
+        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。"
+      },
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
       },
       "mimo-tts-voice": {
         "description": "音色",
-        "hint": "MiMo TTS 的音色名称。默认值为 'mimo_default'。"
+        "hint": "MiMo TTS 的音色名称。可选值包括 'mimo_default'、'default_en'、'default_zh'。"
       },
       "mimo-tts-format": {
         "description": "输出格式",
-        "hint": "MiMo TTS 生成音频的格式，例如 'wav'。"
+        "hint": "MiMo TTS 生成音频的格式。支持 'wav'、'mp3'、'pcm'。"
       },
       "mimo-tts-style-prompt": {
         "description": "风格提示词",

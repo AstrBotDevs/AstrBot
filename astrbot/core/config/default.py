@@ -1431,6 +1431,20 @@ CONFIG_METADATA_2 = {
                         "model": "whisper-1",
                         "proxy": "",
                     },
+                    "MiMo STT(API)": {
+                        "id": "mimo_stt",
+                        "provider": "mimo",
+                        "type": "mimo_stt_api",
+                        "provider_type": "speech_to_text",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.xiaomimimo.com/v1",
+                        "model": "mimo-v2-omni",
+                        "mimo-stt-system-prompt": "You are a speech transcription assistant. Transcribe the spoken content from the audio exactly and return only the transcription text.",
+                        "mimo-stt-user-prompt": "Please transcribe the content of the audio and return only the transcription text.",
+                        "timeout": "20",
+                        "proxy": "",
+                    },
                     "Whisper(Local)": {
                         "provider": "openai",
                         "type": "openai_whisper_selfhost",
@@ -2326,6 +2340,16 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "超时时间，单位为秒。",
                     },
+                    "mimo-stt-system-prompt": {
+                        "description": "系统提示词",
+                        "type": "string",
+                        "hint": "用于指导 MiMo STT 转录行为的 system prompt。",
+                    },
+                    "mimo-stt-user-prompt": {
+                        "description": "用户提示词",
+                        "type": "string",
+                        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。",
+                    },
                     "openai-tts-voice": {
                         "description": "voice",
                         "type": "string",
@@ -2334,12 +2358,12 @@ CONFIG_METADATA_2 = {
                     "mimo-tts-voice": {
                         "description": "音色",
                         "type": "string",
-                        "hint": "MiMo TTS 的音色名称。默认值为 'mimo_default'。",
+                        "hint": "MiMo TTS 的音色名称。可选值包括 'mimo_default'、'default_en'、'default_zh'。",
                     },
                     "mimo-tts-format": {
                         "description": "输出格式",
                         "type": "string",
-                        "hint": "MiMo TTS 生成音频的格式，例如 'wav'。",
+                        "hint": "MiMo TTS 生成音频的格式。支持 'wav'、'mp3'、'pcm'。",
                     },
                     "mimo-tts-style-prompt": {
                         "description": "风格提示词",
