@@ -713,7 +713,7 @@
 </template>
 
 <script>
-import axios from "axios";
+import axios from "@/utils/request";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import ItemCard from "@/components/shared/ItemCard.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";

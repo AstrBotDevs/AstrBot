@@ -117,7 +117,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useDisplay } from 'vuetify';
-import axios from 'axios';
+import axios from '@/utils/request';
 
 interface ModelMetadata {
     modalities?: { input?: string[] };

@@ -2,7 +2,7 @@
  * 指令数据管理 Composable
  */
 import { ref, reactive } from 'vue';
-import axios from 'axios';
+import axios from '@/utils/request';
 import type { CommandItem, CommandSummary, SnackbarState, ToolItem } from '../types';
 
 export function useComponentData() {

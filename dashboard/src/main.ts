@@ -10,7 +10,12 @@ import VueApexCharts from "vue3-apexcharts";
 
 import print from "vue3-print-nb";
 import { loader } from "@guolao/vue-monaco-editor";
-import axios from "axios";
+import {
+  getApiBaseUrl,
+  resolveApiUrl,
+  resolvePublicUrl,
+  setApiBaseUrl,
+} from "@/utils/request";
 import { waitForRouterReadyInBackground } from "./utils/routerReadiness.mjs";
 import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
 
@@ -18,7 +23,9 @@ import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
 async function loadAppConfig() {
   try {
     // 加上时间戳防止浏览器缓存 config.json
-    const response = await fetch(`/config.json?t=${new Date().getTime()}`);
+    const configUrl = new URL(resolvePublicUrl("config.json"));
+    configUrl.searchParams.set("t", `${Date.now()}`);
+    const response = await fetch(configUrl.toString());
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -64,10 +71,12 @@ async function initApp() {
   const config = await loadAppConfig();
   const configApiUrl = config.apiBaseUrl || "";
   const presets = config.presets || [];
+  const envApiUrl = import.meta.env.VITE_API_BASE || "";
 
   // 优先使用 localStorage 中的配置，其次是 config.json，最后是空字符串
   const localApiUrl = localStorage.getItem("apiBaseUrl");
-  const apiBaseUrl = localApiUrl !== null ? localApiUrl : configApiUrl;
+  const apiBaseUrl =
+    localApiUrl !== null ? localApiUrl : configApiUrl || envApiUrl;
 
   if (apiBaseUrl) {
     console.log(
@@ -75,20 +84,7 @@ async function initApp() {
     );
   }
 
-  // 配置 Axios 全局 Base URL
-  axios.defaults.baseURL = apiBaseUrl;
-
-  axios.interceptors.request.use((config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers["Authorization"] = `Bearer ${token}`;
-    }
-    const locale = localStorage.getItem("astrbot-locale");
-    if (locale) {
-      config.headers["Accept-Language"] = locale;
-    }
-    return config;
-  });
+  setApiBaseUrl(apiBaseUrl);
 
   // Keep fetch() calls consistent with axios by automatically attaching the JWT.
   // Some parts of the UI use fetch directly; without this, those requests will 401.
@@ -97,20 +93,9 @@ async function initApp() {
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
     let url = input;
 
-    // 动态获取当前的 Base URL (可能已被 Store 修改)
-    const currentBaseUrl = axios.defaults.baseURL;
-
     // 如果是字符串路径且以 /api 开头，并且配置了 Base URL，则拼接
-    if (
-      typeof input === "string" &&
-      input.startsWith("/api") &&
-      currentBaseUrl
-    ) {
-      // 移除 apiBaseUrl 尾部的斜杠
-      const cleanBase = currentBaseUrl.replace(/\/+$/, "");
-      // 移除 input 开头的斜杠
-      const cleanPath = input.replace(/^\/+/, "");
-      url = `${cleanBase}/${cleanPath}`;
+    if (typeof input === "string" && input.startsWith("/api")) {
+      url = resolveApiUrl(input, getApiBaseUrl());
     }
 
     const token = localStorage.getItem("token");
@@ -153,6 +138,7 @@ async function initApp() {
       const { useApiStore } = await import("@/stores/api");
       const apiStore = useApiStore(pinia);
       apiStore.setPresets(presets);
+      apiStore.init();
 
       app.use(print);
       app.use(VueApexCharts);
@@ -174,6 +160,7 @@ async function initApp() {
       const { useApiStore } = await import("@/stores/api");
       const apiStore = useApiStore(pinia);
       apiStore.setPresets(presets);
+      apiStore.init();
 
       app.use(print);
       app.use(VueApexCharts);

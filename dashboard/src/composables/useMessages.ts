@@ -1,5 +1,6 @@
 import { ref, reactive, type Ref } from 'vue';
-import axios from 'axios';
+import axios from '@/utils/request';
+import { resolveWebSocketUrl } from '@/utils/request';
 import { useToast } from '@/utils/toast';
 
 // 工具调用信息
@@ -162,11 +163,7 @@ export function useMessages(
         if (!token) {
             throw new Error('Missing authentication token');
         }
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = new URL('/api/unified_chat/ws', window.location.href);
-        wsUrl.protocol = protocol;
-        wsUrl.searchParams.set('token', token);
-        return wsUrl.toString();
+        return resolveWebSocketUrl('/api/unified_chat/ws', { token });
     }
 
     function closeChatWebSocket() {

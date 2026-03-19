@@ -540,7 +540,7 @@ import SidebarCustomizer from "@/components/shared/SidebarCustomizer.vue";
 import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
 import MigrationDialog from "@/components/shared/MigrationDialog.vue";
 import BackupDialog from "@/components/shared/BackupDialog.vue";
-import axios from "axios";
+import axios from "@/utils/request";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useToast } from "@/utils/toast";
 

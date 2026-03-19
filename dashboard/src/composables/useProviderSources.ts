@@ -1,5 +1,5 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
-import axios from 'axios'
+import axios from '@/utils/request'
 import { getProviderIcon } from '@/utils/providerUtils'
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
 import { normalizeTextInput } from '@/utils/inputValue'

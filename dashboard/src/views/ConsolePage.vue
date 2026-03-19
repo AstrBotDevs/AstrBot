@@ -1,7 +1,7 @@
 <script setup>
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import { useModuleI18n } from '@/i18n/composables';
-import axios from 'axios';
+import axios from '@/utils/request';
 
 const { tm } = useModuleI18n('features/console');
 </script>

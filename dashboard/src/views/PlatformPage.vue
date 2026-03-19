@@ -309,7 +309,8 @@
 </template>
 
 <script>
-import axios from 'axios';
+import axios from '@/utils/request';
+import { resolveApiUrl } from '@/utils/request';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
@@ -441,7 +442,7 @@ export default {
       const template = this.metadata['platform_group']?.metadata?.platform?.config_template?.[platform_id];
       if (template && template.logo_token) {
           // 通过文件服务访问插件提供的 logo
-        return `/api/file/${template.logo_token}`;
+        return resolveApiUrl(`/api/file/${template.logo_token}`);
       }
       return getPlatformIcon(platform_id);
     },
@@ -666,7 +667,7 @@ export default {
       if (callbackBase) {
         return `${callbackBase.replace(/\/$/, '')}/api/platform/webhook/${webhookUuid}`;
       }
-      return `/api/platform/webhook/${webhookUuid}`;
+      return resolveApiUrl(`/api/platform/webhook/${webhookUuid}`);
     },
 
     openWebhookDialog(webhookUuid) {

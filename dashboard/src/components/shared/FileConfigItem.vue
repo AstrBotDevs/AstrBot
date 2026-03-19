@@ -141,7 +141,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import axios from 'axios'
+import axios from '@/utils/request'
 import { useToast } from '@/utils/toast'
 import { useModuleI18n } from '@/i18n/composables'
 
