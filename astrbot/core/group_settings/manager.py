@@ -50,6 +50,22 @@ class GroupSettingsManager:
         """
         return self._settings.copy()
     
+    def _update_setting(self, umo: str, set_by: str, **updates) -> None:
+        """辅助方法，用于更新群组设置
+        
+        Args:
+            umo: 群的 UMO 标识
+            set_by: 设置者标识
+            **updates: 要更新的字段
+        """
+        if umo not in self._settings:
+            self._settings[umo] = GroupSettings(umo=umo)
+        setting = self._settings[umo]
+        for key, value in updates.items():
+            setattr(setting, key, value)
+        setting.set_by = set_by
+        setting.set_at = str(int(time.time()))
+    
     async def set_provider(self, umo: str, provider_id: str, set_by: str = "") -> None:
         """设置群的 Provider
         
@@ -58,12 +74,7 @@ class GroupSettingsManager:
             provider_id: Provider ID
             set_by: 设置者标识
         """
-        if umo not in self._settings:
-            self._settings[umo] = GroupSettings(umo=umo)
-        
-        self._settings[umo].provider_id = provider_id
-        self._settings[umo].set_by = set_by
-        self._settings[umo].set_at = str(int(time.time()))
+        self._update_setting(umo, set_by, provider_id=provider_id)
     
     async def set_persona(self, umo: str, persona_id: str, set_by: str = "") -> None:
         """设置群的 Persona
@@ -73,12 +84,7 @@ class GroupSettingsManager:
             persona_id: Persona ID
             set_by: 设置者标识
         """
-        if umo not in self._settings:
-            self._settings[umo] = GroupSettings(umo=umo)
-        
-        self._settings[umo].persona_id = persona_id
-        self._settings[umo].set_by = set_by
-        self._settings[umo].set_at = str(int(time.time()))
+        self._update_setting(umo, set_by, persona_id=persona_id)
     
     async def clear_settings(self, umo: str) -> None:
         """清除群的设置
@@ -89,6 +95,17 @@ class GroupSettingsManager:
         if umo in self._settings:
             del self._settings[umo]
     
+    def _cleanup_if_empty(self, umo: str) -> None:
+        """如果 provider 和 persona 均未设置，则移除该设置项
+        
+        Args:
+            umo: 群的 UMO 标识
+        """
+        if umo in self._settings:
+            setting = self._settings[umo]
+            if not setting.provider_id and not setting.persona_id:
+                del self._settings[umo]
+    
     async def remove_provider_override(self, umo: str) -> None:
         """清除群的 Provider 覆盖
         
@@ -97,9 +114,7 @@ class GroupSettingsManager:
         """
         if umo in self._settings:
             self._settings[umo].provider_id = None
-            # 如果两个设置都为空，删除整个设置
-            if not self._settings[umo].persona_id:
-                del self._settings[umo]
+            self._cleanup_if_empty(umo)
     
     async def remove_persona_override(self, umo: str) -> None:
         """清除群的 Persona 覆盖
@@ -109,9 +124,7 @@ class GroupSettingsManager:
         """
         if umo in self._settings:
             self._settings[umo].persona_id = None
-            # 如果两个设置都为空，删除整个设置
-            if not self._settings[umo].provider_id:
-                del self._settings[umo]
+            self._cleanup_if_empty(umo)
     
     async def clear_all_settings(self) -> int:
         """清除所有群设置
