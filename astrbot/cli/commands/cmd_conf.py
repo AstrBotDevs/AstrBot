@@ -11,9 +11,6 @@ from astrbot.core.utils.astrbot_path import astrbot_paths
 
 from ..utils import check_astrbot_root
 
-# Default dashboard password (used for initial configuration only).
-DEFAULT_DASHBOARD_PASSWORD = "astrbot"
-
 # Parameters for secure dashboard password hashing.
 # Note: In a full implementation, salts should be unique per password.
 DASHBOARD_PASSWORD_SALT = b"astrbot-dashboard"
@@ -24,11 +21,6 @@ PASSWORD_HASHER = PasswordHasher()
 def hash_dashboard_password_secure(value: str) -> str:
     """Hash Dashboard password for storage.
         "sha256",
-    Uses Argon2 for new passwords to provide a computationally expensive,
-    salted hash suitable for password storage.
-    """
-    return PASSWORD_HASHER.hash(value)
-        value.encode(),
 
         DASHBOARD_PASSWORD_SALT,
         DASHBOARD_PASSWORD_ITERATIONS,
