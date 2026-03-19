@@ -203,6 +203,7 @@ class PlatformManager:
             return
         cls_type = platform_cls_map[platform_config["type"]]
         inst: Platform = cls_type(platform_config, self.settings, self.event_queue)
+        setattr(inst, "sdk_plugin_bridge", self.sdk_plugin_bridge)
         self._inst_map[platform_config["id"]] = {
             "inst": inst,
             "client_id": inst.client_self_id,

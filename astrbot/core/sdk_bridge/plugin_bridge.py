@@ -14,9 +14,11 @@ from astrbot_sdk.llm.entities import LLMToolSpec
 from astrbot_sdk.message_components import component_to_payload_sync
 from astrbot_sdk.protocol.descriptors import (
     CommandTrigger,
+    CompositeFilterSpec,
     EventTrigger,
     HandlerDescriptor,
     MessageTrigger,
+    PlatformFilterSpec,
     ScheduleTrigger,
 )
 from astrbot_sdk.runtime.loader import (
@@ -1586,7 +1588,11 @@ class SdkPluginBridge:
     def get_handlers_by_event_type(self, event_type: str) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
         for record in sorted(self._records.values(), key=lambda item: item.load_order):
-            if record.state in {SDK_STATE_DISABLED, SDK_STATE_FAILED}:
+            if record.state in {
+                SDK_STATE_DISABLED,
+                SDK_STATE_FAILED,
+                SDK_STATE_RELOADING,
+            }:
                 continue
             for handler in record.handlers:
                 trigger = handler.descriptor.trigger
@@ -1611,6 +1617,60 @@ class SdkPluginBridge:
                             descriptor=descriptor,
                         )
                     )
+        return entries
+
+    def list_native_command_candidates(
+        self,
+        platform_name: str,
+    ) -> list[dict[str, Any]]:
+        """Expose SDK commands that can be surfaced in native platform menus.
+
+        Native platform command menus are top-level and single-token, so grouped
+        SDK commands are exported as their root command (for example ``gf`` for
+        ``gf chat`` / ``gf affection``).
+        """
+        normalized_platform = str(platform_name).strip().lower()
+        if not normalized_platform:
+            return []
+
+        entries: list[dict[str, Any]] = []
+        seen_names: set[str] = set()
+
+        for record in sorted(self._records.values(), key=lambda item: item.load_order):
+            if record.state in {
+                SDK_STATE_DISABLED,
+                SDK_STATE_FAILED,
+                SDK_STATE_RELOADING,
+            }:
+                continue
+            if not self._record_supports_platform(record, normalized_platform):
+                continue
+
+            for handler in record.handlers:
+                for entry in self._descriptor_native_command_candidates(
+                    handler.descriptor,
+                    platform_name=normalized_platform,
+                ):
+                    name = str(entry.get("name", "")).strip().lower()
+                    if not name or name in seen_names:
+                        continue
+                    seen_names.add(name)
+                    entries.append(entry)
+
+            for route in getattr(record, "dynamic_command_routes", []):
+                descriptor = self._build_dynamic_route_descriptor(record, route)
+                if descriptor is None:
+                    continue
+                for entry in self._descriptor_native_command_candidates(
+                    descriptor,
+                    platform_name=normalized_platform,
+                ):
+                    name = str(entry.get("name", "")).strip().lower()
+                    if not name or name in seen_names:
+                        continue
+                    seen_names.add(name)
+                    entries.append(entry)
+
         return entries
 
     def get_handler_by_full_name(self, full_name: str) -> dict[str, Any] | None:
@@ -1641,6 +1701,131 @@ class SdkPluginBridge:
                 description=route.desc or None,
             )
         return descriptor
+
+    @staticmethod
+    def _record_supports_platform(
+        record: SdkPluginRecord,
+        platform_name: str,
+    ) -> bool:
+        support_platforms = record.plugin.manifest_data.get("support_platforms")
+        if not isinstance(support_platforms, list):
+            return True
+        normalized = {
+            str(item).strip().lower() for item in support_platforms if str(item).strip()
+        }
+        if not normalized:
+            return True
+        return platform_name in normalized
+
+    @classmethod
+    def _descriptor_native_command_candidates(
+        cls,
+        descriptor: HandlerDescriptor,
+        *,
+        platform_name: str,
+    ) -> list[dict[str, Any]]:
+        trigger = descriptor.trigger
+        if not isinstance(trigger, CommandTrigger):
+            return []
+        if not cls._descriptor_supports_platform(descriptor, platform_name):
+            return []
+
+        names = [trigger.command, *trigger.aliases]
+        route = descriptor.command_route
+        root_candidates: list[str] = []
+
+        if route is not None and route.group_path:
+            root_candidates.append(str(route.group_path[0]).strip())
+
+        for name in names:
+            normalized = str(name).strip()
+            if " " not in normalized:
+                continue
+            root_candidates.append(normalized.split()[0].strip())
+
+        if root_candidates:
+            description = (
+                str(route.group_help).strip()
+                if route is not None and route.group_help
+                else str(trigger.description or "").strip()
+            )
+            root_name = next((item for item in root_candidates if item), "")
+            if not description and root_name:
+                description = f"Command group: {root_name}"
+            unique_roots = [
+                item
+                for item in dict.fromkeys(root_candidates)
+                if isinstance(item, str) and item.strip()
+            ]
+            return [
+                {
+                    "name": item.strip(),
+                    "description": description,
+                    "is_group": True,
+                }
+                for item in unique_roots
+            ]
+
+        description = str(trigger.description or "").strip()
+        if not description and trigger.command.strip():
+            description = f"Command: {trigger.command.strip()}"
+        unique_names = [
+            item for item in dict.fromkeys(str(name).strip() for name in names) if item
+        ]
+        return [
+            {
+                "name": item,
+                "description": description,
+                "is_group": False,
+            }
+            for item in unique_names
+        ]
+
+    @classmethod
+    def _descriptor_supports_platform(
+        cls,
+        descriptor: HandlerDescriptor,
+        platform_name: str,
+    ) -> bool:
+        trigger_platforms = getattr(descriptor.trigger, "platforms", [])
+        if isinstance(trigger_platforms, list):
+            normalized = {
+                str(item).strip().lower()
+                for item in trigger_platforms
+                if str(item).strip()
+            }
+            if normalized and platform_name not in normalized:
+                return False
+        for filter_spec in descriptor.filters:
+            if not cls._filter_supports_platform(filter_spec, platform_name):
+                return False
+        return True
+
+    @classmethod
+    def _filter_supports_platform(cls, filter_spec, platform_name: str) -> bool:
+        if isinstance(filter_spec, PlatformFilterSpec):
+            normalized = {
+                str(item).strip().lower()
+                for item in filter_spec.platforms
+                if str(item).strip()
+            }
+            return not normalized or platform_name in normalized
+        if isinstance(filter_spec, CompositeFilterSpec):
+            platform_children = [
+                child
+                for child in filter_spec.children
+                if isinstance(child, PlatformFilterSpec | CompositeFilterSpec)
+            ]
+            if not platform_children:
+                return True
+            results = [
+                cls._filter_supports_platform(child, platform_name)
+                for child in platform_children
+            ]
+            if filter_spec.kind == "and":
+                return all(results)
+            return any(results)
+        return True
 
     async def _load_or_reload_plugin(
         self,
