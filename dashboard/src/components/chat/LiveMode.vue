@@ -96,7 +96,7 @@
 </template>
 
 <script setup lang="ts">
-import axios from "axios";
+import { resolveWebSocketUrl } from "@/utils/request";
 import { ref, computed, onBeforeUnmount, watch } from "vue";
 import { useVADRecording } from "@/composables/useVADRecording";
 import SiriOrb from "./LiveOrb.vue";
@@ -331,28 +331,7 @@ function connectWebSocket(): Promise<void> {
       return;
     }
 
-    let wsBase = "";
-    const apiBase = axios.defaults.baseURL || "";
-
-    if (apiBase) {
-      if (apiBase.startsWith("https://")) {
-        wsBase = apiBase.replace("https://", "wss://");
-      } else if (apiBase.startsWith("http://")) {
-        wsBase = apiBase.replace("http://", "ws://");
-      } else {
-        const protocol =
-          window.location.protocol === "https:" ? "wss://" : "ws://";
-        wsBase = protocol + apiBase;
-      }
-      wsBase = wsBase.replace(/\/+$/, "");
-    } else {
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      wsBase = `${protocol}//${window.location.host}`;
-    }
-
-    const wsUrl = `${wsBase}/api/live_chat/ws?token=${encodeURIComponent(
-      token,
-    )}`;
+    const wsUrl = resolveWebSocketUrl("/api/live_chat/ws", { token });
 
     ws = new WebSocket(wsUrl);
 

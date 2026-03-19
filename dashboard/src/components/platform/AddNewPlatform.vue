@@ -559,6 +559,7 @@
 
 <script>
 import axios from 'axios';
+import { resolveApiUrl } from '@/utils/request';
 import { useModuleI18n } from '@/i18n/composables';
 import { getPlatformIcon, getPlatformDescription, getTutorialLink } from '@/utils/platformUtils';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
@@ -780,7 +781,7 @@ export default {
       // Check for plugin-provided logo_token first
       const template = this.platformTemplates?.[platformType];
       if (template && template.logo_token) {
-        return `/api/file/${template.logo_token}`;
+        return resolveApiUrl(`/api/file/${template.logo_token}`);
       }
       return getPlatformIcon(platformType);
     },
