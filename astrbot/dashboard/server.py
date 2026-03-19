@@ -475,17 +475,17 @@ class AstrBotDashboard:
 
         if ssl_enable:
             cert_file = (
-                os.environ.get("ASTRBOT_DASHBOARD_SSL_CERT")
+                os.environ.get("ASTRBOT_SSL_CERT")
                 or os.environ.get("DASHBOARD_SSL_CERT")
                 or ssl_config.get("cert_file", "")
             )
             key_file = (
-                os.environ.get("ASTRBOT_DASHBOARD_SSL_KEY")
+                os.environ.get("ASTRBOT_SSL_KEY")
                 or os.environ.get("DASHBOARD_SSL_KEY")
                 or ssl_config.get("key_file", "")
             )
             ca_certs = (
-                os.environ.get("ASTRBOT_DASHBOARD_SSL_CA_CERTS")
+                os.environ.get("ASTRBOT_SSL_CA_CERTS")
                 or os.environ.get("DASHBOARD_SSL_CA_CERTS")
                 or ssl_config.get("ca_certs", "")
             )
