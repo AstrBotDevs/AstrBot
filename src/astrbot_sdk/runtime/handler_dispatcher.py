@@ -35,6 +35,7 @@ from .._command_model import (
     parse_command_model_remainder,
     resolve_command_model_param,
 )
+from .._injected_params import is_framework_injected_parameter
 from .._invocation_context import caller_plugin_scope
 from .._plugin_logger import PluginLogger
 from .._star_runtime import bind_star_runtime
@@ -947,19 +948,7 @@ class HandlerDispatcher:
 
     @classmethod
     def _is_injected_parameter(cls, name: str, annotation: Any) -> bool:
-        if name in {"event", "ctx", "context", "conversation", "conv"}:
-            return True
-        normalized, _is_optional = unwrap_optional(annotation)
-        if normalized is None:
-            return False
-        if normalized in {Context, MessageEvent, ConversationSession}:
-            return True
-        if isinstance(normalized, type) and issubclass(
-            normalized,
-            (Context, MessageEvent, ConversationSession),
-        ):
-            return True
-        return False
+        return is_framework_injected_parameter(name, annotation)
 
     async def _handle_error(
         self,

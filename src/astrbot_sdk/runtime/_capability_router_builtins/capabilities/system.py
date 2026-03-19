@@ -451,4 +451,3 @@ class SystemCapabilityMixin(CapabilityRouterBridgeBase):
             }
         )
         return {"supported": True}
-

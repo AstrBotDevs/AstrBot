@@ -62,4 +62,3 @@ class LLMCapabilityMixin(CapabilityRouterBridgeBase):
                 "text": "".join(item.get("text", "") for item in chunks)
             },
         )
-

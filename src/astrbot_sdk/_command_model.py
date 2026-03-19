@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from ._injected_params import is_framework_injected_parameter
 from ._typing_utils import unwrap_optional
 from .errors import AstrBotError
 from .runtime._command_matching import split_command_remainder
@@ -211,26 +212,7 @@ def _command_parse_error(message: str) -> AstrBotError:
 
 
 def _is_injected_parameter(name: str, annotation: Any) -> bool:
-    if name in {"event", "ctx", "context", "sched", "schedule", "conversation", "conv"}:
-        return True
-    normalized, _is_optional = unwrap_optional(annotation)
-    if normalized is None:
-        return False
-    try:
-        from .context import Context
-        from .conversation import ConversationSession
-        from .events import MessageEvent
-        from .schedule import ScheduleContext
-    except Exception:
-        return False
-    if normalized in {Context, MessageEvent, ScheduleContext, ConversationSession}:
-        return True
-    if isinstance(normalized, type):
-        return issubclass(
-            normalized,
-            (Context, MessageEvent, ScheduleContext, ConversationSession),
-        )
-    return False
+    return is_framework_injected_parameter(name, annotation)
 
 
 __all__ = [
