@@ -172,7 +172,12 @@ class AstrBotDashboard:
         self.app = cors(
             self.app,
             allow_origin="*",
-            allow_headers=["Authorization", "Content-Type", "X-API-Key"],
+            allow_headers=[
+                "Authorization",
+                "Content-Type",
+                "X-API-Key",
+                "Accept-Language",
+            ],
             allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         )
 
