@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.agent.message import Message
 from astrbot.core.context_compaction_scheduler import PeriodicContextCompactionScheduler
 
 
@@ -181,3 +183,40 @@ def test_is_idle_enough_respects_threshold() -> None:
     assert PeriodicContextCompactionScheduler._is_idle_enough(old, 10) is True
     assert PeriodicContextCompactionScheduler._is_idle_enough(recent, 10) is False
     assert PeriodicContextCompactionScheduler._is_idle_enough(None, 10) is True
+
+
+@pytest.mark.asyncio
+async def test_compact_one_conversation_dry_run_reports_skipped() -> None:
+    scheduler = _build_scheduler({"periodic_context_compaction": {"enabled": True}})
+    cfg = scheduler._load_config()
+    cfg["dry_run"] = True
+
+    conv = SimpleNamespace(
+        conversation_id="conv-1",
+        user_id="user-1",
+        content=[],
+        token_usage=0,
+        updated_at=None,
+    )
+    scheduler._check_eligibility = lambda _conv, _cfg: SimpleNamespace(  # type: ignore[method-assign]
+        eligible=True,
+        messages=[Message(role="user", content="before")],
+        before_tokens=100,
+    )
+    scheduler._resolve_provider = AsyncMock(return_value=object())  # type: ignore[method-assign]
+    scheduler._run_compaction_rounds = AsyncMock(  # type: ignore[method-assign]
+        return_value=SimpleNamespace(
+            messages=[Message(role="user", content="after")],
+            changed=True,
+            rounds=1,
+        )
+    )
+    scheduler._token_counter = SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 50)
+    scheduler._persist_compacted_history = AsyncMock(  # type: ignore[method-assign]
+        return_value=True
+    )
+
+    outcome = await scheduler._compact_one_conversation(conv, cfg)
+
+    assert outcome == "skipped"
+    scheduler._persist_compacted_history.assert_not_awaited()
