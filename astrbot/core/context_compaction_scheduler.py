@@ -65,6 +65,90 @@ class CompactionConfig:
     instruction: str
     dry_run: bool
 
+
+def _to_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
+def _to_int(value: Any, default: int, min_value: int) -> int:
+    try:
+        parsed = int(value)
+    except Exception:
+        parsed = default
+    return max(parsed, min_value)
+
+
+def _resolve_trigger_tokens(target_tokens: int, raw_cfg: dict[str, Any]) -> int:
+    trigger_default = max(int(target_tokens * 1.5), target_tokens + 1)
+    raw_trigger = raw_cfg.get("trigger_tokens")
+    if raw_trigger is None or (isinstance(raw_trigger, str) and not raw_trigger):
+        trigger_tokens = trigger_default
+    else:
+        trigger_tokens = _to_int(raw_trigger, trigger_default, 512)
+    if trigger_tokens <= target_tokens:
+        trigger_tokens = target_tokens + 1
+    return trigger_tokens
+
+
+def load_compaction_config(
+    default_conf: dict[str, Any],
+    defaults: dict[str, Any] | None = None,
+) -> CompactionConfig:
+    provider_settings = default_conf.get("provider_settings", {})
+    raw_cfg = provider_settings.get("periodic_context_compaction", {})
+    if not isinstance(raw_cfg, dict):
+        raw_cfg = {}
+
+    cfg = dict(defaults or PERIODIC_CONTEXT_COMPACTION_DEFAULTS)
+    cfg.update(raw_cfg)
+
+    enabled = _to_bool(cfg.get("enabled"), False)
+    interval_minutes = _to_int(cfg.get("interval_minutes"), 30, 1)
+    startup_delay_seconds = _to_int(cfg.get("startup_delay_seconds"), 120, 0)
+    max_conversations_per_run = _to_int(cfg.get("max_conversations_per_run"), 8, 1)
+    max_scan_per_run = _to_int(cfg.get("max_scan_per_run"), 120, 1)
+    scan_page_size = _to_int(cfg.get("scan_page_size"), 40, 10)
+    min_idle_minutes = _to_int(cfg.get("min_idle_minutes"), 15, 0)
+    min_messages = _to_int(cfg.get("min_messages"), 14, 2)
+    target_tokens = _to_int(cfg.get("target_tokens"), 4096, 512)
+    trigger_tokens = _resolve_trigger_tokens(target_tokens, raw_cfg)
+    max_rounds = _to_int(cfg.get("max_rounds"), 3, 1)
+    truncate_turns = _to_int(cfg.get("truncate_turns"), 1, 1)
+    keep_recent = _to_int(cfg.get("keep_recent"), 6, 0)
+    provider_id = str(cfg.get("provider_id", "") or "").strip()
+    instruction = str(cfg.get("instruction", "") or "").strip()
+    dry_run = _to_bool(cfg.get("dry_run"), False)
+
+    return CompactionConfig(
+        enabled=enabled,
+        interval_minutes=interval_minutes,
+        startup_delay_seconds=startup_delay_seconds,
+        max_conversations_per_run=max_conversations_per_run,
+        max_scan_per_run=max_scan_per_run,
+        scan_page_size=scan_page_size,
+        min_idle_minutes=min_idle_minutes,
+        min_messages=min_messages,
+        target_tokens=target_tokens,
+        trigger_tokens=trigger_tokens,
+        max_rounds=max_rounds,
+        truncate_turns=truncate_turns,
+        keep_recent=keep_recent,
+        provider_id=provider_id,
+        instruction=instruction,
+        dry_run=dry_run,
+    )
+
+
 class PeriodicContextCompactionScheduler:
     """Periodically compact conversation history and persist summarized history back to DB.
 
@@ -281,67 +365,10 @@ class PeriodicContextCompactionScheduler:
         return max(1, int(cfg.interval_minutes)) * 60
 
     def _load_config(self) -> CompactionConfig:
-        raw_cfg = self._load_raw_config()
-
-        cfg = dict(self._DEFAULTS)
-        cfg.update(raw_cfg)
-
-        enabled = self._to_bool(cfg.get("enabled"), False)
-        interval_minutes = self._to_int(cfg.get("interval_minutes"), 30, 1)
-        startup_delay_seconds = self._to_int(cfg.get("startup_delay_seconds"), 120, 0)
-        max_conversations_per_run = self._to_int(
-            cfg.get("max_conversations_per_run"), 8, 1
+        return load_compaction_config(
+            default_conf=self.config_manager.default_conf,
+            defaults=self._DEFAULTS,
         )
-        max_scan_per_run = self._to_int(cfg.get("max_scan_per_run"), 120, 1)
-        scan_page_size = self._to_int(cfg.get("scan_page_size"), 40, 10)
-        min_idle_minutes = self._to_int(cfg.get("min_idle_minutes"), 15, 0)
-        min_messages = self._to_int(cfg.get("min_messages"), 14, 2)
-        target_tokens = self._to_int(cfg.get("target_tokens"), 4096, 512)
-        trigger_tokens = self._resolve_trigger_tokens(target_tokens, raw_cfg)
-        max_rounds = self._to_int(cfg.get("max_rounds"), 3, 1)
-        truncate_turns = self._to_int(cfg.get("truncate_turns"), 1, 1)
-        keep_recent = self._to_int(cfg.get("keep_recent"), 6, 0)
-        provider_id = str(cfg.get("provider_id", "") or "").strip()
-        instruction = str(cfg.get("instruction", "") or "").strip()
-        dry_run = self._to_bool(cfg.get("dry_run"), False)
-
-        return CompactionConfig(
-            enabled=enabled,
-            interval_minutes=interval_minutes,
-            startup_delay_seconds=startup_delay_seconds,
-            max_conversations_per_run=max_conversations_per_run,
-            max_scan_per_run=max_scan_per_run,
-            scan_page_size=scan_page_size,
-            min_idle_minutes=min_idle_minutes,
-            min_messages=min_messages,
-            target_tokens=target_tokens,
-            trigger_tokens=trigger_tokens,
-            max_rounds=max_rounds,
-            truncate_turns=truncate_turns,
-            keep_recent=keep_recent,
-            provider_id=provider_id,
-            instruction=instruction,
-            dry_run=dry_run,
-        )
-
-    def _load_raw_config(self) -> dict[str, Any]:
-        default_conf = self.config_manager.default_conf
-        provider_settings = default_conf.get("provider_settings", {})
-        raw_cfg = provider_settings.get("periodic_context_compaction", {})
-        if isinstance(raw_cfg, dict):
-            return raw_cfg
-        return {}
-
-    def _resolve_trigger_tokens(self, target_tokens: int, raw_cfg: dict[str, Any]) -> int:
-        trigger_default = max(int(target_tokens * 1.5), target_tokens + 1)
-        raw_trigger = raw_cfg.get("trigger_tokens")
-        if raw_trigger is None or (isinstance(raw_trigger, str) and not raw_trigger):
-            trigger_tokens = trigger_default
-        else:
-            trigger_tokens = self._to_int(raw_trigger, trigger_default, 512)
-        if trigger_tokens <= target_tokens:
-            trigger_tokens = target_tokens + 1
-        return trigger_tokens
 
     async def _compact_one_conversation(
         self,
@@ -425,13 +452,13 @@ class PeriodicContextCompactionScheduler:
         changed = False
         rounds = 0
         instruction = self._resolve_instruction(cfg)
+        manager = self._build_context_manager(cfg, provider, instruction)
 
         for _ in range(cfg.max_rounds):
             current_tokens = self._token_counter.count_tokens(compressed)
             if current_tokens <= cfg.target_tokens:
                 break
 
-            manager = self._build_context_manager(cfg, provider, instruction)
             rounds += 1
             next_messages = await manager.process(compressed)
             if self._messages_equal(compressed, next_messages):
@@ -573,28 +600,6 @@ class PeriodicContextCompactionScheduler:
         return [m.model_dump(exclude_none=True) for m in a] == [
             m.model_dump(exclude_none=True) for m in b
         ]
-
-    @staticmethod
-    def _to_bool(value: Any, default: bool) -> bool:
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, (int, float)):
-            return bool(value)
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"1", "true", "yes", "on"}:
-                return True
-            if lowered in {"0", "false", "no", "off"}:
-                return False
-        return default
-
-    @staticmethod
-    def _to_int(value: Any, default: int, min_value: int) -> int:
-        try:
-            parsed = int(value)
-        except Exception:
-            parsed = default
-        return max(parsed, min_value)
 
     @staticmethod
     def _now_iso() -> str:
