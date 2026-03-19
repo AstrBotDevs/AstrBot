@@ -81,6 +81,27 @@ async def test_status_with_runtime_report() -> None:
 
 
 @pytest.mark.asyncio
+async def test_status_with_no_report() -> None:
+    scheduler = _build_scheduler()
+    scheduler._last_report = None
+    scheduler._last_error = None
+
+    command = ContextCompactionCommands(
+        context=SimpleNamespace(context_compaction_scheduler=scheduler)
+    )
+    event = SimpleNamespace(send=AsyncMock())
+
+    await command.status(event)
+
+    event.send.assert_awaited_once()
+    chain = event.send.await_args.args[0]
+    text = chain.get_plain_text(with_other_comps_mark=True)
+    assert "定时上下文压缩状态" in text
+    assert "启用=是" in text
+    assert "最近任务：暂无" in text
+
+
+@pytest.mark.asyncio
 async def test_status_includes_last_error_line() -> None:
     scheduler = _build_scheduler()
     scheduler._last_report = {

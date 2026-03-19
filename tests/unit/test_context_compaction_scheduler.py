@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -7,7 +8,10 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot.core.agent.message import Message
-from astrbot.core.context_compaction_scheduler import PeriodicContextCompactionScheduler
+from astrbot.core.context_compaction_scheduler import (
+    CompactionConfig,
+    PeriodicContextCompactionScheduler,
+)
 
 
 class DummyConfigManager:
@@ -39,11 +43,11 @@ def test_load_config_normalizes_values() -> None:
 
     cfg = scheduler._load_config()
 
-    assert cfg["enabled"] is True
-    assert cfg["interval_minutes"] == 1
-    assert cfg["target_tokens"] == 1024
-    assert cfg["trigger_tokens"] == 1025
-    assert cfg["max_rounds"] == 2
+    assert cfg.enabled is True
+    assert cfg.interval_minutes == 1
+    assert cfg.target_tokens == 1024
+    assert cfg.trigger_tokens == 1025
+    assert cfg.max_rounds == 2
 
 
 @pytest.mark.parametrize(
@@ -68,7 +72,7 @@ def test_load_config_enabled_bool_parsing(raw_enabled: str, expected: bool) -> N
     )
 
     cfg = scheduler._load_config()
-    assert cfg["enabled"] is expected
+    assert cfg.enabled is expected
 
 
 @pytest.mark.parametrize(
@@ -98,9 +102,9 @@ def test_load_config_clamps_numeric_minimums(
     scheduler = _build_scheduler({"periodic_context_compaction": raw_cfg})
     cfg = scheduler._load_config()
 
-    assert cfg["interval_minutes"] == expected_interval
-    assert cfg["scan_page_size"] == expected_scan_page_size
-    assert cfg["min_messages"] == expected_min_messages
+    assert cfg.interval_minutes == expected_interval
+    assert cfg.scan_page_size == expected_scan_page_size
+    assert cfg.min_messages == expected_min_messages
 
 
 @pytest.mark.parametrize(
@@ -122,8 +126,8 @@ def test_load_config_token_threshold_normalization(
     scheduler = _build_scheduler({"periodic_context_compaction": raw_cfg})
     cfg = scheduler._load_config()
 
-    assert cfg["target_tokens"] == expected_target
-    assert cfg["trigger_tokens"] == expected_trigger
+    assert cfg.target_tokens == expected_target
+    assert cfg.trigger_tokens == expected_trigger
 
 
 @pytest.mark.parametrize("raw_value", [None, 1, "not-a-dict", []])
@@ -131,11 +135,15 @@ def test_load_config_falls_back_for_non_dict(raw_value) -> None:
     scheduler = _build_scheduler({"periodic_context_compaction": raw_value})
     cfg = scheduler._load_config()
 
-    assert cfg == scheduler._DEFAULTS
+    expected = CompactionConfig(**scheduler._DEFAULTS)
+    assert cfg == expected
 
 
 def test_resolve_wait_seconds_uses_normalized_interval() -> None:
-    cfg = {"interval_minutes": 1}
+    cfg = replace(
+        CompactionConfig(**PeriodicContextCompactionScheduler._DEFAULTS),
+        interval_minutes=1,
+    )
     assert PeriodicContextCompactionScheduler._resolve_wait_seconds(cfg) == 60
 
 
@@ -188,8 +196,7 @@ def test_is_idle_enough_respects_threshold() -> None:
 @pytest.mark.asyncio
 async def test_compact_one_conversation_dry_run_reports_skipped() -> None:
     scheduler = _build_scheduler({"periodic_context_compaction": {"enabled": True}})
-    cfg = scheduler._load_config()
-    cfg["dry_run"] = True
+    cfg = replace(scheduler._load_config(), dry_run=True)
 
     conv = SimpleNamespace(
         conversation_id="conv-1",

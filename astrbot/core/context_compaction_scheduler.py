@@ -4,7 +4,7 @@ import asyncio
 import json
 import time
 from collections.abc import AsyncIterator, Iterable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -44,6 +44,26 @@ class _RoundResult:
     messages: list[Message]
     changed: bool
     rounds: int
+
+
+@dataclass(frozen=True)
+class CompactionConfig:
+    enabled: bool
+    interval_minutes: int
+    startup_delay_seconds: int
+    max_conversations_per_run: int
+    max_scan_per_run: int
+    scan_page_size: int
+    min_idle_minutes: int
+    min_messages: int
+    target_tokens: int
+    trigger_tokens: int
+    max_rounds: int
+    truncate_turns: int
+    keep_recent: int
+    provider_id: str
+    instruction: str
+    dry_run: bool
 
 
 class _MessageHistoryParser:
@@ -227,7 +247,7 @@ class PeriodicContextCompactionScheduler:
             "running": self._running_lock.locked(),
             "bootstrapped": self._bootstrapped,
             "stop_requested": self._stop_event.is_set(),
-            "config": cfg,
+            "config": asdict(cfg),
             "last_started_at": self._last_started_at,
             "last_finished_at": self._last_finished_at,
             "last_error": self._last_error,
@@ -240,13 +260,13 @@ class PeriodicContextCompactionScheduler:
             cfg = self._load_config()
             wait_seconds = self._resolve_wait_seconds(cfg)
 
-            if not cfg["enabled"]:
+            if not cfg.enabled:
                 await self._sleep_or_stop(wait_seconds)
                 continue
 
             if not self._bootstrapped:
                 self._bootstrapped = True
-                startup_delay = max(0, int(cfg["startup_delay_seconds"]))
+                startup_delay = max(0, int(cfg.startup_delay_seconds))
                 if startup_delay > 0:
                     logger.info(
                         "[ContextCompact] startup delay: %ss before first run",
@@ -297,7 +317,7 @@ class PeriodicContextCompactionScheduler:
             started = time.monotonic()
             stats = _CompactionStats()
 
-            if not cfg["enabled"] and reason == "scheduled":
+            if not cfg.enabled and reason == "scheduled":
                 report = {
                     "reason": reason,
                     "scanned": 0,
@@ -348,25 +368,25 @@ class PeriodicContextCompactionScheduler:
 
     @staticmethod
     def _resolve_run_limits(
-        cfg: dict[str, Any],
+        cfg: CompactionConfig,
         max_conversations_override: int | None,
     ) -> tuple[int, int, int]:
-        max_to_compact = max(1, int(cfg["max_conversations_per_run"]))
+        max_to_compact = max(1, int(cfg.max_conversations_per_run))
         if max_conversations_override is not None:
             max_to_compact = max(1, int(max_conversations_override))
-        max_to_scan = max(max_to_compact, int(cfg["max_scan_per_run"]))
-        scan_page_size = max(10, int(cfg["scan_page_size"]))
+        max_to_scan = max(max_to_compact, int(cfg.max_scan_per_run))
+        scan_page_size = max(10, int(cfg.scan_page_size))
         return max_to_compact, max_to_scan, scan_page_size
 
     async def _iter_candidate_conversations(
         self,
         scan_page_size: int,
-        cfg: dict[str, Any],
+        cfg: CompactionConfig,
     ) -> AsyncIterator[ConversationV2]:
         updated_before: datetime | None = None
-        if cfg["min_idle_minutes"] > 0:
+        if cfg.min_idle_minutes > 0:
             updated_before = datetime.now(timezone.utc) - timedelta(
-                minutes=int(cfg["min_idle_minutes"]),
+                minutes=int(cfg.min_idle_minutes),
             )
 
         page = 1
@@ -375,7 +395,7 @@ class PeriodicContextCompactionScheduler:
                 page=page,
                 page_size=scan_page_size,
                 updated_before=updated_before,
-                min_messages=cfg["min_messages"],
+                min_messages=cfg.min_messages,
             )
             if not conversations:
                 break
@@ -405,34 +425,52 @@ class PeriodicContextCompactionScheduler:
             return
 
     @staticmethod
-    def _resolve_wait_seconds(cfg: dict[str, Any]) -> int:
-        return max(1, int(cfg["interval_minutes"])) * 60
+    def _resolve_wait_seconds(cfg: CompactionConfig) -> int:
+        return max(1, int(cfg.interval_minutes)) * 60
 
-    def _load_config(self) -> dict[str, Any]:
+    def _load_config(self) -> CompactionConfig:
         raw_cfg = self._load_raw_config()
 
         cfg = dict(self._DEFAULTS)
         cfg.update(raw_cfg)
 
-        # normalize
-        cfg["enabled"] = self._to_bool(cfg.get("enabled"), False)
-        self._normalize_int(cfg, "interval_minutes", 30, 1)
-        self._normalize_int(cfg, "startup_delay_seconds", 120, 0)
-        self._normalize_int(cfg, "max_conversations_per_run", 8, 1)
-        self._normalize_int(cfg, "max_scan_per_run", 120, 1)
-        self._normalize_int(cfg, "scan_page_size", 40, 10)
-        self._normalize_int(cfg, "min_idle_minutes", 15, 0)
-        self._normalize_int(cfg, "min_messages", 14, 2)
-        self._normalize_int(cfg, "target_tokens", 4096, 512)
-        self._normalize_trigger_tokens(cfg, raw_cfg)
-        self._normalize_int(cfg, "max_rounds", 3, 1)
-        self._normalize_int(cfg, "truncate_turns", 1, 1)
-        self._normalize_int(cfg, "keep_recent", 6, 0)
-        cfg["provider_id"] = str(cfg.get("provider_id", "") or "").strip()
-        cfg["instruction"] = str(cfg.get("instruction", "") or "").strip()
-        cfg["dry_run"] = self._to_bool(cfg.get("dry_run"), False)
+        enabled = self._to_bool(cfg.get("enabled"), False)
+        interval_minutes = self._to_int(cfg.get("interval_minutes"), 30, 1)
+        startup_delay_seconds = self._to_int(cfg.get("startup_delay_seconds"), 120, 0)
+        max_conversations_per_run = self._to_int(
+            cfg.get("max_conversations_per_run"), 8, 1
+        )
+        max_scan_per_run = self._to_int(cfg.get("max_scan_per_run"), 120, 1)
+        scan_page_size = self._to_int(cfg.get("scan_page_size"), 40, 10)
+        min_idle_minutes = self._to_int(cfg.get("min_idle_minutes"), 15, 0)
+        min_messages = self._to_int(cfg.get("min_messages"), 14, 2)
+        target_tokens = self._to_int(cfg.get("target_tokens"), 4096, 512)
+        trigger_tokens = self._resolve_trigger_tokens(target_tokens, raw_cfg)
+        max_rounds = self._to_int(cfg.get("max_rounds"), 3, 1)
+        truncate_turns = self._to_int(cfg.get("truncate_turns"), 1, 1)
+        keep_recent = self._to_int(cfg.get("keep_recent"), 6, 0)
+        provider_id = str(cfg.get("provider_id", "") or "").strip()
+        instruction = str(cfg.get("instruction", "") or "").strip()
+        dry_run = self._to_bool(cfg.get("dry_run"), False)
 
-        return cfg
+        return CompactionConfig(
+            enabled=enabled,
+            interval_minutes=interval_minutes,
+            startup_delay_seconds=startup_delay_seconds,
+            max_conversations_per_run=max_conversations_per_run,
+            max_scan_per_run=max_scan_per_run,
+            scan_page_size=scan_page_size,
+            min_idle_minutes=min_idle_minutes,
+            min_messages=min_messages,
+            target_tokens=target_tokens,
+            trigger_tokens=trigger_tokens,
+            max_rounds=max_rounds,
+            truncate_turns=truncate_turns,
+            keep_recent=keep_recent,
+            provider_id=provider_id,
+            instruction=instruction,
+            dry_run=dry_run,
+        )
 
     def _load_raw_config(self) -> dict[str, Any]:
         default_conf = self.config_manager.default_conf
@@ -442,35 +480,21 @@ class PeriodicContextCompactionScheduler:
             return raw_cfg
         return {}
 
-    def _normalize_int(
-        self,
-        cfg: dict[str, Any],
-        key: str,
-        default: int,
-        min_value: int,
-    ) -> int:
-        cfg[key] = self._to_int(cfg.get(key), default, min_value)
-        return cfg[key]
-
-    def _normalize_trigger_tokens(
-        self,
-        cfg: dict[str, Any],
-        raw_cfg: dict[str, Any],
-    ) -> int:
-        trigger_default = max(int(cfg["target_tokens"] * 1.5), cfg["target_tokens"] + 1)
+    def _resolve_trigger_tokens(self, target_tokens: int, raw_cfg: dict[str, Any]) -> int:
+        trigger_default = max(int(target_tokens * 1.5), target_tokens + 1)
         raw_trigger = raw_cfg.get("trigger_tokens")
         if raw_trigger is None or (isinstance(raw_trigger, str) and not raw_trigger):
-            cfg["trigger_tokens"] = trigger_default
+            trigger_tokens = trigger_default
         else:
-            cfg["trigger_tokens"] = self._to_int(raw_trigger, trigger_default, 512)
-        if cfg["trigger_tokens"] <= cfg["target_tokens"]:
-            cfg["trigger_tokens"] = cfg["target_tokens"] + 1
-        return cfg["trigger_tokens"]
+            trigger_tokens = self._to_int(raw_trigger, trigger_default, 512)
+        if trigger_tokens <= target_tokens:
+            trigger_tokens = target_tokens + 1
+        return trigger_tokens
 
     async def _compact_one_conversation(
         self,
         conv: ConversationV2,
-        cfg: dict[str, Any],
+        cfg: CompactionConfig,
     ) -> str:
         eligibility = self._check_eligibility(conv, cfg)
         if not eligibility.eligible:
@@ -492,7 +516,7 @@ class PeriodicContextCompactionScheduler:
         if after_tokens >= eligibility.before_tokens:
             return "skipped"
 
-        if cfg["dry_run"]:
+        if cfg.dry_run:
             self._log_dry_run(conv, eligibility.before_tokens, after_tokens, round_result)
             return "skipped"
 
@@ -515,22 +539,22 @@ class PeriodicContextCompactionScheduler:
     def _check_eligibility(
         self,
         conv: ConversationV2,
-        cfg: dict[str, Any],
+        cfg: CompactionConfig,
     ) -> _EligibilityResult:
         history = conv.content
-        if not isinstance(history, list) or len(history) < cfg["min_messages"]:
+        if not isinstance(history, list) or len(history) < cfg.min_messages:
             return _EligibilityResult(eligible=False, messages=[], before_tokens=0)
 
-        if not self._is_idle_enough(conv.updated_at, cfg["min_idle_minutes"]):
+        if not self._is_idle_enough(conv.updated_at, cfg.min_idle_minutes):
             return _EligibilityResult(eligible=False, messages=[], before_tokens=0)
 
         messages = self._history_parser.parse(history)
-        if len(messages) < cfg["min_messages"]:
+        if len(messages) < cfg.min_messages:
             return _EligibilityResult(eligible=False, messages=[], before_tokens=0)
 
         trusted_usage = conv.token_usage if isinstance(conv.token_usage, int) else 0
         before_tokens = self._token_counter.count_tokens(messages, trusted_usage)
-        if before_tokens < cfg["trigger_tokens"]:
+        if before_tokens < cfg.trigger_tokens:
             return _EligibilityResult(eligible=False, messages=[], before_tokens=0)
 
         return _EligibilityResult(
@@ -543,16 +567,16 @@ class PeriodicContextCompactionScheduler:
         self,
         messages: list[Message],
         provider: Provider,
-        cfg: dict[str, Any],
+        cfg: CompactionConfig,
     ) -> _RoundResult:
         compressed = messages
         changed = False
         rounds = 0
         instruction = self._resolve_instruction(cfg)
 
-        for _ in range(cfg["max_rounds"]):
+        for _ in range(cfg.max_rounds):
             current_tokens = self._token_counter.count_tokens(compressed)
-            if current_tokens <= cfg["target_tokens"]:
+            if current_tokens <= cfg.target_tokens:
                 break
 
             manager = self._build_context_manager(cfg, provider, instruction)
@@ -568,16 +592,16 @@ class PeriodicContextCompactionScheduler:
 
     @staticmethod
     def _build_context_manager(
-        cfg: dict[str, Any],
+        cfg: CompactionConfig,
         provider: Provider,
         instruction: str,
     ) -> ContextManager:
         return ContextManager(
             ContextConfig(
-                max_context_tokens=cfg["target_tokens"],
+                max_context_tokens=cfg.target_tokens,
                 enforce_max_turns=-1,
-                truncate_turns=cfg["truncate_turns"],
-                llm_compress_keep_recent=cfg["keep_recent"],
+                truncate_turns=cfg.truncate_turns,
+                llm_compress_keep_recent=cfg.keep_recent,
                 llm_compress_instruction=instruction,
                 llm_compress_provider=provider,
             )
@@ -641,13 +665,13 @@ class PeriodicContextCompactionScheduler:
 
     async def _resolve_provider(
         self,
-        cfg: dict[str, Any],
+        cfg: CompactionConfig,
         umo: str,
     ) -> Provider | None:
         provider = None
 
-        if cfg["provider_id"]:
-            provider = await self.provider_manager.get_provider_by_id(cfg["provider_id"])
+        if cfg.provider_id:
+            provider = await self.provider_manager.get_provider_by_id(cfg.provider_id)
         else:
             provider = self.provider_manager.get_using_provider(
                 provider_type=ProviderType.CHAT_COMPLETION,
@@ -663,14 +687,14 @@ class PeriodicContextCompactionScheduler:
             logger.warning(
                 "[ContextCompact] provider unavailable for umo=%s provider_id=%s",
                 umo,
-                cfg["provider_id"],
+                cfg.provider_id,
             )
             return None
         return provider
 
-    def _resolve_instruction(self, cfg: dict[str, Any]) -> str:
-        if cfg["instruction"]:
-            return cfg["instruction"]
+    def _resolve_instruction(self, cfg: CompactionConfig) -> str:
+        if cfg.instruction:
+            return cfg.instruction
 
         provider_settings = self.config_manager.default_conf.get("provider_settings", {})
         base_instruction = provider_settings.get("llm_compress_instruction", "")
