@@ -222,8 +222,11 @@ class SessionWaiterManager:
                 current.controller.current_event.set()
             return True
 
-    def has_waiter(self, event: MessageEvent) -> bool:
+    def has_active_waiter(self, event: MessageEvent) -> bool:
         return event.unified_msg_origin in self._entries
+
+    def has_waiter(self, event: MessageEvent) -> bool:
+        return self.has_active_waiter(event)
 
     async def dispatch(self, event: MessageEvent) -> dict[str, Any]:
         session_key = event.unified_msg_origin
