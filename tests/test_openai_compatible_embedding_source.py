@@ -50,6 +50,7 @@ def _make_provider_config(**overrides) -> dict:
     ("api_base", "expected_base_url"),
     [
         ("", "https://api.openai.com/v1"),
+        ("api.openai.com", "https://api.openai.com/v1"),
         ("https://example.com", "https://example.com/v1"),
         ("https://example.com/", "https://example.com/v1"),
         (
@@ -87,6 +88,7 @@ async def test_openai_compatible_embedding_provider_appends_v1_only_for_host_url
         )
     finally:
         await provider.terminate()
+        assert provider.client.closed is True
 
 
 @pytest.mark.asyncio
@@ -109,6 +111,7 @@ async def test_openai_compatible_embedding_provider_preserves_existing_api_path(
         )
     finally:
         await provider.terminate()
+        assert provider.client.closed is True
 
 
 @pytest.mark.asyncio
@@ -136,3 +139,5 @@ async def test_openai_compatible_embedding_provider_sends_dimensions_only_when_e
     finally:
         await provider_without_dimensions.terminate()
         await provider_with_dimensions.terminate()
+        assert provider_without_dimensions.client.closed is True
+        assert provider_with_dimensions.client.closed is True

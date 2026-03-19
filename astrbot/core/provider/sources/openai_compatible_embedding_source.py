@@ -11,12 +11,23 @@ from ..register import register_provider_adapter
 
 
 def normalize_openai_compatible_embedding_api_base(api_base: str) -> str:
-    """Normalize API base while preserving provider-specific path prefixes."""
+    """Normalize API base while preserving provider-specific path prefixes.
+
+    Handles URLs with or without scheme:
+    - Empty/whitespace → https://api.openai.com/v1
+    - Host only (api.openai.com) → https://api.openai.com/v1
+    - Full URL with path (https://example.com/api/v3) → preserved as-is
+    """
     cleaned_api_base = api_base.strip().removesuffix("/")
     if not cleaned_api_base:
         return "https://api.openai.com/v1"
 
     parsed_api_base = urlsplit(cleaned_api_base)
+    # If no scheme, the URL is parsed incorrectly (host becomes path)
+    if not parsed_api_base.scheme:
+        cleaned_api_base = f"https://{cleaned_api_base}"
+        parsed_api_base = urlsplit(cleaned_api_base)
+
     if parsed_api_base.path and parsed_api_base.path != "/":
         return cleaned_api_base
 
@@ -59,19 +70,29 @@ class OpenAICompatibleEmbeddingProvider(EmbeddingProvider):
         super().__init__(provider_config, provider_settings)
         self.provider_config = provider_config
         self.provider_settings = provider_settings
+        self._http_client = None
+
         proxy = provider_config.get("proxy", "")
-        http_client = None
         if proxy:
             logger.info(f"[OpenAI Compatible Embedding] 使用代理: {proxy}")
-            http_client = httpx.AsyncClient(proxy=proxy)
+            self._http_client = httpx.AsyncClient(proxy=proxy)
+
+        try:
+            timeout = int(provider_config.get("timeout", 20))
+        except (ValueError, TypeError):
+            logger.warning(
+                "Invalid timeout value in provider config: '%s'. Using default 20s.",
+                provider_config.get("timeout"),
+            )
+            timeout = 20
 
         self.client = AsyncOpenAI(
             api_key=provider_config.get("embedding_api_key"),
             base_url=normalize_openai_compatible_embedding_api_base(
                 provider_config.get("embedding_api_base", "")
             ),
-            timeout=int(provider_config.get("timeout", 20)),
-            http_client=http_client,
+            timeout=timeout,
+            http_client=self._http_client,
         )
         self.model = provider_config.get("embedding_model", "text-embedding-3-small")
 
@@ -109,3 +130,5 @@ class OpenAICompatibleEmbeddingProvider(EmbeddingProvider):
     async def terminate(self):
         if self.client:
             await self.client.close()
+        if self._http_client:
+            await self._http_client.aclose()

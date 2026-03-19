@@ -22,7 +22,7 @@ After completing the configuration, click Save.
 > `OpenAI Compatible Embedding` includes a `send_dimensions_param` switch. When enabled, AstrBot sends `embedding_dimensions` to the upstream embedding API as the `dimensions` parameter. Disable it for OpenAI-compatible services that only need the local vector size and do not support `dimensions`.
 
 > [!NOTE]
-> The Volcengine preset defaults to `doubao-embedding-vision`. AstrBot's knowledge-base pipeline is still text chunking plus text embedding only, so this integration uses the model with text input only and does not add multimodal knowledge-base support yet,although it is a multimodal embedding model.
+> The Volcengine preset defaults to `doubao-embedding-vision`. AstrBot's knowledge-base pipeline is still text chunking plus text embedding only, so this integration uses the model with text input only and does not add multimodal knowledge-base support yet, although it is a multimodal embedding model.
 
 > [!NOTE]
 > The Ollama preset defaults to local `http://127.0.0.1:11434`, model `embeddinggemma`, and 768 dimensions. Before using it, run `ollama pull embeddinggemma` locally and make sure the Ollama service is running.
