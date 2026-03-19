@@ -1396,6 +1396,26 @@
                 "description": "API Base URL",
                 "hint": "Голоса OpenAI TTS: alloy, echo и др."
             },
+            "mimo-tts-voice": {
+                "description": "Голос",
+                "hint": "Имя голоса MiMo TTS. По умолчанию 'mimo_default'."
+            },
+            "mimo-tts-format": {
+                "description": "Формат вывода",
+                "hint": "Формат аудио, создаваемого MiMo TTS, например 'wav'."
+            },
+            "mimo-tts-style-prompt": {
+                "description": "Подсказка стиля",
+                "hint": "Задает стиль речи, тон или эмоцию, например мягкий, живой или спокойный. Необязательно."
+            },
+            "mimo-tts-dialect": {
+                "description": "Диалект",
+                "hint": "Диалект или акцент для синтезируемой речи, например сычуаньский диалект. Необязательно."
+            },
+            "mimo-tts-seed-text": {
+                "description": "Начальный текст",
+                "hint": "Эталонный текст, который помогает задать особенности голоса и манеру речи."
+            },
             "fishaudio-tts-character": {
                 "description": "Персонаж",
                 "hint": "Персонаж Fishaudio. По умолчанию Klee."

@@ -1393,6 +1393,26 @@
         "description": "voice",
         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
       },
+      "mimo-tts-voice": {
+        "description": "音色",
+        "hint": "MiMo TTS 的音色名称。默认值为 'mimo_default'。"
+      },
+      "mimo-tts-format": {
+        "description": "输出格式",
+        "hint": "MiMo TTS 生成音频的格式，例如 'wav'。"
+      },
+      "mimo-tts-style-prompt": {
+        "description": "风格提示词",
+        "hint": "用于控制生成语音的说话风格、语气或情绪，例如温柔、活泼、沉稳等。可留空。"
+      },
+      "mimo-tts-dialect": {
+        "description": "方言",
+        "hint": "指定生成语音时使用的方言或口音，例如四川话、粤语口音等。可留空。"
+      },
+      "mimo-tts-seed-text": {
+        "description": "种子文本",
+        "hint": "用于引导音色和说话方式的参考文本，会影响生成语音的表达风格。"
+      },
       "fishaudio-tts-character": {
         "description": "character",
         "hint": "fishaudio TTS 的角色。默认为可莉。更多角色请访问：https://fish.audio/zh-CN/discovery"

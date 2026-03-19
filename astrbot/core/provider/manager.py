@@ -399,6 +399,10 @@ class ProviderManager:
                 from .sources.openai_tts_api_source import (
                     ProviderOpenAITTSAPI as ProviderOpenAITTSAPI,
                 )
+            case "mimo_tts_api":
+                from .sources.mimo_tts_api_source import (
+                    ProviderMiMoTTSAPI as ProviderMiMoTTSAPI,
+                )
             case "genie_tts":
                 from .sources.genie_tts import (
                     GenieTTSProvider as GenieTTSProvider,
