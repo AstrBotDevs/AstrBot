@@ -10,7 +10,27 @@ from astrbot.core.utils.astrbot_path import astrbot_paths
 
 from ..utils import check_astrbot_root
 
+# Default dashboard password (used for initial configuration only).
 DEFAULT_DASHBOARD_PASSWORD = "astrbot"
+
+# Parameters for secure dashboard password hashing.
+# Note: In a full implementation, salts should be unique per password.
+DASHBOARD_PASSWORD_SALT = b"astrbot-dashboard"
+DASHBOARD_PASSWORD_ITERATIONS = 200_000
+
+
+def hash_dashboard_password_secure(value: str) -> str:
+    """Securely hash a Dashboard password using PBKDF2-HMAC-SHA256."""
+    dk = hashlib.pbkdf2_hmac(
+        "sha256",
+        value.encode(),
+        DASHBOARD_PASSWORD_SALT,
+        DASHBOARD_PASSWORD_ITERATIONS,
+    )
+    return dk.hex()
+
+
+# Legacy default password hashes kept for backward compatibility.
 DEFAULT_DASHBOARD_PASSWORD_MD5 = hashlib.md5(
     DEFAULT_DASHBOARD_PASSWORD.encode()
 ).hexdigest()
@@ -18,14 +38,19 @@ DEFAULT_DASHBOARD_PASSWORD_SHA256 = hashlib.sha256(
     DEFAULT_DASHBOARD_PASSWORD.encode()
 ).hexdigest()
 
+# Secure default password hash for new configurations.
+DEFAULT_DASHBOARD_PASSWORD_HASH = hash_dashboard_password_secure(
+    DEFAULT_DASHBOARD_PASSWORD
+)
+
 
 def hash_dashboard_password(value: str) -> str:
-    """Hash Dashboard password for storage."""
-    return hashlib.sha256(value.encode()).hexdigest()
+    """Hash Dashboard password for storage (secure, PBKDF2-HMAC-SHA256)."""
+    return hash_dashboard_password_secure(value)
 
 
 def hash_dashboard_password_md5(value: str) -> str:
-    """Hash Dashboard password with the legacy MD5 algorithm."""
+    """Hash Dashboard password with the legacy MD5 algorithm (compatibility only)."""
     return hashlib.md5(value.encode()).hexdigest()
 
 
