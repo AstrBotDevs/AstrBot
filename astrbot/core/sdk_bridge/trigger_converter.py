@@ -7,7 +7,6 @@ import typing
 from dataclasses import dataclass
 from typing import Any, get_type_hints
 
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot_sdk.events import MessageEvent as SdkMessageEvent
 from astrbot_sdk.protocol.descriptors import (
     CommandTrigger,
@@ -19,6 +18,8 @@ from astrbot_sdk.protocol.descriptors import (
     ParamSpec,
     PlatformFilterSpec,
 )
+
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 
 @dataclass(slots=True)
