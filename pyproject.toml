@@ -3,7 +3,7 @@ name = "AstrBot"
 version = "4.21.0"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 
 keywords = ["Astrbot", "Astrbot Module", "Astrbot Plugin"]
 
@@ -66,6 +66,7 @@ dependencies = [
   "packaging>=24.2",
   "quart-cors>=0.8.0",
   "anyio>=4.12.1",
+  "argon2>=0.1.10",
 ]
 
 [dependency-groups]
