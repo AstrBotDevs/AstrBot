@@ -439,6 +439,14 @@ class ProviderManager:
                 from .sources.gemini_tts_source import (
                     ProviderGeminiTTSAPI as ProviderGeminiTTSAPI,
                 )
+            case "glm_asr":
+                from .sources.glm_asr_source import (
+                    ProviderGLMASR as ProviderGLMASR,
+                )
+            case "glm_tts":
+                from .sources.glm_tts_source import (
+                    ProviderGLMTTS as ProviderGLMTTS,
+                )
             case "openai_embedding":
                 from .sources.openai_embedding_source import (
                     OpenAIEmbeddingProvider as OpenAIEmbeddingProvider,

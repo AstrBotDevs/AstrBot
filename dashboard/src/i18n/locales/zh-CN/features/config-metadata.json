@@ -1509,6 +1509,18 @@
       "auto_save_history": {
         "description": "由 Coze 管理对话记录",
         "hint": "启用后，将由 Coze 进行对话历史记录管理, 此时 AstrBot 本地保存的上下文不会生效(仅供浏览), 对 AstrBot 的上下文进行的操作也不会生效。如果为禁用, 则使用 AstrBot 管理上下文。"
+      },
+      "glm_tts_voice": {
+        "description": "声音",
+        "hint": "GLM-TTS 声音。可选声音：tongtong, chuichui, xiaochen, jam, kazi, douji, luodo。"
+      },
+      "glm_tts_speed": {
+        "description": "语速",
+        "hint": "合成语速，范围 [0.5, 2.0]，默认 1.0。"
+      },
+      "glm_tts_volume": {
+        "description": "音量",
+        "hint": "合成音量，范围 (0, 10]，默认 1.0。"
       }
     }
   },
