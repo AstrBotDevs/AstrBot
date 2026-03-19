@@ -38,9 +38,11 @@ AstrBot 给每个沙盒环境限制最高 1 CPU 和 512 MB 内存。
 
 ## 推荐：使用 Shipyard Neo
 
-### 使用 Docker Compose 联合部署 AstrBot 和 Shipyard Neo
+### 单独部署 Shipyard Neo（推荐）
 
-如果您准备使用当前推荐的部署方式，建议直接使用 `Shipyard Neo` 仓库中的 Docker Compose 部署方案。
+如果您准备长期使用 `Shipyard Neo`，更推荐将它**单独部署在一台资源更充足的机器上**，例如您的 homelab、局域网服务器，或独立云主机，然后再让 AstrBot 远程接入 Bay。
+
+原因是：`Shipyard Neo` 在启用浏览器能力时需要运行较重的浏览器运行时。对于资源紧张的云服务器，把 AstrBot 和 `Shipyard Neo` 部署在同一台机器上，通常会让 CPU 和内存压力都比较大，稳定性和体验都不理想。
 
 大致步骤如下：
 
@@ -48,16 +50,15 @@ AstrBot 给每个沙盒环境限制最高 1 CPU 和 512 MB 内存。
 git clone https://github.com/AstrBotDevs/shipyard-neo
 cd shipyard-neo/deploy/docker
 # 修改 config.yaml 中的关键配置，例如 security.api_key
-# 如需和 AstrBot 一起启动，可使用 overlay compose 文件
-docker compose -f docker-compose.yaml -f docker-compose.with-astrbot.yaml up -d
+docker compose up -d
 ```
 
-联合部署后：
+部署完成后：
 
-- AstrBot 默认访问地址为 `http://localhost:6185`
-- Bay 默认访问地址为 `http://localhost:8114`
-- 在 AstrBot 控制台中，`Shipyard Neo API Endpoint` 可填写 `http://bay:8114`
-- 若使用官方联合部署方式，AstrBot 会自动发现 Bay 的 `credentials.json`，此时 `Shipyard Neo Access Token` 可留空
+- Bay 默认监听在 `http://<your-host>:8114`
+- 在 AstrBot 控制台中选择 `Shipyard Neo` 驱动器
+- `Shipyard Neo API Endpoint` 填写对应地址，例如 `http://<your-host>:8114`
+- `Shipyard Neo Access Token` 填写 Bay API Key；如果 AstrBot 能访问 Bay 的 `credentials.json`，也可以留空让 AstrBot 自动发现
 
 ### 参考：`config.yaml` 完整示例（附说明）
 
@@ -254,26 +255,6 @@ gc:
 - **希望减少冷启动时间时**：保留 `warm_pool.enabled: true`，并适当提高常用 profile 的 `warm_pool_size`
 - **资源较紧张时**：可先把 `warm_pool_size` 改小，甚至关闭 `warm_pool`
 - **如果需要代理访问外网**：配置顶层 `proxy`，或按 profile 单独覆盖
-
-### 单独部署 Shipyard Neo
-
-如果您已经部署了 AstrBot，也可以单独部署 `Shipyard Neo`，然后再让 AstrBot 接入它。
-
-大致步骤如下：
-
-```bash
-git clone https://github.com/AstrBotDevs/shipyard-neo
-cd shipyard-neo/deploy/docker
-# 修改 config.yaml 中的关键配置
-docker compose up -d
-```
-
-部署完成后：
-
-- Bay 默认监听在 `http://<your-host>:8114`
-- 在 AstrBot 控制台中选择 `Shipyard Neo` 驱动器
-- `Shipyard Neo API Endpoint` 填写对应地址，例如 `http://<your-host>:8114`
-- `Shipyard Neo Access Token` 填写 Bay API Key；如果 AstrBot 能访问 Bay 的 `credentials.json`，也可以留空让 AstrBot自动发现
 
 ### 关于 Shipyard Neo 的复用与持久化
 
