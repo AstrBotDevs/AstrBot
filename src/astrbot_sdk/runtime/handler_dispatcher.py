@@ -39,6 +39,7 @@ from .._invocation_context import caller_plugin_scope
 from .._plugin_logger import PluginLogger
 from .._star_runtime import bind_star_runtime
 from .._typing_utils import unwrap_optional
+from ..clients.llm import LLMResponse
 from ..context import CancelToken, Context
 from ..conversation import (
     DEFAULT_BUSY_MESSAGE,
@@ -49,8 +50,13 @@ from ..conversation import (
 )
 from ..events import MessageEvent
 from ..filters import LocalFilterBinding
+from ..llm.entities import ProviderRequest
 from ..message_components import BaseMessageComponent
-from ..message_result import MessageChain, MessageEventResult, coerce_message_chain
+from ..message_result import (
+    MessageChain,
+    MessageEventResult,
+    coerce_message_chain,
+)
 from ..protocol.descriptors import (
     CommandTrigger,
     MessageTrigger,
@@ -60,12 +66,12 @@ from ..protocol.descriptors import (
 from ..schedule import ScheduleContext
 from ..session_waiter import SessionWaiterManager
 from ..star import Star
-from .capability_dispatcher import CapabilityDispatcher
 from ._command_matching import (
     build_command_args,
     build_regex_args,
     match_command_name,
 )
+from .capability_dispatcher import CapabilityDispatcher
 from .limiter import LimiterEngine
 from .loader import LoadedHandler
 
@@ -74,6 +80,13 @@ from .loader import LoadedHandler
 class _ActiveConversation:
     session: ConversationSession
     task: asyncio.Task[Any]
+
+
+@dataclass(slots=True)
+class _InjectedEventPayloads:
+    provider_request: ProviderRequest | None = None
+    llm_response: LLMResponse | None = None
+    event_result: MessageEventResult | None = None
 
 
 class HandlerDispatcher:
@@ -205,6 +218,8 @@ class HandlerDispatcher:
         schedule_context: ScheduleContext | None = None,
     ) -> dict[str, Any]:
         summary = {"sent_message": False, "stop": False, "call_llm": False}
+        injected_payloads = _InjectedEventPayloads()
+        event_type = self._event_type_name(event)
         try:
             limiter = loaded.limiter
             if limiter is not None:
@@ -254,6 +269,7 @@ class HandlerDispatcher:
                         plugin_id=self._resolve_plugin_id(loaded),
                         handler_ref=loaded.descriptor.id,
                         schedule_context=schedule_context,
+                        injected_payloads=injected_payloads,
                     )
                 )
                 if inspect.isasyncgen(result):
@@ -263,6 +279,11 @@ class HandlerDispatcher:
                             await self._handle_result_item(item, event, ctx),
                         )
                     summary["stop"] = bool(summary.get("stop")) or event.is_stopped()
+                    self._append_injected_payloads(
+                        summary,
+                        injected_payloads,
+                        event_type=event_type,
+                    )
                     return summary
                 if inspect.isawaitable(result):
                     result = await result
@@ -272,6 +293,11 @@ class HandlerDispatcher:
                         await self._handle_result_item(result, event, ctx),
                     )
             summary["stop"] = bool(summary.get("stop")) or event.is_stopped()
+            self._append_injected_payloads(
+                summary,
+                injected_payloads,
+                event_type=event_type,
+            )
             return summary
         except Exception as exc:
             await self._handle_error(
@@ -339,6 +365,7 @@ class HandlerDispatcher:
         handler_ref: str | None = None,
         schedule_context: ScheduleContext | None = None,
         conversation_session: ConversationSession | None = None,
+        injected_payloads: _InjectedEventPayloads | None = None,
     ) -> list[Any]:
         """构建 handler 参数列表。"""
         from loguru import logger
@@ -371,6 +398,7 @@ class HandlerDispatcher:
                     ctx,
                     schedule_context,
                     conversation_session,
+                    injected_payloads=injected_payloads,
                 )
 
             # 2. Fallback 按名字注入
@@ -423,6 +451,8 @@ class HandlerDispatcher:
                 if not str(key).startswith("__command_")
             }
         )
+        if not isinstance(loaded.descriptor.trigger, CommandTrigger):
+            return parsed_args, None
         model_param = resolve_command_model_param(loaded.callable)
         if model_param is None:
             return parsed_args, None
@@ -456,7 +486,7 @@ class HandlerDispatcher:
     ) -> dict[str, Any]:
         assert loaded.conversation is not None
         conversation_meta = loaded.conversation
-        summary = {"sent_message": False, "stop": False, "call_llm": False}
+        summary = {"sent_message": False, "stop": True, "call_llm": False}
         key = f"{self._resolve_plugin_id(loaded)}:{event.session_id}"
         active = self._conversations.get(key)
         if active is not None and not active.task.done():
@@ -584,6 +614,8 @@ class HandlerDispatcher:
         ctx: Context,
         schedule_context: ScheduleContext | None,
         conversation_session: ConversationSession | None,
+        *,
+        injected_payloads: _InjectedEventPayloads | None = None,
     ) -> Any:
         """根据类型注解注入参数。"""
         param_type, _is_optional = unwrap_optional(param_type)
@@ -612,8 +644,116 @@ class HandlerDispatcher:
             isinstance(param_type, type) and issubclass(param_type, ConversationSession)
         ):
             return conversation_session
+        if param_type is ProviderRequest or (
+            isinstance(param_type, type) and issubclass(param_type, ProviderRequest)
+        ):
+            return self._inject_provider_request(event, injected_payloads)
+        if param_type is LLMResponse or (
+            isinstance(param_type, type) and issubclass(param_type, LLMResponse)
+        ):
+            return self._inject_llm_response(event, injected_payloads)
+        if param_type is MessageEventResult or (
+            isinstance(param_type, type) and issubclass(param_type, MessageEventResult)
+        ):
+            return self._inject_event_result(event, injected_payloads)
 
         return None
+
+    @staticmethod
+    def _event_type_name(event: MessageEvent) -> str:
+        raw = event.raw if isinstance(event.raw, dict) else {}
+        value = raw.get("event_type") or raw.get("type")
+        return str(value or "")
+
+    @staticmethod
+    def _payload_from_event(event: MessageEvent, key: str) -> dict[str, Any] | None:
+        raw = event.raw if isinstance(event.raw, dict) else {}
+        payload = raw.get(key)
+        if isinstance(payload, dict):
+            return payload
+        nested_raw = raw.get("raw")
+        if isinstance(nested_raw, dict):
+            nested_payload = nested_raw.get(key)
+            if isinstance(nested_payload, dict):
+                return nested_payload
+        return None
+
+    def _inject_provider_request(
+        self,
+        event: MessageEvent,
+        injected_payloads: _InjectedEventPayloads | None,
+    ) -> ProviderRequest | None:
+        if injected_payloads is None:
+            payload = self._payload_from_event(event, "provider_request")
+            return (
+                ProviderRequest.from_payload(payload) if payload is not None else None
+            )
+        if injected_payloads.provider_request is None:
+            payload = self._payload_from_event(event, "provider_request")
+            if payload is None:
+                return None
+            injected_payloads.provider_request = ProviderRequest.from_payload(payload)
+        return injected_payloads.provider_request
+
+    def _inject_llm_response(
+        self,
+        event: MessageEvent,
+        injected_payloads: _InjectedEventPayloads | None,
+    ) -> LLMResponse | None:
+        if injected_payloads is None:
+            payload = self._payload_from_event(event, "llm_response")
+            return LLMResponse.model_validate(payload) if payload is not None else None
+        if injected_payloads.llm_response is None:
+            payload = self._payload_from_event(event, "llm_response")
+            if payload is None:
+                return None
+            injected_payloads.llm_response = LLMResponse.model_validate(payload)
+        return injected_payloads.llm_response
+
+    def _inject_event_result(
+        self,
+        event: MessageEvent,
+        injected_payloads: _InjectedEventPayloads | None,
+    ) -> MessageEventResult | None:
+        if injected_payloads is None:
+            payload = self._payload_from_event(event, "event_result")
+            return (
+                MessageEventResult.from_payload(payload)
+                if payload is not None
+                else None
+            )
+        if injected_payloads.event_result is None:
+            payload = self._payload_from_event(event, "event_result")
+            if payload is None:
+                return None
+            injected_payloads.event_result = MessageEventResult.from_payload(payload)
+        return injected_payloads.event_result
+
+    @staticmethod
+    def _append_injected_payloads(
+        summary: dict[str, Any],
+        injected_payloads: _InjectedEventPayloads,
+        *,
+        event_type: str,
+    ) -> None:
+        if (
+            event_type == "llm_request"
+            and injected_payloads.provider_request is not None
+        ):
+            summary["provider_request"] = (
+                injected_payloads.provider_request.to_payload()
+            )
+        elif (
+            event_type == "llm_response" and injected_payloads.llm_response is not None
+        ):
+            summary["llm_response"] = injected_payloads.llm_response.model_dump(
+                exclude_none=True
+            )
+        elif (
+            event_type == "decorating_result"
+            and injected_payloads.event_result is not None
+        ):
+            summary["event_result"] = injected_payloads.event_result.to_payload()
 
     def _format_handler_injection_error(
         self,

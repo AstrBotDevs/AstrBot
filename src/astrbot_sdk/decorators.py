@@ -3,13 +3,30 @@
 提供声明式的方法来注册 handler 和 capability。
 装饰器会在方法上附加元数据，由 Star.__init_subclass__ 自动收集。
 
-可用的装饰器：
+触发器装饰器：
     - @on_command: 命令触发器
     - @on_message: 消息触发器（关键词/正则）
     - @on_event: 事件触发器
     - @on_schedule: 定时任务触发器
-    - @require_admin: 权限标记
+    - @conversation_command: 带会话生命周期的命令触发器
+
+权限与过滤装饰器：
+    - @require_admin / @admin_only: 管理员权限标记
+    - @platforms: 限定平台
+    - @group_only / @private_only: 群聊/私聊限定
+    - @message_types: 消息类型过滤
+
+限流装饰器：
+    - @rate_limit: 滑动窗口限流
+    - @cooldown: 冷却时间
+
+优先级装饰器：
+    - @priority: 设置执行优先级
+
+能力导出装饰器：
     - @provide_capability: 声明对外暴露的能力
+    - @register_llm_tool: 注册 LLM 工具
+    - @register_agent: 注册 Agent
 
 Example:
     class MyPlugin(Star):
@@ -645,8 +662,35 @@ def conversation_command(
     busy_message: str | None = None,
     grace_period: float = 1.0,
 ) -> Callable[[HandlerCallable], HandlerCallable]:
+    """注册带会话生命周期的命令处理方法。
+
+    在 ``on_command`` 基础上附加会话元数据，支持超时、并发策略和宽限期控制。
+
+    Args:
+        command: 命令名称或序列（首项为正式名，其余视为别名）
+        aliases: 额外别名列表
+        description: 命令描述
+        timeout: 会话超时时间（秒），必须为正整数
+        mode: 会话冲突时的行为：
+            - ``"replace"``: 替换当前会话
+            - ``"reject"``: 拒绝新请求
+        busy_message: 拒绝新请求时的提示消息
+        grace_period: 宽限期（秒），用于会话生命周期处理
+
+    Returns:
+        装饰器函数
+
+    Raises:
+        ValueError: mode 不合法、timeout 非正整数或 grace_period 非正数
+
+    Example:
+        @conversation_command("chat", timeout=120, mode="reject", busy_message="请稍后再试")
+        async def chat(self, event: MessageEvent, ctx: Context):
+            await event.reply("开始对话...")
+    """
     if mode not in {"replace", "reject"}:
         raise ValueError("conversation_command mode must be 'replace' or 'reject'")
+    # bool 是 int 子类，需单独排除
     if isinstance(timeout, bool) or int(timeout) <= 0:
         raise ValueError("conversation_command timeout must be a positive integer")
     if float(grace_period) <= 0:

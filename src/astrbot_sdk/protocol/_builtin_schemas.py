@@ -642,6 +642,15 @@ CONVERSATION_GET_OUTPUT_SCHEMA = _object_schema(
     required=("conversation",),
     conversation=_nullable(CONVERSATION_RECORD_SCHEMA),
 )
+CONVERSATION_GET_CURRENT_INPUT_SCHEMA = _object_schema(
+    required=("session",),
+    session={"type": "string"},
+    create_if_not_exists={"type": "boolean"},
+)
+CONVERSATION_GET_CURRENT_OUTPUT_SCHEMA = _object_schema(
+    required=("conversation",),
+    conversation=_nullable(CONVERSATION_RECORD_SCHEMA),
+)
 CONVERSATION_LIST_INPUT_SCHEMA = _object_schema(
     session=_nullable({"type": "string"}),
     platform_id=_nullable({"type": "string"}),
@@ -942,6 +951,14 @@ PROVIDER_MANAGER_GET_BY_ID_OUTPUT_SCHEMA = _object_schema(
     required=("provider",),
     provider=_nullable(MANAGED_PROVIDER_RECORD_SCHEMA),
 )
+PROVIDER_MANAGER_GET_MERGED_PROVIDER_CONFIG_INPUT_SCHEMA = _object_schema(
+    required=("provider_id",),
+    provider_id={"type": "string"},
+)
+PROVIDER_MANAGER_GET_MERGED_PROVIDER_CONFIG_OUTPUT_SCHEMA = _object_schema(
+    required=("config",),
+    config=_nullable({"type": "object"}),
+)
 PROVIDER_MANAGER_LOAD_INPUT_SCHEMA = _object_schema(
     required=("provider_config",),
     provider_config={"type": "object"},
@@ -1199,6 +1216,10 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": CONVERSATION_GET_INPUT_SCHEMA,
         "output": CONVERSATION_GET_OUTPUT_SCHEMA,
     },
+    "conversation.get_current": {
+        "input": CONVERSATION_GET_CURRENT_INPUT_SCHEMA,
+        "output": CONVERSATION_GET_CURRENT_OUTPUT_SCHEMA,
+    },
     "conversation.list": {
         "input": CONVERSATION_LIST_INPUT_SCHEMA,
         "output": CONVERSATION_LIST_OUTPUT_SCHEMA,
@@ -1331,6 +1352,10 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
     "provider.manager.get_by_id": {
         "input": PROVIDER_MANAGER_GET_BY_ID_INPUT_SCHEMA,
         "output": PROVIDER_MANAGER_GET_BY_ID_OUTPUT_SCHEMA,
+    },
+    "provider.manager.get_merged_provider_config": {
+        "input": PROVIDER_MANAGER_GET_MERGED_PROVIDER_CONFIG_INPUT_SCHEMA,
+        "output": PROVIDER_MANAGER_GET_MERGED_PROVIDER_CONFIG_OUTPUT_SCHEMA,
     },
     "provider.manager.load": {
         "input": PROVIDER_MANAGER_LOAD_INPUT_SCHEMA,
@@ -1555,6 +1580,8 @@ __all__ = [
     "PROVIDER_MANAGER_DELETE_OUTPUT_SCHEMA",
     "PROVIDER_MANAGER_GET_BY_ID_INPUT_SCHEMA",
     "PROVIDER_MANAGER_GET_BY_ID_OUTPUT_SCHEMA",
+    "PROVIDER_MANAGER_GET_MERGED_PROVIDER_CONFIG_INPUT_SCHEMA",
+    "PROVIDER_MANAGER_GET_MERGED_PROVIDER_CONFIG_OUTPUT_SCHEMA",
     "PROVIDER_MANAGER_GET_INSTS_INPUT_SCHEMA",
     "PROVIDER_MANAGER_GET_INSTS_OUTPUT_SCHEMA",
     "PROVIDER_MANAGER_LOAD_INPUT_SCHEMA",
@@ -1639,6 +1666,8 @@ __all__ = [
     "CONVERSATION_CREATE_SCHEMA",
     "CONVERSATION_DELETE_INPUT_SCHEMA",
     "CONVERSATION_DELETE_OUTPUT_SCHEMA",
+    "CONVERSATION_GET_CURRENT_INPUT_SCHEMA",
+    "CONVERSATION_GET_CURRENT_OUTPUT_SCHEMA",
     "CONVERSATION_GET_INPUT_SCHEMA",
     "CONVERSATION_GET_OUTPUT_SCHEMA",
     "CONVERSATION_LIST_INPUT_SCHEMA",
