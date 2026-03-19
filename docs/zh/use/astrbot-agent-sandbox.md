@@ -266,7 +266,7 @@ gc:
 
 对 AstrBot 而言，当前会按请求的 `session_id` 维度缓存沙箱 booter；在主 Agent 默认流程下，这个 `session_id` 通常等于消息会话标识 `unified_msg_origin`。因此，同一消息会话的后续请求通常会继续复用同一个 Neo sandbox；如果沙箱失效，则会自动重建。
 
-关于 TTL 与数据持久化的更详细说明，请参考下文的 [`关于 Shipyard Neo Sandbox TTL`](docs/zh/use/astrbot-agent-sandbox.md) 与 [`关于沙盒环境的数据持久化`](docs/zh/use/astrbot-agent-sandbox.md) 小节。
+关于 TTL 与数据持久化的更详细说明，请参考下文的“关于 `Shipyard Neo Sandbox TTL`”与“关于沙盒环境的数据持久化”小节。
 
 ## 旧方案：Shipyard
 

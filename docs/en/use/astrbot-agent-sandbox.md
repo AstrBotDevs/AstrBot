@@ -267,7 +267,7 @@ A practical way to think about this file:
 
 From AstrBot's perspective, the current implementation caches the sandbox booter by request `session_id`; in the default main-agent flow, this `session_id` usually equals the message-session identifier `unified_msg_origin`. As a result, follow-up requests from the same message session will usually continue using the same Neo sandbox; if the sandbox becomes unavailable, it will be rebuilt automatically.
 
-For more detailed explanations of TTL and persistence behavior, see the later sections on [`Shipyard Neo Sandbox TTL`](docs/en/use/astrbot-agent-sandbox.md) and [`Data Persistence in the Sandbox Environment`](docs/en/use/astrbot-agent-sandbox.md).
+For more detailed explanations of TTL and persistence behavior, see the later sections on “`Shipyard Neo Sandbox TTL`” and “Data Persistence in the Sandbox Environment”.
 
 ## Legacy Option: Shipyard
 
