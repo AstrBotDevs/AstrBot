@@ -1,10 +1,17 @@
 from __future__ import annotations
 
-import json
-import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
+from ...._memory_utils import (
+    cosine_similarity,
+    extract_memory_text,
+    is_ttl_memory_entry,
+    memory_expiration_from_ttl,
+    memory_index_entry,
+    memory_keyword_score,
+    memory_value_for_search,
+)
 from ....errors import AstrBotError
 from ..bridge_base import CapabilityRouterBridgeBase
 
@@ -20,7 +27,7 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
         Returns:
             bool: 如果值包含 ``value`` 和 ``ttl_seconds`` 字段则返回 ``True``。
         """
-        return isinstance(value, dict) and "value" in value and "ttl_seconds" in value
+        return is_ttl_memory_entry(value)
 
     @classmethod
     def _memory_value_for_search(cls, stored: Any) -> dict[str, Any] | None:
@@ -32,12 +39,7 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
         Returns:
             dict[str, Any] | None: 解开 TTL 包装后的字典，无法解析时返回 ``None``。
         """
-        if not isinstance(stored, dict):
-            return None
-        if cls._is_ttl_memory_entry(stored):
-            value = stored.get("value")
-            return value if isinstance(value, dict) else None
-        return stored
+        return memory_value_for_search(stored)
 
     @classmethod
     def _extract_memory_text(cls, stored: Any) -> str:
@@ -49,14 +51,7 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
         Returns:
             str: 优先使用 ``embedding_text`` / ``content`` 等字段，兜底为 JSON 文本。
         """
-        value = cls._memory_value_for_search(stored)
-        if not isinstance(value, dict):
-            return ""
-        for field_name in ("embedding_text", "content", "summary", "title", "text"):
-            item = value.get(field_name)
-            if isinstance(item, str) and item.strip():
-                return item.strip()
-        return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+        return extract_memory_text(stored)
 
     @staticmethod
     def _memory_expiration_from_ttl(ttl_seconds: Any) -> datetime | None:
@@ -68,13 +63,7 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
         Returns:
             datetime | None: 绝对过期时间；当输入无效时返回 ``None``。
         """
-        try:
-            ttl = int(ttl_seconds)
-        except (TypeError, ValueError):
-            return None
-        if ttl < 1:
-            return None
-        return datetime.now(timezone.utc) + timedelta(seconds=ttl)
+        return memory_expiration_from_ttl(ttl_seconds)
 
     @staticmethod
     def _memory_keyword_score(query: str, key: str, text: str) -> float:
@@ -88,16 +77,7 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
         Returns:
             float: 基于键名和文本命中的粗粒度关键词分数。
         """
-        normalized_query = str(query).casefold()
-        if not normalized_query:
-            return 1.0
-        normalized_key = str(key).casefold()
-        normalized_text = str(text).casefold()
-        if normalized_query in normalized_key:
-            return 1.0
-        if normalized_query in normalized_text:
-            return 0.9
-        return 0.0
+        return memory_keyword_score(query, key, text)
 
     @staticmethod
     def _cosine_similarity(left: list[float], right: list[float]) -> float:
@@ -110,15 +90,7 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
         Returns:
             float: 余弦相似度；输入不合法时返回 ``0.0``。
         """
-        if not left or not right or len(left) != len(right):
-            return 0.0
-        left_norm = math.sqrt(sum(value * value for value in left))
-        right_norm = math.sqrt(sum(value * value for value in right))
-        if left_norm <= 0 or right_norm <= 0:
-            return 0.0
-        return sum(a * b for a, b in zip(left, right, strict=False)) / (
-            left_norm * right_norm
-        )
+        return cosine_similarity(left, right)
 
     def _resolve_memory_embedding_provider_id(
         self,
@@ -170,21 +142,7 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
         Returns:
             dict[str, Any]: 统一后的索引项，包含 ``text``、``embedding``、``provider_id``。
         """
-        if isinstance(entry, dict):
-            return {
-                "text": str(entry.get("text", text)),
-                "embedding": (
-                    [float(item) for item in entry.get("embedding", [])]
-                    if isinstance(entry.get("embedding"), list)
-                    else None
-                ),
-                "provider_id": (
-                    str(entry.get("provider_id")).strip()
-                    if entry.get("provider_id") is not None
-                    else None
-                ),
-            }
-        return {"text": text, "embedding": None, "provider_id": None}
+        return memory_index_entry(entry, text=text)
 
     def _clear_memory_sidecars(self, key: str) -> None:
         """清理指定 memory 键对应的所有 sidecar 状态。
