@@ -9,6 +9,9 @@ if TYPE_CHECKING:
         _event_streams: dict[str, Any]
         _plugin_bridge: Any
         _star_context: Any
+        _memory_index_by_plugin: dict[str, dict[str, dict[str, Any]]]
+        _memory_dirty_keys_by_plugin: dict[str, set[str]]
+        _memory_expires_at_by_plugin: dict[str, dict[str, Any]]
 
         def register(
             self,
@@ -74,6 +77,14 @@ if TYPE_CHECKING:
             raw_config: Any,
             session_id: str,
         ) -> dict[str, Any]: ...
+
+        def _get_typed_provider(
+            self,
+            payload: dict[str, Any],
+            capability_name: str,
+            provider_label: str,
+            expected_type: type[Any],
+        ) -> Any: ...
 
         def _reserved_plugin_names(self) -> set[str]: ...
 
