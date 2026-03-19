@@ -1984,9 +1984,9 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                     },
                     "send_dimensions_param": {
-                        "description": "provider_group.provider.send_dimensions_param.description",
+                        "description": "透传 dimensions 参数",
                         "type": "bool",
-                        "hint": "provider_group.provider.send_dimensions_param.hint",
+                        "hint": "启用后，将 embedding_dimensions 作为 dimensions 参数发送给上游 API。支持自定义维度的服务（OpenAI、智谱、火山等）可开启此项以实现降维；若上游不支持自定义维度则关闭。",
                         "condition": {"type": "openai_compatible_embedding"},
                     },
                     "volcengine_cluster": {
@@ -2409,9 +2409,9 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                     },
                     "proxy": {
-                        "description": "provider_group.provider.proxy.description",
+                        "description": "代理地址",
                         "type": "string",
-                        "hint": "provider_group.provider.proxy.hint",
+                        "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。",
                     },
                     "model": {
                         "description": "模型 ID",
