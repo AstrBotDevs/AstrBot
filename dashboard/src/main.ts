@@ -12,7 +12,6 @@ import print from "vue3-print-nb";
 import { loader } from "@guolao/vue-monaco-editor";
 import {
   getApiBaseUrl,
-  getApiBaseUrlValidationError,
   resolveApiUrl,
   resolvePublicUrl,
   setApiBaseUrl,
@@ -85,13 +84,7 @@ async function initApp() {
     );
   }
 
-  const apiBaseUrlValidationError = getApiBaseUrlValidationError(apiBaseUrl);
-  if (apiBaseUrlValidationError) {
-    console.warn(apiBaseUrlValidationError);
-    setApiBaseUrl("");
-  } else {
-    setApiBaseUrl(apiBaseUrl);
-  }
+  setApiBaseUrl(apiBaseUrl);
 
   // Keep fetch() calls consistent with axios by automatically attaching the JWT.
   // Some parts of the UI use fetch directly; without this, those requests will 401.

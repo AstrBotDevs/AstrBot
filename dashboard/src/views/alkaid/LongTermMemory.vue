@@ -467,7 +467,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import axios from '@/utils/request';
 import * as d3 from 'd3';
 import { useModuleI18n } from '@/i18n/composables';
 import { normalizeTextInput } from '@/utils/inputValue';

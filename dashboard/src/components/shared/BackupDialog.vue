@@ -680,7 +680,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import axios from 'axios'
+import axios from '@/utils/request'
 import { resolveApiUrl } from '@/utils/request'
 import { useI18n } from '@/i18n/composables'
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'

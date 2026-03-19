@@ -207,7 +207,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import axios from 'axios'
+import axios from '@/utils/request'
 import { useI18n } from '@/i18n/composables'
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot'
 import ConsoleDisplayer from './ConsoleDisplayer.vue'

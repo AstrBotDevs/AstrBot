@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import axios from 'axios';
+import axios from '@/utils/request';
 
 export const useCommonStore = defineStore({
   id: 'common',

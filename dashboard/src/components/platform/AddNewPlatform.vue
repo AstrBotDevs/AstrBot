@@ -558,7 +558,7 @@
 
 
 <script>
-import axios from 'axios';
+import axios from '@/utils/request';
 import { resolveApiUrl } from '@/utils/request';
 import { useModuleI18n } from '@/i18n/composables';
 import { getPlatformIcon, getPlatformDescription, getTutorialLink } from '@/utils/platformUtils';

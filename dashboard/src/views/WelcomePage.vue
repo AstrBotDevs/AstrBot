@@ -275,11 +275,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted } from "vue";
-import axios, {
-  getApiBaseUrlValidationError,
-  normalizeConfiguredApiBaseUrl,
-  setApiBaseUrl,
-} from "@/utils/request";
+import axios from "@/utils/request";
 import AddNewPlatform from "@/components/platform/AddNewPlatform.vue";
 import ProviderConfigDialog from "@/components/chat/ProviderConfigDialog.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";

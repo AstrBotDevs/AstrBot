@@ -361,7 +361,7 @@
 
 
 <script>
-import axios from 'axios';
+import axios from '@/utils/request';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';

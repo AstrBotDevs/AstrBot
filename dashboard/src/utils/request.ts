@@ -1,8 +1,6 @@
 import axios, { type InternalAxiosRequestConfig } from "axios";
 
 const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//;
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
-let interceptorsConfigured = false;
 
 function isAbsoluteUrl(value: string): boolean {
   return ABSOLUTE_URL_PATTERN.test(value);
@@ -67,117 +65,13 @@ function normalizeBaseUrl(baseUrl: string | null | undefined): string {
   return stripTrailingSlashes(baseUrl?.trim() || "");
 }
 
-function shouldUseDevProxyBase(baseUrl: string): boolean {
-  if (!import.meta.env.DEV || !isAbsoluteUrl(baseUrl)) {
-    return false;
-  }
-
-  try {
-    const parsedUrl = new URL(baseUrl);
-    const proxyTarget = import.meta.env.VITE_DEV_API_PROXY_TARGET?.trim();
-    const normalizedPathname = parsedUrl.pathname.replace(/\/+$/, "") || "/";
-    const isLoopbackHost = LOOPBACK_HOSTS.has(parsedUrl.hostname);
-    const targetsProxyPath =
-      normalizedPathname === "/" || normalizedPathname === "/api";
-
-    if (proxyTarget) {
-      const proxyUrl = new URL(proxyTarget);
-      const sameOriginAsProxyTarget =
-        parsedUrl.protocol === proxyUrl.protocol &&
-        parsedUrl.hostname === proxyUrl.hostname &&
-        parsedUrl.port === proxyUrl.port;
-
-      if (sameOriginAsProxyTarget && targetsProxyPath) {
-        return true;
-      }
-    }
-
-    return isLoopbackHost && targetsProxyPath;
-  } catch {
-    return false;
-  }
-}
-
-function ensureAxiosInterceptors(): void {
-  if (interceptorsConfigured) {
-    return;
-  }
-
-  axios.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-    const normalizedBaseUrl = normalizeConfiguredApiBaseUrl(
-      config.baseURL ?? axios.defaults.baseURL,
-    );
-
-    config.baseURL = normalizedBaseUrl;
-
-    if (typeof config.url === "string") {
-      config.url = normalizePathForBase(config.url, normalizedBaseUrl);
-    }
-
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.set("Authorization", `Bearer ${token}`);
-    }
-
-    const locale = localStorage.getItem("astrbot-locale");
-    if (locale) {
-      config.headers.set("Accept-Language", locale);
-    }
-
-    return config;
-  });
-
-  interceptorsConfigured = true;
-}
-
-export function normalizeConfiguredApiBaseUrl(
-  baseUrl: string | null | undefined,
-): string {
-  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
-
-  if (!normalizedBaseUrl) {
-    return "";
-  }
-
-  if (shouldUseDevProxyBase(normalizedBaseUrl)) {
-    return "/api";
-  }
-
-  return normalizedBaseUrl;
-}
-
 export function getApiBaseUrl(): string {
-  return normalizeConfiguredApiBaseUrl(axios.defaults.baseURL);
-}
-
-export function getApiBaseUrlValidationError(
-  baseUrl: string | null | undefined,
-): string | null {
-  const normalizedBaseUrl = normalizeConfiguredApiBaseUrl(baseUrl);
-
-  if (!normalizedBaseUrl || !isAbsoluteUrl(normalizedBaseUrl)) {
-    return null;
-  }
-
-  if (window.location.protocol !== "https:") {
-    return null;
-  }
-
-  try {
-    const parsedUrl = new URL(normalizedBaseUrl);
-    if (parsedUrl.protocol !== "http:") {
-      return null;
-    }
-  } catch {
-    return null;
-  }
-
-  return "This dashboard is served over HTTPS, so the browser will block an HTTP backend. Put AstrBot behind an HTTPS reverse proxy or tunnel (for example Nginx, Caddy, or Cloudflare Tunnel), then use that HTTPS URL here.";
+  return normalizeBaseUrl(service.defaults.baseURL);
 }
 
 export function setApiBaseUrl(baseUrl: string | null | undefined): string {
-  const normalizedBaseUrl = normalizeConfiguredApiBaseUrl(baseUrl);
-  axios.defaults.baseURL = normalizedBaseUrl;
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+  service.defaults.baseURL = normalizedBaseUrl;
   return normalizedBaseUrl;
 }
 
@@ -185,7 +79,7 @@ export function resolveApiUrl(
   path: string,
   baseUrl: string | null | undefined = getApiBaseUrl(),
 ): string {
-  const normalizedBaseUrl = normalizeConfiguredApiBaseUrl(baseUrl);
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
   const normalizedPath = normalizePathForBase(path, normalizedBaseUrl);
 
   if (isAbsoluteUrl(normalizedPath)) {
@@ -202,10 +96,8 @@ export function resolveApiUrl(
 export function resolvePublicUrl(path: string): string {
   const base = import.meta.env.BASE_URL || "/";
   const cleanBase = base.endsWith("/") ? base : `${base}/`;
-  return new URL(
-    path.replace(/^\/+/, ""),
-    window.location.origin + cleanBase,
-  ).toString();
+  return new URL(path.replace(/^\/+/, ""), window.location.origin + cleanBase)
+    .toString();
 }
 
 export function resolveWebSocketUrl(
@@ -230,8 +122,30 @@ export function resolveWebSocketUrl(
   return url.toString();
 }
 
-setApiBaseUrl(import.meta.env.VITE_API_BASE);
-ensureAxiosInterceptors();
+const service = axios.create({
+  baseURL: normalizeBaseUrl(import.meta.env.VITE_API_BASE),
+  timeout: 10000,
+});
 
-export default axios;
+service.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const normalizedBaseUrl = normalizeBaseUrl(config.baseURL ?? service.defaults.baseURL);
+
+  if (typeof config.url === "string") {
+    config.url = normalizePathForBase(config.url, normalizedBaseUrl);
+  }
+
+  const token = localStorage.getItem("token");
+  if (token) {
+    config.headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const locale = localStorage.getItem("astrbot-locale");
+  if (locale) {
+    config.headers.set("Accept-Language", locale);
+  }
+
+  return config;
+});
+
+export default service;
 export * from "axios";

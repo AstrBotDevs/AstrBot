@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import axios from 'axios';
+import axios from '@/utils/request';
 import { useRouter } from 'vue-router';
 
 export interface Conversation {

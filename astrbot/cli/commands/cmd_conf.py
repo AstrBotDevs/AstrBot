@@ -1,3 +1,20 @@
+"""
+Configuration CLI for AstrBot.
+
+This module provides:
+- secure hashing utilities for the dashboard password (argon2)
+- legacy compatibility helpers (md5 / sha256 hex digests)
+- validators for commonly configurable items
+- click CLI group with `set`, `get`, and `password` subcommands
+
+Notes:
+- The secure hasher uses `argon2.PasswordHasher`.
+- Legacy checks are provided to detect pre-v3 default hashes.
+"""
+
+from __future__ import annotations
+
+import binascii
 import hashlib
 import json
 import zoneinfo
@@ -6,71 +23,213 @@ from typing import Any
 
 import click
 
+try:
+    # Argon2 provides secure password hashing. Import if available.
+    from argon2 import PasswordHasher
+    from argon2 import exceptions as argon2_exceptions
+
+    _HAS_ARGON2 = True
+except Exception:
+    # Argon2 may be broken on some Python/platform combinations (e.g. missing legacy `imp`).
+    # Fall back to a PBKDF2-HMAC-SHA256 based approach implemented below.
+    PasswordHasher = None
+    argon2_exceptions = None
+    _HAS_ARGON2 = False
+
+from astrbot.cli.utils import check_astrbot_root
+from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import astrbot_paths
 
-from ..utils import check_astrbot_root
+# Instantiate a module-level hasher (argon2 when available, else None).
+# When argon2 is unavailable we will use PBKDF2-HMAC-SHA256 as a deterministic secure fallback.
+if _HAS_ARGON2:
+    try:
+        _PASSWORD_HASHER = PasswordHasher()
+    except Exception:
+        # If construction fails for any reason, fall back to PBKDF2 mode.
+        _PASSWORD_HASHER = None
+        _HAS_ARGON2 = False
+if not _HAS_ARGON2:
+    _PASSWORD_HASHER = None
+    # PBKDF2 fallback parameters (kept stable for deterministic stored hash format)
+    PBKDF2_SALT = b"astrbot-dashboard"
+    PBKDF2_ITER = 200_000
 
+# Plaintext default dashboard password used on first-deploy / demo environments.
+# This mirrors the default username "astrbot" from DEFAULT_CONFIG.
+# NOTE: this is a documented default for new deployments; production installs should change it.
 DEFAULT_DASHBOARD_PASSWORD = "astrbot"
+
+# Legacy default password digests (hex) for compatibility checks in other modules.
 DEFAULT_DASHBOARD_PASSWORD_MD5 = hashlib.md5(
-    DEFAULT_DASHBOARD_PASSWORD.encode()
+    DEFAULT_DASHBOARD_PASSWORD.encode("utf-8")
 ).hexdigest()
 DEFAULT_DASHBOARD_PASSWORD_SHA256 = hashlib.sha256(
-    DEFAULT_DASHBOARD_PASSWORD.encode()
+    DEFAULT_DASHBOARD_PASSWORD.encode("utf-8")
 ).hexdigest()
 
-
-def hash_dashboard_password(value: str) -> str:
-    """Hash Dashboard password for storage."""
-    return hashlib.sha256(value.encode()).hexdigest()
-
-
-def hash_dashboard_password_md5(value: str) -> str:
-    """Hash Dashboard password with the legacy MD5 algorithm."""
-    return hashlib.md5(value.encode()).hexdigest()
+# A secure default hash for the default password.
+# If argon2 is available we generate an argon2 encoded hash. Otherwise we use a
+# stable PBKDF2-HMAC-SHA256 encoded string format:
+#   pbkdf2_sha256$<iterations>$<salt_hex>$<digest_hex>
 
 
-def is_dashboard_password_hash(value: str, *, algorithm: str) -> bool:
-    expected_len = 64 if algorithm == "sha256" else 32
-    return len(value) == expected_len and all(ch in "0123456789abcdef" for ch in value)
+if _HAS_ARGON2 and _PASSWORD_HASHER is not None:
+    try:
+        DEFAULT_DASHBOARD_PASSWORD_HASH = _PASSWORD_HASHER.hash(
+            DEFAULT_DASHBOARD_PASSWORD
+        )
+    except Exception:
+        # Fall back to PBKDF2 if argon2 unexpectedly fails at runtime.
+        dk = hashlib.pbkdf2_hmac(
+            "sha256",
+            DEFAULT_DASHBOARD_PASSWORD.encode("utf-8"),
+            PBKDF2_SALT,
+            PBKDF2_ITER,
+        )
+        DEFAULT_DASHBOARD_PASSWORD_HASH = f"pbkdf2_sha256${PBKDF2_ITER}${binascii.hexlify(PBKDF2_SALT).decode()}${dk.hex()}"
+else:
+    dk = hashlib.pbkdf2_hmac(
+        "sha256", DEFAULT_DASHBOARD_PASSWORD.encode("utf-8"), PBKDF2_SALT, PBKDF2_ITER
+    )
+    DEFAULT_DASHBOARD_PASSWORD_HASH = f"pbkdf2_sha256${PBKDF2_ITER}${binascii.hexlify(PBKDF2_SALT).decode()}${dk.hex()}"
+
+
+# --- Password hashing & validation utilities ---
+
+
+def hash_dashboard_password_secure(value: str) -> str:
+    """
+    Hash the dashboard password for storage.
+
+    Preferred: Argon2 encoded string (if argon2 available).
+    Fallback: PBKDF2-HMAC-SHA256 encoded string in the format:
+        pbkdf2_sha256$<iterations>$<salt_hex>$<digest_hex>
+    """
+    import binascii
+
+    if _HAS_ARGON2 and _PASSWORD_HASHER is not None:
+        try:
+            return _PASSWORD_HASHER.hash(value)
+        except Exception as e:
+            # Surface a ClickException for CLI users while allowing fallback below.
+            # Do not silently swallow unexpected errors.
+            raise click.ClickException(
+                f"Failed to hash password securely (argon2): {e!s}"
+            )
+
+    # PBKDF2 fallback (deterministic encoded string)
+    dk = hashlib.pbkdf2_hmac("sha256", value.encode("utf-8"), PBKDF2_SALT, PBKDF2_ITER)
+    return f"pbkdf2_sha256${PBKDF2_ITER}${binascii.hexlify(PBKDF2_SALT).decode()}${dk.hex()}"
+
+
+def verify_dashboard_password(value: str, stored_hash: str) -> bool:
+    """
+    Verify a plaintext password `value` against a stored hash.
+
+    Supports:
+    - Argon2 encoded hashes (preferred when available)
+    - PBKDF2-HMAC-SHA256 encoded strings created by the fallback
+      format: pbkdf2_sha256$<iterations>$<salt_hex>$<digest_hex>
+    - Legacy SHA-256 and MD5 hexadecimal digests for backward compatibility.
+    """
+    import binascii
+
+    if not stored_hash:
+        return False
+
+    # Argon2 encoded hashes start with $argon2 (only valid if argon2 available)
+    if (
+        stored_hash.startswith("$argon2")
+        and _HAS_ARGON2
+        and _PASSWORD_HASHER is not None
+    ):
+        try:
+            return _PASSWORD_HASHER.verify(stored_hash, value)
+        except Exception as e:
+            # argon2 verification mismatch or errors: return False for mismatch,
+            # raise for unexpected exceptions to avoid silent failures.
+            if getattr(e, "__class__", None).__name__ == "VerifyMismatchError":
+                return False
+            raise click.ClickException(f"Password verification failure (argon2): {e!s}")
+
+    # PBKDF2 fallback format: pbkdf2_sha256$iters$salt_hex$digest_hex
+    if stored_hash.startswith("pbkdf2_sha256$"):
+        try:
+            _, iters_s, salt_hex, digest_hex = stored_hash.split("$", 3)
+            iters = int(iters_s)
+            salt = binascii.unhexlify(salt_hex)
+            expected = digest_hex.lower()
+            dk = hashlib.pbkdf2_hmac("sha256", value.encode("utf-8"), salt, iters)
+            return dk.hex() == expected
+        except Exception:
+            return False
+
+    # Legacy hex digests: support both sha256 (64 hex chars) and md5 (32 hex chars)
+    value_l = value.encode("utf-8")
+    s = stored_hash.lower()
+    if len(s) == 64 and all(ch in "0123456789abcdef" for ch in s):
+        return hashlib.sha256(value_l).hexdigest() == s
+    if len(s) == 32 and all(ch in "0123456789abcdef" for ch in s):
+        return hashlib.md5(value_l).hexdigest() == s
+
+    # Unknown format
+    return False
+
+
+def is_dashboard_password_hash(value: str) -> bool:
+    """
+    Heuristic: return True if `value` looks like a supported dashboard password hash.
+    """
+    if not isinstance(value, str) or not value:
+        return False
+    if value.startswith("$argon2"):
+        return True
+    value_l = value.lower()
+    if len(value_l) == 64 and all(ch in "0123456789abcdef" for ch in value_l):
+        return True
+    if len(value_l) == 32 and all(ch in "0123456789abcdef" for ch in value_l):
+        return True
+    return False
+
+
+# --- Validators for CLI configuration items ---
 
 
 def _validate_log_level(value: str) -> str:
-    """Validate log level"""
-    value = value.upper()
-    if value not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
+    value_up = value.upper()
+    allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+    if value_up not in allowed:
         raise click.ClickException(
-            "Log level must be one of DEBUG/INFO/WARNING/ERROR/CRITICAL",
+            "Log level must be one of DEBUG/INFO/WARNING/ERROR/CRITICAL"
         )
-    return value
+    return value_up
 
 
 def _validate_dashboard_port(value: str) -> int:
-    """Validate Dashboard port"""
     try:
         port = int(value)
-        if port < 1 or port > 65535:
-            raise click.ClickException("Port must be in range 1-65535")
-        return port
     except ValueError:
         raise click.ClickException("Port must be a number")
+    if port < 1 or port > 65535:
+        raise click.ClickException("Port must be in range 1-65535")
+    return port
 
 
 def _validate_dashboard_username(value: str) -> str:
-    """Validate Dashboard username"""
-    if not value:
+    if value is None or value.strip() == "":
         raise click.ClickException("Username cannot be empty")
-    return value
+    return value.strip()
 
 
 def _validate_dashboard_password(value: str) -> str:
-    """Validate Dashboard password"""
-    if not value:
+    if value is None or value == "":
         raise click.ClickException("Password cannot be empty")
-    return hash_dashboard_password(value)
+    # Return a secure stored representation (argon2 encoded)
+    return hash_dashboard_password_secure(value)
 
 
 def _validate_timezone(value: str) -> str:
-    """Validate timezone"""
     try:
         zoneinfo.ZoneInfo(value)
     except Exception:
@@ -81,15 +240,13 @@ def _validate_timezone(value: str) -> str:
 
 
 def _validate_callback_api_base(value: str) -> str:
-    """Validate callback API base URL"""
-    if not value.startswith("http://") and not value.startswith("https://"):
+    if not (value.startswith("http://") or value.startswith("https://")):
         raise click.ClickException(
             "Callback API base must start with http:// or https://"
         )
     return value
 
 
-# Configuration items settable via CLI, mapping config keys to validator functions
 CONFIG_VALIDATORS: dict[str, Callable[[str], Any]] = {
     "timezone": _validate_timezone,
     "log_level": _validate_log_level,
@@ -100,18 +257,23 @@ CONFIG_VALIDATORS: dict[str, Callable[[str], Any]] = {
 }
 
 
+# --- Config file helpers ---
+
+
 def _load_config() -> dict[str, Any]:
-    """Load or initialize config file"""
+    """
+    Load or initialize the CLI config file (data/cmd_config.json).
+    Ensures the astrbot root is valid before proceeding.
+    """
     root = astrbot_paths.root
     if not check_astrbot_root(root):
         raise click.ClickException(
-            f"{root} is not a valid AstrBot root directory. Use 'astrbot init' to initialize",
+            f"{root} is not a valid AstrBot root directory. Use 'astrbot init' to initialize"
         )
 
     config_path = astrbot_paths.data / "cmd_config.json"
     if not config_path.exists():
-        from astrbot.core.config.default import DEFAULT_CONFIG
-
+        # Write DEFAULT_CONFIG to disk if file missing
         config_path.write_text(
             json.dumps(DEFAULT_CONFIG, ensure_ascii=False, indent=2),
             encoding="utf-8-sig",
@@ -124,50 +286,43 @@ def _load_config() -> dict[str, Any]:
 
 
 def _save_config(config: dict[str, Any]) -> None:
-    """Save config file"""
     config_path = astrbot_paths.data / "cmd_config.json"
-
     config_path.write_text(
-        json.dumps(config, ensure_ascii=False, indent=2),
-        encoding="utf-8-sig",
+        json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8-sig"
     )
 
 
 def ensure_config_file() -> dict[str, Any]:
-    """Ensure config file exists and return parsed config."""
     return _load_config()
 
 
 def _set_nested_item(obj: dict[str, Any], path: str, value: Any) -> None:
-    """Set a value in a nested dictionary"""
     parts = path.split(".")
+    cur = obj
     for part in parts[:-1]:
-        if part not in obj:
-            obj[part] = {}
-        elif not isinstance(obj[part], dict):
+        if part not in cur:
+            cur[part] = {}
+        elif not isinstance(cur[part], dict):
             raise click.ClickException(
-                f"Config path conflict: {'.'.join(parts[: parts.index(part) + 1])} is not a dict",
+                f"Config path conflict: {'.'.join(parts[: parts.index(part) + 1])} is not a dict"
             )
-        obj = obj[part]
-    obj[parts[-1]] = value
+        cur = cur[part]
+    cur[parts[-1]] = value
 
 
 def _get_nested_item(obj: dict[str, Any], path: str) -> Any:
-    """Get a value from a nested dictionary"""
     parts = path.split(".")
+    cur = obj
     for part in parts:
-        obj = obj[part]
-    return obj
+        cur = cur[part]
+    return cur
+
+
+# --- CLI commands ---
 
 
 def prompt_dashboard_password(prompt: str = "Dashboard password") -> str:
-    """Prompt for dashboard password with confirmation."""
-    password = click.prompt(
-        prompt,
-        hide_input=True,
-        confirmation_prompt=True,
-        type=str,
-    )
+    password = click.prompt(prompt, hide_input=True, confirmation_prompt=True, type=str)
     return _validate_dashboard_password(password)
 
 
@@ -177,49 +332,60 @@ def set_dashboard_credentials(
     username: str | None = None,
     password_hash: str | None = None,
 ) -> None:
-    """Update dashboard credentials in config."""
     if username is not None:
         _set_nested_item(
-            config,
-            "dashboard.username",
-            _validate_dashboard_username(username),
+            config, "dashboard.username", _validate_dashboard_username(username)
         )
     if password_hash is not None:
-        _set_nested_item(config, "dashboard.password", password_hash)
+        # If caller provided plaintext by mistake, allow passing through validator,
+        # but prefer that callers pass a pre-hashed password when applicable.
+        if is_dashboard_password_hash(password_hash) and not password_hash.startswith(
+            "$argon2"
+        ):
+            # It's a legacy hex digest; store as-is for compatibility.
+            _set_nested_item(config, "dashboard.password", password_hash)
+        elif password_hash.startswith("$argon2"):
+            _set_nested_item(config, "dashboard.password", password_hash)
+        else:
+            # Treat value as plaintext and hash it securely
+            _set_nested_item(
+                config,
+                "dashboard.password",
+                _validate_dashboard_password(password_hash),
+            )
 
 
 @click.group(name="conf")
 def conf() -> None:
-    """Configuration management commands
+    """
+    Configuration management commands.
 
     Supported config keys:
-
-    - timezone: Timezone setting (e.g. Asia/Shanghai)
-
-    - log_level: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
-
-    - dashboard.port: Dashboard port
-
-    - dashboard.username: Dashboard username
-
-    - dashboard.password: Dashboard password
-
-    - callback_api_base: Callback API base URL
+    - timezone
+    - log_level
+    - dashboard.port
+    - dashboard.username
+    - dashboard.password
+    - callback_api_base
     """
+    pass
 
 
 @conf.command(name="set")
 @click.argument("key")
 @click.argument("value")
 def set_config(key: str, value: str) -> None:
-    """Set the value of a config item"""
     if key not in CONFIG_VALIDATORS:
         raise click.ClickException(f"Unsupported config key: {key}")
 
     config = _load_config()
-
     try:
-        old_value = _get_nested_item(config, key)
+        # Attempt to get old value (may raise KeyError)
+        try:
+            old_value = _get_nested_item(config, key)
+        except Exception:
+            old_value = "<not set>"
+
         validated_value = CONFIG_VALIDATORS[key](value)
         _set_nested_item(config, key, validated_value)
         _save_config(config)
@@ -231,9 +397,10 @@ def set_config(key: str, value: str) -> None:
         else:
             click.echo(f"  Old value: {old_value}")
             click.echo(f"  New value: {validated_value}")
-
     except KeyError:
         raise click.ClickException(f"Unknown config key: {key}")
+    except click.ClickException:
+        raise
     except Exception as e:
         raise click.UsageError(f"Failed to set config: {e!s}")
 
@@ -241,13 +408,10 @@ def set_config(key: str, value: str) -> None:
 @conf.command(name="get")
 @click.argument("key", required=False)
 def get_config(key: str | None = None) -> None:
-    """Get the value of a config item. If no key is provided, show all configurable items"""
     config = _load_config()
-
     if key:
         if key not in CONFIG_VALIDATORS:
             raise click.ClickException(f"Unsupported config key: {key}")
-
         try:
             value = _get_nested_item(config, key)
             if key == "dashboard.password":
@@ -259,15 +423,16 @@ def get_config(key: str | None = None) -> None:
             raise click.UsageError(f"Failed to get config: {e!s}")
     else:
         click.echo("Current config:")
-        for key in CONFIG_VALIDATORS:
+        for k in CONFIG_VALIDATORS:
             try:
-                value = (
+                v = (
                     "********"
-                    if key == "dashboard.password"
-                    else _get_nested_item(config, key)
+                    if k == "dashboard.password"
+                    else _get_nested_item(config, k)
                 )
-                click.echo(f"  {key}: {value}")
+                click.echo(f"  {k}: {v}")
             except (KeyError, TypeError):
+                # Missing or non-dict paths are simply skipped in listing
                 pass
 
 
@@ -280,14 +445,20 @@ def get_config(key: str | None = None) -> None:
     help="Set dashboard password directly without interactive prompt",
 )
 def set_dashboard_password(username: str | None, password: str | None) -> None:
-    """Interactively manage dashboard password."""
+    """
+    Interactively set dashboard password (with confirmation) or set directly with -p.
+    """
     config = _load_config()
 
-    password_hash = (
-        _validate_dashboard_password(password)
-        if password is not None
-        else prompt_dashboard_password()
-    )
+    if password is not None:
+        # If the provided value already looks like a supported hash, accept it.
+        if is_dashboard_password_hash(password):
+            password_hash = password
+        else:
+            password_hash = _validate_dashboard_password(password)
+    else:
+        password_hash = prompt_dashboard_password()
+
     set_dashboard_credentials(
         config,
         username=username.strip() if username is not None else None,

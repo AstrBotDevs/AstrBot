@@ -13,7 +13,7 @@
  * - components/DetailsDialog.vue: 详情对话框
  */
 import { computed, onActivated, onMounted, ref, watch} from 'vue';
-import axios from 'axios';
+import axios from '@/utils/request';
 import { useModuleI18n } from '@/i18n/composables';
 import { normalizeTextInput } from '@/utils/inputValue';
 

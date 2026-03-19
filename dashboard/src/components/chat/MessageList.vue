@@ -403,7 +403,7 @@ import {
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github.css";
-import axios from "axios";
+import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
 import ReasoningBlock from "./message_list_comps/ReasoningBlock.vue";
 import MessagePartsRenderer from "./message_list_comps/MessagePartsRenderer.vue";

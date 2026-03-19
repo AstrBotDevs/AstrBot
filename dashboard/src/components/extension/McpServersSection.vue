@@ -412,7 +412,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import axios from '@/utils/request';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import ItemCard from '@/components/shared/ItemCard.vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';

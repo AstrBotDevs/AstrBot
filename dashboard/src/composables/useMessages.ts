@@ -1,5 +1,5 @@
 import { ref, reactive, type Ref } from 'vue';
-import axios from 'axios';
+import axios from '@/utils/request';
 import { resolveWebSocketUrl } from '@/utils/request';
 import { useToast } from '@/utils/toast';
 

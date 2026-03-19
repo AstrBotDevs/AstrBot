@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
-import axios from "axios";
+import axios from "@/utils/request";
 import Logo from "@/components/shared/Logo.vue";
 import { hashDashboardPassword } from "@/utils/passwordHash";
 import { useAuthStore } from "@/stores/auth";

@@ -309,7 +309,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import axios from '@/utils/request';
 import { resolveApiUrl } from '@/utils/request';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';

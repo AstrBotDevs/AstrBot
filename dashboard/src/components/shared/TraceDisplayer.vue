@@ -1,5 +1,5 @@
 <script setup>
-import axios from 'axios';
+import axios from '@/utils/request';
 import { EventSourcePolyfill } from 'event-source-polyfill';
 import { resolveApiUrl } from '@/utils/request';
 </script>
