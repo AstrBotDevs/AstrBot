@@ -115,6 +115,36 @@ async def test_send_message_path_infers_record_component(monkeypatch: pytest.Mon
 
 
 @pytest.mark.asyncio
+async def test_send_message_path_component_construction_error(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    tool = SendMessageToUserTool()
+    run_context, send_message = _build_run_context()
+
+    monkeypatch.setattr(
+        tool,
+        "_resolve_path_from_sandbox",
+        AsyncMock(side_effect=RuntimeError("boom")),
+    )
+
+    result = await tool.call(run_context, path="/sandbox/voice.mp3")
+
+    assert result.startswith("error: failed to build message component")
+    send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_message_whitespace_text_treated_as_empty():
+    tool = SendMessageToUserTool()
+    run_context, send_message = _build_run_context()
+
+    result = await tool.call(run_context, text="   ")
+
+    assert "error: missing payload" in result
+    send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_send_message_url_unknown_extension_falls_back_to_file():
     tool = SendMessageToUserTool()
     run_context, send_message = _build_run_context()
@@ -132,4 +162,3 @@ async def test_send_message_url_unknown_extension_falls_back_to_file():
     assert len(chain.chain) == 1
     assert isinstance(chain.chain[0], File)
     assert chain.chain[0].name == "report.txt"
-

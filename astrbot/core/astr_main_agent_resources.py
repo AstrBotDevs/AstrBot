@@ -202,7 +202,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             "properties": {
                 "text": {
                     "type": "string",
-                    "description": "Plain text content.",
+                    "description": "Plain text content. Whitespace-only text is treated as empty.",
                 },
                 "path": {
                     "type": "string",
@@ -267,8 +267,14 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         ".mpg",
     }
 
+    def _normalize_ref_path(self, ref: str) -> str:
+        return str(ref).split("?", 1)[0].split("#", 1)[0]
+
+    def _basename_from_ref(self, ref: str) -> str:
+        return os.path.basename(self._normalize_ref_path(ref))
+
     def _infer_component_type_from_ref(self, ref: str) -> str:
-        clean_ref = str(ref).split("?", 1)[0].split("#", 1)[0]
+        clean_ref = self._normalize_ref_path(ref)
         ext = os.path.splitext(clean_ref)[1].lower()
         if ext in self._IMAGE_EXTS:
             return "image"
@@ -324,13 +330,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         name = kwargs.get("name")
         mention_user_id = kwargs.get("mention_user_id")
 
-        primary_count = 0
-        if text:
-            primary_count += 1
-        if path:
-            primary_count += 1
-        if url:
-            primary_count += 1
+        primary_count = sum(map(bool, (text, path, url)))
 
         if primary_count > 1:
             return "error: only one primary payload is allowed per call (`text` OR `path` OR `url`)."
@@ -340,18 +340,20 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         if mention_user_id:
             components.append(Comp.At(qq=mention_user_id))
 
+        component_map = {
+            "image": Comp.Image,
+            "record": Comp.Record,
+            "video": Comp.Video,
+        }
         try:
             if text:
                 components.append(Comp.Plain(text=text))
             elif path:
                 component_type = self._infer_component_type_from_ref(path)
                 local_path, _ = await self._resolve_path_from_sandbox(context, path)
-                if component_type == "image":
-                    components.append(Comp.Image.fromFileSystem(path=local_path))
-                elif component_type == "record":
-                    components.append(Comp.Record.fromFileSystem(path=local_path))
-                elif component_type == "video":
-                    components.append(Comp.Video.fromFileSystem(path=local_path))
+                component_cls = component_map.get(component_type)
+                if component_cls:
+                    components.append(component_cls.fromFileSystem(path=local_path))
                 else:
                     file_name = (
                         (str(name).strip() if name is not None else "")
@@ -361,16 +363,13 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     components.append(Comp.File(name=file_name, file=local_path))
             elif url:
                 component_type = self._infer_component_type_from_ref(url)
-                if component_type == "image":
-                    components.append(Comp.Image.fromURL(url=url))
-                elif component_type == "record":
-                    components.append(Comp.Record.fromURL(url=url))
-                elif component_type == "video":
-                    components.append(Comp.Video.fromURL(url=url))
+                component_cls = component_map.get(component_type)
+                if component_cls:
+                    components.append(component_cls.fromURL(url=url))
                 else:
                     file_name = (
                         (str(name).strip() if name is not None else "")
-                        or os.path.basename(str(url).split("?", 1)[0].split("#", 1)[0])
+                        or self._basename_from_ref(url)
                         or "file"
                     )
                     components.append(Comp.File(name=file_name, url=url))
