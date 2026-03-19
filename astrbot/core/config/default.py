@@ -1984,9 +1984,9 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                     },
                     "send_dimensions_param": {
-                        "description": "透传 dimensions 参数",
+                        "description": "provider_group.provider.send_dimensions_param.description",
                         "type": "bool",
-                        "hint": "启用后，会把 embedding_dimensions 作为 dimensions 参数发送给上游嵌入接口。对于只需要本地向量维度、但不支持 dimensions 参数的 OpenAI 兼容服务，请关闭此项。",
+                        "hint": "provider_group.provider.send_dimensions_param.hint",
                         "condition": {"type": "openai_compatible_embedding"},
                     },
                     "volcengine_cluster": {
