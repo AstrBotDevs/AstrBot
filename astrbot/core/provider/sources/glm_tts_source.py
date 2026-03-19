@@ -3,6 +3,7 @@ import uuid
 
 import aiohttp
 
+from astrbot.api import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..entities import ProviderType
@@ -27,8 +28,19 @@ class ProviderGLMTTS(TTSProvider):
             raise ValueError("GLM-TTS requires api_key to be configured")
         self.model_name: str = provider_config.get("model", "glm-tts")
         self.voice: str = provider_config.get("glm_tts_voice", "tongtong")
-        self.speed: float = provider_config.get("glm_tts_speed", 1.0)
-        self.volume: float = provider_config.get("glm_tts_volume", 1.0)
+        self.speed: float = float(provider_config.get("glm_tts_speed", 1.0))
+        if not (0.5 <= self.speed <= 2.0):
+            self.speed = max(0.5, min(2.0, self.speed))
+            logger.warning(
+                f"GLM-TTS speed out of range [0.5, 2.0], clamped to {self.speed}"
+            )
+
+        self.volume: float = float(provider_config.get("glm_tts_volume", 1.0))
+        if not (0 < self.volume <= 10):
+            self.volume = max(0.01, min(10.0, self.volume))
+            logger.warning(
+                f"GLM-TTS volume out of range (0, 10], clamped to {self.volume}"
+            )
         self.timeout: int = provider_config.get("timeout", 30)
         self.api_base: str = "https://open.bigmodel.cn/api/paas/v4/audio/speech"
 
