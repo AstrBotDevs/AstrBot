@@ -2,7 +2,7 @@
  * Persona 文件夹管理 Store
  */
 import { defineStore } from 'pinia';
-import axios from 'axios';
+import axios from '@/utils/request';
 
 // 类型定义
 export interface PersonaFolder {

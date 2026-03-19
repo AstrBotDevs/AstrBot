@@ -135,7 +135,7 @@
 
 <script setup>
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
-import axios from 'axios'
+import axios from '@/utils/request'
 import { useModuleI18n } from '@/i18n/composables'
 
 const props = defineProps({

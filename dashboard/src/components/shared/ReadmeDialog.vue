@@ -2,7 +2,7 @@
 import { ref, watch, computed, onUnmounted } from "vue";
 import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
-import axios from "axios";
+import axios from "@/utils/request";
 import DOMPurify from "dompurify";
 import "highlight.js/styles/github-dark.css";
 import { useI18n } from "@/i18n/composables";

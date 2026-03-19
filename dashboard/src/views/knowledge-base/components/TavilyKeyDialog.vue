@@ -50,7 +50,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import axios from 'axios'
+import axios from '@/utils/request'
 
 const props = defineProps<{
   modelValue: boolean
