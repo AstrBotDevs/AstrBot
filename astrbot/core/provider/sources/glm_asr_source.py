@@ -35,6 +35,17 @@ class ProviderGLMASR(STTProvider):
         self.model_name: str = provider_config.get("model", "glm-asr-2512")
         self.timeout: int = provider_config.get("timeout", 120)
         self.api_base: str = "https://open.bigmodel.cn/api/paas/v4/audio/transcriptions"
+        self._session: aiohttp.ClientSession | None = None
+
+    async def initialize(self) -> None:
+        self._session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=self.timeout),
+        )
+
+    async def terminate(self) -> None:
+        if self._session and not self._session.closed:
+            await self._session.close()
+            self._session = None
 
     def _get_audio_format(self, file_path: str) -> str | None:
         silk_header = b"SILK"
@@ -76,9 +87,7 @@ class ProviderGLMASR(STTProvider):
 
         if file_format in ["silk", "amr"]:
             temp_dir = get_astrbot_temp_path()
-            output_path = os.path.join(
-                temp_dir, f"glm_asr_{uuid.uuid4().hex[:8]}.wav"
-            )
+            output_path = os.path.join(temp_dir, f"glm_asr_{uuid.uuid4().hex[:8]}.wav")
 
             logger.info(f"Converting {file_format} file to wav for GLM-ASR...")
             if file_format == "silk":
@@ -97,28 +106,30 @@ class ProviderGLMASR(STTProvider):
         }
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    self.api_base,
-                    headers=headers,
-                    json=payload,
+            if not self._session or self._session.closed:
+                self._session = aiohttp.ClientSession(
                     timeout=aiohttp.ClientTimeout(total=self.timeout),
-                ) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        logger.error(
-                            f"GLM-ASR API error: {response.status}, body: {error_text}"
-                        )
-                        response.raise_for_status()
+                )
+            async with self._session.post(
+                self.api_base,
+                headers=headers,
+                json=payload,
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(
+                        f"GLM-ASR API error: {response.status}, body: {error_text}"
+                    )
+                    response.raise_for_status()
 
-                    result = await response.json()
+                result = await response.json()
 
-                    if result.get("error"):
-                        error_msg = result["error"].get("message", "Unknown error")
-                        raise Exception(f"GLM-ASR API error: {error_msg}")
+                if result.get("error"):
+                    error_msg = result["error"].get("message", "Unknown error")
+                    raise Exception(f"GLM-ASR API error: {error_msg}")
 
-                    text = result.get("text", "")
-                    return text
+                text = result.get("text", "")
+                return text
 
         except aiohttp.ClientError as e:
             raise Exception(f"GLM-ASR API request failed: {e!s}")
@@ -133,6 +144,3 @@ class ProviderGLMASR(STTProvider):
                     os.remove(downloaded_path)
                 except Exception as e:
                     logger.warning(f"Failed to remove temp file {downloaded_path}: {e}")
-
-    async def terminate(self):
-        pass
