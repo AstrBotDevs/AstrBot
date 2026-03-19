@@ -112,3 +112,13 @@ class GroupSettingsManager:
             # 如果两个设置都为空，删除整个设置
             if not self._settings[umo].provider_id:
                 del self._settings[umo]
+    
+    async def clear_all_settings(self) -> int:
+        """清除所有群设置
+        
+        Returns:
+            int: 清除的设置数量
+        """
+        count = len(self._settings)
+        self._settings.clear()
+        return count

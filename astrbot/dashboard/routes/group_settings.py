@@ -320,21 +320,23 @@ class GroupSettingsRoute(Route):
             return Response().error(f"清除群 Persona 失败: {e!s}").__dict__
 
     async def clear_group_settings(self):
-        """清除群的设置（需要显式确认才能清除全部）
+        """清除群的设置（支持单个、批量或全部清除）
 
         请求体:
         {
-            "umo": "平台:消息类型:群ID",  // 清除指定群
-            "confirm_clear_all": true     // 清除所有群设置时需要此标志
+            "umo": "平台:消息类型:群ID",           // 清除指定群（单个）
+            "umos": ["xxx", "yyy"],                // 批量清除群设置（新增）
+            "confirm_clear_all": true              // 清除所有群设置时需要此标志
         }
         """
         try:
             data = await request.get_json()
             umo = data.get("umo", "").strip()
+            umos = data.get("umos", [])
             confirm_clear_all = data.get("confirm_clear_all", False)
 
             if umo:
-                # 清除指定群的设置
+                # 清除指定群的设置（单个，保留兼容）
                 await self.group_settings_mgr.clear_settings(umo)
                 return (
                     Response()
@@ -344,13 +346,44 @@ class GroupSettingsRoute(Route):
                     })
                     .__dict__
                 )
+            elif umos and isinstance(umos, list):
+                # 批量清除群设置（新增）
+                success_count = 0
+                fail_count = 0
+                failed_umos = []
+                
+                for group_umo in umos:
+                    try:
+                        await self.group_settings_mgr.clear_settings(group_umo)
+                        success_count += 1
+                    except Exception as e:
+                        logger.error(f"清除群 {group_umo} 设置失败: {e!s}")
+                        fail_count += 1
+                        failed_umos.append(group_umo)
+                
+                if fail_count == 0:
+                    return (
+                        Response()
+                        .ok({
+                            "message": f"已成功清除 {success_count} 个群的设置",
+                            "cleared_count": success_count,
+                        })
+                        .__dict__
+                    )
+                else:
+                    return (
+                        Response()
+                        .ok({
+                            "message": f"部分清除完成：成功 {success_count} 个，失败 {fail_count} 个",
+                            "cleared_count": success_count,
+                            "failed_count": fail_count,
+                            "failed_umos": failed_umos,
+                        })
+                        .__dict__
+                    )
             elif confirm_clear_all:
-                # 清除所有群设置 - 需要显式确认
-                all_settings = await self.group_settings_mgr.get_all_groups_with_settings()
-                count = 0
-                for group_umo in list(all_settings.keys()):
-                    await self.group_settings_mgr.clear_settings(group_umo)
-                    count += 1
+                # 清除所有群设置 - 使用优化的 clear_all_settings 方法
+                count = await self.group_settings_mgr.clear_all_settings()
                 return (
                     Response()
                     .ok({
@@ -362,7 +395,7 @@ class GroupSettingsRoute(Route):
             else:
                 return (
                     Response()
-                    .error("请指定 umo 或设置 confirm_clear_all=true 以清除所有设置")
+                    .error("请指定 umo、umos 列表或设置 confirm_clear_all=true 以清除所有设置")
                     .__dict__, 400
                 )
         except Exception as e:

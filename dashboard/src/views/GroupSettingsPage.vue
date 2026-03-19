@@ -293,7 +293,8 @@ const showToast = (message, color = 'success') => {
 
 const formatDate = (value) => {
   if (!value) return '-';
-  const dt = new Date(value);
+  // 后端发送的是秒级时间戳，转换为毫秒
+  const dt = new Date(Number(value) * 1000);
   if (Number.isNaN(dt.getTime())) return value;
   return dt.toLocaleString();
 };
@@ -506,25 +507,22 @@ const confirmBatchDelete = () => {
 const batchDelete = async () => {
   batchDeleting.value = true;
   try {
-    const promises = selectedItems.value.map(item =>
-      axios.post('/api/group-settings/clear', { umo: item.umo })
-    );
-
-    const results = await Promise.all(promises);
-    const successCount = results.filter(r => r.data.status === 'ok').length;
-    const failCount = results.length - successCount;
-
-    if (failCount === 0) {
-      showToast(tm('messages.batchDeleteSuccess', { count: successCount }), 'success');
+    // 使用 umos 数组批量删除，替代多个单独请求
+    const umos = selectedItems.value.map(item => item.umo);
+    const res = await axios.post('/api/group-settings/clear', { umos });
+    
+    if (res.data.status === 'ok') {
+      const clearedCount = res.data.data?.cleared_count || umos.length;
+      showToast(tm('messages.batchDeleteSuccess', { count: clearedCount }), 'success');
     } else {
-      showToast(tm('messages.batchDeletePartial', { success: successCount, fail: failCount }), 'warning');
+      showToast(res.data.message || tm('messages.batchDeleteFailed'), 'error');
     }
-
+    
     batchDeleteDialogVisible.value = false;
     selectedItems.value = [];
     loadSettings();
   } catch (e) {
-    showToast(tm('messages.batchDeleteFailed'), 'error');
+    showToast(e?.response?.data?.message || tm('messages.batchDeleteFailed'), 'error');
   } finally {
     batchDeleting.value = false;
   }
