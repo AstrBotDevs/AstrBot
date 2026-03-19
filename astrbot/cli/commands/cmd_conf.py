@@ -14,6 +14,7 @@ Notes:
 
 from __future__ import annotations
 
+import binascii
 import hashlib
 import json
 import zoneinfo
@@ -21,16 +22,38 @@ from collections.abc import Callable
 from typing import Any
 
 import click
-from argon2 import PasswordHasher
-from argon2 import exceptions as argon2_exceptions
+
+try:
+    # Argon2 provides secure password hashing. Import if available.
+    from argon2 import PasswordHasher
+    from argon2 import exceptions as argon2_exceptions
+
+    _HAS_ARGON2 = True
+except Exception:
+    # Argon2 may be broken on some Python/platform combinations (e.g. missing legacy `imp`).
+    # Fall back to a PBKDF2-HMAC-SHA256 based approach implemented below.
+    PasswordHasher = None
+    argon2_exceptions = None
+    _HAS_ARGON2 = False
 
 from astrbot.cli.utils import check_astrbot_root
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import astrbot_paths
 
-# Instantiate a module-level argon2 hasher.
-# Parameters use argon2 defaults provided by the library which are secure for typical use.
-_PASSWORD_HASHER = PasswordHasher()
+# Instantiate a module-level hasher (argon2 when available, else None).
+# When argon2 is unavailable we will use PBKDF2-HMAC-SHA256 as a deterministic secure fallback.
+if _HAS_ARGON2:
+    try:
+        _PASSWORD_HASHER = PasswordHasher()
+    except Exception:
+        # If construction fails for any reason, fall back to PBKDF2 mode.
+        _PASSWORD_HASHER = None
+        _HAS_ARGON2 = False
+if not _HAS_ARGON2:
+    _PASSWORD_HASHER = None
+    # PBKDF2 fallback parameters (kept stable for deterministic stored hash format)
+    PBKDF2_SALT = b"astrbot-dashboard"
+    PBKDF2_ITER = 200_000
 
 # Plaintext default dashboard password used on first-deploy / demo environments.
 # This mirrors the default username "astrbot" from DEFAULT_CONFIG.
@@ -45,17 +68,31 @@ DEFAULT_DASHBOARD_PASSWORD_SHA256 = hashlib.sha256(
     DEFAULT_DASHBOARD_PASSWORD.encode("utf-8")
 ).hexdigest()
 
-# A secure argon2 hash of the default password (useful when initializing new configs).
-# We compute it once at import-time. Argon2 produces a different encoded string per call,
-# but that's acceptable for generating a starting hash for fresh configs.
-try:
-    DEFAULT_DASHBOARD_PASSWORD_HASH = _PASSWORD_HASHER.hash(DEFAULT_DASHBOARD_PASSWORD)
-except Exception:
-    # If argon2 is unavailable for some reason, fall back to sha256 hex as a last resort.
-    # This branch intentionally crashes loudly later if argon2 is truly required.
-    DEFAULT_DASHBOARD_PASSWORD_HASH = hashlib.sha256(
-        DEFAULT_DASHBOARD_PASSWORD.encode("utf-8")
-    ).hexdigest()
+# A secure default hash for the default password.
+# If argon2 is available we generate an argon2 encoded hash. Otherwise we use a
+# stable PBKDF2-HMAC-SHA256 encoded string format:
+#   pbkdf2_sha256$<iterations>$<salt_hex>$<digest_hex>
+
+
+if _HAS_ARGON2 and _PASSWORD_HASHER is not None:
+    try:
+        DEFAULT_DASHBOARD_PASSWORD_HASH = _PASSWORD_HASHER.hash(
+            DEFAULT_DASHBOARD_PASSWORD
+        )
+    except Exception:
+        # Fall back to PBKDF2 if argon2 unexpectedly fails at runtime.
+        dk = hashlib.pbkdf2_hmac(
+            "sha256",
+            DEFAULT_DASHBOARD_PASSWORD.encode("utf-8"),
+            PBKDF2_SALT,
+            PBKDF2_ITER,
+        )
+        DEFAULT_DASHBOARD_PASSWORD_HASH = f"pbkdf2_sha256${PBKDF2_ITER}${binascii.hexlify(PBKDF2_SALT).decode()}${dk.hex()}"
+else:
+    dk = hashlib.pbkdf2_hmac(
+        "sha256", DEFAULT_DASHBOARD_PASSWORD.encode("utf-8"), PBKDF2_SALT, PBKDF2_ITER
+    )
+    DEFAULT_DASHBOARD_PASSWORD_HASH = f"pbkdf2_sha256${PBKDF2_ITER}${binascii.hexlify(PBKDF2_SALT).decode()}${dk.hex()}"
 
 
 # --- Password hashing & validation utilities ---
@@ -63,15 +100,27 @@ except Exception:
 
 def hash_dashboard_password_secure(value: str) -> str:
     """
-    Hash the dashboard password using Argon2 (secure).
+    Hash the dashboard password for storage.
 
-    Returns the encoded Argon2 hash string.
+    Preferred: Argon2 encoded string (if argon2 available).
+    Fallback: PBKDF2-HMAC-SHA256 encoded string in the format:
+        pbkdf2_sha256$<iterations>$<salt_hex>$<digest_hex>
     """
-    try:
-        return _PASSWORD_HASHER.hash(value)
-    except argon2_exceptions.HashingError as e:
-        # Convert argon2-specific error into a ClickException to surface to CLI users.
-        raise click.ClickException(f"Failed to hash password securely: {e!s}")
+    import binascii
+
+    if _HAS_ARGON2 and _PASSWORD_HASHER is not None:
+        try:
+            return _PASSWORD_HASHER.hash(value)
+        except Exception as e:
+            # Surface a ClickException for CLI users while allowing fallback below.
+            # Do not silently swallow unexpected errors.
+            raise click.ClickException(
+                f"Failed to hash password securely (argon2): {e!s}"
+            )
+
+    # PBKDF2 fallback (deterministic encoded string)
+    dk = hashlib.pbkdf2_hmac("sha256", value.encode("utf-8"), PBKDF2_SALT, PBKDF2_ITER)
+    return f"pbkdf2_sha256${PBKDF2_ITER}${binascii.hexlify(PBKDF2_SALT).decode()}${dk.hex()}"
 
 
 def verify_dashboard_password(value: str, stored_hash: str) -> bool:
@@ -79,31 +128,50 @@ def verify_dashboard_password(value: str, stored_hash: str) -> bool:
     Verify a plaintext password `value` against a stored hash.
 
     Supports:
-    - Argon2 encoded hashes (preferred)
+    - Argon2 encoded hashes (preferred when available)
+    - PBKDF2-HMAC-SHA256 encoded strings created by the fallback
+      format: pbkdf2_sha256$<iterations>$<salt_hex>$<digest_hex>
     - Legacy SHA-256 and MD5 hexadecimal digests for backward compatibility.
     """
+    import binascii
+
     if not stored_hash:
         return False
 
-    # Argon2 encoded hashes start with $argon2
-    if stored_hash.startswith("$argon2"):
+    # Argon2 encoded hashes start with $argon2 (only valid if argon2 available)
+    if (
+        stored_hash.startswith("$argon2")
+        and _HAS_ARGON2
+        and _PASSWORD_HASHER is not None
+    ):
         try:
             return _PASSWORD_HASHER.verify(stored_hash, value)
-        except argon2_exceptions.VerifyMismatchError:
-            return False
         except Exception as e:
-            # Fail loudly on unexpected errors
-            raise click.ClickException(f"Password verification failure: {e!s}")
+            # argon2 verification mismatch or errors: return False for mismatch,
+            # raise for unexpected exceptions to avoid silent failures.
+            if getattr(e, "__class__", None).__name__ == "VerifyMismatchError":
+                return False
+            raise click.ClickException(f"Password verification failure (argon2): {e!s}")
+
+    # PBKDF2 fallback format: pbkdf2_sha256$iters$salt_hex$digest_hex
+    if stored_hash.startswith("pbkdf2_sha256$"):
+        try:
+            _, iters_s, salt_hex, digest_hex = stored_hash.split("$", 3)
+            iters = int(iters_s)
+            salt = binascii.unhexlify(salt_hex)
+            expected = digest_hex.lower()
+            dk = hashlib.pbkdf2_hmac("sha256", value.encode("utf-8"), salt, iters)
+            return dk.hex() == expected
+        except Exception:
+            return False
 
     # Legacy hex digests: support both sha256 (64 hex chars) and md5 (32 hex chars)
-    if len(stored_hash) == 64 and all(
-        ch in "0123456789abcdef" for ch in stored_hash.lower()
-    ):
-        return hashlib.sha256(value.encode("utf-8")).hexdigest() == stored_hash.lower()
-    if len(stored_hash) == 32 and all(
-        ch in "0123456789abcdef" for ch in stored_hash.lower()
-    ):
-        return hashlib.md5(value.encode("utf-8")).hexdigest() == stored_hash.lower()
+    value_l = value.encode("utf-8")
+    s = stored_hash.lower()
+    if len(s) == 64 and all(ch in "0123456789abcdef" for ch in s):
+        return hashlib.sha256(value_l).hexdigest() == s
+    if len(s) == 32 and all(ch in "0123456789abcdef" for ch in s):
+        return hashlib.md5(value_l).hexdigest() == s
 
     # Unknown format
     return False
