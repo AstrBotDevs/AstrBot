@@ -38,7 +38,7 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> int:
         import pilk
     except (ImportError, ModuleNotFoundError) as _:
         raise Exception(
-            "pilk 模块未安装，请前往管理面板->平台日志->安装pip库 安装 pilk 这个库",
+            "pilk 模块未安装,请前往管理面板->平台日志->安装pip库 安装 pilk 这个库",
         )
     # with wave.open(wav_path, 'rb') as wav:
     #     wav_data = wav.readframes(wav.getnframes())
@@ -63,8 +63,8 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> int:
 
 
 async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
-    """将 MP3 或其他音频格式转换为 PCM 16bit WAV，采样率24000Hz，单声道。
-    若转换失败则抛出异常。
+    """将 MP3 或其他音频格式转换为 PCM 16bit WAV,采样率24000Hz,单声道｡
+    若转换失败则抛出异常｡
     """
     try:
         from pyffmpeg import FFmpeg
@@ -108,14 +108,14 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
 
 
 async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
-    """将 MP3/WAV 文件转为 Tencent Silk 并返回 base64 编码与时长（秒）。
+    """将 MP3/WAV 文件转为 Tencent Silk 并返回 base64 编码与时长(秒)｡
 
     参数:
-    - audio_path: 输入音频文件路径（.mp3 或 .wav）
+    - audio_path: 输入音频文件路径(.mp3 或 .wav)
 
     返回:
     - silk_b64: Base64 编码的 Silk 字符串
-    - duration: 音频时长（秒）
+    - duration: 音频时长(秒)
     """
     try:
         import pilk

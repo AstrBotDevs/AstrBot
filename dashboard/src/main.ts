@@ -103,7 +103,7 @@ async function initApp() {
     const headers = new Headers(
       init?.headers ||
         (typeof input !== "string" && "headers" in input
-          ? (input ).headers
+          ? input.headers
           : undefined),
     );
     if (token && !headers.has("Authorization")) {

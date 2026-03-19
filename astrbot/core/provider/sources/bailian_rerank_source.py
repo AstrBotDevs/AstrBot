@@ -43,7 +43,7 @@ class BailianRerankProvider(RerankProvider):
             "DASHSCOPE_API_KEY", ""
         )
         if not self.api_key:
-            raise ValueError("阿里云百炼 API Key 不能为空。")
+            raise ValueError("阿里云百炼 API Key 不能为空｡")
 
         self.model = provider_config.get("rerank_model", "qwen3-rerank")
         self.timeout = provider_config.get("timeout", 30)
@@ -68,7 +68,7 @@ class BailianRerankProvider(RerankProvider):
         # 设置模型名称
         self.set_model(self.model)
 
-        logger.info(f"AstrBot 百炼 Rerank 初始化完成。模型: {self.model}")
+        logger.info(f"AstrBot 百炼 Rerank 初始化完成｡模型: {self.model}")
 
     def _build_payload(
         self, query: str, documents: list[str], top_n: int | None
@@ -78,7 +78,7 @@ class BailianRerankProvider(RerankProvider):
         Args:
             query: 查询文本
             documents: 文档列表
-            top_n: 返回前N个结果，如果为None则返回所有结果
+            top_n: 返回前N个结果,如果为None则返回所有结果
 
         Returns:
             请求载荷字典
@@ -129,7 +129,7 @@ class BailianRerankProvider(RerankProvider):
             logger.warning(f"百炼 Rerank 返回空结果: {data}")
             return []
 
-        # 转换为RerankResult对象，使用.get()避免KeyError
+        # 转换为RerankResult对象,使用.get()避免KeyError
         rerank_results = []
         for idx, result in enumerate(results):
             try:
@@ -137,7 +137,7 @@ class BailianRerankProvider(RerankProvider):
                 relevance_score = result.get("relevance_score", 0.0)
 
                 if relevance_score is None:
-                    logger.warning(f"结果 {idx} 缺少 relevance_score，使用默认值 0.0")
+                    logger.warning(f"结果 {idx} 缺少 relevance_score,使用默认值 0.0")
                     relevance_score = 0.0
 
                 rerank_result = RerankResult(
@@ -172,32 +172,30 @@ class BailianRerankProvider(RerankProvider):
         Args:
             query: 查询文本
             documents: 待排序的文档列表
-            top_n: 返回前N个结果，如果为None则使用配置中的默认值
+            top_n: 返回前N个结果,如果为None则使用配置中的默认值
 
         Returns:
             重排序结果列表
         """
         if not self.client:
-            logger.error("百炼 Rerank 客户端会话已关闭，返回空结果")
+            logger.error("百炼 Rerank 客户端会话已关闭,返回空结果")
             return []
 
         if not documents:
-            logger.warning("文档列表为空，返回空结果")
+            logger.warning("文档列表为空,返回空结果")
             return []
 
         if not query.strip():
-            logger.warning("查询文本为空，返回空结果")
+            logger.warning("查询文本为空,返回空结果")
             return []
 
         # 检查限制
         if len(documents) > 500:
-            logger.warning(
-                f"文档数量({len(documents)})超过限制(500)，将截断前500个文档"
-            )
+            logger.warning(f"文档数量({len(documents)})超过限制(500),将截断前500个文档")
             documents = documents[:500]
 
         try:
-            # 构建请求载荷，如果top_n为None则返回所有重排序结果
+            # 构建请求载荷,如果top_n为None则返回所有重排序结果
             payload = self._build_payload(query, documents, top_n)
 
             logger.debug(

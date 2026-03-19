@@ -8,7 +8,6 @@ from collections.abc import Callable
 from datetime import datetime
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from pathlib import Path
-from typing import Protocol
 
 import anyio
 import jwt
@@ -62,10 +61,6 @@ from .routes.api_key import ALL_OPEN_API_SCOPES
 
 # Static assets shipped inside the wheel (built during `hatch build`).
 _BUNDLED_DIST = Path(__file__).parent / "dist"
-
-
-class _AddrWithPort(Protocol):
-    port: int
 
 
 APP: Quart
@@ -172,7 +167,12 @@ class AstrBotDashboard:
         self.app = cors(
             self.app,
             allow_origin="*",
-            allow_headers=["Authorization", "Content-Type", "X-API-Key"],
+            allow_headers=[
+                "Authorization",
+                "Content-Type",
+                "X-API-Key",
+                "Accept-Language",
+            ],
             allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         )
 
@@ -258,7 +258,7 @@ class AstrBotDashboard:
         )
 
     def _init_plugin_route_index(self):
-        """将插件路由索引，避免 O(n) 查找"""
+        """将插件路由索引,避免 O(n) 查找"""
         self._plugin_route_map: dict[tuple[str, str], Callable] = {}
 
         for (
@@ -470,40 +470,37 @@ class AstrBotDashboard:
 
         if ssl_enable:
             cert_file = (
-                os.environ.get("ASTRBOT_DASHBOARD_SSL_CERT")
+                os.environ.get("ASTRBOT_SSL_CERT")
                 or os.environ.get("DASHBOARD_SSL_CERT")
                 or ssl_config.get("cert_file", "")
             )
             key_file = (
-                os.environ.get("ASTRBOT_DASHBOARD_SSL_KEY")
+                os.environ.get("ASTRBOT_SSL_KEY")
                 or os.environ.get("DASHBOARD_SSL_KEY")
                 or ssl_config.get("key_file", "")
             )
             ca_certs = (
-                os.environ.get("ASTRBOT_DASHBOARD_SSL_CA_CERTS")
+                os.environ.get("ASTRBOT_SSL_CA_CERTS")
                 or os.environ.get("DASHBOARD_SSL_CA_CERTS")
                 or ssl_config.get("ca_certs", "")
             )
 
-            cert_path = anyio.Path(cert_file).expanduser()
-            key_path = anyio.Path(key_file).expanduser()
-            if not cert_file or not key_file:
-                raise ValueError(
-                    "dashboard.ssl.enable 为 true 时，必须配置 cert_file 和 key_file。",
-                )
-            if not await cert_path.is_file():
-                raise ValueError(f"SSL 证书文件不存在: {cert_path}")
-            if not await key_path.is_file():
-                raise ValueError(f"SSL 私钥文件不存在: {key_path}")
+            if cert_file and key_file:
+                cert_path = await anyio.Path(cert_file).expanduser()
+                key_path = await anyio.Path(key_file).expanduser()
+                if not cert_path.is_file():
+                    raise ValueError(f"SSL 证书文件不存在: {cert_path}")
+                if not key_path.is_file():
+                    raise ValueError(f"SSL 私钥文件不存在: {key_path}")
 
-            config.certfile = str(await cert_path.resolve())
-            config.keyfile = str(await key_path.resolve())
+                config.certfile = str(cert_path.resolve())
+                config.keyfile = str(key_path.resolve())
 
             if ca_certs:
-                ca_path = anyio.Path(ca_certs).expanduser()
-                if not await ca_path.is_file():
+                ca_path = await anyio.Path(ca_certs).expanduser()
+                if not ca_path.is_file():
                     raise ValueError(f"SSL CA 证书文件不存在: {ca_path}")
-                config.ca_certs = str(await ca_path.resolve())
+                config.ca_certs = str(ca_path.resolve())
 
         # 根据配置决定是否禁用访问日志
         disable_access_log = dashboard_config.get("disable_access_log", True)
@@ -560,7 +557,7 @@ class AstrBotDashboard:
 
         if not local_ips:
             parts.append(
-                "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问。\n"
+                "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问｡\n"
             )
 
         logger.info("".join(parts))

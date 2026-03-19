@@ -150,7 +150,7 @@ class MCPClient:
             # Handle MCP service error logs
             if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
                 if msg.level in ("warning", "error", "critical", "alert", "emergency"):
-                    log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
+                    log_msg = f"[{msg.level.upper()}] {msg.data!s}"
                     self.server_errlogs.append(log_msg)
 
         if "url" in cfg:
@@ -228,7 +228,7 @@ class MCPClient:
                         "alert",
                         "emergency",
                     ):
-                        log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
+                        log_msg = f"[{msg.level.upper()}] {msg.data!s}"
                         self.server_errlogs.append(log_msg)
 
             stdio_transport = await self.exit_stack.enter_async_context(

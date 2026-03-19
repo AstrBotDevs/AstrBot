@@ -359,7 +359,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             except Exception as e:
                 logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
 
-        # 开始处理，转换到运行状态
+        # 开始处理,转换到运行状态
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
 
@@ -466,7 +466,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_resp = llm_resp_result
 
         if llm_resp.role == "err":
-            # 如果 LLM 响应错误，转换到错误状态
+            # 如果 LLM 响应错误,转换到错误状态
             self.final_llm_resp = llm_resp
             self.stats.end_time = time.time()
             self._transition_state(AgentState.ERROR)
@@ -484,7 +484,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return
 
         if not llm_resp.tools_call_name:
-            # 如果没有工具调用，转换到完成状态
+            # 如果没有工具调用,转换到完成状态
             self.final_llm_resp = llm_resp
             self._transition_state(AgentState.DONE)
             self.stats.end_time = time.time()
@@ -527,7 +527,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
 
-        # 如果有工具调用，还需处理工具调用
+        # 如果有工具调用,还需处理工具调用
         if llm_resp.tools_call_name:
             if self.tool_schema_mode == "lazy_load":
                 llm_resp, _ = await self._resolve_tool_exec(llm_resp)
@@ -628,7 +628,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             async for resp in self.step():
                 yield resp
 
-        #  如果循环结束了但是 agent 还没有完成，说明是达到了 max_step
+        #  如果循环结束了但是 agent 还没有完成,说明是达到了 max_step
         if not self.done():
             logger.warning(
                 f"Agent reached max steps ({max_step}), forcing a final response."
@@ -640,7 +640,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.run_context.messages.append(
                 Message(
                     role="user",
-                    content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
+                    content="工具调用次数已达到上限,请停止使用工具,并根据已经收集到的信息,对你的任务和发现进行总结,然后直接回复用户｡",
                 )
             )
             # 再执行最后一步
@@ -652,7 +652,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         req: ProviderRequest,
         llm_response: LLMResponse,
     ) -> T.AsyncGenerator[_HandleFunctionToolsResult, None]:
-        """处理函数工具调用。"""
+        """处理函数工具调用｡"""
         tool_call_result_blocks: list[ToolCallMessageSegment] = []
         logger.info(f"Agent 使用工具: {llm_response.tools_call_name}")
 
@@ -725,17 +725,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 else:
                     func_tool = req.func_tool.get_tool(func_tool_name)
 
-                logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
+                logger.info(f"使用工具:{func_tool_name},参数:{func_tool_args}")
 
                 if not func_tool:
-                    logger.warning(f"未找到指定的工具: {func_tool_name}，将跳过。")
+                    logger.warning(f"未找到指定的工具: {func_tool_name},将跳过｡")
                     _append_tool_call_result(
                         func_tool_id,
                         f"error: Tool {func_tool_name} not found.",
                     )
                     continue
 
-                valid_params = {}  # 参数过滤：只传递函数实际需要的参数
+                valid_params = {}  # 参数过滤:只传递函数实际需要的参数
 
                 # 获取实际的 handler 函数
                 if func_tool.handler:
@@ -760,7 +760,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             f"工具 {func_tool_name} 忽略非期望参数: {ignored_params}",
                         )
                 else:
-                    # 如果没有 handler（如 MCP 工具），使用所有参数
+                    # 如果没有 handler(如 MCP 工具),使用所有参数
                     valid_params = func_tool_args
 
                 try:
@@ -830,7 +830,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         # 这里我们将直接结束 Agent Loop
                         # 发送消息逻辑在 ToolExecutor 中处理了
                         logger.warning(
-                            f"{func_tool_name} 没有返回值，或者已将结果直接发送给用户。"
+                            f"{func_tool_name} 没有返回值,或者已将结果直接发送给用户｡"
                         )
                         self._transition_state(AgentState.DONE)
                         self.stats.end_time = time.time()
@@ -841,7 +841,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     else:
                         # 不应该出现其他类型
                         logger.warning(
-                            f"Tool 返回了不支持的类型: {type(resp)}。",
+                            f"Tool 返回了不支持的类型: {type(resp)}｡",
                         )
                         _append_tool_call_result(
                             func_tool_id,

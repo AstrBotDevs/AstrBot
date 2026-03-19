@@ -13,7 +13,7 @@ from .route import Response, Route, RouteContext
 
 
 def _format_log_sse(log: dict, ts: float) -> str:
-    """辅助函数：格式化 SSE 消息"""
+    """辅助函数:格式化 SSE 消息"""
     payload = {
         "type": "log",
         **log,
@@ -45,7 +45,7 @@ class LogRoute(Route):
     async def _replay_cached_logs(
         self, last_event_id: str
     ) -> AsyncGenerator[str, None]:
-        """辅助生成器：重放缓存的日志"""
+        """辅助生成器:重放缓存的日志"""
         try:
             last_ts = float(last_event_id)
             cached_logs = list(self.log_broker.log_cache)

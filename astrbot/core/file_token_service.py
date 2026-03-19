@@ -8,7 +8,7 @@ import anyio
 
 
 class FileTokenService:
-    """维护一个简单的基于令牌的文件下载服务，支持超时和懒清除。"""
+    """维护一个简单的基于令牌的文件下载服务,支持超时和懒清除｡"""
 
     def __init__(self, default_timeout: float = 300) -> None:
         self.lock = asyncio.Lock()
@@ -36,11 +36,11 @@ class FileTokenService:
         *,
         single_use: bool = True,
     ) -> str:
-        """向令牌服务注册一个文件。
+        """向令牌服务注册一个文件｡
 
         Args:
             file_path(str): 文件路径
-            expire_seconds(float): 超时时间，单位秒（可选）
+            expire_seconds(float): 超时时间,单位秒(可选)
 
         Returns:
             str: 一个文件令牌
@@ -57,10 +57,10 @@ class FileTokenService:
                 if platform.system() == "Windows" and local_path.startswith("/"):
                     local_path = local_path[1:]
             else:
-                # 如果没有 file:/// 前缀，则认为是普通路径
+                # 如果没有 file:/// 前缀,则认为是普通路径
                 local_path = file_path
         except Exception:
-            # 解析失败时，按原路径处理
+            # 解析失败时,按原路径处理
             local_path = file_path
 
         async with self.lock:
@@ -80,7 +80,7 @@ class FileTokenService:
             return file_token
 
     async def handle_file(self, file_token: str) -> str:
-        """根据令牌获取文件路径。
+        """根据令牌获取文件路径｡
 
         Args:
             file_token(str): 注册时返回的令牌

@@ -33,9 +33,9 @@ class ServeTTSRequest(BaseModel):
     # 例如 https://fish.audio/m/626bb6d3f3364c9cbc3aa6a67300a664/
     # 其中reference_id为 626bb6d3f3364c9cbc3aa6a67300a664
     reference_id: str | None = None
-    # 对中英文文本进行标准化，这可以提高数字的稳定性
+    # 对中英文文本进行标准化,这可以提高数字的稳定性
     normalize: bool = True
-    # 平衡模式将延迟减少到300毫秒，但可能会降低稳定性
+    # 平衡模式将延迟减少到300毫秒,但可能会降低稳定性
     latency: Literal["normal", "balanced"] = "normal"
 
 
@@ -122,14 +122,14 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         return bool(re.match(pattern, reference_id.strip()))
 
     async def _generate_request(self, text: str) -> ServeTTSRequest:
-        # 向前兼容逻辑：优先使用reference_id，如果没有则使用角色名称查询
+        # 向前兼容逻辑:优先使用reference_id,如果没有则使用角色名称查询
         if self.reference_id and self.reference_id.strip():
             # 验证reference_id格式
             if not self._validate_reference_id(self.reference_id):
                 raise ValueError(
                     f"无效的FishAudio参考模型ID: '{self.reference_id}'. "
-                    f"请确保ID是32位十六进制字符串（例如: 626bb6d3f3364c9cbc3aa6a67300a664）。"
-                    f"您可以从 https://fish.audio/zh-CN/discovery 获取有效的模型ID。",
+                    f"请确保ID是32位十六进制字符串(例如: 626bb6d3f3364c9cbc3aa6a67300a664)｡"
+                    f"您可以从 https://fish.audio/zh-CN/discovery 获取有效的模型ID｡",
                 )
             reference_id = self.reference_id.strip()
         else:

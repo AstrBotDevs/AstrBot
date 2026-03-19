@@ -17,7 +17,7 @@ from astrbot.api import logger
 
 
 class SlackWebhookClient:
-    """Slack Webhook 模式客户端，使用 Quart 作为 Web 服务器"""
+    """Slack Webhook 模式客户端,使用 Quart 作为 Web 服务器"""
 
     def __init__(
         self,
@@ -58,7 +58,7 @@ class SlackWebhookClient:
             return {"status": "ok", "service": "slack-webhook"}
 
     async def handle_callback(self, req):
-        """处理 Slack 回调请求，可被统一 webhook 入口复用
+        """处理 Slack 回调请求,可被统一 webhook 入口复用
 
         Args:
             req: Quart 请求对象
@@ -108,7 +108,7 @@ class SlackWebhookClient:
     async def start(self) -> None:
         """启动 Webhook 服务器"""
         logger.info(
-            f"Slack Webhook 服务器启动中，监听 {self.host}:{self.port}{self.path}...",
+            f"Slack Webhook 服务器启动中,监听 {self.host}:{self.port}{self.path}...",
         )
 
         await self.app.run_task(

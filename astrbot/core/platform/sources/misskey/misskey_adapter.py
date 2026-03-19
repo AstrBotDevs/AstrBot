@@ -124,7 +124,7 @@ class MisskeyPlatformAdapter(Platform):
 
     async def run(self) -> None:
         if not self.instance_url or not self.access_token:
-            logger.error("[Misskey] 配置不完整，无法启动")
+            logger.error("[Misskey] 配置不完整,无法启动")
             return
 
         self.api = MisskeyAPI(
@@ -171,7 +171,7 @@ class MisskeyPlatformAdapter(Platform):
         session,
         message_chain,
     ):
-        """发送纯文本消息（无文件上传）"""
+        """发送纯文本消息(无文件上传)"""
         if not self.api:
             return await super().send_by_session(session, message_chain)
 
@@ -196,7 +196,7 @@ class MisskeyPlatformAdapter(Platform):
         poll: dict[str, Any],
         message_parts: list[str],
     ) -> None:
-        """处理投票数据，将其添加到消息中"""
+        """处理投票数据,将其添加到消息中"""
         try:
             if not isinstance(message.raw_message, dict):
                 message.raw_message = {}
@@ -409,7 +409,7 @@ class MisskeyPlatformAdapter(Platform):
 
             if not text or not text.strip():
                 if not has_file_components:
-                    logger.warning("[Misskey] 消息内容为空且无文件组件，跳过发送")
+                    logger.warning("[Misskey] 消息内容为空且无文件组件,跳过发送")
                     return await super().send_by_session(session, message_chain)
                 text = ""
 
@@ -438,7 +438,7 @@ class MisskeyPlatformAdapter(Platform):
             sem = asyncio.Semaphore(upload_concurrency)
 
             async def _upload_comp(comp) -> object | None:
-                """组件上传函数：处理 URL（下载后上传）或本地文件（直接上传）"""
+                """组件上传函数:处理 URL(下载后上传)或本地文件(直接上传)"""
                 from .misskey_utils import (
                     resolve_component_url_or_path,
                     upload_local_with_retries,
@@ -464,7 +464,7 @@ class MisskeyPlatformAdapter(Platform):
                             None,
                         )
 
-                        # URL 上传：下载后本地上传
+                        # URL 上传:下载后本地上传
                         if url_candidate:
                             result = await self.api.upload_and_find_file(
                                 str(url_candidate),
@@ -485,7 +485,7 @@ class MisskeyPlatformAdapter(Platform):
                             if file_id:
                                 return file_id
 
-                        # 所有上传都失败，尝试获取 URL 作为回退
+                        # 所有上传都失败,尝试获取 URL 作为回退
                         if hasattr(comp, "register_to_file_service"):
                             try:
                                 url = await comp.register_to_file_service()
@@ -510,7 +510,7 @@ class MisskeyPlatformAdapter(Platform):
                             except Exception:
                                 pass
 
-            # 收集所有可能包含文件/URL信息的组件：支持异步接口或同步字段
+            # 收集所有可能包含文件/URL信息的组件:支持异步接口或同步字段
             file_components = []
             for comp in message_chain.chain:
                 try:
@@ -531,7 +531,7 @@ class MisskeyPlatformAdapter(Platform):
 
             if len(file_components) > MAX_FILE_UPLOAD_COUNT:
                 logger.warning(
-                    f"[Misskey] 文件数量超过限制 ({len(file_components)} > {MAX_FILE_UPLOAD_COUNT})，只上传前{MAX_FILE_UPLOAD_COUNT}个文件",
+                    f"[Misskey] 文件数量超过限制 ({len(file_components)} > {MAX_FILE_UPLOAD_COUNT}),只上传前{MAX_FILE_UPLOAD_COUNT}个文件",
                 )
                 file_components = file_components[:MAX_FILE_UPLOAD_COUNT]
 
@@ -554,7 +554,7 @@ class MisskeyPlatformAdapter(Platform):
                         except Exception:
                             pass
             except Exception:
-                logger.debug("[Misskey] 并发上传过程中出现异常，继续发送文本")
+                logger.debug("[Misskey] 并发上传过程中出现异常,继续发送文本")
 
             if session_id and is_valid_room_session_id(session_id):
                 from .misskey_utils import extract_room_id_from_session_id
@@ -580,11 +580,11 @@ class MisskeyPlatformAdapter(Platform):
                         text = (text or "") + appended
                     payload: dict[str, Any] = {"toUserId": user_id, "text": text}
                     if file_ids:
-                        # 聊天消息只支持单个文件，使用 fileId 而不是 fileIds
+                        # 聊天消息只支持单个文件,使用 fileId 而不是 fileIds
                         payload["fileId"] = file_ids[0]
                         if len(file_ids) > 1:
                             logger.warning(
-                                f"[Misskey] 聊天消息只支持单个文件，忽略其余 {len(file_ids) - 1} 个文件",
+                                f"[Misskey] 聊天消息只支持单个文件,忽略其余 {len(file_ids) - 1} 个文件",
                             )
                     await self.api.send_message(payload)
                 else:
@@ -594,7 +594,7 @@ class MisskeyPlatformAdapter(Platform):
                         session_id.split("%")[1] if "%" in session_id else session_id
                     )
 
-                    # 获取用户缓存信息（包含reply_to_note_id）
+                    # 获取用户缓存信息(包含reply_to_note_id)
                     user_info_for_reply = self._user_cache.get(user_id_for_cache, {})
 
                     visibility, visible_user_ids = resolve_message_visibility(

@@ -52,13 +52,13 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 import pathlib
 
                 try:
-                    # 使用 pathlib 处理路径，能更好地处理 Windows/Linux 差异
+                    # 使用 pathlib 处理路径,能更好地处理 Windows/Linux 差异
                     path_obj = pathlib.Path(file_val)
-                    # 如果是绝对路径且不包含协议头 (://)，则转换为标准的 file: URI
+                    # 如果是绝对路径且不包含协议头 (://),则转换为标准的 file: URI
                     if path_obj.is_absolute() and "://" not in file_val:
                         d["data"]["file"] = path_obj.as_uri()
                 except Exception:
-                    # 如果不是合法路径（例如已经是特定的特殊字符串），则跳过转换
+                    # 如果不是合法路径(例如已经是特定的特殊字符串),则跳过转换
                     pass
             return d
         if isinstance(segment, Video):
@@ -73,7 +73,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         ret = []
         for segment in message_chain.chain:
             if isinstance(segment, At):
-                # At 组件后插入一个空格，避免与后续文本粘连
+                # At 组件后插入一个空格,避免与后续文本粘连
                 d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
                 ret.append(d)
                 ret.append({"type": "text", "data": {"text": " "}})
@@ -109,7 +109,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             await bot.send(event=event, message=messages)
         else:
             raise ValueError(
-                f"无法发送消息：缺少有效的数字 session_id({session_id}) 或 event({event})",
+                f"无法发送消息:缺少有效的数字 session_id({session_id}) 或 event({event})",
             )
 
     @classmethod
@@ -121,17 +121,17 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         is_group: bool = False,
         session_id: str | None = None,
     ) -> None:
-        """发送消息至 QQ 协议端（aiocqhttp）。
+        """发送消息至 QQ 协议端(aiocqhttp)｡
 
         Args:
             bot (CQHttp): aiocqhttp 机器人实例
             message_chain (MessageChain): 要发送的消息链
             event (Event | None, optional): aiocqhttp 事件对象.
             is_group (bool, optional): 是否为群消息.
-            session_id (str | None, optional): 会话 ID（群号或 QQ 号
+            session_id (str | None, optional): 会话 ID(群号或 QQ 号
 
         """
-        # 转发消息、文件消息不能和普通消息混在一起发送
+        # 转发消息､文件消息不能和普通消息混在一起发送
         send_one_by_one = any(
             isinstance(seg, Node | Nodes | File) for seg in message_chain.chain
         )
@@ -160,7 +160,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 # 使用 OneBot V11 文件 API 发送文件
                 file_path = seg.file_ or seg.url
                 if not file_path:
-                    logger.warning("无法发送文件：文件路径或 URL 为空。")
+                    logger.warning("无法发送文件:文件路径或 URL 为空｡")
                     continue
 
                 file_name = seg.name or "file"
@@ -169,7 +169,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 )
 
                 if session_id_int is None:
-                    logger.warning(f"无法发送文件：无效的 session_id: {session_id}")
+                    logger.warning(f"无法发送文件:无效的 session_id: {session_id}")
                     continue
 
                 if is_group:
@@ -222,14 +222,14 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             return await super().send_streaming(generator, use_fallback)
 
         buffer = ""
-        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
+        pattern = re.compile(r"[^｡?!~…]+[｡?!~…]+")
 
         async for chain in generator:
             if isinstance(chain, MessageChain):
                 for comp in chain.chain:
                     if isinstance(comp, Plain):
                         buffer += comp.text
-                        if any(p in buffer for p in "。？！~…"):
+                        if any(p in buffer for p in "｡?!~…"):
                             buffer = await self.process_buffer(buffer, pattern)
                     else:
                         await self.send(MessageChain(chain=[comp]))

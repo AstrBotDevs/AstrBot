@@ -54,7 +54,7 @@ class VLLMRerankProvider(RerankProvider):
 
             if not results:
                 logger.warning(
-                    f"Rerank API 返回了空的列表数据。原始响应: {response_data}",
+                    f"Rerank API 返回了空的列表数据｡原始响应: {response_data}",
                 )
 
             return [

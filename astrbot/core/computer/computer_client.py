@@ -57,7 +57,7 @@ def _discover_bay_credentials(endpoint: str) -> str:
         candidates.append(Path(bay_data_dir) / "credentials.json")
 
     # 2. Mono-repo layout: AstrBot/../pkgs/bay/credentials.json
-    astrbot_root = Path(__file__).resolve().parents[3]  # astrbot/core/computer/ → root
+    astrbot_root = Path(__file__).resolve().parents[3]  # astrbot/core/computer/ ￫ root
     candidates.append(astrbot_root.parent / "pkgs" / "bay" / "credentials.json")
 
     # 3. Current working directory

@@ -1,6 +1,6 @@
 """文档解析器基类和数据结构
 
-定义了文档解析器的抽象接口和相关数据类。
+定义了文档解析器的抽象接口和相关数据类｡
 """
 
 from abc import ABC, abstractmethod
@@ -11,7 +11,7 @@ from dataclasses import dataclass
 class MediaItem:
     """多媒体项
 
-    表示从文档中提取的多媒体资源。
+    表示从文档中提取的多媒体资源｡
     """
 
     media_type: str  # image, video
@@ -24,7 +24,7 @@ class MediaItem:
 class ParseResult:
     """解析结果
 
-    包含解析后的文本内容和提取的多媒体资源。
+    包含解析后的文本内容和提取的多媒体资源｡
     """
 
     text: str
@@ -34,7 +34,7 @@ class ParseResult:
 class BaseParser(ABC):
     """文档解析器基类
 
-    所有文档解析器都应该继承此类并实现 parse 方法。
+    所有文档解析器都应该继承此类并实现 parse 方法｡
     """
 
     @abstractmethod

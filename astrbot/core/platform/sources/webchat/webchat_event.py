@@ -79,7 +79,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                 )
             elif isinstance(comp, Image):
                 # save image to local
-                filename = f"{str(uuid.uuid4())}.jpg"
+                filename = f"{uuid.uuid4()!s}.jpg"
                 path = os.path.join(attachments_dir, filename)
                 image_base64 = await comp.convert_to_base64()
                 async with aiofiles.open(path, "wb") as f:
@@ -95,7 +95,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                 )
             elif isinstance(comp, Record):
                 # save record to local
-                filename = f"{str(uuid.uuid4())}.wav"
+                filename = f"{uuid.uuid4()!s}.wav"
                 path = os.path.join(attachments_dir, filename)
                 record_base64 = await comp.convert_to_base64()
                 async with aiofiles.open(path, "wb") as f:
@@ -147,9 +147,9 @@ class WebChatMessageEvent(AstrMessageEvent):
             conversation_id,
         )
         async for chain in generator:
-            # 处理音频流（Live Mode）
+            # 处理音频流(Live Mode)
             if chain.type == "audio_chunk":
-                # 音频流数据，直接发送
+                # 音频流数据,直接发送
                 audio_b64 = ""
                 text = None
 

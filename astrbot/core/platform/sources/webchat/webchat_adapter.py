@@ -160,12 +160,12 @@ class WebChatAdapter(Platform):
         depth: int = 0,
         max_depth: int = 1,
     ) -> tuple[list, list[str]]:
-        """解析消息段列表，返回消息组件列表和纯文本列表
+        """解析消息段列表,返回消息组件列表和纯文本列表
 
         Args:
             message_parts: 消息段列表
             depth: 当前递归深度
-            max_depth: 最大递归深度（用于处理 reply）
+            max_depth: 最大递归深度(用于处理 reply)
 
         Returns:
             tuple[list, list[str]]: (消息组件列表, 纯文本列表)

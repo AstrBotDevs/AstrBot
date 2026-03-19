@@ -66,7 +66,7 @@ async def run_third_party_agent(
 ) -> AsyncGenerator[tuple[MessageChain, bool], None]:
     """
     运行第三方 agent runner 并转换响应格式
-    类似于 run_agent 函数，但专门处理第三方 agent runner
+    类似于 run_agent 函数,但专门处理第三方 agent runner
     """
     try:
         async for resp in runner.step_until_done(max_step=30):  # type: ignore[misc]
@@ -86,7 +86,7 @@ async def run_third_party_agent(
             err_msg = (
                 f"Error occurred during AI execution.\n"
                 f"Error Type: {type(e).__name__} (3rd party)\n"
-                f"Error Message: {str(e)}"
+                f"Error Message: {e!s}"
             )
         yield MessageChain().message(err_msg), True
 
@@ -301,11 +301,11 @@ class ThirdPartyAgentSubStage(Stage):
             {},
         )
         if not self.prov_id:
-            logger.error("没有填写 Agent Runner 提供商 ID，请前往配置页面配置。")
+            logger.error("没有填写 Agent Runner 提供商 ID,请前往配置页面配置｡")
             return
         if not self.prov_cfg:
             logger.error(
-                f"Agent Runner 提供商 {self.prov_id} 配置不存在，请前往配置页面修改配置。"
+                f"Agent Runner 提供商 {self.prov_id} 配置不存在,请前往配置页面修改配置｡"
             )
             return
 

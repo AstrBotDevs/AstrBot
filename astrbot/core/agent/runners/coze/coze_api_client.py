@@ -66,7 +66,7 @@ class CozeAPIClient:
                 timeout=aiohttp.ClientTimeout(total=60),
             ) as response:
                 if response.status == 401:
-                    raise Exception("Coze API 认证失败，请检查 API Key 是否正确")
+                    raise Exception("Coze API 认证失败,请检查 API Key 是否正确")
 
                 response_text = await response.text()
                 logger.debug(
@@ -75,7 +75,7 @@ class CozeAPIClient:
 
                 if response.status != 200:
                     raise Exception(
-                        f"文件上传失败，状态码: {response.status}, 响应: {response_text}",
+                        f"文件上传失败,状态码: {response.status}, 响应: {response_text}",
                     )
 
                 try:
@@ -87,7 +87,7 @@ class CozeAPIClient:
                     raise Exception(f"文件上传失败: {result.get('msg', '未知错误')}")
 
                 file_id = result["data"]["id"]
-                logger.debug(f"[Coze] 图片上传成功，file_id: {file_id}")
+                logger.debug(f"[Coze] 图片上传成功,file_id: {file_id}")
                 return file_id
 
         except asyncio.TimeoutError:
@@ -111,7 +111,7 @@ class CozeAPIClient:
         try:
             async with session.get(image_url) as response:
                 if response.status != 200:
-                    raise Exception(f"下载图片失败，状态码: {response.status}")
+                    raise Exception(f"下载图片失败,状态码: {response.status}")
 
                 image_data = await response.read()
                 return image_data
@@ -169,10 +169,10 @@ class CozeAPIClient:
                 timeout=aiohttp.ClientTimeout(total=timeout),
             ) as response:
                 if response.status == 401:
-                    raise Exception("Coze API 认证失败，请检查 API Key 是否正确")
+                    raise Exception("Coze API 认证失败,请检查 API Key 是否正确")
 
                 if response.status != 200:
-                    raise Exception(f"Coze API 流式请求失败，状态码: {response.status}")
+                    raise Exception(f"Coze API 流式请求失败,状态码: {response.status}")
 
                 # SSE
                 buffer = ""
@@ -226,10 +226,10 @@ class CozeAPIClient:
                 response_text = await response.text()
 
                 if response.status == 401:
-                    raise Exception("Coze API 认证失败，请检查 API Key 是否正确")
+                    raise Exception("Coze API 认证失败,请检查 API Key 是否正确")
 
                 if response.status != 200:
-                    raise Exception(f"Coze API 请求失败，状态码: {response.status}")
+                    raise Exception(f"Coze API 请求失败,状态码: {response.status}")
 
                 try:
                     return json.loads(response_text)

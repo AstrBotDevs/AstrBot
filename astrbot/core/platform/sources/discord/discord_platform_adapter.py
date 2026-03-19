@@ -68,7 +68,7 @@ class DiscordPlatformAdapter(Platform):
         """通过会话发送消息"""
         if self.client.user is None:
             logger.error(
-                "[Discord] 客户端未就绪 (self.client.user is None)，无法发送消息"
+                "[Discord] 客户端未就绪 (self.client.user is None),无法发送消息"
             )
             return
 
@@ -140,7 +140,7 @@ class DiscordPlatformAdapter(Platform):
         # 初始化 Discord 客户端
         token = str(self.config.get("discord_token"))
         if not token:
-            logger.error("[Discord] Bot Token 未配置。请在配置文件中正确设置 token。")
+            logger.error("[Discord] Bot Token 未配置｡请在配置文件中正确设置 token｡")
             return
 
         proxy = self.config.get("discord_proxy") or None
@@ -162,9 +162,9 @@ class DiscordPlatformAdapter(Platform):
             self._polling_task = asyncio.create_task(self.client.start_polling())
             await self.shutdown_event.wait()
         except discord.errors.LoginFailure:
-            logger.error("[Discord] 登录失败。请检查你的 Bot Token 是否正确。")
+            logger.error("[Discord] 登录失败｡请检查你的 Bot Token 是否正确｡")
         except discord.errors.ConnectionClosed:
-            logger.warning("[Discord] 与 Discord 的连接已关闭。")
+            logger.warning("[Discord] 与 Discord 的连接已关闭｡")
         except Exception as e:
             logger.error(f"[Discord] 适配器运行时发生意外错误: {e}", exc_info=True)
 
@@ -192,7 +192,7 @@ class DiscordPlatformAdapter(Platform):
 
         content = message.content
 
-        # 如果机器人被@，移除@部分
+        # 如果机器人被@,移除@部分
         # 剥离 User Mention (<@id>, <@!id>)
         if self.client and self.client.user:
             mention_str = f"<@{self.client.user.id}>"
@@ -202,7 +202,7 @@ class DiscordPlatformAdapter(Platform):
             elif content.startswith(mention_str_nickname):
                 content = content[len(mention_str_nickname) :].lstrip()
 
-        # 剥离 Role Mention（bot 拥有的任一角色被提及，<@&role_id>）
+        # 剥离 Role Mention(bot 拥有的任一角色被提及,<@&role_id>)
         if (
             hasattr(message, "role_mentions")
             and hasattr(message, "guild")
@@ -252,7 +252,7 @@ class DiscordPlatformAdapter(Platform):
 
     async def convert_message(self, data: dict) -> AstrBotMessage:
         """将平台消息转换成 AstrBotMessage"""
-        # 由于 on_interaction 已被禁用，我们只处理普通消息
+        # 由于 on_interaction 已被禁用,我们只处理普通消息
         return self._convert_message_to_abm(data)
 
     async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
@@ -268,7 +268,7 @@ class DiscordPlatformAdapter(Platform):
 
         if self.client.user is None:
             logger.error(
-                "[Discord] 客户端未就绪 (self.client.user is None)，无法处理消息"
+                "[Discord] 客户端未就绪 (self.client.user is None),无法处理消息"
             )
             return
 
@@ -282,24 +282,24 @@ class DiscordPlatformAdapter(Platform):
             self.commit_event(message_event)
             return
 
-        # 2. 处理普通消息（提及检测）
-        # 确保 raw_message 是 discord.Message 类型，以便静态检查通过
+        # 2. 处理普通消息(提及检测)
+        # 确保 raw_message 是 discord.Message 类型,以便静态检查通过
         raw_message = message.raw_message
         if not isinstance(raw_message, discord.Message):
             logger.warning(
-                f"[Discord] 收到非 Message 类型的消息: {type(raw_message)}，已忽略。"
+                f"[Discord] 收到非 Message 类型的消息: {type(raw_message)},已忽略｡"
             )
             return
 
-        # 检查是否被@（User Mention 或 Bot 拥有的 Role Mention）
+        # 检查是否被@(User Mention 或 Bot 拥有的 Role Mention)
         is_mention = False
 
         # User Mention
-        # 此时 Pylance 知道 raw_message 是 discord.Message，具有 mentions 属性
+        # 此时 Pylance 知道 raw_message 是 discord.Message,具有 mentions 属性
         if self.client.user in raw_message.mentions:
             is_mention = True
 
-        # Role Mention（Bot 拥有的角色被提及）
+        # Role Mention(Bot 拥有的角色被提及)
         if not is_mention and raw_message.role_mentions:
             bot_member = None
             if raw_message.guild:
@@ -319,7 +319,7 @@ class DiscordPlatformAdapter(Platform):
                 ):
                     is_mention = True
 
-        # 如果是被@的消息，设置为唤醒状态
+        # 如果是被@的消息,设置为唤醒状态
         if is_mention:
             message_event.is_wake = True
             message_event.is_at_or_wake_command = True
@@ -337,17 +337,17 @@ class DiscordPlatformAdapter(Platform):
             try:
                 await asyncio.wait_for(self._polling_task, timeout=10)
             except asyncio.CancelledError:
-                logger.info("[Discord] polling_task 已取消。")
+                logger.info("[Discord] polling_task 已取消｡")
             except Exception as e:
                 logger.warning(f"[Discord] polling_task 取消异常: {e}")
-        logger.info("[Discord] 跳过斜杠指令清理，避免重启时重复创建命令。")
+        logger.info("[Discord] 跳过斜杠指令清理,避免重启时重复创建命令｡")
         logger.info("[Discord] 正在关闭 Discord 客户端... (step 2)")
         if self.client and hasattr(self.client, "close"):
             try:
                 await asyncio.wait_for(self.client.close(), timeout=10)
             except Exception as e:
                 logger.warning(f"[Discord] 客户端关闭异常: {e}")
-        logger.info("[Discord] 适配器已终止。")
+        logger.info("[Discord] 适配器已终止｡")
 
     def register_handler(self, handler_info) -> None:
         """注册处理器信息"""
@@ -399,17 +399,17 @@ class DiscordPlatformAdapter(Platform):
                 f"[Discord] 准备同步 {len(registered_commands)} 个指令: {', '.join(registered_commands)}",
             )
         else:
-            logger.info("[Discord] 没有发现可注册的指令。")
+            logger.info("[Discord] 没有发现可注册的指令｡")
 
         # 使用 Pycord 的方法同步指令
-        # 注意：这可能需要一些时间，并且有频率限制
+        # 注意:这可能需要一些时间,并且有频率限制
         try:
             await self.client.sync_commands()
-            logger.info("[Discord] 指令同步完成。")
+            logger.info("[Discord] 指令同步完成｡")
         except HTTPException as exc:
             if getattr(exc, "code", None) == 30034:
                 logger.warning(
-                    "[Discord] 跳过指令同步：已达到 Discord 每日 application command create 限额。"
+                    "[Discord] 跳过指令同步:已达到 Discord 每日 application command create 限额｡"
                 )
                 return
             raise
@@ -420,7 +420,7 @@ class DiscordPlatformAdapter(Platform):
         async def dynamic_callback(
             ctx: discord.ApplicationContext, params: str | None = None
         ) -> None:
-            # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
+            # 将平台特定的前缀'/'剥离,以适配通用的CommandFilter
             logger.debug(f"[Discord] 回调函数触发: {cmd_name}")
             logger.debug(f"[Discord] 回调函数参数: {ctx}")
             logger.debug(f"[Discord] 回调函数参数: {params}")
@@ -429,12 +429,12 @@ class DiscordPlatformAdapter(Platform):
                 message_str_for_filter += f" {params}"
 
             logger.debug(
-                f"[Discord] 斜杠指令 '{cmd_name}' 被触发。 "
+                f"[Discord] 斜杠指令 '{cmd_name}' 被触发｡ "
                 f"原始参数: '{params}'. "
                 f"构建的指令字符串: '{message_str_for_filter}'",
             )
 
-            # 尝试立即响应，防止超时
+            # 尝试立即响应,防止超时
             followup_webhook = None
             try:
                 await ctx.defer()
@@ -449,7 +449,7 @@ class DiscordPlatformAdapter(Platform):
                 abm.type = self._get_message_type(channel, ctx.guild_id)
                 abm.group_id = self._get_channel_id(channel)
             else:
-                # 防守式兜底：channel 取不到时，仍能根据 guild_id/channel_id 推断会话信息
+                # 防守式兜底:channel 取不到时,仍能根据 guild_id/channel_id 推断会话信息
                 abm.type = (
                     MessageType.GROUP_MESSAGE
                     if ctx.guild_id is not None
@@ -494,7 +494,7 @@ class DiscordPlatformAdapter(Platform):
             cmd_filter_instance = event_filter
 
         elif isinstance(event_filter, CommandGroupFilter):
-            # 暂不支持指令组直接注册为斜杠指令，因为它们没有 handle 方法
+            # 暂不支持指令组直接注册为斜杠指令,因为它们没有 handle 方法
             return None
 
         if not cmd_name:

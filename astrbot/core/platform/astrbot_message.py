@@ -52,7 +52,7 @@ class AstrBotMessage:
 
     type: MessageType  # 消息类型
     self_id: str  # 机器人的识别id
-    session_id: str  # 会话id。取决于 unique_session 的设置。
+    session_id: str  # 会话id｡取决于 unique_session 的设置｡
     message_id: str  # 消息id
     group: Group | None  # 群组
     sender: MessageMember  # 发送者
@@ -71,7 +71,7 @@ class AstrBotMessage:
     @property
     def group_id(self) -> str:
         """向后兼容的 group_id 属性
-        群组id，如果为私聊，则为空
+        群组id,如果为私聊,则为空
         """
         if self.group:
             return self.group.group_id

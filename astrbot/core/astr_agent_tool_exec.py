@@ -114,11 +114,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
     @classmethod
     async def execute(cls, tool, run_context, **tool_args):
-        """执行函数调用。
+        """执行函数调用｡
 
         Args:
-            event (AstrMessageEvent): 事件对象, 当 origin 为 local 时必须提供。
-            **kwargs: 函数调用的参数。
+            event (AstrMessageEvent): 事件对象, 当 origin 为 local 时必须提供｡
+            **kwargs: 函数调用的参数｡
 
         Returns:
             AsyncGenerator[None | mcp.types.CallToolResult, None]
@@ -738,11 +738,11 @@ async def call_local_llm_tool(
     except ValueError as e:
         raise Exception(f"Tool execution ValueError: {e}") from e
     except TypeError as e:
-        # 获取函数的签名（包括类型），除了第一个 event/context 参数。
+        # 获取函数的签名(包括类型),除了第一个 event/context 参数｡
         try:
             sig = inspect.signature(handler)
             params = list(sig.parameters.values())
-            # 跳过第一个参数（event 或 context）
+            # 跳过第一个参数(event 或 context)
             if params:
                 params = params[1:]
 
@@ -781,7 +781,7 @@ async def call_local_llm_tool(
         try:
             async for ret in ready_to_call:
                 # 这里逐步执行异步生成器, 对于每个 yield 返回的 ret, 执行下面的代码
-                # 返回值只能是 MessageEventResult 或者 None（无返回值）
+                # 返回值只能是 MessageEventResult 或者 None(无返回值)
                 _has_yielded = True
                 if isinstance(ret, MessageEventResult | CommandResult):
                     # 如果返回值是 MessageEventResult, 设置结果并继续

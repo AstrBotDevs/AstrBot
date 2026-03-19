@@ -48,7 +48,7 @@ class MCPShutdownTimeoutError(asyncio.TimeoutError):
     def __init__(self, names: list[str], timeout: float) -> None:
         self.names = names
         self.timeout = timeout
-        message = f"MCP 服务关闭超时（{timeout:g} 秒）：{', '.join(names)}"
+        message = f"MCP 服务关闭超时({timeout:g} 秒):{', '.join(names)}"
         super().__init__(message)
 
 
@@ -84,7 +84,7 @@ class _MCPClientDictView(Mapping[str, MCPClient]):
 
 
 def _resolve_timeout(
-    timeout: float | int | str | None = None,
+    timeout: float | str | None = None,
     *,
     env_name: str = MCP_INIT_TIMEOUT_ENV,
     default: float = DEFAULT_MCP_INIT_TIMEOUT_SECONDS,
@@ -100,20 +100,20 @@ def _resolve_timeout(
         timeout_value = float(timeout)
     except (TypeError, ValueError):
         logger.warning(
-            f"超时配置（{source}）={timeout!r} 无效，使用默认值 {default:g} 秒。"
+            f"超时配置({source})={timeout!r} 无效,使用默认值 {default:g} 秒｡"
         )
         return default
 
     if timeout_value <= 0:
         logger.warning(
-            f"超时配置（{source}）={timeout_value:g} 必须大于 0，使用默认值 {default:g} 秒。"
+            f"超时配置({source})={timeout_value:g} 必须大于 0,使用默认值 {default:g} 秒｡"
         )
         return default
 
     if timeout_value > MAX_MCP_TIMEOUT_SECONDS:
         logger.warning(
-            f"超时配置（{source}）={timeout_value:g} 过大，已限制为最大值 "
-            f"{MAX_MCP_TIMEOUT_SECONDS:g} 秒，以避免长时间等待。"
+            f"超时配置({source})={timeout_value:g} 过大,已限制为最大值 "
+            f"{MAX_MCP_TIMEOUT_SECONDS:g} 秒,以避免长时间等待｡"
         )
         return MAX_MCP_TIMEOUT_SECONDS
 
@@ -143,7 +143,7 @@ FuncTool = FunctionTool
 
 
 def _prepare_config(config: dict) -> dict:
-    """准备配置，处理嵌套格式"""
+    """准备配置,处理嵌套格式"""
     if config.get("mcpServers"):
         first_key = next(iter(config["mcpServers"]))
         config = config["mcpServers"][first_key]
@@ -210,7 +210,7 @@ class FunctionToolManager:
     def __init__(self) -> None:
         self.func_list: list[FuncTool] = []
         self._mcp_server_runtime: dict[str, _MCPServerRuntime] = {}
-        """MCP 服务运行时状态（唯一事实来源）"""
+        """MCP 服务运行时状态(唯一事实来源)"""
         self._mcp_server_runtime_view = MappingProxyType(self._mcp_server_runtime)
         self._mcp_client_dict_view = _MCPClientDictView(self._mcp_server_runtime)
         self._timeout_mismatch_warned = False
@@ -288,7 +288,7 @@ class FunctionToolManager:
         """添加函数调用工具
 
         @param name: 函数名
-        @param func_args: 函数参数列表，格式为 [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]
+        @param func_args: 函数参数列表,格式为 [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]
         @param desc: 函数描述
         @param func_obj: 处理函数
         """
@@ -306,7 +306,7 @@ class FunctionToolManager:
         logger.info(f"添加函数调用工具: {name}")
 
     def remove_func(self, name: str) -> None:
-        """删除一个函数调用工具。"""
+        """删除一个函数调用工具｡"""
         for i, f in enumerate(self.func_list):
             if f.name == name:
                 self.func_list.pop(i)
@@ -324,7 +324,7 @@ class FunctionToolManager:
 
     @staticmethod
     def _log_safe_mcp_debug_config(cfg: dict) -> None:
-        # 仅记录脱敏后的摘要，避免泄露 command/args/url 中的敏感信息
+        # 仅记录脱敏后的摘要,避免泄露 command/args/url 中的敏感信息
         if "command" in cfg:
             cmd = cfg["command"]
             executable = str(cmd[0] if isinstance(cmd, (list, tuple)) and cmd else cmd)
@@ -350,7 +350,7 @@ class FunctionToolManager:
     async def init_mcp_clients(
         self, raise_on_all_failed: bool = False
     ) -> MCPInitSummary:
-        """从项目根目录读取 mcp_server.json 文件，初始化 MCP 服务列表。文件格式如下：
+        """从项目根目录读取 mcp_server.json 文件,初始化 MCP 服务列表｡文件格式如下:
         ```
         {
             "mcpServers": {
@@ -369,8 +369,8 @@ class FunctionToolManager:
         ```
 
         Timeout behavior:
-        - 初始化超时使用环境变量 ASTRBOT_MCP_INIT_TIMEOUT 或默认值。
-        - 动态启用超时使用 ASTRBOT_MCP_ENABLE_TIMEOUT（独立于初始化超时）。
+        - 初始化超时使用环境变量 ASTRBOT_MCP_INIT_TIMEOUT 或默认值｡
+        - 动态启用超时使用 ASTRBOT_MCP_ENABLE_TIMEOUT(独立于初始化超时)｡
         """
         data_dir = get_astrbot_data_path()
 
@@ -382,7 +382,7 @@ class FunctionToolManager:
                 await f.write(
                     json.dumps(DEFAULT_MCP_CONFIG, ensure_ascii=False, indent=4)
                 )
-            logger.info(f"未找到 MCP 服务配置文件，已创建默认配置文件 {mcp_json_file}")
+            logger.info(f"未找到 MCP 服务配置文件,已创建默认配置文件 {mcp_json_file}")
             return MCPInitSummary(total=0, success=0, failed=[])
 
         async with aiofiles.open(mcp_json_file, encoding="utf-8") as f:
@@ -575,7 +575,7 @@ class FunctionToolManager:
     async def _cleanup_mcp_client_safely(
         self, mcp_client: MCPClient, name: str
     ) -> None:
-        """安全清理单个 MCP 客户端，避免清理异常中断主流程。"""
+        """安全清理单个 MCP 客户端,避免清理异常中断主流程｡"""
         try:
             await mcp_client.cleanup()
         except Exception as cleanup_exc:  # only log here
@@ -599,7 +599,7 @@ class FunctionToolManager:
         logger.debug(f"MCP server {name} list tools response: {tools_res}")
         tool_names = [tool.name for tool in tools_res.tools]
 
-        # 移除该MCP服务之前的工具（如有）
+        # 移除该MCP服务之前的工具(如有)
         self.func_list = [
             f
             for f in self.func_list
@@ -670,7 +670,7 @@ class FunctionToolManager:
         name: str,
         config: dict,
         shutdown_event: asyncio.Event | None = None,
-        init_timeout: float | int | str | None = None,
+        init_timeout: float | str | None = None,
     ) -> None:
         """Enable a new MCP server and initialize it.
 
@@ -739,8 +739,8 @@ class FunctionToolManager:
             if self._timeout_mismatch_warned:
                 return
             logger.info(
-                "检测到 MCP 初始化超时与动态启用超时配置不同："
-                "初始化使用 %s 秒，动态启用使用 %s 秒。如需一致，请设置相同值。",
+                "检测到 MCP 初始化超时与动态启用超时配置不同:"
+                "初始化使用 %s 秒,动态启用使用 %s 秒｡如需一致,请设置相同值｡",
                 f"{init_timeout:g}",
                 f"{enable_timeout:g}",
             )
@@ -767,10 +767,10 @@ class FunctionToolManager:
         return toolset.google_schema()
 
     def deactivate_llm_tool(self, name: str) -> bool:
-        """停用一个已经注册的函数调用工具。
+        """停用一个已经注册的函数调用工具｡
 
         Returns:
-            如果没找到，会返回 False
+            如果没找到,会返回 False
 
         """
         func_tool = self.get_func(name)
@@ -795,14 +795,14 @@ class FunctionToolManager:
             return True
         return False
 
-    # 因为不想解决循环引用，所以这里直接传入 star_map 先了...
+    # 因为不想解决循环引用,所以这里直接传入 star_map 先了...
     def activate_llm_tool(self, name: str, star_map: dict) -> bool:
         func_tool = self.get_func(name)
         if func_tool is not None:
             if func_tool.handler_module_path in star_map:
                 if not star_map[func_tool.handler_module_path].activated:
                     raise ValueError(
-                        f"此函数调用工具所属的插件 {star_map[func_tool.handler_module_path].name} 已被禁用，请先在管理面板启用再激活此工具。",
+                        f"此函数调用工具所属的插件 {star_map[func_tool.handler_module_path].name} 已被禁用,请先在管理面板启用再激活此工具｡",
                     )
 
             func_tool.active = True
@@ -832,7 +832,7 @@ class FunctionToolManager:
 
     def load_mcp_config(self):
         if not os.path.exists(self.mcp_config_path):
-            # 配置文件不存在，创建默认配置
+            # 配置文件不存在,创建默认配置
             os.makedirs(os.path.dirname(self.mcp_config_path), exist_ok=True)
             with open(self.mcp_config_path, "w", encoding="utf-8") as f:
                 json.dump(DEFAULT_MCP_CONFIG, f, ensure_ascii=False, indent=4)

@@ -1,21 +1,22 @@
-"""测试辅助函数和工具类。
+"""测试辅助函数和工具类｡
 
-提供统一的测试辅助工具，减少测试代码重复。
+提供统一的测试辅助工具,减少测试代码重复｡
 """
 
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 from unittest.mock import AsyncMock, MagicMock
 
 from astrbot.core.message.components import BaseMessageComponent
 
 
 class NoopAwaitable:
-    """可等待的空操作对象。
+    """可等待的空操作对象｡
 
-    用于 mock 需要返回 awaitable 对象的方法。
+    用于 mock 需要返回 awaitable 对象的方法｡
     """
 
     def __await__(self):
@@ -30,7 +31,7 @@ class NoopAwaitable:
 
 
 def make_platform_config(platform_type: str, **kwargs) -> dict:
-    """平台配置工厂函数。
+    """平台配置工厂函数｡
 
     Args:
         platform_type: 平台类型 (telegram, discord, aiocqhttp 等)
@@ -105,7 +106,7 @@ def create_mock_update(
     message_thread_id: int | None = None,
     is_topic_message: bool = False,
 ):
-    """创建模拟的 Telegram Update 对象。
+    """创建模拟的 Telegram Update 对象｡
 
     Args:
         message_text: 消息文本
@@ -168,7 +169,7 @@ def create_mock_update(
 
 
 def create_mock_file(file_path: str = "https://api.telegram.org/file/test.jpg"):
-    """创建模拟的 Telegram File 对象。
+    """创建模拟的 Telegram File 对象｡
 
     Args:
         file_path: 文件路径
@@ -193,7 +194,7 @@ def create_mock_discord_attachment(
     content_type: str | None = None,
     size: int = 1024,
 ):
-    """创建模拟的 Discord Attachment 对象。
+    """创建模拟的 Discord Attachment 对象｡
 
     Args:
         filename: 文件名
@@ -218,7 +219,7 @@ def create_mock_discord_user(
     display_name: str = "Test User",
     bot: bool = False,
 ):
-    """创建模拟的 Discord User 对象。
+    """创建模拟的 Discord User 对象｡
 
     Args:
         user_id: 用户 ID
@@ -244,7 +245,7 @@ def create_mock_discord_channel(
     name: str = "general",
     guild_id: int | None = 444555666,
 ):
-    """创建模拟的 Discord Channel 对象。
+    """创建模拟的 Discord Channel 对象｡
 
     Args:
         channel_id: 频道 ID
@@ -278,7 +279,7 @@ def create_mock_message_component(
     component_type: str,
     **kwargs: Any,
 ) -> BaseMessageComponent:
-    """创建模拟的消息组件。
+    """创建模拟的消息组件｡
 
     Args:
         component_type: 组件类型 (plain, image, at, reply, file)
@@ -311,7 +312,7 @@ def create_mock_llm_response(
     tools_call_args: list[dict] | None = None,
     tools_call_ids: list[str] | None = None,
 ):
-    """创建模拟的 LLM 响应。
+    """创建模拟的 LLM 响应｡
 
     Args:
         completion_text: 完成文本
@@ -342,9 +343,9 @@ def create_mock_llm_response(
 
 @dataclass
 class MockPluginConfig:
-    """测试插件配置。
+    """测试插件配置｡
 
-    用于创建和管理测试用的模拟插件。
+    用于创建和管理测试用的模拟插件｡
 
     Attributes:
         name: 插件名称
@@ -374,26 +375,26 @@ DEFAULT_PLUGIN_MAIN_TEMPLATE = '''
 from astrbot.api import star
 
 class Main(star.Star):
-    """测试插件主类。"""
+    """测试插件主类｡"""
 
     def __init__(self, context):
         super().__init__(context)
         self.name = "{plugin_name}"
 
     async def initialize(self):
-        """初始化插件。"""
+        """初始化插件｡"""
         pass
 
     async def terminate(self):
-        """终止插件。"""
+        """终止插件｡"""
         pass
 '''
 
 
 class MockPluginBuilder:
-    """测试插件构建器。
+    """测试插件构建器｡
 
-    用于创建、管理和清理测试用的模拟插件。支持任意插件的模拟创建。
+    用于创建､管理和清理测试用的模拟插件｡支持任意插件的模拟创建｡
 
     Example:
         # 创建一个简单的测试插件
@@ -413,7 +414,7 @@ class MockPluginBuilder:
     """
 
     def __init__(self, plugin_store_path: str | Path):
-        """初始化构建器。
+        """初始化构建器｡
 
         Args:
             plugin_store_path: 插件存储路径 (通常是 data/plugins)
@@ -426,11 +427,11 @@ class MockPluginBuilder:
         plugin_config: str | MockPluginConfig | None = None,
         **kwargs,
     ) -> Path:
-        """创建模拟插件。
+        """创建模拟插件｡
 
         Args:
-            plugin_config: 插件名称字符串、MockPluginConfig 对象或 None
-            **kwargs: 如果 plugin_config 是字符串或 None，这些参数用于构建 MockPluginConfig
+            plugin_config: 插件名称字符串､MockPluginConfig 对象或 None
+            **kwargs: 如果 plugin_config 是字符串或 None,这些参数用于构建 MockPluginConfig
 
         Returns:
             Path: 创建的插件目录路径
@@ -469,13 +470,13 @@ class MockPluginBuilder:
         )
         (plugin_dir / "main.py").write_text(main_code, encoding="utf-8")
 
-        # 创建 requirements.txt（如果有依赖）
+        # 创建 requirements.txt(如果有依赖)
         if config.requirements:
             (plugin_dir / "requirements.txt").write_text(
                 "\n".join(config.requirements) + "\n", encoding="utf-8"
             )
 
-        # 创建 README.md（如果需要）
+        # 创建 README.md(如果需要)
         if config.has_readme:
             (plugin_dir / "README.md").write_text(
                 config.readme_content, encoding="utf-8"
@@ -487,10 +488,10 @@ class MockPluginBuilder:
         return plugin_dir
 
     def cleanup(self, plugin_name: str | None = None) -> None:
-        """清理插件。
+        """清理插件｡
 
         Args:
-            plugin_name: 要清理的插件名称，如果为 None 则清理所有由本构建器创建的插件
+            plugin_name: 要清理的插件名称,如果为 None 则清理所有由本构建器创建的插件
         """
         if plugin_name:
             plugins_to_clean = {plugin_name}
@@ -504,11 +505,11 @@ class MockPluginBuilder:
             self._created_plugins.discard(name)
 
     def cleanup_all(self) -> None:
-        """清理所有由本构建器创建的插件。"""
+        """清理所有由本构建器创建的插件｡"""
         self.cleanup(None)
 
     def get_plugin_path(self, plugin_name: str) -> Path:
-        """获取插件路径。
+        """获取插件路径｡
 
         Args:
             plugin_name: 插件名称
@@ -520,7 +521,7 @@ class MockPluginBuilder:
 
     @property
     def created_plugins(self) -> set[str]:
-        """获取已创建的插件名称集合。"""
+        """获取已创建的插件名称集合｡"""
         return self._created_plugins.copy()
 
 
@@ -528,24 +529,24 @@ def create_mock_updater_install(
     plugin_builder: MockPluginBuilder,
     repo_to_plugin: dict[str, str] | None = None,
 ) -> Callable:
-    """创建模拟的 updater.install 方法。
+    """创建模拟的 updater.install 方法｡
 
     Args:
         plugin_builder: MockPluginBuilder 实例
-        repo_to_plugin: 仓库 URL 到插件名称的映射，格式: {"https://github.com/user/repo": "plugin_name"}
+        repo_to_plugin: 仓库 URL 到插件名称的映射,格式: {"https://github.com/user/repo": "plugin_name"}
 
     Returns:
-        Callable: 异步函数，可用于 monkeypatch.setattr
+        Callable: 异步函数,可用于 monkeypatch.setattr
     """
 
     async def mock_install(repo_url: str, proxy: str = "") -> str:
-        """Mock updater.install 方法。"""
+        """Mock updater.install 方法｡"""
         # 查找插件名称
         plugin_name = None
         if repo_to_plugin:
             plugin_name = repo_to_plugin.get(repo_url)
 
-        # 如果没有映射，尝试从 URL 提取插件名
+        # 如果没有映射,尝试从 URL 提取插件名
         if not plugin_name:
             # 从 https://github.com/user/plugin_name 提取 plugin_name
             parts = repo_url.rstrip("/").split("/")
@@ -563,18 +564,18 @@ def create_mock_updater_update(
     plugin_builder: MockPluginBuilder,
     update_callback: Callable | None = None,
 ) -> Callable:
-    """创建模拟的 updater.update 方法。
+    """创建模拟的 updater.update 方法｡
 
     Args:
         plugin_builder: MockPluginBuilder 实例
-        update_callback: 更新回调函数，接收 plugin 参数
+        update_callback: 更新回调函数,接收 plugin 参数
 
     Returns:
-        Callable: 异步函数，可用于 monkeypatch.setattr
+        Callable: 异步函数,可用于 monkeypatch.setattr
     """
 
     async def mock_update(plugin, proxy: str = "") -> None:
-        """Mock updater.update 方法。"""
+        """Mock updater.update 方法｡"""
         plugin_dir = plugin_builder.get_plugin_path(plugin.name)
 
         # 创建更新标记文件

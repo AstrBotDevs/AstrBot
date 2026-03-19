@@ -140,11 +140,9 @@ def _select_provider(
     if sel_provider and isinstance(sel_provider, str):
         provider = plugin_context.get_provider_by_id(sel_provider)
         if not provider:
-            logger.error("未找到指定的提供商: %s。", sel_provider)
+            logger.error("未找到指定的提供商: %s｡", sel_provider)
         if not isinstance(provider, Provider):
-            logger.error(
-                "选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider)
-            )
+            logger.error("选择的提供商类型无效(%s),跳过 LLM 请求处理｡", type(provider))
             return None
         return provider
     try:
@@ -167,7 +165,7 @@ async def _get_session_conv(
         cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
         conversation = await conv_mgr.get_conversation(umo, cid)
     if not conversation:
-        raise RuntimeError("无法创建新的对话。")
+        raise RuntimeError("无法创建新的对话｡")
     return conversation
 
 
@@ -219,7 +217,7 @@ async def _apply_file_extract(
     if not file_paths:
         return
     if not req.prompt:
-        req.prompt = "总结一下文件里面讲了什么？"
+        req.prompt = "总结一下文件里面讲了什么?"
     if config.file_extract_prov == "moonshotai":
         if not config.file_extract_msh_api_key:
             logger.error("Moonshot AI API key for file extract is not set")
@@ -752,10 +750,10 @@ def _should_disable_streaming_for_webchat_output(
 
 
 def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
-    """根据事件中的插件设置，过滤请求中的工具列表。
+    """根据事件中的插件设置,过滤请求中的工具列表｡
 
-    注意：没有 handler_module_path 的工具（如 MCP 工具）会被保留，
-    因为它们不属于任何插件，不应被插件过滤逻辑影响。
+    注意:没有 handler_module_path 的工具(如 MCP 工具)会被保留,
+    因为它们不属于任何插件,不应被插件过滤逻辑影响｡
     """
     if event.plugins_name is not None and req.func_tool:
         new_tool_set = ToolSet()
@@ -766,13 +764,13 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
                 continue
             mp = tool.handler_module_path
             if not mp:
-                # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
-                # 不应受到会话插件过滤影响。
+                # 没有 plugin 归属信息的工具(如 subagent transfer_to_*)
+                # 不应受到会话插件过滤影响｡
                 new_tool_set.add_tool(tool)
                 continue
             plugin = star_map.get(mp)
             if not plugin:
-                # 无法解析插件归属时，保守保留工具，避免误过滤。
+                # 无法解析插件归属时,保守保留工具,避免误过滤｡
                 new_tool_set.add_tool(tool)
                 continue
             if plugin.name in event.plugins_name or plugin.reserved:
@@ -841,13 +839,13 @@ def _get_compress_provider(
     provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
     if provider is None:
         logger.warning(
-            "未找到指定的上下文压缩模型 %s，将跳过压缩。",
+            "未找到指定的上下文压缩模型 %s,将跳过压缩｡",
             config.llm_compress_provider_id,
         )
         return None
     if not isinstance(provider, Provider):
         logger.warning(
-            "指定的上下文压缩模型 %s 不是对话模型，将跳过压缩。",
+            "指定的上下文压缩模型 %s 不是对话模型,将跳过压缩｡",
             config.llm_compress_provider_id,
         )
         return None
@@ -898,20 +896,20 @@ async def build_main_agent(
     req: ProviderRequest | None = None,
     apply_reset: bool = True,
 ) -> MainAgentBuildResult | None:
-    """构建主对话代理（Main Agent），并且自动 reset。
+    """构建主对话代理(Main Agent),并且自动 reset｡
 
     If apply_reset is False, will not call reset on the agent runner.
     """
     provider = provider or _select_provider(event, plugin_context)
     if provider is None:
-        logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
+        logger.info("未找到任何对话模型(提供商),跳过 LLM 请求处理｡")
         return None
 
     if req is None:
         if event.get_extra("provider_request"):
             req = event.get_extra("provider_request")
             assert isinstance(req, ProviderRequest), (
-                "provider_request 必须是 ProviderRequest 类型。"
+                "provider_request 必须是 ProviderRequest 类型｡"
             )
             if req.conversation:
                 req.contexts = json.loads(req.conversation.history)

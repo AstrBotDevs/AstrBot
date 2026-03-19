@@ -122,7 +122,7 @@ class AstrBotConfigManager:
         self.abconf_data = abconf_data
 
     def get_conf(self, umo: str | MessageSession | None) -> AstrBotConfig:
-        """获取指定 umo 的配置文件。如果不存在，则 fallback 到默认配置文件。"""
+        """获取指定 umo 的配置文件｡如果不存在,则 fallback 到默认配置文件｡"""
         if not umo:
             return self.confs["default"]
         if isinstance(umo, MessageSession):
@@ -268,7 +268,7 @@ class AstrBotConfigManager:
         key: str | None = None,
         default: _VT = None,
     ) -> _VT:
-        """获取配置项。umo 为 None 时使用默认配置"""
+        """获取配置项｡umo 为 None 时使用默认配置"""
         if umo is None:
             return self.confs["default"].get(key, default)
         conf = self.get_conf(umo)

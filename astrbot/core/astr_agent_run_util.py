@@ -130,7 +130,7 @@ async def run_agent(
                 agent_runner.run_context.messages.append(
                     Message(
                         role="user",
-                        content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
+                        content="工具调用次数已达到上限,请停止使用工具,并根据已经收集到的信息,对你的任务和发现进行总结,然后直接回复用户｡",
                     )
                 )
 
@@ -179,7 +179,7 @@ async def run_agent(
                         await astr_event.send(
                             MessageChain(type="tool_call").message(status_msg)
                         )
-                    # 对于其他情况，暂时先不处理
+                    # 对于其他情况,暂时先不处理
                     continue
                 elif resp.type == "tool_call":
                     if agent_runner.streaming:
@@ -269,7 +269,7 @@ async def run_agent(
                 err_msg = (
                     f"Error occurred during AI execution.\n"
                     f"Error Type: {type(e).__name__}\n"
-                    f"Error Message: {str(e)}"
+                    f"Error Message: {e!s}"
                 )
 
             error_llm_response = LLMResponse(
@@ -306,7 +306,7 @@ async def run_live_agent(
     show_tool_call_result: bool = False,
     show_reasoning: bool = False,
 ) -> AsyncGenerator[MessageChain | None, None]:
-    """Live Mode 的 Agent 运行器，支持流式 TTS
+    """Live Mode 的 Agent 运行器,支持流式 TTS
 
     Args:
         agent_runner: Agent 运行器
@@ -319,7 +319,7 @@ async def run_live_agent(
     Yields:
         MessageChain: 包含文本或音频数据的消息链
     """
-    # 如果没有 TTS Provider，直接发送文本
+    # 如果没有 TTS Provider,直接发送文本
     if not tts_provider:
         async for chain in run_agent(
             agent_runner,
@@ -334,11 +334,11 @@ async def run_live_agent(
 
     support_stream = tts_provider.support_stream()
     if support_stream:
-        logger.info("[Live Agent] 使用流式 TTS（原生支持 get_audio_stream）")
+        logger.info("[Live Agent] 使用流式 TTS(原生支持 get_audio_stream)")
     else:
         logger.info(
-            f"[Live Agent] 使用 TTS（{tts_provider.meta().type} "
-            "使用 get_audio，将按句子分块生成音频）"
+            f"[Live Agent] 使用 TTS({tts_provider.meta().type} "
+            "使用 get_audio,将按句子分块生成音频)"
         )
 
     # 统计数据初始化
@@ -351,7 +351,7 @@ async def run_live_agent(
     # audio_queue stored bytes or (text, bytes)
     audio_queue: asyncio.Queue[bytes | tuple[str, bytes] | None] = asyncio.Queue()
 
-    # 1. 启动 Agent Feeder 任务：负责运行 Agent 并将文本分句喂给 text_queue
+    # 1. 启动 Agent Feeder 任务:负责运行 Agent 并将文本分句喂给 text_queue
     feeder_task = asyncio.create_task(
         _run_agent_feeder(
             agent_runner,
@@ -363,7 +363,7 @@ async def run_live_agent(
         )
     )
 
-    # 2. 启动 TTS 任务：负责从 text_queue 读取文本并生成音频到 audio_queue
+    # 2. 启动 TTS 任务:负责从 text_queue 读取文本并生成音频到 audio_queue
     if support_stream:
         tts_task = asyncio.create_task(
             _safe_tts_stream_wrapper(tts_provider, text_queue, audio_queue)
@@ -373,7 +373,7 @@ async def run_live_agent(
             _simulated_stream_tts(tts_provider, text_queue, audio_queue)
         )
 
-    # 3. 主循环：从 audio_queue 读取音频并 yield
+    # 3. 主循环:从 audio_queue 读取音频并 yield
     try:
         while True:
             queue_item = await audio_queue.get()
@@ -388,7 +388,7 @@ async def run_live_agent(
                 audio_data = queue_item
 
             if not first_chunk_received:
-                # 记录首帧延迟（从开始处理到收到第一个音频块）
+                # 记录首帧延迟(从开始处理到收到第一个音频块)
                 tts_first_frame_time = time.time() - tts_start_time
                 first_chunk_received = True
 
@@ -467,9 +467,9 @@ async def _run_agent_feeder(
             if text:
                 buffer += text
 
-                # 分句逻辑：匹配标点符号
-                # r"([.。!！?？\n]+)" 会保留分隔符
-                parts = re.split(r"([.。!！?？\n]+)", buffer)
+                # 分句逻辑:匹配标点符号
+                # r"([.｡!!??\n]+)" 会保留分隔符
+                parts = re.split(r"([.｡!!??\n]+)", buffer)
 
                 if len(parts) > 1:
                     # 处理完整的句子

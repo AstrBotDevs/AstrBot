@@ -35,7 +35,7 @@ async def generate_tsne_visualization(
         from sklearn.manifold import TSNE
     except ImportError as e:
         raise Exception(
-            "缺少必要的库以生成 t-SNE 可视化。请安装 matplotlib 和 scikit-learn: {e}",
+            "缺少必要的库以生成 t-SNE 可视化｡请安装 matplotlib 和 scikit-learn: {e}",
         ) from e
 
     try:
@@ -115,7 +115,7 @@ async def generate_tsne_visualization(
             label="Knowledge Base Vectors",
         )
 
-        # 绘制查询向量（红色 X）
+        # 绘制查询向量 红色 X
         plt.scatter(
             query_vector_2d[0],
             query_vector_2d[1],

@@ -97,7 +97,7 @@ async def download_image_by_url(
                         await f.write(await resp.read())
                     return path
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        # 关闭SSL验证（仅在证书验证失败时作为fallback）
+        # 关闭SSL验证(仅在证书验证失败时作为fallback)
         logger.warning(
             f"SSL certificate verification failed for {url}. "
             "Disabling SSL verification (CERT_NONE) as a fallback. "
@@ -144,7 +144,9 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
-                    print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
+                    logger.info(
+                        f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}"
+                    )
                 async with await anyio.open_file(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
@@ -159,14 +161,13 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                                 else 1
                             )
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            print(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
-                                end="",
+                            logger.info(
+                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s"
                             )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        # 关闭SSL验证（仅在证书验证失败时作为fallback）
+        # 关闭SSL验证(仅在证书验证失败时作为fallback)
         logger.warning(
-            "SSL 证书验证失败，已关闭 SSL 验证（不安全，仅用于临时下载）。请检查目标服务器的证书配置。"
+            "SSL 证书验证失败,已关闭 SSL 验证(不安全,仅用于临时下载)｡请检查目标服务器的证书配置｡"
         )
         logger.warning(
             f"SSL certificate verification failed for {url}. "
@@ -183,7 +184,9 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
-                    print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
+                    logger.info(
+                        f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}"
+                    )
                 async with await anyio.open_file(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
@@ -194,12 +197,11 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                         if show_progress:
                             elapsed_time = time.time() - start_time
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            print(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
-                                end="",
+                            logger.info(
+                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s"
                             )
     if show_progress:
-        print()
+        logger.info("下载完成")
 
 
 def file_to_base64(file_path: str) -> str:
@@ -218,7 +220,7 @@ def get_local_ip_addresses() -> list[IPv4Address | IPv6Address]:
             if addr.family == socket.AF_INET:
                 network_ips.append(ip_address(addr.address))
             elif addr.family == socket.AF_INET6:
-                # 过滤掉 IPv6 的 link-local 地址（fe80:...）
+                # 过滤掉 IPv6 的 link-local 地址(fe80:...)
                 ip = ip_address(addr.address.split("%")[0])  # 处理带 zone index 的情况
                 if not ip.is_link_local:
                     network_ips.append(ip)
@@ -303,15 +305,15 @@ async def download_dashboard(
             try:
                 with zipfile.ZipFile(str(cache_path), "r") as z:
                     if z.testzip() is None:
-                        logger.info("缓存文件校验通过，将直接使用缓存。")
+                        logger.info("缓存文件校验通过,将直接使用缓存｡")
                         if str(cache_path) != str(zip_path):
                             shutil.copy(str(cache_path), str(zip_path))
                         use_cache = True
                     else:
-                        logger.warning("缓存文件损坏，将重新下载。")
+                        logger.warning("缓存文件损坏,将重新下载｡")
                         await cache_path.unlink()
             except zipfile.BadZipFile:
-                logger.warning("缓存文件损坏 (BadZipFile)，将重新下载。")
+                logger.warning("缓存文件损坏 (BadZipFile),将重新下载｡")
                 await cache_path.unlink()
         if not use_cache:
             if latest or len(str(version)) != 40:
@@ -342,7 +344,7 @@ async def download_dashboard(
                     except Exception as e:
                         if not latest:
                             logger.warning(
-                                f"下载指定版本({version})失败: {e}，尝试下载最新版本。"
+                                f"下载指定版本({version})失败: {e},尝试下载最新版本｡"
                             )
                             await download_dashboard(
                                 path=path,

@@ -42,7 +42,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
     SPLIT_PATTERNS = {
         "paragraph": re.compile(r"\n\n"),
         "line": re.compile(r"\n"),
-        "sentence": re.compile(r"[.!?。！？]"),
+        "sentence": re.compile(r"[.!?｡!?]"),
         "word": re.compile(r"\s"),
     }
 
@@ -52,7 +52,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     @classmethod
     def _allocate_draft_id(cls) -> int:
-        """分配一个递增的 draft_id，溢出时归 1。"""
+        """分配一个递增的 draft_id,溢出时归 1｡"""
         cls._next_draft_id = (
             1
             if cls._next_draft_id >= cls._TELEGRAM_DRAFT_ID_MAX
@@ -60,7 +60,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         )
         return cls._next_draft_id
 
-    # 消息类型到 chat action 的映射，用于优先级判断
+    # 消息类型到 chat action 的映射,用于优先级判断
     ACTION_BY_TYPE: dict[type, str] = {
         Record: ChatAction.UPLOAD_VOICE,
         Video: ChatAction.UPLOAD_VIDEO,
@@ -124,7 +124,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     @classmethod
     def _get_chat_action_for_chain(cls, chain: list[Any]) -> ChatAction | str:
-        """根据消息链中的组件类型确定合适的 chat action（按优先级）"""
+        """根据消息链中的组件类型确定合适的 chat action(按优先级)"""
         for seg_type, action in cls.ACTION_BY_TYPE.items():
             if any(isinstance(seg, seg_type) for seg in chain):
                 return action
@@ -141,7 +141,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         message_thread_id: str | None = None,
         **payload: Any,
     ) -> None:
-        """发送媒体时显示 upload action，发送完成后恢复 typing"""
+        """发送媒体时显示 upload action,发送完成后恢复 typing"""
         effective_thread_id = message_thread_id or cast(
             str | None, payload.get("message_thread_id")
         )
@@ -197,7 +197,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 raise
             logger.warning(
                 "User privacy settings prevent receiving voice messages, falling back to sending an audio file. "
-                "To enable voice messages, go to Telegram Settings → Privacy and Security → Voice Messages → set to 'Everyone'."
+                "To enable voice messages, go to Telegram Settings ￫ Privacy and Security ￫ Voice Messages ￫ set to 'Everyone'."
             )
             if use_media_action:
                 media_payload = dict(payload)
@@ -339,13 +339,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
         await super().send(message)
 
     async def react(self, emoji: str | None, big: bool = False) -> None:
-        """给原消息添加 Telegram 反应：
-        - 普通 emoji：传入 '👍'、'😂' 等
-        - 自定义表情：传入其 custom_emoji_id（纯数字字符串）
-        - 取消本机器人的反应：传入 None 或空字符串
+        """给原消息添加 Telegram 反应:
+        - 普通 emoji:传入 '👍'､'😂' 等
+        - 自定义表情:传入其 custom_emoji_id(纯数字字符串)
+        - 取消本机器人的反应:传入 None 或空字符串
         """
         try:
-            # 解析 chat_id（去掉超级群的 "#<thread_id>" 片段）
+            # 解析 chat_id(去掉超级群的 "#<thread_id>" 片段)
             if self.get_message_type() == MessageType.GROUP_MESSAGE:
                 chat_id = (self.message_obj.group_id or "").split("#")[0]
             else:
@@ -353,10 +353,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
             message_id = int(self.message_obj.message_id)
 
-            # 组装 reaction 参数（必须是 ReactionType 的列表）
+            # 组装 reaction 参数(必须是 ReactionType 的列表)
             if not emoji:  # 清空本 bot 的反应
                 reaction_param = []  # 空列表表示移除本 bot 的反应
-            elif emoji.isdigit():  # 自定义表情：传 custom_emoji_id
+            elif emoji.isdigit():  # 自定义表情:传 custom_emoji_id
                 reaction_param = [ReactionTypeCustomEmoji(emoji)]
             else:  # 普通 emoji
                 reaction_param = [ReactionTypeEmoji(emoji)]
@@ -365,7 +365,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 chat_id=chat_id,
                 message_id=message_id,
                 reaction=reaction_param,  # 注意是列表
-                is_big=big,  # 可选：大动画
+                is_big=big,  # 可选:大动画
             )
         except Exception as e:
             logger.error(f"[Telegram] 添加反应失败: {e}")
@@ -378,16 +378,16 @@ class TelegramPlatformEvent(AstrMessageEvent):
         message_thread_id: str | None = None,
         parse_mode: str | None = None,
     ) -> None:
-        """通过 Bot.send_message_draft 发送草稿消息（流式推送部分消息）。
+        """通过 Bot.send_message_draft 发送草稿消息(流式推送部分消息)｡
 
-        该 API 仅支持私聊。
+        该 API 仅支持私聊｡
 
         Args:
             chat_id: 目标私聊的 chat_id
-            draft_id: 草稿唯一标识，非零整数；相同 draft_id 的变更会以动画展示
-            text: 消息文本，1-4096 字符
-            message_thread_id: 可选，目标消息线程 ID
-            parse_mode: 可选，消息文本的解析模式
+            draft_id: 草稿唯一标识,非零整数;相同 draft_id 的变更会以动画展示
+            text: 消息文本,1-4096 字符
+            message_thread_id: 可选,目标消息线程 ID
+            parse_mode: 可选,消息文本的解析模式
         """
         kwargs: dict[str, Any] = {}
         if message_thread_id:
@@ -416,7 +416,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         message_thread_id: str | None,
         on_text: Callable[[str], None],
     ) -> None:
-        """处理 MessageChain 中的各类组件，文本通过 on_text 回调追加，媒体直接发送。"""
+        """处理 MessageChain 中的各类组件,文本通过 on_text 回调追加,媒体直接发送｡"""
         for i in chain.chain:
             if isinstance(i, Plain):
                 on_text(i.text)
@@ -475,7 +475,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 logger.warning(f"不支持的消息类型: {type(i)}")
 
     async def _send_final_segment(self, delta: str, payload: dict[str, Any]) -> None:
-        """将累积文本作为 MarkdownV2 真实消息发送，失败时回退到纯文本。"""
+        """将累积文本作为 MarkdownV2 真实消息发送,失败时回退到纯文本｡"""
         try:
             markdown_text = telegramify_markdown.markdownify(
                 delta,
@@ -486,7 +486,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 **cast(Any, payload),
             )
         except Exception as e:
-            logger.warning(f"Markdown转换失败，使用普通文本: {e!s}")
+            logger.warning(f"Markdown转换失败,使用普通文本: {e!s}")
             await self.client.send_message(text=delta, **cast(Any, payload))
 
     async def send_streaming(self, generator, use_fallback: bool = False):
@@ -506,7 +506,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         if message_thread_id:
             payload["message_thread_id"] = message_thread_id
 
-        # sendMessageDraft 仅支持私聊（显式检查 FRIEND_MESSAGE）
+        # sendMessageDraft 仅支持私聊(显式检查 FRIEND_MESSAGE)
         is_private = self.get_message_type() == MessageType.FRIEND_MESSAGE
 
         if is_private:
@@ -520,7 +520,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 user_name, message_thread_id, payload, generator
             )
 
-        # 内联父类 send_streaming 的副作用（避免传入已消费的 generator）
+        # 内联父类 send_streaming 的副作用(避免传入已消费的 generator)
         asyncio.create_task(
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
         )
@@ -533,26 +533,26 @@ class TelegramPlatformEvent(AstrMessageEvent):
         payload: dict[str, Any],
         generator,
     ) -> None:
-        """使用 sendMessageDraft API 进行流式推送（私聊专用）。
+        """使用 sendMessageDraft API 进行流式推送(私聊专用)｡
 
-        流式过程中使用 sendMessageDraft 推送草稿动画，
-        流式结束后发送一条真实消息保留最终内容（draft 是临时的，会消失）。
-        使用信号驱动的发送循环：每次有新 token 到达时唤醒发送，
-        发送频率由网络 RTT 自然限制（最多一个请求 in-flight）。
+        流式过程中使用 sendMessageDraft 推送草稿动画,
+        流式结束后发送一条真实消息保留最终内容(draft 是临时的,会消失)｡
+        使用信号驱动的发送循环:每次有新 token 到达时唤醒发送,
+        发送频率由网络 RTT 自然限制(最多一个请求 in-flight)｡
         """
         draft_id = self._allocate_draft_id()
         delta = ""
         last_sent_text = ""
-        done = False  # 信号：生成器已结束
+        done = False  # 信号:生成器已结束
         text_changed = asyncio.Event()  # 有新 token 到达时触发
 
         async def _draft_sender_loop() -> None:
-            """信号驱动的草稿发送循环，有新内容就发，RTT 自然限流。"""
+            """信号驱动的草稿发送循环,有新内容就发,RTT 自然限流｡"""
             nonlocal last_sent_text
             while not done:
                 await text_changed.wait()
                 text_changed.clear()
-                # 发送最新的缓冲区内容（MarkdownV2 渲染，与真实消息一致）
+                # 发送最新的缓冲区内容(MarkdownV2 渲染,与真实消息一致)
                 if delta and delta != last_sent_text:
                     draft_text = delta[: self.MAX_MESSAGE_LENGTH]
                     if draft_text != last_sent_text:
@@ -569,7 +569,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                             )
                             last_sent_text = draft_text
                         except Exception:
-                            # markdownify 对未闭合语法可能失败，回退纯文本
+                            # markdownify 对未闭合语法可能失败,回退纯文本
                             try:
                                 await self._send_message_draft(
                                     user_name,
@@ -596,9 +596,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     continue
 
                 if chain.type == "break":
-                    # 分割符：发送真实消息保留内容，重置缓冲区
+                    # 分割符:发送真实消息保留内容,重置缓冲区
                     if delta:
-                        # 用 emoji 清空 draft 显示，避免 draft 和真实消息同时可见
+                        # 用 emoji 清空 draft 显示,避免 draft 和真实消息同时可见
                         await self._send_message_draft(
                             user_name,
                             draft_id,
@@ -619,7 +619,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             text_changed.set()  # 唤醒循环使其退出
             await sender_task
 
-        # 流式结束：用 emoji 清空 draft，然后发真实消息持久化
+        # 流式结束:用 emoji 清空 draft,然后发真实消息持久化
         if delta:
             await self._send_message_draft(
                 user_name,
@@ -636,7 +636,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         payload: dict[str, Any],
         generator,
     ) -> None:
-        """使用 send_message + edit_message_text 进行流式推送（群聊 fallback）。"""
+        """使用 send_message + edit_message_text 进行流式推送(群聊 fallback)｡"""
         delta = ""
         current_content = ""
         message_id = None
@@ -724,7 +724,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         parse_mode="MarkdownV2",
                     )
                 except Exception as e:
-                    logger.warning(f"Markdown转换失败，使用普通文本: {e!s}")
+                    logger.warning(f"Markdown转换失败,使用普通文本: {e!s}")
                     await self.client.edit_message_text(
                         text=delta,
                         chat_id=payload["chat_id"],

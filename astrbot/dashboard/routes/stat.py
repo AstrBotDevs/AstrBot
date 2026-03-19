@@ -169,7 +169,7 @@ class StatRoute(Route):
             return Response().error(e.__str__()).__dict__
 
     async def test_ghproxy_connection(self):
-        """测试 GitHub 代理连接是否可用。"""
+        """测试 GitHub 代理连接是否可用｡"""
         try:
             data = await request.get_json()
             proxy_url: str = data.get("proxy_url")
@@ -223,7 +223,7 @@ class StatRoute(Route):
             changelogs_dir = _resolve_path(Path(project_path) / "changelogs")
             changelog_path = _resolve_path(changelogs_dir / filename)
 
-            # 验证最终路径在预期的 changelogs 目录内（防止路径遍历）
+            # 验证最终路径在预期的 changelogs 目录内(防止路径遍历)
             try:
                 changelog_path.relative_to(changelogs_dir)
             except ValueError:
@@ -265,13 +265,13 @@ class StatRoute(Route):
             versions = []
             for filename in os.listdir(changelogs_dir):
                 if filename.endswith(".md") and filename.startswith("v"):
-                    # 提取版本号（去除 v 前缀和 .md 后缀）
+                    # 提取版本号(去除 v 前缀和 .md 后缀)
                     version = filename[1:-3]  # 去掉 "v" 和 ".md"
                     # 验证版本号格式
                     if re.match(r"^[a-zA-Z0-9._-]+$", version):
                         versions.append(version)
 
-            # 按版本号排序（降序，最新的在前）
+            # 按版本号排序(降序,最新的在前)
             # 使用项目中的 VersionComparator 进行语义化版本号排序
             versions.sort(
                 key=cmp_to_key(
@@ -285,7 +285,7 @@ class StatRoute(Route):
             return Response().error(f"Error: {e!s}").__dict__
 
     async def get_first_notice(self):
-        """读取项目根目录 FIRST_NOTICE.md 内容。"""
+        """读取项目根目录 FIRST_NOTICE.md 内容｡"""
         try:
             locale = (request.args.get("locale") or "").strip()
             if not re.match(r"^[A-Za-z0-9_-]*$", locale):

@@ -3,10 +3,7 @@
     <!-- Proxy Settings -->
     <!-- <div class="text-h6 mb-2">{{ tm('network.title') }}</div> -->
 
-    <v-list
-      lines="two"
-      subheader
-    >
+    <v-list lines="two" subheader>
       <v-list-subheader>{{ tm("network.title") }}</v-list-subheader>
 
       <v-list-item
@@ -148,23 +145,15 @@
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <v-icon size="18">
-                    mdi-help-circle-outline
-                  </v-icon>
+                  <v-icon size="18"> mdi-help-circle-outline </v-icon>
                 </v-btn>
               </template>
               <span>{{ tm("apiKey.docsLink") }}</span>
             </v-tooltip>
           </div>
         </template>
-        <v-row
-          class="mt-2"
-          dense
-        >
-          <v-col
-            cols="12"
-            md="4"
-          >
+        <v-row class="mt-2" dense>
+          <v-col cols="12" md="4">
             <v-text-field
               v-model="newApiKeyName"
               :label="tm('apiKey.name')"
@@ -173,10 +162,7 @@
               hide-details
             />
           </v-col>
-          <v-col
-            cols="12"
-            md="3"
-          >
+          <v-col cols="12" md="3">
             <v-select
               v-model="newApiKeyExpiresInDays"
               :items="apiKeyExpiryOptions"
@@ -186,31 +172,18 @@
               hide-details
             />
           </v-col>
-          <v-col
-            v-if="newApiKeyExpiresInDays === 'permanent'"
-            cols="12"
-          >
-            <v-alert
-              type="warning"
-              variant="tonal"
-              density="comfortable"
-            >
+          <v-col v-if="newApiKeyExpiresInDays === 'permanent'" cols="12">
+            <v-alert type="warning" variant="tonal" density="comfortable">
               {{ tm("apiKey.permanentWarning") }}
             </v-alert>
           </v-col>
-          <v-col
-            cols="12"
-            md="5"
-            class="d-flex align-center"
-          >
+          <v-col cols="12" md="5" class="d-flex align-center">
             <v-btn
               color="primary"
               :loading="apiKeyCreating"
               @click="createApiKey"
             >
-              <v-icon class="mr-2">
-                mdi-key-plus
-              </v-icon>
+              <v-icon class="mr-2"> mdi-key-plus </v-icon>
               {{ tm("apiKey.create") }}
             </v-btn>
           </v-col>
@@ -219,10 +192,7 @@
             <div class="text-caption text-medium-emphasis mb-1">
               {{ tm("apiKey.scopes") }}
             </div>
-            <v-chip-group
-              v-model="newApiKeyScopes"
-              multiple
-            >
+            <v-chip-group v-model="newApiKeyScopes" multiple>
               <v-chip
                 v-for="scope in availableScopes"
                 :key="scope.value"
@@ -239,14 +209,8 @@
             </v-chip-group>
           </v-col>
 
-          <v-col
-            v-if="createdApiKeyPlaintext"
-            cols="12"
-          >
-            <v-alert
-              type="warning"
-              variant="tonal"
-            >
+          <v-col v-if="createdApiKeyPlaintext" cols="12">
+            <v-alert type="warning" variant="tonal">
               <div class="d-flex align-center justify-space-between flex-wrap">
                 <span>{{ tm("apiKey.plaintextHint") }}</span>
                 <v-btn
@@ -255,9 +219,8 @@
                   color="primary"
                   @click="copyCreatedApiKey"
                 >
-                  <v-icon class="mr-1">
-                    mdi-content-copy
-                  </v-icon>{{ tm("apiKey.copy") }}
+                  <v-icon class="mr-1"> mdi-content-copy </v-icon
+                  >{{ tm("apiKey.copy") }}
                 </v-btn>
               </div>
               <code style="word-break: break-all">{{
@@ -280,10 +243,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr
-                  v-for="item in apiKeys"
-                  :key="item.key_id"
-                >
+                <tr v-for="item in apiKeys" :key="item.key_id">
                   <td>{{ item.name }}</td>
                   <td>
                     <code>{{ item.key_prefix }}</code>
@@ -328,10 +288,7 @@
                   </td>
                 </tr>
                 <tr v-if="apiKeys.length === 0">
-                  <td
-                    colspan="7"
-                    class="text-center text-medium-emphasis"
-                  >
+                  <td colspan="7" class="text-center text-medium-emphasis">
                     {{ tm("apiKey.empty") }}
                   </td>
                 </tr>
@@ -345,11 +302,7 @@
         :subtitle="tm('system.migration.subtitle')"
         :title="tm('system.migration.title')"
       >
-        <v-btn
-          style="margin-top: 16px"
-          color="primary"
-          @click="startMigration"
-        >
+        <v-btn style="margin-top: 16px" color="primary" @click="startMigration">
           {{ tm("system.migration.button") }}
         </v-btn>
       </v-list-item>
@@ -371,14 +324,8 @@
       >
         <template #append />
 
-        <v-row
-          class="mt-2"
-          dense
-        >
-          <v-col
-            cols="12"
-            md="4"
-          >
+        <v-row class="mt-2" dense>
+          <v-col cols="12" md="4">
             <v-text-field
               v-model="primaryColor"
               :label="tm('style.color.primary')"
@@ -400,10 +347,7 @@
               </template>
             </v-text-field>
           </v-col>
-          <v-col
-            cols="12"
-            md="4"
-          >
+          <v-col cols="12" md="4">
             <v-text-field
               v-model="secondaryColor"
               :label="tm('style.color.secondary')"
@@ -425,18 +369,9 @@
               </template>
             </v-text-field>
           </v-col>
-          <v-col
-            cols="12"
-            md="4"
-          >
-            <v-btn
-              color="primary"
-              block
-              @click="applyThemeColors"
-            >
-              <v-icon start>
-                mdi-pencil-ruler
-              </v-icon>
+          <v-col cols="12" md="4">
+            <v-btn color="primary" block @click="applyThemeColors">
+              <v-icon start> mdi-pencil-ruler </v-icon>
               {{ t("core.common.save") }}
             </v-btn>
           </v-col>
@@ -473,10 +408,7 @@
         </div>
       </v-list-item>
 
-      <v-list-item
-        :subtitle="tm('reset.subtitle')"
-        :title="tm('reset.title')"
-      >
+      <v-list-item :subtitle="tm('reset.subtitle')" :title="tm('reset.title')">
         <div class="d-flex align-center mt-2">
           <v-btn
             color="error"
@@ -595,6 +527,12 @@ const isCustomPreset = (name) => {
 };
 
 const saveApiUrl = () => {
+  const validationError = getApiBaseUrlValidationError(apiBaseUrl.value);
+  if (validationError) {
+    toastStore.error(validationError);
+    return;
+  }
+
   apiStore.setApiBaseUrl(apiBaseUrl.value);
   window.location.reload();
 };
@@ -651,8 +589,10 @@ const autoThemeSwitcher = computed({
   get: () => customizer.autoSwitchTheme,
   set: (value) => {
     customizer.SET_AUTO_SYNC(value);
-    if (value) { customizer.APPLY_SYSTEM_THEME() }
-  }
+    if (value) {
+      customizer.APPLY_SYSTEM_THEME();
+    }
+  },
 });
 
 const wfr = ref(null);

@@ -1,6 +1,6 @@
-"""Discord 模块 Mock 工具。
+"""Discord 模块 Mock 工具｡
 
-提供统一的 Discord 相关模块 mock 设置，避免在测试文件中重复定义。
+提供统一的 Discord 相关模块 mock 设置,避免在测试文件中重复定义｡
 """
 
 import sys
@@ -10,7 +10,7 @@ import pytest
 
 
 def create_mock_discord_modules():
-    """创建 Discord 相关的 mock 模块。
+    """创建 Discord 相关的 mock 模块｡
 
     Returns:
         dict: 包含 discord 和相关模块的 mock 对象
@@ -100,9 +100,9 @@ def create_mock_discord_modules():
 
 @pytest.fixture(scope="module", autouse=True)
 def mock_discord_modules():
-    """Mock Discord 相关模块的 fixture。
+    """Mock Discord 相关模块的 fixture｡
 
-    自动应用于使用此 fixture 的测试模块。
+    自动应用于使用此 fixture 的测试模块｡
     """
     mock_discord = create_mock_discord_modules()
     monkeypatch = pytest.MonkeyPatch()
@@ -123,11 +123,11 @@ def mock_discord_modules():
 
 
 class MockDiscordBuilder:
-    """构建 Discord 测试 mock 对象的工具类。"""
+    """构建 Discord 测试 mock 对象的工具类｡"""
 
     @staticmethod
     def create_client():
-        """创建 mock Discord client 实例。"""
+        """创建 mock Discord client 实例｡"""
         client = MagicMock()
         client.user = MagicMock()
         client.user.id = 123456789

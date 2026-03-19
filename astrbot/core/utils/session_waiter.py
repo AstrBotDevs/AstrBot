@@ -19,6 +19,7 @@ class SessionController:
     """控制一个 Session 是否已经结束"""
 
     def __init__(self) -> None:
+        self.tasks = set()
         self.future = asyncio.Future()
         self.current_event: asyncio.Event | None = None
         """当前正在等待的所用的异步事件"""
@@ -41,8 +42,8 @@ class SessionController:
         """保持这个会话
 
         Args:
-            timeout (float): 必填。会话超时时间。
-            当 reset_timeout 设置为 True 时, 代表重置超时时间, timeout 必须 > 0, 如果 <= 0 则立即结束会话。
+            timeout (float): 必填｡会话超时时间｡
+            当 reset_timeout 设置为 True 时, 代表重置超时时间, timeout 必须 > 0, 如果 <= 0 则立即结束会话｡
             当 reset_timeout 设置为 False 时, 代表继续维持原来的超时时间, 新 timeout = 原来剩余的timeout + timeout (可以 < 0)
 
         """
@@ -69,13 +70,17 @@ class SessionController:
         self.current_event = new_event
         self.timeout = timeout
 
-        asyncio.create_task(self._holding(new_event, timeout))  # 开始新的 keep
+        _holding_task = asyncio.create_task(
+            self._holding(new_event, timeout)
+        )  # 开始新的 keep
+        self.tasks.add(_holding_task)
+        _holding_task.add_done_callback(self.tasks.discard)
 
     async def _holding(self, event: asyncio.Event, timeout: float) -> None:
         """等待事件结束或超时"""
         try:
             await asyncio.wait_for(event.wait(), timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             if not self.future.done():
                 self.future.set_exception(TimeoutError("等待超时"))
         except asyncio.CancelledError:
@@ -97,7 +102,7 @@ class SessionFilter:
 
 class DefaultSessionFilter(SessionFilter):
     def filter(self, event: AstrMessageEvent) -> str:
-        """默认实现，返回统一消息来源字符串作为会话标识符"""
+        """默认实现,返回统一消息来源字符串作为会话标识符"""
         return event.unified_msg_origin
 
 
@@ -188,10 +193,10 @@ class SessionWaiter:
 
 
 def session_waiter(timeout: int = 30, record_history_chains: bool = False):
-    """装饰器：自动将函数注册为 SessionWaiter 处理函数，并等待外部输入触发执行。
+    """装饰器:自动将函数注册为 SessionWaiter 处理函数,并等待外部输入触发执行｡
 
-    :param timeout: 超时时间（秒）
-    :param record_history_chain: 是否自动记录历史消息链。可以通过 controller.get_history_chains() 获取。深拷贝。
+    :param timeout: 超时时间(秒)
+    :param record_history_chain: 是否自动记录历史消息链｡可以通过 controller.get_history_chains() 获取｡深拷贝｡
     """
 
     def decorator(

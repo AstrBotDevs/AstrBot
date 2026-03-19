@@ -35,7 +35,7 @@ class PersonaManager:
     async def initialize(self) -> None:
         self.personas = await self.get_all_personas()
         self.get_v3_persona_data()
-        logger.info(f"已加载 {len(self.personas)} 个人格。")
+        logger.info(f"已加载 {len(self.personas)} 个人格｡")
 
     async def get_persona(self, persona_id: str):
         """获取指定 persona 的信息"""
@@ -80,7 +80,7 @@ class PersonaManager:
         platform_name: str,
         provider_settings: dict | None = None,
     ) -> tuple[str | None, Personality | None, str | None, bool]:
-        """解析当前会话最终生效的人格。
+        """解析当前会话最终生效的人格｡
 
         Returns:
             tuple:
@@ -143,7 +143,7 @@ class PersonaManager:
         skills: list[str] | None | object = NOT_GIVEN,
         custom_error_message: str | None | object = NOT_GIVEN,
     ):
-        """更新指定 persona 的信息。tools 参数为 None 时表示使用所有工具，空列表表示不使用任何工具"""
+        """更新指定 persona 的信息｡tools 参数为 None 时表示使用所有工具,空列表表示不使用任何工具"""
         existing_persona = await self.db.get_persona_by_id(persona_id)
         if not existing_persona:
             raise ValueError(f"Persona with ID {persona_id} does not exist.")
@@ -179,7 +179,7 @@ class PersonaManager:
         """获取指定文件夹中的 personas
 
         Args:
-            folder_id: 文件夹 ID，None 表示根目录
+            folder_id: 文件夹 ID,None 表示根目录
         """
         return await self.db.get_personas_by_folder(folder_id)
 
@@ -190,7 +190,7 @@ class PersonaManager:
 
         Args:
             persona_id: Persona ID
-            folder_id: 目标文件夹 ID，None 表示移动到根目录
+            folder_id: 目标文件夹 ID,None 表示移动到根目录
         """
         persona = await self.db.move_persona_to_folder(persona_id, folder_id)
         if persona:
@@ -227,7 +227,7 @@ class PersonaManager:
         """获取文件夹列表
 
         Args:
-            parent_id: 父文件夹 ID，None 表示获取根目录下的文件夹
+            parent_id: 父文件夹 ID,None 表示获取根目录下的文件夹
         """
         return await self.db.get_persona_folders(parent_id)
 
@@ -263,7 +263,7 @@ class PersonaManager:
         """批量更新 personas 和/或 folders 的排序顺序
 
         Args:
-            items: 包含以下键的字典列表：
+            items: 包含以下键的字典列表:
                 - id: persona_id 或 folder_id
                 - type: "persona" 或 "folder"
                 - sort_order: 新的排序顺序值
@@ -277,7 +277,7 @@ class PersonaManager:
         """获取文件夹树形结构
 
         Returns:
-            树形结构的文件夹列表，每个文件夹包含 children 子列表
+            树形结构的文件夹列表,每个文件夹包含 children 子列表
         """
         all_folders = await self.get_all_folders()
         folder_map: dict[str, dict] = {}
@@ -323,15 +323,15 @@ class PersonaManager:
         folder_id: str | None = None,
         sort_order: int = 0,
     ) -> Persona:
-        """创建新的 persona。
+        """创建新的 persona｡
 
         Args:
             persona_id: Persona 唯一标识
             system_prompt: 系统提示词
             begin_dialogs: 预设对话列表
-            tools: 工具列表，None 表示使用所有工具，空列表表示不使用任何工具
-            skills: Skills 列表，None 表示使用所有 Skills，空列表表示不使用任何 Skills
-            folder_id: 所属文件夹 ID，None 表示根目录
+            tools: 工具列表,None 表示使用所有工具,空列表表示不使用任何工具
+            skills: Skills 列表,None 表示使用所有 Skills,空列表表示不使用任何 Skills
+            folder_id: 所属文件夹 ID,None 表示根目录
             sort_order: 排序顺序
         """
         if await self.db.get_persona_by_id(persona_id):
@@ -388,12 +388,12 @@ class PersonaManager:
     def get_v3_persona_data(
         self,
     ) -> tuple[list[dict], list[Personality], Personality]:
-        """获取 AstrBot <4.0.0 版本的 persona 数据。
+        """获取 AstrBot <4.0.0 版本的 persona 数据｡
 
         Returns:
-            - list[dict]: 包含 persona 配置的字典列表。
-            - list[Personality]: 包含 Personality 对象的列表。
-            - Personality: 默认选择的 Personality 对象。
+            - list[dict]: 包含 persona 配置的字典列表｡
+            - list[Personality]: 包含 Personality 对象的列表｡
+            - Personality: 默认选择的 Personality 对象｡
 
         """
         v3_persona_config = [
@@ -418,7 +418,7 @@ class PersonaManager:
             if begin_dialogs:
                 if len(begin_dialogs) % 2 != 0:
                     logger.error(
-                        f"{persona_cfg['name']} 人格情景预设对话格式不对，条数应该为偶数。",
+                        f"{persona_cfg['name']} 人格情景预设对话格式不对,条数应该为偶数｡",
                     )
                     begin_dialogs = []
                 user_turn = True
@@ -442,7 +442,7 @@ class PersonaManager:
                     selected_default_persona = persona
                 personas_v3.append(persona)
             except Exception as e:
-                logger.error(f"解析 Persona 配置失败：{e}")
+                logger.error(f"解析 Persona 配置失败:{e}")
 
         if not selected_default_persona and len(personas_v3) > 0:
             # 默认选择第一个

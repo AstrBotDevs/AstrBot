@@ -18,10 +18,10 @@ class PersonaCommands:
         all_personas: list["Persona"],
         depth: int = 0,
     ) -> list[str]:
-        """递归构建树状输出，使用短线条表示层级"""
+        """递归构建树状输出,使用短线条表示层级"""
         lines: list[str] = []
-        # 使用短线条作为缩进前缀，每层只用 "│" 加一个空格
-        prefix = "│ " * depth
+        # 使用短线条作为缩进前缀,每层只用 "￨" 加一个空格
+        prefix = "￨ " * depth
 
         for folder in folder_tree:
             # 输出文件夹
@@ -31,7 +31,7 @@ class PersonaCommands:
             folder_personas = [
                 p for p in all_personas if p.folder_id == folder["folder_id"]
             ]
-            child_prefix = "│ " * (depth + 1)
+            child_prefix = "￨ " * (depth + 1)
 
             # 输出该文件夹下的人格
             for persona in folder_personas:
@@ -71,7 +71,7 @@ class PersonaCommands:
             if conv is None:
                 message.set_result(
                     MessageEventResult().message(
-                        "当前对话不存在，请先使用 /new 新建一个对话。",
+                        "当前对话不存在,请先使用 /new 新建一个对话｡",
                     ),
                 )
                 return
@@ -127,16 +127,16 @@ class PersonaCommands:
             folder_tree = await self.context.persona_manager.get_folder_tree()
             all_personas = self.context.persona_manager.personas
 
-            lines = ["📂 人格列表：\n"]
+            lines = ["📂 人格列表:\n"]
 
             # 构建树状输出
             tree_lines = self._build_tree_output(folder_tree, all_personas)
             lines.extend(tree_lines)
 
-            # 输出根目录下的人格（没有文件夹的）
+            # 输出根目录下的人格(没有文件夹的)
             root_personas = [p for p in all_personas if p.folder_id is None]
             if root_personas:
-                if tree_lines:  # 如果有文件夹内容，加个空行
+                if tree_lines:  # 如果有文件夹内容,加个空行
                     lines.append("")
                 for persona in root_personas:
                     lines.append(f"👤 {persona.persona_id}")
@@ -161,7 +161,7 @@ class PersonaCommands:
                 ),
                 None,
             ):
-                msg = f"人格{ps}的详细信息：\n"
+                msg = f"人格{ps}的详细信息:\n"
                 msg += f"{persona['prompt']}\n"
             else:
                 msg = f"人格{ps}不存在"
@@ -169,20 +169,20 @@ class PersonaCommands:
         elif parts[1] == "unset":
             if not cid:
                 message.set_result(
-                    MessageEventResult().message("当前没有对话，无法取消人格。"),
+                    MessageEventResult().message("当前没有对话,无法取消人格｡"),
                 )
                 return
             await self.context.conversation_manager.update_conversation_persona_id(
                 message.unified_msg_origin,
                 "[%None]",
             )
-            message.set_result(MessageEventResult().message("取消人格成功。"))
+            message.set_result(MessageEventResult().message("取消人格成功｡"))
         else:
             ps = "".join(parts[1:]).strip()
             if not cid:
                 message.set_result(
                     MessageEventResult().message(
-                        "当前没有对话，请先开始对话或使用 /new 创建一个对话。",
+                        "当前没有对话,请先开始对话或使用 /new 创建一个对话｡",
                     ),
                 )
                 return
@@ -199,18 +199,16 @@ class PersonaCommands:
                 )
                 force_warn_msg = ""
                 if force_applied_persona_id:
-                    force_warn_msg = (
-                        "提醒：由于自定义规则，您现在切换的人格将不会生效。"
-                    )
+                    force_warn_msg = "提醒:由于自定义规则,您现在切换的人格将不会生效｡"
 
                 message.set_result(
                     MessageEventResult().message(
-                        f"设置成功。如果您正在切换到不同的人格，请注意使用 /reset 来清空上下文，防止原人格对话影响现人格。{force_warn_msg}",
+                        f"设置成功｡如果您正在切换到不同的人格,请注意使用 /reset 来清空上下文,防止原人格对话影响现人格｡{force_warn_msg}",
                     ),
                 )
             else:
                 message.set_result(
                     MessageEventResult().message(
-                        "不存在该人格情景。使用 /persona list 查看所有。",
+                        "不存在该人格情景｡使用 /persona list 查看所有｡",
                     ),
                 )

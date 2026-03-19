@@ -645,7 +645,7 @@ async def test_install_raises_dedicated_pip_install_error_on_non_conflict_failur
 
     installer = PipInstaller("")
 
-    with pytest.raises(pip_installer_module.PipInstallError, match="错误码：2"):
+    with pytest.raises(pip_installer_module.PipInstallError, match="错误码:2"):
         await installer.install(package_name="demo-package")
 
 
@@ -661,7 +661,7 @@ async def test_run_pip_with_classification_raises_install_error_on_non_conflict_
 
     installer = PipInstaller("")
 
-    with pytest.raises(pip_installer_module.PipInstallError, match="错误码：3"):
+    with pytest.raises(pip_installer_module.PipInstallError, match="错误码:3"):
         await installer._run_pip_with_classification(["install", "demo-package"])
 
 

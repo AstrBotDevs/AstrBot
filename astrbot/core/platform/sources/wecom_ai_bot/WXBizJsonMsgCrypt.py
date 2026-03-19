@@ -21,9 +21,9 @@ from Crypto.Cipher import AES
 from . import ierror
 
 """
-关于Crypto.Cipher模块，ImportError: No module named 'Crypto'解决方案
-请到官方网站 https://www.dlitz.net/software/pycrypto/ 下载pycrypto。
-下载后，按照README中的“Installation”小节的提示进行pycrypto安装。
+关于Crypto.Cipher模块,ImportError: No module named 'Crypto'解决方案
+请到官方网站 https://www.dlitz.net/software/pycrypto/ 下载pycrypto｡
+下载后,按照README中的“Installation”小节的提示进行pycrypto安装｡
 """
 
 
@@ -141,8 +141,8 @@ class Prpcrypt:
     """提供接收和推送给企业微信消息的加解密接口"""
 
     # 16位随机字符串的范围常量
-    # randbelow(RANDOM_RANGE) 返回 [0, 8999999999999999]（两端都包含，即包含0和8999999999999999）
-    # 加上 MIN_RANDOM_VALUE 后得到 [1000000000000000, 9999999999999999]（两端都包含）即16位数字
+    # randbelow(RANDOM_RANGE) 返回 [0, 8999999999999999](两端都包含,即包含0和8999999999999999)
+    # 加上 MIN_RANDOM_VALUE 后得到 [1000000000000000, 9999999999999999](两端都包含)即16位数字
     MIN_RANDOM_VALUE = 1000000000000000  # 最小值: 1000000000000000 (16位)
     RANDOM_RANGE = 9000000000000000  # 范围大小: 确保最大值为 9999999999999999 (16位)
 
@@ -187,7 +187,7 @@ class Prpcrypt:
         """
         try:
             cryptor = AES.new(self.key, self.mode, self.key[:16])  # type: ignore
-            # 使用BASE64对密文进行解码，然后AES-CBC解密
+            # 使用BASE64对密文进行解码,然后AES-CBC解密
             plain_text = cryptor.decrypt(base64.b64decode(text))
         except Exception as e:
             print(e)
@@ -232,12 +232,12 @@ class WXBizJsonMsgCrypt:
         self.m_sReceiveId = sReceiveId
 
     # 验证URL
-    # @param sMsgSignature: 签名串，对应URL参数的msg_signature
-    # @param sTimeStamp: 时间戳，对应URL参数的timestamp
-    # @param sNonce: 随机串，对应URL参数的nonce
-    # @param sEchoStr: 随机串，对应URL参数的echostr
-    # @param sReplyEchoStr: 解密之后的echostr，当return返回0时有效
-    # @return：成功0，失败返回对应的错误码
+    # @param sMsgSignature: 签名串,对应URL参数的msg_signature
+    # @param sTimeStamp: 时间戳,对应URL参数的timestamp
+    # @param sNonce: 随机串,对应URL参数的nonce
+    # @param sEchoStr: 随机串,对应URL参数的echostr
+    # @param sReplyEchoStr: 解密之后的echostr,当return返回0时有效
+    # @return:成功0,失败返回对应的错误码
 
     def VerifyURL(self, sMsgSignature, sTimeStamp, sNonce, sEchoStr):
         sha1 = SHA1()
@@ -252,11 +252,11 @@ class WXBizJsonMsgCrypt:
 
     def EncryptMsg(self, sReplyMsg, sNonce, timestamp=None):
         # 将企业回复用户的消息加密打包
-        # @param sReplyMsg: 企业号待回复用户的消息，json格式的字符串
-        # @param sTimeStamp: 时间戳，可以自己生成，也可以用URL参数的timestamp,如为None则自动用当前时间
-        # @param sNonce: 随机串，可以自己生成，也可以用URL参数的nonce
-        # sEncryptMsg: 加密后的可以直接回复用户的密文，包括msg_signature, timestamp, nonce, encrypt的json格式的字符串,
-        # return：成功0，sEncryptMsg,失败返回对应的错误码None
+        # @param sReplyMsg: 企业号待回复用户的消息,json格式的字符串
+        # @param sTimeStamp: 时间戳,可以自己生成,也可以用URL参数的timestamp,如为None则自动用当前时间
+        # @param sNonce: 随机串,可以自己生成,也可以用URL参数的nonce
+        # sEncryptMsg: 加密后的可以直接回复用户的密文,包括msg_signature, timestamp, nonce, encrypt的json格式的字符串,
+        # return:成功0,sEncryptMsg,失败返回对应的错误码None
         pc = Prpcrypt(self.key)
         ret, encrypt = pc.encrypt(sReplyMsg, self.m_sReceiveId)
         encrypt = encrypt.decode("utf-8")  # type: ignore
@@ -273,13 +273,13 @@ class WXBizJsonMsgCrypt:
         return ret, jsonParse.generate(encrypt, signature, timestamp, sNonce)
 
     def DecryptMsg(self, sPostData, sMsgSignature, sTimeStamp, sNonce):
-        # 检验消息的真实性，并且获取解密后的明文
-        # @param sMsgSignature: 签名串，对应URL参数的msg_signature
-        # @param sTimeStamp: 时间戳，对应URL参数的timestamp
-        # @param sNonce: 随机串，对应URL参数的nonce
-        # @param sPostData: 密文，对应POST请求的数据
-        #  json_content: 解密后的原文，当return返回0时有效
-        # @return: 成功0，失败返回对应的错误码
+        # 检验消息的真实性,并且获取解密后的明文
+        # @param sMsgSignature: 签名串,对应URL参数的msg_signature
+        # @param sTimeStamp: 时间戳,对应URL参数的timestamp
+        # @param sNonce: 随机串,对应URL参数的nonce
+        # @param sPostData: 密文,对应POST请求的数据
+        #  json_content: 解密后的原文,当return返回0时有效
+        # @return: 成功0,失败返回对应的错误码
         # 验证安全签名
         jsonParse = JsonParse()
         ret, encrypt = jsonParse.extract(sPostData)

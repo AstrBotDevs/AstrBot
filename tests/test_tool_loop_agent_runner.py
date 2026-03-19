@@ -42,7 +42,7 @@ class MockProvider(Provider):
         # 检查工具是否被禁用
         func_tool = kwargs.get("func_tool")
 
-        # 如果工具被禁用或超过最大调用次数，返回正常响应
+        # 如果工具被禁用或超过最大调用次数,返回正常响应
         if func_tool is None or self.call_count > self.max_calls_before_normal_response:
             return LLMResponse(
                 role="assistant",
@@ -82,7 +82,7 @@ class MockToolExecutor:
     @classmethod
     def execute(cls, tool, run_context, **tool_args):
         async def generator():
-            # 模拟工具返回结果，使用正确的类型
+            # 模拟工具返回结果,使用正确的类型
             from mcp.types import CallToolResult, TextContent
 
             result = CallToolResult(
@@ -231,10 +231,10 @@ async def test_max_step_limit_functionality(
 ):
     """测试最大步数限制功能"""
 
-    # 设置模拟provider，让它总是返回工具调用
+    # 设置模拟provider,让它总是返回工具调用
     mock_provider.should_call_tools = True
     mock_provider.max_calls_before_normal_response = (
-        100  # 设置一个很大的值，确保不会自然结束
+        100  # 设置一个很大的值,确保不会自然结束
     )
 
     # 初始化runner
@@ -258,7 +258,7 @@ async def test_max_step_limit_functionality(
     # 验证结果
     assert runner.done(), "代理应该在达到最大步数后完成"
 
-    # 验证工具被禁用（这是最重要的验证点）
+    # 验证工具被禁用(这是最重要的验证点)
     assert runner.req.func_tool is None, "达到最大步数后工具应该被禁用"
 
     # 验证有最终响应
@@ -274,9 +274,9 @@ async def test_max_step_limit_functionality(
 async def test_normal_completion_without_max_step(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
-    """测试正常完成（不触发最大步数限制）"""
+    """测试正常完成(不触发最大步数限制)"""
 
-    # 设置模拟provider，让它在第2次调用时返回正常响应
+    # 设置模拟provider,让它在第2次调用时返回正常响应
     mock_provider.should_call_tools = True
     mock_provider.max_calls_before_normal_response = 2
 
@@ -302,19 +302,19 @@ async def test_normal_completion_without_max_step(
     assert runner.done(), "代理应该正常完成"
 
     # 验证没有触发最大步数限制 - 通过检查provider调用次数
-    # mock_provider在第2次调用后返回正常响应，所以不应该达到max_steps(10)
+    # mock_provider在第2次调用后返回正常响应,所以不应该达到max_steps(10)
     assert mock_provider.call_count < max_steps, (
         f"正常完成时调用次数({mock_provider.call_count})应该小于最大步数({max_steps})"
     )
 
-    # 验证没有最大步数警告消息（注意：实际注入的是user角色的消息）
+    # 验证没有最大步数警告消息(注意:实际注入的是user角色的消息)
     user_messages = [m for m in runner.run_context.messages if m.role == "user"]
     max_step_messages = [
         m for m in user_messages if "工具调用次数已达到上限" in m.content
     ]
     assert len(max_step_messages) == 0, "正常完成时不应该有步数限制消息"
 
-    # 验证工具仍然可用（没有被禁用）
+    # 验证工具仍然可用(没有被禁用)
     assert runner.req.func_tool is not None, "正常完成时工具不应该被禁用"
 
 
@@ -328,7 +328,7 @@ async def test_max_step_with_streaming(
     mock_provider.should_call_tools = True
     mock_provider.max_calls_before_normal_response = 100
 
-    # 初始化runner，启用流式响应
+    # 初始化runner,启用流式响应
     await runner.reset(
         provider=mock_provider,
         request=provider_request,

@@ -20,7 +20,7 @@ class AgentRequestSubStage(Stage):
         for bwp in self.bot_wake_prefixs:
             if self.prov_wake_prefix.startswith(bwp):
                 logger.info(
-                    f"识别 LLM 聊天额外唤醒前缀 {self.prov_wake_prefix} 以机器人唤醒前缀 {bwp} 开头，已自动去除。",
+                    f"识别 LLM 聊天额外唤醒前缀 {self.prov_wake_prefix} 以机器人唤醒前缀 {bwp} 开头,已自动去除｡",
                 )
                 self.prov_wake_prefix = self.prov_wake_prefix[len(bwp) :]
 

@@ -1,5 +1,5 @@
 """企业微信智能机器人工具模块
-提供常量定义、工具函数和辅助方法
+提供常量定义､工具函数和辅助方法
 """
 
 import asyncio
@@ -46,7 +46,7 @@ def generate_random_string(length: int = 10) -> str:
     """生成随机字符串
 
     Args:
-        length: 字符串长度，默认为 10
+        length: 字符串长度,默认为 10
 
     Returns:
         随机字符串
@@ -63,7 +63,7 @@ def calculate_image_md5(image_data: bytes) -> str:
         image_data: 图片二进制数据
 
     Returns:
-        MD5 哈希值（十六进制字符串）
+        MD5 哈希值(十六进制字符串)
 
     """
     return hashlib.md5(image_data).hexdigest()
@@ -162,7 +162,7 @@ async def process_encrypted_image(
         aes_key_base64: Base64编码的AES密钥(与回调加解密相同)
 
     Returns:
-        Tuple[bool, str]: status 为 True 时 data 是解密后的图片数据的 base64 编码，
+        Tuple[bool, str]: status 为 True 时 data 是解密后的图片数据的 base64 编码,
             status 为 False 时 data 是错误信息
 
     """
@@ -173,7 +173,7 @@ async def process_encrypted_image(
             async with session.get(image_url, timeout=15) as response:
                 response.raise_for_status()
                 encrypted_data = await response.read()
-        logger.info("图片下载成功，大小: %d 字节", len(encrypted_data))
+        logger.info("图片下载成功,大小: %d 字节", len(encrypted_data))
     except (aiohttp.ClientError, asyncio.TimeoutError) as e:
         error_msg = f"下载图片失败: {e!s}"
         logger.error(error_msg)
@@ -200,10 +200,10 @@ async def process_encrypted_image(
         raise ValueError("无效的填充长度 (大于32字节)")
 
     decrypted_data = decrypted_data[:-pad_len]
-    logger.info("图片解密成功，解密后大小: %d 字节", len(decrypted_data))
+    logger.info("图片解密成功,解密后大小: %d 字节", len(decrypted_data))
 
     # 5. 转换为base64编码
     base64_data = base64.b64encode(decrypted_data).decode("utf-8")
-    logger.info("图片已转换为base64编码，编码后长度: %d", len(base64_data))
+    logger.info("图片已转换为base64编码,编码后长度: %d", len(base64_data))
 
     return True, base64_data

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from asyncio import Queue
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Protocol
 
 from deprecated import deprecated
@@ -60,12 +60,12 @@ class StarManagerProtocol(Protocol):
 
 
 class Context:
-    """暴露给插件的接口上下文。"""
+    """暴露给插件的接口上下文｡"""
 
     registered_web_apis: list = []
 
     # 向后兼容的变量
-    _register_tasks: list[Coroutine[object, object, object]] = []
+    _register_tasks: list[Awaitable[Any]] = []
     _star_manager: StarManagerProtocol | None = None
 
     def __init__(
@@ -84,7 +84,7 @@ class Context:
         subagent_orchestrator: SubAgentOrchestrator | None = None,
     ) -> None:
         self._event_queue = event_queue
-        """事件队列。消息平台通过事件队列传递消息事件。"""
+        """事件队列｡消息平台通过事件队列传递消息事件｡"""
         self._config = config
         """AstrBot 默认配置"""
         self._db = db
@@ -258,16 +258,16 @@ class Context:
         return llm_resp
 
     async def get_current_chat_provider_id(self, umo: str) -> str:
-        """获取当前使用的聊天模型 Provider ID。
+        """获取当前使用的聊天模型 Provider ID｡
 
         Args:
-            umo: unified_message_origin。消息会话来源 ID。
+            umo: unified_message_origin｡消息会话来源 ID｡
 
         Returns:
-            指定消息会话来源当前使用的聊天模型 Provider ID。
+            指定消息会话来源当前使用的聊天模型 Provider ID｡
 
         Raises:
-            ProviderNotFoundError: 未找到。
+            ProviderNotFoundError: 未找到｡
         """
         prov = self.get_using_provider(umo)
         if not prov:
@@ -285,31 +285,31 @@ class Context:
         return star_registry
 
     def get_llm_tool_manager(self) -> FunctionToolManager:
-        """获取 LLM Tool Manager，其用于管理注册的所有的 Function-calling tools"""
+        """获取 LLM Tool Manager,其用于管理注册的所有的 Function-calling tools"""
         return self.provider_manager.llm_tools
 
     def activate_llm_tool(self, name: str) -> bool:
-        """激活一个已经注册的函数调用工具。
+        """激活一个已经注册的函数调用工具｡
 
         Args:
-            name: 工具名称。
+            name: 工具名称｡
 
         Returns:
-            如果成功激活返回 True，如果没找到工具返回 False。
+            如果成功激活返回 True,如果没找到工具返回 False｡
 
         Note:
-            注册的工具默认是激活状态。
+            注册的工具默认是激活状态｡
         """
         return self.provider_manager.llm_tools.activate_llm_tool(name, star_map)
 
     def deactivate_llm_tool(self, name: str) -> bool:
-        """停用一个已经注册的函数调用工具。
+        """停用一个已经注册的函数调用工具｡
 
         Args:
-            name: 工具名称。
+            name: 工具名称｡
 
         Returns:
-            如果成功停用返回 True，如果没找到工具返回 False。
+            如果成功停用返回 True,如果没找到工具返回 False｡
         """
         return self.provider_manager.llm_tools.deactivate_llm_tool(name)
 
@@ -319,52 +319,52 @@ class Context:
     ) -> (
         Provider | TTSProvider | STTProvider | EmbeddingProvider | RerankProvider | None
     ):
-        """通过 ID 获取对应的 LLM Provider。
+        """通过 ID 获取对应的 LLM Provider｡
 
         Args:
-            provider_id: 提供者 ID。
+            provider_id: 提供者 ID｡
 
         Returns:
-            提供者实例，如果未找到则返回 None。
+            提供者实例,如果未找到则返回 None｡
 
         Note:
-            如果提供者 ID 存在但未找到提供者，会记录警告日志。
+            如果提供者 ID 存在但未找到提供者,会记录警告日志｡
         """
         prov = self.provider_manager.inst_map.get(provider_id)
         if provider_id and not prov:
             logger.warning(
-                f"没有找到 ID 为 {provider_id} 的提供商，这可能是由于您修改了提供商（模型）ID 导致的。"
+                f"没有找到 ID 为 {provider_id} 的提供商,这可能是由于您修改了提供商(模型)ID 导致的｡"
             )
         return prov
 
     def get_all_providers(self) -> list[Provider]:
-        """获取所有用于文本生成任务的 LLM Provider(Chat_Completion 类型)。"""
+        """获取所有用于文本生成任务的 LLM Provider(Chat_Completion 类型)｡"""
         return self.provider_manager.provider_insts
 
     def get_all_tts_providers(self) -> list[TTSProvider]:
-        """获取所有用于 TTS 任务的 Provider。"""
+        """获取所有用于 TTS 任务的 Provider｡"""
         return self.provider_manager.tts_provider_insts
 
     def get_all_stt_providers(self) -> list[STTProvider]:
-        """获取所有用于 STT 任务的 Provider。"""
+        """获取所有用于 STT 任务的 Provider｡"""
         return self.provider_manager.stt_provider_insts
 
     def get_all_embedding_providers(self) -> list[EmbeddingProvider]:
-        """获取所有用于 Embedding 任务的 Provider。"""
+        """获取所有用于 Embedding 任务的 Provider｡"""
         return self.provider_manager.embedding_provider_insts
 
     def get_using_provider(self, umo: str | None = None) -> Provider | None:
-        """获取当前使用的用于文本生成任务的 LLM Provider(Chat_Completion 类型)。
+        """获取当前使用的用于文本生成任务的 LLM Provider(Chat_Completion 类型)｡
 
         Args:
-            umo: unified_message_origin 值，如果传入并且用户启用了提供商会话隔离，
-                 则使用该会话偏好的对话模型（提供商）。
+            umo: unified_message_origin 值,如果传入并且用户启用了提供商会话隔离,
+                 则使用该会话偏好的对话模型(提供商)｡
 
         Returns:
-            当前使用的对话模型（提供商），如果未设置则返回 None。
+            当前使用的对话模型(提供商),如果未设置则返回 None｡
 
         Raises:
-            ValueError: 该会话来源配置的的对话模型（提供商）的类型不正确。
+            ValueError: 该会话来源配置的的对话模型(提供商)的类型不正确｡
         """
         prov = self.provider_manager.get_using_provider(
             provider_type=ProviderType.CHAT_COMPLETION,
@@ -373,22 +373,20 @@ class Context:
         if prov is None:
             return None
         if not isinstance(prov, Provider):
-            raise ValueError(
-                f"该会话来源的对话模型（提供商）的类型不正确: {type(prov)}"
-            )
+            raise ValueError(f"该会话来源的对话模型(提供商)的类型不正确: {type(prov)}")
         return prov
 
     def get_using_tts_provider(self, umo: str | None = None) -> TTSProvider | None:
-        """获取当前使用的用于 TTS 任务的 Provider。
+        """获取当前使用的用于 TTS 任务的 Provider｡
 
         Args:
-            umo: unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
+            umo: unified_message_origin 值,如果传入,则使用该会话偏好的提供商｡
 
         Returns:
-            当前使用的 TTS 提供者，如果未设置则返回 None。
+            当前使用的 TTS 提供者,如果未设置则返回 None｡
 
         Raises:
-            ValueError: 返回的提供者不是 TTSProvider 类型。
+            ValueError: 返回的提供者不是 TTSProvider 类型｡
         """
         prov = self.provider_manager.get_using_provider(
             provider_type=ProviderType.TEXT_TO_SPEECH,
@@ -399,16 +397,16 @@ class Context:
         return prov
 
     def get_using_stt_provider(self, umo: str | None = None) -> STTProvider | None:
-        """获取当前使用的用于 STT 任务的 Provider。
+        """获取当前使用的用于 STT 任务的 Provider｡
 
         Args:
-            umo: unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
+            umo: unified_message_origin 值,如果传入,则使用该会话偏好的提供商｡
 
         Returns:
-            当前使用的 STT 提供者，如果未设置则返回 None。
+            当前使用的 STT 提供者,如果未设置则返回 None｡
 
         Raises:
-            ValueError: 返回的提供者不是 STTProvider 类型。
+            ValueError: 返回的提供者不是 STTProvider 类型｡
         """
         prov = self.provider_manager.get_using_provider(
             provider_type=ProviderType.SPEECH_TO_TEXT,
@@ -419,16 +417,16 @@ class Context:
         return prov
 
     def get_config(self, umo: str | None = None) -> AstrBotConfig:
-        """获取 AstrBot 的配置。
+        """获取 AstrBot 的配置｡
 
         Args:
-            umo: unified_message_origin 值，用于获取特定会话的配置。
+            umo: unified_message_origin 值,用于获取特定会话的配置｡
 
         Returns:
-            AstrBot 配置对象。
+            AstrBot 配置对象｡
 
         Note:
-            如果不提供 umo 参数，将返回默认配置。
+            如果不提供 umo 参数,将返回默认配置｡
         """
         if not umo:
             # 使用默认配置
@@ -440,21 +438,21 @@ class Context:
         session: str | MessageSesion,
         message_chain: MessageChain,
     ) -> bool:
-        """根据 session(unified_msg_origin) 主动发送消息。
+        """根据 session(unified_msg_origin) 主动发送消息｡
 
         Args:
-            session: 消息会话。通过 event.session 或者 event.unified_msg_origin 获取。
-            message_chain: 消息链。
+            session: 消息会话｡通过 event.session 或者 event.unified_msg_origin 获取｡
+            message_chain: 消息链｡
 
         Returns:
-            是否找到匹配的平台。
+            是否找到匹配的平台｡
 
         Raises:
-            ValueError: session 字符串不合法时抛出。
+            ValueError: session 字符串不合法时抛出｡
 
         Note:
-            当 session 为字符串时，会尝试解析为 MessageSession 对象。(类名为MessageSesion是因为历史遗留拼写错误)
-            qq_official(QQ 官方 API 平台) 不支持此方法。
+            当 session 为字符串时,会尝试解析为 MessageSession 对象｡(类名为MessageSesion是因为历史遗留拼写错误)
+            qq_official(QQ 官方 API 平台) 不支持此方法｡
         """
         if isinstance(session, str):
             try:
@@ -467,18 +465,18 @@ class Context:
                 await platform.send_by_session(session, message_chain)
                 return True
         logger.warning(
-            f"cannot find platform for session {str(session)}, message not sent"
+            f"cannot find platform for session {session!s}, message not sent"
         )
         return False
 
     def add_llm_tools(self, *tools: FunctionTool) -> None:
-        """添加 LLM 工具。
+        """添加 LLM 工具｡
 
         Args:
-            *tools: 要添加的函数工具对象。
+            *tools: 要添加的函数工具对象｡
 
         Note:
-            如果工具已存在，会替换已存在的工具。
+            如果工具已存在,会替换已存在的工具｡
         """
         tool_name = {tool.name for tool in self.provider_manager.llm_tools.func_list}
         module_path = ""
@@ -513,16 +511,16 @@ class Context:
         methods: list,
         desc: str,
     ) -> None:
-        """注册 Web API。
+        """注册 Web API｡
 
         Args:
-            route: API 路由路径。
-            view_handler: 异步视图处理函数。
-            methods: HTTP 方法列表。
-            desc: API 描述。
+            route: API 路由路径｡
+            view_handler: 异步视图处理函数｡
+            methods: HTTP 方法列表｡
+            desc: API 描述｡
 
         Note:
-            如果相同路由和方法已注册，会替换现有的 API。
+            如果相同路由和方法已注册,会替换现有的 API｡
         """
         for idx, api in enumerate(self.registered_web_apis):
             if api[0] == route and methods == api[2]:
@@ -531,25 +529,25 @@ class Context:
         self.registered_web_apis.append((route, view_handler, methods, desc))
 
     """
-    以下的方法已经不推荐使用。请从 AstrBot 文档查看更好的注册方式。
+    以下的方法已经不推荐使用｡请从 AstrBot 文档查看更好的注册方式｡
     """
 
     def get_event_queue(self) -> Queue:
-        """获取事件队列。"""
+        """获取事件队列｡"""
         return self._event_queue
 
     @deprecated(version="4.0.0", reason="Use get_platform_inst instead")
     def get_platform(self, platform_type: PlatformAdapterType | str) -> Platform | None:
-        """获取指定类型的平台适配器。
+        """获取指定类型的平台适配器｡
 
         Args:
-            platform_type: 平台类型或平台名称。
+            platform_type: 平台类型或平台名称｡
 
         Returns:
-            平台适配器实例，如果未找到则返回 None。
+            平台适配器实例,如果未找到则返回 None｡
 
         Note:
-            该方法已经过时，请使用 get_platform_inst 方法。(>= AstrBot v4.0.0)
+            该方法已经过时,请使用 get_platform_inst 方法｡(>= AstrBot v4.0.0)
         """
         for platform in self.platform_manager.platform_insts:
             name = platform.meta().name
@@ -563,34 +561,34 @@ class Context:
                 return platform
 
     def get_platform_inst(self, platform_id: str) -> Platform | None:
-        """获取指定 ID 的平台适配器实例。
+        """获取指定 ID 的平台适配器实例｡
 
         Args:
-            platform_id: 平台适配器的唯一标识符。
+            platform_id: 平台适配器的唯一标识符｡
 
         Returns:
-            平台适配器实例，如果未找到则返回 None。
+            平台适配器实例,如果未找到则返回 None｡
 
         Note:
-            可以通过 event.get_platform_id() 获取平台 ID。
+            可以通过 event.get_platform_id() 获取平台 ID｡
         """
         for platform in self.platform_manager.platform_insts:
             if platform.meta().id == platform_id:
                 return platform
 
     def get_db(self) -> BaseDatabase:
-        """获取 AstrBot 数据库。
+        """获取 AstrBot 数据库｡
 
         Returns:
-            数据库实例。
+            数据库实例｡
         """
         return self._db
 
     def register_provider(self, provider: Provider) -> None:
-        """注册一个 LLM Provider(Chat_Completion 类型)。
+        """注册一个 LLM Provider(Chat_Completion 类型)｡
 
         Args:
-            provider: 提供者实例。
+            provider: 提供者实例｡
         """
         self.provider_manager.provider_insts.append(provider)
 
@@ -601,18 +599,18 @@ class Context:
         desc: str,
         func_obj: Callable[..., Awaitable[Any]],
     ) -> None:
-        """[DEPRECATED]为函数调用（function-calling / tools-use）添加工具。
+        """[DEPRECATED]为函数调用(function-calling / tools-use)添加工具｡
 
         Args:
-            name: 函数名。
-            func_args: 函数参数列表，格式为
-                [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]。
-            desc: 函数描述。
-            func_obj: 异步处理函数。
+            name: 函数名｡
+            func_args: 函数参数列表,格式为
+                [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]｡
+            desc: 函数描述｡
+            func_obj: 异步处理函数｡
 
         Note:
-            异步处理函数会接收到额外的关键词参数：event: AstrMessageEvent, context: Context。
-            该方法已弃用，请使用新的注册方式。
+            异步处理函数会接收到额外的关键词参数:event: AstrMessageEvent, context: Context｡
+            该方法已弃用,请使用新的注册方式｡
         """
         md = StarHandlerMetadata(
             event_type=EventType.OnLLMRequestEvent,
@@ -627,14 +625,14 @@ class Context:
         self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj)
 
     def unregister_llm_tool(self, name: str) -> None:
-        """[DEPRECATED]删除一个函数调用工具。
+        """[DEPRECATED]删除一个函数调用工具｡
 
         Args:
-            name: 工具名称。
+            name: 工具名称｡
 
         Note:
-            如果再要启用，需要重新注册。
-            该方法已弃用。
+            如果再要启用,需要重新注册｡
+            该方法已弃用｡
         """
         self.provider_manager.llm_tools.remove_func(name)
 
@@ -648,19 +646,19 @@ class Context:
         use_regex=False,
         ignore_prefix=False,
     ) -> None:
-        """[DEPRECATED]注册一个命令。
+        """[DEPRECATED]注册一个命令｡
 
         Args:
-            star_name: 插件（Star）名称。
-            command_name: 命令名称。
-            desc: 命令描述。
-            priority: 优先级。1-10。
-            awaitable: 异步处理函数。
-            use_regex: 是否使用正则表达式匹配命令。
-            ignore_prefix: 是否忽略命令前缀。
+            star_name: 插件(Star)名称｡
+            command_name: 命令名称｡
+            desc: 命令描述｡
+            priority: 优先级｡1-10｡
+            awaitable: 异步处理函数｡
+            use_regex: 是否使用正则表达式匹配命令｡
+            ignore_prefix: 是否忽略命令前缀｡
 
         Note:
-            推荐使用装饰器注册指令。该方法将在未来的版本中被移除。
+            推荐使用装饰器注册指令｡该方法将在未来的版本中被移除｡
         """
         md = StarHandlerMetadata(
             event_type=EventType.AdapterMessageEvent,
@@ -679,14 +677,14 @@ class Context:
             )
         star_handlers_registry.append(md)
 
-    def register_task(self, task: Awaitable, desc: str) -> None:
-        """[DEPRECATED]注册一个异步任务。
+    def register_task(self, task: Awaitable[Any], desc: str) -> None:
+        """[DEPRECATED]注册一个异步任务｡
 
         Args:
-            task: 异步任务。
-            desc: 任务描述。
+            task: 异步任务｡
+            desc: 任务描述｡
 
         Note:
-            该方法已弃用。
+            该方法已弃用｡
         """
         self._register_tasks.append(task)

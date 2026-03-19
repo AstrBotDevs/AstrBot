@@ -34,14 +34,14 @@ class Main(star.Star):
         self.bocha_key_index = 0
         self.bocha_key_lock = asyncio.Lock()
 
-        # 将 str 类型的 key 迁移至 list[str]，并保存
+        # 将 str 类型的 key 迁移至 list[str],并保存
         cfg = self.context.get_config()
         provider_settings = cfg.get("provider_settings")
         if provider_settings:
             tavily_key = provider_settings.get("websearch_tavily_key")
             if isinstance(tavily_key, str):
                 logger.info(
-                    "检测到旧版 websearch_tavily_key (字符串格式)，自动迁移为列表格式并保存。",
+                    "检测到旧版 websearch_tavily_key (字符串格式),自动迁移为列表格式并保存｡",
                 )
                 if tavily_key:
                     provider_settings["websearch_tavily_key"] = [tavily_key]
@@ -62,7 +62,7 @@ class Main(star.Star):
         self.baidu_initialized = False
 
     async def _tidy_text(self, text: str) -> str:
-        """清理文本，去除空格、换行符等"""
+        """清理文本,去除空格､换行符等"""
         return text.strip().replace("\n", " ").replace("\r", " ").replace("  ", " ")
 
     async def _get_from_url(self, url: str) -> str:
@@ -124,10 +124,10 @@ class Main(star.Star):
         return results
 
     async def _get_tavily_key(self, cfg: AstrBotConfig) -> str:
-        """并发安全的从列表中获取并轮换Tavily API密钥。"""
+        """并发安全的从列表中获取并轮换Tavily API密钥｡"""
         tavily_keys = cfg.get("provider_settings", {}).get("websearch_tavily_key", [])
         if not tavily_keys:
-            raise ValueError("错误：Tavily API密钥未在AstrBot中配置。")
+            raise ValueError("错误:Tavily API密钥未在AstrBot中配置｡")
 
         async with self.tavily_key_lock:
             key = tavily_keys[self.tavily_key_index]
@@ -203,11 +203,11 @@ class Main(star.Star):
         query: str,
         max_results: int = 5,
     ) -> str:
-        """搜索网络以回答用户的问题。当用户需要搜索网络以获取即时性的信息时调用此工具。
+        """搜索网络以回答用户的问题｡当用户需要搜索网络以获取即时性的信息时调用此工具｡
 
         Args:
-            query(string): 和用户的问题最相关的搜索关键词，用于在 Google 上搜索。
-            max_results(number): 返回的最大搜索结果数量，默认为 5。
+            query(string): 和用户的问题最相关的搜索关键词,用于在 Google 上搜索｡
+            max_results(number): 返回的最大搜索结果数量,默认为 5｡
 
         """
         logger.info(f"web_searcher - search_from_search_engine: {query}")
@@ -231,7 +231,7 @@ class Main(star.Star):
             ret += processed_result
 
         if websearch_link:
-            ret += "\n\n针对问题，请根据上面的结果分点总结，并且在结尾处附上对应内容的参考链接（如有）。"
+            ret += "\n\n针对问题,请根据上面的结果分点总结,并且在结尾处附上对应内容的参考链接(如有)｡"
 
         return ret
 
@@ -384,10 +384,10 @@ class Main(star.Star):
         return ret
 
     async def _get_bocha_key(self, cfg: AstrBotConfig) -> str:
-        """并发安全的从列表中获取并轮换BoCha API密钥。"""
+        """并发安全的从列表中获取并轮换BoCha API密钥｡"""
         bocha_keys = cfg.get("provider_settings", {}).get("websearch_bocha_key", [])
         if not bocha_keys:
-            raise ValueError("错误：BoCha API密钥未在AstrBot中配置。")
+            raise ValueError("错误:BoCha API密钥未在AstrBot中配置｡")
 
         async with self.bocha_key_lock:
             key = bocha_keys[self.bocha_key_index]
@@ -500,18 +500,18 @@ class Main(star.Star):
             "count": count,
         }
 
-        # freshness：时间范围
+        # freshness:时间范围
         if freshness:
             payload["freshness"] = freshness
 
         # 是否返回摘要
         payload["summary"] = summary
 
-        # include：限制搜索域
+        # include:限制搜索域
         if include:
             payload["include"] = include
 
-        # exclude：排除搜索域
+        # exclude:排除搜索域
         if exclude:
             payload["exclude"] = exclude
 

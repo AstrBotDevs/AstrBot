@@ -44,7 +44,7 @@ async def _poll_webchat_stream_result(back_queue, username: str):
     except asyncio.TimeoutError:
         return None, False
     except asyncio.CancelledError:
-        logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
+        logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接｡")
         return None, True
     except Exception as e:
         logger.error(f"WebChat stream error: {e}")
@@ -197,7 +197,7 @@ class ChatRoute(Route):
         )
 
     async def _build_user_message_parts(self, message: str | list) -> list[dict]:
-        """构建用户消息的部分列表。"""
+        """构建用户消息的部分列表｡"""
         return await build_webchat_message_parts(
             message,
             get_attachment_by_id=self.db.get_attachment_by_id,
@@ -207,7 +207,7 @@ class ChatRoute(Route):
     async def _create_attachment_from_file(
         self, filename: str, attach_type: str
     ) -> dict | None:
-        """从本地文件创建 attachment 并返回消息部分。"""
+        """从本地文件创建 attachment 并返回消息部分｡"""
         return await create_attachment_part_from_existing_file(
             filename,
             attach_type=attach_type,
@@ -226,7 +226,7 @@ class ChatRoute(Route):
             accumulated_parts: 累积的消息部分列表
 
         Returns:
-            包含 used 列表的字典，记录被引用的搜索结果
+            包含 used 列表的字典,记录被引用的搜索结果
         """
         supported = ["web_search_tavily", "web_search_bocha"]
         # 从 accumulated_parts 中找到所有 web_search_tavily 的工具调用结果
@@ -284,7 +284,7 @@ class ChatRoute(Route):
         agent_stats: dict,
         refs: dict,
     ):
-        """保存 bot 消息到历史记录，返回保存的记录"""
+        """保存 bot 消息到历史记录,返回保存的记录"""
         bot_message_parts = []
         bot_message_parts.extend(media_parts)
         if text:
@@ -333,7 +333,7 @@ class ChatRoute(Route):
 
         webchat_conv_id = session_id
 
-        # 构建用户消息段（包含 path 用于传递给 adapter）
+        # 构建用户消息段(包含 path 用于传递给 adapter)
         message_parts = await self._build_user_message_parts(message)
         if not webchat_message_parts_have_content(message_parts):
             return (
@@ -404,7 +404,7 @@ class ChatRoute(Route):
                         except Exception as e:
                             if not client_disconnected:
                                 logger.debug(
-                                    f"[WebChat] 用户 {username} 断开聊天长连接。 {e}"
+                                    f"[WebChat] 用户 {username} 断开聊天长连接｡ {e}"
                                 )
                             client_disconnected = True
 
@@ -412,7 +412,7 @@ class ChatRoute(Route):
                             if not client_disconnected:
                                 await asyncio.sleep(0.05)
                         except asyncio.CancelledError:
-                            logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
+                            logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接｡")
                             client_disconnected = True
 
                         # 累积消息部分
@@ -422,7 +422,7 @@ class ChatRoute(Route):
                                 tool_call = json.loads(result_text)
                                 tool_calls[tool_call.get("id")] = tool_call
                                 if accumulated_text:
-                                    # 如果累积了文本，则先保存文本
+                                    # 如果累积了文本,则先保存文本
                                     accumulated_parts.append(
                                         {"type": "plain", "text": accumulated_text}
                                     )
@@ -636,7 +636,7 @@ class ChatRoute(Route):
                 exc,
             )
 
-        # 清理队列（仅对 webchat）
+        # 清理队列(仅对 webchat)
         if session.platform_id == "webchat":
             webchat_queue_mgr.remove_queues(session_id)
 
@@ -721,7 +721,7 @@ class ChatRoute(Route):
         return attachment_ids
 
     async def _delete_attachments(self, attachment_ids: list[str]) -> None:
-        """删除附件（包括数据库记录和磁盘文件）"""
+        """删除附件(包括数据库记录和磁盘文件)"""
         try:
             attachments = await self.db.get_attachments(attachment_ids)
             for attachment in attachments:
@@ -746,7 +746,7 @@ class ChatRoute(Route):
         """Create a new Platform session (default: webchat)."""
         username = g.get("username", "guest")
 
-        # 获取可选的 platform_id 参数，默认为 webchat
+        # 获取可选的 platform_id 参数,默认为 webchat
         platform_id = request.args.get("platform_id", "webchat")
 
         # 创建新会话
@@ -811,7 +811,7 @@ class ChatRoute(Route):
         session = await self.db.get_platform_session_by_id(session_id)
         platform_id = session.platform_id if session else "webchat"
 
-        # 获取项目信息（如果会话属于某个项目）
+        # 获取项目信息(如果会话属于某个项目)
         username = g.get("username", "guest")
         project_info = await self.db.get_project_by_session(
             session_id=session_id, creator=username
@@ -832,7 +832,7 @@ class ChatRoute(Route):
             "is_running": self.running_convs.get(session_id, False),
         }
 
-        # 如果会话属于项目，添加项目信息
+        # 如果会话属于项目,添加项目信息
         if project_info:
             response_data["project"] = {
                 "project_id": project_info.project_id,

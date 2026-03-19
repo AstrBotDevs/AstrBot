@@ -160,7 +160,7 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
 
         if skill.source_type == "sandbox_only":
             rendered_path = (
-                f"{str(SANDBOX_WORKSPACE_ROOT)}/{str(SANDBOX_SKILLS_ROOT)}/"
+                f"{SANDBOX_WORKSPACE_ROOT!s}/{SANDBOX_SKILLS_ROOT!s}/"
                 f"{display_name}/SKILL.md"
             )
         else:

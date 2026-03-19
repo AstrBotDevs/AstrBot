@@ -93,7 +93,7 @@ class BaseMessageComponent(BaseModel):
         return {"type": self.type.lower(), "data": data}
 
     async def to_dict(self) -> dict:
-        # 默认情况下，回退到旧的同步 toDict()
+        # 默认情况下,回退到旧的同步 toDict()
         return self.toDict()
 
 
@@ -155,10 +155,10 @@ class Record(BaseMessageComponent):
         return Record(file=f"base64://{bs64_data}", **_)
 
     async def convert_to_file_path(self) -> str:
-        """将这个语音统一转换为本地文件路径。这个方法避免了手动判断语音数据类型，直接返回语音数据的本地路径（如果是网络 URL, 则会自动进行下载）。
+        """将这个语音统一转换为本地文件路径｡这个方法避免了手动判断语音数据类型,直接返回语音数据的本地路径(如果是网络 URL, 则会自动进行下载)｡
 
         Returns:
-            str: 语音的本地路径，以绝对路径表示。
+            str: 语音的本地路径,以绝对路径表示｡
 
         """
         if not self.file:
@@ -182,10 +182,10 @@ class Record(BaseMessageComponent):
         raise Exception(f"not a valid file: {self.file}")
 
     async def convert_to_base64(self) -> str:
-        """将语音统一转换为 base64 编码。这个方法避免了手动判断语音数据类型，直接返回语音数据的 base64 编码。
+        """将语音统一转换为 base64 编码｡这个方法避免了手动判断语音数据类型,直接返回语音数据的 base64 编码｡
 
         Returns:
-            str: 语音的 base64 编码，不以 base64:// 或者 data:image/jpeg;base64, 开头。
+            str: 语音的 base64 编码,不以 base64:// 或者 data:image/jpeg;base64, 开头｡
 
         """
         # convert to base64
@@ -206,7 +206,7 @@ class Record(BaseMessageComponent):
         return bs64_data
 
     async def register_to_file_service(self) -> str:
-        """将语音注册到文件服务。
+        """将语音注册到文件服务｡
 
         Returns:
             str: 注册后的URL
@@ -218,13 +218,13 @@ class Record(BaseMessageComponent):
         callback_host = astrbot_config.get("callback_api_base")
 
         if not callback_host:
-            raise Exception("未配置 callback_api_base，文件服务不可用")
+            raise Exception("未配置 callback_api_base,文件服务不可用")
 
         file_path = await self.convert_to_file_path()
 
         token = await file_token_service.register_file(file_path)
 
-        logger.debug(f"已注册：{callback_host}/api/file/{token}")
+        logger.debug(f"已注册:{callback_host}/api/file/{token}")
 
         return f"{callback_host}/api/file/{token}"
 
@@ -251,10 +251,10 @@ class Video(BaseMessageComponent):
         raise Exception("not a valid url")
 
     async def convert_to_file_path(self) -> str:
-        """将这个视频统一转换为本地文件路径。这个方法避免了手动判断视频数据类型，直接返回视频数据的本地路径（如果是网络 URL，则会自动进行下载）。
+        """将这个视频统一转换为本地文件路径｡这个方法避免了手动判断视频数据类型,直接返回视频数据的本地路径(如果是网络 URL,则会自动进行下载)｡
 
         Returns:
-            str: 视频的本地路径，以绝对路径表示。
+            str: 视频的本地路径,以绝对路径表示｡
 
         """
         url = self.file
@@ -273,7 +273,7 @@ class Video(BaseMessageComponent):
         raise Exception(f"not a valid file: {url}")
 
     async def register_to_file_service(self) -> str:
-        """将视频注册到文件服务。
+        """将视频注册到文件服务｡
 
         Returns:
             str: 注册后的URL
@@ -285,18 +285,18 @@ class Video(BaseMessageComponent):
         callback_host = astrbot_config.get("callback_api_base")
 
         if not callback_host:
-            raise Exception("未配置 callback_api_base，文件服务不可用")
+            raise Exception("未配置 callback_api_base,文件服务不可用")
 
         file_path = await self.convert_to_file_path()
 
         token = await file_token_service.register_file(file_path)
 
-        logger.debug(f"已注册：{callback_host}/api/file/{token}")
+        logger.debug(f"已注册:{callback_host}/api/file/{token}")
 
         return f"{callback_host}/api/file/{token}"
 
     async def to_dict(self):
-        """需要和 toDict 区分开，toDict 是同步方法"""
+        """需要和 toDict 区分开,toDict 是同步方法"""
         url_or_path = self.file
         if url_or_path.startswith("http"):
             payload_file = url_or_path
@@ -445,10 +445,10 @@ class Image(BaseMessageComponent):
         return Image.fromBytes(IO.read())
 
     async def convert_to_file_path(self) -> str:
-        """将这个图片统一转换为本地文件路径。这个方法避免了手动判断图片数据类型，直接返回图片数据的本地路径（如果是网络 URL, 则会自动进行下载）。
+        """将这个图片统一转换为本地文件路径｡这个方法避免了手动判断图片数据类型,直接返回图片数据的本地路径(如果是网络 URL, 则会自动进行下载)｡
 
         Returns:
-            str: 图片的本地路径，以绝对路径表示。
+            str: 图片的本地路径,以绝对路径表示｡
 
         """
         url = self.url or self.file
@@ -473,10 +473,10 @@ class Image(BaseMessageComponent):
         raise Exception(f"not a valid file: {url}")
 
     async def convert_to_base64(self) -> str:
-        """将这个图片统一转换为 base64 编码。这个方法避免了手动判断图片数据类型，直接返回图片数据的 base64 编码。
+        """将这个图片统一转换为 base64 编码｡这个方法避免了手动判断图片数据类型,直接返回图片数据的 base64 编码｡
 
         Returns:
-            str: 图片的 base64 编码，不以 base64:// 或者 data:image/jpeg;base64, 开头。
+            str: 图片的 base64 编码,不以 base64:// 或者 data:image/jpeg;base64, 开头｡
 
         """
         # convert to base64
@@ -498,7 +498,7 @@ class Image(BaseMessageComponent):
         return bs64_data
 
     async def register_to_file_service(self) -> str:
-        """将图片注册到文件服务。
+        """将图片注册到文件服务｡
 
         Returns:
             str: 注册后的URL
@@ -510,13 +510,13 @@ class Image(BaseMessageComponent):
         callback_host = astrbot_config.get("callback_api_base")
 
         if not callback_host:
-            raise Exception("未配置 callback_api_base，文件服务不可用")
+            raise Exception("未配置 callback_api_base,文件服务不可用")
 
         file_path = await self.convert_to_file_path()
 
         token = await file_token_service.register_file(file_path)
 
-        logger.debug(f"已注册：{callback_host}/api/file/{token}")
+        logger.debug(f"已注册:{callback_host}/api/file/{token}")
 
         return f"{callback_host}/api/file/{token}"
 
@@ -660,7 +660,7 @@ class Nodes(BaseMessageComponent):
         return ret
 
     async def to_dict(self) -> dict:
-        """将 Nodes 转换为字典格式，适用于 OneBot JSON 格式"""
+        """将 Nodes 转换为字典格式,适用于 OneBot JSON 格式"""
         ret = {"messages": []}
         for node in self.nodes:
             d = await node.to_dict()
@@ -692,12 +692,12 @@ class File(BaseMessageComponent):
     url: str | None = ""  # url
 
     def __init__(self, name: str, file: str = "", url: str = "") -> None:
-        """文件消息段。"""
+        """文件消息段｡"""
         super().__init__(name=name, file_=file, url=url)
 
     @property
     def file(self) -> str:
-        """获取文件路径，如果文件不存在但有URL，则同步下载文件
+        """获取文件路径,如果文件不存在但有URL,则同步下载文件
 
         Returns:
             str: 文件路径
@@ -712,12 +712,12 @@ class File(BaseMessageComponent):
                 asyncio.get_running_loop()
                 logger.warning(
                     "不可以在异步上下文中同步等待下载! "
-                    "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
+                    "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容｡"
                     "请使用 await get_file() 代替直接获取 <File>.file 字段",
                 )
                 return ""
             except RuntimeError:
-                # 没有运行中的 event loop，可以同步执行
+                # 没有运行中的 event loop,可以同步执行
                 try:
                     # 使用 asyncio.run 安全地创建和关闭事件循环
                     asyncio.run(self._download_file())
@@ -743,11 +743,11 @@ class File(BaseMessageComponent):
             self.file_ = value
 
     async def get_file(self, allow_return_url: bool = False) -> str:
-        """异步获取文件。请注意在使用后清理下载的文件, 以免占用过多空间
+        """异步获取文件｡请注意在使用后清理下载的文件, 以免占用过多空间
 
         Args:
-            allow_return_url: 是否允许以文件 http 下载链接的形式返回，这允许您自行控制是否需要下载文件。
-            注意，如果为 True，也可能返回文件路径。
+            allow_return_url: 是否允许以文件 http 下载链接的形式返回,这允许您自行控制是否需要下载文件｡
+            注意,如果为 True,也可能返回文件路径｡
         Returns:
             str: 文件路径或者 http 下载链接
 
@@ -805,7 +805,7 @@ class File(BaseMessageComponent):
         self.file_ = str(await anyio.Path(file_path).resolve())
 
     async def register_to_file_service(self) -> str:
-        """将文件注册到文件服务。
+        """将文件注册到文件服务｡
 
         Returns:
             str: 注册后的URL
@@ -817,18 +817,18 @@ class File(BaseMessageComponent):
         callback_host = astrbot_config.get("callback_api_base")
 
         if not callback_host:
-            raise Exception("未配置 callback_api_base，文件服务不可用")
+            raise Exception("未配置 callback_api_base,文件服务不可用")
 
         file_path = await self.get_file()
 
         token = await file_token_service.register_file(file_path)
 
-        logger.debug(f"已注册：{callback_host}/api/file/{token}")
+        logger.debug(f"已注册:{callback_host}/api/file/{token}")
 
         return f"{callback_host}/api/file/{token}"
 
     async def to_dict(self):
-        """需要和 toDict 区分开，toDict 是同步方法"""
+        """需要和 toDict 区分开,toDict 是同步方法"""
         url_or_path = await self.get_file(allow_return_url=True)
         if url_or_path.startswith("http"):
             payload_file = url_or_path

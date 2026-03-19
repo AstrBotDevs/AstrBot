@@ -45,17 +45,17 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
         self.api_key = provider_config.get("coze_api_key", "")
         if not self.api_key:
-            raise Exception("Coze API Key 不能为空。")
+            raise Exception("Coze API Key 不能为空｡")
         self.bot_id = provider_config.get("bot_id", "")
         if not self.bot_id:
-            raise Exception("Coze Bot ID 不能为空。")
+            raise Exception("Coze Bot ID 不能为空｡")
         self.api_base: str = provider_config.get("coze_api_base", "https://api.coze.cn")
 
         if not isinstance(self.api_base, str) or not self.api_base.startswith(
             ("http://", "https://"),
         ):
             raise Exception(
-                "Coze API Base URL 格式不正确，必须以 http:// 或 https:// 开头。",
+                "Coze API Base URL 格式不正确,必须以 http:// 或 https:// 开头｡",
             )
 
         self.timeout = provider_config.get("timeout", 120)
@@ -83,7 +83,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             except Exception as e:
                 logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
 
-        # 开始处理，转换到运行状态
+        # 开始处理,转换到运行状态
         self._transition_state(AgentState.RUNNING)
 
         try:
@@ -91,15 +91,15 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             async for response in self._execute_coze_request():
                 yield response
         except Exception as e:
-            logger.error(f"Coze 请求失败：{str(e)}")
+            logger.error(f"Coze 请求失败:{e!s}")
             self._transition_state(AgentState.ERROR)
             self.final_llm_resp = LLMResponse(
-                role="err", completion_text=f"Coze 请求失败：{str(e)}"
+                role="err", completion_text=f"Coze 请求失败:{e!s}"
             )
             yield AgentResponse(
                 type="err",
                 data=AgentResponseData(
-                    chain=MessageChain().message(f"Coze 请求失败：{str(e)}")
+                    chain=MessageChain().message(f"Coze 请求失败:{e!s}")
                 ),
             )
         finally:
@@ -152,7 +152,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                     # 处理上下文中的图片
                     content = ctx["content"]
                     if isinstance(content, list):
-                        # 多模态内容，需要处理图片
+                        # 多模态内容,需要处理图片
                         processed_content = []
                         for item in content:
                             if isinstance(item, dict):
@@ -277,7 +277,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                     accumulated_content += content
                     message_started = True
 
-                    # 如果是流式响应，发送增量数据
+                    # 如果是流式响应,发送增量数据
                     if self.streaming:
                         yield AgentResponse(
                             type="streaming_delta",
@@ -328,7 +328,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         image_url: str,
         session_id: str | None = None,
     ) -> str:
-        """下载图片并上传到 Coze，返回 file_id"""
+        """下载图片并上传到 Coze,返回 file_id"""
         import hashlib
 
         # 计算哈希实现缓存
@@ -349,7 +349,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
             if session_id:
                 self.file_id_cache[session_id][cache_key] = file_id
-                logger.debug(f"[Coze] 图片上传成功并缓存，file_id: {file_id}")
+                logger.debug(f"[Coze] 图片上传成功并缓存,file_id: {file_id}")
 
             return file_id
 

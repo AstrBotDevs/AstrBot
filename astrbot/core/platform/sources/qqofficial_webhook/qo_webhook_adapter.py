@@ -161,11 +161,11 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         )
         await self.webhook_helper.initialize()
 
-        # 如果启用统一 webhook 模式，则不启动独立服务器
+        # 如果启用统一 webhook 模式,则不启动独立服务器
         webhook_uuid = self.config.get("webhook_uuid")
         if self.unified_webhook_mode and webhook_uuid:
             log_webhook_info(f"{self.meta().id}(QQ 官方机器人 Webhook)", webhook_uuid)
-            # 保持运行状态，等待 shutdown
+            # 保持运行状态,等待 shutdown
             await self.webhook_helper.shutdown_event.wait()
         else:
             await self.webhook_helper.start_polling()

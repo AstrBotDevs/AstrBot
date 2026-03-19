@@ -58,7 +58,7 @@ class TestMultimodalCounting:
         assert tokens > 0
 
     def test_mixed_content(self):
-        """文本 + 图片的多模态消息，token 数 = 文本 token + 图片估算。"""
+        """文本 + 图片的多模态消息,token 数 = 文本 token + 图片估算｡"""
         text_only = _msg("user", [TextPart(text="describe this image")])
         mixed = _msg("user", [
             TextPart(text="describe this image"),
@@ -69,7 +69,7 @@ class TestMultimodalCounting:
         assert mixed_tokens == text_tokens + IMAGE_TOKEN_ESTIMATE
 
     def test_multiple_images(self):
-        """多张图片应该各自计算。"""
+        """多张图片应该各自计算｡"""
         msg = _msg("user", [
             ImageURLPart(image_url=ImageURLPart.ImageURL(url="data:image/png;base64,a")),
             ImageURLPart(image_url=ImageURLPart.ImageURL(url="data:image/png;base64,b")),
@@ -81,7 +81,7 @@ class TestMultimodalCounting:
 
 class TestTrustedUsage:
     def test_trusted_overrides(self):
-        """如果 API 返回了 token 数，直接用它不做估算。"""
+        """如果 API 返回了 token 数,直接用它不做估算｡"""
         msg = _msg("user", [
             TextPart(text="hello"),
             ImageURLPart(image_url=ImageURLPart.ImageURL(url="data:image/png;base64,x")),

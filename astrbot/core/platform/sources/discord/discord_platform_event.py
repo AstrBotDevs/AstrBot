@@ -24,7 +24,7 @@ from .client import DiscordBotClient
 from .components import DiscordEmbed, DiscordView
 
 
-# 自定义Discord视图组件（兼容旧版本）
+# 自定义Discord视图组件(兼容旧版本)
 class DiscordViewComponent(BaseMessageComponent):
     type: str = "discord_view"
 
@@ -73,7 +73,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         if reference_message_id and not self.interaction_followup_webhook:
             kwargs["reference"] = self.client.get_message(int(reference_message_id))
         if not kwargs:
-            logger.debug("[Discord] 尝试发送空消息，已忽略。")
+            logger.debug("[Discord] 尝试发送空消息,已忽略｡")
             return
 
         # 根据上下文执行发送/回复操作
@@ -208,7 +208,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                             )
                         except (ValueError, TypeError, binascii.Error):
                             logger.debug(
-                                f"[Discord] 裸 Base64 解码失败，作为本地路径处理: {file_content}",
+                                f"[Discord] 裸 Base64 解码失败,作为本地路径处理: {file_content}",
                             )
                             path = Path(file_content)
                             if await asyncio.to_thread(path.exists):
@@ -224,7 +224,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         files.append(discord_file)
 
                 except Exception:
-                    # 使用 getattr 来安全地访问 i.file，以防 i 本身就是问题
+                    # 使用 getattr 来安全地访问 i.file,以防 i 本身就是问题
                     file_info = getattr(i, "file", "未知")
                     logger.error(
                         f"[Discord] 处理图片时发生未知严重错误: {file_info}",
@@ -242,7 +242,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                             )
                         else:
                             logger.warning(
-                                f"[Discord] 获取文件失败，路径不存在: {file_path_str}",
+                                f"[Discord] 获取文件失败,路径不存在: {file_path_str}",
                             )
                     else:
                         logger.warning(f"[Discord] 获取文件失败: {i.name}")
@@ -252,10 +252,10 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 # Discord Embed消息
                 embeds.append(i.to_discord_embed())
             elif isinstance(i, DiscordView):
-                # Discord视图组件（按钮、选择菜单等）
+                # Discord视图组件(按钮､选择菜单等)
                 view = i.to_discord_view()
             elif isinstance(i, DiscordViewComponent):
-                # 如果消息链中包含Discord视图组件（兼容旧版本）
+                # 如果消息链中包含Discord视图组件(兼容旧版本)
                 if isinstance(i.view, discord.ui.View):
                     view = i.view
             else:
@@ -263,7 +263,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
 
         content = "".join(content_parts)
         if len(content) > 2000:
-            logger.warning("[Discord] 消息内容超过2000字符，将被截断。")
+            logger.warning("[Discord] 消息内容超过2000字符,将被截断｡")
             content = content[:2000]
         return content, files, view, embeds, reference_message_id
 

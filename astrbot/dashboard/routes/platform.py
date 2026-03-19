@@ -1,6 +1,6 @@
 """统一 Webhook 路由
 
-提供统一的 webhook 回调入口，支持多个平台使用同一端口接收回调。
+提供统一的 webhook 回调入口,支持多个平台使用同一端口接收回调｡
 """
 
 from quart import request
@@ -28,7 +28,7 @@ class PlatformRoute(Route):
 
     def _register_webhook_routes(self) -> None:
         """注册 webhook 路由"""
-        # 统一 webhook 入口，支持 GET 和 POST
+        # 统一 webhook 入口,支持 GET 和 POST
         self.app.add_url_rule(
             "/api/platform/webhook/<webhook_uuid>",
             view_func=self.unified_webhook_callback,
@@ -78,7 +78,7 @@ class PlatformRoute(Route):
             webhook_uuid: webhook UUID
 
         Returns:
-            平台适配器实例，未找到则返回 None
+            平台适配器实例,未找到则返回 None
         """
         for platform in self.platform_manager.platform_insts:
             if platform.config.get("webhook_uuid") == webhook_uuid:

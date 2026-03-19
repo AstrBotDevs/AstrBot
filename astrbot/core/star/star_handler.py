@@ -17,7 +17,7 @@ class StarHandlerRegistry(Generic[T]):
         self._handlers: list[StarHandlerMetadata] = []
 
     def append(self, handler: StarHandlerMetadata) -> None:
-        """添加一个 Handler，并保持按优先级有序"""
+        """添加一个 Handler,并保持按优先级有序"""
         if "priority" not in handler.extras_configs:
             handler.extras_configs["priority"] = 0
 
@@ -201,17 +201,17 @@ star_handlers_registry: StarHandlerRegistry = StarHandlerRegistry()
 
 
 class EventType(enum.Enum):
-    """表示一个 AstrBot 内部事件的类型。如适配器消息事件、LLM 请求事件、发送消息前的事件等
+    """表示一个 AstrBot 内部事件的类型｡如适配器消息事件､LLM 请求事件､发送消息前的事件等
 
-    用于对 Handler 的职能分组。
+    用于对 Handler 的职能分组｡
     """
 
     OnAstrBotLoadedEvent = enum.auto()  # AstrBot 加载完成
     OnPlatformLoadedEvent = enum.auto()  # 平台加载完成
 
     AdapterMessageEvent = enum.auto()  # 收到适配器发来的消息
-    OnWaitingLLMRequestEvent = enum.auto()  # 等待调用 LLM（在获取锁之前，仅通知）
-    OnLLMRequestEvent = enum.auto()  # 收到 LLM 请求（可以是用户也可以是插件）
+    OnWaitingLLMRequestEvent = enum.auto()  # 等待调用 LLM(在获取锁之前,仅通知)
+    OnLLMRequestEvent = enum.auto()  # 收到 LLM 请求(可以是用户也可以是插件)
     OnLLMResponseEvent = enum.auto()  # LLM 响应后
     OnDecoratingResultEvent = enum.auto()  # 发送消息前
     OnCallingFuncToolEvent = enum.auto()  # 调用函数工具
@@ -228,7 +228,7 @@ H = TypeVar("H", bound=Callable[..., Any])
 
 @dataclass
 class StarHandlerMetadata(Generic[H]):
-    """描述一个 Star 所注册的某一个 Handler。"""
+    """描述一个 Star 所注册的某一个 Handler｡"""
 
     event_type: EventType
     """Handler 的事件类型"""
@@ -237,16 +237,16 @@ class StarHandlerMetadata(Generic[H]):
     '''格式为 f"{handler.__module__}_{handler.__name__}"'''
 
     handler_name: str
-    """Handler 的名字，也就是方法名"""
+    """Handler 的名字,也就是方法名"""
 
     handler_module_path: str
-    """Handler 所在的模块路径。"""
+    """Handler 所在的模块路径｡"""
 
     handler: H
-    """Handler 的函数对象，应当是一个异步函数"""
+    """Handler 的函数对象,应当是一个异步函数"""
 
     event_filters: list[HandlerFilter]
-    """一个适配器消息事件过滤器，用于描述这个 Handler 能够处理、应该处理的适配器消息事件"""
+    """一个适配器消息事件过滤器,用于描述这个 Handler 能够处理､应该处理的适配器消息事件"""
 
     desc: str = ""
     """Handler 的描述信息"""

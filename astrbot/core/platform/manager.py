@@ -49,8 +49,8 @@ class PlatformManager:
         self.astrbot_config = config
         self.platforms_config = config["platform"]
         self.settings = config["platform_settings"]
-        """NOTE: 这里是 default 的配置文件，以保证最大的兼容性；
-        这个配置中的 unique_session 需要特殊处理，
+        """NOTE: 这里是 default 的配置文件,以保证最大的兼容性;
+        这个配置中的 unique_session 需要特殊处理,
         约定整个项目中对 unique_session 的引用都从 default 的配置中获取"""
         self.event_queue = event_queue
 
@@ -129,7 +129,7 @@ class PlatformManager:
                 sanitized_id, changed = self._sanitize_platform_id(platform_id)
                 if sanitized_id and changed:
                     logger.warning(
-                        "平台 ID %r 包含非法字符 ':' 或 '!'，已替换为 %r。",
+                        "平台 ID %r 包含非法字符 ':' 或 '!',已替换为 %r｡",
                         platform_id,
                         sanitized_id,
                     )
@@ -137,7 +137,7 @@ class PlatformManager:
                     self.astrbot_config.save_config()
                 else:
                     logger.error(
-                        f"平台 ID {platform_id!r} 不能为空，跳过加载该平台适配器。",
+                        f"平台 ID {platform_id!r} 不能为空,跳过加载该平台适配器｡",
                     )
                     return
 
@@ -149,14 +149,14 @@ class PlatformManager:
                 import_module(module_path, package=__package__)
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
-                f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->平台日志->安装Pip库 中安装依赖库。",
+                f"加载平台适配器 {platform_config['type']} 失败,原因:{e}｡请检查依赖库是否安装｡提示:可以在 管理面板->平台日志->安装Pip库 中安装依赖库｡",
             )
         except Exception as e:
-            logger.error(f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。")
+            logger.error(f"加载平台适配器 {platform_config['type']} 失败,原因:{e}｡")
 
         if platform_config["type"] not in platform_cls_map:
             logger.error(
-                f"未找到适用于 {platform_config['type']}({platform_config['id']}) 平台适配器，请检查是否已经安装或者名称填写错误",
+                f"未找到适用于 {platform_config['type']}({platform_config['id']}) 平台适配器,请检查是否已经安装或者名称填写错误",
             )
             return
         cls_type = platform_cls_map[platform_config["type"]]
@@ -280,7 +280,7 @@ class PlatformManager:
                 elif stat.get("status") == PlatformStatus.ERROR.value:
                     error_count += 1
             except Exception as e:
-                # 如果获取统计信息失败，记录基本信息
+                # 如果获取统计信息失败,记录基本信息
                 logger.warning(f"获取平台统计信息失败: {e}")
                 stats_list.append(
                     {
