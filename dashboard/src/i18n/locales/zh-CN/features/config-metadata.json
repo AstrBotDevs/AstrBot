@@ -1192,7 +1192,7 @@
       },
       "send_dimensions_param": {
         "description": "透传 dimensions 参数",
-        "hint": "启用后，会把 embedding_dimensions 作为 dimensions 参数发送给上游嵌入接口。对于只需要本地向量维度、但不支持 dimensions 参数的 OpenAI 兼容服务，请关闭此项。"
+        "hint": "启用后，将 embedding_dimensions 作为 dimensions 参数发送给上游 API。支持自定义维度的服务（OpenAI、智谱、火山等）可开启此项以实现降维；若上游不支持自定义维度则关闭。"
       },
       "openai_embedding": {
         "hint": "OpenAI Embedding 保留给已有配置和标准 /v1 接口使用，会在请求时自动补上 /v1，并在填写 embedding_dimensions 时继续直接发送 dimensions。"

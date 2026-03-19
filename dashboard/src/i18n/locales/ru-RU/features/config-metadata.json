@@ -1195,7 +1195,7 @@
             },
             "send_dimensions_param": {
                 "description": "Передавать параметр dimensions",
-                "hint": "Если включено, AstrBot отправляет embedding_dimensions в upstream embedding API как параметр dimensions. Отключите это для OpenAI-совместимых сервисов, которым нужен только локальный размер вектора и которые не поддерживают параметр dimensions."
+                "hint": "Если включено, отправляет embedding_dimensions в upstream API как параметр dimensions. Это позволяет уменьшить размерность для сервисов, которые это поддерживают (OpenAI, Zhipu, Volcengine). Отключите, если upstream не поддерживает пользовательскую размерность."
             },
             "openai_embedding": {
                 "hint": "OpenAI Embedding сохранён для существующих конфигураций и стандартных /v1 endpoint-ов. Он автоматически добавляет /v1 и по-прежнему отправляет dimensions, если задан embedding_dimensions."

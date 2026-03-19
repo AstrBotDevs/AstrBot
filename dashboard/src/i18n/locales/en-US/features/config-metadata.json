@@ -1189,8 +1189,8 @@
         "description": "API Base URL"
       },
       "send_dimensions_param": {
-        "description": "Send dimensions parameter",
-        "hint": "When enabled, AstrBot sends embedding_dimensions to the upstream embedding API as dimensions. Disable this for OpenAI-compatible services that only need the local vector size and do not support the dimensions parameter."
+        "description": "Forward dimensions parameter",
+        "hint": "When enabled, sends embedding_dimensions to the upstream API as the dimensions parameter. This allows dimension reduction on services that support it (OpenAI, Zhipu, Volcengine). Leave disabled if the upstream does not support custom dimensions."
       },
       "openai_embedding": {
         "hint": "OpenAI Embedding is kept for existing configs and standard /v1 endpoints. It automatically appends /v1 and still forwards dimensions whenever embedding_dimensions is configured."
