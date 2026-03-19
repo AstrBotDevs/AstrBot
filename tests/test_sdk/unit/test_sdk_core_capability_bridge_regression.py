@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import sys
 import types
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -68,6 +69,76 @@ class _FakeStarContext:
         return []
 
 
+class _FakeMemorySp:
+    def __init__(self) -> None:
+        self.store: dict[tuple[str, str, str], object] = {}
+
+    async def get_async(self, scope, scope_id, key, default=None):
+        return self.store.get((scope, scope_id, key), default)
+
+    async def put_async(self, scope, scope_id, key, value):
+        self.store[(scope, scope_id, key)] = value
+
+    async def remove_async(self, scope, scope_id, key):
+        self.store.pop((scope, scope_id, key), None)
+
+    async def range_get_async(self, scope, scope_id=None, key=None):
+        items = []
+        for item_scope, item_scope_id, item_key in self.store:
+            if item_scope != scope:
+                continue
+            if scope_id is not None and item_scope_id != scope_id:
+                continue
+            if key is not None and item_key != key:
+                continue
+            items.append(SimpleNamespace(key=item_key))
+        return items
+
+
+class _FakeEmbeddingProvider:
+    def __init__(self, provider_id: str = "embedding-main") -> None:
+        self.provider_id = provider_id
+
+    def meta(self):
+        return SimpleNamespace(id=self.provider_id)
+
+    @staticmethod
+    def _vector_for_text(text: str) -> list[float]:
+        normalized = str(text).casefold()
+        if "banana" in normalized or "mango" in normalized:
+            return [1.0, 0.0]
+        if "ocean" in normalized or "blue" in normalized:
+            return [0.0, 1.0]
+        return [0.5, 0.5]
+
+    async def get_embedding(self, text: str) -> list[float]:
+        return self._vector_for_text(text)
+
+    async def get_embeddings(self, texts: list[str]) -> list[list[float]]:
+        return [self._vector_for_text(text) for text in texts]
+
+    def get_dim(self) -> int:
+        return 2
+
+
+class _FakeMemoryStarContext(_FakeStarContext):
+    def __init__(
+        self, embedding_provider: _FakeEmbeddingProvider | None = None
+    ) -> None:
+        self.embedding_provider = embedding_provider
+        self._providers_by_id: dict[str, object] = {}
+        if embedding_provider is not None:
+            self._providers_by_id[embedding_provider.provider_id] = embedding_provider
+
+    def get_provider_by_id(self, provider_id: str):
+        return self._providers_by_id.get(provider_id)
+
+    def get_all_embedding_providers(self):
+        if self.embedding_provider is None:
+            return []
+        return [self.embedding_provider]
+
+
 class _FakeCancelToken:
     def raise_if_cancelled(self) -> None:
         return None
@@ -103,3 +174,162 @@ async def test_core_capability_bridge_serves_registered_plugin_config() -> None:
     )
 
     assert result == {"config": {"enable_morning": True}}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_core_memory_search_uses_hybrid_ranking_and_runtime_stats(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_sp = _FakeMemorySp()
+    embedding_provider = _FakeEmbeddingProvider()
+    plugin_bridge = _FakePluginBridge()
+    bridge = CoreCapabilityBridge(
+        star_context=_FakeMemoryStarContext(embedding_provider),
+        plugin_bridge=plugin_bridge,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.capabilities.basic._get_runtime_sp",
+        lambda: fake_sp,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.capabilities.basic._get_runtime_provider_types",
+        lambda: (object, object, _FakeEmbeddingProvider, object),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.capabilities.provider._get_runtime_provider_types",
+        lambda: (object, object, _FakeEmbeddingProvider, object),
+    )
+
+    await bridge._memory_save(
+        "req-1",
+        {"key": "fruit-note", "value": {"content": "banana smoothie with mango"}},
+        None,
+    )
+    await bridge._memory_save(
+        "req-1",
+        {"key": "ocean-note", "value": {"content": "blue ocean memory"}},
+        None,
+    )
+
+    result = await bridge._memory_search(
+        "req-1",
+        {"query": "banana smoothie", "limit": 1},
+        None,
+    )
+
+    assert result["items"] == [
+        {
+            "key": "fruit-note",
+            "value": {"content": "banana smoothie with mango"},
+            "score": 1.0,
+            "match_type": "hybrid",
+        }
+    ]
+
+    stats = await bridge._memory_stats("req-1", {}, None)
+    assert stats["total_items"] == 2
+    assert stats["indexed_items"] == 2
+    assert stats["embedded_items"] == 2
+    assert stats["dirty_items"] == 0
+    assert stats["plugin_id"] == "ai_girlfriend"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_core_memory_sidecars_are_scoped_per_plugin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_sp = _FakeMemorySp()
+    embedding_provider = _FakeEmbeddingProvider()
+
+    class _RoutingPluginBridge(_FakePluginBridge):
+        def resolve_request_plugin_id(self, request_id: str) -> str:
+            if request_id == "req-a":
+                return "plugin-a"
+            if request_id == "req-b":
+                return "plugin-b"
+            return super().resolve_request_plugin_id(request_id)
+
+    bridge = CoreCapabilityBridge(
+        star_context=_FakeMemoryStarContext(embedding_provider),
+        plugin_bridge=_RoutingPluginBridge(),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.capabilities.basic._get_runtime_sp",
+        lambda: fake_sp,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.capabilities.basic._get_runtime_provider_types",
+        lambda: (object, object, _FakeEmbeddingProvider, object),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.capabilities.provider._get_runtime_provider_types",
+        lambda: (object, object, _FakeEmbeddingProvider, object),
+    )
+
+    await bridge._memory_save(
+        "req-a",
+        {"key": "alpha-note", "value": {"content": "banana memory"}},
+        None,
+    )
+    await bridge._memory_save(
+        "req-b",
+        {"key": "beta-note", "value": {"content": "blue ocean memory"}},
+        None,
+    )
+
+    await bridge._memory_search("req-a", {"query": "banana"}, None)
+
+    stats_a = await bridge._memory_stats("req-a", {}, None)
+    stats_b = await bridge._memory_stats("req-b", {}, None)
+
+    assert stats_a["indexed_items"] == 1
+    assert stats_a["embedded_items"] == 1
+    assert stats_a["dirty_items"] == 0
+    assert stats_b["indexed_items"] == 1
+    assert stats_b["embedded_items"] == 0
+    assert stats_b["dirty_items"] == 1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_core_memory_ttl_restores_expiration_after_sidecar_reset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_sp = _FakeMemorySp()
+    bridge = CoreCapabilityBridge(
+        star_context=_FakeMemoryStarContext(),
+        plugin_bridge=_FakePluginBridge(),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.capabilities.basic._get_runtime_sp",
+        lambda: fake_sp,
+    )
+
+    await bridge._memory_save_with_ttl(
+        "req-1",
+        {
+            "key": "temp-note",
+            "value": {"content": "temporary note"},
+            "ttl_seconds": 60,
+        },
+        None,
+    )
+
+    stored_key = ("sdk_memory", "ai_girlfriend", "temp-note")
+    stored = fake_sp.store[stored_key]
+    assert isinstance(stored, dict)
+    assert "expires_at" in stored
+
+    bridge._memory_index_by_plugin = {}
+    bridge._memory_dirty_keys_by_plugin = {}
+    bridge._memory_expires_at_by_plugin = {}
+    stored["expires_at"] = (
+        datetime.now(timezone.utc) - timedelta(seconds=1)
+    ).isoformat()
+
+    result = await bridge._memory_get("req-1", {"key": "temp-note"}, None)
+
+    assert result == {"value": None}
+    assert stored_key not in fake_sp.store
