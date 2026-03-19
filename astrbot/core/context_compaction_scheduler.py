@@ -31,6 +31,20 @@ class _CompactionStats:
     failed: int = 0
 
 
+@dataclass
+class _EligibilityResult:
+    eligible: bool
+    messages: list[Message]
+    before_tokens: int
+
+
+@dataclass
+class _RoundResult:
+    messages: list[Message]
+    changed: bool
+    rounds: int
+
+
 class PeriodicContextCompactionScheduler:
     """Periodically compact conversation history and persist summarized history back to DB.
 
@@ -233,37 +247,54 @@ class PeriodicContextCompactionScheduler:
         return max(1, int(cfg["interval_minutes"])) * 60
 
     def _load_config(self) -> dict[str, Any]:
-        default_conf = self.config_manager.default_conf
-        provider_settings = default_conf.get("provider_settings", {})
-        raw_cfg = provider_settings.get("periodic_context_compaction", {})
-        if not isinstance(raw_cfg, dict):
-            raw_cfg = {}
+        raw_cfg = self._load_raw_config()
 
         cfg = dict(self._DEFAULTS)
         cfg.update(raw_cfg)
 
         # normalize
         cfg["enabled"] = self._to_bool(cfg.get("enabled"), False)
-        cfg["interval_minutes"] = self._to_int(cfg.get("interval_minutes"), 30, 1)
-        cfg["startup_delay_seconds"] = self._to_int(
-            cfg.get("startup_delay_seconds"),
-            120,
-            0,
-        )
-        cfg["max_conversations_per_run"] = self._to_int(
-            cfg.get("max_conversations_per_run"),
-            8,
-            1,
-        )
-        cfg["max_scan_per_run"] = self._to_int(
-            cfg.get("max_scan_per_run"),
-            120,
-            1,
-        )
-        cfg["scan_page_size"] = self._to_int(cfg.get("scan_page_size"), 40, 10)
-        cfg["min_idle_minutes"] = self._to_int(cfg.get("min_idle_minutes"), 15, 0)
-        cfg["min_messages"] = self._to_int(cfg.get("min_messages"), 14, 2)
-        cfg["target_tokens"] = self._to_int(cfg.get("target_tokens"), 4096, 512)
+        self._normalize_int(cfg, "interval_minutes", 30, 1)
+        self._normalize_int(cfg, "startup_delay_seconds", 120, 0)
+        self._normalize_int(cfg, "max_conversations_per_run", 8, 1)
+        self._normalize_int(cfg, "max_scan_per_run", 120, 1)
+        self._normalize_int(cfg, "scan_page_size", 40, 10)
+        self._normalize_int(cfg, "min_idle_minutes", 15, 0)
+        self._normalize_int(cfg, "min_messages", 14, 2)
+        self._normalize_int(cfg, "target_tokens", 4096, 512)
+        self._normalize_trigger_tokens(cfg, raw_cfg)
+        self._normalize_int(cfg, "max_rounds", 3, 1)
+        self._normalize_int(cfg, "truncate_turns", 1, 1)
+        self._normalize_int(cfg, "keep_recent", 6, 0)
+        cfg["provider_id"] = str(cfg.get("provider_id", "") or "").strip()
+        cfg["instruction"] = str(cfg.get("instruction", "") or "").strip()
+        cfg["dry_run"] = self._to_bool(cfg.get("dry_run"), False)
+
+        return cfg
+
+    def _load_raw_config(self) -> dict[str, Any]:
+        default_conf = self.config_manager.default_conf
+        provider_settings = default_conf.get("provider_settings", {})
+        raw_cfg = provider_settings.get("periodic_context_compaction", {})
+        if isinstance(raw_cfg, dict):
+            return raw_cfg
+        return {}
+
+    def _normalize_int(
+        self,
+        cfg: dict[str, Any],
+        key: str,
+        default: int,
+        min_value: int,
+    ) -> int:
+        cfg[key] = self._to_int(cfg.get(key), default, min_value)
+        return cfg[key]
+
+    def _normalize_trigger_tokens(
+        self,
+        cfg: dict[str, Any],
+        raw_cfg: dict[str, Any],
+    ) -> int:
         trigger_default = max(int(cfg["target_tokens"] * 1.5), cfg["target_tokens"] + 1)
         raw_trigger = raw_cfg.get("trigger_tokens")
         if raw_trigger is None or (isinstance(raw_trigger, str) and not raw_trigger):
@@ -272,59 +303,97 @@ class PeriodicContextCompactionScheduler:
             cfg["trigger_tokens"] = self._to_int(raw_trigger, trigger_default, 512)
         if cfg["trigger_tokens"] <= cfg["target_tokens"]:
             cfg["trigger_tokens"] = cfg["target_tokens"] + 1
-        cfg["max_rounds"] = self._to_int(cfg.get("max_rounds"), 3, 1)
-        cfg["truncate_turns"] = self._to_int(cfg.get("truncate_turns"), 1, 1)
-        cfg["keep_recent"] = self._to_int(cfg.get("keep_recent"), 6, 0)
-        cfg["provider_id"] = str(cfg.get("provider_id", "") or "").strip()
-        cfg["instruction"] = str(cfg.get("instruction", "") or "").strip()
-        cfg["dry_run"] = self._to_bool(cfg.get("dry_run"), False)
-
-        return cfg
+        return cfg["trigger_tokens"]
 
     async def _compact_one_conversation(
         self,
         conv: ConversationV2,
         cfg: dict[str, Any],
     ) -> str:
-        history = conv.content
-        if not isinstance(history, list) or len(history) < cfg["min_messages"]:
-            return "skipped"
-
-        if not self._is_idle_enough(conv.updated_at, cfg["min_idle_minutes"]):
-            return "skipped"
-
-        messages = self._parse_history(history)
-        if len(messages) < cfg["min_messages"]:
-            return "skipped"
-
-        trusted_usage = conv.token_usage if isinstance(conv.token_usage, int) else 0
-        before_tokens = self._token_counter.count_tokens(messages, trusted_usage)
-        if before_tokens < cfg["trigger_tokens"]:
+        eligibility = self._check_eligibility(conv, cfg)
+        if not eligibility.eligible:
             return "skipped"
 
         provider = await self._resolve_provider(cfg, conv.user_id)
         if not provider:
             return "failed"
 
+        round_result = await self._run_compaction_rounds(
+            messages=eligibility.messages,
+            provider=provider,
+            cfg=cfg,
+        )
+        if not round_result.changed:
+            return "skipped"
+
+        after_tokens = self._token_counter.count_tokens(round_result.messages)
+        if after_tokens >= eligibility.before_tokens:
+            return "skipped"
+
+        if cfg["dry_run"]:
+            self._log_dry_run(conv, eligibility.before_tokens, after_tokens, round_result)
+            return "compacted"
+
+        persisted = await self._persist_compacted_history(
+            conv=conv,
+            compressed=round_result.messages,
+            after_tokens=after_tokens,
+        )
+        if not persisted:
+            return "failed"
+
+        self._log_compacted(
+            conv,
+            eligibility.before_tokens,
+            after_tokens,
+            round_result,
+        )
+        return "compacted"
+
+    def _check_eligibility(
+        self,
+        conv: ConversationV2,
+        cfg: dict[str, Any],
+    ) -> _EligibilityResult:
+        history = conv.content
+        if not isinstance(history, list) or len(history) < cfg["min_messages"]:
+            return _EligibilityResult(eligible=False, messages=[], before_tokens=0)
+
+        if not self._is_idle_enough(conv.updated_at, cfg["min_idle_minutes"]):
+            return _EligibilityResult(eligible=False, messages=[], before_tokens=0)
+
+        messages = self._parse_history(history)
+        if len(messages) < cfg["min_messages"]:
+            return _EligibilityResult(eligible=False, messages=[], before_tokens=0)
+
+        trusted_usage = conv.token_usage if isinstance(conv.token_usage, int) else 0
+        before_tokens = self._token_counter.count_tokens(messages, trusted_usage)
+        if before_tokens < cfg["trigger_tokens"]:
+            return _EligibilityResult(eligible=False, messages=[], before_tokens=0)
+
+        return _EligibilityResult(
+            eligible=True,
+            messages=messages,
+            before_tokens=before_tokens,
+        )
+
+    async def _run_compaction_rounds(
+        self,
+        messages: list[Message],
+        provider: Provider,
+        cfg: dict[str, Any],
+    ) -> _RoundResult:
         compressed = messages
         changed = False
         rounds = 0
+        instruction = self._resolve_instruction(cfg)
+
         for _ in range(cfg["max_rounds"]):
             current_tokens = self._token_counter.count_tokens(compressed)
             if current_tokens <= cfg["target_tokens"]:
                 break
 
-            manager = ContextManager(
-                ContextConfig(
-                    max_context_tokens=cfg["target_tokens"],
-                    enforce_max_turns=-1,
-                    truncate_turns=cfg["truncate_turns"],
-                    llm_compress_keep_recent=cfg["keep_recent"],
-                    llm_compress_instruction=self._resolve_instruction(cfg),
-                    llm_compress_provider=provider,
-                )
-            )
-
+            manager = self._build_context_manager(cfg, provider, instruction)
             rounds += 1
             next_messages = await manager.process(compressed)
             if self._messages_equal(compressed, next_messages):
@@ -333,24 +402,31 @@ class PeriodicContextCompactionScheduler:
             compressed = next_messages
             changed = True
 
-        if not changed:
-            return "skipped"
+        return _RoundResult(messages=compressed, changed=changed, rounds=rounds)
 
-        after_tokens = self._token_counter.count_tokens(compressed)
-        if after_tokens >= before_tokens:
-            return "skipped"
-
-        if cfg["dry_run"]:
-            logger.info(
-                "[ContextCompact] dry-run: cid=%s user=%s tokens=%s->%s rounds=%s",
-                conv.conversation_id,
-                conv.user_id,
-                before_tokens,
-                after_tokens,
-                rounds,
+    @staticmethod
+    def _build_context_manager(
+        cfg: dict[str, Any],
+        provider: Provider,
+        instruction: str,
+    ) -> ContextManager:
+        return ContextManager(
+            ContextConfig(
+                max_context_tokens=cfg["target_tokens"],
+                enforce_max_turns=-1,
+                truncate_turns=cfg["truncate_turns"],
+                llm_compress_keep_recent=cfg["keep_recent"],
+                llm_compress_instruction=instruction,
+                llm_compress_provider=provider,
             )
-            return "compacted"
+        )
 
+    async def _persist_compacted_history(
+        self,
+        conv: ConversationV2,
+        compressed: list[Message],
+        after_tokens: int,
+    ) -> bool:
         try:
             await self.conversation_manager.update_conversation(
                 unified_msg_origin=conv.user_id,
@@ -366,17 +442,40 @@ class PeriodicContextCompactionScheduler:
                 exc,
                 exc_info=True,
             )
-            return "failed"
+            return False
+        return True
 
+    @staticmethod
+    def _log_dry_run(
+        conv: ConversationV2,
+        before_tokens: int,
+        after_tokens: int,
+        round_result: _RoundResult,
+    ) -> None:
+        logger.info(
+            "[ContextCompact] dry-run: cid=%s user=%s tokens=%s->%s rounds=%s",
+            conv.conversation_id,
+            conv.user_id,
+            before_tokens,
+            after_tokens,
+            round_result.rounds,
+        )
+
+    @staticmethod
+    def _log_compacted(
+        conv: ConversationV2,
+        before_tokens: int,
+        after_tokens: int,
+        round_result: _RoundResult,
+    ) -> None:
         logger.info(
             "[ContextCompact] compacted cid=%s user=%s tokens=%s->%s rounds=%s",
             conv.conversation_id,
             conv.user_id,
             before_tokens,
             after_tokens,
-            rounds,
+            round_result.rounds,
         )
-        return "compacted"
 
     async def _resolve_provider(
         self,
@@ -483,69 +582,7 @@ class PeriodicContextCompactionScheduler:
             return content
 
         if isinstance(content, list):
-            parts: list[dict[str, Any]] = []
-            fallback_texts: list[str] = []
-
-            for part in content:
-                if isinstance(part, str):
-                    if part.strip():
-                        fallback_texts.append(part)
-                    continue
-                if not isinstance(part, dict):
-                    txt = self._safe_json(part)
-                    if txt:
-                        fallback_texts.append(txt)
-                    continue
-
-                part_type = str(part.get("type", "")).strip()
-                if part_type == "text":
-                    text_val = part.get("text")
-                    if text_val is not None:
-                        parts.append({"type": "text", "text": str(text_val)})
-                    continue
-                if part_type == "image_url":
-                    image_obj = part.get("image_url")
-                    if isinstance(image_obj, dict) and image_obj.get("url"):
-                        image_part: dict[str, Any] = {
-                            "type": "image_url",
-                            "image_url": {"url": str(image_obj.get("url"))},
-                        }
-                        if image_obj.get("id"):
-                            image_part["image_url"]["id"] = str(image_obj.get("id"))
-                        parts.append(image_part)
-                        continue
-                if part_type == "audio_url":
-                    audio_obj = part.get("audio_url")
-                    if isinstance(audio_obj, dict) and audio_obj.get("url"):
-                        audio_part: dict[str, Any] = {
-                            "type": "audio_url",
-                            "audio_url": {"url": str(audio_obj.get("url"))},
-                        }
-                        if audio_obj.get("id"):
-                            audio_part["audio_url"]["id"] = str(audio_obj.get("id"))
-                        parts.append(audio_part)
-                        continue
-
-                if part_type == "think":
-                    think = part.get("think")
-                    if think:
-                        fallback_texts.append(str(think))
-                    continue
-
-                raw_text = part.get("text") or part.get("content")
-                if raw_text:
-                    fallback_texts.append(str(raw_text))
-                else:
-                    dumped = self._safe_json(part)
-                    if dumped:
-                        fallback_texts.append(dumped)
-
-            if fallback_texts:
-                parts.insert(0, {"type": "text", "text": "\n".join(fallback_texts)})
-
-            if parts:
-                return parts
-            return ""
+            return self._sanitize_list_content(content)
 
         if content is None:
             if role == "assistant":
@@ -554,6 +591,80 @@ class PeriodicContextCompactionScheduler:
 
         dumped = self._safe_json(content)
         return dumped if dumped is not None else str(content)
+
+    def _sanitize_list_content(self, content: list[Any]) -> str | list[dict]:
+        parts: list[dict[str, Any]] = []
+        fallback_texts: list[str] = []
+
+        for part in content:
+            if isinstance(part, str):
+                if part.strip():
+                    fallback_texts.append(part)
+                continue
+            if not isinstance(part, dict):
+                txt = self._safe_json(part)
+                if txt:
+                    fallback_texts.append(txt)
+                continue
+            self._sanitize_content_part(part, parts, fallback_texts)
+
+        if fallback_texts:
+            parts.insert(0, {"type": "text", "text": "\n".join(fallback_texts)})
+
+        if parts:
+            return parts
+        return ""
+
+    def _sanitize_content_part(
+        self,
+        part: dict[str, Any],
+        parts: list[dict[str, Any]],
+        fallback_texts: list[str],
+    ) -> None:
+        part_type = str(part.get("type", "")).strip()
+        if part_type == "text":
+            text_val = part.get("text")
+            if text_val is not None:
+                parts.append({"type": "text", "text": str(text_val)})
+            return
+
+        if part_type == "image_url":
+            image_obj = part.get("image_url")
+            if isinstance(image_obj, dict) and image_obj.get("url"):
+                image_part: dict[str, Any] = {
+                    "type": "image_url",
+                    "image_url": {"url": str(image_obj.get("url"))},
+                }
+                if image_obj.get("id"):
+                    image_part["image_url"]["id"] = str(image_obj.get("id"))
+                parts.append(image_part)
+            return
+
+        if part_type == "audio_url":
+            audio_obj = part.get("audio_url")
+            if isinstance(audio_obj, dict) and audio_obj.get("url"):
+                audio_part: dict[str, Any] = {
+                    "type": "audio_url",
+                    "audio_url": {"url": str(audio_obj.get("url"))},
+                }
+                if audio_obj.get("id"):
+                    audio_part["audio_url"]["id"] = str(audio_obj.get("id"))
+                parts.append(audio_part)
+            return
+
+        if part_type == "think":
+            think = part.get("think")
+            if think:
+                fallback_texts.append(str(think))
+            return
+
+        raw_text = part.get("text") or part.get("content")
+        if raw_text:
+            fallback_texts.append(str(raw_text))
+        else:
+            dumped = self._safe_json(part)
+            if dumped:
+                fallback_texts.append(dumped)
 
     @staticmethod
     def _messages_equal(a: list[Message], b: list[Message]) -> bool:
