@@ -84,7 +84,7 @@ class _MCPClientDictView(Mapping[str, MCPClient]):
 
 
 def _resolve_timeout(
-    timeout: float | int | str | None = None,
+    timeout: float | str | None = None,
     *,
     env_name: str = MCP_INIT_TIMEOUT_ENV,
     default: float = DEFAULT_MCP_INIT_TIMEOUT_SECONDS,
@@ -670,7 +670,7 @@ class FunctionToolManager:
         name: str,
         config: dict,
         shutdown_event: asyncio.Event | None = None,
-        init_timeout: float | int | str | None = None,
+        init_timeout: float | str | None = None,
     ) -> None:
         """Enable a new MCP server and initialize it.
 

@@ -1005,7 +1005,9 @@ class PipInstaller:
                 ]
             )
 
-        with self._core_constraints.constraints_file() as constraints_file_path:
+        async with (
+            self._core_constraints.async_constraints_file() as constraints_file_path
+        ):
             if constraints_file_path:
                 args.extend(["-c", constraints_file_path])
 

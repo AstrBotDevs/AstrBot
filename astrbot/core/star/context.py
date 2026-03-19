@@ -467,7 +467,7 @@ class Context:
                 await platform.send_by_session(session, message_chain)
                 return True
         logger.warning(
-            f"cannot find platform for session {str(session)}, message not sent"
+            f"cannot find platform for session {session!s}, message not sent"
         )
         return False
 

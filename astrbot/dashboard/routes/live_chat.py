@@ -646,7 +646,7 @@ class LiveChatRoute(Route):
                 {
                     "ct": "chat",
                     "t": "error",
-                    "data": f"处理失败: {str(e)}",
+                    "data": f"处理失败: {e!s}",
                     "code": "PROCESSING_ERROR",
                 },
             )
@@ -911,7 +911,7 @@ class LiveChatRoute(Route):
 
         except Exception as e:
             logger.error(f"[Live Chat] 处理音频失败: {e}", exc_info=True)
-            await websocket.send_json({"t": "error", "data": f"处理失败: {str(e)}"})
+            await websocket.send_json({"t": "error", "data": f"处理失败: {e!s}"})
 
         finally:
             session.is_processing = False

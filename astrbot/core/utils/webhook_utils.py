@@ -22,7 +22,7 @@ def _get_dashboard_port() -> int:
 
 
 def _is_dashboard_ssl_enabled() -> bool:
-    env_ssl = os.environ.get("ASTRBOT_DASHBOARD_SSL_ENABLE") or os.environ.get(
+    env_ssl = os.environ.get("ASTRBOT_SSL_ENABLE") or os.environ.get(
         "DASHBOARD_SSL_ENABLE"
     )
     if env_ssl is not None:

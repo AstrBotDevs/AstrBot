@@ -95,7 +95,7 @@ Text chunk to process:
                 return []
         except Exception as e:
             logger.warning(
-                f"  - LLM call failed on attempt {attempt + 1}/{max_retries + 1}. Error: {str(e)}"
+                f"  - LLM call failed on attempt {attempt + 1}/{max_retries + 1}. Error: {e!s}"
             )
 
     logger.error(
@@ -635,7 +635,7 @@ class KBHelper:
             final_chunks = []
             for i, result in enumerate(repaired_results):
                 if isinstance(result, Exception):
-                    logger.warning(f"块 {i} 处理异常: {str(result)}. 回退到原始块。")
+                    logger.warning(f"块 {i} 处理异常: {result!s}. 回退到原始块。")
                     final_chunks.append(initial_chunks[i])
                 elif isinstance(result, list):
                     final_chunks.extend(result)

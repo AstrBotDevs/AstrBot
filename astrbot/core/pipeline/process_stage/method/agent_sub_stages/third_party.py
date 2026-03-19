@@ -86,7 +86,7 @@ async def run_third_party_agent(
             err_msg = (
                 f"Error occurred during AI execution.\n"
                 f"Error Type: {type(e).__name__} (3rd party)\n"
-                f"Error Message: {str(e)}"
+                f"Error Message: {e!s}"
             )
         yield MessageChain().message(err_msg), True
 

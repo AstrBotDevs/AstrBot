@@ -269,7 +269,7 @@ async def run_agent(
                 err_msg = (
                     f"Error occurred during AI execution.\n"
                     f"Error Type: {type(e).__name__}\n"
-                    f"Error Message: {str(e)}"
+                    f"Error Message: {e!s}"
                 )
 
             error_llm_response = LLMResponse(

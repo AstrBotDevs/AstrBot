@@ -23,15 +23,22 @@ from typing import Any
 
 import click
 
-try:
-    # Argon2 provides secure password hashing. Import if available.
-    from argon2 import PasswordHasher
-    from argon2 import exceptions as argon2_exceptions
+# Provide type-safe placeholders for optional argon2 imports so static analysis / type checkers
+# do not assume the symbols always exist at import time.
+PasswordHasher: Any = None
+argon2_exceptions: Any = None
+_HAS_ARGON2 = False
 
-    _HAS_ARGON2 = True
+try:
+    # Import argon2 at runtime if available. Use the module import path and getattr to avoid
+    # static-analysis import errors and to allow graceful fallback when argon2 isn't installed.
+    import argon2 as _argon2  # type: ignore
+
+    PasswordHasher = getattr(_argon2, "PasswordHasher", None)
+    argon2_exceptions = getattr(_argon2, "exceptions", None)
+    _HAS_ARGON2 = PasswordHasher is not None and callable(PasswordHasher)
 except Exception:
-    # Argon2 may be broken on some Python/platform combinations (e.g. missing legacy `imp`).
-    # Fall back to a PBKDF2-HMAC-SHA256 based approach implemented below.
+    # Argon2 may be broken on some Python/platform combinations.
     PasswordHasher = None
     argon2_exceptions = None
     _HAS_ARGON2 = False
@@ -42,7 +49,8 @@ from astrbot.core.utils.astrbot_path import astrbot_paths
 
 # Instantiate a module-level hasher (argon2 when available, else None).
 # When argon2 is unavailable we will use PBKDF2-HMAC-SHA256 as a deterministic secure fallback.
-if _HAS_ARGON2:
+_PASSWORD_HASHER: Any = None
+if _HAS_ARGON2 and PasswordHasher is not None and callable(PasswordHasher):
     try:
         _PASSWORD_HASHER = PasswordHasher()
     except Exception:
@@ -149,7 +157,17 @@ def verify_dashboard_password(value: str, stored_hash: str) -> bool:
         except Exception as e:
             # argon2 verification mismatch or errors: return False for mismatch,
             # raise for unexpected exceptions to avoid silent failures.
-            if getattr(e, "__class__", None).__name__ == "VerifyMismatchError":
+            # Be defensive when accessing exception type/name to avoid attribute errors.
+            # If argon2_exceptions module is available prefer isinstance check.
+            if argon2_exceptions is not None:
+                vm = getattr(argon2_exceptions, "VerifyMismatchError", None)
+                if vm is not None and isinstance(e, vm):
+                    return False
+            cls = getattr(e, "__class__", None)
+            if (
+                cls is not None
+                and getattr(cls, "__name__", "") == "VerifyMismatchError"
+            ):
                 return False
             raise click.ClickException(f"Password verification failure (argon2): {e!s}")
 
@@ -337,16 +355,26 @@ def set_dashboard_credentials(
             config, "dashboard.username", _validate_dashboard_username(username)
         )
     if password_hash is not None:
-        # If caller provided plaintext by mistake, allow passing through validator,
-        # but prefer that callers pass a pre-hashed password when applicable.
-        if is_dashboard_password_hash(password_hash) and not password_hash.startswith(
-            "$argon2"
-        ):
-            # It's a legacy hex digest; store as-is for compatibility.
-            _set_nested_item(config, "dashboard.password", password_hash)
-        elif password_hash.startswith("$argon2"):
+        # Security policy: disallow storing legacy hex digests via CLI.
+        # Acceptable inputs from callers:
+        # - Argon2 encoded hash string (starts with "$argon2")
+        # - Plaintext password (will be hashed securely here)
+        #
+        # Rationale: legacy hex digests (md5/sha256 hex) are insecure to store and
+        # lead to ambiguity in verification. Require callers to provide plaintext
+        # (for secure hashing) or a properly encoded argon2 hash.
+        if isinstance(password_hash, str) and password_hash.startswith("$argon2"):
             _set_nested_item(config, "dashboard.password", password_hash)
         else:
+            # If caller mistakenly passed a legacy hex digest, reject with clear error.
+            if is_dashboard_password_hash(password_hash) and not str(
+                password_hash
+            ).startswith("$argon2"):
+                raise click.ClickException(
+                    "Storing legacy hex password digests via CLI is disallowed. "
+                    "Please provide the plaintext password (it will be hashed securely), "
+                    "or provide an Argon2-encoded hash string."
+                )
             # Treat value as plaintext and hash it securely
             _set_nested_item(
                 config,
@@ -447,14 +475,30 @@ def get_config(key: str | None = None) -> None:
 def set_dashboard_password(username: str | None, password: str | None) -> None:
     """
     Interactively set dashboard password (with confirmation) or set directly with -p.
+
+    Note: Legacy hex digests (md5/sha256 hex) provided directly are now disallowed
+    for CLI storage. Acceptable inputs:
+    - Plaintext password (recommended): it will be hashed securely before storage.
+    - Argon2-encoded hash (advanced): stored as-is.
     """
     config = _load_config()
 
     if password is not None:
-        # If the provided value already looks like a supported hash, accept it.
-        if is_dashboard_password_hash(password):
+        # If the provided value is an Argon2 encoded hash, accept as-is.
+        if isinstance(password, str) and password.startswith("$argon2"):
             password_hash = password
         else:
+            # If the provided value looks like a legacy hex digest, reject and ask
+            # the user to provide plaintext so we can hash it securely.
+            if is_dashboard_password_hash(password) and not str(password).startswith(
+                "$argon2"
+            ):
+                raise click.ClickException(
+                    "Providing legacy hex password digests is disallowed. "
+                    "Please supply the plaintext password (it will be hashed securely), "
+                    "or provide an Argon2-encoded hash string."
+                )
+            # Otherwise treat as plaintext and hash securely
             password_hash = _validate_dashboard_password(password)
     else:
         password_hash = prompt_dashboard_password()

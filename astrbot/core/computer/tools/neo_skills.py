@@ -66,7 +66,7 @@ class NeoSkillToolBase(FunctionTool):
             result = await neo_call(client, sandbox)
             return _to_json_text(result)
         except Exception as e:
-            return f"{self.error_prefix} {error_action}: {str(e)}"
+            return f"{self.error_prefix} {error_action}: {e!s}"
 
 
 @dataclass
@@ -422,7 +422,7 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
                 }
             )
         except Exception as e:
-            return f"Error promoting skill candidate: {str(e)}"
+            return f"Error promoting skill candidate: {e!s}"
 
 
 @dataclass

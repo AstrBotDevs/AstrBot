@@ -103,15 +103,15 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             async for response in self._execute_dashscope_request():
                 yield response
         except Exception as e:
-            logger.error(f"阿里云百炼请求失败：{str(e)}")
+            logger.error(f"阿里云百炼请求失败：{e!s}")
             self._transition_state(AgentState.ERROR)
             self.final_llm_resp = LLMResponse(
-                role="err", completion_text=f"阿里云百炼请求失败：{str(e)}"
+                role="err", completion_text=f"阿里云百炼请求失败：{e!s}"
             )
             yield AgentResponse(
                 type="err",
                 data=AgentResponseData(
-                    chain=MessageChain().message(f"阿里云百炼请求失败：{str(e)}")
+                    chain=MessageChain().message(f"阿里云百炼请求失败：{e!s}")
                 ),
             )
 
