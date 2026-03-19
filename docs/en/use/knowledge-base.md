@@ -14,6 +14,8 @@ AstrBot now includes built-in presets for OpenAI-compatible Embedding, Zhipu Emb
 
 If you want to connect another OpenAI-compatible embedding service, use `OpenAI Compatible Embedding` first. When `embedding api base` only contains the host, AstrBot automatically appends `/v1`. If the URL already contains a path such as Zhipu `/api/paas/v4` or Volcengine Ark `/api/v3`, AstrBot preserves that path as-is.
 
+The legacy `OpenAI Embedding` preset is still kept for backward compatibility with existing configurations. It remains a good fit for standard OpenAI-style `/v1` endpoints and keeps the previous behavior of forwarding `dimensions` whenever `embedding_dimensions` is configured. `OpenAI Compatible Embedding` targets broader compatibility by preserving provider-specific path prefixes and making `dimensions` forwarding opt-in, so the two presets are intentionally not interchangeable.
+
 Click on the provider card above to enter the configuration page and fill in the configuration.
 
 After completing the configuration, click Save.
@@ -64,7 +66,7 @@ In the configuration file, you can specify different knowledge bases for differe
 2. Go to the [Model Marketplace](https://ppio.cn/model-api/console) and click on Embedding Models.
 3. Click on BAAI:BGE-M3 (as of 2025-06-02, this model is free on this platform).
 4. Find the API integration guide and apply for a Key.
-5. Fill in the AstrBot OpenAI Embedding model provider configuration:
+5. Fill in the AstrBot `OpenAI Compatible Embedding` model provider configuration:
    1. API Key is the PPIO API Key you just applied for
    2. embedding api base: enter `https://api.ppinfra.com/v3/openai`
    3. model: enter the model you selected, in this example `baai/bge-m3`.

@@ -30,6 +30,18 @@ class _FakeAsyncOpenAI:
         self.closed = True
 
 
+class _FakeHTTPClient:
+    instances: list["_FakeHTTPClient"] = []
+
+    def __init__(self, **kwargs) -> None:
+        self.kwargs = kwargs
+        self.closed = False
+        self.__class__.instances.append(self)
+
+    async def aclose(self):
+        self.closed = True
+
+
 def _make_provider_config(**overrides) -> dict:
     provider_config = {
         "id": "test-openai-compatible-embedding",
@@ -141,3 +153,41 @@ async def test_openai_compatible_embedding_provider_sends_dimensions_only_when_e
         await provider_with_dimensions.terminate()
         assert provider_without_dimensions.client.closed is True
         assert provider_with_dimensions.client.closed is True
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_embedding_provider_closes_proxy_http_client(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _FakeAsyncOpenAI.instances.clear()
+    _FakeHTTPClient.instances.clear()
+    monkeypatch.setattr(source, "AsyncOpenAI", _FakeAsyncOpenAI)
+    monkeypatch.setattr(source.httpx, "AsyncClient", _FakeHTTPClient)
+
+    provider = source.OpenAICompatibleEmbeddingProvider(
+        _make_provider_config(proxy="http://127.0.0.1:7890"),
+        {},
+    )
+
+    try:
+        assert _FakeHTTPClient.instances[-1].kwargs["proxy"] == "http://127.0.0.1:7890"
+    finally:
+        await provider.terminate()
+        assert provider.client.closed is True
+        assert provider._http_client.closed is True
+
+
+def test_should_send_dimensions_param_requires_boolean(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    warnings: list[str] = []
+
+    def _capture_warning(message, *args):
+        warnings.append(message % args)
+
+    monkeypatch.setattr(source.logger, "warning", _capture_warning)
+
+    assert (
+        source.should_send_dimensions_param({"send_dimensions_param": "true"}) is False
+    )
+    assert "send_dimensions_param should be a boolean" in warnings[0]

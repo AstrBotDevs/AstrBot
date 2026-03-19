@@ -51,13 +51,16 @@ def parse_embedding_dimensions(provider_config: dict) -> int:
 
 
 def should_send_dimensions_param(provider_config: dict) -> bool:
-    """Keep dimensions opt-in for generic OpenAI-compatible services."""
+    """Read the explicit bool switch used by OpenAI-compatible presets."""
     raw_value = provider_config.get("send_dimensions_param", False)
     if isinstance(raw_value, bool):
         return raw_value
-    if isinstance(raw_value, str):
-        return raw_value.strip().lower() in {"1", "true", "yes", "on"}
-    return bool(raw_value)
+    if raw_value not in (None, ""):
+        logger.warning(
+            "send_dimensions_param should be a boolean in embedding configs: '%s', treated as disabled.",
+            raw_value,
+        )
+    return False
 
 
 @register_provider_adapter(
