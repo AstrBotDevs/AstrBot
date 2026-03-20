@@ -455,7 +455,10 @@ class OpenApiRoute(Route):
                 if msg_type == "end":
                     break
                 if (streaming and msg_type == "complete") or not streaming:
-                    if chain_type in ("tool_call", "tool_call_result"):
+                    if chain_type in (
+                        "tool_call",
+                        "tool_call_result",
+                    ):
                         continue
                     try:
                         refs = self.chat_route._extract_web_search_refs(
