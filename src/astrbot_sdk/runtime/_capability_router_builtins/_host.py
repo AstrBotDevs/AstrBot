@@ -37,6 +37,8 @@ class CapabilityRouterHost:
     _conversation_store: dict[str, dict[str, Any]]
     _session_current_conversation_ids: dict[str, str]
     _kb_store: dict[str, dict[str, Any]]
+    _kb_document_store: dict[str, dict[str, dict[str, Any]]]
+    _kb_document_content_store: dict[str, str]
 
     def register(
         self,
