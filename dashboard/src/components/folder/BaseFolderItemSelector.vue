@@ -139,14 +139,12 @@
                           navigateToFolder((item as any).folderId)
                       "
                     >
-                      <template #prepend>
-                        <v-icon
-                          v-if="(item as any).isRoot"
-                          size="small"
-                          class="mr-1"
-                          >mdi-home</v-icon
-                        >
-                      </template>
+                      <v-icon
+                        v-if="(item as any).isRoot"
+                        size="small"
+                        class="mr-1"
+                        >mdi-home</v-icon
+                      >
                       {{ item.title }}
                     </v-breadcrumbs-item>
                   </template>
