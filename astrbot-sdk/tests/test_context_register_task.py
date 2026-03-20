@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from astrbot_sdk._testing_support import MockContext
+from astrbot_sdk._internal.testing_support import MockContext
 
 
 class RecordingLogger:

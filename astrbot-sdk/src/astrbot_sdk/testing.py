@@ -20,8 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ._star_runtime import bind_star_runtime
-from ._testing_support import (
+from ._internal.star_runtime import bind_star_runtime
+from ._internal.testing_support import (
     InMemoryDB,
     InMemoryMemory,
     MockCapabilityRouter,
@@ -333,17 +333,8 @@ class PluginHarness:
 
         start_index = len(self.platform_sink.records)
         if self._has_waiter_for_event(event_payload):
-            carrier = (
-                self.loaded_plugin.handlers[0] if self.loaded_plugin.handlers else None
-            )
-            if carrier is None:
-                raise AstrBotError.invalid_input(
-                    "当前没有可用于承接 session_waiter 的 handler"
-                )
-            await self._invoke_handler(
-                carrier,
+            await self._invoke_session_waiter(
                 event_payload,
-                args={},
                 request_id=request_id,
             )
             await self._wait_for_followup_side_effects(
@@ -451,17 +442,45 @@ class PluginHarness:
         except Exception as exc:  # pragma: no cover - 由 CLI/集成测试覆盖
             raise _PluginExecutionError(str(exc)) from exc
 
+    async def _invoke_session_waiter(
+        self,
+        event_payload: dict[str, Any],
+        *,
+        request_id: str | None = None,
+    ) -> None:
+        assert self.dispatcher is not None
+        message = InvokeMessage(
+            id=request_id or self._next_request_id("msg"),
+            capability="handler.invoke",
+            input={
+                "handler_id": "__sdk_session_waiter__",
+                "event": dict(event_payload),
+                "args": {},
+            },
+        )
+        try:
+            await self.dispatcher.invoke(message, CancelToken())
+        except AstrBotError:
+            raise
+        except Exception as exc:  # pragma: no cover - 由 CLI/集成测试覆盖
+            raise _PluginExecutionError(str(exc)) from exc
+
     async def _wait_for_followup_side_effects(
         self,
         *,
         start_index: int,
         event_payload: dict[str, Any],
     ) -> None:
+        settled_rounds = 0
         for _ in range(20):
             if len(self.platform_sink.records) > start_index:
                 return
             await asyncio.sleep(0)
-            if not self._has_waiter_for_event(event_payload):
+            if self._has_waiter_for_event(event_payload):
+                settled_rounds = 0
+                continue
+            settled_rounds += 1
+            if settled_rounds >= 3:
                 return
 
     async def _run_lifecycle(self, method_name: str) -> None:
@@ -680,6 +699,9 @@ class PluginHarness:
             event_payload,
             context=self.lifecycle_context,
         )
+        public_probe = getattr(self.dispatcher, "has_active_waiter", None)
+        if callable(public_probe):
+            return bool(public_probe(probe_event))
         session_waiters = getattr(self.dispatcher, "_session_waiters", None)
         if session_waiters is None:
             return False

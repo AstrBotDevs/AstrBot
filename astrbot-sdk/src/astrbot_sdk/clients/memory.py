@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from .._memory_utils import join_memory_namespace
+from .._internal.memory_utils import join_memory_namespace
 from ._proxy import CapabilityProxy
 
 

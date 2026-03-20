@@ -697,59 +697,72 @@ def session_waiter(
 
 ### 使用示例
 
+#### 推荐启动方式
+
+`@session_waiter` 定义的是“后续消息到达时如何处理”，推荐从当前 handler
+里通过 `Context.register_task()` 把 waiter 挂到后台任务中。这样首条消息的
+dispatch 会立刻结束，不会因为等待下一条消息而卡住。
+
 #### 基本使用
 
 ```python
-from astrbot_sdk import session_waiter, SessionController
+from astrbot_sdk import Context, session_waiter, SessionController
 from astrbot_sdk.events import MessageEvent
+from astrbot_sdk import Star, on_command
 
-@session_waiter(timeout=300)
-async def interactive_input(self, controller: SessionController, event: MessageEvent):
-    await event.reply("请输入用户名:")
+class MyPlugin(Star):
+    @session_waiter(timeout=300)
+    async def collect_username(
+        self,
+        controller: SessionController,
+        event: MessageEvent,
+    ) -> None:
+        await event.reply(f"已记录用户名: {event.text}")
+        controller.stop()
 
-    response = await controller.future
-    username = response.text
-
-    await event.reply(f"你好, {username}!")
-    controller.stop()
+    @on_command("bind")
+    async def bind(self, event: MessageEvent, ctx: Context) -> None:
+        await event.reply("请输入用户名:")
+        await ctx.register_task(
+            self.collect_username(event),
+            "waiter:collect_username",
+        )
 ```
 
 #### 多轮对话
 
 ```python
-@session_waiter(timeout=600, record_history_chains=True)
-async def survey(self, controller: SessionController, event: MessageEvent):
-    # 第一轮：询问姓名
-    await event.reply("请输入您的姓名:")
-    response1 = await controller.future
-    name = response1.text
+class SurveyPlugin(Star):
+    @session_waiter(timeout=600, record_history_chains=True)
+    async def survey(self, controller: SessionController, event: MessageEvent) -> None:
+        history = controller.get_history_chains()
 
-    # 延长会话时间
-    controller.keep(timeout=300)
+        if len(history) == 1:
+            await event.reply(f"收到姓名: {event.text}")
+            await event.reply("请输入您的年龄:")
+            controller.keep(timeout=300)
+            return
 
-    # 第二轮：询问年龄
-    await event.reply("请输入您的年龄:")
-    response2 = await controller.future
-    age = response2.text
+        await event.reply(f"收到年龄: {event.text}")
+        controller.stop()
 
-    # 获取历史消息
-    history = controller.get_history_chains()
-
-    await event.reply(f"感谢！姓名: {name}, 年龄: {age}")
-    controller.stop()
+    @on_command("survey")
+    async def start_survey(self, event: MessageEvent, ctx: Context) -> None:
+        await event.reply("请输入您的姓名:")
+        await ctx.register_task(self.survey(event), "waiter:survey")
 ```
 
-#### 在类方法中使用
+#### 直接 await 的语义
 
 ```python
-class MyPlugin(Star):
-    @session_waiter(timeout=300)
-    async def interactive(self, controller: SessionController, event: MessageEvent):
-        await event.reply("请输入内容:")
-        response = await controller.future
-        await event.reply(f"收到: {response.text}")
-        controller.stop()
+@on_command("debug-blocking")
+async def debug_blocking(self, event: MessageEvent, ctx: Context) -> None:
+    await event.reply("下一条消息会在当前 dispatch 中继续处理")
+    await self.collect_username(event)  # 会保持当前 dispatch 挂起
 ```
+
+上面这种直接 `await` 仍然保留现有语义，但它会一直阻塞到下一条消息到达
+或超时。常规插件逻辑推荐使用 `await ctx.register_task(waiter(...), "...")`。
 
 ---
 

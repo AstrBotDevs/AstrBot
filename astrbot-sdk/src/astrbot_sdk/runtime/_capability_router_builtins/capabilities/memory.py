@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from ...._invocation_context import current_caller_plugin_id
+from ...._internal.invocation_context import current_caller_plugin_id
 from ...._memory_backend import PluginMemoryBackend
-from ...._memory_utils import (
+from ...._internal.memory_utils import (
     cosine_similarity,
     extract_memory_text,
     is_ttl_memory_entry,

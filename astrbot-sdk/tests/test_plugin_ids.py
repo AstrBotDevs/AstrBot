@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from astrbot_sdk._plugin_ids import resolve_plugin_data_dir, validate_plugin_id
+from astrbot_sdk._internal.plugin_ids import resolve_plugin_data_dir, validate_plugin_id
 
 
 def test_validate_plugin_id_accepts_safe_identifiers() -> None:

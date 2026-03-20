@@ -5,7 +5,7 @@ from pathlib import Path
 
 import astrbot_sdk._memory_backend as memory_backend_module
 import pytest
-from astrbot_sdk._invocation_context import caller_plugin_scope
+from astrbot_sdk._internal.invocation_context import caller_plugin_scope
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.runtime.capability_router import CapabilityRouter
 

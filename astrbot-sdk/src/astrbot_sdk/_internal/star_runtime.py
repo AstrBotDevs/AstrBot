@@ -6,8 +6,8 @@ from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .context import Context
-    from .star import Star
+    from ..context import Context
+    from ..star import Star
 
 
 _CURRENT_STAR_CONTEXT: ContextVar[Context | None] = ContextVar(

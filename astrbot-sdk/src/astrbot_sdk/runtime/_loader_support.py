@@ -18,8 +18,8 @@ import inspect
 import typing
 from typing import Any, Literal, TypeAlias, cast
 
-from .._injected_params import is_framework_injected_parameter
-from .._typing_utils import unwrap_optional
+from .._internal.injected_params import is_framework_injected_parameter
+from .._internal.typing_utils import unwrap_optional
 from ..decorators import get_capability_meta, get_handler_meta
 from ..protocol.descriptors import ParamSpec
 from ..types import GreedyStr

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
 
-from ._memory_utils import (
+from ._internal.memory_utils import (
     cosine_similarity,
     display_memory_namespace,
     extract_memory_text,

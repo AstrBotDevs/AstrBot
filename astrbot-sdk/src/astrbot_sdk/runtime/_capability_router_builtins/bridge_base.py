@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..._plugin_ids import resolve_plugin_data_dir, validate_plugin_id
+from ..._internal.plugin_ids import resolve_plugin_data_dir, validate_plugin_id
 from ...errors import AstrBotError
 from ...protocol.descriptors import (
     BUILTIN_CAPABILITY_SCHEMAS,
