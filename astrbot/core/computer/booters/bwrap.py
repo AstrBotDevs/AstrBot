@@ -275,7 +275,7 @@ class BwrapBooter(ComputerBooter):
         self._fs = HostBackedFileSystemComponent(self.config.workspace_dir)
         self._python = BwrapPythonComponent(self.config)
         self._shell = BwrapShellComponent(self.config)
-        if not self.available(): 
+        if not await self.available(): 
             raise RuntimeError(
             "BubbleWrap sandbox unavailable on current machine for no bwrap executable.")
         test_shl = await self._shell.exec(command = "ls > /dev/null")
