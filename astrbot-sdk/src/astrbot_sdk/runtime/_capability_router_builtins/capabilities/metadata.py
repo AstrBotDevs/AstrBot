@@ -35,6 +35,19 @@ class MetadataCapabilityMixin(CapabilityRouterBridgeBase):
             return {"config": None}
         return {"config": dict(plugin.config)}
 
+    async def _metadata_save_plugin_config(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        caller_plugin_id = self._require_caller_plugin_id("metadata.save_plugin_config")
+        plugin = self._plugins.get(caller_plugin_id)
+        if plugin is None:
+            return {"config": None}
+        config = payload.get("config")
+        if not isinstance(config, dict):
+            return {"config": dict(plugin.config)}
+        plugin.config = dict(config)
+        return {"config": dict(plugin.config)}
+
     def _register_metadata_capabilities(self) -> None:
         self.register(
             self._builtin_descriptor("metadata.get_plugin", "获取单个插件元数据"),
@@ -50,4 +63,11 @@ class MetadataCapabilityMixin(CapabilityRouterBridgeBase):
                 "获取插件配置",
             ),
             call_handler=self._metadata_get_plugin_config,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "metadata.save_plugin_config",
+                "保存当前插件配置",
+            ),
+            call_handler=self._metadata_save_plugin_config,
         )

@@ -437,6 +437,19 @@ class ConversationManagerClient:
             },
         )
 
+    async def unset_persona(
+        self,
+        session: str | MessageSession,
+        conversation_id: str | None = None,
+    ) -> None:
+        await self._proxy.call(
+            "conversation.unset_persona",
+            {
+                "session": _normalize_session(session),
+                "conversation_id": conversation_id,
+            },
+        )
+
 
 class KnowledgeBaseManagerClient:
     def __init__(self, proxy: CapabilityProxy) -> None:

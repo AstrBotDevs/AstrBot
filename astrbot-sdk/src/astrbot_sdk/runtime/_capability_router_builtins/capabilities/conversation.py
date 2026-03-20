@@ -201,6 +201,31 @@ class ConversationCapabilityMixin(CapabilityRouterBridgeBase):
         record["updated_at"] = self._now_iso()
         return {}
 
+    async def _conversation_unset_persona(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        session = str(payload.get("session", "")).strip()
+        conversation_id = payload.get("conversation_id")
+        normalized_conversation_id = (
+            str(conversation_id).strip() if conversation_id is not None else ""
+        )
+        if not normalized_conversation_id:
+            normalized_conversation_id = self._session_current_conversation_ids.get(
+                session, ""
+            )
+        if not normalized_conversation_id:
+            return {}
+        record = self._conversation_store.get(normalized_conversation_id)
+        if record is None:
+            return {}
+        if str(record.get("session", "")) != session:
+            raise AstrBotError.invalid_input(
+                "conversation.unset_persona requires a conversation in the same session"
+            )
+        record["persona_id"] = None
+        record["updated_at"] = self._now_iso()
+        return {}
+
     def _register_conversation_capabilities(self) -> None:
         self.register(
             self._builtin_descriptor("conversation.new", "新建对话"),
@@ -229,4 +254,8 @@ class ConversationCapabilityMixin(CapabilityRouterBridgeBase):
         self.register(
             self._builtin_descriptor("conversation.update", "更新对话"),
             call_handler=self._conversation_update,
+        )
+        self.register(
+            self._builtin_descriptor("conversation.unset_persona", "清空对话人格"),
+            call_handler=self._conversation_unset_persona,
         )
