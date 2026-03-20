@@ -346,9 +346,17 @@ class SystemCapabilityMixin(CapabilityRouterBridgeBase):
                                 if bool(route.get("use_regex", False))
                                 else "command"
                             ),
+                            "description": (
+                                None
+                                if route.get("desc") is None
+                                else str(route.get("desc", "")).strip() or None
+                            ),
                             "event_types": ["message"],
                             "enabled": True,
                             "group_path": [],
+                            "priority": int(route.get("priority", 0) or 0),
+                            "kind": "handler",
+                            "require_admin": False,
                         }
                     )
         return {"handlers": handlers}
