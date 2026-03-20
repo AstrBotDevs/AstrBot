@@ -8,7 +8,7 @@ try:
 except ImportError:  # pragma: no cover
     get_type_hints = None
 
-from ._typing_utils import unwrap_optional
+from .typing_utils import unwrap_optional
 
 _INJECTED_PARAMETER_NAMES = {
     "event",
@@ -67,13 +67,13 @@ def legacy_arg_parameter_names(handler: Any) -> list[str]:
 
 
 def _framework_injected_types() -> tuple[type[Any], ...]:
-    from .clients.llm import LLMResponse
-    from .context import Context
-    from .conversation import ConversationSession
-    from .events import MessageEvent
-    from .llm.entities import ProviderRequest
-    from .message_result import MessageEventResult
-    from .schedule import ScheduleContext
+    from ..clients.llm import LLMResponse
+    from ..context import Context
+    from ..conversation import ConversationSession
+    from ..events import MessageEvent
+    from ..llm.entities import ProviderRequest
+    from ..message.result import MessageEventResult
+    from ..schedule import ScheduleContext
 
     return (
         Context,

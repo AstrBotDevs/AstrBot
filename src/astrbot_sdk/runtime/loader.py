@@ -68,10 +68,10 @@ from typing import Any, Literal, TypeAlias, cast
 
 import yaml
 
-from .._command_model import resolve_command_model_param
-from .._injected_params import is_framework_injected_parameter
-from .._plugin_ids import validate_plugin_id
-from .._typing_utils import unwrap_optional
+from .._internal.command_model import resolve_command_model_param
+from .._internal.injected_params import is_framework_injected_parameter
+from .._internal.plugin_ids import validate_plugin_id
+from .._internal.typing_utils import unwrap_optional
 from ..decorators import (
     ConversationMeta,
     LimiterMeta,

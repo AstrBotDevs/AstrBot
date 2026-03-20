@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from astrbot_sdk._testing_support import MockContext
+from astrbot_sdk._internal.testing_support import MockContext
 from astrbot_sdk.clients._proxy import CapabilityProxy
 from astrbot_sdk.clients.platform import PlatformStatus
 from astrbot_sdk.clients.provider import ProviderManagerClient

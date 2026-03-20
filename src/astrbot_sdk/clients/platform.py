@@ -16,9 +16,9 @@ from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..message_components import BaseMessageComponent, Plain
-from ..message_result import MessageChain
-from ..message_session import MessageSession
+from ..message.components import BaseMessageComponent, Plain
+from ..message.result import MessageChain
+from ..message.session import MessageSession
 from ..protocol.descriptors import SessionRef
 from ._proxy import CapabilityProxy
 

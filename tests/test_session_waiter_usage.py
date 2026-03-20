@@ -5,13 +5,13 @@ import importlib
 
 import pytest
 
-from astrbot_sdk._testing_support import (
+from astrbot_sdk._internal.testing_support import (
     MockCapabilityRouter,
     MockContext,
     MockMessageEvent,
     MockPeer,
 )
-from astrbot_sdk._invocation_context import caller_plugin_scope
+from astrbot_sdk._internal.invocation_context import caller_plugin_scope
 from astrbot_sdk.context import CancelToken, Context
 from astrbot_sdk.events import MessageEvent
 from astrbot_sdk.protocol.messages import InvokeMessage

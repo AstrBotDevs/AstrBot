@@ -73,7 +73,10 @@ import inspect
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import Any
 
-from .._invocation_context import caller_plugin_scope, current_caller_plugin_id
+from .._internal.invocation_context import (
+    caller_plugin_scope,
+    current_caller_plugin_id,
+)
 from ..context import CancelToken
 from ..errors import AstrBotError, ErrorCodes
 from ..protocol.messages import (

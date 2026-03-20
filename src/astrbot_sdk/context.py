@@ -34,8 +34,8 @@ from typing import Any
 
 from loguru import logger as base_logger
 
-from ._plugin_logger import PluginLogger
-from ._star_runtime import current_star_instance
+from ._internal.plugin_logger import PluginLogger
+from ._internal.star_runtime import current_star_instance
 from .clients import (
     DBClient,
     HTTPClient,
@@ -61,9 +61,9 @@ from .clients.session import SessionPluginManager, SessionServiceManager
 from .errors import AstrBotError
 from .llm.entities import LLMToolSpec, ProviderMeta, ProviderRequest
 from .llm.tools import LLMToolManager
-from .message_components import BaseMessageComponent
-from .message_result import MessageChain
-from .message_session import MessageSession
+from .message.components import BaseMessageComponent
+from .message.result import MessageChain
+from .message.session import MessageSession
 from .session_waiter import (
     _mark_session_waiter_background_task,
     _unmark_session_waiter_background_task,
@@ -486,31 +486,24 @@ class Context:
             raise TypeError("register_llm_tool requires parameters_schema dict")
 
         handler_ref = f"__dynamic_llm_tool__:{tool_name}"
+        tool_spec = LLMToolSpec.create(
+            name=tool_name,
+            description=str(desc),
+            parameters_schema=dict(parameters_schema),
+            handler_ref=handler_ref,
+            active=bool(active),
+        )
         owner = getattr(func_obj, "__self__", None) or current_star_instance()
         dispatcher = getattr(self.peer, "_sdk_capability_dispatcher", None)
         if dispatcher is not None and hasattr(dispatcher, "add_dynamic_llm_tool"):
             dispatcher.add_dynamic_llm_tool(
                 plugin_id=self.plugin_id,
-                spec=LLMToolSpec(
-                    name=tool_name,
-                    description=str(desc),
-                    parameters_schema=dict(parameters_schema),
-                    handler_ref=handler_ref,
-                    active=bool(active),
-                ),
+                spec=tool_spec,
                 callable_obj=func_obj,
                 owner=owner,
             )
         try:
-            return await self._llm_tool_manager.add(
-                LLMToolSpec(
-                    name=tool_name,
-                    description=str(desc),
-                    parameters_schema=dict(parameters_schema),
-                    handler_ref=handler_ref,
-                    active=bool(active),
-                )
-            )
+            return await self._llm_tool_manager.add(tool_spec)
         except Exception:
             if dispatcher is not None and hasattr(dispatcher, "remove_llm_tool"):
                 dispatcher.remove_llm_tool(self.plugin_id, tool_name)

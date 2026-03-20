@@ -31,15 +31,15 @@ from typing import Any, cast, get_type_hints
 
 from loguru import logger
 
-from .._command_model import (
+from .._internal.command_model import (
     parse_command_model_remainder,
     resolve_command_model_param,
 )
-from .._injected_params import legacy_arg_parameter_names
-from .._invocation_context import caller_plugin_scope
-from .._plugin_logger import PluginLogger
-from .._star_runtime import bind_star_runtime
-from .._typing_utils import unwrap_optional
+from .._internal.injected_params import legacy_arg_parameter_names
+from .._internal.invocation_context import caller_plugin_scope
+from .._internal.plugin_logger import PluginLogger
+from .._internal.star_runtime import bind_star_runtime
+from .._internal.typing_utils import unwrap_optional
 from ..clients.llm import LLMResponse
 from ..context import CancelToken, Context
 from ..conversation import (
@@ -52,8 +52,8 @@ from ..conversation import (
 from ..events import MessageEvent
 from ..filters import LocalFilterBinding
 from ..llm.entities import ProviderRequest
-from ..message_components import BaseMessageComponent
-from ..message_result import (
+from ..message.components import BaseMessageComponent
+from ..message.result import (
     MessageChain,
     MessageEventResult,
     coerce_message_chain,

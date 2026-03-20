@@ -72,6 +72,33 @@ class LLMToolSpec(_EntityModel):
     active: bool = True
 
     @classmethod
+    def create(
+        cls,
+        *,
+        name: str,
+        description: str = "",
+        parameters_schema: dict[str, Any] | None = None,
+        handler_ref: str | None = None,
+        handler_capability: str | None = None,
+        active: bool = True,
+    ) -> LLMToolSpec:
+        # Keep an explicit factory signature so static analyzers do not depend on
+        # Pydantic's generated __init__ when SDK call sites construct tool specs.
+        payload: dict[str, Any] = {
+            "name": name,
+            "description": description,
+            "parameters_schema": parameters_schema
+            if parameters_schema is not None
+            else {"type": "object", "properties": {}},
+            "active": active,
+        }
+        if handler_ref is not None:
+            payload["handler_ref"] = handler_ref
+        if handler_capability is not None:
+            payload["handler_capability"] = handler_capability
+        return cls.from_payload(payload)
+
+    @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> LLMToolSpec:
         return cls.model_validate(payload)
 

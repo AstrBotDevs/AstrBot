@@ -1412,7 +1412,7 @@ async def setup_api(event: MessageEvent, ctx: Context):
 - **Memory 客户端**: `astrbot_sdk.clients.memory.MemoryClient`
 - **DB 客户端**: `astrbot_sdk.clients.db.DBClient`
 - **Platform 客户端**: `astrbot_sdk.clients.platform.PlatformClient`
-- **日志器**: `astrbot_sdk._plugin_logger.PluginLogger`
+- **日志器**: `astrbot_sdk._internal.plugin_logger.PluginLogger`
 - **取消令牌**: `astrbot_sdk.context.CancelToken`
 
 ---

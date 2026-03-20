@@ -26,7 +26,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Mapping
 from typing import Any, Protocol
 
-from .._invocation_context import caller_plugin_scope
+from .._internal.invocation_context import caller_plugin_scope
 from ..errors import AstrBotError
 
 

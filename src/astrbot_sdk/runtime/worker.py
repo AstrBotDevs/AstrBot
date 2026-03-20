@@ -33,8 +33,8 @@ from typing import Any
 
 from loguru import logger
 
-from .._invocation_context import caller_plugin_scope
-from .._star_runtime import bind_star_runtime
+from .._internal.invocation_context import caller_plugin_scope
+from .._internal.star_runtime import bind_star_runtime
 from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
 from ..protocol.messages import PeerInfo

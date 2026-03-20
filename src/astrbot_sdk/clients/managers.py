@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..errors import AstrBotError, ErrorCodes
-from ..message_session import MessageSession
+from ..message.session import MessageSession
 from ._proxy import CapabilityProxy
 
 
