@@ -10,7 +10,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
+from astrbot.core.agent.runners.tool_loop_agent_runner import (
+    PostToolCompactionConfig,
+    PostToolCompactionController,
+    ToolLoopAgentRunner,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
@@ -623,20 +627,26 @@ async def test_compact_context_after_tool_call_honors_debounce(
 
 
 def test_post_tool_compaction_soft_zone_respects_min_delta(runner):
-    # initialize attributes by calling reset in event loop would be overkill for this pure helper;
-    # emulate the required fields directly.
-    runner.compact_context_after_tool_call = True
-    runner.compact_context_soft_ratio = 0.3
-    runner.compact_context_hard_ratio = 0.9
-    runner.compact_context_min_delta_tokens = 10
-    runner.compact_context_min_delta_turns = 10
+    runner.post_tool_compaction = PostToolCompactionConfig(
+        enabled=True,
+        soft_ratio=0.3,
+        hard_ratio=0.9,
+        min_delta_tokens=10,
+        min_delta_turns=10,
+        debounce_seconds=0,
+    )
+    runner.post_tool_compaction_controller = PostToolCompactionController(
+        runner.post_tool_compaction
+    )
     runner.context_config = SimpleNamespace(max_context_tokens=100)
     runner.run_context = SimpleNamespace(messages=[object(), object()])
     runner.context_manager = SimpleNamespace(
         token_counter=SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 35)
     )
-    runner._tool_compaction_baseline_tokens = 30
-    runner._tool_compaction_baseline_messages = 2
+    runner.post_tool_compaction_controller.refresh_baseline(
+        messages=runner.run_context.messages,
+        token_counter=SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 30),
+    )
 
     # ratio=0.35 in soft zone, token delta=5 and message delta=0 -> should skip
     assert runner._should_run_post_tool_compaction() is False
@@ -649,11 +659,17 @@ def test_post_tool_compaction_soft_zone_respects_min_delta(runner):
 
 
 def test_post_tool_compaction_handles_token_counter_errors(runner):
-    runner.compact_context_after_tool_call = True
-    runner.compact_context_soft_ratio = 0.3
-    runner.compact_context_hard_ratio = 0.9
-    runner.compact_context_min_delta_tokens = 10
-    runner.compact_context_min_delta_turns = 10
+    runner.post_tool_compaction = PostToolCompactionConfig(
+        enabled=True,
+        soft_ratio=0.3,
+        hard_ratio=0.9,
+        min_delta_tokens=10,
+        min_delta_turns=10,
+        debounce_seconds=0,
+    )
+    runner.post_tool_compaction_controller = PostToolCompactionController(
+        runner.post_tool_compaction
+    )
     runner.context_config = SimpleNamespace(max_context_tokens=100)
     runner.run_context = SimpleNamespace(messages=[object(), object()])
 

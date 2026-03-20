@@ -32,6 +32,7 @@ from astrbot.core.provider.entities import (
     ToolCallsResult,
 )
 from astrbot.core.provider.provider import Provider
+from astrbot.core.utils.config_normalization import to_non_negative_int, to_ratio
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
@@ -78,6 +79,86 @@ class FollowUpTicket:
     text: str
     consumed: bool = False
     resolved: asyncio.Event = field(default_factory=asyncio.Event)
+
+
+@dataclass(slots=True, frozen=True)
+class PostToolCompactionConfig:
+    enabled: bool = False
+    soft_ratio: float = 0.3
+    hard_ratio: float = 0.7
+    min_delta_tokens: int = 0
+    min_delta_turns: int = 0
+    debounce_seconds: int = 0
+
+
+class PostToolCompactionController:
+    def __init__(self, config: PostToolCompactionConfig) -> None:
+        self.config = config
+        self._baseline_tokens = 0
+        self._baseline_messages = 0
+        self._last_check_at = 0.0
+
+    def refresh_baseline(
+        self,
+        *,
+        messages: list[Message],
+        token_counter: TokenCounter,
+        trusted_token_usage: int = 0,
+    ) -> None:
+        try:
+            self._baseline_tokens = token_counter.count_tokens(
+                messages,
+                trusted_token_usage,
+            )
+        except Exception:
+            self._baseline_tokens = 0
+        self._baseline_messages = len(messages)
+
+    def should_compact(
+        self,
+        *,
+        messages: list[Message],
+        token_counter: TokenCounter,
+        max_context_tokens: int,
+    ) -> bool:
+        if not self.config.enabled:
+            return False
+
+        now = time.monotonic()
+        if (
+            self.config.debounce_seconds > 0
+            and self._last_check_at > 0
+            and (now - self._last_check_at) < self.config.debounce_seconds
+        ):
+            self._last_check_at = now
+            return False
+        self._last_check_at = now
+
+        if max_context_tokens <= 0:
+            # No explicit token budget configured: preserve legacy behavior.
+            return True
+
+        try:
+            current_tokens = token_counter.count_tokens(messages)
+        except Exception:
+            return False
+
+        current_messages = len(messages)
+        current_ratio = current_tokens / max(1, max_context_tokens)
+
+        if current_ratio >= self.config.hard_ratio:
+            return True
+        if current_ratio < self.config.soft_ratio:
+            return False
+
+        delta_tokens = max(0, current_tokens - self._baseline_tokens)
+        delta_messages = max(0, current_messages - self._baseline_messages)
+        if (
+            delta_tokens < self.config.min_delta_tokens
+            and delta_messages < self.config.min_delta_turns
+        ):
+            return False
+        return True
 
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
@@ -129,26 +210,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.llm_compress_provider = llm_compress_provider
         self.truncate_turns = truncate_turns
         self.token_counter_mode = token_counter_mode
-        self.compact_context_after_tool_call = compact_context_after_tool_call
-        self.compact_context_soft_ratio = self._normalize_ratio(
-            compact_context_soft_ratio, default=0.3
+        post_tool_soft_ratio = to_ratio(compact_context_soft_ratio, 0.3)
+        self.post_tool_compaction = PostToolCompactionConfig(
+            enabled=bool(compact_context_after_tool_call),
+            soft_ratio=post_tool_soft_ratio,
+            hard_ratio=max(post_tool_soft_ratio, to_ratio(compact_context_hard_ratio, 0.7)),
+            min_delta_tokens=to_non_negative_int(compact_context_min_delta_tokens),
+            min_delta_turns=to_non_negative_int(compact_context_min_delta_turns),
+            debounce_seconds=to_non_negative_int(
+                compact_context_debounce_seconds
+            ),
         )
-        self.compact_context_hard_ratio = max(
-            self.compact_context_soft_ratio,
-            self._normalize_ratio(compact_context_hard_ratio, default=0.7),
+        self.post_tool_compaction_controller = PostToolCompactionController(
+            self.post_tool_compaction
         )
-        self.compact_context_min_delta_tokens = self._to_non_negative_int(
-            compact_context_min_delta_tokens
-        )
-        self.compact_context_min_delta_turns = self._to_non_negative_int(
-            compact_context_min_delta_turns
-        )
-        self.compact_context_debounce_seconds = self._to_non_negative_int(
-            compact_context_debounce_seconds
-        )
-        self._last_tool_compaction_check_at = 0.0
-        self._tool_compaction_baseline_tokens = 0
-        self._tool_compaction_baseline_messages = 0
         self.custom_token_counter = custom_token_counter
         self.custom_compressor = custom_compressor
         # we will do compress when:
@@ -235,68 +310,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats = AgentStats()
         self.stats.start_time = time.time()
 
-    @staticmethod
-    def _normalize_ratio(value: float, *, default: float) -> float:
-        try:
-            ratio = float(value)
-        except Exception:
-            ratio = default
-        if ratio > 1.0 and ratio <= 100.0:
-            ratio = ratio / 100.0
-        return min(max(ratio, 0.0), 1.0)
-
-    @staticmethod
-    def _to_non_negative_int(value: int) -> int:
-        try:
-            return max(0, int(value))
-        except Exception:
-            return 0
-
     def _refresh_tool_compaction_baseline(self, *, trusted_token_usage: int = 0) -> None:
-        try:
-            self._tool_compaction_baseline_tokens = (
-                self.context_manager.token_counter.count_tokens(
-                    self.run_context.messages,
-                    trusted_token_usage,
-                )
-            )
-        except Exception:
-            self._tool_compaction_baseline_tokens = 0
-        self._tool_compaction_baseline_messages = len(self.run_context.messages)
+        self.post_tool_compaction_controller.refresh_baseline(
+            messages=self.run_context.messages,
+            token_counter=self.context_manager.token_counter,
+            trusted_token_usage=trusted_token_usage,
+        )
 
     def _should_run_post_tool_compaction(self) -> bool:
-        if not self.compact_context_after_tool_call:
+        if not hasattr(self, "post_tool_compaction_controller"):
             return False
-        max_context_tokens = int(self.context_config.max_context_tokens or 0)
-        if max_context_tokens <= 0:
-            # No explicit token budget configured: preserve legacy behavior.
-            return True
-
-        try:
-            current_tokens = self.context_manager.token_counter.count_tokens(
-                self.run_context.messages
-            )
-        except Exception:
-            return False
-        current_messages = len(self.run_context.messages)
-        current_ratio = current_tokens / max(1, max_context_tokens)
-
-        # Hard threshold: force compaction immediately.
-        if current_ratio >= self.compact_context_hard_ratio:
-            return True
-
-        # Soft threshold: only compact when context has grown enough.
-        if current_ratio < self.compact_context_soft_ratio:
-            return False
-
-        delta_tokens = max(0, current_tokens - self._tool_compaction_baseline_tokens)
-        delta_messages = max(0, current_messages - self._tool_compaction_baseline_messages)
-        if (
-            delta_tokens < self.compact_context_min_delta_tokens
-            and delta_messages < self.compact_context_min_delta_turns
-        ):
-            return False
-        return True
+        return self.post_tool_compaction_controller.should_compact(
+            messages=self.run_context.messages,
+            token_counter=self.context_manager.token_counter,
+            max_context_tokens=int(self.context_config.max_context_tokens or 0),
+        )
 
     async def _iter_llm_responses(
         self, *, include_model: bool = True
@@ -718,23 +746,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             self.req.append_tool_calls_result(tool_calls_result)
 
-            if self.compact_context_after_tool_call:
-                now = time.monotonic()
-                if (
-                    self.compact_context_debounce_seconds > 0
-                    and self._last_tool_compaction_check_at > 0
-                    and (
-                        now - self._last_tool_compaction_check_at
-                        < self.compact_context_debounce_seconds
-                    )
-                ):
-                    pass
-                elif self._should_run_post_tool_compaction():
-                    self.run_context.messages = await self.context_manager.process(
-                        self.run_context.messages,
-                    )
-                    self._refresh_tool_compaction_baseline()
-                self._last_tool_compaction_check_at = now
+            if self._should_run_post_tool_compaction():
+                self.run_context.messages = await self.context_manager.process(
+                    self.run_context.messages,
+                )
+                self._refresh_tool_compaction_baseline()
 
     async def step_until_done(
         self, max_step: int

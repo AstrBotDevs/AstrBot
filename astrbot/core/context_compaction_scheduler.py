@@ -23,6 +23,7 @@ from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db.po import ConversationV2
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import Provider
+from astrbot.core.utils.config_normalization import to_bool, to_int, to_ratio
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
 if TYPE_CHECKING:
@@ -89,68 +90,36 @@ class CompactionConfig:
         cfg = dict(defaults)
         cfg.update(raw_cfg)
 
-        target_tokens = cls._to_int(cfg.get("target_tokens"), 4096, 512)
-        trigger_tokens = cls._to_int(cfg.get("trigger_tokens"), 0, 0)
-        trigger_min_context_ratio = cls._to_ratio(
+        target_tokens = to_int(cfg.get("target_tokens"), 4096, 512)
+        trigger_tokens = to_int(cfg.get("trigger_tokens"), 0, 0)
+        trigger_min_context_ratio = to_ratio(
             cfg.get("trigger_min_context_ratio"),
             0.3,
         )
 
         return cls(
-            enabled=cls._to_bool(cfg.get("enabled"), False),
-            interval_minutes=cls._to_int(cfg.get("interval_minutes"), 30, 1),
-            startup_delay_seconds=cls._to_int(cfg.get("startup_delay_seconds"), 120, 0),
-            max_conversations_per_run=cls._to_int(
+            enabled=to_bool(cfg.get("enabled"), False),
+            interval_minutes=to_int(cfg.get("interval_minutes"), 30, 1),
+            startup_delay_seconds=to_int(cfg.get("startup_delay_seconds"), 120, 0),
+            max_conversations_per_run=to_int(
                 cfg.get("max_conversations_per_run"),
                 8,
                 1,
             ),
-            max_scan_per_run=cls._to_int(cfg.get("max_scan_per_run"), 120, 1),
-            scan_page_size=cls._to_int(cfg.get("scan_page_size"), 40, 10),
-            min_idle_minutes=cls._to_int(cfg.get("min_idle_minutes"), 15, 0),
-            min_messages=cls._to_int(cfg.get("min_messages"), 14, 2),
+            max_scan_per_run=to_int(cfg.get("max_scan_per_run"), 120, 1),
+            scan_page_size=to_int(cfg.get("scan_page_size"), 40, 10),
+            min_idle_minutes=to_int(cfg.get("min_idle_minutes"), 15, 0),
+            min_messages=to_int(cfg.get("min_messages"), 14, 2),
             target_tokens=target_tokens,
             trigger_tokens=trigger_tokens,
             trigger_min_context_ratio=trigger_min_context_ratio,
-            max_rounds=cls._to_int(cfg.get("max_rounds"), 3, 1),
-            truncate_turns=cls._to_int(cfg.get("truncate_turns"), 1, 1),
-            keep_recent=cls._to_int(cfg.get("keep_recent"), 6, 0),
+            max_rounds=to_int(cfg.get("max_rounds"), 3, 1),
+            truncate_turns=to_int(cfg.get("truncate_turns"), 1, 1),
+            keep_recent=to_int(cfg.get("keep_recent"), 6, 0),
             provider_id=str(cfg.get("provider_id", "") or "").strip(),
             instruction=str(cfg.get("instruction", "") or "").strip(),
-            dry_run=cls._to_bool(cfg.get("dry_run"), False),
+            dry_run=to_bool(cfg.get("dry_run"), False),
         )
-
-    @staticmethod
-    def _to_bool(value: Any, default: bool) -> bool:
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, (int, float)):
-            return bool(value)
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"1", "true", "yes", "on"}:
-                return True
-            if lowered in {"0", "false", "no", "off"}:
-                return False
-        return default
-
-    @staticmethod
-    def _to_int(value: Any, default: int, min_value: int) -> int:
-        try:
-            parsed = int(value)
-        except Exception:
-            parsed = default
-        return max(parsed, min_value)
-
-    @staticmethod
-    def _to_ratio(value: Any, default: float) -> float:
-        try:
-            parsed = float(value)
-        except Exception:
-            parsed = default
-        if parsed > 1.0 and parsed <= 100.0:
-            parsed = parsed / 100.0
-        return min(max(parsed, 0.0), 1.0)
 
 
 class PeriodicContextCompactionScheduler:

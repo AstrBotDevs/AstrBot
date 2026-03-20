@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
+from astrbot.core.utils.config_normalization import to_bool, to_int
+
 DEFAULT_CONTEXT_MEMORY_SETTINGS: dict[str, Any] = {
     # Global switch for context-memory related features.
     "enabled": False,
@@ -46,53 +48,30 @@ class ContextMemoryConfig:
     retrieval_provider_id: str = ""
     retrieval_top_k: int = 5
 
-
-def _to_bool(value: Any, default: bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"1", "true", "yes", "on"}:
-            return True
-        if lowered in {"0", "false", "no", "off"}:
-            return False
-    return default
-
-
-def _to_int(value: Any, default: int, min_value: int) -> int:
-    try:
-        parsed = int(value)
-    except Exception:
-        parsed = default
-    return max(parsed, min_value)
-
-
 def normalize_context_memory_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
     normalized = dict(DEFAULT_CONTEXT_MEMORY_SETTINGS)
     if not isinstance(raw, dict):
         return normalized
 
-    normalized["enabled"] = _to_bool(
+    normalized["enabled"] = to_bool(
         raw.get("enabled"),
         bool(DEFAULT_CONTEXT_MEMORY_SETTINGS["enabled"]),
     )
-    normalized["inject_pinned_memory"] = _to_bool(
+    normalized["inject_pinned_memory"] = to_bool(
         raw.get("inject_pinned_memory"),
         bool(DEFAULT_CONTEXT_MEMORY_SETTINGS["inject_pinned_memory"]),
     )
-    normalized["pinned_max_items"] = _to_int(
+    normalized["pinned_max_items"] = to_int(
         raw.get("pinned_max_items"),
         int(DEFAULT_CONTEXT_MEMORY_SETTINGS["pinned_max_items"]),
         1,
     )
-    normalized["pinned_max_chars_per_item"] = _to_int(
+    normalized["pinned_max_chars_per_item"] = to_int(
         raw.get("pinned_max_chars_per_item"),
         int(DEFAULT_CONTEXT_MEMORY_SETTINGS["pinned_max_chars_per_item"]),
         1,
     )
-    normalized["retrieval_enabled"] = _to_bool(
+    normalized["retrieval_enabled"] = to_bool(
         raw.get("retrieval_enabled"),
         bool(DEFAULT_CONTEXT_MEMORY_SETTINGS["retrieval_enabled"]),
     )
@@ -100,7 +79,7 @@ def normalize_context_memory_settings(raw: dict[str, Any] | None) -> dict[str, A
     normalized["retrieval_provider_id"] = str(
         raw.get("retrieval_provider_id", "") or ""
     ).strip()
-    normalized["retrieval_top_k"] = _to_int(
+    normalized["retrieval_top_k"] = to_int(
         raw.get("retrieval_top_k"),
         int(DEFAULT_CONTEXT_MEMORY_SETTINGS["retrieval_top_k"]),
         1,
