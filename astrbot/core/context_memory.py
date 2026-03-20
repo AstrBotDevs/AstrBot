@@ -10,7 +10,6 @@ DEFAULT_CONTEXT_MEMORY_SETTINGS: dict[str, Any] = {
     "enabled": False,
     # Manually maintained top-level memories injected into system prompt.
     "inject_pinned_memory": True,
-    "pinned_memories": [],
     "pinned_max_items": 8,
     "pinned_max_chars_per_item": 400,
     # Retrieval enhancement is intentionally reserved for future PRs.
@@ -36,6 +35,79 @@ class VectorLongTermMemoryRetriever(Protocol):
         ...
 
 
+@runtime_checkable
+class ContextMemoryEvolutionBackend(Protocol):
+    """Reserved protocol for MemEvolve-style memory evolution backend integration."""
+
+    async def evolve(
+        self,
+        *,
+        unified_msg_origin: str,
+        turns: list[str],
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Evolve short-term conversation turns into durable memory artifacts."""
+        ...
+
+    async def retrieve(
+        self,
+        *,
+        unified_msg_origin: str,
+        query: str,
+        top_k: int,
+    ) -> list[str]:
+        """Retrieve evolved memory snippets for prompt assembly."""
+        ...
+
+
+@runtime_checkable
+class ContextMemoryMigrationAdapter(Protocol):
+    """Reserved protocol for future context-memory schema/store migration."""
+
+    async def export_session(
+        self,
+        *,
+        unified_msg_origin: str,
+    ) -> dict[str, Any]:
+        """Export memory payload for migration or backup."""
+        ...
+
+    async def import_session(
+        self,
+        *,
+        unified_msg_origin: str,
+        payload: dict[str, Any],
+    ) -> None:
+        """Import migrated memory payload into target backend."""
+        ...
+
+
+_context_memory_evolution_backend: ContextMemoryEvolutionBackend | None = None
+_context_memory_migration_adapter: ContextMemoryMigrationAdapter | None = None
+
+
+def set_context_memory_evolution_backend(
+    backend: ContextMemoryEvolutionBackend | None,
+) -> None:
+    global _context_memory_evolution_backend
+    _context_memory_evolution_backend = backend
+
+
+def get_context_memory_evolution_backend() -> ContextMemoryEvolutionBackend | None:
+    return _context_memory_evolution_backend
+
+
+def set_context_memory_migration_adapter(
+    adapter: ContextMemoryMigrationAdapter | None,
+) -> None:
+    global _context_memory_migration_adapter
+    _context_memory_migration_adapter = adapter
+
+
+def get_context_memory_migration_adapter() -> ContextMemoryMigrationAdapter | None:
+    return _context_memory_migration_adapter
+
+
 @dataclass(frozen=True)
 class ContextMemoryConfig:
     enabled: bool = False
@@ -48,8 +120,11 @@ class ContextMemoryConfig:
     retrieval_provider_id: str = ""
     retrieval_top_k: int = 5
 
+
 def normalize_context_memory_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
     normalized = dict(DEFAULT_CONTEXT_MEMORY_SETTINGS)
+    # Always initialize pinned_memories explicitly to avoid sharing mutable defaults.
+    normalized["pinned_memories"] = []
     if not isinstance(raw, dict):
         return normalized
 
