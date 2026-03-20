@@ -1,15 +1,16 @@
 import asyncio
 import json
 import os
+import re
 from pathlib import Path
 
 import click
 from filelock import FileLock, Timeout
 
+from astrbot.cli.utils import check_dashboard
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import astrbot_paths
 
-from ..utils import check_dashboard
 from .cmd_conf import (
     _validate_dashboard_password,
     ensure_config_file,
@@ -59,6 +60,50 @@ async def initialize_astrbot(
             encoding="utf-8-sig",
         )
         click.echo(f"Created config file: {config_path}")
+
+    # Generate an .env for this instance from the bundled config.template (if available).
+    # The generated file will be written to ASTRBOT_ROOT/.env and will be automatically
+    # loaded by `astrbot run` (service-config/.env precedence applies).
+    ASTRBOT_ROOT = astrbot_root
+    env_file = ASTRBOT_ROOT / ".env"
+    if not env_file.exists():
+        tmpl_candidates = [
+            Path("/opt/astrbot/config.template"),
+            # project_root may point to the installed package directory; try it as well
+            getattr(astrbot_paths, "project_root", Path.cwd()) / "config.template",
+            Path.cwd() / "config.template",
+        ]
+        tmpl = None
+        for t in tmpl_candidates:
+            try:
+                if t.exists():
+                    tmpl = t
+                    break
+            except Exception:
+                continue
+        if tmpl is not None:
+            try:
+                txt = tmpl.read_text(encoding="utf-8")
+                # Determine instance name for template replacement (fallback to directory name)
+                instance_name = astrbot_root.name or "astrbot"
+                # Substitute ${VAR} and ${VAR:-default} for INSTANCE_NAME, PORT, ASTRBOT_ROOT
+                txt = re.sub(r"\$\{INSTANCE_NAME(:-[^}]*)?\}", instance_name, txt)
+                port_val = (
+                    os.environ.get("ASTRBOT_PORT") or os.environ.get("PORT") or "8000"
+                )
+                txt = re.sub(r"\$\{PORT(:-[^}]*)?\}", str(port_val), txt)
+                txt = re.sub(r"\$\{ASTRBOT_ROOT(:-[^}]*)?\}", str(ASTRBOT_ROOT), txt)
+                header = (
+                    f"# Generated from config.template by astrbot init for instance: {instance_name}\n"
+                    "# This file will be auto-loaded by 'astrbot run'\n\n"
+                )
+                env_file.write_text(header + txt, encoding="utf-8")
+                env_file.chmod(0o644)
+                click.echo(f"Created environment file from template: {env_file}")
+            except Exception as e:
+                click.echo(f"Warning: failed to generate .env from template: {e!s}")
+        else:
+            click.echo("No config.template found; skipping .env generation")
 
     if admin_password and not admin_username:
         raise click.ClickException(
@@ -122,20 +167,27 @@ async def initialize_astrbot(
     type=str,
     help="Set dashboard admin password during initialization without prompting",
 )
+@click.option(
+    "--root",
+    help="ASTRBOT root directory to initialize (overrides ASTRBOT_ROOT env)",
+    type=str,
+)
 def init(
     yes: bool,
     backend_only: bool,
     backup: str | None,
     admin_username: str | None,
     admin_password: str | None,
+    root: str | None = None,
 ) -> None:
     """Initialize AstrBot"""
     click.echo("Initializing AstrBot...")
 
     if os.environ.get("ASTRBOT_SYSTEMD") == "1":
         yes = True
+    from astrbot.core.utils.astrbot_path import astrbot_paths
 
-    astrbot_root = astrbot_paths.root
+    astrbot_root = Path(root) if root else astrbot_paths.root
     lock_file = astrbot_root / "astrbot.lock"
     lock = FileLock(lock_file, timeout=5)
 
