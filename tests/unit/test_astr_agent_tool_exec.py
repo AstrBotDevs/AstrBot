@@ -245,31 +245,56 @@ async def test_collect_handoff_image_urls_keeps_extensionless_existing_event_fil
         [],
     )
 
-    assert image_urls == ["/tmp/astrbot-handoff-image"]
+    assert image_urls == []
 
 
 @pytest.mark.asyncio
-async def test_collect_handoff_image_urls_filters_extensionless_missing_event_file(
+async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    async def _fake_convert_to_file_path(self):
-        return "/tmp/astrbot-handoff-missing-image"
+    captured: dict = {}
 
-    monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
-    monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.get_astrbot_temp_path", lambda: "/tmp"
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
     )
-    monkeypatch.setattr(
-        "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: False
+    event = _DummyEvent([])
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=event, context=context),
+        tool_call_timeout=120,
+    )
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
     )
 
-    run_context = _build_run_context([Image(file="file:///tmp/original.png")])
-    image_urls = await FunctionToolExecutor._collect_handoff_image_urls(
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
         run_context,
-        [],
-    )
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
 
-    assert image_urls == []
+    assert len(results) == 1
+    assert captured["tool_call_timeout"] == 120
 
 
 @pytest.mark.asyncio
