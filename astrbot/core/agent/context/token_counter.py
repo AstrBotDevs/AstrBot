@@ -111,7 +111,7 @@ class EstimateTokenCounter:
             self._cache[cache_key] = total
         elif self._cache_size > 0:
             # 简单的缓存淘汰: 清空一半
-            keys_to_remove = list(self._cache.keys())[:self._cache_size // 2]
+            keys_to_remove = list(self._cache.keys())[: self._cache_size // 2]
             for key in keys_to_remove:
                 del self._cache[key]
             self._cache[cache_key] = total
@@ -194,7 +194,7 @@ class EstimateTokenCounter:
             "hits": self._hit_count,
             "misses": self._miss_count,
             "hit_rate": f"{hit_rate:.1f}%",
-            "cache_size": len(self._cache)
+            "cache_size": len(self._cache),
         }
 
     def clear_cache(self) -> None:

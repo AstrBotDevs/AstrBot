@@ -90,9 +90,11 @@ class ContextManager:
 
                 if trusted_token_usage > 0:
                     total_tokens = trusted_token_usage
-                elif (self._last_messages_fingerprint is not None and
-                      self._last_messages_fingerprint == current_fingerprint and
-                      self._last_token_count is not None):
+                elif (
+                    self._last_messages_fingerprint is not None
+                    and self._last_messages_fingerprint == current_fingerprint
+                    and self._last_token_count is not None
+                ):
                     # 消息内容没变化，使用缓存的 token 计数
                     total_tokens = self._last_token_count
                 else:
@@ -108,7 +110,9 @@ class ContextManager:
                 ):
                     result = await self._run_compression(result, total_tokens)
                     # 压缩后更新指纹
-                    self._last_messages_fingerprint = self._get_messages_fingerprint(result)
+                    self._last_messages_fingerprint = self._get_messages_fingerprint(
+                        result
+                    )
 
             return result
         except Exception as e:
@@ -138,7 +142,9 @@ class ContextManager:
         tokens_after_compression = self.token_counter.count_tokens(messages)
 
         # calculate compress rate
-        compress_rate = (tokens_after_compression / self.config.max_context_tokens) * 100
+        compress_rate = (
+            tokens_after_compression / self.config.max_context_tokens
+        ) * 100
         logger.info(
             f"Compress #{self._compression_count} completed."
             f" {prev_tokens} -> {tokens_after_compression} tokens,"
