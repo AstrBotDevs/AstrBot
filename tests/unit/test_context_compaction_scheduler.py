@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot.core.agent.message import Message
+from astrbot.core.config.default import PERIODIC_CONTEXT_COMPACTION_DEFAULTS
 from astrbot.core.context_compaction_scheduler import (
     CompactionConfig,
     PeriodicContextCompactionScheduler,
@@ -135,16 +136,8 @@ def test_load_config_falls_back_for_non_dict(raw_value) -> None:
     scheduler = _build_scheduler({"periodic_context_compaction": raw_value})
     cfg = scheduler._load_config()
 
-    expected = CompactionConfig(**scheduler._DEFAULTS)
+    expected = CompactionConfig(**PERIODIC_CONTEXT_COMPACTION_DEFAULTS)
     assert cfg == expected
-
-
-def test_resolve_wait_seconds_uses_normalized_interval() -> None:
-    cfg = replace(
-        CompactionConfig(**PeriodicContextCompactionScheduler._DEFAULTS),
-        interval_minutes=1,
-    )
-    assert PeriodicContextCompactionScheduler._resolve_wait_seconds(cfg) == 60
 
 
 def test_get_status_returns_runtime_snapshot() -> None:

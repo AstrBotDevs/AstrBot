@@ -54,7 +54,7 @@ async def test_status_when_scheduler_unavailable() -> None:
 @pytest.mark.asyncio
 async def test_status_with_runtime_report() -> None:
     scheduler = _build_scheduler()
-    scheduler._last_report = {
+    scheduler._last_status.report = {
         "reason": "manual_command",
         "scanned": 8,
         "compacted": 2,
@@ -62,8 +62,8 @@ async def test_status_with_runtime_report() -> None:
         "failed": 0,
         "elapsed_sec": 1.2,
     }
-    scheduler._last_started_at = "2026-03-19T12:00:00+00:00"
-    scheduler._last_finished_at = "2026-03-19T12:00:01+00:00"
+    scheduler._last_status.started_at = "2026-03-19T12:00:00+00:00"
+    scheduler._last_status.finished_at = "2026-03-19T12:00:01+00:00"
 
     command = ContextCompactionCommands(
         context=SimpleNamespace(context_compaction_scheduler=scheduler)
@@ -83,8 +83,8 @@ async def test_status_with_runtime_report() -> None:
 @pytest.mark.asyncio
 async def test_status_with_no_report() -> None:
     scheduler = _build_scheduler()
-    scheduler._last_report = None
-    scheduler._last_error = None
+    scheduler._last_status.report = None
+    scheduler._last_status.error = None
 
     command = ContextCompactionCommands(
         context=SimpleNamespace(context_compaction_scheduler=scheduler)
@@ -104,7 +104,7 @@ async def test_status_with_no_report() -> None:
 @pytest.mark.asyncio
 async def test_status_includes_last_error_line() -> None:
     scheduler = _build_scheduler()
-    scheduler._last_report = {
+    scheduler._last_status.report = {
         "reason": "manual_command",
         "scanned": 1,
         "compacted": 0,
@@ -112,7 +112,7 @@ async def test_status_includes_last_error_line() -> None:
         "failed": 0,
         "elapsed_sec": 0.3,
     }
-    scheduler._last_error = "mock error"
+    scheduler._last_status.error = "mock error"
 
     command = ContextCompactionCommands(
         context=SimpleNamespace(context_compaction_scheduler=scheduler)

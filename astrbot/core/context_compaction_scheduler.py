@@ -73,8 +73,8 @@ class CompactionConfig:
     def from_default_conf(
         cls,
         default_conf: dict[str, Any],
-        defaults: dict[str, Any],
     ) -> CompactionConfig:
+        defaults = PERIODIC_CONTEXT_COMPACTION_DEFAULTS
         provider_settings = default_conf.get("provider_settings", {}) or {}
         raw_cfg = provider_settings.get("periodic_context_compaction", {}) or {}
         if not isinstance(raw_cfg, dict):
@@ -146,8 +146,6 @@ class PeriodicContextCompactionScheduler:
     conversation-body compaction to keep long sessions lightweight.
     """
 
-    _DEFAULTS = dict(PERIODIC_CONTEXT_COMPACTION_DEFAULTS)
-
     def __init__(
         self,
         config_manager: AstrBotConfigManager,
@@ -163,38 +161,6 @@ class PeriodicContextCompactionScheduler:
         self._history_parser = MessageHistoryParser()
         self._bootstrapped = False
         self._last_status = _RunStatus()
-
-    @property
-    def _last_report(self) -> dict[str, Any] | None:
-        return self._last_status.report
-
-    @_last_report.setter
-    def _last_report(self, value: dict[str, Any] | None) -> None:
-        self._last_status.report = value
-
-    @property
-    def _last_started_at(self) -> str | None:
-        return self._last_status.started_at
-
-    @_last_started_at.setter
-    def _last_started_at(self, value: str | None) -> None:
-        self._last_status.started_at = value
-
-    @property
-    def _last_finished_at(self) -> str | None:
-        return self._last_status.finished_at
-
-    @_last_finished_at.setter
-    def _last_finished_at(self, value: str | None) -> None:
-        self._last_status.finished_at = value
-
-    @property
-    def _last_error(self) -> str | None:
-        return self._last_status.error
-
-    @_last_error.setter
-    def _last_error(self, value: str | None) -> None:
-        self._last_status.error = value
 
     def get_status(self) -> dict[str, Any]:
         cfg = self._load_config()
@@ -214,7 +180,7 @@ class PeriodicContextCompactionScheduler:
         logger.info("[ContextCompact] scheduler started")
         while not self._stop_event.is_set():
             cfg = self._load_config()
-            wait_seconds = self._resolve_wait_seconds(cfg)
+            wait_seconds = max(1, int(cfg.interval_minutes)) * 60
 
             if not cfg.enabled:
                 await self._sleep_or_stop(wait_seconds)
@@ -244,10 +210,13 @@ class PeriodicContextCompactionScheduler:
                     report.get("elapsed_sec", 0.0),
                 )
             except Exception as exc:
-                self._last_status.error = str(exc)
-                self._last_status.finished_at = self._now_iso()
+                finished = self._now_iso()
+                self._update_last_status(
+                    finished_at=finished,
+                    error=str(exc),
+                )
                 if self._last_status.started_at is None:
-                    self._last_status.started_at = self._last_status.finished_at
+                    self._last_status.started_at = finished
                 if self._last_status.report is None:
                     self._last_status.report = {}
                 logger.error(
@@ -275,6 +244,8 @@ class PeriodicContextCompactionScheduler:
         """
         async with self._running_lock:
             started_at = self._now_iso()
+            self._last_status.started_at = started_at
+            self._last_status.finished_at = None
             if cfg is None:
                 cfg = self._load_config()
             started = time.monotonic()
@@ -290,8 +261,9 @@ class PeriodicContextCompactionScheduler:
                     "elapsed_sec": 0.0,
                     "message": "disabled",
                 }
-                self._set_last_status(
+                self._update_last_status(
                     started_at=started_at,
+                    finished_at=self._now_iso(),
                     report=report,
                     error=None,
                 )
@@ -315,7 +287,12 @@ class PeriodicContextCompactionScheduler:
 
                 stats.scanned += 1
                 outcome = await self._compact_one_conversation(conv, cfg)
-                self._record_outcome(stats, outcome)
+                if outcome == "compacted":
+                    stats.compacted += 1
+                elif outcome == "skipped":
+                    stats.skipped += 1
+                else:
+                    stats.failed += 1
 
             elapsed = time.monotonic() - started
             report = {
@@ -326,8 +303,9 @@ class PeriodicContextCompactionScheduler:
                 "failed": stats.failed,
                 "elapsed_sec": elapsed,
             }
-            self._set_last_status(
+            self._update_last_status(
                 started_at=started_at,
+                finished_at=self._now_iso(),
                 report=report,
                 error=None,
             )
@@ -376,27 +354,21 @@ class PeriodicContextCompactionScheduler:
                 break
             page += 1
 
-    @staticmethod
-    def _record_outcome(stats: _CompactionStats, outcome: str) -> None:
-        if outcome == "compacted":
-            stats.compacted += 1
-        elif outcome == "skipped":
-            stats.skipped += 1
-        else:
-            stats.failed += 1
-
-    def _set_last_status(
+    def _update_last_status(
         self,
-        started_at: str,
-        report: dict[str, Any],
-        error: str | None,
+        *,
+        started_at: str | None = None,
+        finished_at: str | None = None,
+        error: str | None = None,
+        report: dict[str, Any] | None = None,
     ) -> None:
-        self._last_status = _RunStatus(
-            started_at=started_at,
-            finished_at=self._now_iso(),
-            error=error,
-            report=report,
-        )
+        if started_at is not None:
+            self._last_status.started_at = started_at
+        if finished_at is not None:
+            self._last_status.finished_at = finished_at
+        self._last_status.error = error
+        if report is not None:
+            self._last_status.report = report
 
     async def _sleep_or_stop(self, seconds: int) -> None:
         try:
@@ -404,14 +376,9 @@ class PeriodicContextCompactionScheduler:
         except asyncio.TimeoutError:
             return
 
-    @staticmethod
-    def _resolve_wait_seconds(cfg: CompactionConfig) -> int:
-        return max(1, int(cfg.interval_minutes)) * 60
-
     def _load_config(self) -> CompactionConfig:
         return CompactionConfig.from_default_conf(
             default_conf=self.config_manager.default_conf,
-            defaults=self._DEFAULTS,
         )
 
     async def _compact_one_conversation(
