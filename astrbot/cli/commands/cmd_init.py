@@ -7,7 +7,7 @@ from pathlib import Path
 import click
 from filelock import FileLock, Timeout
 
-from astrbot.cli.utils import check_dashboard
+from astrbot.cli.utils import DashboardManager
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import astrbot_paths
 
@@ -146,7 +146,7 @@ async def initialize_astrbot(
         if os.environ.get("ASTRBOT_SYSTEMD") == "1":
             click.echo("Systemd detected: Skipping dashboard check.")
         else:
-            await check_dashboard(astrbot_root)
+            await DashboardManager().ensure_installed(astrbot_root)
     else:
         click.echo("你可以使用在线面版(需支持配置后端)来控制｡")
 

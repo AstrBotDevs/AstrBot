@@ -53,7 +53,7 @@ import click
 from dotenv import load_dotenv
 from filelock import FileLock, Timeout
 
-from astrbot.cli.utils import check_dashboard
+from astrbot.cli.utils import DashboardManager
 from astrbot.runtime_bootstrap import initialize_runtime_bootstrap
 
 initialize_runtime_bootstrap()
@@ -95,7 +95,7 @@ async def run_astrbot(astrbot_root: Path) -> None:
     ):
         # Avoid blocking when running under systemd by waiting for input
         if os.environ.get("ASTRBOT_SYSTEMD") != "1":
-            await check_dashboard(astrbot_root)
+            await DashboardManager().ensure_installed(astrbot_root)
 
     log_broker = LogBroker()
     LogManager.set_queue_handler(logger, log_broker)
