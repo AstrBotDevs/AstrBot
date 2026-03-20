@@ -19,13 +19,13 @@ Dashboard / Backend:
 - `ASTRBOT_PORT` / `DASHBOARD_PORT`: Dashboard bind port.
 
 Backend-standard SSL names (preferred for server):
-- `ASTRBOT_SSL_ENABLE` / `ASTRBOT_DASHBOARD_SSL_ENABLE`: Enable SSL for API.
-- `ASTRBOT_SSL_CERT` / `ASTRBOT_DASHBOARD_SSL_CERT`: SSL Certificate path for backend.
-- `ASTRBOT_SSL_KEY` / `ASTRBOT_DASHBOARD_SSL_KEY`: SSL Key path for backend.
-- `ASTRBOT_SSL_CA_CERTS` / `ASTRBOT_DASHBOARD_SSL_CA_CERTS`: SSL CA Certs path for backend.
+- `ASTRBOT_SSL_ENABLE` / `DASHBOARD_SSL_ENABLE`: Enable SSL for API.
+- `ASTRBOT_SSL_CERT` / `DASHBOARD_SSL_CERT`: SSL Certificate path for backend.
+- `ASTRBOT_SSL_KEY` / `DASHBOARD_SSL_KEY`: SSL Key path for backend.
+- `ASTRBOT_SSL_CA_CERTS` / `DASHBOARD_SSL_CA_CERTS`: SSL CA Certs path for backend.
 
 Legacy compatibility:
-- The CLI will set both `ASTRBOT_SSL_*` and the legacy `ASTRBOT_DASHBOARD_SSL_*` / `DASHBOARD_SSL_*` names to remain compatible.
+- The CLI will set both `ASTRBOT_SSL_*` and the legacy `DASHBOARD_SSL_*` names to remain compatible.
 
 Network:
 - `http_proxy` / `https_proxy`: Proxy URL.
