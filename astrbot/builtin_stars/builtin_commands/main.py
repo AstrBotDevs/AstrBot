@@ -132,8 +132,8 @@ class Main(star.Star):
         """查看或者切换 LLM Provider"""
         await self.provider_c.provider(event, idx, idx2)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command_group("ctxcompact")
+    @filter.permission_type(filter.PermissionType.ADMIN)
     def ctxcompact(self) -> None:
         """上下文定时压缩管理"""
 
@@ -153,8 +153,8 @@ class Main(star.Star):
         """手动触发一次上下文压缩（可选 limit 覆盖本次压缩会话数）"""
         await self.ctxcompact_c.run(event, limit)
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command_group("ctxmem")
+    @filter.permission_type(filter.PermissionType.ADMIN)
     def ctxmem(self) -> None:
         """上下文记忆管理（手动顶层记忆）"""
 
