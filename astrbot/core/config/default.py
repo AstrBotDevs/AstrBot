@@ -1074,7 +1074,7 @@ CONFIG_METADATA_2 = {
                 "type": "list",
                 # provider sources templates
                 "config_template": {
-                    "OpenAI": {
+                    "OpenAI Compatible": {
                         "id": "openai",
                         "provider": "openai",
                         "type": "openai_chat_completion",
@@ -1254,6 +1254,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "http://127.0.0.1:11434/v1",
                         "proxy": "",
                         "custom_headers": {},
+                        "ollama_disable_thinking": False,
                     },
                     "LM Studio": {
                         "id": "lm_studio",
@@ -1813,6 +1814,11 @@ CONFIG_METADATA_2 = {
                         "type": "dict",
                         "items": {},
                         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。",
+                    },
+                    "ollama_disable_thinking": {
+                        "description": "关闭思考模式",
+                        "type": "bool",
+                        "hint": "关闭 Ollama 思考模式。",
                     },
                     "custom_extra_body": {
                         "description": "自定义请求体参数",
