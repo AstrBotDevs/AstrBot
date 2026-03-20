@@ -105,6 +105,9 @@ def completion(shell: str | None) -> None:
             sys.exit(1)
 
     comp_cls = get_completion_class(shell)
+    if comp_cls is None:
+        click.echo(f"No completion support for shell: {shell}", err=True)
+        sys.exit(1)
     comp = comp_cls(
         cli, ctx_args={}, prog_name="astrbot", complete_var="_ASTRBOT_COMPLETE"
     )

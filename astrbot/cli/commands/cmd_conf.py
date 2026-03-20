@@ -23,6 +23,10 @@ from typing import Any
 
 import click
 
+from astrbot.cli.utils import check_astrbot_root
+from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.utils.astrbot_path import astrbot_paths
+
 # Provide type-safe placeholders for optional argon2 imports so static analysis / type checkers
 # do not assume the symbols always exist at import time.
 PasswordHasher: Any = None
@@ -43,9 +47,6 @@ except Exception:
     argon2_exceptions = None
     _HAS_ARGON2 = False
 
-from astrbot.cli.utils import check_astrbot_root
-from astrbot.core.config.default import DEFAULT_CONFIG
-from astrbot.core.utils.astrbot_path import astrbot_paths
 
 # Instantiate a module-level hasher (argon2 when available, else None).
 # When argon2 is unavailable we will use PBKDF2-HMAC-SHA256 as a deterministic secure fallback.

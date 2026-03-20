@@ -54,7 +54,6 @@ from dotenv import load_dotenv
 from filelock import FileLock, Timeout
 
 from astrbot.cli.utils import check_astrbot_root, check_dashboard
-from astrbot.core.utils.astrbot_path import astrbot_paths
 from astrbot.runtime_bootstrap import initialize_runtime_bootstrap
 
 initialize_runtime_bootstrap()
@@ -83,85 +82,6 @@ def _expand_parameter(
     if val != "":
         return val
     return default
-
-
-def expand_value(
-    value: str,
-    env: dict[str, str] | None = None,
-    local: dict[str, str] | None = None,
-) -> str:
-    """Expand bash-like ${VAR:-default} and ${VAR} placeholders in `value`.
-
-    This resolves references from `local` first (previously parsed keys), then from `env`.
-    Repeats expansion until stable or a maximum iteration count is reached to allow
-    nested expansions.
-    """
-    if env is None:
-        env = dict(os.environ)
-    if local is None:
-        local = {}
-
-    # Fast path: if there's no ${...} pattern, return as-is
-    if "${" not in value:
-        return value
-
-    def _repl(m: re.Match) -> str:
-        return _expand_parameter(m, env=env, local=local)
-
-    prev = None
-    current = value
-    # Allow nested expansions but prevent infinite loops
-    for _ in range(8):
-        new = _PARAM_EXPAND_RE.sub(_repl, current)
-        if new == current:
-            break
-        prev, current = current, new
-    return current
-
-
-def parse_service_config_file(
-    path: Path, env: dict[str, str] | None = None
-) -> dict[str, str]:
-    """Parse a service/config template file supporting:
-      - KEY=VALUE lines (with optional surrounding quotes)
-      - export KEY=VALUE
-      - Comments starting with '#'
-      - Bash-like parameter expansions ${VAR:-default} and ${VAR}
-    Returns a dictionary of parsed keys -> expanded values (expansion can reference env and earlier keys).
-    """
-    if env is None:
-        env = dict(os.environ)
-
-    parsed: dict[str, str] = {}
-
-    text = path.read_text(encoding="utf-8")
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        # Allow "export KEY=VALUE" too
-        if line.startswith("export "):
-            line = line[len("export ") :].strip()
-
-        if "=" not in line:
-            # Not a key-value, skip
-            continue
-
-        key, val = line.split("=", 1)
-        key = key.strip()
-        val = val.strip()
-
-        # Remove surrounding quotes if present
-        if (val.startswith('"') and val.endswith('"')) or (
-            val.startswith("'") and val.endswith("'")
-        ):
-            val = val[1:-1]
-
-        # Expand placeholders using current parsed + environment
-        expanded = expand_value(val, env=env, local=parsed)
-        parsed[key] = expanded
-
-    return parsed
 
 
 async def run_astrbot(astrbot_root: Path) -> None:
@@ -250,82 +170,32 @@ def run(
         if debug:
             log_level = "DEBUG"
 
-        # --- Step 1: If a service config is provided, read and parse it to local overrides ---
-        parsed_service: dict[str, str] = {}
-        # If explicit config path provided, use it.
+        # --- Step 1: Resolve service-config path (if provided). We'll treat it as a .env file later. ---
         svc_path: Path | None = None
         if service_config:
             candidate = Path(service_config)
-            if candidate.exists():
-                svc_path = candidate
-            else:
+            if not candidate.exists():
                 # Try to expand user and resolve
                 candidate = Path(os.path.expanduser(service_config))
-                if candidate.exists():
-                    svc_path = candidate
+            if candidate.exists():
+                svc_path = candidate
 
-            if svc_path is not None:
-                parsed_service = parse_service_config_file(svc_path)
-
-        # Local variables (CLI args) should keep the highest precedence.
-        # Apply parsed service values only if CLI didn't supply them.
-        # Recognized keys we care about: HOST, PORT, ASTRBOT_ROOT, ASTRBOT_PORT, ASTRBOT_HOST
-        if parsed_service:
-            if not host:
-                host = (
-                    parsed_service.get("HOST")
-                    or parsed_service.get("ASTRBOT_HOST")
-                    or parsed_service.get("DASHBOARD_HOST")
-                    or host
-                )
-            if not port:
-                port = (
-                    parsed_service.get("PORT")
-                    or parsed_service.get("ASTRBOT_PORT")
-                    or parsed_service.get("DASHBOARD_PORT")
-                    or port
-                )
-            if not root:
-                root = (
-                    parsed_service.get("ASTRBOT_ROOT")
-                    or parsed_service.get("ASTRBOT_HOME")
-                    or parsed_service.get("ROOT")
-                    or root
-                )
-
-            # Also export other useful keys from parsed_service into environment,
-            # but do not override existing environment variables.
-            for k, v in parsed_service.items():
-                if k not in os.environ:
-                    os.environ[k] = v
-
-        # --- Step 2: Load .env files early so file-based environment vars are available. ---
-        # Precedence principle implemented here:
-        # 1. CLI args (local variables) keep highest priority and will not be overwritten.
-        # 2. Service config (already applied to local variables above) has next priority.
-        # 3. Environment variables and .env files provide defaults and are loaded here.
-        # Loading .env files should NOT override existing environment variables.
-        dotenv_candidates = []
-
-        # Prefer .env in current working directory first
-        dotenv_candidates.append(Path.cwd() / ".env")
-
-        # If ASTRBOT_ROOT already set in environment, try loading .env from there as well
-        astrbot_root_env = os.environ.get("ASTRBOT_ROOT")
-        if astrbot_root_env:
-            dotenv_candidates.append(Path(astrbot_root_env) / ".env")
-
-        # Also try loading from the packaged default astrbot_paths.root location
-        try:
-            dotenv_candidates.append(astrbot_paths.root / ".env")
-        except Exception:
-            # astrbot_paths.root should normally be available, but be defensive
-            pass
-
-        for p in dotenv_candidates:
-            if p.exists():
-                # load_dotenv with override=False will NOT overwrite existing os.environ values
-                load_dotenv(dotenv_path=str(p), override=False)
+        # NOTE:
+        # Loading of common .env files (CWD/.env, packaged project .env, ASTRBOT_ROOT/.env)
+        # has been moved to astrbot.core.utils.astrbot_path during import-time to avoid
+        # early-initialization ordering issues. Those files are loaded there using
+        # `override=False` so they do not clobber environment variables provided by the
+        # systemd unit or the caller.
+        #
+        # Here we only load an explicit service-config file (if given). Service-config
+        # should be able to override the common .env files, but CLI-provided values must
+        # still win; the CLI will set/overwrite corresponding environment variables
+        # below after this load.
+        if svc_path and svc_path.exists():
+            # Load service-config as an env file and allow it to override previously-loaded
+            # .env values (those were loaded by astrbot_path). CLI variables are applied
+            # after this point and will take precedence.
+            load_dotenv(dotenv_path=str(svc_path), override=True)
 
         # Normalize environment variables for backward compatibility
         # If legacy env vars are set but the preferred new ones aren't, copy them over.
@@ -358,6 +228,8 @@ def run(
         elif os.environ.get("ASTRBOT_ROOT"):
             astrbot_root = Path(os.environ["ASTRBOT_ROOT"])
         else:
+            from astrbot.core.utils.astrbot_path import astrbot_paths
+
             astrbot_root = astrbot_paths.root
 
         if not check_astrbot_root(astrbot_root):
