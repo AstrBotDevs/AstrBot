@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..events import MessageEvent
-from ..message_session import MessageSession
+from ..message.session import MessageSession
 from ._proxy import CapabilityProxy
 from .registry import HandlerMetadata
 

@@ -8,8 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pydantic import BaseModel
 
-from astrbot_sdk._command_model import resolve_command_model_param
-from astrbot_sdk._injected_params import (
+from astrbot_sdk._internal.command_model import resolve_command_model_param
+from astrbot_sdk._internal.injected_params import (
     is_framework_injected_parameter,
     legacy_arg_parameter_names,
 )

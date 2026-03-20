@@ -31,15 +31,15 @@ from typing import Any, cast, get_type_hints
 
 from loguru import logger
 
-from .._command_model import (
+from .._internal.command_model import (
     parse_command_model_remainder,
     resolve_command_model_param,
 )
-from .._injected_params import legacy_arg_parameter_names
-from .._invocation_context import caller_plugin_scope
-from .._plugin_logger import PluginLogger
-from .._star_runtime import bind_star_runtime
-from .._typing_utils import unwrap_optional
+from .._internal.injected_params import legacy_arg_parameter_names
+from .._internal.invocation_context import caller_plugin_scope
+from .._internal.plugin_logger import PluginLogger
+from .._internal.star_runtime import bind_star_runtime
+from .._internal.typing_utils import unwrap_optional
 from ..clients.llm import LLMResponse
 from ..context import CancelToken, Context
 from ..conversation import (
@@ -52,8 +52,8 @@ from ..conversation import (
 from ..events import MessageEvent
 from ..filters import LocalFilterBinding
 from ..llm.entities import ProviderRequest
-from ..message_components import BaseMessageComponent
-from ..message_result import (
+from ..message.components import BaseMessageComponent
+from ..message.result import (
     MessageChain,
     MessageEventResult,
     coerce_message_chain,
@@ -112,15 +112,22 @@ class HandlerDispatcher:
     async def invoke(self, message, cancel_token: CancelToken) -> dict[str, Any]:
         handler_id = str(message.input.get("handler_id", ""))
         if handler_id == "__sdk_session_waiter__":
-            plugin_id = self._plugin_id
+            requested_plugin_id = (
+                str(message.input.get("plugin_id", "")).strip() or None
+            )
+            event_payload = message.input.get("event", {})
             ctx = Context(
-                peer=self._peer, plugin_id=plugin_id, cancel_token=cancel_token
+                peer=self._peer,
+                plugin_id=requested_plugin_id or self._plugin_id,
+                cancel_token=cancel_token,
+                source_event_payload=(
+                    dict(event_payload) if isinstance(event_payload, dict) else None
+                ),
             )
-            event = MessageEvent.from_payload(
-                message.input.get("event", {}), context=ctx
+            event = MessageEvent.from_payload(event_payload, context=ctx)
+            task = asyncio.create_task(
+                self._session_waiters.dispatch(event, plugin_id=requested_plugin_id)
             )
-            event.bind_reply_handler(self._create_reply_handler(ctx, event))
-            task = asyncio.create_task(self._session_waiters.dispatch(event))
             self._active[message.id] = (task, cancel_token)
             try:
                 return await task
@@ -178,6 +185,9 @@ class HandlerDispatcher:
             return await task
         finally:
             self._active.pop(message.id, None)
+
+    def has_active_waiter(self, event: MessageEvent) -> bool:
+        return self._session_waiters.has_waiter(event)
 
     def _resolve_plugin_id(self, loaded: LoadedHandler) -> str:
         if loaded.plugin_id:

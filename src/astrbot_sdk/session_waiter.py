@@ -28,6 +28,7 @@ from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar, cast, overloa
 
 from loguru import logger
 
+from ._internal.invocation_context import current_caller_plugin_id
 from .events import MessageEvent
 
 _OwnerT = TypeVar("_OwnerT")
@@ -115,17 +116,19 @@ class SessionController:
 @dataclass(slots=True)
 class _WaiterEntry:
     session_key: str
+    plugin_id: str
     handler: Callable[[SessionController, MessageEvent], Awaitable[Any]]
     controller: SessionController
     record_history_chains: bool
+    unregister_enabled: bool = True
 
 
 class SessionWaiterManager:
     def __init__(self, *, plugin_id: str, peer) -> None:
         self._plugin_id = plugin_id
         self._peer = peer
-        self._entries: dict[str, _WaiterEntry] = {}
-        self._locks: dict[str, asyncio.Lock] = {}
+        self._entries: dict[str, dict[str, _WaiterEntry]] = {}
+        self._locks: dict[tuple[str, str], asyncio.Lock] = {}
 
     async def register(
         self,
@@ -138,30 +141,44 @@ class SessionWaiterManager:
         if event._context is None:
             raise RuntimeError("session_waiter requires runtime context")
         session_key = event.unified_msg_origin
+        plugin_id = self._resolve_plugin_id(event)
         entry = _WaiterEntry(
             session_key=session_key,
+            plugin_id=plugin_id,
             handler=handler,
             controller=SessionController(),
             record_history_chains=record_history_chains,
         )
-        replaced = session_key in self._entries
-        self._entries[session_key] = entry
-        self._locks.setdefault(session_key, asyncio.Lock())
-        if replaced:
+        previous = self._entries.setdefault(session_key, {}).get(plugin_id)
+        self._entries[session_key][plugin_id] = entry
+        self._lock_for(session_key, plugin_id)
+        if previous is not None:
+            previous.unregister_enabled = False
+            self._finish_entry(
+                previous,
+                RuntimeError("session waiter replaced by a newer waiter"),
+            )
             logger.warning(
-                "Session waiter replaced: plugin_id=%s session_key=%s",
-                self._plugin_id,
+                "Session waiter replaced: plugin_id={} session_key={}",
+                plugin_id,
                 session_key,
             )
-        await self._peer.invoke(
-            "system.session_waiter.register",
-            {"session_key": session_key},
-        )
-        entry.controller.keep(timeout, reset_timeout=True)
+        try:
+            await self._invoke_system_waiter(
+                "system.session_waiter.register",
+                session_key=session_key,
+                plugin_id=plugin_id,
+            )
+            entry.controller.keep(timeout, reset_timeout=True)
+        except Exception:
+            entry.unregister_enabled = False
+            await self._remove_entry(entry)
+            raise
         try:
             return await entry.controller.future
         finally:
-            await self.unregister(session_key)
+            if entry.unregister_enabled:
+                await self.unregister(session_key, plugin_id=plugin_id)
 
     async def wait_for_event(
         self,
@@ -190,62 +207,250 @@ class SessionWaiterManager:
         )
         return future.result()
 
-    async def unregister(self, session_key: str) -> None:
-        self._entries.pop(session_key, None)
-        self._locks.pop(session_key, None)
+    async def unregister(
+        self,
+        session_key: str,
+        *,
+        plugin_id: str | None = None,
+    ) -> None:
+        target_plugin_id = self._resolve_unregister_plugin_id(
+            session_key,
+            plugin_id=plugin_id,
+        )
+        if target_plugin_id is None:
+            return
+        lock_key = (session_key, target_plugin_id)
+        lock = self._lock_for(session_key, target_plugin_id)
+        removed = False
+        async with lock:
+            session_entries = self._entries.get(session_key)
+            if session_entries is None:
+                return
+            removed = session_entries.pop(target_plugin_id, None) is not None
+            if not session_entries:
+                self._entries.pop(session_key, None)
+        if self._locks.get(lock_key) is lock:
+            self._locks.pop(lock_key, None)
+        if not removed:
+            return
         try:
-            await self._peer.invoke(
+            await self._invoke_system_waiter(
                 "system.session_waiter.unregister",
-                {"session_key": session_key},
+                session_key=session_key,
+                plugin_id=target_plugin_id,
             )
         except Exception:
             logger.debug(
-                "Failed to unregister session waiter: plugin_id=%s session_key=%s",
-                self._plugin_id,
+                "Failed to unregister session waiter: plugin_id={} session_key={}",
+                target_plugin_id,
                 session_key,
             )
 
-    async def fail(self, session_key: str, error: Exception) -> bool:
-        entry = self._entries.get(session_key)
+    async def fail(
+        self,
+        session_key: str,
+        error: Exception,
+        *,
+        plugin_id: str | None = None,
+    ) -> bool:
+        entry = self._select_entry(
+            session_key,
+            plugin_id=plugin_id,
+            allow_ambiguous=False,
+            missing_result=None,
+        )
         if entry is None:
             return False
-        lock = self._locks.setdefault(session_key, asyncio.Lock())
+        lock = self._lock_for(session_key, entry.plugin_id)
         async with lock:
-            current = self._entries.get(session_key)
-            if current is None:
+            current = self._get_entry(session_key, entry.plugin_id)
+            if current is None or current.controller.future.done():
                 return False
-            current.controller.stop(error)
-            if (
-                current.controller.current_event is not None
-                and not current.controller.current_event.is_set()
-            ):
-                current.controller.current_event.set()
+            self._finish_entry(current, error)
             return True
 
     def has_waiter(self, event: MessageEvent) -> bool:
-        return event.unified_msg_origin in self._entries
-
-    async def dispatch(self, event: MessageEvent) -> dict[str, Any]:
         session_key = event.unified_msg_origin
-        entry = self._entries.get(session_key)
+        event_plugin_id = self._event_plugin_id(event)
+        if event_plugin_id is not None:
+            entry = self._get_entry(session_key, event_plugin_id)
+            return entry is not None and not entry.controller.future.done()
+        return bool(self.get_waiter_plugin_ids(session_key))
+
+    def get_waiter_plugin_ids(self, session_key: str) -> list[str]:
+        return sorted(
+            plugin_id
+            for plugin_id, entry in self._entries.get(session_key, {}).items()
+            if not entry.controller.future.done()
+        )
+
+    async def dispatch(
+        self,
+        event: MessageEvent,
+        *,
+        plugin_id: str | None = None,
+    ) -> dict[str, Any]:
+        session_key = event.unified_msg_origin
+        entry = self._select_entry(
+            session_key,
+            plugin_id=plugin_id,
+            allow_ambiguous=False,
+            missing_result=None,
+            ambiguous_error=LookupError(
+                f"session waiter dispatch for session '{session_key}' requires explicit plugin identity"
+            ),
+        )
         if entry is None:
             return {"sent_message": False, "stop": False, "call_llm": False}
-        lock = self._locks.setdefault(session_key, asyncio.Lock())
+        lock = self._lock_for(session_key, entry.plugin_id)
         async with lock:
-            if entry.record_history_chains:
+            current = self._get_entry(session_key, entry.plugin_id)
+            if current is None or current.controller.future.done():
+                return {"sent_message": False, "stop": False, "call_llm": False}
+            waiter_event = self._build_waiter_event(current, event)
+            if current.record_history_chains:
                 chain = []
                 raw_chain = (
-                    event.raw.get("chain") if isinstance(event.raw, dict) else None
+                    waiter_event.raw.get("chain")
+                    if isinstance(waiter_event.raw, dict)
+                    else None
                 )
                 if isinstance(raw_chain, list):
                     chain = [dict(item) for item in raw_chain if isinstance(item, dict)]
-                entry.controller.history_chains.append(chain)
-            await entry.handler(entry.controller, event)
+                current.controller.history_chains.append(chain)
+            await current.handler(current.controller, waiter_event)
             return {
                 "sent_message": False,
-                "stop": event.is_stopped(),
+                "stop": waiter_event.is_stopped(),
                 "call_llm": False,
             }
+
+    def _resolve_plugin_id(self, event: MessageEvent) -> str:
+        caller_plugin_id = current_caller_plugin_id()
+        if caller_plugin_id:
+            return caller_plugin_id
+        context = event._context
+        if context is not None and context.plugin_id.strip():
+            return context.plugin_id
+        return self._plugin_id
+
+    @staticmethod
+    def _event_plugin_id(event: MessageEvent) -> str | None:
+        context = event._context
+        if context is None:
+            return None
+        plugin_id = context.plugin_id.strip()
+        return plugin_id or None
+
+    def _resolve_unregister_plugin_id(
+        self,
+        session_key: str,
+        *,
+        plugin_id: str | None,
+    ) -> str | None:
+        if plugin_id is not None:
+            normalized = str(plugin_id).strip()
+            return normalized or None
+        session_entries = self._entries.get(session_key, {})
+        if len(session_entries) != 1:
+            return None
+        return next(iter(session_entries))
+
+    def _select_entry(
+        self,
+        session_key: str,
+        *,
+        plugin_id: str | None,
+        allow_ambiguous: bool,
+        missing_result: _WaiterEntry | None,
+        ambiguous_error: Exception | None = None,
+    ) -> _WaiterEntry | None:
+        if plugin_id is not None:
+            return self._get_entry(session_key, plugin_id)
+        active_entries = [
+            entry
+            for entry in self._entries.get(session_key, {}).values()
+            if not entry.controller.future.done()
+        ]
+        if not active_entries:
+            return missing_result
+        if len(active_entries) > 1 and not allow_ambiguous:
+            if ambiguous_error is not None:
+                raise ambiguous_error
+            return missing_result
+        return active_entries[0]
+
+    def _get_entry(self, session_key: str, plugin_id: str) -> _WaiterEntry | None:
+        return self._entries.get(session_key, {}).get(plugin_id)
+
+    def _lock_for(self, session_key: str, plugin_id: str) -> asyncio.Lock:
+        return self._locks.setdefault((session_key, plugin_id), asyncio.Lock())
+
+    async def _remove_entry(self, entry: _WaiterEntry) -> None:
+        lock_key = (entry.session_key, entry.plugin_id)
+        lock = self._lock_for(entry.session_key, entry.plugin_id)
+        async with lock:
+            session_entries = self._entries.get(entry.session_key)
+            if session_entries is None:
+                return
+            current = session_entries.get(entry.plugin_id)
+            if current is not entry:
+                return
+            session_entries.pop(entry.plugin_id, None)
+            if not session_entries:
+                self._entries.pop(entry.session_key, None)
+        if self._locks.get(lock_key) is lock:
+            self._locks.pop(lock_key, None)
+
+    @staticmethod
+    def _finish_entry(entry: _WaiterEntry, error: Exception | None = None) -> None:
+        entry.controller.stop(error)
+        if (
+            entry.controller.current_event is not None
+            and not entry.controller.current_event.is_set()
+        ):
+            entry.controller.current_event.set()
+
+    async def _invoke_system_waiter(
+        self,
+        capability: str,
+        *,
+        session_key: str,
+        plugin_id: str,
+    ) -> None:
+        from ._internal.invocation_context import caller_plugin_scope
+
+        with caller_plugin_scope(plugin_id):
+            await self._peer.invoke(
+                capability,
+                {"session_key": session_key},
+            )
+
+    def _build_waiter_event(
+        self,
+        entry: _WaiterEntry,
+        event: MessageEvent,
+    ) -> MessageEvent:
+        from .context import Context
+
+        source_payload = (
+            dict(event.raw) if isinstance(event.raw, dict) else event.to_payload()
+        )
+        cancel_token = (
+            event._context.cancel_token if event._context is not None else None
+        )
+        waiter_context = Context(
+            peer=self._peer,
+            plugin_id=entry.plugin_id,
+            cancel_token=cancel_token,
+            source_event_payload=source_payload,
+        )
+        # Rebuild the event so the waiter always sees the registering plugin identity
+        # and the exact source payload that triggered the follow-up dispatch.
+        return MessageEvent.from_payload(
+            source_payload,
+            context=waiter_context,
+        )
 
 
 def session_waiter(
@@ -314,3 +519,13 @@ def session_waiter(
         return wrapper
 
     return cast(_SessionWaiterDecorator, decorator)
+
+
+__all__ = [
+    "_OwnerT",
+    "_P",
+    "_ResultT",
+    "SessionController",
+    "SessionWaiterManager",
+    "session_waiter",
+]

@@ -3,11 +3,11 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
-from ._star_runtime import current_star_context
+from ._internal.star_runtime import current_star_context
 from .context import Context
-from .message_components import BaseMessageComponent
-from .message_result import MessageChain
-from .message_session import MessageSession
+from .message.components import BaseMessageComponent
+from .message.result import MessageChain
+from .message.session import MessageSession
 
 
 class _StarToolsContextDescriptor:

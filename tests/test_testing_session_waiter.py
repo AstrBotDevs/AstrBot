@@ -6,14 +6,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from astrbot_sdk._invocation_context import caller_plugin_scope
+from astrbot_sdk._internal.invocation_context import caller_plugin_scope
 from astrbot_sdk.context import CancelToken, Context
 from astrbot_sdk.events import MessageEvent
 from astrbot_sdk.protocol.messages import InvokeMessage
 from astrbot_sdk.runtime.handler_dispatcher import HandlerDispatcher
 from astrbot_sdk.session_waiter import SessionController
 from astrbot_sdk.testing import LocalRuntimeConfig, PluginHarness
-from astrbot_sdk._testing_support import MockCapabilityRouter, MockPeer
+from astrbot_sdk._internal.testing_support import MockCapabilityRouter, MockPeer
 
 
 def _write_session_waiter_plugin(plugin_dir: Path) -> None:

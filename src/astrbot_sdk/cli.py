@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import sys
 import typing
@@ -95,6 +96,23 @@ def setup_logger(verbose: bool = False) -> None:
         level="DEBUG" if verbose else "INFO",
         colorize=True,
     )
+
+
+def _resolve_protocol_stdout(
+    protocol_stdout: str | None,
+) -> tuple[typing.TextIO, typing.TextIO | None]:
+    configured = str(protocol_stdout).strip() if protocol_stdout is not None else ""
+    if not configured:
+        stdout = sys.stdout
+        if callable(getattr(stdout, "isatty", None)) and stdout.isatty():
+            opened_stdout = open(os.devnull, "w", encoding="utf-8")
+            return opened_stdout, opened_stdout
+        return stdout, None
+    if configured.lower() == "console":
+        return sys.stdout, None
+    output_path = os.devnull if configured.lower() == "silent" else configured
+    opened_stdout = open(output_path, "w", encoding="utf-8")
+    return opened_stdout, opened_stdout
 
 
 def _run_async_entrypoint(
@@ -846,13 +864,24 @@ def cli(ctx, verbose: bool) -> None:
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
     help="Directory containing plugin folders",
 )
-def run(plugins_dir: Path) -> None:
+@click.option(
+    "--protocol-stdout",
+    default=None,
+    type=str,
+    help="Redirect runtime protocol stdout to console, silent, or a file path",
+)
+def run(plugins_dir: Path, protocol_stdout: str | None) -> None:
     """Start the plugin supervisor over stdio."""
-    _run_async_entrypoint(
-        run_supervisor(plugins_dir=plugins_dir),
-        log_message=f"启动插件主管进程，插件目录：{plugins_dir}",
-        context={"plugins_dir": plugins_dir},
-    )
+    transport_stdout, opened_stdout = _resolve_protocol_stdout(protocol_stdout)
+    try:
+        _run_async_entrypoint(
+            run_supervisor(plugins_dir=plugins_dir, stdout=transport_stdout),
+            log_message=f"启动插件主管进程，插件目录：{plugins_dir}",
+            context={"plugins_dir": plugins_dir},
+        )
+    finally:
+        if opened_stdout is not None:
+            opened_stdout.close()
 
 
 @cli.command()
@@ -987,7 +1016,17 @@ def dev(
     required=False,
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
 )
-def worker(plugin_dir: Path | None, group_metadata: Path | None) -> None:
+@click.option(
+    "--protocol-stdout",
+    default=None,
+    type=str,
+    help="Redirect runtime protocol stdout to console, silent, or a file path",
+)
+def worker(
+    plugin_dir: Path | None,
+    group_metadata: Path | None,
+    protocol_stdout: str | None,
+) -> None:
     """Internal command used by the supervisor to start a worker."""
     if plugin_dir is None and group_metadata is None:
         raise click.UsageError("Either --plugin-dir or --group-metadata is required")
@@ -997,16 +1036,27 @@ def worker(plugin_dir: Path | None, group_metadata: Path | None) -> None:
         )
 
     target = str(group_metadata or plugin_dir)
+    transport_stdout, opened_stdout = _resolve_protocol_stdout(protocol_stdout)
     if group_metadata is not None:
-        entrypoint = run_plugin_worker(group_metadata=group_metadata)
+        entrypoint = run_plugin_worker(
+            group_metadata=group_metadata,
+            stdout=transport_stdout,
+        )
     else:
-        entrypoint = run_plugin_worker(plugin_dir=plugin_dir)
-    _run_async_entrypoint(
-        entrypoint,
-        log_message=f"启动插件工作进程：{target}",
-        log_level="debug",
-        context={"plugin_dir": plugin_dir},
-    )
+        entrypoint = run_plugin_worker(
+            plugin_dir=plugin_dir,
+            stdout=transport_stdout,
+        )
+    try:
+        _run_async_entrypoint(
+            entrypoint,
+            log_message=f"启动插件工作进程：{target}",
+            log_level="debug",
+            context={"plugin_dir": plugin_dir},
+        )
+    finally:
+        if opened_stdout is not None:
+            opened_stdout.close()
 
 
 @cli.command(hidden=True)

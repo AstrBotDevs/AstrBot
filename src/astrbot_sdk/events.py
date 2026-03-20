@@ -16,7 +16,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from .message_components import (
+from .message.components import (
     At,
     BaseMessageComponent,
     File,
@@ -25,7 +25,7 @@ from .message_components import (
     component_to_payload_sync,
     payloads_to_components,
 )
-from .message_result import EventResultType, MessageChain, MessageEventResult
+from .message.result import EventResultType, MessageChain, MessageEventResult
 from .protocol.descriptors import SessionRef
 
 if TYPE_CHECKING:

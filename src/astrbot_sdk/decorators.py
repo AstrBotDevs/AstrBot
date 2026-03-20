@@ -53,7 +53,7 @@ from typing import Any, Literal, cast
 
 from pydantic import BaseModel
 
-from ._typing_utils import unwrap_optional
+from ._internal.typing_utils import unwrap_optional
 from .llm.agents import AgentSpec, BaseAgentRunner
 from .llm.entities import LLMToolSpec
 from .protocol.descriptors import (
@@ -854,7 +854,7 @@ def register_llm_tool(
             func,
             LLM_TOOL_META_ATTR,
             LLMToolMeta(
-                spec=LLMToolSpec(
+                spec=LLMToolSpec.create(
                     name=tool_name,
                     description=description
                     or (inspect.getdoc(func) or "").splitlines()[0]

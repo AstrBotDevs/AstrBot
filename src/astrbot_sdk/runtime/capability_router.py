@@ -171,7 +171,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .._invocation_context import current_caller_plugin_id
+from .._internal.invocation_context import current_caller_plugin_id
 from ..errors import AstrBotError
 from ..protocol.descriptors import (
     RESERVED_CAPABILITY_PREFIXES,
