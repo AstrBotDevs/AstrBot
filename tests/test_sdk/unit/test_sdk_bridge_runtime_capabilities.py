@@ -131,6 +131,19 @@ async def test_mock_context_system_tools_and_memory_stats() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_mock_context_metadata_save_plugin_config_round_trip() -> None:
+    ctx = MockContext(plugin_id="sdk-demo")
+
+    saved = await ctx.metadata.save_plugin_config({"chat_scope_mode": "global_default"})
+
+    assert saved == {"chat_scope_mode": "global_default"}
+    assert await ctx.metadata.get_plugin_config() == {
+        "chat_scope_mode": "global_default"
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_platform_client_accepts_message_session() -> None:
     ctx = MockContext(plugin_id="sdk-demo")
     session = MessageSession(

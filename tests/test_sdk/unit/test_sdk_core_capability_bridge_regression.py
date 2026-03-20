@@ -49,12 +49,23 @@ from astrbot.core.sdk_bridge.capability_bridge import CoreCapabilityBridge
 class _FakePluginBridge:
     def __init__(self) -> None:
         self.configs = {"ai_girlfriend": {"enable_morning": True}}
+        self.saved: list[tuple[str, dict[str, object]]] = []
 
     def resolve_request_plugin_id(self, _request_id: str) -> str:
         return "ai_girlfriend"
 
     def get_plugin_config(self, plugin_id: str) -> dict[str, object] | None:
         return self.configs.get(plugin_id)
+
+    def save_plugin_config(
+        self,
+        plugin_id: str,
+        config: dict[str, object],
+    ) -> dict[str, object]:
+        saved = dict(config)
+        self.configs[plugin_id] = saved
+        self.saved.append((plugin_id, saved))
+        return saved
 
     def get_plugin_metadata(self, plugin_id: str) -> dict[str, object] | None:
         return {"name": plugin_id}
@@ -156,6 +167,8 @@ def test_core_capability_bridge_keeps_runtime_router_methods() -> None:
     assert CoreCapabilityBridge.register.__qualname__ == "CapabilityRouter.register"
     assert len(bridge._registrations) > 0
     assert "metadata.get_plugin_config" in bridge._registrations
+    assert "metadata.save_plugin_config" in bridge._registrations
+    assert "conversation.unset_persona" in bridge._registrations
 
 
 @pytest.mark.unit
@@ -176,6 +189,29 @@ async def test_core_capability_bridge_serves_registered_plugin_config() -> None:
     )
 
     assert result == {"config": {"enable_morning": True}}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_core_capability_bridge_saves_plugin_config() -> None:
+    plugin_bridge = _FakePluginBridge()
+    bridge = CoreCapabilityBridge(
+        star_context=_FakeStarContext(),
+        plugin_bridge=plugin_bridge,
+    )
+
+    result = await bridge.execute(
+        "metadata.save_plugin_config",
+        {"config": {"chat_scope_mode": "global_default"}},
+        stream=False,
+        cancel_token=_FakeCancelToken(),
+        request_id="req-1",
+    )
+
+    assert result == {"config": {"chat_scope_mode": "global_default"}}
+    assert plugin_bridge.saved == [
+        ("ai_girlfriend", {"chat_scope_mode": "global_default"})
+    ]
 
 
 @pytest.mark.unit
