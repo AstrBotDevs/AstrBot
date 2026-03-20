@@ -245,6 +245,30 @@ async def test_collect_handoff_image_urls_keeps_extensionless_existing_event_fil
         [],
     )
 
+    assert image_urls == ["/tmp/astrbot-handoff-image"]
+
+
+@pytest.mark.asyncio
+async def test_collect_handoff_image_urls_filters_extensionless_missing_event_file(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def _fake_convert_to_file_path(self):
+        return "/tmp/astrbot-handoff-missing-image"
+
+    monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.get_astrbot_temp_path", lambda: "/tmp"
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: False
+    )
+
+    run_context = _build_run_context([Image(file="file:///tmp/original.png")])
+    image_urls = await FunctionToolExecutor._collect_handoff_image_urls(
+        run_context,
+        [],
+    )
+
     assert image_urls == []
 
 
