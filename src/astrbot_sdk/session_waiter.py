@@ -48,6 +48,41 @@ _ACTIVE_WAITER_KEY: ContextVar[_WaiterKey | None] = ContextVar(
 )
 
 
+class _TaskReentrantLock:
+    def __init__(self) -> None:
+        self._lock = asyncio.Lock()
+        self._owner: asyncio.Task[Any] | None = None
+        self._depth = 0
+
+    async def acquire(self) -> None:
+        current_task = asyncio.current_task()
+        if current_task is None:
+            raise RuntimeError("session waiter lock requires an active asyncio task")
+        if self._owner is current_task:
+            self._depth += 1
+            return
+        await self._lock.acquire()
+        self._owner = current_task
+        self._depth = 1
+
+    def release(self) -> None:
+        current_task = asyncio.current_task()
+        if current_task is None or self._owner is not current_task:
+            raise RuntimeError("session waiter lock released by a non-owner task")
+        self._depth -= 1
+        if self._depth > 0:
+            return
+        self._owner = None
+        self._lock.release()
+
+    async def __aenter__(self) -> _TaskReentrantLock:
+        await self.acquire()
+        return self
+
+    async def __aexit__(self, *_exc_info: object) -> None:
+        self.release()
+
+
 def _mark_session_waiter_handler_task(task: asyncio.Task[Any]) -> None:
     _HANDLER_TASKS.add(task)
 
@@ -156,7 +191,7 @@ class SessionWaiterManager:
         self._plugin_id = plugin_id
         self._peer = peer
         self._entries: dict[str, dict[str, _WaiterEntry]] = {}
-        self._locks: dict[_WaiterKey, asyncio.Lock] = {}
+        self._locks: dict[_WaiterKey, _TaskReentrantLock] = {}
 
     @staticmethod
     def _make_key(*, plugin_id: str, session_key: str) -> _WaiterKey:
@@ -393,16 +428,18 @@ class SessionWaiterManager:
                 if isinstance(raw_chain, list):
                     chain = [dict(item) for item in raw_chain if isinstance(item, dict)]
                 current.controller.history_chains.append(chain)
-        active_key_token = _ACTIVE_WAITER_KEY.set(
-            self._make_key(
-                plugin_id=current.plugin_id,
-                session_key=current.session_key,
+            active_key_token = _ACTIVE_WAITER_KEY.set(
+                self._make_key(
+                    plugin_id=current.plugin_id,
+                    session_key=current.session_key,
+                )
             )
-        )
-        try:
-            await current.handler(current.controller, waiter_event)
-        finally:
-            _ACTIVE_WAITER_KEY.reset(active_key_token)
+            try:
+                # Keep follow-up handler execution serialized per waiter while still
+                # allowing nested waiter cleanup in the same task to re-enter safely.
+                await current.handler(current.controller, waiter_event)
+            finally:
+                _ACTIVE_WAITER_KEY.reset(active_key_token)
         return {
             "sent_message": False,
             "stop": waiter_event.is_stopped(),
@@ -467,8 +504,8 @@ class SessionWaiterManager:
     def _get_entry(self, session_key: str, plugin_id: str) -> _WaiterEntry | None:
         return self._entries.get(session_key, {}).get(plugin_id)
 
-    def _lock_for(self, session_key: str, plugin_id: str) -> asyncio.Lock:
-        return self._locks.setdefault((session_key, plugin_id), asyncio.Lock())
+    def _lock_for(self, session_key: str, plugin_id: str) -> _TaskReentrantLock:
+        return self._locks.setdefault((session_key, plugin_id), _TaskReentrantLock())
 
     async def _remove_entry(self, entry: _WaiterEntry) -> None:
         lock_key = (entry.session_key, entry.plugin_id)

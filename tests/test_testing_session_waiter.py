@@ -260,6 +260,65 @@ async def test_session_waiter_dispatch_preserves_source_event_payload() -> None:
 
 
 @pytest.mark.asyncio
+async def test_session_waiter_dispatch_serializes_followups_per_waiter() -> None:
+    peer = MockPeer(MockCapabilityRouter())
+    dispatcher = HandlerDispatcher(plugin_id="test-plugin", peer=peer, handlers=[])
+    event = _build_event(text="hello", session_id="session-serial", peer=peer)
+    handler_entered = asyncio.Event()
+    release_handler = asyncio.Event()
+    invocations: list[str] = []
+
+    async def slow_waiter(
+        controller: SessionController,
+        waiter_event: MessageEvent,
+    ) -> None:
+        invocations.append(waiter_event.text)
+        handler_entered.set()
+        await release_handler.wait()
+        controller.stop()
+
+    async def waiter_task() -> None:
+        with caller_plugin_scope("test-plugin"):
+            await dispatcher._session_waiters.register(
+                event=event,
+                handler=slow_waiter,
+                timeout=30,
+                record_history_chains=False,
+            )
+
+    task = asyncio.create_task(waiter_task())
+    await asyncio.sleep(0)
+
+    first_followup = _build_event(text="first", session_id="session-serial", peer=peer)
+    second_followup = _build_event(
+        text="second",
+        session_id="session-serial",
+        peer=peer,
+    )
+
+    first_dispatch = asyncio.create_task(
+        dispatcher._session_waiters.dispatch(first_followup)
+    )
+    await handler_entered.wait()
+
+    second_dispatch = asyncio.create_task(
+        dispatcher._session_waiters.dispatch(second_followup)
+    )
+    await asyncio.sleep(0)
+
+    assert invocations == ["first"]
+    assert second_dispatch.done() is False
+
+    release_handler.set()
+
+    await first_dispatch
+    await second_dispatch
+    await task
+
+    assert invocations == ["first"]
+
+
+@pytest.mark.asyncio
 async def test_has_active_waiter_ignores_completed_waiter_before_unregister() -> None:
     peer = MockPeer(MockCapabilityRouter())
     dispatcher = HandlerDispatcher(plugin_id="test-plugin", peer=peer, handlers=[])
