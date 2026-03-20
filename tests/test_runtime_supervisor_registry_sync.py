@@ -4,10 +4,12 @@ from pathlib import Path
 
 import pytest
 
+from astrbot_sdk.errors import AstrBotError, ErrorCodes
+from astrbot_sdk.runtime.capability_router import CapabilityRouter
 import astrbot_sdk.runtime.supervisor as supervisor_module
 from astrbot_sdk.runtime.environment_groups import EnvironmentPlanResult
 from astrbot_sdk.runtime.loader import PluginDiscoveryResult, PluginSpec
-from astrbot_sdk.runtime.supervisor import SupervisorRuntime
+from astrbot_sdk.runtime.supervisor import SupervisorRuntime, WorkerSession
 from astrbot_sdk.runtime.transport import Transport
 
 
@@ -227,3 +229,70 @@ async def test_supervisor_publishes_plugin_registry_in_two_phases(
         ],
         "worker_group_count": 1,
     }
+
+
+@pytest.mark.asyncio
+async def test_worker_session_start_surfaces_init_waiter_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugin = _write_plugin_spec(tmp_path, "alpha")
+    session = WorkerSession(
+        plugin=plugin,
+        repo_root=tmp_path,
+        env_manager=_StaticEnvManager([plugin]),
+        capability_router=CapabilityRouter(),
+    )
+    session._worker_command = lambda: (
+        Path("/usr/bin/python3"),
+        ["/usr/bin/python3", "-m", "astrbot_sdk", "worker"],
+        str(tmp_path),
+    )
+
+    class _StubStdioTransport:
+        def __init__(self, *, command, cwd, env) -> None:
+            self.command = command
+            self.cwd = cwd
+            self.env = env
+
+    created_peers: list[object] = []
+
+    class _FailingInitPeer:
+        def __init__(self, *, transport, peer_info) -> None:
+            del transport, peer_info
+            self.remote_handlers = []
+            self.remote_provided_capabilities = []
+            self.remote_metadata = {}
+            self.stopped = False
+            created_peers.append(self)
+
+        def set_initialize_handler(self, _handler) -> None:
+            return None
+
+        def set_invoke_handler(self, _handler) -> None:
+            return None
+
+        async def start(self) -> None:
+            return None
+
+        async def wait_until_remote_initialized(
+            self, timeout: float | None = None
+        ) -> None:
+            del timeout
+            raise AstrBotError.protocol_error("连接在初始化完成前关闭")
+
+        async def wait_closed(self) -> None:
+            return None
+
+        async def stop(self) -> None:
+            self.stopped = True
+
+    monkeypatch.setattr(supervisor_module, "StdioTransport", _StubStdioTransport)
+    monkeypatch.setattr(supervisor_module, "Peer", _FailingInitPeer)
+
+    with pytest.raises(AstrBotError, match="连接在初始化完成前关闭") as exc_info:
+        await session.start()
+
+    assert exc_info.value.code == ErrorCodes.PROTOCOL_ERROR
+    assert len(created_peers) == 1
+    assert created_peers[0].stopped is True

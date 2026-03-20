@@ -217,6 +217,7 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         self._registrations: dict[str, _CapabilityRegistration] = {}
         self.db_store: dict[str, Any] = {}
         self.memory_store: dict[str, dict[str, Any]] = {}
+        self._memory_backends: dict[str, Any] = {}
         self._memory_index: dict[str, dict[str, Any]] = {}
         self._memory_dirty_keys: set[str] = set()
         self._memory_expires_at: dict[str, datetime | None] = {}

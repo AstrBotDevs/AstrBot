@@ -10,6 +10,7 @@ from ...protocol.descriptors import CapabilityDescriptor
 
 class CapabilityRouterHost:
     memory_store: dict[str, dict[str, Any]]
+    _memory_backends: dict[str, Any]
     _memory_index: dict[str, dict[str, Any]]
     _memory_dirty_keys: set[str]
     _memory_expires_at: dict[str, datetime | None]
@@ -53,6 +54,13 @@ class CapabilityRouterHost:
 
     @staticmethod
     def _require_caller_plugin_id(capability_name: str) -> str:
+        raise NotImplementedError
+
+    @staticmethod
+    def _validated_plugin_id(plugin_id: str, *, capability_name: str) -> str:
+        raise NotImplementedError
+
+    def _plugin_data_dir(self, plugin_id: str, *, capability_name: str) -> Path:
         raise NotImplementedError
 
     def register_dynamic_command_route(

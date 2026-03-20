@@ -201,6 +201,9 @@ class WorkerSession:
                 except asyncio.CancelledError:
                     pass
 
+            if init_task in done:
+                await init_task
+
             if closed_task in done:
                 raise RuntimeError(f"worker 组 {self.group_id} 在初始化阶段退出")
 

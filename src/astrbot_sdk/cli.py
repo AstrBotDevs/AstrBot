@@ -16,7 +16,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 import sys
 import typing
@@ -25,7 +24,7 @@ from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from pathlib import Path
 from textwrap import dedent
-from typing import IO, Any
+from typing import Any
 
 import click
 from loguru import logger
@@ -109,6 +108,9 @@ def _run_async_entrypoint(
     log_method(log_message)
     try:
         asyncio.run(entrypoint)
+    except (click.Abort, KeyboardInterrupt):
+        click.echo("\n创建插件已优雅地中断。", err=True)
+        raise SystemExit(130)
     except Exception as exc:
         exit_code, error_code, hint = _classify_cli_exception(exc)
         docs_url = exc.docs_url if isinstance(exc, AstrBotError) else ""
@@ -137,6 +139,9 @@ def _run_sync_entrypoint(
     log_method(log_message)
     try:
         entrypoint()
+    except (click.Abort, KeyboardInterrupt):
+        click.echo("\n创建插件已优雅地中断。", err=True)
+        raise SystemExit(130)
     except Exception as exc:
         exit_code, error_code, hint = _classify_cli_exception(exc)
         docs_url = exc.docs_url if isinstance(exc, AstrBotError) else ""
@@ -152,52 +157,6 @@ def _run_sync_entrypoint(
         if exit_code == EXIT_UNEXPECTED:
             logger.exception("CLI 异常退出")
         raise SystemExit(exit_code) from exc
-
-
-def _resolve_protocol_stdout(
-    protocol_stdout: str | None,
-) -> tuple[IO[str] | None, IO[str] | None]:
-    target = protocol_stdout
-    if target is None:
-        target = "silent" if sys.stdout.isatty() else "console"
-    if target == "console":
-        return sys.stdout, None
-    if target == "silent":
-        opened_stdout = open(os.devnull, "w", encoding="utf-8")
-        return opened_stdout, opened_stdout
-    opened_stdout = open(target, "w", encoding="utf-8")
-    return opened_stdout, opened_stdout
-
-
-async def _run_supervisor_with_protocol_stdout(
-    *,
-    plugins_dir: Path,
-    protocol_stdout: str | None,
-) -> None:
-    transport_stdout, opened_stdout = _resolve_protocol_stdout(protocol_stdout)
-    try:
-        await run_supervisor(plugins_dir=plugins_dir, stdout=transport_stdout)
-    finally:
-        if opened_stdout is not None:
-            opened_stdout.close()
-
-
-async def _run_worker_with_protocol_stdout(
-    *,
-    plugin_dir: Path | None,
-    group_metadata: Path | None,
-    protocol_stdout: str | None,
-) -> None:
-    transport_stdout, opened_stdout = _resolve_protocol_stdout(protocol_stdout)
-    try:
-        await run_plugin_worker(
-            plugin_dir=plugin_dir,
-            group_metadata=group_metadata,
-            stdout=transport_stdout,
-        )
-    finally:
-        if opened_stdout is not None:
-            opened_stdout.close()
 
 
 def _classify_cli_exception(exc: Exception) -> tuple[int, str, str]:
@@ -620,6 +579,16 @@ def _slugify_plugin_name(value: str) -> str:
     return slug or "my_plugin"
 
 
+def _normalize_plugin_name(value: str) -> str:
+    normalized = _slugify_plugin_name(value)
+    if normalized.startswith("astrbot_plugin_"):
+        return normalized
+    normalized = normalized.removeprefix("astrbot_plugin")
+    normalized = normalized.strip("_")
+    suffix = normalized or "my_plugin"
+    return f"astrbot_plugin_{suffix}"
+
+
 def _class_name_for_plugin(value: str) -> str:
     parts = [part for part in re.split(r"[^a-zA-Z0-9]+", value) if part]
     if not parts:
@@ -632,16 +601,23 @@ def _sanitize_build_part(value: str) -> str:
     return sanitized or "artifact"
 
 
-def _render_init_plugin_yaml(*, plugin_name: str, display_name: str) -> str:
+def _render_init_plugin_yaml(
+    *,
+    plugin_name: str,
+    display_name: str,
+    desc: str,
+    author: str,
+    version: str,
+) -> str:
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
     class_name = _class_name_for_plugin(plugin_name)
     return dedent(
         f"""\
         name: {plugin_name}
         display_name: {display_name}
-        desc: 使用 AstrBot SDK 创建的插件
-        author: your-name
-        version: 0.1.0
+        desc: {desc}
+        author: {author}
+        version: {version}
         runtime:
           python: "{python_version}"
         components:
@@ -808,19 +784,42 @@ def _iter_build_files(plugin_dir: Path, output_dir: Path) -> list[Path]:
     return files
 
 
-def _init_plugin(name: str) -> None:
-    target_dir = Path(name)
+def _prompt_nonempty_text(prompt: str) -> str:
+    while True:
+        value = click.prompt(prompt, type=str, default="", show_default=False).strip()
+        if value:
+            return value
+        click.echo("该字段不能为空，请重新输入。")
+
+
+def _collect_init_metadata(name: str | None) -> tuple[str, str, str, str]:
+    if name is not None:
+        return name, "", "", "1.0.0"
+
+    plugin_name = _prompt_nonempty_text("插件名字")
+    author = click.prompt("作者", type=str, default="", show_default=False).strip()
+    desc = click.prompt("描述", type=str, default="", show_default=False).strip()
+    version = click.prompt("版本", type=str, default="1.0.0", show_default=True).strip()
+    return plugin_name, author, desc, version or "1.0.0"
+
+
+def _init_plugin(name: str | None) -> None:
+    raw_name, author, desc, version = _collect_init_metadata(name)
+    plugin_name = _normalize_plugin_name(raw_name)
+    target_dir = Path(plugin_name)
     if target_dir.exists():
         raise _CliPluginValidationError(f"目标目录已存在：{target_dir}")
 
-    plugin_name = _slugify_plugin_name(target_dir.name)
-    display_name = target_dir.name
+    display_name = raw_name.strip() or plugin_name
     target_dir.mkdir(parents=True, exist_ok=False)
     (target_dir / "tests").mkdir()
     (target_dir / "plugin.yaml").write_text(
         _render_init_plugin_yaml(
             plugin_name=plugin_name,
             display_name=display_name,
+            desc=desc,
+            author=author,
+            version=version,
         ),
         encoding="utf-8",
     )
@@ -837,7 +836,7 @@ def _init_plugin(name: str) -> None:
         _render_init_test_py(plugin_name=plugin_name),
         encoding="utf-8",
     )
-    click.echo(f"已创建插件骨架：{target_dir}")
+    click.echo(f"已创建插件：{target_dir}")
     click.echo("后续命令：")
     click.echo(f"  astrbot-sdk validate --plugin-dir {target_dir}")
     click.echo(
@@ -893,35 +892,23 @@ def cli(ctx, verbose: bool) -> None:
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
     help="Directory containing plugin folders",
 )
-@click.option(
-    "--protocol-stdout",
-    default=None,
-    type=str,
-    help=(
-        "Where to write protocol stdout: silent (discard), console, or a file "
-        "path. Defaults to silent on TTY; console when stdout is piped."
-    ),
-)
-def run(plugins_dir: Path, protocol_stdout: str | None) -> None:
+def run(plugins_dir: Path) -> None:
     """Start the plugin supervisor over stdio."""
     _run_async_entrypoint(
-        _run_supervisor_with_protocol_stdout(
-            plugins_dir=plugins_dir,
-            protocol_stdout=protocol_stdout,
-        ),
+        run_supervisor(plugins_dir=plugins_dir),
         log_message=f"启动插件主管进程，插件目录：{plugins_dir}",
-        context={"plugins_dir": plugins_dir, "protocol_stdout": protocol_stdout},
+        context={"plugins_dir": plugins_dir},
     )
 
 
 @cli.command()
-@click.argument("name", type=str)
-def init(name: str) -> None:
+@click.argument("name", type=str, required=False)
+def init(name: str | None) -> None:
     """Create a new plugin skeleton in the target directory."""
     _run_sync_entrypoint(
         lambda: _init_plugin(name),
-        log_message=f"创建插件骨架：{name}",
-        context={"target": Path(name)},
+        log_message=f"创建插件：{name or '<interactive>'}",
+        context={"target": name or "<interactive>"},
     )
 
 
@@ -1046,20 +1033,7 @@ def dev(
     required=False,
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
 )
-@click.option(
-    "--protocol-stdout",
-    default=None,
-    type=str,
-    help=(
-        "Where to write protocol stdout: silent (discard), console, or a file "
-        "path. Defaults to silent on TTY; console when stdout is piped."
-    ),
-)
-def worker(
-    plugin_dir: Path | None,
-    group_metadata: Path | None,
-    protocol_stdout: str | None,
-) -> None:
+def worker(plugin_dir: Path | None, group_metadata: Path | None) -> None:
     """Internal command used by the supervisor to start a worker."""
     if plugin_dir is None and group_metadata is None:
         raise click.UsageError("Either --plugin-dir or --group-metadata is required")
@@ -1069,16 +1043,15 @@ def worker(
         )
 
     target = str(group_metadata or plugin_dir)
-    entrypoint = _run_worker_with_protocol_stdout(
-        plugin_dir=plugin_dir,
-        group_metadata=group_metadata,
-        protocol_stdout=protocol_stdout,
-    )
+    if group_metadata is not None:
+        entrypoint = run_plugin_worker(group_metadata=group_metadata)
+    else:
+        entrypoint = run_plugin_worker(plugin_dir=plugin_dir)
     _run_async_entrypoint(
         entrypoint,
         log_message=f"启动插件工作进程：{target}",
         log_level="debug",
-        context={"plugin_dir": plugin_dir, "protocol_stdout": protocol_stdout},
+        context={"plugin_dir": plugin_dir},
     )
 
 

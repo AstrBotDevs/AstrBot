@@ -154,9 +154,12 @@ class HandlerDispatcher:
                     )
                     event = MessageEvent.from_payload(event_payload, context=ctx)
             event.bind_reply_handler(self._create_reply_handler(ctx, event))
-            task = asyncio.create_task(
-                self._session_waiters.dispatch(event, plugin_id=plugin_id)
-            )
+            with caller_plugin_scope(plugin_id):
+                task = asyncio.create_task(
+                    self._session_waiters.dispatch(event, plugin_id=plugin_id)
+                )
+            _mark_session_waiter_handler_task(task)
+            task.add_done_callback(_unmark_session_waiter_handler_task)
             self._active[message.id] = (task, cancel_token)
             try:
                 return await task
@@ -538,7 +541,6 @@ class HandlerDispatcher:
             await self._session_waiters.fail(
                 active.session.session_key,
                 ConversationReplaced("conversation replaced by a newer session"),
-                plugin_id=self._resolve_plugin_id(loaded),
             )
             await asyncio.sleep(0)
             active.task.cancel()

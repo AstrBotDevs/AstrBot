@@ -210,7 +210,7 @@ class SessionWaiterManager:
             "Direct await on session_waiter blocks the current handler dispatch; "
             'prefer `await ctx.register_task(waiter(...), "...")`: '
             "plugin_id={} session_key={}",
-            self._plugin_id,
+            event._context.plugin_id,
             event.unified_msg_origin,
         )
 
