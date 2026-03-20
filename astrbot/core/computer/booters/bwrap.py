@@ -275,15 +275,19 @@ class BwrapBooter(ComputerBooter):
         self._fs = HostBackedFileSystemComponent(self.config.workspace_dir)
         self._python = BwrapPythonComponent(self.config)
         self._shell = BwrapShellComponent(self.config)
+        if not self.available(): 
+            raise RuntimeError(
+            "BubbleWrap sandbox unavailable on current machine for no bwrap executable.")
         test_shl = await self._shell.exec(command = "ls > /dev/null")
         if test_shl["exit_code"] != 0:
             raise RuntimeError(
-            '''BubbleWrap sandbox fails to exec test shell command "ls > /dev/null".
-stderr:\n{}'''.format(test_shl["stderr"]))
+            '''BubbleWrap sandbox fails to exec test shell command "ls > /dev/null" with stderr:
+{}'''.format(test_shl["stderr"]))
         test_py = await self._python.exec(code = "print('Yes')")
         if test_py["exit_code"] != 0:
-            raise RuntimeError('''BubbleWrap sandbox fails to exec test python code "print('Yes')".
-stderr:\n{}'''.format(test_py["stderr"]))
+            raise RuntimeError(
+            '''BubbleWrap sandbox fails to exec test python code "print('Yes')" with stderr:
+{}'''.format(test_py["stderr"]))
 
     async def shutdown(self) -> None:
         if self.config and os.path.exists(self.config.workspace_dir):
