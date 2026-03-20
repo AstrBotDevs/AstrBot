@@ -109,6 +109,9 @@ class HandlerDispatcher:
                 "some features may not work as expected"
             )
 
+    def has_active_waiter(self, event: MessageEvent) -> bool:
+        return self._session_waiters.has_active_waiter(event)
+
     async def invoke(self, message, cancel_token: CancelToken) -> dict[str, Any]:
         handler_id = str(message.input.get("handler_id", ""))
         if handler_id == "__sdk_session_waiter__":
