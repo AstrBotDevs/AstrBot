@@ -308,17 +308,12 @@ class ProviderManager:
         )
         if not self.curr_provider_inst and self.provider_insts:
             self.curr_provider_inst = self.provider_insts[0]
-        if len(self.provider_insts) > 1:
-            if selected_provider_id:
-                if not isinstance(temp_provider, Provider):
-                    logger.warning(
-                        "无法加载指定的默认对话模型提供商 '%s'，已自动使用第一个可用的提供商 '%s'。请检查您的配置或在 WebUI 中重新设置。",
-                        selected_provider_id,
-                        self.curr_provider_inst.meta().id,
-                    )
-            else:
-                logger.warning(
-                    "检测到配置了多个对话模型提供商，但未指定默认对话模型。"
+            if (
+                len(self.provider_insts) > 1
+                and not self.provider_settings.get("default_provider_id")
+            ):
+                logger.info(
+                    "检测到已配置多个对话模型提供商，但未设置 provider_settings.default_provider_id。"
                     "当前将默认使用第一个提供商：%s。建议在 WebUI 中设置默认对话模型。",
                     self.curr_provider_inst.meta().id,
                 )
