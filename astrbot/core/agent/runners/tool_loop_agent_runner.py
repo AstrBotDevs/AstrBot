@@ -187,8 +187,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 m._no_save = True
             messages.append(m)
         if request.prompt is not None:
-            m = await request.assemble_context()
+            extra_user_content_parts = copy.deepcopy(request.extra_user_content_parts)
+            request.extra_user_content_parts = []
+            try:
+                m = await request.assemble_context()
+            finally:
+                request.extra_user_content_parts = extra_user_content_parts
             messages.append(Message.model_validate(m))
+            if extra_user_content_parts:
+                extra_msg = Message(
+                    role="user",
+                    content=extra_user_content_parts,
+                )
+                extra_msg._no_save = True
+                messages.append(extra_msg)
         if request.system_prompt:
             messages.insert(
                 0,
@@ -207,7 +219,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             "contexts": self.run_context.messages,  # list[Message]
             "func_tool": self.req.func_tool,
             "session_id": self.req.session_id,
-            "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
         }
         if include_model:
             # For primary provider we keep explicit model selection if provided.
