@@ -157,6 +157,14 @@ async def test_mock_context_manager_clients_round_trip(tmp_path: Path) -> None:
     assert current_conversation.token_usage == 42
     assert current_conversation.history == [{"role": "assistant", "content": "updated"}]
 
+    await ctx.conversations.unset_persona(session, conversation_b)
+    current_conversation = await ctx.conversations.get_conversation(
+        session,
+        conversation_b,
+    )
+    assert isinstance(current_conversation, ConversationRecord)
+    assert current_conversation.persona_id is None
+
     kb = await ctx.kbs.create_kb(
         KnowledgeBaseCreateParams(
             kb_name="Demo KB",
