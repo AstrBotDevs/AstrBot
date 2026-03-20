@@ -144,7 +144,7 @@ class AstrbotPaths:
     def project_root(self) -> Path:
         """获取项目根目录路径 (package root)"""
         with resources.as_file(resources.files("astrbot")) as path:
-            return path
+            return Path(path)
 
     @property
     def data(self) -> Path:
