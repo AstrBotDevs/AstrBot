@@ -488,19 +488,19 @@ class AstrBotDashboard:
             if cert_file and key_file:
                 cert_path = await anyio.Path(cert_file).expanduser()
                 key_path = await anyio.Path(key_file).expanduser()
-                if not cert_path.is_file():
+                if not await cert_path.is_file():
                     raise ValueError(f"SSL 证书文件不存在: {cert_path}")
-                if not key_path.is_file():
+                if not await key_path.is_file():
                     raise ValueError(f"SSL 私钥文件不存在: {key_path}")
 
-                config.certfile = str(cert_path.resolve())
-                config.keyfile = str(key_path.resolve())
+                config.certfile = str(await cert_path.resolve())
+                config.keyfile = str(await key_path.resolve())
 
             if ca_certs:
                 ca_path = await anyio.Path(ca_certs).expanduser()
-                if not ca_path.is_file():
+                if not await ca_path.is_file():
                     raise ValueError(f"SSL CA 证书文件不存在: {ca_path}")
-                config.ca_certs = str(ca_path.resolve())
+                config.ca_certs = str(await ca_path.resolve())
 
         # 根据配置决定是否禁用访问日志
         disable_access_log = dashboard_config.get("disable_access_log", True)
