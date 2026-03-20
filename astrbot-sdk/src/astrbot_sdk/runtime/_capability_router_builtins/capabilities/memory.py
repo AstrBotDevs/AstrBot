@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ...._internal.invocation_context import current_caller_plugin_id
-from ...._memory_backend import PluginMemoryBackend
 from ...._internal.memory_utils import (
     cosine_similarity,
     extract_memory_text,
@@ -14,6 +13,7 @@ from ...._internal.memory_utils import (
     memory_keyword_score,
     memory_value_for_search,
 )
+from ...._memory_backend import PluginMemoryBackend
 from ....errors import AstrBotError
 from ..bridge_base import CapabilityRouterBridgeBase
 

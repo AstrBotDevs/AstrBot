@@ -26,6 +26,11 @@ dependencies = [
 astr = "astrbot_sdk.cli:cli"
 astrbot-sdk = "astrbot_sdk.cli:cli"
 
+[tool.pytest.ini_options]
+markers = [
+    "unit: unit tests",
+]
+
 # ============================================================
 # Package Discovery (src layout)
 # ============================================================
