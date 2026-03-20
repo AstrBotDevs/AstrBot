@@ -302,6 +302,69 @@ def test_resolve_token_counter_uses_configured_mode_and_provider_model(monkeypat
     assert called["model"] == "gpt-4o"
 
 
+def test_resolve_token_counter_prefers_provider_level_mode(monkeypatch) -> None:
+    scheduler = _build_scheduler({"context_token_counter_mode": "estimate"})
+    provider = SimpleNamespace(
+        get_model=lambda: "gpt-4o",
+        provider_settings={"context_token_counter_mode": "tokenizer"},
+    )
+    called: dict[str, str | None] = {}
+
+    fake_counter = SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 0)
+
+    def _fake_create(mode: str | None = None, *, model: str | None = None):
+        called["mode"] = mode
+        called["model"] = model
+        return fake_counter
+
+    monkeypatch.setattr(
+        "astrbot.core.context_compaction_scheduler.create_token_counter",
+        _fake_create,
+    )
+
+    resolved = scheduler._resolve_token_counter(provider)
+    assert resolved is fake_counter
+    assert called["mode"] == "tokenizer"
+    assert called["model"] == "gpt-4o"
+
+
+@pytest.mark.asyncio
+async def test_iter_candidate_conversations_does_not_apply_idle_filter_in_db_query() -> None:
+    scheduler = _build_scheduler(
+        {"periodic_context_compaction": {"enabled": True, "min_idle_minutes": 30}}
+    )
+
+    class _FakeDB:
+        def __init__(self) -> None:
+            self.updated_before_calls: list[datetime | None] = []
+
+        async def get_filtered_conversations(
+            self,
+            *,
+            page: int,
+            page_size: int,
+            updated_before: datetime | None,
+            min_messages: int,
+        ):
+            self.updated_before_calls.append(updated_before)
+            return [], 0
+
+    fake_db = _FakeDB()
+    scheduler.conversation_manager = SimpleNamespace(db=fake_db)  # type: ignore[assignment]
+
+    cfg = scheduler._load_config()
+    result = [
+        conv
+        async for conv in scheduler._iter_candidate_conversations(
+            scan_page_size=40,
+            cfg=cfg,
+        )
+    ]
+
+    assert result == []
+    assert fake_db.updated_before_calls == [None]
+
+
 @pytest.mark.asyncio
 async def test_compact_one_conversation_dry_run_reports_skipped(monkeypatch) -> None:
     scheduler = _build_scheduler({"periodic_context_compaction": {"enabled": True}})

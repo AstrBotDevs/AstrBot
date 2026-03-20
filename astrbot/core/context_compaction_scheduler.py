@@ -4,7 +4,7 @@ import asyncio
 import time
 from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from astrbot import logger
@@ -387,18 +387,12 @@ class PeriodicContextCompactionScheduler:
         scan_page_size: int,
         cfg: CompactionConfig,
     ) -> AsyncIterator[ConversationV2]:
-        updated_before: datetime | None = None
-        if cfg.min_idle_minutes > 0:
-            updated_before = datetime.now(timezone.utc) - timedelta(
-                minutes=int(cfg.min_idle_minutes),
-            )
-
         page = 1
         while not self._stop_event.is_set():
             conversations, total = await self.conversation_manager.db.get_filtered_conversations(
                 page=page,
                 page_size=scan_page_size,
-                updated_before=updated_before,
+                updated_before=None,
                 min_messages=cfg.min_messages,
             )
             if not conversations:
@@ -636,11 +630,7 @@ class PeriodicContextCompactionScheduler:
         return ""
 
     def _resolve_token_counter(self, provider: Provider | None) -> TokenCounter:
-        provider_settings = self.config_manager.default_conf.get("provider_settings", {})
-        mode = "estimate"
-        if isinstance(provider_settings, dict):
-            mode = str(provider_settings.get("context_token_counter_mode", "estimate"))
-        mode = mode.strip().lower() or "estimate"
+        mode = self._resolve_token_counter_mode(provider)
 
         model = ""
         if provider is not None:
@@ -666,6 +656,21 @@ class PeriodicContextCompactionScheduler:
 
         self._token_counter_cache[cache_key] = resolved
         return resolved
+
+    def _resolve_token_counter_mode(self, provider: Provider | None) -> str:
+        if provider is not None:
+            provider_settings = getattr(provider, "provider_settings", None)
+            if isinstance(provider_settings, dict):
+                mode = str(provider_settings.get("context_token_counter_mode", "") or "")
+                normalized = mode.strip().lower()
+                if normalized:
+                    return normalized
+
+        provider_settings = self.config_manager.default_conf.get("provider_settings", {})
+        mode = "estimate"
+        if isinstance(provider_settings, dict):
+            mode = str(provider_settings.get("context_token_counter_mode", "estimate"))
+        return mode.strip().lower() or "estimate"
 
     @staticmethod
     def _messages_equal(a: list[Message], b: list[Message]) -> bool:
