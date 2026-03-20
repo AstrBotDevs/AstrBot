@@ -19,14 +19,16 @@ import random
 import re
 import time
 from collections.abc import AsyncGenerator
-from typing import Optional
-
-from tenacity import sleep
+from typing import Any, Optional
 
 from astrbot.core import logger
-from astrbot.core.mind_sim.action import ActionExecutor, PreExecuteResult
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
+
+from astrbot.core import logger
+from astrbot.core.mind_sim.action import ActionExecutor
+from astrbot.core.mind_sim.AgentMindSubStage import AgentMindSubStage
 from astrbot.core.mind_sim.context import MindContext
-from astrbot.core.mind_sim.llm import MindSimLLM
 from astrbot.core.mind_sim.messages import (
     ActionOutput,
     ActionSendMsg,
@@ -113,16 +115,15 @@ class PrivateBrain:
     def __init__(
         self,
         ctx: MindContext,
-        persona: Optional[dict] = None,
-        llm: Optional[MindSimLLM] = None,
+        persona: dict | None = None,
     ):
         self.ctx = ctx
         self.persona = persona or {}
-        self.llm = llm
+        self.llm: AgentMindSubStage | None = None
 
         # 动作执行器
         self.executor = ActionExecutor(
-            ctx=ctx, send_callback=self._on_action_output, llm=llm
+            ctx=ctx, send_callback=self._on_action_output, llm=None
         )
 
         # 注册动作类
@@ -135,17 +136,15 @@ class PrivateBrain:
         # 思考状态
         self._thinking = False
         self._think_requested = False
-        self._think_task: Optional[asyncio.Task] = None
+        self._think_task: asyncio.Task | None = None
 
         # 思考节流机制（1秒内只触发一次思考，累积提示词）
         self._last_think_time: float = 0
         self._think_cooldown: float = 1.0  # 思考冷却时间（秒）
-        self._pending_think_timer: Optional[asyncio.Task] = None  # 延迟思考定时器
+        self._pending_think_timer: asyncio.Task | None = None  # 延迟思考定时器
 
         # 是否有需要打断 wait 的事件待处理
         self._interrupt_wait_pending: bool = False
-
-
 
         # 中断事件（用于阻塞时被用户消息或动作消息打断）
         self._interrupt_event: asyncio.Event = asyncio.Event()
@@ -204,50 +203,94 @@ class PrivateBrain:
 
     async def _on_action_output(self, output):
         """动作产出回调，将产出转为事件放入队列"""
+        if output is None:
+            logger.warning("Received None output")
+            return
+
+        reason = output.prompt if hasattr(output, 'prompt') else ""
+
         if isinstance(output, ActionOutput):
             # 根据输出类型转换为对应的 MindEvent
             if output.type == "reply":
-                await self._event_queue.put(MindEvent.reply(output.content, output.metadata))
+                await self._event_queue.put(
+                    MindEvent.reply(output.content, output.metadata)
+                )
                 # 检查是否标记了不触发重新思考（如 EndConversation 的回复）
                 if not (output.metadata and output.metadata.get("no_think")):
                     self._interrupt_event.set()
                     # reply 发出后打断 wait，让主思考决定下一步
                     self._interrupt_wait_pending = True
-                    await self._schedule_think(f"动作 {output.action_name} 发出了回复")
+                    await self._schedule_think(
+                        f"动作 {output.action_name} 发出了回复{reason}"
+                    )
             elif output.type == "typing":
                 await self._event_queue.put(MindEvent.typing())
             elif output.type == "error":
-                await self._event_queue.put(MindEvent.error(output.content, output.metadata))
+                await self._event_queue.put(
+                    MindEvent.error(output.content, output.metadata)
+                )
             elif output.type == "completed":
                 # 动作完成，触发重新思考
-                logger.debug(f"[PrivateBrain] 动作 {output.action_name} 完成，触发重新思考")
-                await self._schedule_think(f"这次是动作{output.action_name} 完成的自动触发思考")
+                logger.debug(
+                    f"[PrivateBrain] 动作 {output.action_name} 完成，触发重新思考{reason}"
+                )
+                await self._schedule_think(
+                    f"这次是动作{output.action_name} 完成的自动触发思考{reason}"
+                )
             elif output.type == "completed_no_think":
                 # 动作完成但不触发重新思考
-                logger.debug(f"[PrivateBrain] 动作 {output.action_name} 完成（不触发重新思考）")
+                logger.debug(
+                    f"[PrivateBrain] 动作 {output.action_name} 完成（不触发重新思考）"
+                )
             elif output.type == "end":
                 # 动作请求结束对话
-                logger.info(f"[PrivateBrain] 动作 {output.action_name} 请求结束对话: {output.content}")
+                logger.info(
+                    f"[PrivateBrain] 动作 {output.action_name} 请求结束对话: {output.content}"
+                )
                 # 先停止所有其他正在运行的动作
                 await self.executor.stop_all("结束对话，停止所有动作")
                 await self._event_queue.put(MindEvent.end(output.content))
             elif output.type == "request_think":
                 # 动作显式请求重新思考，打断 wait
-                reason = output.prompt or output.content
-                logger.debug(f"[PrivateBrain] 动作 {output.action_name} 请求重新思考: {reason}")
+                logger.debug(
+                    f"[PrivateBrain] 动作 {output.action_name} 请求重新思考: {reason}"
+                )
                 self._interrupt_wait_pending = True
                 if reason:
-                    await self._schedule_think(f"这次是动作{output.action_name}由于原因是{reason}请求重新思考触发思考")
+                    await self._schedule_think(
+                        f"这次是动作{output.action_name}由于原因是{reason}请求重新思考触发思考"
+                    )
                 else:
-                    await self._schedule_think(f"这次是动作{output.action_name}请求重新思考触发思考")
+                    await self._schedule_think(
+                        f"这次是动作{output.action_name}请求重新思考触发思考"
+                    )
             elif output.type == "noop":
-                logger.info(f"[PrivateBrain] 动作 {output.action_name} 什么都没做")
+                logger.info(
+                    f"[PrivateBrain] 动作 {output.action_name} 什么都没做{reason}"
+                )
         elif isinstance(output, ActionStateUpdate):
             pass
 
-    def set_llm(self, llm: MindSimLLM):
-        """设置 LLM 实例"""
-        self.llm = llm
+    def init_llm(
+        self,
+        event: AstrMessageEvent,
+        plugin_context: Any,
+        persona: dict,
+    ):
+        """初始化 LLM 实例"""
+        try:
+            self.llm = AgentMindSubStage.create_for_brain(
+                event=event,
+                plugin_context=plugin_context,
+                persona_config=persona,
+            )
+            # 注入 Brain 的事件队列，让 call() 能发送 PIPELINE_YIELD
+            self.llm._mind_event_queue = self._event_queue
+            # 同步给 executor，让动作实例能拿到 llm
+            self.executor._llm = self.llm
+        except Exception as e:
+            logger.error(f"[PrivateBrain] 创建 AgentMindSubStage 失败: {e}")
+            self.llm = None
 
     async def handle_message(
         self,
@@ -267,7 +310,7 @@ class PrivateBrain:
         # 触发思考
         await self._schedule_think(f"以下是这一轮思考的新的用户消息: {message}")
 
-    async def _schedule_think(self, prompt: Optional[str] = None):
+    async def _schedule_think(self, prompt: str | None = None):
         """调度一次思考（节流机制：1秒内只触发一次，累积提示词）"""
         # 1. 将提示词加入队列（无论是否立即思考）
         if prompt:
@@ -290,11 +333,15 @@ class PrivateBrain:
 
             # 如果已经有延迟定时器，不需要重复创建
             if self._pending_think_timer and not self._pending_think_timer.done():
-                logger.debug(f"[PrivateBrain] 冷却中，提示词已累积，等待 {remaining_cooldown:.2f}秒后统一思考")
+                logger.debug(
+                    f"[PrivateBrain] 冷却中，提示词已累积，等待 {remaining_cooldown:.2f}秒后统一思考"
+                )
                 return
 
             # 创建延迟思考定时器
-            logger.debug(f"[PrivateBrain] 冷却中，延迟 {remaining_cooldown:.2f}秒后思考")
+            logger.debug(
+                f"[PrivateBrain] 冷却中，延迟 {remaining_cooldown:.2f}秒后思考"
+            )
             self._pending_think_timer = asyncio.create_task(
                 self._delayed_think(remaining_cooldown)
             )
@@ -336,8 +383,8 @@ class PrivateBrain:
 
                 # 构建提示词
                 prompt = await self._build_prompt()
-                ORANGE = '\033[38;5;214m'
-                RESET = '\033[0m'
+                ORANGE = "\033[38;5;214m"
+                RESET = "\033[0m"
                 logger.debug(f"{ORANGE}[PrivateBrain] 思考提示词: {prompt}{RESET}")
 
                 try:
@@ -381,8 +428,8 @@ class PrivateBrain:
                 # 检测是否只有 wait 动作在运行（连续等待）
                 running_states = self.executor.get_running_states()
                 is_only_wait = (
-                        len(running_states) == 1
-                        and running_states[0]["action_name"] == "wait"
+                    len(running_states) == 1
+                    and running_states[0]["action_name"] == "wait"
                 )
 
                 if is_only_wait:
@@ -403,7 +450,11 @@ class PrivateBrain:
                 stuck_hint = ""
                 if self._consecutive_wait_count >= self._consecutive_wait_threshold:
                     # 计算从第一次等待到现在的时间
-                    elapsed_time = time.time() - self._first_wait_time if self._first_wait_time > 0 else 0
+                    elapsed_time = (
+                        time.time() - self._first_wait_time
+                        if self._first_wait_time > 0
+                        else 0
+                    )
 
                     # 只有当连续等待次数达标且时间超过阈值时才提示
                     if elapsed_time >= self._stuck_min_duration:
@@ -428,7 +479,11 @@ class PrivateBrain:
 
     def _maybe_emit_end(self):
         """检查是否应该发送 END 事件（无动作运行且无待思考）"""
-        if not self._thinking and not self.executor.has_running() and not self._think_requested:
+        if (
+            not self._thinking
+            and not self.executor.has_running()
+            and not self._think_requested
+        ):
             logger.debug("[PrivateBrain] 思考完成，发送 END 事件")
             asyncio.create_task(self._event_queue.put(MindEvent.end("思考完成")))
 
@@ -445,7 +500,9 @@ class PrivateBrain:
                     event = await asyncio.wait_for(self._event_queue.get(), timeout=5)
 
                     if event.type == MindEventType.END:
-                        logger.debug("[PrivateBrain] 收到 END 事件，关闭事件流")
+                        logger.debug(
+                            "[PrivateBrain] 收到 END 事件，关闭事件流"
+                        )  # todo这里还要检查是否由运行中的动作，思考，确保结束时候这个类是干净的
                         yield event
                         break
 
@@ -463,7 +520,11 @@ class PrivateBrain:
     async def _think(self, prompt: str) -> str:
         """统一的思考入口：先快速模型评估，按需升级"""
         # 快速模型调用（包含升级思考模块）
-        fast_response = await self.llm.call(prompt=prompt, role="fast")
+        # 使用 call_simple 直接获取文本响应
+        fast_response = await self.llm.call_simple(
+            prompt=prompt,
+            role="fast",
+        )
         logger.debug(f"[PrivateBrain] 快速思考结果: {fast_response}")
 
         need_role = self._parse_need_deeper(fast_response)
@@ -475,7 +536,10 @@ class PrivateBrain:
 
         # 升级思考时不传入升级模块（避免循环升级）
         upgraded_prompt = await self._build_prompt(include_upgrade=False)
-        response = await self.llm.call(prompt=upgraded_prompt, role=need_role)
+        response = await self.llm.call_simple(
+            prompt=upgraded_prompt,
+            role=need_role,
+        )
         logger.debug(f"[PrivateBrain] {need_role} 思考结果: {response}")
         return response
 
@@ -485,9 +549,7 @@ class PrivateBrain:
         if not fast_response:
             return "fast"
 
-        match = re.search(
-            r"NEED_DEEPER:\s*(MEDIUM|DEEP)", fast_response, re.IGNORECASE
-        )
+        match = re.search(r"NEED_DEEPER:\s*(MEDIUM|DEEP)", fast_response, re.IGNORECASE)
         if not match:
             return "fast"
 
@@ -528,13 +590,15 @@ class PrivateBrain:
 
         # 当前运行的动作实例状态
         running_states = self.executor.get_running_states()
-        states_prompt = build_action_states_prompt(running_states) if running_states else ""
+        states_prompt = (
+            build_action_states_prompt(running_states) if running_states else ""
+        )
 
         # 临时提示词
         if include_upgrade:
-            temp_contents = self.executor.tick_temp_prompts(consume_rounds = False)
+            temp_contents = self.executor.tick_temp_prompts(consume_rounds=False)
         else:
-            temp_contents = self.executor.tick_temp_prompts(consume_rounds = True)
+            temp_contents = self.executor.tick_temp_prompts(consume_rounds=True)
 
         temp_prompt = build_temp_prompts_section(temp_contents) if temp_contents else ""
 

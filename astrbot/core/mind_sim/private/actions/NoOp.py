@@ -1,4 +1,4 @@
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from astrbot.core.mind_sim import Action, ActionOutput
 

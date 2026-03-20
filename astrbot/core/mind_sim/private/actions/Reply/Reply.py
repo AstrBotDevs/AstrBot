@@ -1,8 +1,18 @@
-import asyncio
-import json
-from typing import AsyncGenerator
-from astrbot.core import logger
+"""回复动作 - 调用 LLM 生成并发送消息
 
+支持根据主思考传入的参数生成不同风格的回复。
+
+职责：
+1. 调用 LLM 生成回复（通过 AgentMindSubStage.call，完整流程）
+2. 发送消息到用户（AgentMindSubStage 自动处理）
+3. 保存 AI 回复到对话历史
+"""
+
+import json
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
+
+from astrbot.core import logger
 from astrbot.core.mind_sim import Action, ActionOutput
 from astrbot.core.mind_sim.private.actions.Reply.reply_prompts import (
     build_reply_prompt,
@@ -12,6 +22,9 @@ from astrbot.core.mind_sim.private.prompts import (
     build_history_prompt,
     build_temp_prompts_section,
 )
+
+if TYPE_CHECKING:
+    pass
 
 
 class ReplyAction(Action):
@@ -24,7 +37,7 @@ class ReplyAction(Action):
     description = """回复动作 - 调用 LLM 生成回复并发送 不要回复太频繁，像真人一样，能拒绝回复
 **回复完成后会自动触发下一轮思考**
 **自动调用 LLM 生成回复内容**：
-- reply_type: 正常回复(normal)/追加回复(append) 
+- reply_type: 正常回复(normal)/追加回复(append)
 - reply_guidance: 给指导方向，什么话题，传入给回复器的知识，内容等等，这是给另一个大模型进行专门回复的参考与指导
 - target: 追加回复时，要补充的原发言内容（仅 append 类型需要）
 - reason: 追加回复时，补充的原因（仅 append 类型需要）
@@ -32,8 +45,7 @@ class ReplyAction(Action):
 追加示例: {"reply_type": "append", "reply_guidance": "", "target": "今天天气不错", "reason": "忘了说温度"}
 """
     fixed_prompt = "正在生成回复"
-
-    priority = 100  # 高优先级
+    priority = 100
 
     usage_guide = """
     - 适用于需要 AI 生成回复的场景
@@ -44,13 +56,22 @@ class ReplyAction(Action):
 
     async def on_complete(self, params: dict) -> None:
         """完成后添加临时提示词"""
-        # 回复文本存在 state.data 里，不在启动参数 params 里
         text = self._state.data.get("reply_text", "")
         if text:
-            self.add_temp_prompt(f"已回复: {text} 提示：距离0秒的这条语句 则这是回复后调用思考，可以选择只等待，或者追加回复，避免频繁回复", rounds=5)
+            self.add_temp_prompt(
+                f"已回复: {text} 提示：距离0秒的这条语句 则这是回复后调用思考，可以选择只等待，或者追加回复，避免频繁回复",
+                rounds=5,
+            )
 
     async def run(self, params: dict) -> AsyncGenerator[ActionOutput, None]:
-        # 获取主思考传入的参数
+        """运行回复动作
+
+        流程：
+        1. 获取对话历史和上下文
+        2. 调用 LLM 生成回复
+        3. 发送消息到用户
+        4. 保存回复到历史
+        """
         reply_type = params.get("reply_type", "normal")
         reply_guidance = params.get("reply_guidance", "")
         target = params.get("target", "")
@@ -62,13 +83,13 @@ class ReplyAction(Action):
             data={"reply_type": reply_type},
         )
 
-        # 获取对话历史（用 prompts.py 的方式从数据库读取）
+        # 获取对话历史
         dialogue_history = await self._get_dialogue_history_formatted()
 
-        # 获取临时提醒（从 executor 读取，用 prompts.py 的格式化函数）
+        # 获取临时提醒
         temp_prompts_str = self._build_temp_prompts_formatted()
 
-        # 获取运行中的动作实例状态（用 prompts.py 的格式化函数）
+        # 获取运行中的动作实例状态
         running_actions_str = self._build_running_states_formatted()
 
         # 构建提示词
@@ -82,19 +103,25 @@ class ReplyAction(Action):
             temp_prompts=temp_prompts_str,
             running_actions=running_actions_str,
         )
-        # 橙色 ANSI 代码：\033[38;5;214m 或 \033[33m（黄色，接近橙色）
-        ORANGE = '\033[38;5;214m'
-        RESET = '\033[0m'
-        logger.debug(f"{ORANGE}[PrivateBrain] 回复提示词: {prompt}{RESET}")
 
-        # 调用 LLM 生成回复
+        ORANGE = "\033[38;5;214m"
+        RESET = "\033[0m"
+        logger.debug(f"{ORANGE}[ReplyAction] 回复提示词: {prompt}{RESET}")
+
+        # 调用 LLM 生成回复（与 internal.py 架构完全一致）
+        # 会自动处理：typing 状态、事件钩子、会话锁、流式/普通响应、保存历史
         self.update_state(progress="调用 LLM 生成回复中")
+        reply_text = ""
+
         try:
-            # 使用 reply 模型调用 LLM
-            response = await self.llm.call(
+            # send_to_platform=True：通过 PIPELINE_YIELD 桥接 pipeline 框架发送消息
+            # 自动处理 typing、hook、session lock
+            reply_text = await self.llm.call(
                 prompt=prompt,
                 role="reply",
+                send_to_platform=True,
             )
+
         except Exception as e:
             self.update_state(
                 progress="LLM 调用失败",
@@ -108,26 +135,27 @@ class ReplyAction(Action):
             return
 
         # 清理回复内容
-        response = self._clean_response(response)
+        reply_text = self._clean_response(reply_text)
 
-        if not response:
+        if not reply_text:
             self.update_state(progress="回复为空", prompt_contribution="LLM 返回空内容")
-            return
+            # return
+        else:
+            self.update_state(
+                progress="发送回复",
+                prompt_contribution=f"回复内容: {reply_text[:50]}...",
+                data={"reply_text": reply_text},
+            )
 
-        self.update_state(
-            progress="发送回复",
-            prompt_contribution=f"回复内容: {response[:50]}...",
-            data={"reply_text": response},
-        )
+        # 保存回复到历史（call 已通过 event.send 发送，这里只保存历史）
+        await self._save_reply_to_history(reply_text)
 
-        # 通过 event 发送回复（流式或非流式）
-        # await self._send_via_event(response)
-
-        # 发送回复到主思考（用于临时提示词）
+        # 通知主思考回复已完成，触发重新思考
         yield ActionOutput(
             action_name=self.instance_id or self.name,
-            type="reply",
-            content=response,
+            type="completed",
+            prompt=f"已回复: {reply_text}",
+            content=""
         )
 
         self.update_state(
@@ -136,8 +164,39 @@ class ReplyAction(Action):
             prompt_contribution=None,
         )
 
+    async def _save_reply_to_history(self, text: str) -> None:
+        """保存 AI 回复到对话历史
+
+        从 conv_manager 读取当前 history，追加 assistant 消息，然后更新。
+        """
+        if not self.ctx.conv_manager or not self.ctx.conversation_id:
+            logger.debug(
+                "[ReplyAction] 无法保存历史：缺少 conv_manager 或 conversation_id"
+            )
+            return
+
+        try:
+            conv = await self.ctx.conv_manager.get_conversation(
+                self.ctx.unified_msg_origin, self.ctx.conversation_id
+            )
+            if not conv:
+                logger.debug("[ReplyAction] 无法保存历史：对话不存在")
+                return
+
+            history = json.loads(conv.history) if conv.history else []
+            history.append({"role": "assistant", "content": text})
+
+            await self.ctx.conv_manager.update_conversation(
+                self.ctx.unified_msg_origin,
+                self.ctx.conversation_id,
+                history=history,
+            )
+            logger.debug(f"[ReplyAction] 已保存回复到历史，长度: {len(text)}")
+        except Exception as e:
+            logger.warning(f"[ReplyAction] 保存历史失败: {e}")
+
     async def _get_dialogue_history_formatted(self) -> str:
-        """用 prompts.py 的 build_history_prompt 获取格式化的对话历史"""
+        """获取格式化的对话历史"""
         if not self.ctx.conv_manager or not self.ctx.conversation_id:
             return "暂无对话历史"
 
@@ -152,7 +211,6 @@ class ReplyAction(Action):
             if not history:
                 return "暂无对话历史"
 
-            # 从聊天配置中获取消息条数
             chat_config = self.ctx.chat_config or {}
             message_length = chat_config.get("message_length", 10)
             if not isinstance(message_length, int) or message_length < 1:
@@ -163,41 +221,22 @@ class ReplyAction(Action):
             return "暂无对话历史"
 
     def _build_temp_prompts_formatted(self) -> str:
-        """用 prompts.py 的 build_temp_prompts_section 获取格式化的临时提醒"""
+        """获取格式化的临时提醒"""
         if not self._executor:
             return ""
-        # 不消耗轮数，只读取
         temp_contents = self._executor.tick_temp_prompts(consume_rounds=False)
         if not temp_contents:
             return ""
         return build_temp_prompts_section(temp_contents)
 
     def _build_running_states_formatted(self) -> str:
-        """用 prompts.py 的 build_action_states_prompt 获取格式化的动作实例状态"""
+        """获取格式化的动作实例状态"""
         if not self._executor:
             return ""
         running_states = self._executor.get_running_states()
         if not running_states:
             return ""
         return build_action_states_prompt(running_states)
-
-    async def _send_via_event(self, text: str):
-        """通过 event 发送回复"""
-        event = self.ctx.event
-        if not event:
-            return
-
-        try:
-            # 直接调用 event 发送消息
-            from astrbot.core.message import MessageChain
-
-            msg_chain = MessageChain().message(text)
-            await event.reply(msg_chain)
-        except Exception as e:
-            # 如果 event 发送失败，输出到日志
-            from astrbot.core import logger
-
-            logger.warning(f"[ReplyAction] 通过 event 发送失败: {e}")
 
     @staticmethod
     def _clean_response(text: str) -> str:

@@ -1,12 +1,12 @@
 """mind_sim 上下文状态"""
 
 from dataclasses import dataclass, field
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .messages import ActionState
 
 if TYPE_CHECKING:
-    from astrbot.core.conversation_mgr import ConversationManager
+    pass
 
 
 @dataclass
@@ -53,7 +53,8 @@ class MindContext:
     def get_running_actions(self) -> list[str]:
         """获取所有正在运行的动作名称"""
         return [
-            name for name, state in self.action_states.items()
+            name
+            for name, state in self.action_states.items()
             if state.status == "running"
         ]
 

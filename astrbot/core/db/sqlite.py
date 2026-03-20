@@ -47,6 +47,12 @@ class SQLiteDatabase(BaseDatabase):
 
     async def initialize(self) -> None:
         """Initialize the database by creating tables if they do not exist."""
+        # 延迟导入 MindSim 记忆模型，避免循环导入
+        from astrbot.core.mind_sim.memory.models import (  # noqa: F401
+            MindSimChatMemory,
+            MindSimPersonMemory,
+        )
+
         async with self.engine.begin() as conn:
             await conn.run_sync(SQLModel.metadata.create_all)
             await conn.execute(text("PRAGMA journal_mode=WAL"))
@@ -119,7 +125,9 @@ class SQLiteDatabase(BaseDatabase):
 
         if "personality_config" not in columns:
             await conn.execute(
-                text("ALTER TABLE personas ADD COLUMN personality_config JSON DEFAULT NULL")
+                text(
+                    "ALTER TABLE personas ADD COLUMN personality_config JSON DEFAULT NULL"
+                )
             )
         if "chat_config" not in columns:
             await conn.execute(
@@ -131,7 +139,9 @@ class SQLiteDatabase(BaseDatabase):
             )
         if "llm_model_config" not in columns:
             await conn.execute(
-                text("ALTER TABLE personas ADD COLUMN llm_model_config JSON DEFAULT NULL")
+                text(
+                    "ALTER TABLE personas ADD COLUMN llm_model_config JSON DEFAULT NULL"
+                )
             )
         if "is_advanced" not in columns:
             await conn.execute(

@@ -102,7 +102,7 @@ REPLY_TYPE_PROMPTS = {
 def build_reply_prompt(
     reply_type: str,
     reply_guidance: str,
-    ctx: "MindContext",
+    ctx: MindContext,
     dialogue_history: str,
     *,
     target: str = "",
@@ -145,6 +145,7 @@ def build_reply_prompt(
 
     # 当前时间
     from datetime import datetime
+
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # 聊天名称（从 unified_msg_origin 提取）

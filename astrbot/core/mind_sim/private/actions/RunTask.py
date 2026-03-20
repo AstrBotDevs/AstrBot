@@ -12,19 +12,16 @@
 - max_steps: 最大执行轮数，默认 10
 """
 
-import asyncio
-import json
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from astrbot.core import logger
+from astrbot.core.astr_agent_run_util import AgentRunner, run_agent
 from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
     build_main_agent,
 )
-from astrbot.core.astr_agent_run_util import AgentRunner, run_agent
-from astrbot.core.mind_sim import Action, ActionOutput, ActionSendMsg, ActionStopMsg
-from astrbot.core.mind_sim.context import MindContext
-
+from astrbot.core.mind_sim import Action, ActionOutput, ActionSendMsg
 
 TOOL_ASSISTANT_PROMPT = """你是一个工具助手。你的任务是根据用户的指令，使用各种工具来完成任务。
 
@@ -79,7 +76,7 @@ class RunTaskAction(Action):
 
     name = "run_task"
     description = """执行任务动作 - 使用 Agent 执行任务
-是解决不了的问题都可以调用这个动作试试看,这是你的手
+是解决不了的问题都可以调用这个动作试试看,这是原本的agent，有可能本身就是只想转诉给这个对话助手
 
 **重要：每执行完一轮会自动触发主思考**
 
@@ -96,7 +93,7 @@ class RunTaskAction(Action):
 4. 你可以通过 STOP 停止任务
 
 参数:
-{"task": "任务描述"(不能为空，传递给Agent的指令), "max_steps": 10}
+{"task": "任务描述"(不能为空，传递给Agent的指令,要详细), "max_steps": 10}
 """
     fixed_prompt = "执行任务中"
     priority = 10  # 高优先级，任务通常比较重要
@@ -125,7 +122,9 @@ class RunTaskAction(Action):
         """执行任务"""
         self._task_description = params.get("task", "")
         self._max_steps = params.get("max_steps", 10)
-        self._reply_to_platform = params.get("reply_to_platform", False)  # 从参数获取开关
+        self._reply_to_platform = params.get(
+            "reply_to_platform", False
+        )  # 从参数获取开关
         self._step_responses = []  # 重置
 
         if not self._task_description:
@@ -196,10 +195,14 @@ class RunTaskAction(Action):
             tool_call_timeout=settings.get("tool_call_timeout", 60),
             streaming_response=False,  # 禁用流式响应
             tool_schema_mode=settings.get("tool_schema_mode", "full"),
-            sanitize_context_by_modalities=settings.get("sanitize_context_by_modalities", False),
+            sanitize_context_by_modalities=settings.get(
+                "sanitize_context_by_modalities", False
+            ),
             kb_agentic_mode=conf.get("kb_agentic_mode", False),
             file_extract_enabled=settings.get("file_extract", {}).get("enable", False),
-            context_limit_reached_strategy=settings.get("context_limit_reached_strategy", "truncate_by_turns"),
+            context_limit_reached_strategy=settings.get(
+                "context_limit_reached_strategy", "truncate_by_turns"
+            ),
             llm_compress_instruction=settings.get("llm_compress_instruction", ""),
             llm_compress_keep_recent=settings.get("llm_compress_keep_recent", 4),
             max_context_length=settings.get("max_context_length", 128000),
@@ -208,7 +211,9 @@ class RunTaskAction(Action):
             safety_mode_strategy=settings.get("safety_mode_strategy", "system_prompt"),
             computer_use_runtime=settings.get("computer_use_runtime"),
             sandbox_cfg=settings.get("sandbox", {}),
-            add_cron_tools=settings.get("proactive_capability", {}).get("add_cron_tools", True),
+            add_cron_tools=settings.get("proactive_capability", {}).get(
+                "add_cron_tools", True
+            ),
             provider_settings=settings,
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
             timezone=conf.get("timezone"),
@@ -266,11 +271,13 @@ class RunTaskAction(Action):
             if content:
                 self._append_prompt_contribution(f"[Agent回复: {content}]")
                 # 存储到列表
-                self._step_responses.append({
-                    "step": step_idx,
-                    "type": "reply",
-                    "content": content,
-                })
+                self._step_responses.append(
+                    {
+                        "step": step_idx,
+                        "type": "reply",
+                        "content": content,
+                    }
+                )
                 self._pending_think_reason = f"Agent回复了: {content}..."
 
         elif resp_type == "done":
@@ -285,6 +292,7 @@ class RunTaskAction(Action):
             else:
                 self._append_prompt_contribution("[任务已完成]")
             self._pending_think_reason = "任务已完成"
+
     async def _run_task_loop(self) -> AsyncGenerator[ActionOutput, None]:
         """执行任务循环
 
@@ -362,7 +370,9 @@ class RunTaskAction(Action):
         if current:
             self.update_state(prompt_contribution=f"{current} {suffix}")
         else:
-            self.update_state(prompt_contribution=f"可以在合适的时候向聊天对象汇报进度:执行任务中： {self._task_description} {suffix}")
+            self.update_state(
+                prompt_contribution=f"可以在合适的时候向聊天对象汇报进度:执行任务中： {self._task_description} {suffix}"
+            )
 
     async def on_complete(self, params: dict) -> None:
         """完成后添加临时提示词（仅正常完成时调用）"""
@@ -371,10 +381,16 @@ class RunTaskAction(Action):
 
         # 2. 每次 Agent 回复
         if self._step_responses:
-            summary_parts.append(f"\nAgent 执行过程（共 {len(self._step_responses)} 轮）:")
+            summary_parts.append(
+                f"\nAgent 执行过程（共 {len(self._step_responses)} 轮）:"
+            )
             for i, response in enumerate(self._step_responses, 1):
                 # 截取前200字符避免过长
-                content = str(response)[:200] + "..." if len(str(response)) > 200 else str(response)
+                content = (
+                    str(response)[:200] + "..."
+                    if len(str(response)) > 200
+                    else str(response)
+                )
                 summary_parts.append(f"  第{i}轮: {content}")
 
         # 3. 最终结果
@@ -388,7 +404,9 @@ class RunTaskAction(Action):
         if self._task_completed:
             summary_parts.append("\n状态: 任务已完成")
         else:
-            summary_parts.append(f"\n状态: 已执行 {len(self._step_responses)} 轮，未完全完成")
+            summary_parts.append(
+                f"\n状态: 已执行 {len(self._step_responses)} 轮，未完全完成"
+            )
 
         # 将摘要添加为临时提示词（保留5轮思考）
         summary = "\n".join(summary_parts)

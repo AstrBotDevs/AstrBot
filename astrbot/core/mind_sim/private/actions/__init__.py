@@ -24,7 +24,7 @@ PRIVATE_ACTIONS = [
 ]
 
 
-def get_available_actions() -> list[Type[Action]]:
+def get_available_actions() -> list[type[Action]]:
     """获取可用的动作类列表"""
     return PRIVATE_ACTIONS
 

@@ -5,8 +5,8 @@
 
 from .brain import PrivateBrain
 from .prompts import (
-    DECISION_FORMAT_PROMPT,
     ACTION_OPTIONS_TEMPLATE,
+    DECISION_FORMAT_PROMPT,
     MAIN_THINKING_SYSTEM_PROMPT,
     build_action_options_prompt,
     build_action_states_prompt,

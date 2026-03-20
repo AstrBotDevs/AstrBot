@@ -1,4 +1,4 @@
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from astrbot.core.mind_sim import Action, ActionOutput
 
@@ -57,15 +57,20 @@ class EndConversationAction(Action):
         relpy = params.get("reply", None)
 
         if relpy:
+            # yield ActionOutput( #后续编辑使用，应该传入事件使用
+            #     action_name=self.instance_id or self.name,
+            #     type="reply",
+            #     content=f"{relpy}",
+            #     metadata={"no_think": True},  # 标记不触发重新思考
+            # )
             yield ActionOutput(
                 action_name=self.instance_id or self.name,
-                type="reply",
-                content=f"{relpy}",
-                metadata={"no_think": True},  # 标记不触发重新思考
+                type="noop",
+                content="对话已结束",
             )
         else:
             yield ActionOutput(
                 action_name=self.instance_id or self.name,
                 type="noop",
-                content=f"对话已结束",
+                content="对话已结束",
             )

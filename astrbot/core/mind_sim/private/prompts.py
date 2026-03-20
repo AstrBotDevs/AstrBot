@@ -113,8 +113,8 @@ MAIN_THINKING_SYSTEM_PROMPT = """你是{bot_name}，一个具有自主思考能�
 
 
 def build_main_thinking_prompt(
-    persona: "Personality",
-    ctx: "MindContext",
+    persona: Personality,
+    ctx: MindContext,
     action_infos: list[dict],
 ) -> str:
     """构建主思考系统提示词
@@ -251,9 +251,7 @@ def build_action_states_prompt(running_states: list[dict]) -> str:
                 lines.append(f"详情：{prompt_contribution}")
             data = state.get("data", {})
             if data:
-                key_data = {
-                    k: v for k, v in data.items() if not k.startswith("_")
-                }
+                key_data = {k: v for k, v in data.items() if not k.startswith("_")}
                 if key_data:
                     lines.append(f"数据：{key_data}")
         else:

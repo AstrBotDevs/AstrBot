@@ -2,11 +2,14 @@
 
 作为 AstrMessageEvent 和 MindSim 之间的桥梁（适配器），负责：
 1. 从 AstrMessageEvent 提取信息，构建 MindContext
-2. 创建 MindSimLLM 实例，传给 dispatcher
-3. 调用 dispatcher 启动 MindSim 并获取事件流
-4. 监听 MindEvent 事件流，将回复发送到消息平台
-5. 独立保存历史记录（收到用户消息保存一次，每条 AI 回复保存一次）
-6. 不控制事件生命周期（由主思考 Brain 决定何时结束）
+2. 调用 factory 启动 MindSim 并获取事件流
+3. 监听 MindEvent 事件流，将回复发送到消息平台
+4. 不控制事件生命周期（由主思考 Brain 决定何时结束）
+
+职责划分：
+- internal_mind：管理 Brain 生命周期、监听事件流
+- ReplyAction：生成回复、发送消息、保存 AI 回复到历史
+- MemoryManager：不在此阶段管理（由其他模块处理）
 """
 
 import json
@@ -14,12 +17,9 @@ from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
 from astrbot.core.message.components import Plain
-from astrbot.core.message.message_event_result import (
-    MessageChain,
-    MessageEventResult,
-    ResultContentType,
-)
-from astrbot.core.mind_sim import MindContext, MindSimLLM, get_dispatcher
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.mind_sim import MindContext
+from astrbot.core.mind_sim.dispatcher import PrivateBrainFactory
 from astrbot.core.mind_sim.messages import MindEventType
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -54,17 +54,20 @@ class InternalMindSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
+        # 每个 InternalMindSubStage 实例持有一个 BrainFactory
+        # 不再使用全局单例
+        self._brain_factory = PrivateBrainFactory()
 
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None, None]:
         """处理高级人格事件
 
-        每条回复独立发送和保存：
-        - 用户消息到达时立即保存历史
-        - MindSim 每产生一条回复就立即发送并保存
-        - 使用 type="break" 分隔每条回复
-        - 后续消息只投递到 Brain，不创建新的事件流
+        流程：
+        1. 获取或创建对话
+        2. 保存用户消息到历史
+        3. 获取/创建 Brain 实例（通过 PrivateBrainFactory）
+        4. 监听事件流，每条回复发送并保存
         """
         # 1. 获取或创建对话
         conversation = await _get_or_create_conversation(event, self.conv_manager)
@@ -73,117 +76,44 @@ class InternalMindSubStage(Stage):
         # 2. 保存用户消息到历史
         await self._save_user_message(event, conversation_id)
 
-        # 3. 获取 Provider 并创建 MindSimLLM
-        llm = self._create_llm(event)
-
-        # 4. 获取高级人格配置
+        # 3. 获取高级人格配置
         persona = await self._resolve_persona(event)
 
-        # 5. 构建 MindContext
+        # 4. 构建 MindContext
         mind_ctx = self._build_mind_context(event, conversation_id, persona)
 
-        # 6. 检查是否已有活跃的事件流
-        dispatcher = get_dispatcher()
-        instance = await dispatcher.get_instance(mind_ctx.session_id)
-        has_active_stream = instance is not None and instance.handler._stream_active
-
-        if has_active_stream:
-            # 已有活跃的事件流，只投递消息到 Brain
-            await instance.handler.handle_message(
-                event.message_str,
-                event.get_sender_id(),
-                event.get_sender_name(),
-            )
-            logger.debug(
-                f"[InternalMindSubStage] 已有活跃事件流，仅投递消息到 Brain: {event.message_str[:50]}"
-            )
-            # 不设置流式响应，不 yield，让 pipeline 直接结束
-            return
-
-        # 7. 首次调用，创建流式生成器
-        async def mind_event_to_message_chain_generator():
-            """将 MindEvent 流转换为 MessageChain 流，每条回复用 break 分隔"""
-            event_stream = dispatcher.dispatch(
-                ctx=mind_ctx,
-                message=event.message_str,
-                sender_id=event.get_sender_id(),
-                sender_name=event.get_sender_name(),
-                llm=llm,
-                persona=persona,
-            )
-
-            reply_count = 0
-            async for mind_event in event_stream:
-                if mind_event.type == MindEventType.REPLY:
-                    text = mind_event.data.get("text", "")
-                    if not text:
-                        continue
-
-                    reply_count += 1
-                    # 保存 AI 回复到对话历史（用于 LLM 上下文）
-                    await self._save_assistant_message(event, conversation_id, text)
-
-                    # 生成消息
-                    yield MessageChain([Plain(text)])
-
-                    # 发送 break 信号，让 chat.py 保存这条消息
-                    break_chain = MessageChain([Plain("")])
-                    break_chain.type = "break"
-                    yield break_chain
-
-                elif mind_event.type == MindEventType.TYPING:
-                    await event.send_typing()
-
-                elif mind_event.type == MindEventType.ERROR:
-                    error_msg = mind_event.data.get("message", "思考出错")
-                    logger.error(f"[InternalMindSubStage] MindSim 错误: {error_msg}")
-                    yield MessageChain([Plain(f"[错误] {error_msg}")])
-
-                    break_chain = MessageChain([Plain("")])
-                    break_chain.type = "break"
-                    yield break_chain
-
-                elif mind_event.type == MindEventType.END:
-                    logger.debug(f"[InternalMindSubStage] 收到 END 事件，思考结束，共 {reply_count} 条回复")
-                    break
-
-        # 8. 设置流式响应
-        event.set_result(
-            MessageEventResult()
-            .set_result_content_type(ResultContentType.STREAMING_RESULT)
-            .set_async_stream(mind_event_to_message_chain_generator())
+        # 5. 启动事件流，ReplyAction 通过 event.send() 直接发送回复
+        # dispatch() 内部已处理活跃事件流的消息投递
+        event_stream = self._brain_factory.dispatch(
+            ctx=mind_ctx,
+            message=event.message_str,
+            sender_id=event.get_sender_id(),
+            sender_name=event.get_sender_name(),
+            persona=persona,
         )
-        yield
 
-    def _create_llm(self, event: AstrMessageEvent) -> MindSimLLM | None:
-        """从 PipelineContext 获取 Provider 并创建 MindSimLLM"""
-        try:
-            provider = self.ctx.plugin_manager.context.get_using_provider(
-                umo=event.unified_msg_origin
-            )
-            if not provider:
-                logger.warning("[InternalMindSubStage] 未找到可用 Provider")
-                return None
+        async for mind_event in event_stream:
+            if mind_event.type == MindEventType.TYPING:
+                await event.send_typing()
+            elif mind_event.type == MindEventType.ERROR:
+                error_msg = mind_event.data.get("message", "思考出错")
+                logger.error(f"[InternalMindSubStage] MindSim 错误: {error_msg}")
+                await event.send(MessageChain([Plain(f"[错误] {error_msg}")]))
+            elif mind_event.type == MindEventType.PIPELINE_YIELD:
+                # AgentMindSubStage 请求 pipeline yield
+                # event.result 已由 AgentMindSubStage 设置好
+                done_event = mind_event.data.get("done_event")
+                logger.debug("[InternalMindSubStage] 收到 PIPELINE_YIELD，yield 给 pipeline")
+                yield  # 传递给 pipeline 框架，RespondStage 处理 event.result
+                # pipeline yield 返回后，通知 AgentMindSubStage 继续
+                if done_event:
+                    done_event.set()
+            elif mind_event.type == MindEventType.END:
+                logger.debug("[InternalMindSubStage] 收到 END 事件，思考结束")
+                break
 
-            provider_manager = self.ctx.plugin_manager.context.provider_manager
-
-            # 获取人格配置（如果有）
-            persona_config = getattr(event, "_persona_config", {}) or {}
-
-            if persona_config:
-                return MindSimLLM.from_persona_config(
-                    provider=provider,
-                    persona_config=persona_config,
-                    provider_manager=provider_manager,
-                )
-            else:
-                return MindSimLLM(
-                    provider_manager=provider_manager,
-                    default_provider=provider,
-                )
-        except Exception as e:
-            logger.error(f"[InternalMindSubStage] 创建 MindSimLLM 失败: {e}")
-            return None
+        return
+        yield  # noqa: 使函数保持 AsyncGenerator 类型
 
     def _build_mind_context(
         self,
@@ -232,12 +162,16 @@ class InternalMindSubStage(Stage):
     async def _save_user_message(
         self, event: AstrMessageEvent, conversation_id: str
     ) -> None:
-        """保存用户消息到历史（追加模式）"""
+        """保存用户消息到历史"""
         try:
             conversation = await self.conv_manager.get_conversation(
                 event.unified_msg_origin, conversation_id
             )
-            history = json.loads(conversation.history) if conversation and conversation.history else []
+            history = (
+                json.loads(conversation.history)
+                if conversation and conversation.history
+                else []
+            )
             history.append({"role": "user", "content": event.message_str})
             await self.conv_manager.update_conversation(
                 event.unified_msg_origin,
@@ -246,21 +180,3 @@ class InternalMindSubStage(Stage):
             )
         except Exception as e:
             logger.warning(f"[InternalMindSubStage] 保存用户消息失败: {e}")
-
-    async def _save_assistant_message(
-        self, event: AstrMessageEvent, conversation_id: str, content: str
-    ) -> None:
-        """保存 AI 回复到历史（追加模式）"""
-        try:
-            conversation = await self.conv_manager.get_conversation(
-                event.unified_msg_origin, conversation_id
-            )
-            history = json.loads(conversation.history) if conversation and conversation.history else []
-            history.append({"role": "assistant", "content": content})
-            await self.conv_manager.update_conversation(
-                event.unified_msg_origin,
-                conversation_id,
-                history=history,
-            )
-        except Exception as e:
-            logger.warning(f"[InternalMindSubStage] 保存 AI 回复失败: {e}")

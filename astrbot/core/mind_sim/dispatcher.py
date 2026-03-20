@@ -1,34 +1,33 @@
-"""MindSim 调度器 - 负责将消息分发到对应的处理模块
+"""MindSim 简化的 Brain 工厂模块
 
-根据会话类型（私聊/群聊）分发到不同的处理模块：
-- 私聊：mind_sim.private
-- 群聊：mind_sim.group（暂未实现）
+只负责根据会话类型创建/管理 Brain 实例，不再是全局单例。
+由 internal_mind 持有和管理。
 
-调度器还负责：
-- 维护会话状态
-- 管理 MindSim 实例的生命周期
-- 处理消息的输入输出
-- 返回事件流供外部监听
+调度逻辑：
+- 私聊：mind_sim.private.brain.PrivateBrain
+- 群聊：降级为私聊处理（暂未实现群聊）
 """
 
 import asyncio
 from collections.abc import AsyncGenerator
-from typing import Optional
 
 from astrbot.core import logger
 from astrbot.core.mind_sim.context import MindContext
-from astrbot.core.mind_sim.llm import MindSimLLM
 from astrbot.core.mind_sim.messages import MindEvent
 
 
-class MindSimDispatcher:
-    """MindSim 调度器
+class PrivateBrainFactory:
+    """简化的 Brain 工厂
 
-    负责将消息分发到对应的处理模块，并管理 MindSim 实例。
+    不再是全局单例，由 internal_mind 持有。
+    职责：
+    1. 根据 session_id 管理 Brain 实例映射
+    2. 创建 Brain 时根据会话类型选择处理模块（私聊/群聊）
+    3. 提供 dispatch 方法启动事件流
     """
 
     def __init__(self):
-        self._instances: dict[str, "MindSimInstance"] = {}
+        self._instances: dict = {}
         self._lock = asyncio.Lock()
 
     async def dispatch(
@@ -37,18 +36,16 @@ class MindSimDispatcher:
         message: str,
         sender_id: str,
         sender_name: str,
-        llm: Optional[MindSimLLM] = None,
-        persona: Optional[dict] = None,
+        persona: dict | None = None,
     ) -> AsyncGenerator[MindEvent, None]:
-        """分发消息到对应的处理模块
+        """分发消息到对应的 Brain
 
         Args:
             ctx: MindContext 会话上下文
             message: 用户消息
             sender_id: 发送者 ID
             sender_name: 发送者名称
-            llm: MindSimLLM 实例（首次创建 Brain 时使用）
-            persona: Personality 高级人格配置
+            persona: 高级人格配置
 
         Yields:
             MindEvent: 事件流
@@ -56,98 +53,46 @@ class MindSimDispatcher:
         session_id = ctx.session_id
         is_new_instance = False
 
-        # 获取或创建实例
         async with self._lock:
             if session_id not in self._instances:
                 # 根据会话类型选择处理模块
                 if ctx.is_private:
                     from .private.brain import PrivateBrain
 
-                    handler = PrivateBrain(ctx, persona=persona, llm=llm)
-                    logger.info(f"[Dispatcher] 创建私聊 Brain 实例: {session_id}")
+                    handler = PrivateBrain(ctx, persona=persona)
+                    handler.init_llm(ctx.event, ctx.plugin_context, persona)
+                    logger.info(f"[BrainFactory] 创建私聊 Brain 实例: {session_id}")
                 else:
-                    # 群聊暂未实现，使用私聊处理
+                    # 群聊暂未实现，降级为私聊处理
                     logger.warning(
-                        f"[Dispatcher] 群聊处理暂未实现，降级为私聊处理: {session_id}"
+                        f"[BrainFactory] 群聊处理暂未实现，降级为私聊处理: {session_id}"
                     )
                     from .private.brain import PrivateBrain
 
-                    handler = PrivateBrain(ctx, persona=persona, llm=llm)
+                    handler = PrivateBrain(ctx, persona=persona)
+                    handler.init_llm(ctx.event, ctx.plugin_context, persona)
                     handler._is_fallback = True
 
-                self._instances[session_id] = MindSimInstance(
-                    session_id=session_id,
-                    handler=handler,
-                )
+                self._instances[session_id] = handler
                 is_new_instance = True
             else:
-                instance = self._instances[session_id]
-                # 如果传入了新的 llm，更新已有实例
-                if llm and not instance.handler.llm:
-                    instance.handler.set_llm(llm)
-
-            instance = self._instances[session_id]
+                handler = self._instances[session_id]
 
         # 发送消息到 Brain
-        await instance.handler.handle_message(message, sender_id, sender_name)
+        await handler.handle_message(message, sender_id, sender_name)
 
         # 只有首次创建实例或没有活跃的事件流时才监听
-        # 已有实例的后续消息只投递，不创建新的事件流监听器
-        if is_new_instance or not instance.handler._stream_active:
-            async for event in instance.handler.get_event_stream():
+        if is_new_instance or not handler._stream_active:
+            async for event in handler.get_event_stream():
                 yield event
         else:
-            # 已有活跃的事件流在监听，只需投递消息即可
-            logger.debug(f"[Dispatcher] 实例 {session_id} 已有活跃事件流，仅投递消息")
-
-    async def get_instance(self, session_id: str) -> Optional["MindSimInstance"]:
-        """获取已存在的实例
-
-        Args:
-            session_id: 会话 ID
-
-        Returns:
-            MindSimInstance 或 None
-        """
-        return self._instances.get(session_id)
-
-    async def remove_instance(self, session_id: str):
-        """移除实例
-
-        Args:
-            session_id: 会话 ID
-        """
-        async with self._lock:
-            if session_id in self._instances:
-                instance = self._instances.pop(session_id)
-                await instance.handler.stop()
-                logger.info(f"[Dispatcher] 移除实例: {session_id}")
+            logger.debug(f"[BrainFactory] 实例 {session_id} 已有活跃事件流，仅投递消息")
 
     async def stop_all(self):
-        """停止所有实例"""
+        """停止所有 Brain 实例"""
         async with self._lock:
             for session_id, instance in self._instances.items():
-                await instance.handler.stop()
-                logger.info(f"[Dispatcher] 停止实例: {session_id}")
+                await instance.stop()
+                logger.info(f"[BrainFactory] 停止实例: {session_id}")
             self._instances.clear()
-            logger.info("[Dispatcher] 已停止所有实例")
-
-
-class MindSimInstance:
-    """MindSim 实例"""
-
-    def __init__(self, session_id: str, handler):
-        self.session_id = session_id
-        self.handler = handler
-
-
-# 全局调度器实例
-_dispatcher: Optional[MindSimDispatcher] = None
-
-
-def get_dispatcher() -> MindSimDispatcher:
-    """获取全局调度器实例"""
-    global _dispatcher
-    if _dispatcher is None:
-        _dispatcher = MindSimDispatcher()
-    return _dispatcher
+            logger.info("[BrainFactory] 已停止所有实例")

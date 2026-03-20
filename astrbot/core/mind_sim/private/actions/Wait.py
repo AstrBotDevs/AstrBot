@@ -1,5 +1,5 @@
-from typing import AsyncGenerator
 import asyncio
+from collections.abc import AsyncGenerator
 
 from astrbot.core.mind_sim import Action, ActionOutput, ActionStopMsg
 
@@ -41,12 +41,12 @@ class WaitAction(Action):
     async def on_complete(self, params: dict) -> None:
         """完成后添加临时提示词（仅正常完成时调用）"""
         # 从 state 中获取实际等待时间
-        wait_time = self._state.data.get("actual_wait_time",0)
+        wait_time = self._state.data.get("actual_wait_time", 0)
         if wait_time:
             self.add_temp_prompt(
                 f"已等待: {int(wait_time)}秒 ，如果有重复的等待，其实可以调用空时间啥也不用干",
                 rounds=5,
-                min_duration=30.0
+                min_duration=30.0,
             )
 
     async def run(self, params: dict) -> AsyncGenerator[ActionOutput, None]:
