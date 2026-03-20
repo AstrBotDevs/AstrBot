@@ -29,31 +29,21 @@ class AstrbotPaths:
 
     def __init__(self) -> None:
         self._root_override: Path | None = None
-
-        # Load .env candidates early to avoid environment-dependent initialization issues.
-        # This is intentionally conservative and best-effort: failure to find or parse a .env
-        # must never raise during import time.
-
-        # Use python-dotenv if available; do not make it a hard dependency at import-time.
         from dotenv import load_dotenv
 
         env_candidates = []
 
-        # 1) packaged project root .env (best effort)
-        with resources.as_file(resources.files("astrbot")) as pkg_path:
-            pkg_env = Path(pkg_path) / ".env"
-            env_candidates.append(pkg_env)
 
-            # 2) current working directory .env
-            env_candidates.append(Path.cwd() / ".env")
+        # 1) current working directory .env
+        env_candidates.append(Path.cwd() / ".env")
 
-            # 3) ASTRBOT_ROOT/.env if ASTRBOT_ROOT already set in the environment
-            root_env = os.environ.get("ASTRBOT_ROOT")
-            if root_env:
-                env_candidates.append(Path(root_env) / ".env")
-            for p in env_candidates:
-                if p.exists():
-                    load_dotenv(dotenv_path=str(p), override=False)
+        # 2) ASTRBOT_ROOT/.env if ASTRBOT_ROOT already set in the environment
+        root_env = os.environ.get("ASTRBOT_ROOT")
+        if root_env:
+            env_candidates.append(Path(root_env) / ".env")
+        for p in env_candidates:
+            if p.exists():
+                load_dotenv(dotenv_path=str(p), override=False)
 
     def _resolve_root(self) -> Path:
         if path := os.environ.get("ASTRBOT_ROOT"):
