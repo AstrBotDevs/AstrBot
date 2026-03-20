@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 
@@ -65,28 +66,59 @@ class ContextMemoryMigrationAdapter(Protocol):
         ...
 
 
-_context_memory_evolution_backend: ContextMemoryEvolutionBackend | None = None
-_context_memory_migration_adapter: ContextMemoryMigrationAdapter | None = None
+@dataclass
+class ExperimentalContextMemoryBackends:
+    """Container for optional experimental backends."""
 
+    evolution_backend: ContextMemoryEvolutionBackend | None = None
+    migration_adapter: ContextMemoryMigrationAdapter | None = None
+
+
+_backends = ExperimentalContextMemoryBackends()
+
+
+def configure_context_memory_backends(
+    *,
+    evolution_backend: ContextMemoryEvolutionBackend | None = None,
+    migration_adapter: ContextMemoryMigrationAdapter | None = None,
+) -> None:
+    """Configure optional experimental backends in one cohesive entry point."""
+    _backends.evolution_backend = evolution_backend
+    _backends.migration_adapter = migration_adapter
+
+
+def get_experimental_context_memory_backends() -> ExperimentalContextMemoryBackends:
+    return _backends
 
 def set_context_memory_evolution_backend(
     backend: ContextMemoryEvolutionBackend | None,
 ) -> None:
-    global _context_memory_evolution_backend
-    _context_memory_evolution_backend = backend
+    _backends.evolution_backend = backend
 
 
 def get_context_memory_evolution_backend() -> ContextMemoryEvolutionBackend | None:
-    return _context_memory_evolution_backend
+    return _backends.evolution_backend
 
 
 def set_context_memory_migration_adapter(
     adapter: ContextMemoryMigrationAdapter | None,
 ) -> None:
-    global _context_memory_migration_adapter
-    _context_memory_migration_adapter = adapter
+    _backends.migration_adapter = adapter
 
 
 def get_context_memory_migration_adapter() -> ContextMemoryMigrationAdapter | None:
-    return _context_memory_migration_adapter
+    return _backends.migration_adapter
 
+
+__all__ = [
+    "VectorLongTermMemoryRetriever",
+    "ContextMemoryEvolutionBackend",
+    "ContextMemoryMigrationAdapter",
+    "ExperimentalContextMemoryBackends",
+    "configure_context_memory_backends",
+    "get_experimental_context_memory_backends",
+    "set_context_memory_evolution_backend",
+    "get_context_memory_evolution_backend",
+    "set_context_memory_migration_adapter",
+    "get_context_memory_migration_adapter",
+]
