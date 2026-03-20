@@ -53,3 +53,7 @@ class CoreCapabilityBridge(
         self._register_kb_capabilities()
         self._register_system_capabilities()
         self._register_registry_capabilities()
+        self._register_db_capabilities()
+        self._register_memory_capabilities()
+        self._register_http_capabilities()
+        self._register_metadata_capabilities()
