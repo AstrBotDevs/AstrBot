@@ -1758,8 +1758,7 @@ CONFIG_METADATA_2 = {
                     "ollama_disable_thinking": {
                         "description": "关闭思考模式",
                         "type": "bool",
-                        "hint": "仅对 Ollama 提供商生效。启用后会通过 OpenAI 兼容接口注入 reasoning_effort=none，以稳定关闭 thinking；比 think:false 更可靠。",
-                        "condition": {"provider": "ollama"},
+                        "hint": "关闭 Ollama 思考模式。",
                     },
                     "custom_extra_body": {
                         "description": "自定义请求体参数",

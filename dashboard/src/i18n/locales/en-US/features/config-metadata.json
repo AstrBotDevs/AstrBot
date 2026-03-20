@@ -1070,7 +1070,7 @@
       },
       "ollama_disable_thinking": {
         "description": "Disable thinking mode",
-        "hint": "Only applies to the Ollama provider. When enabled, AstrBot injects reasoning_effort=none on the OpenAI-compatible endpoint, which is more reliable than think:false."
+        "hint": "Close Ollama thinking mode."
       },
       "custom_extra_body": {
         "description": "Custom request body parameters",
