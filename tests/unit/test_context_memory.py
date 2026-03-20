@@ -7,11 +7,7 @@ from astrbot.core.context_memory import (
 )
 from astrbot.core.context_memory_experimental_backends import (
     configure_context_memory_backends,
-    get_context_memory_evolution_backend,
-    get_context_memory_migration_adapter,
     get_experimental_context_memory_backends,
-    set_context_memory_evolution_backend,
-    set_context_memory_migration_adapter,
 )
 
 
@@ -34,17 +30,13 @@ def test_context_memory_reserved_backend_registration() -> None:
         migration_adapter=adapter,  # type: ignore[arg-type]
     )
 
-    assert get_context_memory_evolution_backend() is backend
-    assert get_context_memory_migration_adapter() is adapter
     backends = get_experimental_context_memory_backends()
     assert backends.evolution_backend is backend
     assert backends.migration_adapter is adapter
 
-    set_context_memory_evolution_backend(None)
-    set_context_memory_migration_adapter(None)
-
-    assert get_context_memory_evolution_backend() is None
-    assert get_context_memory_migration_adapter() is None
+    configure_context_memory_backends(evolution_backend=None, migration_adapter=None)
+    assert get_experimental_context_memory_backends().evolution_backend is None
+    assert get_experimental_context_memory_backends().migration_adapter is None
 
 
 def test_context_memory_defaults_follow_single_source() -> None:

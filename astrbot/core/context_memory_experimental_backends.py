@@ -90,26 +90,6 @@ def configure_context_memory_backends(
 def get_experimental_context_memory_backends() -> ExperimentalContextMemoryBackends:
     return _backends
 
-def set_context_memory_evolution_backend(
-    backend: ContextMemoryEvolutionBackend | None,
-) -> None:
-    _backends.evolution_backend = backend
-
-
-def get_context_memory_evolution_backend() -> ContextMemoryEvolutionBackend | None:
-    return _backends.evolution_backend
-
-
-def set_context_memory_migration_adapter(
-    adapter: ContextMemoryMigrationAdapter | None,
-) -> None:
-    _backends.migration_adapter = adapter
-
-
-def get_context_memory_migration_adapter() -> ContextMemoryMigrationAdapter | None:
-    return _backends.migration_adapter
-
-
 __all__ = [
     "VectorLongTermMemoryRetriever",
     "ContextMemoryEvolutionBackend",
@@ -117,8 +97,4 @@ __all__ = [
     "ExperimentalContextMemoryBackends",
     "configure_context_memory_backends",
     "get_experimental_context_memory_backends",
-    "set_context_memory_evolution_backend",
-    "get_context_memory_evolution_backend",
-    "set_context_memory_migration_adapter",
-    "get_context_memory_migration_adapter",
 ]
