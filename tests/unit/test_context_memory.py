@@ -6,7 +6,7 @@ from astrbot.core.context_memory import (
     normalize_context_memory_settings,
 )
 from astrbot.core.context_memory_experimental_backends import (
-    make_experimental_context_memory_backends,
+    ContextMemoryBackend,
 )
 
 
@@ -20,20 +20,38 @@ def test_normalize_context_memory_settings_initializes_fresh_pinned_memories() -
     assert second["pinned_memories"] == []
 
 
-def test_context_memory_reserved_backend_registration() -> None:
-    backend = object()
-    adapter = object()
+def test_context_memory_unified_backend_protocol_shape() -> None:
+    class _Backend:
+        async def evolve(
+            self,
+            *,
+            unified_msg_origin: str,
+            turns: list[str],
+            metadata=None,
+        ) -> dict:
+            return {"ok": True}
 
-    backends = make_experimental_context_memory_backends(
-        evolution_backend=backend,  # type: ignore[arg-type]
-        migration_adapter=adapter,  # type: ignore[arg-type]
-    )
-    assert backends.evolution_backend is backend
-    assert backends.migration_adapter is adapter
+        async def retrieve(
+            self,
+            *,
+            unified_msg_origin: str,
+            query: str,
+            top_k: int,
+        ) -> list[str]:
+            return []
 
-    empty_backends = make_experimental_context_memory_backends()
-    assert empty_backends.evolution_backend is None
-    assert empty_backends.migration_adapter is None
+        async def export_session(self, *, unified_msg_origin: str) -> dict:
+            return {}
+
+        async def import_session(
+            self,
+            *,
+            unified_msg_origin: str,
+            payload: dict,
+        ) -> None:
+            return None
+
+    assert isinstance(_Backend(), ContextMemoryBackend)
 
 
 def test_context_memory_defaults_follow_single_source() -> None:

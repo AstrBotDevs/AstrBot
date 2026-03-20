@@ -1,6 +1,6 @@
 """Compatibility re-exports for experimental context-memory backend hooks.
 
-Experimental protocol and bundle factory definitions live in
+Experimental protocol definitions live in
 `context_memory_experimental_backends.py` to keep extension points isolated from
 stable context-memory config logic.
 """
