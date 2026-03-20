@@ -106,7 +106,7 @@ async def initialize_astrbot(
     if admin_password is not None:
         raise click.ClickException(
             "--admin-password is no longer supported during init. "
-            "Run 'astrbot conf password' after initialization."
+            "Run 'astrbot conf admin' after initialization."
         )
 
     effective_admin_username = (
@@ -128,7 +128,7 @@ async def initialize_astrbot(
     click.echo(f"Configured dashboard admin username: {effective_admin_username}")
     click.echo(
         "Dashboard password is not initialized for interactive use. "
-        "Run 'astrbot conf password' before the first login."
+        "Run 'astrbot conf admin' before the first login."
     )
 
     if not backend_only and (
@@ -161,7 +161,7 @@ async def initialize_astrbot(
     "-p",
     "--admin-password",
     type=str,
-    help="Deprecated. Run `astrbot conf password` after initialization.",
+    help="Deprecated. Run `astrbot conf admin` after initialization.",
 )
 @click.option(
     "--root",

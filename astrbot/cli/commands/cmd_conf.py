@@ -16,28 +16,15 @@ import zoneinfo
 from collections.abc import Callable
 from typing import Any
 
+import argon2.exceptions as argon2_exceptions
 import click
-
-try:
-    from argon2 import PasswordHasher
-    from argon2 import exceptions as argon2_exceptions
-
-    _HAS_ARGON2 = True
-except Exception:
-    PasswordHasher = None  # type: ignore[assignment]
-    argon2_exceptions = None  # type: ignore[assignment]
-    _HAS_ARGON2 = False
+from argon2 import PasswordHasher
 
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import astrbot_paths
 
-_PASSWORD_HASHER: Any = None
-if _HAS_ARGON2 and PasswordHasher is not None:
-    try:
-        _PASSWORD_HASHER = PasswordHasher()
-    except Exception:
-        _PASSWORD_HASHER = None
-        _HAS_ARGON2 = False
+_PASSWORD_HASHER = PasswordHasher()
+
 
 PBKDF2_SALT = b"astrbot-dashboard"
 PBKDF2_ITER = 200_000
@@ -53,7 +40,7 @@ def hash_dashboard_password_secure(value: str) -> str:
     Stored format:
         $argon2id$... (if Argon2 available) or pbkdf2_sha256 fallback.
     """
-    if _HAS_ARGON2 and _PASSWORD_HASHER is not None:
+    if _PASSWORD_HASHER is not None:
         try:
             return _PASSWORD_HASHER.hash(value)
         except Exception as e:
@@ -77,8 +64,6 @@ def verify_dashboard_password(value: str, stored_hash: str) -> bool:
         return False
 
     if stored_hash.startswith("$argon2"):
-        if not _HAS_ARGON2 or _PASSWORD_HASHER is None:
-            return False
         try:
             return _PASSWORD_HASHER.verify(stored_hash, value)
         except argon2_exceptions.VerifyMismatchError:
@@ -360,13 +345,13 @@ def get_config(key: str | None = None) -> None:
                 pass
 
 
-@conf.command(name="password")
-@click.option("-u", "--username", type=str, help="Update dashboard username as well")
+@conf.command(name="admin")
+@click.option("-u", "--username", type=str, help="Update admain username as well")
 @click.option(
     "-p",
     "--password",
     type=str,
-    help="Set dashboard password directly without interactive prompt",
+    help="Set admain password directly without interactive prompt",
 )
 def set_dashboard_password(username: str | None, password: str | None) -> None:
     """
