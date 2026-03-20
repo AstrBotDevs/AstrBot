@@ -6,22 +6,22 @@
 3. 压缩器的功能
 """
 
-import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import AsyncMock, Mock
 
-from astrbot.core.agent.context.token_counter import (
-    EstimateTokenCounter,
-    PER_MESSAGE_OVERHEAD,
-)
+import pytest
+
 from astrbot.core.agent.context.compressor import (
-    TruncateByTurnsCompressor,
     LLMSummaryCompressor,
-    split_history,
+    TruncateByTurnsCompressor,
     _generate_summary_cache_key,
+    split_history,
 )
-from astrbot.core.agent.context.manager import ContextManager
 from astrbot.core.agent.context.config import ContextConfig
+from astrbot.core.agent.context.manager import ContextManager
+from astrbot.core.agent.context.token_counter import (
+    PER_MESSAGE_OVERHEAD,
+    EstimateTokenCounter,
+)
 from astrbot.core.agent.message import Message
 
 
@@ -84,15 +84,15 @@ class TestEstimateTokenCounter:
             Message(role="user", content="测试消息"),
             Message(role="assistant", content="测试回复"),
         ]
-        
+
         # 第一次计数
         tokens1 = self.counter.count_tokens(messages)
-        
+
         # 第二次计数应该使用缓存
         tokens2 = self.counter.count_tokens(messages)
-        
+
         assert tokens1 == tokens2
-        
+
         # 检查缓存统计
         stats = self.counter.get_cache_stats()
         assert stats["hits"] >= 1
@@ -107,10 +107,10 @@ class TestEstimateTokenCounter:
             Message(role="user", content="消息2"),
             Message(role="assistant", content="回复2"),
         ]
-        
+
         key1 = self.counter._get_cache_key(messages1)
         key2 = self.counter._get_cache_key(messages2)
-        
+
         assert key1 != key2
 
     def test_same_messages_same_cache_key(self):
@@ -123,20 +123,20 @@ class TestEstimateTokenCounter:
             Message(role="user", content="相同消息"),
             Message(role="assistant", content="相同回复"),
         ]
-        
+
         key1 = self.counter._get_cache_key(messages1)
         key2 = self.counter._get_cache_key(messages2)
-        
+
         assert key1 == key2
 
     def test_cache_clear(self):
         """测试缓存清除。"""
         messages = [Message(role="user", content="测试")]
         self.counter.count_tokens(messages)
-        
+
         # 清除缓存
         self.counter.clear_cache()
-        
+
         stats = self.counter.get_cache_stats()
         assert stats["hits"] == 0
         assert stats["cache_size"] == 0
@@ -183,9 +183,9 @@ class TestSplitHistory:
             Message(role="user", content="User 3"),
             Message(role="assistant", content="Assistant 3"),
         ]
-        
+
         system, to_summarize, recent = split_history(messages, keep_recent=2)
-        
+
         assert len(system) == 1  # system message
         assert len(recent) >= 2  # 至少保留最近的消息
 
@@ -195,9 +195,9 @@ class TestSplitHistory:
             Message(role="user", content="User 1"),
             Message(role="assistant", content="Assistant 1"),
         ]
-        
+
         system, to_summarize, recent = split_history(messages, keep_recent=4)
-        
+
         assert len(to_summarize) == 0  # 没有需要摘要的消息
         assert len(recent) == 2
 
@@ -215,10 +215,10 @@ class TestGenerateSummaryCacheKey:
             Message(role="user", content="用户消息2"),
             Message(role="assistant", content="助手回复2"),
         ]
-        
+
         key1 = _generate_summary_cache_key(messages1)
         key2 = _generate_summary_cache_key(messages2)
-        
+
         assert key1 != key2
 
     def test_same_history_same_key(self):
@@ -231,10 +231,10 @@ class TestGenerateSummaryCacheKey:
             Message(role="user", content="相同消息"),
             Message(role="assistant", content="相同回复"),
         ]
-        
+
         key1 = _generate_summary_cache_key(messages1)
         key2 = _generate_summary_cache_key(messages2)
-        
+
         assert key1 == key2
 
 
@@ -246,7 +246,7 @@ class TestLLMSummaryCompressor:
         self.mock_provider = Mock()
         self.mock_provider.text_chat = AsyncMock()
         self.mock_provider.text_chat.return_value = Mock(completion_text="这是一段摘要。")
-        
+
         self.compressor = LLMSummaryCompressor(
             provider=self.mock_provider,
             keep_recent=2
@@ -264,9 +264,9 @@ class TestLLMSummaryCompressor:
             Message(role="user", content="User 3"),
             Message(role="assistant", content="Assistant 3"),
         ]
-        
+
         result = await self.compressor(messages)
-        
+
         # 验证摘要已生成
         assert len(result) >= 3
         # 验证 LLM 被调用
@@ -282,13 +282,13 @@ class TestLLMSummaryCompressor:
             Message(role="user", content="User 2"),
             Message(role="assistant", content="Assistant 2"),
         ]
-        
+
         # 第一次调用
         await self.compressor(messages)
-        
+
         # 第二次调用应该使用缓存
         await self.compressor(messages)
-        
+
         # LLM 只应该被调用一次
         assert self.mock_provider.text_chat.call_count == 1
 
@@ -311,9 +311,9 @@ class TestContextManager:
         messages = [
             Message(role="user", content="短消息"),
         ]
-        
+
         result = await self.manager.process(messages)
-        
+
         assert len(result) == 1
 
     @pytest.mark.asyncio
@@ -324,19 +324,19 @@ class TestContextManager:
         for i in range(50):
             messages.append(Message(role="user", content=f"用户消息 {i} " * 50))
             messages.append(Message(role="assistant", content=f"助手回复 {i} " * 50))
-        
+
         # 设置较小的 max_context_tokens 以触发压缩
         self.config.max_context_tokens = 100
-        
+
         result = await self.manager.process(messages)
-        
+
         # 验证消息被压缩
         assert len(result) < len(messages)
 
     def test_get_stats(self):
         """测试获取统计信息。"""
         stats = self.manager.get_stats()
-        
+
         assert "compression_count" in stats
         assert "last_token_count" in stats
         assert "last_messages_fingerprint" in stats
@@ -344,9 +344,9 @@ class TestContextManager:
     def test_reset_stats(self):
         """测试重置统计信息。"""
         self.manager._compression_count = 5
-        
+
         self.manager.reset_stats()
-        
+
         assert self.manager._compression_count == 0
         assert self.manager._last_token_count is None
         assert self.manager._last_messages_fingerprint is None
