@@ -945,6 +945,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     func_tool=param_subset,
                     model=self.req.model,
                     session_id=self.req.session_id,
+                    extra_user_content_parts=self.req.extra_user_content_parts,
                 )
                 if requery_resp:
                     llm_resp = requery_resp
