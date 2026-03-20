@@ -21,9 +21,6 @@ import anyio
 
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
 
-_BUNDLED_DIST = resources.files("astrbot") / "dashboard" / "dist"
-
-
 class AstrbotPaths:
     """Astrbot 项目路径管理类"""
 
@@ -108,6 +105,10 @@ class AstrbotPaths:
         except FileNotFoundError:
             return None
 
+    @property
+    def bundled_dist(self) -> Path
+        return self.project_root / "dashboard" / "dist"
+    
     async def async_dashboard_version(self) -> str | None:
         try:
             # anyio.open_file returns a coroutine that yields an async file object.
