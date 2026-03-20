@@ -218,6 +218,8 @@ def run(
         # Mark CLI execution
         os.environ["ASTRBOT_CLI"] = "1"
 
+        from astrbot.core.utils.astrbot_path import astrbot_paths
+
         # Resolve astrbot_root with the following precedence:
         # 1. CLI --root parameter (local variable `root`)
         # 2. ASTRBOT_ROOT environment variable (possibly from .env or parsed service config)
@@ -228,8 +230,6 @@ def run(
         elif os.environ.get("ASTRBOT_ROOT"):
             astrbot_root = Path(os.environ["ASTRBOT_ROOT"])
         else:
-            from astrbot.core.utils.astrbot_path import astrbot_paths
-
             astrbot_root = astrbot_paths.root
 
         if not astrbot_paths.is_root:
