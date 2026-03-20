@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from ...._invocation_context import current_caller_plugin_id
+from ...._memory_backend import PluginMemoryBackend
 from ...._memory_utils import (
     cosine_similarity,
     extract_memory_text,
@@ -17,6 +19,17 @@ from ..bridge_base import CapabilityRouterBridgeBase
 
 
 class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
+    def _memory_plugin_id(self) -> str:
+        plugin_id = current_caller_plugin_id()
+        return str(plugin_id).strip() or "__anonymous__"
+
+    def _memory_backend_for_plugin(self, plugin_id: str) -> PluginMemoryBackend:
+        backend = self._memory_backends.get(plugin_id)
+        if backend is None:
+            backend = PluginMemoryBackend(self._system_data_root / plugin_id)
+            self._memory_backends[plugin_id] = backend
+        return backend
+
     @staticmethod
     def _is_ttl_memory_entry(value: Any) -> bool:
         """判断存储值是否使用了 TTL 包装结构。
@@ -356,12 +369,14 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
     async def _memory_search(
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
+        plugin_id = self._memory_plugin_id()
         query = str(payload.get("query", ""))
         mode = str(payload.get("mode", "auto")).strip().lower() or "auto"
         limit = self._optional_int(payload.get("limit"))
         raw_min_score = payload.get("min_score")
         min_score = float(raw_min_score) if raw_min_score is not None else None
-        self._purge_expired_memory_entries()
+        namespace = payload.get("namespace")
+        include_descendants = bool(payload.get("include_descendants", True))
         provider_id = self._resolve_memory_embedding_provider_id(
             payload.get("provider_id"),
             required=mode in {"vector", "hybrid"},
@@ -369,97 +384,89 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
         effective_mode = mode
         if effective_mode == "auto":
             effective_mode = "hybrid" if provider_id is not None else "keyword"
-        query_embedding: list[float] | None = None
-        if effective_mode in {"vector", "hybrid"}:
-            if provider_id is None:
-                raise AstrBotError.invalid_input(
-                    "memory.search requires an embedding provider",
-                )
-            await self._refresh_memory_embeddings(provider_id=provider_id)
-            query_embedding = await self._embedding_for_text(
-                provider_id=provider_id,
-                text=query,
-            )
-
-        items: list[dict[str, Any]] = []
-        for key, value in self.memory_store.items():
-            self._ensure_memory_sidecars(key, value)
-            entry = self._memory_index_entry(
-                self._memory_index.get(key),
-                text=self._extract_memory_text(value),
-            )
-            text = str(entry.get("text", ""))
-            keyword_score = self._memory_keyword_score(query, key, text)
-            vector_score = 0.0
-            if query_embedding is not None:
-                embedding = entry.get("embedding")
-                if isinstance(embedding, list):
-                    vector_score = max(
-                        0.0,
-                        self._cosine_similarity(query_embedding, embedding),
+        backend = self._memory_backend_for_plugin(plugin_id)
+        items = await backend.search(
+            query,
+            namespace=str(namespace) if namespace is not None else None,
+            include_descendants=include_descendants,
+            mode=effective_mode,
+            limit=limit,
+            min_score=min_score,
+            provider_id=provider_id,
+            embed_one=(
+                (
+                    lambda text: self._embedding_for_text(
+                        provider_id=provider_id, text=text
                     )
-
-            if effective_mode == "keyword":
-                score = keyword_score
-            elif effective_mode == "vector":
-                score = vector_score
-            else:
-                score = vector_score
-                if keyword_score > 0:
-                    score = max(score, 0.4 + 0.6 * vector_score)
-            if score <= 0:
-                continue
-            if min_score is not None and score < min_score:
-                continue
-
-            if effective_mode == "keyword" or (keyword_score > 0 and vector_score <= 0):
-                match_type = "keyword"
-            elif effective_mode == "vector" or keyword_score <= 0:
-                match_type = "vector"
-            else:
-                match_type = "hybrid"
-
-            items.append(
-                {
-                    "key": key,
-                    "value": self._memory_value_for_search(value),
-                    "score": score,
-                    "match_type": match_type,
-                }
-            )
-        items.sort(key=lambda item: (-float(item["score"]), str(item["key"])))
-        if limit is not None and limit >= 0:
-            items = items[:limit]
+                )
+                if provider_id is not None and effective_mode in {"vector", "hybrid"}
+                else None
+            ),
+            embed_many=(
+                (
+                    lambda texts: self._embeddings_for_texts(
+                        provider_id=provider_id,
+                        texts=texts,
+                    )
+                )
+                if provider_id is not None and effective_mode in {"vector", "hybrid"}
+                else None
+            ),
+        )
         return {"items": items}
 
     async def _memory_save(
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
+        plugin_id = self._memory_plugin_id()
         key = str(payload.get("key", ""))
         value = payload.get("value")
         if not isinstance(value, dict):
             raise AstrBotError.invalid_input("memory.save 的 value 必须是 object")
-        self.memory_store[key] = value
-        self._upsert_memory_sidecars(key, value)
+        await self._memory_backend_for_plugin(plugin_id).save(
+            key,
+            value,
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+        )
         return {}
 
     async def _memory_get(
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
+        plugin_id = self._memory_plugin_id()
         key = str(payload.get("key", ""))
-        if self._purge_expired_memory_entry(key):
-            return {"value": None}
-        return {"value": self.memory_store.get(key)}
+        value = await self._memory_backend_for_plugin(plugin_id).get(
+            key,
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+        )
+        return {"value": value}
 
     async def _memory_delete(
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
-        self._delete_memory_entry(str(payload.get("key", "")))
+        plugin_id = self._memory_plugin_id()
+        await self._memory_backend_for_plugin(plugin_id).delete(
+            str(payload.get("key", "")),
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+        )
         return {}
 
     async def _memory_save_with_ttl(
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
+        plugin_id = self._memory_plugin_id()
         key = str(payload.get("key", ""))
         value = payload.get("value")
         ttl_seconds = payload.get("ttl_seconds", 0)
@@ -467,79 +474,66 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
             raise AstrBotError.invalid_input(
                 "memory.save_with_ttl 的 value 必须是 object"
             )
-        stored = {"value": value, "ttl_seconds": ttl_seconds}
-        self.memory_store[key] = stored
-        self._upsert_memory_sidecars(
+        await self._memory_backend_for_plugin(plugin_id).save_with_ttl(
             key,
-            stored,
-            expires_at=self._memory_expiration_from_ttl(ttl_seconds),
+            value,
+            int(ttl_seconds),
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
         )
         return {}
 
     async def _memory_get_many(
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
+        plugin_id = self._memory_plugin_id()
         keys_payload = payload.get("keys")
         if not isinstance(keys_payload, (list, tuple)):
             raise AstrBotError.invalid_input("memory.get_many 的 keys 必须是数组")
-        keys = [str(item) for item in keys_payload]
-        items = []
-        for key in keys:
-            if self._purge_expired_memory_entry(key):
-                items.append({"key": key, "value": None})
-                continue
-            stored = self.memory_store.get(key)
-            if (
-                isinstance(stored, dict)
-                and "value" in stored
-                and "ttl_seconds" in stored
-            ):
-                value = stored["value"]
-            else:
-                value = stored
-            items.append({"key": key, "value": value})
+        items = await self._memory_backend_for_plugin(plugin_id).get_many(
+            [str(item) for item in keys_payload],
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+        )
         return {"items": items}
 
     async def _memory_delete_many(
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
+        plugin_id = self._memory_plugin_id()
         keys_payload = payload.get("keys")
         if not isinstance(keys_payload, (list, tuple)):
             raise AstrBotError.invalid_input("memory.delete_many 的 keys 必须是数组")
-        keys = [str(item) for item in keys_payload]
-        deleted_count = 0
-        for key in keys:
-            if self._delete_memory_entry(key):
-                deleted_count += 1
+        deleted_count = await self._memory_backend_for_plugin(plugin_id).delete_many(
+            [str(item) for item in keys_payload],
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+        )
         return {"deleted_count": deleted_count}
 
     async def _memory_stats(
-        self, _request_id: str, _payload: dict[str, Any], _token
+        self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
-        self._purge_expired_memory_entries()
-        total_items = len(self.memory_store)
-        total_bytes = sum(
-            len(str(key)) + len(str(value)) for key, value in self.memory_store.items()
+        plugin_id = self._memory_plugin_id()
+        stats = await self._memory_backend_for_plugin(plugin_id).stats(
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+            include_descendants=bool(payload.get("include_descendants", True)),
         )
-        ttl_entries = len(self._memory_expires_at)
-        indexed_items = len(self._memory_index)
-        embedded_items = sum(
-            1
-            for entry in self._memory_index.values()
-            if isinstance(entry, dict)
-            and isinstance(entry.get("embedding"), list)
-            and bool(entry.get("embedding"))
-        )
-        dirty_items = len(self._memory_dirty_keys)
-        return {
-            "total_items": total_items,
-            "total_bytes": total_bytes,
-            "plugin_id": self._require_caller_plugin_id("memory.stats"),
-            "ttl_entries": ttl_entries,
-            "indexed_items": indexed_items,
-            "embedded_items": embedded_items,
-            "dirty_items": dirty_items,
-        }
+        stats["plugin_id"] = plugin_id
+        return stats
 
     def _register_memory_capabilities(self) -> None:
         self.register(

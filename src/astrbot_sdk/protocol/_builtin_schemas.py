@@ -81,6 +81,8 @@ MEMORY_SEARCH_INPUT_SCHEMA = _object_schema(
     limit={"type": "integer", "minimum": 1},
     min_score={"type": "number"},
     provider_id={"type": "string"},
+    namespace={"type": "string"},
+    include_descendants={"type": "boolean"},
 )
 MEMORY_SEARCH_OUTPUT_SCHEMA = _object_schema(
     required=("items",),
@@ -89,6 +91,7 @@ MEMORY_SEARCH_OUTPUT_SCHEMA = _object_schema(
         "items": _object_schema(
             required=("key", "value", "score", "match_type"),
             key={"type": "string"},
+            namespace=_nullable({"type": "string"}),
             value=_nullable({"type": "object"}),
             score={"type": "number"},
             match_type={
@@ -102,9 +105,14 @@ MEMORY_SAVE_INPUT_SCHEMA = _object_schema(
     required=("key", "value"),
     key={"type": "string"},
     value={"type": "object"},
+    namespace={"type": "string"},
 )
 MEMORY_SAVE_OUTPUT_SCHEMA = _object_schema()
-MEMORY_GET_INPUT_SCHEMA = _object_schema(required=("key",), key={"type": "string"})
+MEMORY_GET_INPUT_SCHEMA = _object_schema(
+    required=("key",),
+    key={"type": "string"},
+    namespace={"type": "string"},
+)
 MEMORY_GET_OUTPUT_SCHEMA = _object_schema(
     required=("value",),
     value=_nullable({"type": "object"}),
@@ -112,6 +120,7 @@ MEMORY_GET_OUTPUT_SCHEMA = _object_schema(
 MEMORY_DELETE_INPUT_SCHEMA = _object_schema(
     required=("key",),
     key={"type": "string"},
+    namespace={"type": "string"},
 )
 MEMORY_DELETE_OUTPUT_SCHEMA = _object_schema()
 MEMORY_SAVE_WITH_TTL_INPUT_SCHEMA = _object_schema(
@@ -119,11 +128,13 @@ MEMORY_SAVE_WITH_TTL_INPUT_SCHEMA = _object_schema(
     key={"type": "string"},
     value={"type": "object"},
     ttl_seconds={"type": "integer", "minimum": 1},
+    namespace={"type": "string"},
 )
 MEMORY_SAVE_WITH_TTL_OUTPUT_SCHEMA = _object_schema()
 MEMORY_GET_MANY_INPUT_SCHEMA = _object_schema(
     required=("keys",),
     keys={"type": "array", "items": {"type": "string"}},
+    namespace={"type": "string"},
 )
 MEMORY_GET_MANY_OUTPUT_SCHEMA = _object_schema(
     required=("items",),
@@ -139,20 +150,29 @@ MEMORY_GET_MANY_OUTPUT_SCHEMA = _object_schema(
 MEMORY_DELETE_MANY_INPUT_SCHEMA = _object_schema(
     required=("keys",),
     keys={"type": "array", "items": {"type": "string"}},
+    namespace={"type": "string"},
 )
 MEMORY_DELETE_MANY_OUTPUT_SCHEMA = _object_schema(
     required=("deleted_count",),
     deleted_count={"type": "integer"},
 )
-MEMORY_STATS_INPUT_SCHEMA = _object_schema()
+MEMORY_STATS_INPUT_SCHEMA = _object_schema(
+    namespace={"type": "string"},
+    include_descendants={"type": "boolean"},
+)
 MEMORY_STATS_OUTPUT_SCHEMA = _object_schema(
     total_items={"type": "integer"},
     total_bytes=_nullable({"type": "integer"}),
     plugin_id=_nullable({"type": "string"}),
     ttl_entries=_nullable({"type": "integer"}),
+    namespace=_nullable({"type": "string"}),
+    namespace_count=_nullable({"type": "integer"}),
     indexed_items=_nullable({"type": "integer"}),
     embedded_items=_nullable({"type": "integer"}),
     dirty_items=_nullable({"type": "integer"}),
+    fts_enabled={"type": "boolean"},
+    vector_backend=_nullable({"type": "string"}),
+    vector_indexes={"type": "array", "items": {"type": "object"}},
 )
 SYSTEM_GET_DATA_DIR_INPUT_SCHEMA = _object_schema()
 SYSTEM_GET_DATA_DIR_OUTPUT_SCHEMA = _object_schema(

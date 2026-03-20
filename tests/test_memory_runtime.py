@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
-
 from astrbot_sdk._invocation_context import caller_plugin_scope
 from astrbot_sdk.runtime.capability_router import CapabilityRouter
 
@@ -12,52 +13,154 @@ async def _call(
     router: CapabilityRouter,
     capability: str,
     payload: dict[str, object],
+    *,
+    plugin_id: str = "test-plugin",
 ) -> dict[str, object]:
-    result = await router.execute(
-        capability,
-        payload,
-        stream=False,
-        cancel_token=object(),
-        request_id=f"test-{capability}",
-    )
+    with caller_plugin_scope(plugin_id):
+        result = await router.execute(
+            capability,
+            payload,
+            stream=False,
+            cancel_token=object(),
+            request_id=f"{plugin_id}:{capability}",
+        )
     assert isinstance(result, dict)
     return result
 
 
+def _memory_db_path(tmp_path: Path, plugin_id: str) -> Path:
+    return (
+        tmp_path
+        / ".astrbot_sdk_testing"
+        / "plugin_data"
+        / plugin_id
+        / "memory"
+        / "memory.sqlite3"
+    )
+
+
 @pytest.mark.asyncio
-async def test_memory_save_updates_sidecars_and_search() -> None:
+async def test_memory_is_plugin_scoped_and_persistent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
     router = CapabilityRouter()
 
     await _call(
         router,
         "memory.save",
-        {"key": "user-pref", "value": {"content": "user likes blue"}},
+        {"key": "profile", "value": {"content": "alice likes blue"}},
+        plugin_id="plugin-a",
+    )
+    await _call(
+        router,
+        "memory.save",
+        {"key": "profile", "value": {"content": "bob likes green"}},
+        plugin_id="plugin-b",
     )
 
-    assert router.memory_store["user-pref"] == {"content": "user likes blue"}
-    assert router._memory_index["user-pref"] == {
-        "text": "user likes blue",
-        "embedding": None,
-        "provider_id": None,
-    }
-    assert "user-pref" in router._memory_dirty_keys
-    assert "user-pref" not in router._memory_expires_at
+    profile_a = await _call(
+        router,
+        "memory.get",
+        {"key": "profile"},
+        plugin_id="plugin-a",
+    )
+    profile_b = await _call(
+        router,
+        "memory.get",
+        {"key": "profile"},
+        plugin_id="plugin-b",
+    )
 
-    result = await _call(router, "memory.search", {"query": "likes blue"})
-    assert len(result["items"]) == 1
-    item = result["items"][0]
-    assert item["key"] == "user-pref"
-    assert item["value"] == {"content": "user likes blue"}
-    assert item["match_type"] == "hybrid"
-    assert float(item["score"]) > 0
-    assert router._memory_index["user-pref"]["provider_id"] == "mock-embedding-provider"
-    assert isinstance(router._memory_index["user-pref"]["embedding"], list)
-    assert "user-pref" not in router._memory_dirty_keys
+    assert profile_a == {"value": {"content": "alice likes blue"}}
+    assert profile_b == {"value": {"content": "bob likes green"}}
+    assert _memory_db_path(tmp_path, "plugin-a").exists()
+
+    restarted = CapabilityRouter()
+    persisted = await _call(
+        restarted,
+        "memory.get",
+        {"key": "profile"},
+        plugin_id="plugin-a",
+    )
+    assert persisted == {"value": {"content": "alice likes blue"}}
 
 
 @pytest.mark.asyncio
-async def test_memory_search_keyword_mode_keeps_dirty_embedding_state() -> None:
+async def test_memory_namespace_search_respects_descendants(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
     router = CapabilityRouter()
+
+    await _call(
+        router,
+        "memory.save",
+        {
+            "key": "profile",
+            "namespace": "users/alice",
+            "value": {"content": "alice likes blue"},
+        },
+    )
+    await _call(
+        router,
+        "memory.save",
+        {
+            "key": "session-note",
+            "namespace": "users/alice/sessions/1",
+            "value": {"content": "alice asked about the sea"},
+        },
+    )
+    await _call(
+        router,
+        "memory.save",
+        {
+            "key": "profile",
+            "namespace": "users/bob",
+            "value": {"content": "bob likes green"},
+        },
+    )
+
+    exact = await _call(
+        router,
+        "memory.search",
+        {
+            "query": "alice",
+            "namespace": "users/alice",
+            "include_descendants": False,
+            "mode": "keyword",
+        },
+    )
+    scoped = await _call(
+        router,
+        "memory.search",
+        {
+            "query": "alice",
+            "namespace": "users/alice",
+            "include_descendants": True,
+            "mode": "keyword",
+        },
+    )
+
+    assert [(item["namespace"], item["key"]) for item in exact["items"]] == [
+        ("users/alice", "profile")
+    ]
+    assert {(item["namespace"], item["key"]) for item in scoped["items"]} == {
+        ("users/alice", "profile"),
+        ("users/alice/sessions/1", "session-note"),
+    }
+
+
+@pytest.mark.asyncio
+async def test_memory_search_auto_falls_back_to_keyword_without_embedding_provider(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    router = CapabilityRouter()
+    router._active_provider_ids["embedding"] = None
 
     await _call(
         router,
@@ -65,20 +168,18 @@ async def test_memory_search_keyword_mode_keeps_dirty_embedding_state() -> None:
         {"key": "alpha-key", "value": {"content": "blue ocean memory"}},
     )
 
-    result = await _call(
-        router,
-        "memory.search",
-        {"query": "alpha", "mode": "keyword", "min_score": 0.95},
-    )
+    result = await _call(router, "memory.search", {"query": "alpha", "mode": "auto"})
 
     assert [item["key"] for item in result["items"]] == ["alpha-key"]
     assert result["items"][0]["match_type"] == "keyword"
-    assert router._memory_index["alpha-key"]["embedding"] is None
-    assert "alpha-key" in router._memory_dirty_keys
 
 
 @pytest.mark.asyncio
-async def test_memory_search_vector_mode_supports_ranking_and_limit() -> None:
+async def test_memory_vector_search_and_stats_report_vector_backend(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
     router = CapabilityRouter()
 
     await _call(
@@ -97,181 +198,111 @@ async def test_memory_search_vector_mode_supports_ranking_and_limit() -> None:
         "memory.search",
         {"query": "banana smoothie", "mode": "vector", "limit": 1},
     )
+    stats = await _call(router, "memory.stats", {})
 
     assert len(result["items"]) == 1
     assert result["items"][0]["key"] == "fruit-note"
     assert result["items"][0]["match_type"] == "vector"
+    assert stats["plugin_id"] == "test-plugin"
+    assert stats["total_items"] == 2
+    assert stats["vector_backend"] in {"faiss", "exact"}
 
 
 @pytest.mark.asyncio
-async def test_memory_search_auto_falls_back_to_keyword_without_embedding_provider() -> (
-    None
-):
+async def test_memory_save_with_ttl_expires_across_restart(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
     router = CapabilityRouter()
-    router._active_provider_ids["embedding"] = None
 
     await _call(
         router,
-        "memory.save",
-        {"key": "alpha-key", "value": {"content": "blue ocean memory"}},
-    )
-
-    result = await _call(router, "memory.search", {"query": "alpha", "mode": "auto"})
-
-    assert [item["key"] for item in result["items"]] == ["alpha-key"]
-    assert result["items"][0]["match_type"] == "keyword"
-    assert router._memory_index["alpha-key"]["embedding"] is None
-    assert "alpha-key" in router._memory_dirty_keys
-
-
-@pytest.mark.asyncio
-async def test_memory_search_reembeds_when_embedding_provider_changes() -> None:
-    router = CapabilityRouter()
-    router._provider_catalog["embedding"].append(
+        "memory.save_with_ttl",
         {
-            "id": "mock-embedding-provider-alt",
-            "model": "mock-embedding-model-alt",
-            "type": "mock",
-            "provider_type": "embedding",
-        }
+            "key": "session",
+            "namespace": "users/alice/sessions/1",
+            "value": {"content": "active session"},
+            "ttl_seconds": 60,
+        },
     )
-    router._provider_configs["mock-embedding-provider-alt"] = {
-        "id": "mock-embedding-provider-alt",
-        "model": "mock-embedding-model-alt",
-        "type": "mock",
-        "provider_type": "embedding",
-        "enable": True,
-    }
 
-    await _call(
+    result = await _call(
         router,
-        "memory.save",
-        {"key": "topic", "value": {"content": "banana smoothie with mango"}},
+        "memory.get_many",
+        {"keys": ["session"], "namespace": "users/alice/sessions/1"},
     )
-
-    first = await _call(router, "memory.search", {"query": "banana smoothie"})
-    first_embedding = list(router._memory_index["topic"]["embedding"])
-    assert first["items"][0]["match_type"] == "hybrid"
-    assert router._memory_index["topic"]["provider_id"] == "mock-embedding-provider"
-
-    router._active_provider_ids["embedding"] = "mock-embedding-provider-alt"
-
-    second = await _call(router, "memory.search", {"query": "banana smoothie"})
-    second_embedding = list(router._memory_index["topic"]["embedding"])
-    assert second["items"][0]["match_type"] == "hybrid"
-    assert router._memory_index["topic"]["provider_id"] == "mock-embedding-provider-alt"
-    assert first_embedding != second_embedding
-
-
-@pytest.mark.asyncio
-async def test_memory_stats_reports_index_embedding_and_dirty_counts() -> None:
-    router = CapabilityRouter()
-
-    await _call(
-        router,
-        "memory.save",
-        {"key": "a", "value": {"content": "alpha"}},
-    )
-    await _call(
-        router,
-        "memory.save_with_ttl",
-        {"key": "b", "value": {"content": "beta"}, "ttl_seconds": 60},
-    )
-
-    with caller_plugin_scope("test-plugin"):
-        before = await _call(router, "memory.stats", {})
-    assert before["total_items"] == 2
-    assert before["ttl_entries"] == 1
-    assert before["indexed_items"] == 2
-    assert before["embedded_items"] == 0
-    assert before["dirty_items"] == 2
-
-    await _call(router, "memory.search", {"query": "alpha"})
-
-    with caller_plugin_scope("test-plugin"):
-        after = await _call(router, "memory.stats", {})
-    assert after["total_items"] == 2
-    assert after["ttl_entries"] == 1
-    assert after["indexed_items"] == 2
-    assert after["embedded_items"] == 2
-    assert after["dirty_items"] == 0
-
-
-@pytest.mark.asyncio
-async def test_memory_save_with_ttl_registers_expiry_and_purges_on_read() -> None:
-    router = CapabilityRouter()
-
-    await _call(
-        router,
-        "memory.save_with_ttl",
-        {"key": "temp-note", "value": {"content": "temporary note"}, "ttl_seconds": 60},
-    )
-
-    assert "temp-note" in router._memory_index
-    assert "temp-note" in router._memory_dirty_keys
-    assert router._memory_expires_at["temp-note"] is not None
-
-    search_result = await _call(router, "memory.search", {"query": "temporary"})
-    assert search_result["items"][0]["value"] == {"content": "temporary note"}
-
-    router._memory_expires_at["temp-note"] = datetime.now(timezone.utc) - timedelta(
-        seconds=1
-    )
-
-    get_result = await _call(router, "memory.get", {"key": "temp-note"})
-    assert get_result == {"value": None}
-    assert "temp-note" not in router.memory_store
-    assert "temp-note" not in router._memory_index
-    assert "temp-note" not in router._memory_expires_at
-    assert "temp-note" not in router._memory_dirty_keys
-
-
-@pytest.mark.asyncio
-async def test_memory_get_many_unwraps_ttl_value_and_returns_none_after_expiry() -> (
-    None
-):
-    router = CapabilityRouter()
-
-    await _call(
-        router,
-        "memory.save_with_ttl",
-        {"key": "session", "value": {"content": "active session"}, "ttl_seconds": 60},
-    )
-
-    result = await _call(router, "memory.get_many", {"keys": ["session", "missing"]})
     assert result == {
-        "items": [
-            {"key": "session", "value": {"content": "active session"}},
-            {"key": "missing", "value": None},
-        ]
+        "items": [{"key": "session", "value": {"content": "active session"}}]
     }
 
-    router._memory_expires_at["session"] = datetime.now(timezone.utc) - timedelta(
-        seconds=1
-    )
+    db_path = _memory_db_path(tmp_path, "test-plugin")
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE memory_records
+            SET expires_at = ?
+            WHERE namespace = ? AND key = ?
+            """,
+            (
+                (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat(),
+                "users/alice/sessions/1",
+                "session",
+            ),
+        )
+        conn.commit()
 
-    expired_result = await _call(router, "memory.get_many", {"keys": ["session"]})
-    assert expired_result == {"items": [{"key": "session", "value": None}]}
+    restarted = CapabilityRouter()
+    expired = await _call(
+        restarted,
+        "memory.get",
+        {"key": "session", "namespace": "users/alice/sessions/1"},
+    )
+    assert expired == {"value": None}
 
 
 @pytest.mark.asyncio
-async def test_memory_delete_many_clears_sidecars() -> None:
+async def test_memory_stats_can_scope_by_namespace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
     router = CapabilityRouter()
 
     await _call(
         router,
         "memory.save",
-        {"key": "a", "value": {"content": "alpha"}},
+        {
+            "key": "root-note",
+            "value": {"content": "top level"},
+        },
     )
     await _call(
         router,
-        "memory.save_with_ttl",
-        {"key": "b", "value": {"content": "beta"}, "ttl_seconds": 60},
+        "memory.save",
+        {
+            "key": "user-note",
+            "namespace": "users/alice",
+            "value": {"content": "alice memory"},
+        },
+    )
+    await _call(
+        router,
+        "memory.save",
+        {
+            "key": "session-note",
+            "namespace": "users/alice/sessions/1",
+            "value": {"content": "session memory"},
+        },
     )
 
-    result = await _call(router, "memory.delete_many", {"keys": ["a", "b", "c"]})
-    assert result == {"deleted_count": 2}
-    assert router.memory_store == {}
-    assert router._memory_index == {}
-    assert router._memory_expires_at == {}
-    assert router._memory_dirty_keys == set()
+    scoped = await _call(
+        router,
+        "memory.stats",
+        {"namespace": "users/alice", "include_descendants": True},
+    )
+
+    assert scoped["namespace"] == "users/alice"
+    assert scoped["total_items"] == 2
+    assert scoped["namespace_count"] == 2
+    assert scoped["fts_enabled"] in {True, False}

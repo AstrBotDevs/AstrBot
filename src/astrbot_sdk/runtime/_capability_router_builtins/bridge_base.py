@@ -67,6 +67,8 @@ def _mock_embedding_vector(text: str, *, provider_id: str) -> list[float]:
 
 
 class CapabilityRouterBridgeBase(CapabilityRouterHost):
+    _memory_backends: dict[str, Any]
+
     def _builtin_descriptor(
         self,
         name: str,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -73,6 +74,71 @@ def memory_expiration_from_stored_payload(stored: Any) -> datetime | None:
     return expires_at.astimezone(timezone.utc)
 
 
+def normalize_memory_namespace(value: Any) -> str:
+    """Normalize a namespace path into a stable slash-delimited string."""
+
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple)):
+        return join_memory_namespace(*value)
+    text = str(value).strip().replace("\\", "/")
+    if not text:
+        return ""
+    parts = [segment.strip() for segment in text.split("/") if segment.strip()]
+    return "/".join(parts)
+
+
+def join_memory_namespace(*parts: Any) -> str:
+    """Join namespace segments while preserving the root namespace as empty."""
+
+    normalized_parts: list[str] = []
+    for part in parts:
+        normalized = normalize_memory_namespace(part)
+        if not normalized:
+            continue
+        normalized_parts.extend(
+            segment for segment in normalized.split("/") if segment.strip()
+        )
+    return "/".join(normalized_parts)
+
+
+def memory_namespace_matches(
+    candidate: str,
+    namespace: str,
+    *,
+    include_descendants: bool,
+) -> bool:
+    """Check whether a stored namespace belongs to the requested scope."""
+
+    normalized_candidate = normalize_memory_namespace(candidate)
+    normalized_namespace = normalize_memory_namespace(namespace)
+    if not normalized_namespace:
+        return True
+    if normalized_candidate == normalized_namespace:
+        return True
+    return include_descendants and normalized_candidate.startswith(
+        f"{normalized_namespace}/"
+    )
+
+
+def display_memory_namespace(value: Any) -> str | None:
+    """Return a user-facing namespace value."""
+
+    normalized = normalize_memory_namespace(value)
+    return normalized or None
+
+
+def _memory_query_terms(value: str) -> list[str]:
+    normalized = re.sub(r"\s+", " ", str(value).strip().casefold())
+    if not normalized:
+        return []
+    terms = [item for item in re.findall(r"\w+", normalized, flags=re.UNICODE) if item]
+    if terms:
+        return terms
+    compact = normalized.replace(" ", "")
+    return [compact] if compact else []
+
+
 def memory_keyword_score(query: str, key: str, text: str) -> float:
     """Score a keyword hit the same way across runtime and core bridge."""
 
@@ -81,11 +147,23 @@ def memory_keyword_score(query: str, key: str, text: str) -> float:
         return 1.0
     normalized_key = str(key).casefold()
     normalized_text = str(text).casefold()
+    best = 0.0
     if normalized_query in normalized_key:
-        return 1.0
+        best = 1.0
     if normalized_query in normalized_text:
-        return 0.9
-    return 0.0
+        best = max(best, 0.92)
+
+    terms = _memory_query_terms(normalized_query)
+    if not terms:
+        return best
+
+    key_hits = sum(1 for term in terms if term in normalized_key)
+    text_hits = sum(1 for term in terms if term in normalized_text)
+    if key_hits:
+        best = max(best, 0.5 + 0.5 * (key_hits / len(terms)))
+    if text_hits:
+        best = max(best, 0.35 + 0.55 * (text_hits / len(terms)))
+    return min(best, 1.0)
 
 
 def cosine_similarity(left: list[float], right: list[float]) -> float:
@@ -100,6 +178,17 @@ def cosine_similarity(left: list[float], right: list[float]) -> float:
     return sum(a * b for a, b in zip(left, right, strict=False)) / (
         left_norm * right_norm
     )
+
+
+def normalize_embedding(vector: list[float]) -> list[float]:
+    """Normalize an embedding for cosine/inner-product search."""
+
+    if not vector:
+        return []
+    norm = math.sqrt(sum(value * value for value in vector))
+    if norm <= 0:
+        return [0.0 for _ in vector]
+    return [float(value) / norm for value in vector]
 
 
 def memory_index_entry(entry: Any, *, text: str) -> dict[str, Any]:
