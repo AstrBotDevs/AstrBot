@@ -717,6 +717,80 @@ KNOWLEDGE_BASE_CREATE_SCHEMA = _object_schema(
     top_k_sparse=_nullable({"type": "integer"}),
     top_m_final=_nullable({"type": "integer"}),
 )
+KNOWLEDGE_BASE_UPDATE_SCHEMA = _object_schema(
+    kb_name=_nullable({"type": "string"}),
+    description=_nullable({"type": "string"}),
+    emoji=_nullable({"type": "string"}),
+    embedding_provider_id=_nullable({"type": "string"}),
+    rerank_provider_id=_nullable({"type": "string"}),
+    chunk_size=_nullable({"type": "integer"}),
+    chunk_overlap=_nullable({"type": "integer"}),
+    top_k_dense=_nullable({"type": "integer"}),
+    top_k_sparse=_nullable({"type": "integer"}),
+    top_m_final=_nullable({"type": "integer"}),
+)
+KNOWLEDGE_BASE_DOCUMENT_RECORD_SCHEMA = _object_schema(
+    required=(
+        "doc_id",
+        "kb_id",
+        "doc_name",
+        "file_type",
+        "file_size",
+        "chunk_count",
+        "media_count",
+    ),
+    doc_id={"type": "string"},
+    kb_id={"type": "string"},
+    doc_name={"type": "string"},
+    file_type={"type": "string"},
+    file_size={"type": "integer"},
+    file_path={"type": "string"},
+    chunk_count={"type": "integer"},
+    media_count={"type": "integer"},
+    created_at=_nullable({"type": "string"}),
+    updated_at=_nullable({"type": "string"}),
+)
+KNOWLEDGE_BASE_RETRIEVE_RESULT_SCHEMA = _object_schema(
+    required=(
+        "chunk_id",
+        "doc_id",
+        "kb_id",
+        "kb_name",
+        "doc_name",
+        "chunk_index",
+        "content",
+        "score",
+        "char_count",
+    ),
+    chunk_id={"type": "string"},
+    doc_id={"type": "string"},
+    kb_id={"type": "string"},
+    kb_name={"type": "string"},
+    doc_name={"type": "string"},
+    chunk_index={"type": "integer"},
+    content={"type": "string"},
+    score={"type": "number"},
+    char_count={"type": "integer"},
+)
+KNOWLEDGE_BASE_DOCUMENT_UPLOAD_SCHEMA = _object_schema(
+    file_token=_nullable({"type": "string"}),
+    url=_nullable({"type": "string"}),
+    text=_nullable({"type": "string"}),
+    file_name=_nullable({"type": "string"}),
+    file_type=_nullable({"type": "string"}),
+    chunk_size=_nullable({"type": "integer"}),
+    chunk_overlap=_nullable({"type": "integer"}),
+    batch_size=_nullable({"type": "integer"}),
+    tasks_limit=_nullable({"type": "integer"}),
+    max_retries=_nullable({"type": "integer"}),
+    enable_cleaning=_nullable({"type": "boolean"}),
+    cleaning_provider_id=_nullable({"type": "string"}),
+)
+KB_LIST_INPUT_SCHEMA = _object_schema()
+KB_LIST_OUTPUT_SCHEMA = _object_schema(
+    required=("kbs",),
+    kbs={"type": "array", "items": KNOWLEDGE_BASE_RECORD_SCHEMA},
+)
 KB_GET_INPUT_SCHEMA = _object_schema(
     required=("kb_id",),
     kb_id={"type": "string"},
@@ -733,6 +807,15 @@ KB_CREATE_OUTPUT_SCHEMA = _object_schema(
     required=("kb",),
     kb=KNOWLEDGE_BASE_RECORD_SCHEMA,
 )
+KB_UPDATE_INPUT_SCHEMA = _object_schema(
+    required=("kb_id", "kb"),
+    kb_id={"type": "string"},
+    kb=KNOWLEDGE_BASE_UPDATE_SCHEMA,
+)
+KB_UPDATE_OUTPUT_SCHEMA = _object_schema(
+    required=("kb",),
+    kb=_nullable(KNOWLEDGE_BASE_RECORD_SCHEMA),
+)
 KB_DELETE_INPUT_SCHEMA = _object_schema(
     required=("kb_id",),
     kb_id={"type": "string"},
@@ -740,6 +823,73 @@ KB_DELETE_INPUT_SCHEMA = _object_schema(
 KB_DELETE_OUTPUT_SCHEMA = _object_schema(
     required=("deleted",),
     deleted={"type": "boolean"},
+)
+KB_RETRIEVE_INPUT_SCHEMA = _object_schema(
+    required=("query",),
+    query={"type": "string"},
+    kb_ids={"type": "array", "items": {"type": "string"}},
+    kb_names={"type": "array", "items": {"type": "string"}},
+    top_k_fusion={"type": "integer"},
+    top_m_final={"type": "integer"},
+)
+KB_RETRIEVE_OUTPUT_SCHEMA = _object_schema(
+    required=("result",),
+    result=_nullable(
+        _object_schema(
+            required=("context_text", "results"),
+            context_text={"type": "string"},
+            results={
+                "type": "array",
+                "items": KNOWLEDGE_BASE_RETRIEVE_RESULT_SCHEMA,
+            },
+        )
+    ),
+)
+KB_DOCUMENT_UPLOAD_INPUT_SCHEMA = _object_schema(
+    required=("kb_id", "document"),
+    kb_id={"type": "string"},
+    document=KNOWLEDGE_BASE_DOCUMENT_UPLOAD_SCHEMA,
+)
+KB_DOCUMENT_UPLOAD_OUTPUT_SCHEMA = _object_schema(
+    required=("document",),
+    document=KNOWLEDGE_BASE_DOCUMENT_RECORD_SCHEMA,
+)
+KB_DOCUMENT_LIST_INPUT_SCHEMA = _object_schema(
+    required=("kb_id",),
+    kb_id={"type": "string"},
+    offset={"type": "integer"},
+    limit={"type": "integer"},
+)
+KB_DOCUMENT_LIST_OUTPUT_SCHEMA = _object_schema(
+    required=("documents",),
+    documents={"type": "array", "items": KNOWLEDGE_BASE_DOCUMENT_RECORD_SCHEMA},
+)
+KB_DOCUMENT_GET_INPUT_SCHEMA = _object_schema(
+    required=("kb_id", "doc_id"),
+    kb_id={"type": "string"},
+    doc_id={"type": "string"},
+)
+KB_DOCUMENT_GET_OUTPUT_SCHEMA = _object_schema(
+    required=("document",),
+    document=_nullable(KNOWLEDGE_BASE_DOCUMENT_RECORD_SCHEMA),
+)
+KB_DOCUMENT_DELETE_INPUT_SCHEMA = _object_schema(
+    required=("kb_id", "doc_id"),
+    kb_id={"type": "string"},
+    doc_id={"type": "string"},
+)
+KB_DOCUMENT_DELETE_OUTPUT_SCHEMA = _object_schema(
+    required=("deleted",),
+    deleted={"type": "boolean"},
+)
+KB_DOCUMENT_REFRESH_INPUT_SCHEMA = _object_schema(
+    required=("kb_id", "doc_id"),
+    kb_id={"type": "string"},
+    doc_id={"type": "string"},
+)
+KB_DOCUMENT_REFRESH_OUTPUT_SCHEMA = _object_schema(
+    required=("document",),
+    document=_nullable(KNOWLEDGE_BASE_DOCUMENT_RECORD_SCHEMA),
 )
 REGISTRY_COMMAND_REGISTER_INPUT_SCHEMA = _object_schema(
     required=("command_name", "handler_full_name"),
@@ -1248,14 +1398,43 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": CONVERSATION_UPDATE_INPUT_SCHEMA,
         "output": CONVERSATION_UPDATE_OUTPUT_SCHEMA,
     },
+    "kb.list": {"input": KB_LIST_INPUT_SCHEMA, "output": KB_LIST_OUTPUT_SCHEMA},
     "kb.get": {"input": KB_GET_INPUT_SCHEMA, "output": KB_GET_OUTPUT_SCHEMA},
     "kb.create": {
         "input": KB_CREATE_INPUT_SCHEMA,
         "output": KB_CREATE_OUTPUT_SCHEMA,
     },
+    "kb.update": {
+        "input": KB_UPDATE_INPUT_SCHEMA,
+        "output": KB_UPDATE_OUTPUT_SCHEMA,
+    },
     "kb.delete": {
         "input": KB_DELETE_INPUT_SCHEMA,
         "output": KB_DELETE_OUTPUT_SCHEMA,
+    },
+    "kb.retrieve": {
+        "input": KB_RETRIEVE_INPUT_SCHEMA,
+        "output": KB_RETRIEVE_OUTPUT_SCHEMA,
+    },
+    "kb.document.upload": {
+        "input": KB_DOCUMENT_UPLOAD_INPUT_SCHEMA,
+        "output": KB_DOCUMENT_UPLOAD_OUTPUT_SCHEMA,
+    },
+    "kb.document.list": {
+        "input": KB_DOCUMENT_LIST_INPUT_SCHEMA,
+        "output": KB_DOCUMENT_LIST_OUTPUT_SCHEMA,
+    },
+    "kb.document.get": {
+        "input": KB_DOCUMENT_GET_INPUT_SCHEMA,
+        "output": KB_DOCUMENT_GET_OUTPUT_SCHEMA,
+    },
+    "kb.document.delete": {
+        "input": KB_DOCUMENT_DELETE_INPUT_SCHEMA,
+        "output": KB_DOCUMENT_DELETE_OUTPUT_SCHEMA,
+    },
+    "kb.document.refresh": {
+        "input": KB_DOCUMENT_REFRESH_INPUT_SCHEMA,
+        "output": KB_DOCUMENT_REFRESH_OUTPUT_SCHEMA,
     },
     "registry.command.register": {
         "input": REGISTRY_COMMAND_REGISTER_INPUT_SCHEMA,
@@ -1702,12 +1881,32 @@ __all__ = [
     "CONVERSATION_UPDATE_SCHEMA",
     "KB_CREATE_INPUT_SCHEMA",
     "KB_CREATE_OUTPUT_SCHEMA",
+    "KB_DOCUMENT_DELETE_INPUT_SCHEMA",
+    "KB_DOCUMENT_DELETE_OUTPUT_SCHEMA",
+    "KB_DOCUMENT_GET_INPUT_SCHEMA",
+    "KB_DOCUMENT_GET_OUTPUT_SCHEMA",
+    "KB_DOCUMENT_LIST_INPUT_SCHEMA",
+    "KB_DOCUMENT_LIST_OUTPUT_SCHEMA",
+    "KB_DOCUMENT_REFRESH_INPUT_SCHEMA",
+    "KB_DOCUMENT_REFRESH_OUTPUT_SCHEMA",
+    "KB_DOCUMENT_UPLOAD_INPUT_SCHEMA",
+    "KB_DOCUMENT_UPLOAD_OUTPUT_SCHEMA",
     "KB_DELETE_INPUT_SCHEMA",
     "KB_DELETE_OUTPUT_SCHEMA",
     "KB_GET_INPUT_SCHEMA",
     "KB_GET_OUTPUT_SCHEMA",
+    "KB_LIST_INPUT_SCHEMA",
+    "KB_LIST_OUTPUT_SCHEMA",
+    "KB_RETRIEVE_INPUT_SCHEMA",
+    "KB_RETRIEVE_OUTPUT_SCHEMA",
+    "KB_UPDATE_INPUT_SCHEMA",
+    "KB_UPDATE_OUTPUT_SCHEMA",
     "KNOWLEDGE_BASE_CREATE_SCHEMA",
+    "KNOWLEDGE_BASE_DOCUMENT_RECORD_SCHEMA",
+    "KNOWLEDGE_BASE_DOCUMENT_UPLOAD_SCHEMA",
     "KNOWLEDGE_BASE_RECORD_SCHEMA",
+    "KNOWLEDGE_BASE_RETRIEVE_RESULT_SCHEMA",
+    "KNOWLEDGE_BASE_UPDATE_SCHEMA",
     "REGISTRY_COMMAND_REGISTER_INPUT_SCHEMA",
     "REGISTRY_COMMAND_REGISTER_OUTPUT_SCHEMA",
     "REGISTRY_GET_HANDLER_BY_FULL_NAME_INPUT_SCHEMA",

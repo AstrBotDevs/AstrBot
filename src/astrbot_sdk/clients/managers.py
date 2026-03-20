@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..errors import AstrBotError, ErrorCodes
 from ..message.session import MessageSession
@@ -132,6 +132,122 @@ class KnowledgeBaseCreateParams(_ManagerModel):
     top_k_dense: int | None = None
     top_k_sparse: int | None = None
     top_m_final: int | None = None
+
+
+class KnowledgeBaseUpdateParams(_ManagerModel):
+    kb_name: str | None = None
+    embedding_provider_id: str | None = None
+    description: str | None = None
+    emoji: str | None = None
+    rerank_provider_id: str | None = None
+    chunk_size: int | None = None
+    chunk_overlap: int | None = None
+    top_k_dense: int | None = None
+    top_k_sparse: int | None = None
+    top_m_final: int | None = None
+
+
+class KnowledgeBaseDocumentRecord(_ManagerModel):
+    doc_id: str
+    kb_id: str
+    doc_name: str
+    file_type: str
+    file_size: int
+    file_path: str = ""
+    chunk_count: int = 0
+    media_count: int = 0
+    created_at: str | None = None
+    updated_at: str | None = None
+
+    @classmethod
+    def from_payload(
+        cls,
+        payload: dict[str, Any] | None,
+    ) -> KnowledgeBaseDocumentRecord | None:
+        if not isinstance(payload, dict):
+            return None
+        return cls.model_validate(payload)
+
+
+class KnowledgeBaseRetrieveResultItem(_ManagerModel):
+    chunk_id: str
+    doc_id: str
+    kb_id: str
+    kb_name: str
+    doc_name: str
+    chunk_index: int
+    content: str
+    score: float
+    char_count: int
+
+    @classmethod
+    def from_payload(
+        cls,
+        payload: dict[str, Any] | None,
+    ) -> KnowledgeBaseRetrieveResultItem | None:
+        if not isinstance(payload, dict):
+            return None
+        return cls.model_validate(payload)
+
+
+class KnowledgeBaseRetrieveResult(_ManagerModel):
+    context_text: str
+    results: list[KnowledgeBaseRetrieveResultItem] = Field(default_factory=list)
+
+    @classmethod
+    def from_payload(
+        cls,
+        payload: dict[str, Any] | None,
+    ) -> KnowledgeBaseRetrieveResult | None:
+        if not isinstance(payload, dict):
+            return None
+        items = payload.get("results")
+        normalized_items = (
+            [
+                item.model_dump()
+                for item in (
+                    KnowledgeBaseRetrieveResultItem.from_payload(candidate)
+                    if isinstance(candidate, dict)
+                    else None
+                    for candidate in items
+                )
+                if item is not None
+            ]
+            if isinstance(items, list)
+            else []
+        )
+        return cls.model_validate(
+            {
+                "context_text": str(payload.get("context_text", "")),
+                "results": normalized_items,
+            }
+        )
+
+
+class KnowledgeBaseDocumentUploadParams(_ManagerModel):
+    file_token: str | None = None
+    url: str | None = None
+    text: str | None = None
+    file_name: str | None = None
+    file_type: str | None = None
+    chunk_size: int | None = None
+    chunk_overlap: int | None = None
+    batch_size: int | None = None
+    tasks_limit: int | None = None
+    max_retries: int | None = None
+    enable_cleaning: bool | None = None
+    cleaning_provider_id: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_source(self) -> KnowledgeBaseDocumentUploadParams:
+        if any(
+            isinstance(value, str) and value.strip()
+            for value in (self.file_token, self.url, self.text)
+        ):
+            return self
+        raise ValueError(
+            "knowledge base document upload requires file_token, url, or text"
+        )
 
 
 class PersonaManagerClient:
@@ -326,6 +442,22 @@ class KnowledgeBaseManagerClient:
     def __init__(self, proxy: CapabilityProxy) -> None:
         self._proxy = proxy
 
+    async def list_kbs(self) -> list[KnowledgeBaseRecord]:
+        output = await self._proxy.call("kb.list", {})
+        items = output.get("kbs")
+        if not isinstance(items, list):
+            return []
+        return [
+            kb
+            for kb in (
+                KnowledgeBaseRecord.from_payload(item)
+                if isinstance(item, dict)
+                else None
+                for item in items
+            )
+            if kb is not None
+        ]
+
     async def get_kb(self, kb_id: str) -> KnowledgeBaseRecord | None:
         output = await self._proxy.call("kb.get", {"kb_id": str(kb_id)})
         return KnowledgeBaseRecord.from_payload(output.get("kb"))
@@ -340,9 +472,116 @@ class KnowledgeBaseManagerClient:
             raise ValueError("kb.create returned no knowledge base")
         return kb
 
+    async def update_kb(
+        self,
+        kb_id: str,
+        params: KnowledgeBaseUpdateParams,
+    ) -> KnowledgeBaseRecord | None:
+        output = await self._proxy.call(
+            "kb.update",
+            {"kb_id": str(kb_id), "kb": params.to_update_payload()},
+        )
+        return KnowledgeBaseRecord.from_payload(output.get("kb"))
+
     async def delete_kb(self, kb_id: str) -> bool:
         output = await self._proxy.call("kb.delete", {"kb_id": str(kb_id)})
         return bool(output.get("deleted", False))
+
+    async def retrieve(
+        self,
+        query: str,
+        *,
+        kb_ids: list[str] | None = None,
+        kb_names: list[str] | None = None,
+        top_k_fusion: int | None = None,
+        top_m_final: int | None = None,
+    ) -> KnowledgeBaseRetrieveResult | None:
+        request_payload: dict[str, Any] = {
+            "query": str(query),
+            "kb_ids": [str(item) for item in (kb_ids or [])],
+            "kb_names": [str(item) for item in (kb_names or [])],
+        }
+        if top_k_fusion is not None:
+            request_payload["top_k_fusion"] = int(top_k_fusion)
+        if top_m_final is not None:
+            request_payload["top_m_final"] = int(top_m_final)
+        output = await self._proxy.call(
+            "kb.retrieve",
+            request_payload,
+        )
+        return KnowledgeBaseRetrieveResult.from_payload(output.get("result"))
+
+    async def upload_document(
+        self,
+        kb_id: str,
+        params: KnowledgeBaseDocumentUploadParams,
+    ) -> KnowledgeBaseDocumentRecord:
+        output = await self._proxy.call(
+            "kb.document.upload",
+            {"kb_id": str(kb_id), "document": params.to_payload()},
+        )
+        document = KnowledgeBaseDocumentRecord.from_payload(output.get("document"))
+        if document is None:
+            raise ValueError("kb.document.upload returned no document")
+        return document
+
+    async def list_documents(
+        self,
+        kb_id: str,
+        *,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> list[KnowledgeBaseDocumentRecord]:
+        output = await self._proxy.call(
+            "kb.document.list",
+            {"kb_id": str(kb_id), "offset": int(offset), "limit": int(limit)},
+        )
+        items = output.get("documents")
+        if not isinstance(items, list):
+            return []
+        return [
+            document
+            for document in (
+                KnowledgeBaseDocumentRecord.from_payload(item)
+                if isinstance(item, dict)
+                else None
+                for item in items
+            )
+            if document is not None
+        ]
+
+    async def get_document(
+        self,
+        kb_id: str,
+        doc_id: str,
+    ) -> KnowledgeBaseDocumentRecord | None:
+        output = await self._proxy.call(
+            "kb.document.get",
+            {"kb_id": str(kb_id), "doc_id": str(doc_id)},
+        )
+        return KnowledgeBaseDocumentRecord.from_payload(output.get("document"))
+
+    async def delete_document(
+        self,
+        kb_id: str,
+        doc_id: str,
+    ) -> bool:
+        output = await self._proxy.call(
+            "kb.document.delete",
+            {"kb_id": str(kb_id), "doc_id": str(doc_id)},
+        )
+        return bool(output.get("deleted", False))
+
+    async def refresh_document(
+        self,
+        kb_id: str,
+        doc_id: str,
+    ) -> KnowledgeBaseDocumentRecord | None:
+        output = await self._proxy.call(
+            "kb.document.refresh",
+            {"kb_id": str(kb_id), "doc_id": str(doc_id)},
+        )
+        return KnowledgeBaseDocumentRecord.from_payload(output.get("document"))
 
 
 __all__ = [
@@ -351,8 +590,13 @@ __all__ = [
     "ConversationRecord",
     "ConversationUpdateParams",
     "KnowledgeBaseCreateParams",
+    "KnowledgeBaseDocumentRecord",
+    "KnowledgeBaseDocumentUploadParams",
     "KnowledgeBaseManagerClient",
     "KnowledgeBaseRecord",
+    "KnowledgeBaseRetrieveResult",
+    "KnowledgeBaseRetrieveResultItem",
+    "KnowledgeBaseUpdateParams",
     "PersonaCreateParams",
     "PersonaManagerClient",
     "PersonaRecord",

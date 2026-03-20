@@ -103,7 +103,9 @@
         persona.get / persona.list / persona.create / persona.update / persona.delete
         conversation.new / conversation.switch / conversation.delete
         conversation.get / conversation.list / conversation.update
-        kb.get / kb.create / kb.delete
+        kb.list / kb.get / kb.create / kb.update / kb.delete / kb.retrieve
+        kb.document.upload / kb.document.list / kb.document.get
+        kb.document.delete / kb.document.refresh
     System (内部使用):
         system.get_data_dir: 获取插件数据目录
         system.text_to_image: 文本转图片
@@ -294,6 +296,8 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         self._conversation_store: dict[str, dict[str, Any]] = {}
         self._session_current_conversation_ids: dict[str, str] = {}
         self._kb_store: dict[str, dict[str, Any]] = {}
+        self._kb_document_store: dict[str, dict[str, dict[str, Any]]] = {}
+        self._kb_document_content_store: dict[str, str] = {}
         self._platform_instances: list[dict[str, Any]] = [
             {
                 "id": "mock-platform",
