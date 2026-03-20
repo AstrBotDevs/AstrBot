@@ -1,9 +1,6 @@
 aiocqhttp>=1.4.4
 aiodocker>=0.24.0
 aiohttp>=3.11.18
-aiocqhttp>=1.4.4
-aiodocker>=0.24.0
-aiohttp>=3.11.18
 aiosqlite>=0.21.0
 anthropic>=0.51.0
 apscheduler>=3.11.0

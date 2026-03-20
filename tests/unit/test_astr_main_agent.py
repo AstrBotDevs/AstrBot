@@ -39,6 +39,7 @@ def mock_context():
     ctx.persona_manager.resolve_selected_persona = AsyncMock(
         return_value=(None, None, None, False)
     )
+    ctx.persona_manager.get_persona_v3_by_id = MagicMock(return_value=None)
     ctx.get_llm_tool_manager.return_value = MagicMock()
     ctx.subagent_orchestrator = None
     return ctx
@@ -538,6 +539,63 @@ class TestEnsurePersonaAndSkills:
 
         assert req.func_tool is not None
 
+    @pytest.mark.asyncio
+    async def test_subagent_dedupe_uses_default_persona_tools(
+        self, mock_event, mock_context
+    ):
+        """Test dedupe uses resolved default persona tools in subagent mode."""
+        module = ama
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(None, None, None, False)
+        )
+        mock_context.persona_manager.get_persona_v3_by_id = MagicMock(
+            return_value={"name": "default", "tools": ["tool_a"]}
+        )
+
+        tool_a = FunctionTool(
+            name="tool_a",
+            parameters={"type": "object", "properties": {}},
+            description="tool a",
+        )
+        tool_b = FunctionTool(
+            name="tool_b",
+            parameters={"type": "object", "properties": {}},
+            description="tool b",
+        )
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.func_list = [tool_a, tool_b]
+        tmgr.get_full_tool_set.return_value = ToolSet([tool_a, tool_b])
+        tmgr.get_func.side_effect = lambda name: {"tool_a": tool_a, "tool_b": tool_b}.get(
+            name
+        )
+
+        handoff = MagicMock()
+        handoff.name = "transfer_to_planner"
+        mock_context.subagent_orchestrator = MagicMock(handoffs=[handoff])
+        mock_context.get_config.return_value = {
+            "subagent_orchestrator": {
+                "main_enable": True,
+                "remove_main_duplicate_tools": True,
+                "agents": [
+                    {
+                        "name": "planner",
+                        "enabled": True,
+                        "persona_id": "default",
+                    }
+                ],
+            }
+        }
+
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert req.func_tool is not None
+        assert "transfer_to_planner" in req.func_tool.names()
+        assert "tool_a" not in req.func_tool.names()
+        assert "tool_b" in req.func_tool.names()
+
 
 class TestDecorateLlmRequest:
     """Tests for _decorate_llm_request function."""
@@ -803,6 +861,28 @@ class TestPluginToolFix:
             module._plugin_tool_fix(mock_event, req)
 
         assert "mcp_tool" in req.func_tool.names()
+
+    def test_plugin_tool_fix_preserves_tools_without_plugin_origin(self, mock_event):
+        """Tools without handler_module_path should not be filtered out."""
+        module = ama
+        handoff_tool = FunctionTool(
+            name="transfer_to_demo_agent",
+            description="Delegate to demo agent",
+            parameters={"type": "object", "properties": {}},
+            handler_module_path=None,
+            active=True,
+        )
+
+        tool_set = ToolSet()
+        tool_set.add_tool(handoff_tool)
+
+        req = ProviderRequest(func_tool=tool_set)
+        mock_event.plugins_name = ["other_plugin"]
+
+        with patch("astrbot.core.astr_main_agent.star_map"):
+            module._plugin_tool_fix(mock_event, req)
+
+        assert "transfer_to_demo_agent" in req.func_tool.names()
 
 
 class TestBuildMainAgent:

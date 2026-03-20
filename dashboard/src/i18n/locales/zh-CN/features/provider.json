@@ -21,6 +21,7 @@
     },
     "description": {
       "openai": "也支持所有兼容 OpenAI API 的模型提供商。",
+      "kimi_code": "Kimi 的 CodingPlan / Kimi Code 专用接入，使用特殊的 Anthropic API 兼容适配。",
       "vllm_rerank": "也支持 Jina AI, Cohere, PPIO 等提供商。",
       "default": ""
     }
@@ -133,6 +134,7 @@
     "deleteSuccess": "模型删除成功",
     "deleteError": "模型删除失败",
     "testSuccess": "模型 {id} 测试通过",
+    "testSuccessWithLatency": "模型 {id} 测试通过，延迟 {latency} ms",
     "testError": "模型测试失败",
     "searchPlaceholder": "搜索模型或 ID",
     "manualAddButton": "自定义模型",

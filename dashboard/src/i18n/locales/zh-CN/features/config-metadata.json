@@ -534,6 +534,10 @@
         "description": "Telegram 命令自动刷新间隔",
         "hint": "Telegram 命令自动刷新间隔，单位为秒。"
       },
+      "telegram_polling_restart_delay": {
+        "description": "Telegram 轮询重启延迟",
+        "hint": "当轮询意外结束尝试自动重启时的延迟时间，单位为秒。默认为 5s。"
+      },
       "telegram_token": {
         "description": "Bot Token",
         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。"
@@ -621,11 +625,6 @@
         "type": "string",
         "hint": "必填项。从 KOOK 开发者平台获取的机器人 Token"
       },
-      "kook_bot_nickname": {
-        "description": "Bot Nickname",
-        "type": "string",
-        "hint": "可选项。若发送者昵称与此值一致，将忽略该消息。"
-      },
       "kook_reconnect_delay": {
         "description": "重连延迟",
         "type": "int",
@@ -704,11 +703,11 @@
       "platform_settings": {
         "enable_id_white_list": {
           "description": "启用白名单",
-          "hint": "启用后,只有在白名单内的会话会被响应。"
+          "hint": "启用后,只有在白名单内的会话会被响应，白名单列表为空时代表不启用白名单（所有 ID 都会被放行）。"
         },
         "id_whitelist": {
           "description": "白名单 ID 列表",
-          "hint": "使用 /sid 获取 ID。"
+          "hint": "使用 /sid 获取 ID。列表为空时表示该白名单不启用（即所有 ID 都在白名单内）。"
         },
         "id_whitelist_log": {
           "description": "输出日志",
@@ -1072,6 +1071,10 @@
         "description": "自定义添加请求头",
         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"
       },
+      "ollama_disable_thinking": {
+        "description": "关闭思考模式",
+        "hint": "关闭 Ollama 思考模式。"
+      },
       "custom_extra_body": {
         "description": "自定义请求体参数",
         "hint": "用于在请求时添加额外的参数，如 temperature、top_p、max_tokens 等。",
@@ -1394,9 +1397,37 @@
         "description": "超时时间",
         "hint": "超时时间，单位为秒。"
       },
+      "mimo-stt-system-prompt": {
+        "description": "系统提示词",
+        "hint": "用于指导 MiMo STT 转录行为的 system prompt。"
+      },
+      "mimo-stt-user-prompt": {
+        "description": "用户提示词",
+        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。"
+      },
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
+      },
+      "mimo-tts-voice": {
+        "description": "音色",
+        "hint": "MiMo TTS 的音色名称。可选值包括 'mimo_default'、'default_en'、'default_zh'。"
+      },
+      "mimo-tts-format": {
+        "description": "输出格式",
+        "hint": "MiMo TTS 生成音频的格式。支持 'wav'、'mp3'、'pcm'。"
+      },
+      "mimo-tts-style-prompt": {
+        "description": "风格提示词",
+        "hint": "用于控制生成语音的说话风格、语气或情绪，例如温柔、活泼、沉稳等。可留空。"
+      },
+      "mimo-tts-dialect": {
+        "description": "方言",
+        "hint": "指定生成语音时使用的方言或口音，例如四川话、粤语口音等。可留空。"
+      },
+      "mimo-tts-seed-text": {
+        "description": "种子文本",
+        "hint": "用于引导音色和说话方式的参考文本，会影响生成语音的表达风格。"
       },
       "fishaudio-tts-character": {
         "description": "character",

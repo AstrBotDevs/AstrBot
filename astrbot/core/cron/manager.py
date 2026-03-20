@@ -307,8 +307,11 @@ class CronJobManager:
         if cron_payload.get("origin", "tool") == "api":
             cron_event.role = "admin"
 
+        tool_call_timeout = cfg.get("provider_settings", {}).get(
+            "tool_call_timeout", 120
+        )
         config = MainAgentBuildConfig(
-            tool_call_timeout=3600,
+            tool_call_timeout=tool_call_timeout,
             llm_safety_mode=False,
             streaming_response=False,
         )
@@ -332,9 +335,9 @@ class CronJobManager:
             cron_job=cron_job_str
         )
         req.prompt = (
-            "You are now responding to a scheduled task"
+            "You are now responding to a scheduled task. "
             "Proceed according to your system instructions. "
-            "Output using same language as previous conversation."
+            "Output using same language as previous conversation. "
             "After completing your task, summarize and output your actions and results."
         )
         if not req.func_tool:
