@@ -1,11 +1,14 @@
 import asyncio
+import os
 import re
 import sys
 import uuid
+from typing import cast
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
 from telegram.constants import ChatType
+from telegram.error import InvalidToken, Unauthorized
 from telegram.ext import ApplicationBuilder, ContextTypes, ExtBot, filters
 from telegram.ext import MessageHandler as TelegramMessageHandler
 
@@ -25,6 +28,9 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.io import download_file
+from astrbot.core.utils.media_utils import convert_audio_to_wav
 
 from .tg_event import TelegramPlatformEvent
 
@@ -88,6 +94,26 @@ class TelegramPlatformAdapter(Platform):
         logger.debug(f"Telegram base url: {self.client.base_url}")
 
         self.scheduler = AsyncIOScheduler()
+        self._terminating = False
+        raw_delay = self.config.get("telegram_polling_restart_delay", 5.0)
+        try:
+            delay = float(raw_delay)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid 'telegram_polling_restart_delay' value %r in config, "
+                "falling back to default 5.0s",
+                raw_delay,
+            )
+            delay = 5.0
+
+        if delay < 0.1:
+            logger.warning(
+                "Configured 'telegram_polling_restart_delay' (%s) is too small; "
+                "enforcing minimum of 0.1s to avoid tight restart loops",
+                delay,
+            )
+            delay = 0.1
+        self._polling_restart_delay = delay
 
         # Media group handling
         # Cache structure: {media_group_id: {"created_at": datetime, "items": [(update, context), ...]}}
@@ -140,9 +166,43 @@ class TelegramPlatformAdapter(Platform):
             logger.error("Telegram Updater is not initialized. Cannot start polling.")
             return
 
-        queue = self.application.updater.start_polling()
-        logger.info("Telegram Platform Adapter is running.")
-        await queue
+        while not self._terminating:
+            try:
+                logger.info("Starting Telegram polling...")
+                await self.application.updater.start_polling(
+                    error_callback=self._on_polling_error
+                )
+                logger.info("Telegram Platform Adapter is running.")
+                while self.application.updater.running and not self._terminating:  # noqa: ASYNC110
+                    await asyncio.sleep(1)
+
+                if not self._terminating:
+                    logger.warning(
+                        "Telegram polling loop exited unexpectedly, "
+                        f"retrying in {self._polling_restart_delay}s."
+                    )
+            except asyncio.CancelledError:
+                raise
+            except (Unauthorized, InvalidToken) as e:
+                logger.error(
+                    f"Telegram token is invalid or unauthorized: {e}. Polling stopped."
+                )
+                break
+            except Exception as e:
+                logger.exception(
+                    "Telegram polling crashed with exception: "
+                    f"{type(e).__name__}: {e!s}. "
+                    f"Retrying in {self._polling_restart_delay}s.",
+                )
+
+            if not self._terminating:
+                await asyncio.sleep(self._polling_restart_delay)
+
+    def _on_polling_error(self, error: Exception) -> None:
+        logger.error(
+            f"Telegram polling request failed: {type(error).__name__}: {error!s}",
+            exc_info=error,
+        )
 
     async def register_commands(self) -> None:
         """收集所有注册的指令并注册到 Telegram"""
@@ -174,14 +234,19 @@ class TelegramPlatformAdapter(Platform):
             if not handler_metadata.enabled:
                 continue
             for event_filter in handler_metadata.event_filters:
-                cmd_info = self._extract_command_info(
+                cmd_info_list = self._extract_command_info(
                     event_filter,
                     handler_metadata,
                     skip_commands,
                 )
-                if cmd_info:
-                    cmd_name, description = cmd_info
-                    command_dict.setdefault(cmd_name, description)
+                if cmd_info_list:
+                    for cmd_name, description in cmd_info_list:
+                        if cmd_name in command_dict:
+                            logger.warning(
+                                f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
+                                f"'{command_dict[cmd_name]}'"
+                            )
+                        command_dict.setdefault(cmd_name, description)
 
         commands_a = sorted(command_dict.keys())
         return [BotCommand(cmd, command_dict[cmd]) for cmd in commands_a]
@@ -191,9 +256,9 @@ class TelegramPlatformAdapter(Platform):
         event_filter,
         handler_metadata,
         skip_commands: set,
-    ) -> tuple[str, str] | None:
-        """从事件过滤器中提取指令信息"""
-        cmd_name = None
+    ) -> list[tuple[str, str]] | None:
+        """从事件过滤器中提取指令信息，包括所有别名"""
+        cmd_names = []
         is_group = False
         if isinstance(event_filter, CommandFilter) and event_filter.command_name:
             if (
@@ -201,26 +266,32 @@ class TelegramPlatformAdapter(Platform):
                 and event_filter.parent_command_names != [""]
             ):
                 return None
-            cmd_name = event_filter.command_name
+            # 收集主命令名和所有别名
+            cmd_names = [event_filter.command_name]
+            if event_filter.alias:
+                cmd_names.extend(event_filter.alias)
         elif isinstance(event_filter, CommandGroupFilter):
             if event_filter.parent_group:
                 return None
-            cmd_name = event_filter.group_name
+            cmd_names = [event_filter.group_name]
             is_group = True
 
-        if not cmd_name or cmd_name in skip_commands:
-            return None
+        result = []
+        for cmd_name in cmd_names:
+            if not cmd_name or cmd_name in skip_commands:
+                continue
+            if not re.match(r"^[a-z0-9_]+$", cmd_name) or len(cmd_name) > 32:
+                continue
 
-        if not re.match(r"^[a-z0-9_]+$", cmd_name) or len(cmd_name) > 32:
-            return None
+            # Build description.
+            description = handler_metadata.desc or (
+                f"Command group: {cmd_name}" if is_group else f"Command: {cmd_name}"
+            )
+            if len(description) > 30:
+                description = description[:30] + "..."
+            result.append((cmd_name, description))
 
-        # Build description.
-        description = handler_metadata.desc or (
-            f"指令组: {cmd_name} (包含多个子指令)" if is_group else f"指令: {cmd_name}"
-        )
-        if len(description) > 30:
-            description = description[:30] + "..."
-        return cmd_name, description
+        return result if result else None
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not update.effective_chat:
@@ -273,8 +344,8 @@ class TelegramPlatformAdapter(Platform):
         else:
             message.type = MessageType.GROUP_MESSAGE
             message.group_id = str(update.message.chat.id)
-            if update.message.message_thread_id:
-                # Topic Group
+            if update.message.is_topic_message and update.message.message_thread_id:
+                # Telegram Topic Group: include thread id to isolate per-topic sessions.
                 message.group_id += "#" + str(update.message.message_thread_id)
                 message.session_id = message.group_id
         message.message_id = str(update.message.message_id)
@@ -364,8 +435,19 @@ class TelegramPlatformAdapter(Platform):
 
         elif update.message.voice:
             file = await update.message.voice.get_file()
+
+            file_basename = os.path.basename(cast(str, file.file_path))
+            temp_dir = get_astrbot_temp_path()
+            temp_path = os.path.join(temp_dir, file_basename)
+            await download_file(cast(str, file.file_path), path=temp_path)
+            path_wav = os.path.join(
+                temp_dir,
+                f"{file_basename}.wav",
+            )
+            path_wav = await convert_audio_to_wav(temp_path, path_wav)
+
             message.message = [
-                Comp.Record(file=file.file_path, url=file.file_path),
+                Comp.Record(file=path_wav, url=path_wav),
             ]
 
         elif update.message.photo:
@@ -540,6 +622,7 @@ class TelegramPlatformAdapter(Platform):
 
     async def terminate(self) -> None:
         try:
+            self._terminating = True
             if self.scheduler.running:
                 self.scheduler.shutdown()
 

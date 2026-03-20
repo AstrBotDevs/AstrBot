@@ -20,6 +20,8 @@
   "form": {
     "personaId": "Persona ID",
     "systemPrompt": "System Prompt",
+    "customErrorMessage": "Custom Error Reply Message (Optional)",
+    "customErrorMessageHelp": "When this persona's LLM request fails (for example, connection failures), this error reply is sent first. Leave empty to use the default error message.",
     "presetDialogs": "Preset Dialogs",
     "presetDialogsHelp": "Add some preset dialogs to help the bot better understand the role settings. The number of dialogs must be even (users and assistants take turns).",
     "userMessage": "User Message",

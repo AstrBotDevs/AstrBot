@@ -3,7 +3,7 @@
     "name": "AI 配置",
     "agent_runner": {
       "description": "Agent 执行方式",
-      "hint": "选择 AI 对话的执行器,默认为 AstrBot 内置 Agent 执行器,可使用 AstrBot 内的知识库、人格、工具调用功能。如果不打算接入 Dify 或 Coze 等第三方 Agent 执行器,不需要修改此节。",
+      "hint": "选择 AI 对话的执行器,默认为 AstrBot 内置 Agent 执行器,可使用 AstrBot 内的知识库、人格、工具调用功能。如果不打算接入 Dify、Coze、DeerFlow 等第三方 Agent 执行器,不需要修改此节。",
       "provider_settings": {
         "enable": {
           "description": "启用",
@@ -15,7 +15,8 @@
             "内置 Agent",
             "Dify",
             "Coze",
-            "阿里云百炼应用"
+            "阿里云百炼应用",
+            "DeerFlow"
           ]
         },
         "coze_agent_runner_provider_id": {
@@ -26,6 +27,9 @@
         },
         "dashscope_agent_runner_provider_id": {
           "description": "阿里云百炼应用 Agent 执行器提供商 ID"
+        },
+        "deerflow_agent_runner_provider_id": {
+          "description": "DeerFlow Agent 执行器提供商 ID"
         }
       }
     },
@@ -160,6 +164,22 @@
           "booter": {
             "description": "沙箱环境驱动器"
           },
+          "shipyard_neo_endpoint": {
+            "description": "Shipyard Neo API Endpoint",
+            "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。"
+          },
+          "shipyard_neo_access_token": {
+            "description": "Shipyard Neo 访问令牌",
+            "hint": "Bay 的 API Key（sk-bay-...）。留空时自动从 credentials.json 发现。"
+          },
+          "shipyard_neo_profile": {
+            "description": "Shipyard Neo Profile",
+            "hint": "Shipyard Neo 沙箱 profile，例如 python-default。"
+          },
+          "shipyard_neo_ttl": {
+            "description": "Shipyard Neo Sandbox 存活时间(秒)",
+            "hint": "Shipyard Neo 沙箱的生存时间（秒）。"
+          },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
             "hint": "Shipyard 服务的 API 访问地址。"
@@ -253,6 +273,10 @@
         },
         "show_tool_use_status": {
           "description": "输出函数调用状态"
+        },
+        "show_tool_call_result": {
+          "description": "输出函数调用返回结果",
+          "hint": "仅在启用“输出函数调用状态”时生效，且最多展示 70 个字符。"
         },
         "sanitize_context_by_modalities": {
           "description": "按模型能力清理历史上下文",
@@ -349,7 +373,8 @@
         "hint": "可选的 Discord 活动名称。留空则不设置活动。"
       },
       "discord_command_register": {
-        "description": "是否自动将插件指令注册为 Discord 斜杠指令"
+        "description": "注册 Discord 指令",
+        "hint": "启用后，自动将插件指令注册为 Discord 斜杠指令"
       },
       "discord_proxy": {
         "description": "Discord 代理地址",
@@ -509,6 +534,10 @@
         "description": "Telegram 命令自动刷新间隔",
         "hint": "Telegram 命令自动刷新间隔，单位为秒。"
       },
+      "telegram_polling_restart_delay": {
+        "description": "Telegram 轮询重启延迟",
+        "hint": "当轮询意外结束尝试自动重启时的延迟时间，单位为秒。默认为 5s。"
+      },
       "telegram_token": {
         "description": "Bot Token",
         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。"
@@ -518,7 +547,7 @@
       },
       "unified_webhook_mode": {
         "description": "统一 Webhook 模式",
-        "hint": "启用后，将使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。"
+        "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。"
       },
       "webhook_uuid": {
         "description": "Webhook UUID",
@@ -528,13 +557,41 @@
         "description": "企业微信智能机器人的名字",
         "hint": "请务必填写正确，否则无法使用一些指令。"
       },
+      "wecom_ai_bot_connection_mode": {
+        "description": "企业微信智能机器人连接模式",
+        "hint": "Webhook 回调模式需要配置 Token/EncodingAESKey；长连接模式需要配置 BotID/Secret。"
+      },
       "wecomaibot_friend_message_welcome_text": {
         "description": "企业微信智能机器人私聊欢迎语",
-        "hint": "当用户当天进入智能机器人单聊会话，回复欢迎语，如 “💭 思考中...”。留空则不回复。"
+        "hint": "可选。当用户当天进入智能机器人单聊会话，回复欢迎语，如 “💭 思考中...”。留空则不回复。"
       },
       "wecomaibot_init_respond_text": {
         "description": "企业微信智能机器人初始响应文本",
-        "hint": "当机器人收到消息时，首先回复的文本内容。留空则不设置。"
+        "hint": "可选。当机器人收到消息时，首先回复的文本内容。留空则不设置。"
+      },
+      "wecomaibot_token": {
+        "description": "企业微信智能机器人 Token",
+        "hint": "用于 Webhook 回调模式的身份验证。"
+      },
+      "wecomaibot_encoding_aes_key": {
+        "description": "企业微信智能机器人 EncodingAESKey",
+        "hint": "用于 Webhook 回调模式的消息加密解密。"
+      },
+      "wecomaibot_ws_bot_id": {
+        "description": "长连接 BotID",
+        "hint": "企业微信智能机器人长连接模式凭证 BotID。"
+      },
+      "wecomaibot_ws_secret": {
+        "description": "长连接 Secret",
+        "hint": "企业微信智能机器人长连接模式凭证 Secret。"
+      },
+      "wecomaibot_ws_url": {
+        "description": "长连接 WebSocket 地址",
+        "hint": "默认值为 wss://openws.work.weixin.qq.com，一般无需修改。"
+      },
+      "wecomaibot_heartbeat_interval": {
+        "description": "长连接心跳间隔",
+        "hint": "长连接模式心跳间隔（秒），建议 30 秒。"
       },
       "wpp_active_message_poll": {
         "description": "是否启用主动消息轮询",
@@ -557,11 +614,51 @@
       },
       "msg_push_webhook_url": {
         "description": "企业微信消息推送 Webhook URL",
-        "hint": "用于主动消息推送，请在企微群->消息推送得到 URL。强烈建议设置此项以带来更好的消息发送体验。"
+        "hint": "可选。用于主动消息推送，请在企微群->消息推送得到 URL。建议设置此项以带来更好的消息发送体验。"
       },
       "only_use_webhook_url_to_send": {
         "description": "仅使用 Webhook 发送消息",
-        "hint": "启用后，企业微信智能机器人的所有回复都改为通过消息推送 Webhook 发送。消息推送 Webhook 支持更多的消息类型（如图片、文件等）。如果不需要打字机效果，强烈建议使用此选项。"
+        "hint": "可选。启用后，企业微信智能机器人的所有回复都改为通过消息推送 Webhook 发送。消息推送 Webhook 支持更多的消息类型（如图片、文件等）。如果不需要打字机效果，强烈建议使用此选项。"
+      },
+      "kook_bot_token": {
+        "description": "机器人 Token",
+        "type": "string",
+        "hint": "必填项。从 KOOK 开发者平台获取的机器人 Token"
+      },
+      "kook_reconnect_delay": {
+        "description": "重连延迟",
+        "type": "int",
+        "hint": "重连延迟时间（秒），使用指数退避策略"
+      },
+      "kook_max_reconnect_delay": {
+        "description": "最大重连延迟",
+        "type": "int",
+        "hint": "重连延迟的最大值（秒）"
+      },
+      "kook_max_retry_delay": {
+        "description": "最大重试延迟",
+        "type": "int",
+        "hint": "重试的最大延迟时间（秒）"
+      },
+      "kook_heartbeat_interval": {
+        "description": "心跳间隔",
+        "type": "int",
+        "hint": "心跳检测间隔时间（秒）"
+      },
+      "kook_heartbeat_timeout": {
+        "description": "心跳超时时间",
+        "type": "int",
+        "hint": "心跳检测超时时间（秒）"
+      },
+      "kook_max_heartbeat_failures": {
+        "description": "最大心跳失败次数",
+        "type": "int",
+        "hint": "允许的最大心跳失败次数，超过后断开连接"
+      },
+      "kook_max_consecutive_failures": {
+        "description": "最大连续失败次数",
+        "type": "int",
+        "hint": "允许的最大连续失败次数，超过后停止重试"
       }
     },
     "general": {
@@ -613,11 +710,11 @@
       "platform_settings": {
         "enable_id_white_list": {
           "description": "启用白名单",
-          "hint": "启用后,只有在白名单内的会话会被响应。"
+          "hint": "启用后,只有在白名单内的会话会被响应，白名单列表为空时代表不启用白名单（所有 ID 都会被放行）。"
         },
         "id_whitelist": {
           "description": "白名单 ID 列表",
-          "hint": "使用 /sid 获取 ID。"
+          "hint": "使用 /sid 获取 ID。列表为空时表示该白名单不启用（即所有 ID 都在白名单内）。"
         },
         "id_whitelist_log": {
           "description": "输出日志",
@@ -723,6 +820,17 @@
               "hint": "Telegram 仅支持固定反应集合,参考:[https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)"
             }
           }
+        },
+        "discord": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Discord] 启用预回应表情"
+            },
+            "emojis": {
+              "description": "表情列表（Unicode 或自定义表情名）",
+              "hint": "填写 Unicode 表情符号，例如：👍、🤔、⏳"
+            }
+          }
         }
       }
     }
@@ -774,7 +882,8 @@
             ]
           },
           "regex": {
-            "description": "分段正则表达式"
+            "description": "分段正则表达式",
+            "hint": "用于按正则规则识别分段点。建议使用能匹配分隔符的表达式。"
           },
           "split_words": {
             "description": "分段词列表",
@@ -969,6 +1078,10 @@
         "description": "自定义添加请求头",
         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"
       },
+      "ollama_disable_thinking": {
+        "description": "关闭思考模式",
+        "hint": "关闭 Ollama 思考模式。"
+      },
       "custom_extra_body": {
         "description": "自定义请求体参数",
         "hint": "用于在请求时添加额外的参数，如 temperature、top_p、max_tokens 等。",
@@ -1092,6 +1205,12 @@
       "embedding_api_base": {
         "description": "API Base URL"
       },
+      "openai_embedding": {
+        "hint": "OpenAI Embedding 会在请求时自动补上 /v1。"
+      },
+      "gemini_embedding": {
+        "hint": "Gemini Embedding 无需手动添加 /v1beta。"
+      },
       "volcengine_cluster": {
         "description": "火山引擎集群",
         "hint": "若使用语音复刻大模型，可选volcano_icl或volcano_icl_concurr，默认使用volcano_tts"
@@ -1188,9 +1307,17 @@
       },
       "anth_thinking_config": {
         "description": "思考配置",
+        "type": {
+          "description": "思考类型",
+          "hint": "设为 'adaptive' 以使用自适应思考（推荐 Opus 4.6+ / Sonnet 4.6+）。留空则使用手动预算模式。参见: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking"
+        },
         "budget": {
           "description": "思考预算",
-          "hint": "Anthropic thinking.budget_tokens 参数。必须 >= 1024。参见: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+          "hint": "Anthropic thinking.budget_tokens 参数。必须 >= 1024。仅在思考类型为空时生效。Opus 4.6 / Sonnet 4.6 已弃用。参见: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+        },
+        "effort": {
+          "description": "思考深度",
+          "hint": "当思考类型为 'adaptive' 时控制思考深度。'high' 为默认值。'max' 仅限 Opus 4.6。参见: https://platform.claude.com/docs/en/build-with-claude/effort"
         }
       },
       "minimax-group-id": {
@@ -1277,9 +1404,37 @@
         "description": "超时时间",
         "hint": "超时时间，单位为秒。"
       },
+      "mimo-stt-system-prompt": {
+        "description": "系统提示词",
+        "hint": "用于指导 MiMo STT 转录行为的 system prompt。"
+      },
+      "mimo-stt-user-prompt": {
+        "description": "用户提示词",
+        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。"
+      },
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
+      },
+      "mimo-tts-voice": {
+        "description": "音色",
+        "hint": "MiMo TTS 的音色名称。可选值包括 'mimo_default'、'default_en'、'default_zh'。"
+      },
+      "mimo-tts-format": {
+        "description": "输出格式",
+        "hint": "MiMo TTS 生成音频的格式。支持 'wav'、'mp3'、'pcm'。"
+      },
+      "mimo-tts-style-prompt": {
+        "description": "风格提示词",
+        "hint": "用于控制生成语音的说话风格、语气或情绪，例如温柔、活泼、沉稳等。可留空。"
+      },
+      "mimo-tts-dialect": {
+        "description": "方言",
+        "hint": "指定生成语音时使用的方言或口音，例如四川话、粤语口音等。可留空。"
+      },
+      "mimo-tts-seed-text": {
+        "description": "种子文本",
+        "hint": "用于引导音色和说话方式的参考文本，会影响生成语音的表达风格。"
       },
       "fishaudio-tts-character": {
         "description": "character",
@@ -1310,6 +1465,10 @@
       },
       "api_base": {
         "description": "API Base URL"
+      },
+      "proxy": {
+        "description": "代理地址",
+        "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。"
       },
       "model": {
         "description": "模型 ID",
@@ -1350,6 +1509,45 @@
       "coze_api_base": {
         "description": "API Base URL",
         "hint": "Coze API 的基础 URL 地址，默认为 https://api.coze.cn"
+      },
+      "deerflow_api_base": {
+        "description": "API Base URL",
+        "hint": "DeerFlow API 网关地址，默认为 http://127.0.0.1:2026"
+      },
+      "deerflow_api_key": {
+        "description": "DeerFlow API Key",
+        "hint": "可选。若 DeerFlow 网关配置了 Bearer 鉴权，则在此填写。"
+      },
+      "deerflow_auth_header": {
+        "description": "Authorization Header",
+        "hint": "可选。自定义 Authorization 请求头，优先级高于 DeerFlow API Key。"
+      },
+      "deerflow_assistant_id": {
+        "description": "Assistant ID",
+        "hint": "LangGraph assistant_id，默认为 lead_agent。"
+      },
+      "deerflow_model_name": {
+        "description": "模型名称覆盖",
+        "hint": "可选。覆盖 DeerFlow 默认模型（对应 runtime context 的 model_name）。"
+      },
+      "deerflow_thinking_enabled": {
+        "description": "启用思考模式"
+      },
+      "deerflow_plan_mode": {
+        "description": "启用计划模式",
+        "hint": "对应 DeerFlow 的 is_plan_mode。"
+      },
+      "deerflow_subagent_enabled": {
+        "description": "启用子智能体",
+        "hint": "对应 DeerFlow 的 subagent_enabled。"
+      },
+      "deerflow_max_concurrent_subagents": {
+        "description": "子智能体最大并发数",
+        "hint": "对应 DeerFlow 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。"
+      },
+      "deerflow_recursion_limit": {
+        "description": "递归深度上限",
+        "hint": "对应 LangGraph recursion_limit。"
       },
       "auto_save_history": {
         "description": "由 Coze 管理对话记录",

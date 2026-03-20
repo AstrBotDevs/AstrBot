@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue';
 import axios from 'axios';
 import { useRouter } from 'vue-router';
+import { buildWebchatUmoDetails, getStoredSelectedChatConfigId } from '@/utils/chatConfigBinding';
 
 export interface Session {
     session_id: string;
@@ -62,9 +63,24 @@ export function useSessions(chatboxMode: boolean = false) {
 
     async function newSession() {
         try {
+            const selectedConfigId = getStoredSelectedChatConfigId();
             const response = await axios.get('/api/chat/new_session');
             const sessionId = response.data.data.session_id;
+            const platformId = response.data.data.platform_id;
+
             currSessionId.value = sessionId;
+
+            if (selectedConfigId && selectedConfigId !== 'default' && platformId === 'webchat') {
+                try {
+                    const umoDetails = buildWebchatUmoDetails(sessionId, false);
+                    await axios.post('/api/config/umo_abconf_route/update', {
+                        umo: umoDetails.umo,
+                        conf_id: selectedConfigId
+                    });
+                } catch (err) {
+                    console.error('Failed to bind config to session', err);
+                }
+            }
 
             // 更新 URL
             const basePath = chatboxMode ? '/chatbox' : '/chat';
@@ -90,6 +106,73 @@ export function useSessions(chatboxMode: boolean = false) {
             selectedSessions.value = [];
         } catch (err) {
             console.error(err);
+        }
+    }
+
+    interface BatchDeleteFailedItem {
+        session_id: string;
+        reason: string;
+    }
+
+    interface BatchDeleteResult {
+        deleted_count: number;
+        failed_count: number;
+        failed_items: BatchDeleteFailedItem[];
+        currentSessionDeleted: boolean;
+    }
+
+    function isBatchDeleteResponseData(data: unknown): data is {
+        deleted_count: number;
+        failed_count: number;
+        failed_items: BatchDeleteFailedItem[];
+    } {
+        if (!data || typeof data !== 'object') {
+            return false;
+        }
+        const payload = data as Record<string, unknown>;
+        return (
+            typeof payload.deleted_count === 'number' &&
+            typeof payload.failed_count === 'number' &&
+            Array.isArray(payload.failed_items)
+        );
+    }
+
+    async function batchDeleteSessions(sessionIds: string[]): Promise<BatchDeleteResult> {
+        try {
+            const currentSessionId = currSessionId.value;
+            const response = await axios.post('/api/chat/batch_delete_sessions', { session_ids: sessionIds });
+            if (response.data?.status !== 'ok') {
+                throw new Error(response.data?.message || 'Failed to batch delete sessions');
+            }
+
+            const data = response.data?.data;
+            if (!isBatchDeleteResponseData(data)) {
+                throw new Error('Invalid batch delete response payload');
+            }
+
+            const failedItems = data.failed_items;
+            const failedSessionIds = new Set(failedItems.map(item => item.session_id));
+            const currentSessionDeleted = Boolean(
+                currentSessionId &&
+                sessionIds.includes(currentSessionId) &&
+                !failedSessionIds.has(currentSessionId)
+            );
+
+            if (currentSessionDeleted) {
+                currSessionId.value = '';
+                selectedSessions.value = [];
+            }
+            await getSessions();
+
+            return {
+                deleted_count: data.deleted_count,
+                failed_count: data.failed_count,
+                failed_items: failedItems,
+                currentSessionDeleted,
+            };
+        } catch (err) {
+            console.error(err);
+            throw err;
         }
     }
 
@@ -151,6 +234,7 @@ export function useSessions(chatboxMode: boolean = false) {
         getSessions,
         newSession,
         deleteSession,
+        batchDeleteSessions,
         showEditTitleDialog,
         saveTitle,
         updateSessionTitle,

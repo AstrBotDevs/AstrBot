@@ -13,11 +13,25 @@ from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.computer.tools import (
+    AnnotateExecutionTool,
+    BrowserBatchExecTool,
+    BrowserExecTool,
+    CreateSkillCandidateTool,
+    CreateSkillPayloadTool,
+    EvaluateSkillCandidateTool,
     ExecuteShellTool,
     FileDownloadTool,
     FileUploadTool,
+    GetExecutionHistoryTool,
+    GetSkillPayloadTool,
+    ListSkillCandidatesTool,
+    ListSkillReleasesTool,
     LocalPythonTool,
+    PromoteSkillCandidateTool,
     PythonTool,
+    RollbackSkillReleaseTool,
+    RunBrowserSkillTool,
+    SyncSkillReleaseTool,
 )
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
@@ -174,7 +188,12 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
 @dataclass
 class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     name: str = "send_message_to_user"
-    description: str = "Directly send message to the user. Only use this tool when you need to proactively message the user. Otherwise you can directly output the reply in the conversation."
+    description: str = (
+        "Send message to the user. "
+        "Supports various message types including `plain`, `image`, `record`, `video`, `file`, and `mention_user`. "
+        "Use this tool to send media files (`image`, `record`, `video`, `file`), "
+        "or when you need to proactively message the user(such as cron job). For normal text replies, you can output directly."
+    )
 
     parameters: dict = Field(
         default_factory=lambda: {
@@ -190,7 +209,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                                 "type": "string",
                                 "description": (
                                     "Component type. One of: "
-                                    "plain, image, record, file, mention_user"
+                                    "plain, image, record, video, file, mention_user. Record is voice message."
                                 ),
                             },
                             "text": {
@@ -306,6 +325,19 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         components.append(Comp.Record.fromURL(url=url))
                     else:
                         return f"error: messages[{idx}] must include path or url for record component."
+                elif msg_type == "video":
+                    path = msg.get("path")
+                    url = msg.get("url")
+                    if path:
+                        (
+                            local_path,
+                            file_from_sandbox,
+                        ) = await self._resolve_path_from_sandbox(context, path)
+                        components.append(Comp.Video.fromFileSystem(path=local_path))
+                    elif url:
+                        components.append(Comp.Video.fromURL(url=url))
+                    else:
+                        return f"error: messages[{idx}] must include path or url for video component."
                 elif msg_type == "file":
                     path = msg.get("path")
                     url = msg.get("url")
@@ -449,6 +481,20 @@ PYTHON_TOOL = PythonTool()
 LOCAL_PYTHON_TOOL = LocalPythonTool()
 FILE_UPLOAD_TOOL = FileUploadTool()
 FILE_DOWNLOAD_TOOL = FileDownloadTool()
+BROWSER_EXEC_TOOL = BrowserExecTool()
+BROWSER_BATCH_EXEC_TOOL = BrowserBatchExecTool()
+RUN_BROWSER_SKILL_TOOL = RunBrowserSkillTool()
+GET_EXECUTION_HISTORY_TOOL = GetExecutionHistoryTool()
+ANNOTATE_EXECUTION_TOOL = AnnotateExecutionTool()
+CREATE_SKILL_PAYLOAD_TOOL = CreateSkillPayloadTool()
+GET_SKILL_PAYLOAD_TOOL = GetSkillPayloadTool()
+CREATE_SKILL_CANDIDATE_TOOL = CreateSkillCandidateTool()
+LIST_SKILL_CANDIDATES_TOOL = ListSkillCandidatesTool()
+EVALUATE_SKILL_CANDIDATE_TOOL = EvaluateSkillCandidateTool()
+PROMOTE_SKILL_CANDIDATE_TOOL = PromoteSkillCandidateTool()
+LIST_SKILL_RELEASES_TOOL = ListSkillReleasesTool()
+ROLLBACK_SKILL_RELEASE_TOOL = RollbackSkillReleaseTool()
+SYNC_SKILL_RELEASE_TOOL = SyncSkillReleaseTool()
 
 # we prevent astrbot from connecting to known malicious hosts
 # these hosts are base64 encoded

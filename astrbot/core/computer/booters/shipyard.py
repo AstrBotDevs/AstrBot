@@ -31,7 +31,7 @@ class ShipyardBooter(ComputerBooter):
         self._ship = ship
 
     async def shutdown(self) -> None:
-        pass
+        logger.info("[Computer] Shipyard booter shutdown.")
 
     @property
     def fs(self) -> FileSystemComponent:
@@ -47,11 +47,19 @@ class ShipyardBooter(ComputerBooter):
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         """Upload file to sandbox"""
-        return await self._ship.upload_file(path, file_name)
+        result = await self._ship.upload_file(path, file_name)
+        logger.info("[Computer] File uploaded to Shipyard sandbox: %s", file_name)
+        return result
 
     async def download_file(self, remote_path: str, local_path: str):
         """Download file from sandbox."""
-        return await self._ship.download_file(remote_path, local_path)
+        result = await self._ship.download_file(remote_path, local_path)
+        logger.info(
+            "[Computer] File downloaded from Shipyard sandbox: %s -> %s",
+            remote_path,
+            local_path,
+        )
+        return result
 
     async def available(self) -> bool:
         """Check if the sandbox is available."""
@@ -59,8 +67,17 @@ class ShipyardBooter(ComputerBooter):
             ship_id = self._ship.id
             data = await self._sandbox_client.get_ship(ship_id)
             if not data:
+                logger.info(
+                    "[Computer] Shipyard sandbox health check: id=%s, healthy=False (no data)",
+                    ship_id,
+                )
                 return False
             health = bool(data.get("status", 0) == 1)
+            logger.info(
+                "[Computer] Shipyard sandbox health check: id=%s, healthy=%s",
+                ship_id,
+                health,
+            )
             return health
         except Exception as e:
             logger.error(f"Error checking Shipyard sandbox availability: {e}")

@@ -126,6 +126,8 @@ class Persona(TimestampMixin, SQLModel, table=True):
     """None means use ALL tools for default, empty list means no tools, otherwise a list of tool names."""
     skills: list | None = Field(default=None, sa_type=JSON)
     """None means use ALL skills for default, empty list means no skills, otherwise a list of skill names."""
+    custom_error_message: str | None = Field(default=None, sa_type=Text)
+    """Optional custom error message sent to end users when the agent request fails."""
     folder_id: str | None = Field(default=None, max_length=36)
     """所属文件夹ID，NULL 表示在根目录"""
     sort_order: int = Field(default=0)
@@ -288,6 +290,43 @@ class Attachment(TimestampMixin, SQLModel, table=True):
     )
 
 
+class ApiKey(TimestampMixin, SQLModel, table=True):
+    """API keys used by external developers to access Open APIs."""
+
+    __tablename__: str = "api_keys"
+
+    inner_id: int | None = Field(
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
+    )
+    key_id: str = Field(
+        max_length=36,
+        nullable=False,
+        unique=True,
+        default_factory=lambda: str(uuid.uuid4()),
+    )
+    name: str = Field(max_length=255, nullable=False)
+    key_hash: str = Field(max_length=128, nullable=False, unique=True)
+    key_prefix: str = Field(max_length=24, nullable=False)
+    scopes: list | None = Field(default=None, sa_type=JSON)
+    created_by: str = Field(max_length=255, nullable=False)
+    last_used_at: datetime | None = Field(default=None)
+    expires_at: datetime | None = Field(default=None)
+    revoked_at: datetime | None = Field(default=None)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "key_id",
+            name="uix_api_key_id",
+        ),
+        UniqueConstraint(
+            "key_hash",
+            name="uix_api_key_hash",
+        ),
+    )
+
+
 class ChatUIProject(TimestampMixin, SQLModel, table=True):
     """This class represents projects for organizing ChatUI conversations.
 
@@ -435,6 +474,8 @@ class Personality(TypedDict):
     """工具列表。None 表示使用所有工具，空列表表示不使用任何工具"""
     skills: list[str] | None
     """Skills 列表。None 表示使用所有 Skills，空列表表示不使用任何 Skills"""
+    custom_error_message: str | None
+    """可选的人格自定义报错回复信息。配置后将优先发送给最终用户。"""
 
     # cache
     _begin_dialogs_processed: list[dict]

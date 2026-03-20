@@ -40,6 +40,7 @@ import type { FolderTreeNode, SelectableItem } from '@/components/folder/types'
 interface Persona {
   persona_id: string
   system_prompt: string
+  custom_error_message?: string | null
   folder_id?: string | null
   [key: string]: any
 }
@@ -188,10 +189,16 @@ function openEditPersona(persona: Persona) {
 // 人格保存成功（创建或编辑）
 async function handlePersonaSaved(message: string) {
   console.log('人格保存成功:', message)
+  const savedPersonaId = editingPersona.value?.persona_id || ''
   showPersonaDialog.value = false
   editingPersona.value = null
   // 刷新当前文件夹的人格列表
   await loadPersonasInFolder(currentFolderId.value)
+  window.dispatchEvent(
+    new CustomEvent('astrbot:persona-saved', {
+      detail: { persona_id: savedPersonaId }
+    })
+  )
 }
 
 // 错误处理

@@ -5,7 +5,8 @@ import os
 import ssl
 import traceback
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 
 import aiohttp
 import certifi
@@ -19,7 +20,10 @@ from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.filter.regex import RegexFilter
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
-from astrbot.core.star.star_manager import PluginManager
+from astrbot.core.star.star_manager import (
+    PluginManager,
+    PluginVersionIncompatibleError,
+)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_temp_path,
@@ -49,11 +53,13 @@ class PluginRoute(Route):
         super().__init__(context)
         self.routes = {
             "/plugin/get": ("GET", self.get_plugins),
+            "/plugin/check-compat": ("POST", self.check_plugin_compatibility),
             "/plugin/install": ("POST", self.install_plugin),
             "/plugin/install-upload": ("POST", self.install_plugin_upload),
             "/plugin/update": ("POST", self.update_plugin),
             "/plugin/update-all": ("POST", self.update_all_plugins),
             "/plugin/uninstall": ("POST", self.uninstall_plugin),
+            "/plugin/uninstall-failed": ("POST", self.uninstall_failed_plugin),
             "/plugin/market_list": ("GET", self.get_online_plugins),
             "/plugin/off": ("POST", self.off_plugin),
             "/plugin/on": ("POST", self.on_plugin),
@@ -80,6 +86,27 @@ class PluginRoute(Route):
         }
 
         self._logo_cache = {}
+
+    async def check_plugin_compatibility(self):
+        try:
+            data = await request.get_json()
+            version_spec = data.get("astrbot_version", "")
+            is_valid, message = self.plugin_manager._validate_astrbot_version_specifier(
+                version_spec
+            )
+            return (
+                Response()
+                .ok(
+                    {
+                        "compatible": is_valid,
+                        "message": message,
+                        "astrbot_version": version_spec,
+                    }
+                )
+                .__dict__
+            )
+        except Exception as e:
+            return Response().error(str(e)).__dict__
 
     async def reload_failed_plugins(self):
         if DEMO_MODE:
@@ -121,7 +148,7 @@ class PluginRoute(Route):
         try:
             success, message = await self.plugin_manager.reload(plugin_name)
             if not success:
-                return Response().error(message).__dict__
+                return Response().error(message or "插件重载失败").__dict__
             return Response().ok(None, "重载成功。").__dict__
         except Exception as e:
             logger.error(f"/api/plugin/reload: {traceback.format_exc()}")
@@ -326,6 +353,34 @@ class PluginRoute(Route):
             logger.warning(f"获取插件 Logo 失败: {e}")
             return None
 
+    def _resolve_plugin_dir(self, plugin) -> Path | None:
+        if not plugin.root_dir_name:
+            return None
+
+        base_dir = Path(
+            self.plugin_manager.reserved_plugin_path
+            if plugin.reserved
+            else self.plugin_manager.plugin_store_path
+        )
+        plugin_dir = base_dir / plugin.root_dir_name
+        if not plugin_dir.is_dir():
+            return None
+        return plugin_dir
+
+    def _get_plugin_installed_at(self, plugin) -> str | None:
+        plugin_dir = self._resolve_plugin_dir(plugin)
+        if plugin_dir is None:
+            return None
+
+        try:
+            return datetime.fromtimestamp(
+                plugin_dir.stat().st_mtime,
+                timezone.utc,
+            ).isoformat()
+        except OSError as exc:
+            logger.warning(f"获取插件安装时间失败 {plugin.name}: {exc!s}")
+            return None
+
     async def get_plugins(self):
         _plugin_resp = []
         plugin_name = request.args.get("name")
@@ -349,6 +404,9 @@ class PluginRoute(Route):
                 ),
                 "display_name": plugin.display_name,
                 "logo": f"/api/file/{logo_url}" if logo_url else None,
+                "support_platforms": plugin.support_platforms,
+                "astrbot_version": plugin.astrbot_version,
+                "installed_at": self._get_plugin_installed_at(plugin),
             }
             # 检查是否为全空的幽灵插件
             if not any(
@@ -443,6 +501,7 @@ class PluginRoute(Route):
 
         post_data = await request.get_json()
         repo_url = post_data["url"]
+        ignore_version_check = bool(post_data.get("ignore_version_check", False))
 
         proxy: str = post_data.get("proxy", None)
         if proxy:
@@ -450,10 +509,23 @@ class PluginRoute(Route):
 
         try:
             logger.info(f"正在安装插件 {repo_url}")
-            plugin_info = await self.plugin_manager.install_plugin(repo_url, proxy)
+            plugin_info = await self.plugin_manager.install_plugin(
+                repo_url,
+                proxy,
+                ignore_version_check=ignore_version_check,
+            )
             # self.core_lifecycle.restart()
             logger.info(f"安装插件 {repo_url} 成功。")
             return Response().ok(plugin_info, "安装成功。").__dict__
+        except PluginVersionIncompatibleError as e:
+            return {
+                "status": "warning",
+                "message": str(e),
+                "data": {
+                    "warning_type": "astrbot_version_incompatible",
+                    "can_ignore": True,
+                },
+            }
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
@@ -469,16 +541,32 @@ class PluginRoute(Route):
         try:
             file = await request.files
             file = file["file"]
+            form_data = await request.form
+            ignore_version_check = (
+                str(form_data.get("ignore_version_check", "false")).lower() == "true"
+            )
             logger.info(f"正在安装用户上传的插件 {file.filename}")
             file_path = os.path.join(
                 get_astrbot_temp_path(),
                 f"plugin_upload_{file.filename}",
             )
             await file.save(file_path)
-            plugin_info = await self.plugin_manager.install_plugin_from_file(file_path)
+            plugin_info = await self.plugin_manager.install_plugin_from_file(
+                file_path,
+                ignore_version_check=ignore_version_check,
+            )
             # self.core_lifecycle.restart()
             logger.info(f"安装插件 {file.filename} 成功")
             return Response().ok(plugin_info, "安装成功。").__dict__
+        except PluginVersionIncompatibleError as e:
+            return {
+                "status": "warning",
+                "message": str(e),
+                "data": {
+                    "warning_type": "astrbot_version_incompatible",
+                    "can_ignore": True,
+                },
+            }
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
@@ -503,6 +591,34 @@ class PluginRoute(Route):
                 delete_data=delete_data,
             )
             logger.info(f"卸载插件 {plugin_name} 成功")
+            return Response().ok(None, "卸载成功").__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
+
+    async def uninstall_failed_plugin(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+
+        post_data = await request.get_json()
+        dir_name = post_data.get("dir_name", "")
+        delete_config = post_data.get("delete_config", False)
+        delete_data = post_data.get("delete_data", False)
+        if not dir_name:
+            return Response().error("缺少失败插件目录名").__dict__
+
+        try:
+            logger.info(f"正在卸载失败插件 {dir_name}")
+            await self.plugin_manager.uninstall_failed_plugin(
+                dir_name,
+                delete_config=delete_config,
+                delete_data=delete_data,
+            )
+            logger.info(f"卸载失败插件 {dir_name} 成功")
             return Response().ok(None, "卸载成功").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -641,10 +757,16 @@ class PluginRoute(Route):
             logger.warning(f"插件 {plugin_name} 目录不存在")
             return Response().error(f"插件 {plugin_name} 目录不存在").__dict__
 
-        plugin_dir = os.path.join(
-            self.plugin_manager.plugin_store_path,
-            plugin_obj.root_dir_name or "",
-        )
+        if plugin_obj.reserved:
+            plugin_dir = os.path.join(
+                self.plugin_manager.reserved_plugin_path,
+                plugin_obj.root_dir_name,
+            )
+        else:
+            plugin_dir = os.path.join(
+                self.plugin_manager.plugin_store_path,
+                plugin_obj.root_dir_name,
+            )
 
         if not os.path.isdir(plugin_dir):
             logger.warning(f"无法找到插件目录: {plugin_dir}")
@@ -678,6 +800,7 @@ class PluginRoute(Route):
         logger.debug(f"正在获取插件 {plugin_name} 的更新日志")
 
         if not plugin_name:
+            logger.warning("插件名称为空")
             return Response().error("插件名称不能为空").__dict__
 
         # 查找插件
@@ -688,15 +811,27 @@ class PluginRoute(Route):
                 break
 
         if not plugin_obj:
+            logger.warning(f"插件 {plugin_name} 不存在")
             return Response().error(f"插件 {plugin_name} 不存在").__dict__
 
         if not plugin_obj.root_dir_name:
+            logger.warning(f"插件 {plugin_name} 目录不存在")
             return Response().error(f"插件 {plugin_name} 目录不存在").__dict__
 
-        plugin_dir = os.path.join(
-            self.plugin_manager.plugin_store_path,
-            plugin_obj.root_dir_name,
-        )
+        if plugin_obj.reserved:
+            plugin_dir = os.path.join(
+                self.plugin_manager.reserved_plugin_path,
+                plugin_obj.root_dir_name,
+            )
+        else:
+            plugin_dir = os.path.join(
+                self.plugin_manager.plugin_store_path,
+                plugin_obj.root_dir_name,
+            )
+
+        if not os.path.isdir(plugin_dir):
+            logger.warning(f"无法找到插件目录: {plugin_dir}")
+            return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
 
         # 尝试多种可能的文件名
         changelog_names = ["CHANGELOG.md", "changelog.md", "CHANGELOG", "changelog"]
@@ -716,6 +851,7 @@ class PluginRoute(Route):
                     return Response().error(f"读取更新日志失败: {e!s}").__dict__
 
         # 没有找到 changelog 文件，返回 ok 但 content 为 null
+        logger.warning(f"插件 {plugin_name} 没有更新日志文件")
         return Response().ok({"content": None}, "该插件没有更新日志文件").__dict__
 
     async def get_custom_source(self):

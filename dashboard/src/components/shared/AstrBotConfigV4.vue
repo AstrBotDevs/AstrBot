@@ -4,6 +4,7 @@ import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { ref, computed } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
+import PersonaQuickPreview from './PersonaQuickPreview.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 
@@ -274,6 +275,16 @@ function getSpecialSubtype(value) {
               </div>
             </v-col>
           </v-row>
+
+          <!-- Default Persona Quick Preview 全宽显示区域 -->
+          <v-row
+            v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona' && itemKey === 'provider_settings.default_personality'"
+            class="persona-preview-row"
+          >
+            <v-col cols="12" class="persona-preview-display">
+              <PersonaQuickPreview :model-value="createSelectorModel(itemKey).value" />
+            </v-col>
+          </v-row>
         </template>
         <v-divider class="config-divider"
           v-if="shouldShowItem(itemMeta, itemKey) && hasVisibleItemsAfter(metadata[metadataKey].items, index)"></v-divider>
@@ -430,6 +441,15 @@ function getSpecialSubtype(value) {
 }
 
 .plugin-set-display {
+  padding: 0 8px;
+}
+
+.persona-preview-row {
+  margin: 16px;
+  margin-top: 0;
+}
+
+.persona-preview-display {
   padding: 0 8px;
 }
 

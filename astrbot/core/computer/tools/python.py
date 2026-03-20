@@ -1,3 +1,4 @@
+import platform
 from dataclasses import dataclass, field
 
 import mcp
@@ -7,7 +8,10 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext, AstrMessageEvent
 from astrbot.core.computer.computer_client import get_booter, get_local_booter
+from astrbot.core.computer.tools.permissions import check_admin_permission
 from astrbot.core.message.message_event_result import MessageChain
+
+_OS_NAME = platform.system()
 
 param_schema = {
     "type": "object",
@@ -24,21 +28,6 @@ param_schema = {
     },
     "required": ["code"],
 }
-
-
-def _check_admin_permission(context: ContextWrapper[AstrAgentContext]) -> str | None:
-    cfg = context.context.context.get_config(
-        umo=context.context.event.unified_msg_origin
-    )
-    provider_settings = cfg.get("provider_settings", {})
-    require_admin = provider_settings.get("computer_use_require_admin", True)
-    if require_admin and context.context.event.role != "admin":
-        return (
-            "error: Permission denied. Python execution is only allowed for admin users. "
-            "Tell user to set admins in `AstrBot WebUI -> Config -> General Config` by adding their user ID to the admins list if they need this feature."
-            f"User's ID is: {context.context.event.get_sender_id()}. User's ID can be found by using /sid command."
-        )
-    return None
 
 
 async def handle_result(result: dict, event: AstrMessageEvent) -> ToolExecResult:
@@ -75,13 +64,13 @@ async def handle_result(result: dict, event: AstrMessageEvent) -> ToolExecResult
 @dataclass
 class PythonTool(FunctionTool):
     name: str = "astrbot_execute_ipython"
-    description: str = "Run codes in an IPython shell."
+    description: str = f"Run codes in an IPython shell. Current OS: {_OS_NAME}."
     parameters: dict = field(default_factory=lambda: param_schema)
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], code: str, silent: bool = False
     ) -> ToolExecResult:
-        if permission_error := _check_admin_permission(context):
+        if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
         sb = await get_booter(
             context.context.context,
@@ -97,14 +86,17 @@ class PythonTool(FunctionTool):
 @dataclass
 class LocalPythonTool(FunctionTool):
     name: str = "astrbot_execute_python"
-    description: str = "Execute codes in a Python environment."
+    description: str = (
+        f"Execute codes in a Python environment. Current OS: {_OS_NAME}. "
+        "Use system-compatible commands."
+    )
 
     parameters: dict = field(default_factory=lambda: param_schema)
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], code: str, silent: bool = False
     ) -> ToolExecResult:
-        if permission_error := _check_admin_permission(context):
+        if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
         sb = get_local_booter()
         try:

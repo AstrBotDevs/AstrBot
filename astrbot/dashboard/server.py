@@ -1,7 +1,9 @@
 import asyncio
+import hashlib
 import logging
 import os
 import socket
+from datetime import datetime
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -18,9 +20,11 @@ from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.io import get_local_ip_addresses
 
 from .routes import *
+from .routes.api_key import ALL_OPEN_API_SCOPES
 from .routes.backup import BackupRoute
 from .routes.live_chat import LiveChatRoute
 from .routes.platform import PlatformRoute
@@ -28,6 +32,9 @@ from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
+
+# Static assets shipped inside the wheel (built during `hatch build`).
+_BUNDLED_DIST = Path(__file__).parent / "dist"
 
 
 class _AddrWithPort(Protocol):
@@ -43,6 +50,13 @@ def _parse_env_bool(value: str | None, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+class AstrBotJSONProvider(DefaultJSONProvider):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return to_utc_isoformat(obj)
+        return super().default(obj)
+
+
 class AstrBotDashboard:
     def __init__(
         self,
@@ -53,21 +67,32 @@ class AstrBotDashboard:
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
+        self.db = db
 
-        # 参数指定webui目录
+        # Path priority:
+        # 1. Explicit webui_dir argument
+        # 2. data/dist/ (user-installed / manually updated dashboard)
+        # 3. astrbot/dashboard/dist/ (bundled with the wheel)
         if webui_dir and os.path.exists(webui_dir):
             self.data_path = os.path.abspath(webui_dir)
         else:
-            self.data_path = os.path.abspath(
-                os.path.join(get_astrbot_data_path(), "dist"),
-            )
+            user_dist = os.path.join(get_astrbot_data_path(), "dist")
+            if os.path.exists(user_dist):
+                self.data_path = os.path.abspath(user_dist)
+            elif _BUNDLED_DIST.exists():
+                self.data_path = str(_BUNDLED_DIST)
+                logger.info("Using bundled dashboard dist: %s", self.data_path)
+            else:
+                # Fall back to expected user path (will fail gracefully later)
+                self.data_path = os.path.abspath(user_dist)
 
         self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
         APP = self.app  # noqa
         self.app.config["MAX_CONTENT_LENGTH"] = (
             128 * 1024 * 1024
         )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
-        cast(DefaultJSONProvider, self.app.json).sort_keys = False
+        self.app.json = AstrBotJSONProvider(self.app)
+        self.app.json.sort_keys = False
         self.app.before_request(self.auth_middleware)
         # token 用于验证请求
         logging.getLogger(self.app.name).removeHandler(default_handler)
@@ -88,7 +113,14 @@ class AstrBotDashboard:
         self.lr = LogRoute(self.context, core_lifecycle.log_broker)
         self.sfr = StaticFileRoute(self.context)
         self.ar = AuthRoute(self.context)
+        self.api_key_route = ApiKeyRoute(self.context, db)
         self.chat_route = ChatRoute(self.context, db, core_lifecycle)
+        self.open_api_route = OpenApiRoute(
+            self.context,
+            db,
+            core_lifecycle,
+            self.chat_route,
+        )
         self.chatui_project_route = ChatUIProjectRoute(self.context, db)
         self.tools_root = ToolsRoute(self.context, core_lifecycle)
         self.subagent_route = SubAgentRoute(self.context, core_lifecycle)
@@ -130,6 +162,40 @@ class AstrBotDashboard:
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
             return None
+        if request.path.startswith("/api/v1"):
+            raw_key = self._extract_raw_api_key()
+            if not raw_key:
+                r = jsonify(Response().error("Missing API key").__dict__)
+                r.status_code = 401
+                return r
+            key_hash = hashlib.pbkdf2_hmac(
+                "sha256",
+                raw_key.encode("utf-8"),
+                b"astrbot_api_key",
+                100_000,
+            ).hex()
+            api_key = await self.db.get_active_api_key_by_hash(key_hash)
+            if not api_key:
+                r = jsonify(Response().error("Invalid API key").__dict__)
+                r.status_code = 401
+                return r
+
+            if isinstance(api_key.scopes, list):
+                scopes = api_key.scopes
+            else:
+                scopes = list(ALL_OPEN_API_SCOPES)
+            required_scope = self._get_required_open_api_scope(request.path)
+            if required_scope and "*" not in scopes and required_scope not in scopes:
+                r = jsonify(Response().error("Insufficient API key scope").__dict__)
+                r.status_code = 403
+                return r
+
+            g.api_key_id = api_key.key_id
+            g.api_key_scopes = scopes
+            g.username = f"api_key:{api_key.key_id}"
+            await self.db.touch_api_key(api_key.key_id)
+            return None
+
         allowed_endpoints = [
             "/api/auth/login",
             "/api/file",
@@ -157,6 +223,34 @@ class AstrBotDashboard:
             r = jsonify(Response().error("Token 无效").__dict__)
             r.status_code = 401
             return r
+
+    @staticmethod
+    def _extract_raw_api_key() -> str | None:
+        if key := request.args.get("api_key"):
+            return key.strip()
+        if key := request.args.get("key"):
+            return key.strip()
+        if key := request.headers.get("X-API-Key"):
+            return key.strip()
+        auth_header = request.headers.get("Authorization", "").strip()
+        if auth_header.startswith("Bearer "):
+            return auth_header.removeprefix("Bearer ").strip()
+        if auth_header.startswith("ApiKey "):
+            return auth_header.removeprefix("ApiKey ").strip()
+        return None
+
+    @staticmethod
+    def _get_required_open_api_scope(path: str) -> str | None:
+        scope_map = {
+            "/api/v1/chat": "chat",
+            "/api/v1/chat/ws": "chat",
+            "/api/v1/chat/sessions": "chat",
+            "/api/v1/configs": "config",
+            "/api/v1/file": "file",
+            "/api/v1/im/message": "im",
+            "/api/v1/im/bots": "im",
+        }
+        return scope_map.get(path)
 
     def check_port_in_use(self, port: int) -> bool:
         """跨平台检测端口是否被占用"""

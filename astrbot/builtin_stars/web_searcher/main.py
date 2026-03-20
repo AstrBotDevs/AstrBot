@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 from readability import Document
 
 from astrbot.api import AstrBotConfig, llm_tool, logger, sp, star
-from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
+from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.provider import ProviderRequest
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
@@ -70,7 +70,7 @@ class Main(star.Star):
         header = HEADERS
         header.update({"User-Agent": random.choice(USER_AGENTS)})
         async with aiohttp.ClientSession(trust_env=True) as session:
-            async with session.get(url, headers=header, timeout=6) as response:
+            async with session.get(url, headers=header) as response:
                 html = await response.text(encoding="utf-8")
                 doc = Document(html)
                 ret = doc.summary(html_partial=True)
@@ -151,7 +151,6 @@ class Main(star.Star):
                 url,
                 json=payload,
                 headers=header,
-                timeout=6,
             ) as response:
                 if response.status != 200:
                     reason = await response.text()
@@ -183,7 +182,6 @@ class Main(star.Star):
                 url,
                 json=payload,
                 headers=header,
-                timeout=6,
             ) as response:
                 if response.status != 200:
                     reason = await response.text()
@@ -197,15 +195,6 @@ class Main(star.Star):
                         "Error: Tavily web searcher does not return any results.",
                     )
                 return results
-
-    @filter.command("websearch")
-    async def websearch(self, event: AstrMessageEvent, oper: str | None = None) -> None:
-        """网页搜索指令（已废弃）"""
-        event.set_result(
-            MessageEventResult().message(
-                "此指令已经被废弃，请在 WebUI 中开启或关闭网页搜索功能。",
-            ),
-        )
 
     @llm_tool(name="web_search")
     async def search_from_search_engine(
@@ -265,7 +254,7 @@ class Main(star.Star):
                 "transport": "sse",
                 "url": f"http://appbuilder.baidu.com/v2/ai_search/mcp/sse?api_key={key}",
                 "headers": {},
-                "timeout": 30,
+                "timeout": 600,
             },
         )
         self.baidu_initialized = True
@@ -578,9 +567,9 @@ class Main(star.Star):
         if provider == "default":
             web_search_t = func_tool_mgr.get_func("web_search")
             fetch_url_t = func_tool_mgr.get_func("fetch_url")
-            if web_search_t:
+            if web_search_t and web_search_t.active:
                 tool_set.add_tool(web_search_t)
-            if fetch_url_t:
+            if fetch_url_t and fetch_url_t.active:
                 tool_set.add_tool(fetch_url_t)
             tool_set.remove_tool("web_search_tavily")
             tool_set.remove_tool("tavily_extract_web_page")
@@ -589,9 +578,9 @@ class Main(star.Star):
         elif provider == "tavily":
             web_search_tavily = func_tool_mgr.get_func("web_search_tavily")
             tavily_extract_web_page = func_tool_mgr.get_func("tavily_extract_web_page")
-            if web_search_tavily:
+            if web_search_tavily and web_search_tavily.active:
                 tool_set.add_tool(web_search_tavily)
-            if tavily_extract_web_page:
+            if tavily_extract_web_page and tavily_extract_web_page.active:
                 tool_set.add_tool(tavily_extract_web_page)
             tool_set.remove_tool("web_search")
             tool_set.remove_tool("fetch_url")
@@ -601,9 +590,8 @@ class Main(star.Star):
             try:
                 await self.ensure_baidu_ai_search_mcp(event.unified_msg_origin)
                 aisearch_tool = func_tool_mgr.get_func("AIsearch")
-                if not aisearch_tool:
-                    raise ValueError("Cannot get Baidu AI Search MCP tool.")
-                tool_set.add_tool(aisearch_tool)
+                if aisearch_tool and aisearch_tool.active:
+                    tool_set.add_tool(aisearch_tool)
                 tool_set.remove_tool("web_search")
                 tool_set.remove_tool("fetch_url")
                 tool_set.remove_tool("web_search_tavily")
@@ -613,7 +601,7 @@ class Main(star.Star):
                 logger.error(f"Cannot Initialize Baidu AI Search MCP Server: {e}")
         elif provider == "bocha":
             web_search_bocha = func_tool_mgr.get_func("web_search_bocha")
-            if web_search_bocha:
+            if web_search_bocha and web_search_bocha.active:
                 tool_set.add_tool(web_search_bocha)
             tool_set.remove_tool("web_search")
             tool_set.remove_tool("fetch_url")

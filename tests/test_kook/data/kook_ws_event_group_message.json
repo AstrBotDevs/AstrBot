@@ -1,0 +1,119 @@
+{
+    "s": 0,
+    "d": {
+        "channel_type": "GROUP",
+        "type": 9,
+        "target_id": "2732467349811313213",
+        "author_id": "7324688132731983",
+        "content": "done!",
+        "extra": {
+            "quote": {
+                "id": "69a788adb0cfb9ece50eae1c",
+                "rong_id": "7baef72c-0cd7-49ad-9592-1615236136cb",
+                "type": 9,
+                "content": "/am 1",
+                "interact_res": null,
+                "create_at": 1772587180973,
+                "author": {
+                    "id": "2701973210937821093781",
+                    "username": "some_username",
+                    "identify_num": "4198",
+                    "online": true,
+                    "os": "Websocket",
+                    "status": 1,
+                    "avatar": "https://example.com",
+                    "vip_avatar": "https://example.com",
+                    "banner": "",
+                    "nickname": "some_username",
+                    "roles": [
+                        63724577
+                    ],
+                    "is_vip": false,
+                    "vip_amp": false,
+                    "bot": false,
+                    "nameplate": [],
+                    "kpm_vip": null,
+                    "wealth_level": 0,
+                    "decorations_id_map": null,
+                    "mobile_verified": true,
+                    "is_sys": false,
+                    "joined_at": 1772259607000,
+                    "active_time": 1772587181304
+                },
+                "can_jump": true,
+                "preview_content": null,
+                "kmarkdown": {
+                    "mention_part": [],
+                    "mention_role_part": [],
+                    "channel_part": [],
+                    "item_part": []
+                }
+            },
+            "type": 9,
+            "code": "",
+            "guild_id": "273902183210983210983",
+            "guild_type": 0,
+            "channel_name": "聊天大厅",
+            "author": {
+                "id": "7324688132731983",
+                "username": "Bot_Test",
+                "identify_num": "9561",
+                "online": true,
+                "os": "Websocket",
+                "status": 0,
+                "avatar": "https://example.com",
+                "vip_avatar": "https://example.com",
+                "banner": "",
+                "nickname": "Bot_Test",
+                "roles": [
+                    63725384
+                ],
+                "is_vip": false,
+                "vip_amp": false,
+                "bot": true,
+                "nameplate": [],
+                "kpm_vip": null,
+                "wealth_level": 0,
+                "bot_status": 0,
+                "tag_info": {
+                    "color": "#0096FF",
+                    "bg_color": "#0096FF33",
+                    "text": "机器人"
+                },
+                "is_sys": false,
+                "client_id": "sAdiIHoGhdSFUOA",
+                "verified": false
+            },
+            "visible_only": "",
+            "mention": [],
+            "mention_no_at": [],
+            "mention_all": false,
+            "mention_roles": [],
+            "mention_here": false,
+            "nav_channels": [],
+            "kmarkdown": {
+                "raw_content": "done!",
+                "mention_part": [],
+                "mention_role_part": [],
+                "channel_part": [],
+                "spl": []
+            },
+            "emoji": [],
+            "preview_content": "",
+            "channel_type": 1,
+            "last_msg_content": "Bot_Test：done!",
+            "send_msg_device": 0
+        },
+        "msg_id": "c51a8761-63bv-5l2a-5681-0ac16e140a1b",
+        "msg_timestamp": 1772587182234,
+        "nonce": "",
+        "from_type": 1
+    },
+    "extra": {
+        "verifyToken": "kW4FH_ASHio1hosd",
+        "encryptKey": "",
+        "callbackUrl": "",
+        "intent": 255
+    },
+    "sn": 3
+}

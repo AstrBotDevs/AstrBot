@@ -1,8 +1,10 @@
 from astrbot import logger
+from astrbot.api import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.sentinels import NOT_GIVEN
 
 DEFAULT_PERSONALITY = Personality(
     prompt="You are a helpful and friendly assistant.",
@@ -11,6 +13,7 @@ DEFAULT_PERSONALITY = Personality(
     mood_imitation_dialogs=[],
     tools=None,
     skills=None,
+    custom_error_message=None,
     _begin_dialogs_processed=[],
     _mood_imitation_dialogs_processed="",
 )
@@ -41,6 +44,22 @@ class PersonaManager:
             raise ValueError(f"Persona with ID {persona_id} does not exist.")
         return persona
 
+    def get_persona_v3_by_id(self, persona_id: str | None) -> Personality | None:
+        """Resolve a v3 persona object by id.
+
+        - None/empty id returns None.
+        - "default" maps to in-memory DEFAULT_PERSONALITY.
+        - Otherwise search in personas_v3 by persona name.
+        """
+        if not persona_id:
+            return None
+        if persona_id == "default":
+            return DEFAULT_PERSONALITY
+        return next(
+            (persona for persona in self.personas_v3 if persona["name"] == persona_id),
+            None,
+        )
+
     async def get_default_persona_v3(
         self,
         umo: str | MessageSession | None = None,
@@ -51,12 +70,61 @@ class PersonaManager:
             "default_personality",
             "default",
         )
-        if not default_persona_id or default_persona_id == "default":
-            return DEFAULT_PERSONALITY
-        try:
-            return next(p for p in self.personas_v3 if p["name"] == default_persona_id)
-        except Exception:
-            return DEFAULT_PERSONALITY
+        return self.get_persona_v3_by_id(default_persona_id) or DEFAULT_PERSONALITY
+
+    async def resolve_selected_persona(
+        self,
+        *,
+        umo: str | MessageSession,
+        conversation_persona_id: str | None,
+        platform_name: str,
+        provider_settings: dict | None = None,
+    ) -> tuple[str | None, Personality | None, str | None, bool]:
+        """解析当前会话最终生效的人格。
+
+        Returns:
+            tuple:
+                - selected persona_id
+                - selected persona object
+                - force applied persona_id from session rule
+                - whether use webchat special default persona
+        """
+        session_service_config = (
+            await sp.get_async(
+                scope="umo",
+                scope_id=str(umo),
+                key="session_service_config",
+                default={},
+            )
+            or {}
+        )
+
+        force_applied_persona_id = session_service_config.get("persona_id")
+        persona_id = force_applied_persona_id
+
+        if not persona_id:
+            persona_id = conversation_persona_id
+            if persona_id == "[%None]":
+                pass
+            elif persona_id is None:
+                persona_id = (provider_settings or {}).get("default_personality")
+
+        persona = next(
+            (item for item in self.personas_v3 if item["name"] == persona_id),
+            None,
+        )
+
+        use_webchat_special_default = False
+        if not persona and platform_name == "webchat" and persona_id != "[%None]":
+            persona_id = "_chatui_default_"
+            use_webchat_special_default = True
+
+        return (
+            persona_id,
+            persona,
+            force_applied_persona_id,
+            use_webchat_special_default,
+        )
 
     async def delete_persona(self, persona_id: str) -> None:
         """删除指定 persona"""
@@ -71,19 +139,27 @@ class PersonaManager:
         persona_id: str,
         system_prompt: str | None = None,
         begin_dialogs: list[str] | None = None,
-        tools: list[str] | None = None,
-        skills: list[str] | None = None,
+        tools: list[str] | None | object = NOT_GIVEN,
+        skills: list[str] | None | object = NOT_GIVEN,
+        custom_error_message: str | None | object = NOT_GIVEN,
     ):
         """更新指定 persona 的信息。tools 参数为 None 时表示使用所有工具，空列表表示不使用任何工具"""
         existing_persona = await self.db.get_persona_by_id(persona_id)
         if not existing_persona:
             raise ValueError(f"Persona with ID {persona_id} does not exist.")
+        update_kwargs = {}
+        if tools is not NOT_GIVEN:
+            update_kwargs["tools"] = tools
+        if skills is not NOT_GIVEN:
+            update_kwargs["skills"] = skills
+        if custom_error_message is not NOT_GIVEN:
+            update_kwargs["custom_error_message"] = custom_error_message
+
         persona = await self.db.update_persona(
             persona_id,
             system_prompt,
             begin_dialogs,
-            tools=tools,
-            skills=skills,
+            **update_kwargs,
         )
         if persona:
             for i, p in enumerate(self.personas):
@@ -243,6 +319,7 @@ class PersonaManager:
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None = None,
         skills: list[str] | None = None,
+        custom_error_message: str | None = None,
         folder_id: str | None = None,
         sort_order: int = 0,
     ) -> Persona:
@@ -265,6 +342,7 @@ class PersonaManager:
             begin_dialogs,
             tools=tools,
             skills=skills,
+            custom_error_message=custom_error_message,
             folder_id=folder_id,
             sort_order=sort_order,
         )
@@ -291,6 +369,7 @@ class PersonaManager:
                 "mood_imitation_dialogs": [],  # deprecated
                 "tools": persona.tools,
                 "skills": persona.skills,
+                "custom_error_message": persona.custom_error_message,
             }
             for persona in self.personas
         ]
@@ -347,6 +426,7 @@ class PersonaManager:
             begin_dialogs=selected_default_persona["begin_dialogs"],
             tools=selected_default_persona["tools"] or None,
             skills=selected_default_persona["skills"] or None,
+            custom_error_message=selected_default_persona["custom_error_message"],
         )
 
         return v3_persona_config, personas_v3, selected_default_persona

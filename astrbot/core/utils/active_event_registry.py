@@ -46,5 +46,22 @@ class ActiveEventRegistry:
                 count += 1
         return count
 
+    def request_agent_stop_all(
+        self,
+        umo: str,
+        exclude: AstrMessageEvent | None = None,
+    ) -> int:
+        """请求停止指定 UMO 的所有活跃事件中的 Agent 运行。
+
+        与 stop_all 不同，这里不会调用 event.stop_event()，
+        因此不会中断事件传播，后续流程（如历史记录保存）仍可继续。
+        """
+        count = 0
+        for event in list(self._events.get(umo, [])):
+            if event is not exclude:
+                event.set_extra("agent_stop_requested", True)
+                count += 1
+        return count
+
 
 active_event_registry = ActiveEventRegistry()

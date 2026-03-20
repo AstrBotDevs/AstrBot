@@ -8,15 +8,17 @@ from astrbot.core.platform.sources.wecom_ai_bot.wecomai_event import (
 )
 from astrbot.core.utils.active_event_registry import active_event_registry
 
-from . import STAGES_ORDER
+from .bootstrap import ensure_builtin_stages_registered
 from .context import PipelineContext
 from .stage import registered_stages
+from .stage_order import STAGES_ORDER
 
 
 class PipelineScheduler:
     """管道调度器，负责调度各个阶段的执行"""
 
     def __init__(self, context: PipelineContext) -> None:
+        ensure_builtin_stages_registered()
         registered_stages.sort(
             key=lambda x: STAGES_ORDER.index(x.__name__),
         )  # 按照顺序排序
@@ -84,7 +86,7 @@ class PipelineScheduler:
         try:
             await self._process_stages(event)
 
-            # 如果没有发送操作, 则发送一个空消息, 以便于后续的处理
+            # 发送一个空消息, 以便于后续的处理
             if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
                 await event.send(None)
 

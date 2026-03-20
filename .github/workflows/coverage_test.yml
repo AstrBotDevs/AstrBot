@@ -37,9 +37,10 @@ jobs:
           mkdir -p data/temp
           export TESTING=true
           export ZHIPU_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          pytest --cov=. -v -o log_cli=true -o log_level=DEBUG
+          pytest --cov=astrbot -v -o log_cli=true -o log_level=DEBUG
 
       - name: Upload results to Codecov
+        if: github.repository == 'AstrBotDevs/AstrBot'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

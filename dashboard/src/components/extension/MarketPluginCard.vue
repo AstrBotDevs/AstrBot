@@ -1,9 +1,11 @@
 <script setup>
+import { ref, computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
+import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
 
 const { tm } = useModuleI18n("features/extension");
 
-defineProps({
+const props = defineProps({
   plugin: {
     type: Object,
     required: true,
@@ -20,16 +22,26 @@ defineProps({
 
 const emit = defineEmits(["install"]);
 
+const normalizePlatformList = (platforms) => {
+  if (!Array.isArray(platforms)) return [];
+  return platforms.filter((item) => typeof item === "string");
+};
+
+const platformDisplayList = computed(() =>
+  normalizePlatformList(props.plugin?.support_platforms),
+);
+
 const handleInstall = (plugin) => {
   emit("install", plugin);
 };
+
 </script>
 
 <template>
   <v-card
     class="rounded-lg d-flex flex-column plugin-card"
     elevation="0"
-    style="height: 12rem; position: relative"
+    style="height: 13rem; position: relative"
   >
     <v-chip
       v-if="plugin?.pinned"
@@ -112,6 +124,7 @@ const handleInstall = (plugin) => {
             v-if="plugin?.social_link"
             :href="plugin.social_link"
             target="_blank"
+            @click.stop
             class="text-subtitle-2 font-weight-medium"
             style="
               text-decoration: none;
@@ -152,6 +165,27 @@ const handleInstall = (plugin) => {
           {{ plugin.desc }}
         </div>
 
+        <div
+          v-if="plugin.astrbot_version || platformDisplayList.length"
+          class="d-flex align-center flex-wrap"
+          style="gap: 4px; margin-top: 4px; margin-bottom: 4px"
+        >
+          <v-chip
+            v-if="plugin.astrbot_version"
+            size="x-small"
+            color="secondary"
+            variant="outlined"
+            style="height: 20px"
+          >
+            AstrBot: {{ plugin.astrbot_version }}
+          </v-chip>
+          <PluginPlatformChip
+            :platforms="plugin.support_platforms"
+            size="x-small"
+            :chip-style="{ height: '20px' }"
+          />
+        </div>
+
         <div class="d-flex align-center" style="gap: 8px; margin-top: auto">
           <div
             v-if="plugin.stars !== undefined"
@@ -181,7 +215,10 @@ const handleInstall = (plugin) => {
       </div>
     </v-card-text>
 
-    <v-card-actions style="gap: 6px; padding: 8px 12px; padding-top: 0">
+    <v-card-actions
+      style="gap: 6px; padding: 8px 12px; padding-top: 0"
+      @click.stop
+    >
       <v-chip
         v-for="tag in plugin.tags?.slice(0, 2)"
         :key="tag"
@@ -216,22 +253,24 @@ const handleInstall = (plugin) => {
       <v-btn
         v-if="plugin?.repo"
         color="secondary"
-        size="x-small"
+        size="small"
         variant="tonal"
+        class="market-action-btn"
         :href="plugin.repo"
         target="_blank"
-        style="height: 24px"
+        style="height: 32px"
       >
-        <v-icon icon="mdi-github" start size="x-small"></v-icon>
+        <v-icon icon="mdi-github" start size="small"></v-icon>
         {{ tm("buttons.viewRepo") }}
       </v-btn>
       <v-btn
         v-if="!plugin?.installed"
         color="primary"
-        size="x-small"
+        size="small"
         @click="handleInstall(plugin)"
         variant="flat"
-        style="height: 24px"
+        class="market-action-btn"
+        style="height: 32px"
       >
         {{ tm("buttons.install") }}
       </v-btn>
@@ -273,5 +312,10 @@ const handleInstall = (plugin) => {
 
 .plugin-description::-webkit-scrollbar-thumb:hover {
   background-color: rgba(var(--v-theme-primary-rgb), 0.6);
+}
+
+.market-action-btn {
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 </style>

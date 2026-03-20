@@ -18,6 +18,7 @@ import StyledMenu from '@/components/shared/StyledMenu.vue';
 import { useLanguageSwitcher } from '@/i18n/composables';
 import type { Locale } from '@/i18n/types';
 import AboutPage from '@/views/AboutPage.vue';
+import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
 
 enableKatex();
 enableMermaid();
@@ -26,6 +27,7 @@ const customizer = useCustomizerStore();
 const theme = useTheme();
 const { t } = useI18n();
 const route = useRoute();
+const LAST_BOT_ROUTE_KEY = 'astrbot:last_bot_route';
 let dialog = ref(false);
 let accountWarning = ref(false)
 let updateStatusDialog = ref(false);
@@ -33,6 +35,7 @@ let aboutDialog = ref(false);
 const username = localStorage.getItem('user');
 let password = ref('');
 let newPassword = ref('');
+let confirmPassword = ref('');
 let newUsername = ref('');
 let status = ref('');
 let updateStatus = ref('')
@@ -45,14 +48,31 @@ let version = ref('');
 let releases = ref([]);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
-const isElectronApp = ref(
-  typeof window !== 'undefined' && !!window.astrbotDesktop?.isElectron
+const isDesktopReleaseMode = ref(
+  typeof window !== 'undefined' && !!window.astrbotDesktop?.isDesktop
 );
-const redirectConfirmDialog = ref(false);
-const pendingRedirectUrl = ref('');
-const resolvingReleaseTarget = ref(false);
-const desktopReleaseBaseUrl = 'https://github.com/AstrBotDevs/AstrBot-desktop/releases';
-const fallbackReleaseUrl = desktopReleaseBaseUrl;
+const desktopUpdateDialog = ref(false);
+const desktopUpdateChecking = ref(false);
+const desktopUpdateInstalling = ref(false);
+const desktopUpdateHasNewVersion = ref(false);
+const desktopUpdateCurrentVersion = ref('-');
+const desktopUpdateLatestVersion = ref('-');
+const desktopUpdateStatus = ref('');
+
+const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const bridge = window.astrbotAppUpdater;
+  if (
+    bridge &&
+    typeof bridge.checkForAppUpdate === 'function' &&
+    typeof bridge.installAppUpdate === 'function'
+  ) {
+    return bridge;
+  }
+  return null;
+};
 
 const getSelectedGitHubProxy = () => {
   if (typeof window === "undefined" || !window.localStorage) return "";
@@ -73,21 +93,15 @@ const releasesHeader = computed(() => [
   { title: t('core.header.updateDialog.table.sourceUrl'), key: 'zipball_url' },
   { title: t('core.header.updateDialog.table.actions'), key: 'switch' }
 ]);
-const latestReleaseTag = computed(() => {
-  const firstRelease = (releases.value as any[])?.[0];
-  if (firstRelease?.tag_name) {
-    return firstRelease.tag_name as string;
-  }
-  return hasNewVersion.value
-    ? t('core.header.updateDialog.redirectConfirm.latestLabel')
-    : (botCurrVersion.value || '-');
-});
-
 // Form validation
 const formValid = ref(true);
 const passwordRules = computed(() => [
   (v: string) => !!v || t('core.header.accountDialog.validation.passwordRequired'),
   (v: string) => v.length >= 8 || t('core.header.accountDialog.validation.passwordMinLength')
+]);
+const confirmPasswordRules = computed(() => [
+  (v: string) => !newPassword.value || !!v || t('core.header.accountDialog.validation.passwordRequired'),
+  (v: string) => !newPassword.value || v === newPassword.value || t('core.header.accountDialog.validation.passwordMatch')
 ]);
 const usernameRules = computed(() => [
   (v: string) => !v || v.length >= 3 || t('core.header.accountDialog.validation.usernameMinLength')
@@ -96,6 +110,7 @@ const usernameRules = computed(() => [
 // 显示密码相关
 const showPassword = ref(false);
 const showNewPassword = ref(false);
+const showConfirmPassword = ref(false);
 
 // 账户修改状态
 const accountEditStatus = ref({
@@ -105,50 +120,88 @@ const accountEditStatus = ref({
   message: ''
 });
 
-const open = (link: string) => {
-  window.open(link, '_blank');
-};
-
-function requestExternalRedirect(link: string) {
-  pendingRedirectUrl.value = link;
-  redirectConfirmDialog.value = true;
+function cancelDesktopUpdate() {
+  if (desktopUpdateInstalling.value) {
+    return;
+  }
+  desktopUpdateDialog.value = false;
 }
 
-function cancelExternalRedirect() {
-  redirectConfirmDialog.value = false;
-  pendingRedirectUrl.value = '';
-}
+async function openDesktopUpdateDialog() {
+  desktopUpdateDialog.value = true;
+  desktopUpdateChecking.value = true;
+  desktopUpdateInstalling.value = false;
+  desktopUpdateHasNewVersion.value = false;
+  desktopUpdateCurrentVersion.value = '-';
+  desktopUpdateLatestVersion.value = '-';
+  desktopUpdateStatus.value = t('core.header.updateDialog.desktopApp.checking');
 
-function confirmExternalRedirect() {
-  const targetUrl = pendingRedirectUrl.value;
-  cancelExternalRedirect();
-  if (targetUrl) {
-    open(targetUrl);
+  const bridge = getAppUpdaterBridge();
+  if (!bridge) {
+    desktopUpdateChecking.value = false;
+    desktopUpdateStatus.value = t('core.header.updateDialog.desktopApp.checkFailed');
+    return;
+  }
+
+  try {
+    const result = await bridge.checkForAppUpdate();
+    if (!result?.ok) {
+      desktopUpdateCurrentVersion.value = result?.currentVersion || '-';
+      desktopUpdateLatestVersion.value =
+        result?.latestVersion || result?.currentVersion || '-';
+      desktopUpdateStatus.value =
+        result?.reason || t('core.header.updateDialog.desktopApp.checkFailed');
+      return;
+    }
+
+    desktopUpdateCurrentVersion.value = result.currentVersion || '-';
+    desktopUpdateLatestVersion.value =
+      result.latestVersion || result.currentVersion || '-';
+    desktopUpdateHasNewVersion.value = !!result.hasUpdate;
+    desktopUpdateStatus.value = result.hasUpdate
+      ? t('core.header.updateDialog.desktopApp.hasNewVersion')
+      : t('core.header.updateDialog.desktopApp.isLatest');
+  } catch (error) {
+    console.error(error);
+    desktopUpdateStatus.value = t('core.header.updateDialog.desktopApp.checkFailed');
+  } finally {
+    desktopUpdateChecking.value = false;
   }
 }
 
-const getReleaseUrlForElectron = () => {
-  const firstRelease = (releases.value as any[])?.[0];
-  if (firstRelease?.tag_name) {
-    const tag = firstRelease.tag_name as string;
-    return `${desktopReleaseBaseUrl}/tag/${tag}`;
+async function confirmDesktopUpdate() {
+  if (!desktopUpdateHasNewVersion.value || desktopUpdateInstalling.value) {
+    return;
   }
-  if (hasNewVersion.value) return fallbackReleaseUrl;
-  const tag = botCurrVersion.value?.startsWith('v') ? botCurrVersion.value : 'latest';
-  return tag === 'latest'
-    ? fallbackReleaseUrl
-    : `${desktopReleaseBaseUrl}/tag/${tag}`;
-};
+
+  const bridge = getAppUpdaterBridge();
+  if (!bridge) {
+    desktopUpdateStatus.value = t('core.header.updateDialog.desktopApp.installFailed');
+    return;
+  }
+
+  desktopUpdateInstalling.value = true;
+  desktopUpdateStatus.value = t('core.header.updateDialog.desktopApp.installing');
+
+  try {
+    const result = await bridge.installAppUpdate();
+    if (result?.ok) {
+      desktopUpdateDialog.value = false;
+      return;
+    }
+    desktopUpdateStatus.value =
+      result?.reason || t('core.header.updateDialog.desktopApp.installFailed');
+  } catch (error) {
+    console.error(error);
+    desktopUpdateStatus.value = t('core.header.updateDialog.desktopApp.installFailed');
+  } finally {
+    desktopUpdateInstalling.value = false;
+  }
+}
 
 function handleUpdateClick() {
-  if (isElectronApp.value) {
-    requestExternalRedirect('');
-    resolvingReleaseTarget.value = true;
-    checkUpdate();
-    void getReleases().finally(() => {
-      pendingRedirectUrl.value = getReleaseUrlForElectron() || fallbackReleaseUrl;
-      resolvingReleaseTarget.value = false;
-    });
+  if (isDesktopReleaseMode.value) {
+    void openDesktopUpdateDialog();
     return;
   }
   checkUpdate();
@@ -169,17 +222,14 @@ function accountEdit() {
   accountEditStatus.value.error = false;
   accountEditStatus.value.success = false;
 
-  // md5加密
-  // @ts-ignore
-  if (password.value != '') {
-    password.value = md5(password.value);
-  }
-  if (newPassword.value != '') {
-    newPassword.value = md5(newPassword.value);
-  }
+  const passwordHash = password.value ? md5(password.value) : '';
+  const newPasswordHash = newPassword.value ? md5(newPassword.value) : '';
+  const confirmPasswordHash = confirmPassword.value ? md5(confirmPassword.value) : '';
+
   axios.post('/api/auth/account/edit', {
-    password: password.value,
-    new_password: newPassword.value,
+    password: passwordHash,
+    new_password: newPasswordHash,
+    confirm_password: confirmPasswordHash,
     new_username: newUsername.value ? newUsername.value : username
   })
     .then((res) => {
@@ -188,6 +238,7 @@ function accountEdit() {
         accountEditStatus.value.message = res.data.message;
         password.value = '';
         newPassword.value = '';
+        confirmPassword.value = '';
         return;
       }
       accountEditStatus.value.success = true;
@@ -204,6 +255,7 @@ function accountEdit() {
       accountEditStatus.value.message = typeof err === 'string' ? err : t('core.header.accountDialog.messages.updateFailed');
       password.value = '';
       newPassword.value = '';
+      confirmPassword.value = '';
     })
     .finally(() => {
       accountEditStatus.value.loading = false;
@@ -241,7 +293,7 @@ function checkUpdate() {
       } else {
         updateStatus.value = res.data.message;
       }
-      dashboardHasNewVersion.value = isElectronApp.value
+      dashboardHasNewVersion.value = isDesktopReleaseMode.value
         ? false
         : res.data.data.dashboard_has_new_version;
     })
@@ -351,12 +403,29 @@ const viewMode = computed({
 });
 
 // 监听 viewMode 变化，切换到 bot 模式时跳转到首页
-watch(() => customizer.viewMode, (newMode, oldMode) => {
-  if (newMode === 'bot' && oldMode === 'chat') {
-    // 从 chat 模式切换到 bot 模式时，跳转到首页
-    if (route.path !== '/') {
-      router.push('/');
+// 保存 bot 模式的最後路由
+// 監聽 route 變化，保存最後一次 bot 路由
+watch(() => route.fullPath, (newPath) => {
+  if (customizer.viewMode === 'bot' && typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
+    } catch (e) {
+      console.error('Failed to save last bot route to localStorage:', e);
     }
+  }
+});
+
+// 監聽 viewMode 切換
+watch(() => customizer.viewMode, (newMode, oldMode) => {
+  if (newMode === 'bot' && oldMode === 'chat' && typeof window !== 'undefined') {
+    // 從 chat 切換回 bot，跳轉到最後一次的 bot 路由
+    let lastBotRoute = '/';
+    try {
+      lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+    } catch (e) {
+      console.error('Failed to read last bot route from localStorage:', e);
+    }
+    router.push(lastBotRoute);
   }
 });
 
@@ -383,13 +452,9 @@ const changeLanguage = async (langCode: string) => {
 };
 
 onMounted(async () => {
-  try {
-    isElectronApp.value = !!window.astrbotDesktop?.isElectron ||
-      !!(await window.astrbotDesktop?.isElectronRuntime?.());
-  } catch {
-    isElectronApp.value = false;
-  }
-  if (isElectronApp.value) {
+  const runtimeInfo = await getDesktopRuntimeInfo();
+  isDesktopReleaseMode.value = runtimeInfo.isDesktopRuntime;
+  if (isDesktopReleaseMode.value) {
     dashboardHasNewVersion.value = false;
   }
 });
@@ -400,24 +465,21 @@ onMounted(async () => {
   <v-app-bar elevation="0" height="50" class="top-header">
 
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" style="margin-left: 16px;"
-      class="hidden-md-and-down"  icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
-    <v-btn v-else-if="customizer.viewMode === 'bot'"
-      style="margin-left: 22px;"
+    <v-btn v-if="customizer.viewMode === 'bot'"
+      style="margin-left: 16px;"
       class="hidden-md-and-down" icon rounded="sm" variant="flat"
       @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
     <!-- 移动端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" class="hidden-lg-and-up ms-3"
-      icon rounded="sm" variant="flat" @click.stop="customizer.SET_SIDEBAR_DRAWER">
+    <v-btn v-if="customizer.viewMode === 'bot'" class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
+      @click.stop="customizer.SET_SIDEBAR_DRAWER">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
-    <v-btn v-else-if="customizer.viewMode === 'bot'" class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_SIDEBAR_DRAWER">
+
+    <!-- 移动端 chat sidebar 展开按钮 - 仅在 chat 模式下的小屏幕显示 -->
+    <v-btn v-if="customizer.viewMode === 'chat'" class="hidden-lg-and-up ms-1" icon rounded="sm" variant="flat"
+      @click.stop="customizer.TOGGLE_CHAT_SIDEBAR()">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
@@ -436,18 +498,18 @@ onMounted(async () => {
       <small v-if="hasNewVersion">
         {{ t('core.header.version.hasNewVersion') }}
       </small>
-      <small v-else-if="dashboardHasNewVersion && !isElectronApp">
+      <small v-else-if="dashboardHasNewVersion && !isDesktopReleaseMode">
         {{ t('core.header.version.dashboardHasNewVersion') }}
       </small>
     </div>
     
-    <!-- Bot/Chat 模式切换按钮 -->
+    <!-- Bot/Chat 模式切换按钮 - 手机端隐藏，移入 ... 菜单 -->
     <v-btn-toggle
       v-model="viewMode"
       mandatory
       variant="outlined"
       density="compact"
-      class="mr-4"
+      class="mr-4 hidden-xs"
       color="primary"
     >
       <v-btn value="bot" size="small">
@@ -477,21 +539,75 @@ onMounted(async () => {
         </v-btn>
       </template>
 
-      <!-- 语言切换 -->
-      <v-list-item
-        v-for="lang in languages"
-        :key="lang.code"
-        :value="lang.code"
-        @click="changeLanguage(lang.code)"
-        :class="{ 'styled-menu-item-active': currentLocale === lang.code }"
-        class="styled-menu-item"
-        rounded="md"
+      <!-- Bot/Chat 模式切换 - 仅在手机端显示 -->
+      <template v-if="$vuetify.display.xs">
+        <div class="mobile-mode-toggle-wrapper">
+          <v-btn-toggle
+            v-model="viewMode"
+            mandatory
+            variant="outlined"
+            density="compact"
+            color="primary"
+            class="mobile-mode-toggle"
+          >
+            <v-btn value="bot" size="small">
+              <v-icon start>mdi-robot</v-icon>
+              Bot
+            </v-btn>
+            <v-btn value="chat" size="small">
+              <v-icon start>mdi-chat</v-icon>
+              Chat
+            </v-btn>
+          </v-btn-toggle>
+        </div>
+        <v-divider class="my-1" />
+      </template>
+
+      <!-- 语言切换分组 -->
+      <v-menu
+        :open-on-hover="!$vuetify.display.xs"
+        :open-on-click="$vuetify.display.xs"
+        :open-delay="!$vuetify.display.xs ? 60 : 0"
+        :close-delay="!$vuetify.display.xs ? 120 : 0"
+        :location="$vuetify.display.xs ? 'bottom' : 'start center'"
+        offset="8"
       >
-        <template v-slot:prepend>
-          <span class="language-flag">{{ lang.flag }}</span>
+        <template v-slot:activator="{ props: languageMenuProps }">
+          <v-list-item
+            v-bind="languageMenuProps"
+            class="styled-menu-item language-group-trigger"
+            rounded="md"
+          >
+            <template v-slot:prepend>
+              <v-icon>mdi-translate</v-icon>
+            </template>
+            <v-list-item-title>{{ t('core.common.language') }}</v-list-item-title>
+            <template v-slot:append>
+              <span class="language-group-current">{{ currentLanguage?.flag }}</span>
+              <v-icon size="18" class="language-group-arrow">mdi-chevron-right</v-icon>
+            </template>
+          </v-list-item>
         </template>
-        <v-list-item-title>{{ lang.name }}</v-list-item-title>
-      </v-list-item>
+
+        <v-card class="styled-menu-card" style="min-width: 180px;" elevation="8" rounded="lg">
+          <v-list density="compact" class="styled-menu-list pa-1">
+            <v-list-item
+              v-for="lang in languages"
+              :key="lang.code"
+              :value="lang.code"
+              @click="changeLanguage(lang.code)"
+              :class="{ 'styled-menu-item-active': currentLocale === lang.code }"
+              class="styled-menu-item"
+              rounded="md"
+            >
+              <template v-slot:prepend>
+                <span class="language-flag">{{ lang.flag }}</span>
+              </template>
+              <v-list-item-title>{{ lang.name }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-card>
+      </v-menu>
 
       <!-- 主题切换 -->
       <v-list-item
@@ -519,7 +635,7 @@ onMounted(async () => {
           <v-icon>mdi-arrow-up-circle</v-icon>
         </template>
         <v-list-item-title>{{ t('core.header.updateDialog.title') }}</v-list-item-title>
-        <template v-slot:append v-if="hasNewVersion || (dashboardHasNewVersion && !isElectronApp)">
+        <template v-slot:append v-if="hasNewVersion || (dashboardHasNewVersion && !isDesktopReleaseMode)">
           <v-chip size="x-small" color="primary" variant="tonal" class="ml-2">!</v-chip>
         </template>
       </v-list-item>
@@ -667,40 +783,38 @@ onMounted(async () => {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="redirectConfirmDialog" max-width="460">
+    <v-dialog v-model="desktopUpdateDialog" max-width="460">
       <v-card>
         <v-card-title class="text-h3 pa-4 pl-6 pb-0">
-          {{ t('core.header.updateDialog.redirectConfirm.title') }}
+          {{ t('core.header.updateDialog.desktopApp.title') }}
         </v-card-title>
         <v-card-text>
           <div class="mb-3">
-            {{ t('core.header.updateDialog.redirectConfirm.message') }}
+            {{ t('core.header.updateDialog.desktopApp.message') }}
           </div>
           <v-alert type="info" variant="tonal" density="compact">
             <div>
-              {{ t('core.header.updateDialog.redirectConfirm.targetVersion') }}
-              <strong v-if="!resolvingReleaseTarget">{{ latestReleaseTag }}</strong>
-              <v-progress-circular v-else indeterminate size="16" width="2" class="ml-1" />
+              {{ t('core.header.updateDialog.desktopApp.currentVersion') }}
+              <strong>{{ desktopUpdateCurrentVersion }}</strong>
             </div>
-            <div class="text-caption">
-              {{ t('core.header.updateDialog.redirectConfirm.currentVersion') }}
-              {{ botCurrVersion || '-' }}
+            <div>
+              {{ t('core.header.updateDialog.desktopApp.latestVersion') }}
+              <strong v-if="!desktopUpdateChecking">{{ desktopUpdateLatestVersion }}</strong>
+              <v-progress-circular v-else indeterminate size="16" width="2" class="ml-1" />
             </div>
           </v-alert>
           <div class="text-caption mt-3">
-            <div>{{ t('core.header.updateDialog.redirectConfirm.guideTitle') }}</div>
-            <div>1. {{ t('core.header.updateDialog.redirectConfirm.guideStep1') }}</div>
-            <div>2. {{ t('core.header.updateDialog.redirectConfirm.guideStep2') }}</div>
-            <div>3. {{ t('core.header.updateDialog.redirectConfirm.guideStep3') }}</div>
+            {{ desktopUpdateStatus }}
           </div>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="grey" variant="text" @click="cancelExternalRedirect">
+          <v-btn color="grey" variant="text" @click="cancelDesktopUpdate" :disabled="desktopUpdateInstalling">
             {{ t('core.common.dialog.cancelButton') }}
           </v-btn>
-          <v-btn color="primary" variant="flat" @click="confirmExternalRedirect"
-            :loading="resolvingReleaseTarget" :disabled="resolvingReleaseTarget || !pendingRedirectUrl">
+          <v-btn color="primary" variant="flat" @click="confirmDesktopUpdate"
+            :loading="desktopUpdateInstalling"
+            :disabled="desktopUpdateChecking || desktopUpdateInstalling || !desktopUpdateHasNewVersion">
             {{ t('core.common.dialog.confirmButton') }}
           </v-btn>
         </v-card-actions>
@@ -734,9 +848,15 @@ onMounted(async () => {
 
             <v-text-field v-model="newPassword" :append-inner-icon="showNewPassword ? 'mdi-eye-off' : 'mdi-eye'"
               :type="showNewPassword ? 'text' : 'password'" :rules="passwordRules"
-              :label="t('core.header.accountDialog.form.newPassword')" variant="outlined" required clearable
+              :label="t('core.header.accountDialog.form.newPassword')" variant="outlined" clearable
               @click:append-inner="showNewPassword = !showNewPassword" prepend-inner-icon="mdi-lock-plus-outline"
               :hint="t('core.header.accountDialog.form.passwordHint')" persistent-hint class="mb-4"></v-text-field>
+
+            <v-text-field v-model="confirmPassword" :append-inner-icon="showConfirmPassword ? 'mdi-eye-off' : 'mdi-eye'"
+              :type="showConfirmPassword ? 'text' : 'password'" :rules="confirmPasswordRules"
+              :label="t('core.header.accountDialog.form.confirmPassword')" variant="outlined" clearable
+              @click:append-inner="showConfirmPassword = !showConfirmPassword" prepend-inner-icon="mdi-lock-check-outline"
+              :hint="t('core.header.accountDialog.form.confirmPasswordHint')" persistent-hint class="mb-4"></v-text-field>
 
             <v-text-field v-model="newUsername" :rules="usernameRules"
               :label="t('core.header.accountDialog.form.newUsername')" variant="outlined" clearable
@@ -837,6 +957,10 @@ onMounted(async () => {
   margin-left: 22px;
 }
 
+.mobile-logo.chat-mode-logo {
+  margin-left: 4px;
+}
+
 .logo-text {
   font-size: 24px;
   font-weight: 1000;
@@ -873,6 +997,39 @@ onMounted(async () => {
 .language-flag {
   font-size: 16px;
   margin-right: 8px;
+}
+
+.language-group-trigger :deep(.v-list-item__append) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.language-group-current {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.language-group-arrow {
+  opacity: 0.7;
+}
+
+.language-submenu-card {
+  min-width: 180px;
+}
+
+.mobile-mode-toggle-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 8px 12px 4px;
+}
+
+.mobile-mode-toggle {
+  width: 100%;
+}
+
+.mobile-mode-toggle .v-btn {
+  flex: 1;
 }
 
 /* 移动端对话框标题样式 */

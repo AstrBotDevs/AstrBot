@@ -18,7 +18,6 @@ import { RouterView } from 'vue-router';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useToastStore } from '@/stores/toast'
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue'
-import { restartAstrBot } from '@/utils/restartAstrBot'
 
 const toastStore = useToastStore()
 const globalWaitingRef = ref(null)
@@ -33,12 +32,12 @@ const snackbarShow = computed({
 
 onMounted(() => {
   const desktopBridge = window.astrbotDesktop
-  if (!desktopBridge?.isElectron || !desktopBridge.onTrayRestartBackend) {
+  if (!desktopBridge?.onTrayRestartBackend) {
     return
   }
   disposeTrayRestartListener = desktopBridge.onTrayRestartBackend(async () => {
     try {
-      await restartAstrBot(globalWaitingRef.value)
+      await globalWaitingRef.value?.check?.()
     } catch (error) {
       globalWaitingRef.value?.stop?.()
       console.error('Tray restart backend failed:', error)

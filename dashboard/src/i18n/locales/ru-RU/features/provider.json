@@ -1,0 +1,152 @@
+﻿{
+    "title": "Провайдеры моделей",
+    "subtitle": "Настройка AI моделей для диалогов. Также поддерживает Dify, Coze, а также внешние Agent-сервисы.",
+    "providers": {
+        "title": "Сервис-провайдеры",
+        "settings": "Настройки",
+        "addProvider": "Добавить провайдера",
+        "providerType": "Тип провайдера",
+        "tabs": {
+            "all": "Все",
+            "chatCompletion": "Диалоги",
+            "agentRunner": "Агенты",
+            "speechToText": "STT (Речь -> Текст)",
+            "textToSpeech": "TTS (Текст -> Речь)",
+            "embedding": "Эмбеддинги",
+            "rerank": "Rerank (Ранжирование)"
+        },
+        "empty": {
+            "all": "Провайдеры не добавлены. Нажмите «Добавить провайдера», чтобы начать.",
+            "typed": "Провайдеры типа «{type}» не найдены."
+        },
+        "description": {
+            "openai": "Поддерживаются все провайдеры, совместимые с OpenAI API.",
+            "kimi_code": "Специальная интеграция Kimi CodingPlan / Kimi Code с отдельной совместимой адаптацией Anthropic API.",
+            "vllm_rerank": "Также поддерживает Jina AI, Cohere, PPIO и другие.",
+            "default": "Преобразование речи в текст"
+        }
+    },
+    "availability": {
+        "title": "Доступность провайдеров",
+        "subtitle": "Статус определяется путем выполнения тестового запроса. Может взиматься плата согласно тарифу API.",
+        "refresh": "Проверить статус",
+        "noData": "Нажмите «Проверить статус», чтобы узнать доступность моделей",
+        "available": "Доступен",
+        "unavailable": "Недоступен",
+        "pending": "Проверка...",
+        "errorMessage": "Ошибка",
+        "test": "Тест"
+    },
+    "logs": {
+        "title": "Логи сервиса",
+        "expand": "Развернуть",
+        "collapse": "Свернуть"
+    },
+    "dialogs": {
+        "addProvider": {
+            "title": "Новый провайдер",
+            "tabs": {
+                "basic": "Диалоги",
+                "agentRunner": "Агенты",
+                "speechToText": "Преобразование текста в речь",
+                "textToSpeech": "Переранжирование",
+                "embedding": "Эмбеддинги",
+                "rerank": "API Key"
+            },
+            "noTemplates": "Шаблоны для этого типа не найдены"
+        },
+        "config": {
+            "addTitle": "Добавить",
+            "editTitle": "Изменить",
+            "provider": "Провайдер",
+            "cancel": "Отмена",
+            "save": "Сохранить"
+        },
+        "settings": {
+            "title": "Общие настройки провайдеров",
+            "sessionSeparation": {
+                "title": "Изоляция провайдеров по сессиям",
+                "description": "Позволяет выбирать независимых провайдеров для генерации текста, TTS и STT в каждой конкретной сессии."
+            },
+            "close": "Закрыть"
+        }
+    },
+    "messages": {
+        "success": {
+            "update": "Обновлено!",
+            "add": "Добавлено!",
+            "delete": "Удалено!",
+            "statusUpdate": "Статус обновлен!",
+            "sessionSeparation": "Настройки изоляции сохранены"
+        },
+        "error": {
+            "sessionSeparation": "Не удалось загрузить настройки изоляции",
+            "fetchStatus": "Не удалось получить статус провайдеров",
+            "testError": "Тест {id} провален: {error}"
+        },
+        "confirm": {
+            "delete": "Вы уверены, что хотите удалить провайдера «{id}»?"
+        }
+    },
+    "providerTypes": {
+        "title": "Тип провайдера"
+    },
+    "providerSources": {
+        "title": "Источник провайдера",
+        "add": "Добавить",
+        "empty": "Источники не найдены",
+        "selectHint": "Пожалуйста, выберите источник провайдера",
+        "selectCreated": "Выбрать существующий источник",
+        "save": "Сохранить конфиг",
+        "saveAndFetchModels": "Сохранить и загрузить модели",
+        "fetchModels": "Загрузить список моделей",
+        "saveSuccess": "Источник успешно сохранен",
+        "saveError": "Ошибка сохранения источника",
+        "deleteConfirm": "Вы уверены, что хотите удалить источник «{id}»? Все связанные конфигурации моделей будут удалены.",
+        "deleteSuccess": "Источник удален",
+        "deleteError": "Ошибка удаления",
+        "enabled": "Включен",
+        "disabled": "Выключен",
+        "advancedConfig": "Расширенные настройки...",
+        "fields": {
+            "name": "Имя",
+            "apiKey": "Base URL",
+            "baseUrl": "Base URL"
+        },
+        "hints": {
+            "id": "Уникальный ID источника",
+            "key": "Ваш серетный API-ключ",
+            "apiBase": "Адрес API точки входа (Endpoint URL)",
+            "proxy": "Прокси сервер (HTTP/HTTPS), напр. http://127.0.0.1:7890. Используется только для запросов к этому провайдеру."
+        },
+        "labels": {
+            "proxy": "Прокси"
+        }
+    },
+    "models": {
+        "available": "Доступные модели",
+        "configured": "Настроенные модели",
+        "empty": "Модели не настроены. Нажмите «Загрузить список моделей» выше.",
+        "noModelsFound": "Модели не найдены",
+        "fetchError": "Не удалось получить список моделей",
+        "addSuccess": "Модель {model} успешно добавлена",
+        "deleteConfirm": "Вы уверены, что хотите удалить модель «{id}»?",
+        "deleteSuccess": "Модель удалена",
+        "deleteError": "Ошибка удаления модели",
+        "testSuccess": "Тест модели «{id}» пройден успешно",
+        "testError": "Тест модели провален",
+        "searchPlaceholder": "Поиск по имени или ID",
+        "manualAddButton": "Добавить вручную",
+        "manualDialogTitle": "Произвольная модель",
+        "manualDialogModelLabel": "Код модели (напр. gpt-4o-mini)",
+        "manualDialogPreviewLabel": "Отображаемый ID (авто)",
+        "manualDialogPreviewHint": "Будет выглядеть как: SourceID/ModelID",
+        "manualModelRequired": "Укажите ID модели",
+        "manualModelExists": "Эта модель уже добавлена",
+        "configure": "Настроить",
+        "tooltips": {
+            "providerId": "ID провайдера",
+            "modelId": "ID модели"
+        }
+    }
+}

@@ -112,5 +112,18 @@
     "addToConfig": "Added to config",
     "fileCount": "Files: {count}",
     "done": "Done"
+  },
+  "unsavedChangesWarning": {
+    "dialogTitle": "Unsaved changes",
+    "leavePage": "You have unsaved changes. Do you want to save before leaving?",
+    "switchConfig": "Switching config will discard unsaved changes. Do you want to save first?",
+    "options": {
+      "save": "Save",
+      "saveAndSwitch": "Save and switch",
+      "discardAndSwitch": "Discard changes and switch",
+      "closeCard": "Close the pop-up window",
+      "confirm": "confirm",
+      "cancel": "cancel"
+    }
   }
 }

@@ -3,7 +3,7 @@ import os
 import sys
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
 from typing import Any, cast
 
 import quart
@@ -65,7 +65,9 @@ class WeixinOfficialAccountServer:
 
         self.event_queue = event_queue
 
-        self.callback: Callable[[BaseMessage], Awaitable[None]] | None = None
+        self.callback: (
+            Callable[[BaseMessage], Coroutine[Any, Any, str | None]] | None
+        ) = None
         self.shutdown_event = asyncio.Event()
 
         self._wx_msg_time_out = 4.0  # 微信服务器要求 5 秒内回复
@@ -367,7 +369,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                 if future:
                     logger.debug(f"duplicate message id checked: {msg.id}")
                 else:
-                    future = asyncio.get_event_loop().create_future()
+                    future = asyncio.get_running_loop().create_future()
                     self.wexin_event_workers[msg_id] = future
                     await self.convert_message(msg, future)
                     # I love shield so much!
@@ -459,7 +461,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         elif msg.type == "voice":
             assert isinstance(msg, VoiceMessage)
 
-            resp: Response = await asyncio.get_event_loop().run_in_executor(
+            resp: Response = await asyncio.get_running_loop().run_in_executor(
                 None,
                 self.client.media.download,
                 msg.media_id,

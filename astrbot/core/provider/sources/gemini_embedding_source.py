@@ -48,6 +48,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             result = await self.client.models.embed_content(
                 model=self.model,
                 contents=text,
+                config=types.EmbedContentConfig(
+                    output_dimensionality=self.get_dim(),
+                ),
             )
             assert result.embeddings is not None
             assert result.embeddings[0].values is not None
@@ -61,6 +64,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             result = await self.client.models.embed_content(
                 model=self.model,
                 contents=cast(types.ContentListUnion, text),
+                config=types.EmbedContentConfig(
+                    output_dimensionality=self.get_dim(),
+                ),
             )
             assert result.embeddings is not None
 

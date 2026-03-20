@@ -1,0 +1,100 @@
+{
+    "type": "card",
+    "theme": "info",
+    "size": "lg",
+    "modules": [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain-text",
+                "content": "test1",
+                "emoji": true
+            }
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "kmarkdown",
+                "content": "test2"
+            },
+            "mode": "left"
+        },
+        {
+            "type": "divider"
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "paragraph",
+                "fields": [
+                    {
+                        "type": "kmarkdown",
+                        "content": "test3"
+                    },
+                    {
+                        "type": "kmarkdown",
+                        "content": "**test4**"
+                    }
+                ],
+                "cols": 2
+            },
+            "mode": "left"
+        },
+        {
+            "type": "image-group",
+            "elements": [
+                {
+                    "type": "image",
+                    "src": "https://img.kookapp.cn/attachments/2023-01/05/63b645851ff19.svg",
+                    "alt": "",
+                    "size": "lg",
+                    "circle": false
+                }
+            ]
+        },
+        {
+            "type": "file",
+            "src": "https://img.kookapp.cn/attachments/2023-01/05/63b645851ff19.svg",
+            "title": "test5"
+        },
+        {
+            "type": "countdown",
+            "endTime": 1772343427360,
+            "startTime": 1772343378259,
+            "mode": "second"
+        },
+        {
+            "type": "action-group",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": "点我测试回调",
+                    "theme": "primary",
+                    "value": "btn_clicked",
+                    "click": "return-val"
+                },
+                {
+                    "type": "button",
+                    "text": "访问官网",
+                    "theme": "danger",
+                    "value": "https://www.kookapp.cn",
+                    "click": "link"
+                }
+            ]
+        },
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "plain-text",
+                    "content": "test6",
+                    "emoji": true
+                }
+            ]
+        },
+        {
+            "type": "invite",
+            "code": "test7"
+        }
+    ]
+}

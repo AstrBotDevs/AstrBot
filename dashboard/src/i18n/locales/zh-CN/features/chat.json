@@ -9,7 +9,8 @@
     "voice": "语音输入",
     "recordingPrompt": "录音中，请说话...",
     "chatPrompt": "聊天吧!",
-    "dropToUpload": "松开鼠标上传文件"
+    "dropToUpload": "松开鼠标上传文件",
+    "stopGenerating": "停止生成"
   },
   "message": {
     "user": "用户",
@@ -70,16 +71,27 @@
   "modes": {
     "darkMode": "切换到夜间模式",
     "lightMode": "切换到日间模式"
-  },  "shortcuts": {
+  },
+  "shortcuts": {
     "help": "获取帮助",
     "voiceRecord": "录制语音",
-    "pasteImage": "粘贴图片"
+    "pasteImage": "粘贴图片",
+    "sendKey": {
+      "title": "发送快捷键",
+      "enterToSend": "Enter 发送",
+      "shiftEnterToSend": "Shift+Enter 发送"
+    }
   },
   "streaming": {
     "enabled": "流式响应已开启",
     "disabled": "流式响应已关闭",
     "on": "流式",
     "off": "普通"
+  },
+  "transport": {
+    "title": "通信传输模式",
+    "sse": "SSE",
+    "websocket": "WebSocket"
   },
   "config": {
     "title": "配置文件"
@@ -135,5 +147,15 @@
   "errors": {
     "sendMessageFailed": "发送消息失败，请重试",
     "createSessionFailed": "创建会话失败，请刷新页面重试"
+  },
+  "batch": {
+    "selected": "已选择 {count} 个",
+    "confirmDelete": "确定要删除 {count} 个对话吗？此操作无法撤销。",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "delete": "删除",
+    "exit": "退出",
+    "partialFailure": "{total} 个对话中有 {failed} 个删除失败",
+    "requestFailed": "删除对话失败，请重试。"
   }
 } 

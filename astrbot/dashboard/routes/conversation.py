@@ -148,7 +148,6 @@ class ConversationRoute(Route):
             user_id = data.get("user_id")
             cid = data.get("cid")
             title = data.get("title")
-            persona_id = data.get("persona_id", "")
 
             if not user_id or not cid:
                 return Response().error("缺少必要参数: user_id 和 cid").__dict__
@@ -158,6 +157,9 @@ class ConversationRoute(Route):
             )
             if not conversation:
                 return Response().error("对话不存在").__dict__
+
+            persona_id = data.get("persona_id", conversation.persona_id)
+
             if title is not None or persona_id is not None:
                 await self.conv_mgr.update_conversation(
                     unified_msg_origin=user_id,
