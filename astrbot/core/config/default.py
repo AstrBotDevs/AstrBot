@@ -131,6 +131,11 @@ DEFAULT_CONFIG = {
         "llm_compress_provider_id": "",
         "context_token_counter_mode": "estimate",
         "compact_context_after_tool_call": False,
+        "compact_context_soft_ratio": 0.3,
+        "compact_context_hard_ratio": 0.7,
+        "compact_context_min_delta_tokens": 0,
+        "compact_context_min_delta_turns": 0,
+        "compact_context_debounce_seconds": 0,
         "periodic_context_compaction": dict(PERIODIC_CONTEXT_COMPACTION_DEFAULTS),
         "context_memory": dict(CONTEXT_MEMORY_DEFAULTS),
         "max_context_length": -1,
@@ -2552,6 +2557,21 @@ CONFIG_METADATA_2 = {
                     "compact_context_after_tool_call": {
                         "type": "bool",
                     },
+                    "compact_context_soft_ratio": {
+                        "type": "float",
+                    },
+                    "compact_context_hard_ratio": {
+                        "type": "float",
+                    },
+                    "compact_context_min_delta_tokens": {
+                        "type": "int",
+                    },
+                    "compact_context_min_delta_turns": {
+                        "type": "int",
+                    },
+                    "compact_context_debounce_seconds": {
+                        "type": "int",
+                    },
                     "periodic_context_compaction": {
                         "type": "object",
                         "properties": {
@@ -3343,6 +3363,51 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "hint": "开启后，每次工具执行回写上下文后都会立刻触发一次上下文压缩检查。",
                         "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compact_context_soft_ratio": {
+                        "description": "工具后压缩软阈值",
+                        "type": "float",
+                        "hint": "当上下文占比达到该阈值时，按“最小增长量”规则决定是否压缩。支持填写 0~1 或 0~100（百分比）。",
+                        "condition": {
+                            "provider_settings.compact_context_after_tool_call": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compact_context_hard_ratio": {
+                        "description": "工具后压缩硬阈值",
+                        "type": "float",
+                        "hint": "当上下文占比达到该阈值时，强制执行一次压缩。支持填写 0~1 或 0~100（百分比）。",
+                        "condition": {
+                            "provider_settings.compact_context_after_tool_call": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compact_context_min_delta_tokens": {
+                        "description": "工具后最小 Token 增长",
+                        "type": "int",
+                        "hint": "在软阈值区间内，Token 增长低于该值时不触发压缩。0 表示不限制。",
+                        "condition": {
+                            "provider_settings.compact_context_after_tool_call": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compact_context_min_delta_turns": {
+                        "description": "工具后最小消息增长",
+                        "type": "int",
+                        "hint": "在软阈值区间内，消息增长低于该值时不触发压缩。0 表示不限制。",
+                        "condition": {
+                            "provider_settings.compact_context_after_tool_call": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compact_context_debounce_seconds": {
+                        "description": "工具后压缩防抖（秒）",
+                        "type": "int",
+                        "hint": "两次工具后压缩检查的最小间隔秒数。0 表示关闭防抖。",
+                        "condition": {
+                            "provider_settings.compact_context_after_tool_call": True,
                             "provider_settings.agent_runner_type": "local",
                         },
                     },

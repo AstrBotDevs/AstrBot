@@ -1,5 +1,6 @@
 import os
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -583,6 +584,68 @@ async def test_compact_context_after_tool_call_disabled_by_default(
         pass
 
     assert runner.context_manager.process.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_compact_context_after_tool_call_honors_debounce(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = True
+    mock_provider.provider_config["max_context_tokens"] = 100
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        compact_context_after_tool_call=True,
+        compact_context_soft_ratio=0.3,
+        compact_context_hard_ratio=0.4,
+        compact_context_debounce_seconds=3600,
+    )
+
+    runner.context_manager.token_counter = SimpleNamespace(
+        count_tokens=lambda *_args, **_kwargs: 90
+    )
+    runner.context_manager.process = AsyncMock(  # type: ignore[method-assign]
+        side_effect=lambda messages, trusted_token_usage=0: messages,
+    )
+
+    # step 1: pre-LLM compact + post-tool compact
+    async for _ in runner.step():
+        pass
+    # step 2: pre-LLM compact + post-tool compact skipped by debounce
+    async for _ in runner.step():
+        pass
+
+    assert runner.context_manager.process.await_count == 3
+
+
+def test_post_tool_compaction_soft_zone_respects_min_delta(runner):
+    # initialize attributes by calling reset in event loop would be overkill for this pure helper;
+    # emulate the required fields directly.
+    runner.compact_context_after_tool_call = True
+    runner.compact_context_soft_ratio = 0.3
+    runner.compact_context_hard_ratio = 0.9
+    runner.compact_context_min_delta_tokens = 10
+    runner.compact_context_min_delta_turns = 10
+    runner.context_config = SimpleNamespace(max_context_tokens=100)
+    runner.run_context = SimpleNamespace(messages=[object(), object()])
+    runner.context_manager = SimpleNamespace(
+        token_counter=SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 35)
+    )
+    runner._tool_compaction_baseline_tokens = 30
+    runner._tool_compaction_baseline_messages = 2
+
+    # ratio=0.35 in soft zone, token delta=5 and message delta=0 -> should skip
+    assert runner._should_run_post_tool_compaction() is False
+
+    runner.context_manager = SimpleNamespace(
+        token_counter=SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 95)
+    )
+    # ratio=0.95 in hard zone -> force compaction
+    assert runner._should_run_post_tool_compaction() is True
 
 
 if __name__ == "__main__":

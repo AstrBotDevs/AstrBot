@@ -108,6 +108,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         token_counter_mode: str = "estimate",
         # run context compression immediately after tool execution
         compact_context_after_tool_call: bool = False,
+        # post-tool-call compaction policy
+        compact_context_soft_ratio: float = 0.3,
+        compact_context_hard_ratio: float = 0.7,
+        compact_context_min_delta_tokens: int = 0,
+        compact_context_min_delta_turns: int = 0,
+        compact_context_debounce_seconds: int = 0,
         # customize
         custom_token_counter: TokenCounter | None = None,
         custom_compressor: ContextCompressor | None = None,
@@ -124,6 +130,25 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.truncate_turns = truncate_turns
         self.token_counter_mode = token_counter_mode
         self.compact_context_after_tool_call = compact_context_after_tool_call
+        self.compact_context_soft_ratio = self._normalize_ratio(
+            compact_context_soft_ratio, default=0.3
+        )
+        self.compact_context_hard_ratio = max(
+            self.compact_context_soft_ratio,
+            self._normalize_ratio(compact_context_hard_ratio, default=0.7),
+        )
+        self.compact_context_min_delta_tokens = self._to_non_negative_int(
+            compact_context_min_delta_tokens
+        )
+        self.compact_context_min_delta_turns = self._to_non_negative_int(
+            compact_context_min_delta_turns
+        )
+        self.compact_context_debounce_seconds = self._to_non_negative_int(
+            compact_context_debounce_seconds
+        )
+        self._last_tool_compaction_check_at = 0.0
+        self._tool_compaction_baseline_tokens = 0
+        self._tool_compaction_baseline_messages = 0
         self.custom_token_counter = custom_token_counter
         self.custom_compressor = custom_compressor
         # we will do compress when:
@@ -203,9 +228,72 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 Message(role="system", content=request.system_prompt),
             )
         self.run_context.messages = messages
+        self._refresh_tool_compaction_baseline(
+            trusted_token_usage=request.conversation.token_usage if request.conversation else 0
+        )
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
+
+    @staticmethod
+    def _normalize_ratio(value: float, *, default: float) -> float:
+        try:
+            ratio = float(value)
+        except Exception:
+            ratio = default
+        if ratio > 1.0 and ratio <= 100.0:
+            ratio = ratio / 100.0
+        return min(max(ratio, 0.0), 1.0)
+
+    @staticmethod
+    def _to_non_negative_int(value: int) -> int:
+        try:
+            return max(0, int(value))
+        except Exception:
+            return 0
+
+    def _refresh_tool_compaction_baseline(self, *, trusted_token_usage: int = 0) -> None:
+        try:
+            self._tool_compaction_baseline_tokens = (
+                self.context_manager.token_counter.count_tokens(
+                    self.run_context.messages,
+                    trusted_token_usage,
+                )
+            )
+        except Exception:
+            self._tool_compaction_baseline_tokens = 0
+        self._tool_compaction_baseline_messages = len(self.run_context.messages)
+
+    def _should_run_post_tool_compaction(self) -> bool:
+        if not self.compact_context_after_tool_call:
+            return False
+        max_context_tokens = int(self.context_config.max_context_tokens or 0)
+        if max_context_tokens <= 0:
+            # No explicit token budget configured: preserve legacy behavior.
+            return True
+
+        current_tokens = self.context_manager.token_counter.count_tokens(
+            self.run_context.messages
+        )
+        current_messages = len(self.run_context.messages)
+        current_ratio = current_tokens / max(1, max_context_tokens)
+
+        # Hard threshold: force compaction immediately.
+        if current_ratio >= self.compact_context_hard_ratio:
+            return True
+
+        # Soft threshold: only compact when context has grown enough.
+        if current_ratio < self.compact_context_soft_ratio:
+            return False
+
+        delta_tokens = max(0, current_tokens - self._tool_compaction_baseline_tokens)
+        delta_messages = max(0, current_messages - self._tool_compaction_baseline_messages)
+        if (
+            delta_tokens < self.compact_context_min_delta_tokens
+            and delta_messages < self.compact_context_min_delta_turns
+        ):
+            return False
+        return True
 
     async def _iter_llm_responses(
         self, *, include_model: bool = True
@@ -377,6 +465,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.run_context.messages = await self.context_manager.process(
             self.run_context.messages, trusted_token_usage=token_usage
         )
+        self._refresh_tool_compaction_baseline(trusted_token_usage=token_usage)
         self._simple_print_message_role("[AftCompact]")
 
         async for llm_response in self._iter_llm_responses_with_fallback():
@@ -627,9 +716,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.req.append_tool_calls_result(tool_calls_result)
 
             if self.compact_context_after_tool_call:
-                self.run_context.messages = await self.context_manager.process(
-                    self.run_context.messages,
-                )
+                now = time.monotonic()
+                if (
+                    self.compact_context_debounce_seconds > 0
+                    and self._last_tool_compaction_check_at > 0
+                    and (
+                        now - self._last_tool_compaction_check_at
+                        < self.compact_context_debounce_seconds
+                    )
+                ):
+                    pass
+                elif self._should_run_post_tool_compaction():
+                    self.run_context.messages = await self.context_manager.process(
+                        self.run_context.messages,
+                    )
+                    self._refresh_tool_compaction_baseline()
+                self._last_tool_compaction_check_at = now
 
     async def step_until_done(
         self, max_step: int
