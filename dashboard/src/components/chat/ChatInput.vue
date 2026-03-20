@@ -95,7 +95,7 @@
                             {{ isRecording ? tm('voice.speaking') : tm('voice.startRecording') }}
                         </v-tooltip>
                     </v-btn>
-                    <v-btn icon v-if="isRunning" @click="$emit('stop')" variant="tonal" color="primary" class="send-btn">
+                    <v-btn icon v-if="isRunning && !canSend" @click="$emit('stop')" variant="tonal" color="primary" class="send-btn">
                         <v-icon icon="mdi-stop" variant="text" plain></v-icon>
                         <v-tooltip activator="parent" location="top">
                             {{ tm('input.stopGenerating') }}
@@ -173,6 +173,7 @@ interface Props {
     currentSession?: Session | null;
     configId?: string | null;
     replyTo?: ReplyInfo | null;
+    sendShortcut?: 'enter' | 'shift_enter';
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -180,7 +181,8 @@ const props = withDefaults(defineProps<Props>(), {
     currentSession: null,
     configId: null,
     stagedFiles: () => [],
-    replyTo: null
+    replyTo: null,
+    sendShortcut: 'shift_enter'
 });
 
 const emit = defineEmits<{
@@ -253,9 +255,29 @@ watch(localPrompt, () => {
 });
 
 function handleKeyDown(e: KeyboardEvent) {
-    // Enter 插入换行（桌面和手机端均如此，发送通过右下角发送按鈕）
-    // Shift+Enter 发送（Ctrl+Enter / Cmd+Enter 也保留）
-    if (e.keyCode === 13 && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+    const isEnter = e.key === 'Enter';
+    if (!isEnter) {
+        // Ctrl+B 录音
+        if (e.ctrlKey && e.keyCode === 66) {
+            e.preventDefault();
+            if (ctrlKeyDown.value) return;
+
+            ctrlKeyDown.value = true;
+            ctrlKeyTimer.value = window.setTimeout(() => {
+                if (ctrlKeyDown.value && !props.isRecording) {
+                    emit('startRecording');
+                }
+            }, ctrlKeyLongPressThreshold);
+        }
+        return;
+    }
+
+    const isSendHotkey =
+        e.ctrlKey ||
+        e.metaKey ||
+        (props.sendShortcut === 'enter' ? !e.shiftKey : e.shiftKey);
+
+    if (isSendHotkey) {
         e.preventDefault();
         if (localPrompt.value.trim() === '/astr_live_dev') {
             emit('openLiveMode');
@@ -266,19 +288,6 @@ function handleKeyDown(e: KeyboardEvent) {
             emit('send');
         }
         return;
-    }
-
-    // Ctrl+B 录音
-    if (e.ctrlKey && e.keyCode === 66) {
-        e.preventDefault();
-        if (ctrlKeyDown.value) return;
-
-        ctrlKeyDown.value = true;
-        ctrlKeyTimer.value = window.setTimeout(() => {
-            if (ctrlKeyDown.value && !props.isRecording) {
-                emit('startRecording');
-            }
-        }, ctrlKeyLongPressThreshold);
     }
 }
 
@@ -364,6 +373,11 @@ function getCurrentSelection() {
     return providerModelMenuRef.value?.getCurrentSelection();
 }
 
+function focusInput() {
+    if (!inputField.value) return;
+    inputField.value.focus();
+}
+
 onMounted(() => {
     if (inputField.value) {
         inputField.value.addEventListener('paste', handlePaste);
@@ -379,7 +393,8 @@ onBeforeUnmount(() => {
 });
 
 defineExpose({
-    getCurrentSelection
+    getCurrentSelection,
+    focusInput
 });
 </script>
 

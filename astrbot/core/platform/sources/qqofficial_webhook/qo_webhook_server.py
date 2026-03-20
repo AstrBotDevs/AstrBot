@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import cast
 
 import quart
@@ -45,6 +46,9 @@ class QQOfficialWebhook:
         self.event_queue = event_queue
         self.platform = platform
         self.shutdown_event = asyncio.Event()
+        # Deduplication cache for webhook retry callbacks.
+        self._seen_event_ids: dict[str, float] = {}
+        self._dedup_ttl: int = 60  # seconds
 
     async def initialize(self) -> None:
         logger.info("正在登录到 QQ 官方机器人...")
@@ -119,6 +123,22 @@ class QQOfficialWebhook:
             # validation
             signed = await self.webhook_validation(cast(dict, data))
             return signed
+
+        event_id = msg.get("id")
+        if event_id:
+            now = time.monotonic()
+            # Lazily evict expired entries to prevent unbounded growth.
+            expired = [
+                k
+                for k, ts in self._seen_event_ids.items()
+                if now - ts > self._dedup_ttl
+            ]
+            for k in expired:
+                del self._seen_event_ids[k]
+            if event_id in self._seen_event_ids:
+                logger.debug(f"Duplicate webhook event {event_id!r}, skipping.")
+                return {"opcode": 12}
+            self._seen_event_ids[event_id] = now
 
         if not stopped and event and opcode == BotWebSocket.WS_DISPATCH_EVENT:
             event = msg["t"].lower()

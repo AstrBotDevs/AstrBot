@@ -311,9 +311,10 @@ class ProviderOpenAIOfficial(Provider):
                 state.handle_chunk(chunk)
             except Exception as e:
                 logger.warning("Saving chunk state error: " + str(e))
-            if len(chunk.choices) == 0:
+            if not chunk.choices:
                 continue
-            delta = chunk.choices[0].delta
+            choice = chunk.choices[0]
+            delta = choice.delta
             # logger.debug(f"chunk delta: {delta}")
             # handle the content delta
             reasoning = self._extract_reasoning_content(chunk)
@@ -322,7 +323,7 @@ class ProviderOpenAIOfficial(Provider):
             if reasoning:
                 llm_response.reasoning_content = reasoning
                 _y = True
-            if delta.content:
+            if delta and delta.content:
                 # Don't strip streaming chunks to preserve spaces between words
                 completion_text = self._normalize_content(delta.content, strip=False)
                 llm_response.result_chain = MessageChain(
@@ -331,6 +332,11 @@ class ProviderOpenAIOfficial(Provider):
                 _y = True
             if chunk.usage:
                 llm_response.usage = self._extract_usage(chunk.usage)
+            elif choice_usage := getattr(choice, "usage", None):
+                # Workaround for some providers that only return usage in choices[].usage, e.g. MoonshotAI
+                # See https://github.com/AstrBotDevs/AstrBot/issues/6614
+                llm_response.usage = self._extract_usage(choice_usage)
+                state.current_completion_snapshot.usage = choice_usage
             if _y:
                 yield llm_response
 
@@ -345,7 +351,7 @@ class ProviderOpenAIOfficial(Provider):
     ) -> str:
         """Extract reasoning content from OpenAI ChatCompletion if available."""
         reasoning_text = ""
-        if len(completion.choices) == 0:
+        if not completion.choices:
             return reasoning_text
         if isinstance(completion, ChatCompletion):
             choice = completion.choices[0]
@@ -359,13 +365,11 @@ class ProviderOpenAIOfficial(Provider):
                 reasoning_text = str(reasoning_attr)
         return reasoning_text
 
-    def _extract_usage(self, usage: CompletionUsage) -> TokenUsage:
-        ptd = usage.prompt_tokens_details
-        cached = ptd.cached_tokens if ptd and ptd.cached_tokens else 0
-        prompt_tokens = 0 if usage.prompt_tokens is None else usage.prompt_tokens
-        completion_tokens = (
-            0 if usage.completion_tokens is None else usage.completion_tokens
-        )
+    def _extract_usage(self, usage: CompletionUsage | dict) -> TokenUsage:
+        ptd = getattr(usage, "prompt_tokens_details", None)
+        cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
+        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+        completion_tokens = getattr(usage, "completion_tokens", 0) or 0
         return TokenUsage(
             input_other=prompt_tokens - cached,
             input_cached=cached,
@@ -468,7 +472,7 @@ class ProviderOpenAIOfficial(Provider):
         """Parse OpenAI ChatCompletion into LLMResponse"""
         llm_response = LLMResponse("assistant")
 
-        if len(completion.choices) == 0:
+        if not completion.choices:
             raise Exception("API 返回的 completion 为空。")
         choice = completion.choices[0]
 

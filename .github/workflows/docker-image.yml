@@ -11,7 +11,7 @@ on:
 
 jobs:
   build-nightly-image:
-    if: github.event_name == 'schedule'
+    if: github.repository == 'AstrBotDevs/AstrBot' && github.event_name == 'schedule'
     runs-on: ubuntu-latest
     env:
       DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
@@ -109,7 +109,7 @@ jobs:
         run: echo "Test Docker image has been built and pushed successfully"
 
   build-release-image:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+    if: github.repository == 'AstrBotDevs/AstrBot' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
     runs-on: ubuntu-latest
     env:
       DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
