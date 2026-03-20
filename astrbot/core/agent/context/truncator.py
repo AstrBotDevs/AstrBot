@@ -37,9 +37,7 @@ class ContextTruncator:
             return system_messages + truncated
 
         # 从原始消息里找第一条 user
-        first_user = next(
-            (m for m in original_messages if m.role == "user"), None
-        )
+        first_user = next((m for m in original_messages if m.role == "user"), None)
         if first_user is None:
             return system_messages + truncated
 
