@@ -1,4 +1,5 @@
 import asyncio
+import errno
 import hashlib
 import logging
 import os
@@ -392,8 +393,16 @@ class AstrBotDashboard:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 s.bind((host, port))
                 return False
-        except OSError:
-            return True
+        except OSError as exc:
+            if exc.errno == errno.EADDRINUSE:
+                return True
+            logger.warning(
+                "Skip port preflight for %s:%s due to bind probe failure: %s",
+                host,
+                port,
+                exc,
+            )
+            return False
 
     def get_process_using_port(self, port: int) -> str:
         """获取占用端口的进程信息"""

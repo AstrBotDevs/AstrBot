@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import errno
 import hashlib
 import io
 import os
@@ -29,6 +30,54 @@ from tests.fixtures.helpers import (
 )
 
 TEST_DASHBOARD_PASSWORD = "astrbot-test-password"
+
+
+def test_check_port_in_use_only_treats_eaddrinuse_as_occupied(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    server = AstrBotDashboard.__new__(AstrBotDashboard)
+
+    class _Socket:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def setsockopt(self, *args, **kwargs):
+            return None
+
+        def bind(self, address):
+            raise OSError(errno.EADDRINUSE, "Address already in use")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.socket.socket", lambda *args, **kwargs: _Socket()
+    )
+
+    assert server.check_port_in_use("127.0.0.1", 3002) is True
+
+
+def test_check_port_in_use_ignores_permission_errors(monkeypatch: pytest.MonkeyPatch):
+    server = AstrBotDashboard.__new__(AstrBotDashboard)
+
+    class _Socket:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def setsockopt(self, *args, **kwargs):
+            return None
+
+        def bind(self, address):
+            raise PermissionError(errno.EPERM, "Operation not permitted")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.socket.socket", lambda *args, **kwargs: _Socket()
+    )
+
+    assert server.check_port_in_use("127.0.0.1", 3002) is False
 
 
 @pytest_asyncio.fixture(scope="module")
