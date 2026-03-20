@@ -101,3 +101,13 @@ class MetadataClient:
             {"name": target},
         )
         return output.get("config")
+
+    async def save_plugin_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(config, dict):
+            raise TypeError("save_plugin_config requires a dict payload")
+        output = await self._proxy.call(
+            "metadata.save_plugin_config",
+            {"config": dict(config)},
+        )
+        saved = output.get("config")
+        return dict(saved) if isinstance(saved, dict) else {}

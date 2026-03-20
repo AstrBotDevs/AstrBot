@@ -686,6 +686,12 @@ CONVERSATION_UPDATE_INPUT_SCHEMA = _object_schema(
     conversation=_nullable(CONVERSATION_UPDATE_SCHEMA),
 )
 CONVERSATION_UPDATE_OUTPUT_SCHEMA = _object_schema()
+CONVERSATION_UNSET_PERSONA_INPUT_SCHEMA = _object_schema(
+    required=("session",),
+    session={"type": "string"},
+    conversation_id=_nullable({"type": "string"}),
+)
+CONVERSATION_UNSET_PERSONA_OUTPUT_SCHEMA = _object_schema()
 KNOWLEDGE_BASE_RECORD_SCHEMA = _object_schema(
     required=("kb_id", "kb_name", "embedding_provider_id", "doc_count", "chunk_count"),
     kb_id={"type": "string"},
@@ -939,6 +945,14 @@ METADATA_GET_PLUGIN_CONFIG_INPUT_SCHEMA = _object_schema(
     name={"type": "string"},
 )
 METADATA_GET_PLUGIN_CONFIG_OUTPUT_SCHEMA = _object_schema(
+    required=("config",),
+    config=_nullable({"type": "object"}),
+)
+METADATA_SAVE_PLUGIN_CONFIG_INPUT_SCHEMA = _object_schema(
+    required=("config",),
+    config={"type": "object"},
+)
+METADATA_SAVE_PLUGIN_CONFIG_OUTPUT_SCHEMA = _object_schema(
     required=("config",),
     config=_nullable({"type": "object"}),
 )
@@ -1398,6 +1412,10 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": CONVERSATION_UPDATE_INPUT_SCHEMA,
         "output": CONVERSATION_UPDATE_OUTPUT_SCHEMA,
     },
+    "conversation.unset_persona": {
+        "input": CONVERSATION_UNSET_PERSONA_INPUT_SCHEMA,
+        "output": CONVERSATION_UNSET_PERSONA_OUTPUT_SCHEMA,
+    },
     "kb.list": {"input": KB_LIST_INPUT_SCHEMA, "output": KB_LIST_OUTPUT_SCHEMA},
     "kb.get": {"input": KB_GET_INPUT_SCHEMA, "output": KB_GET_OUTPUT_SCHEMA},
     "kb.create": {
@@ -1463,6 +1481,10 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
     "metadata.get_plugin_config": {
         "input": METADATA_GET_PLUGIN_CONFIG_INPUT_SCHEMA,
         "output": METADATA_GET_PLUGIN_CONFIG_OUTPUT_SCHEMA,
+    },
+    "metadata.save_plugin_config": {
+        "input": METADATA_SAVE_PLUGIN_CONFIG_INPUT_SCHEMA,
+        "output": METADATA_SAVE_PLUGIN_CONFIG_OUTPUT_SCHEMA,
     },
     "registry.get_handlers_by_event_type": {
         "input": REGISTRY_GET_HANDLERS_BY_EVENT_TYPE_INPUT_SCHEMA,
@@ -1754,6 +1776,8 @@ __all__ = [
     "MEMORY_STATS_OUTPUT_SCHEMA",
     "METADATA_GET_PLUGIN_CONFIG_INPUT_SCHEMA",
     "METADATA_GET_PLUGIN_CONFIG_OUTPUT_SCHEMA",
+    "METADATA_SAVE_PLUGIN_CONFIG_INPUT_SCHEMA",
+    "METADATA_SAVE_PLUGIN_CONFIG_OUTPUT_SCHEMA",
     "METADATA_GET_PLUGIN_INPUT_SCHEMA",
     "METADATA_GET_PLUGIN_OUTPUT_SCHEMA",
     "METADATA_LIST_PLUGINS_INPUT_SCHEMA",
@@ -1876,6 +1900,8 @@ __all__ = [
     "CONVERSATION_RECORD_SCHEMA",
     "CONVERSATION_SWITCH_INPUT_SCHEMA",
     "CONVERSATION_SWITCH_OUTPUT_SCHEMA",
+    "CONVERSATION_UNSET_PERSONA_INPUT_SCHEMA",
+    "CONVERSATION_UNSET_PERSONA_OUTPUT_SCHEMA",
     "CONVERSATION_UPDATE_INPUT_SCHEMA",
     "CONVERSATION_UPDATE_OUTPUT_SCHEMA",
     "CONVERSATION_UPDATE_SCHEMA",
