@@ -132,6 +132,7 @@
     "randomPlugins": "🎲 Random Plugins",
     "showRandomPlugins": "Show Random Plugins",
     "hideRandomPlugins": "Hide Random Plugins",
+    "itemsPerPage": "Items per page",
     "sourceSafetyWarning": "Even with the default source, plugin stability and security cannot be fully guaranteed. Please verify carefully before use."
   },
   "sort": {
