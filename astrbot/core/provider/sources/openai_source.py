@@ -310,11 +310,11 @@ class ProviderOpenAIOfficial(Provider):
             # Fix for #6661: Add missing 'index' field to tool_call deltas
             # Gemini and some OpenAI-compatible proxies omit this field
             if chunk.choices:
-                choice = chunk.choices[0]
-                if choice.delta and choice.delta.tool_calls:
-                    for tc in choice.delta.tool_calls:
-                        if not hasattr(tc, "index") or tc.index is None:
-                            tc.index = 0
+                for choice in chunk.choices:
+                    if choice.delta and choice.delta.tool_calls:
+                        for idx, tc in enumerate(choice.delta.tool_calls):
+                            if not hasattr(tc, "index") or tc.index is None:
+                                tc.index = idx
             try:
                 state.handle_chunk(chunk)
             except Exception as e:
