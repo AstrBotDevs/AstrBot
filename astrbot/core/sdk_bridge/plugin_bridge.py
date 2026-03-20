@@ -1570,6 +1570,18 @@ class SdkPluginBridge:
             return []
         return list(route.group_path)
 
+    @staticmethod
+    def _descriptor_description(descriptor: HandlerDescriptor) -> str | None:
+        description = str(descriptor.description or "").strip()
+        if description:
+            return description
+        trigger = descriptor.trigger
+        if isinstance(trigger, CommandTrigger):
+            command_description = str(trigger.description or "").strip()
+            if command_description:
+                return command_description
+        return None
+
     def _descriptor_metadata(
         self,
         *,
@@ -1580,9 +1592,13 @@ class SdkPluginBridge:
             "plugin_name": plugin_id,
             "handler_full_name": descriptor.id,
             "trigger_type": getattr(descriptor.trigger, "type", ""),
+            "description": self._descriptor_description(descriptor),
             "event_types": self._descriptor_event_types(descriptor),
             "enabled": True,
             "group_path": self._descriptor_group_path(descriptor),
+            "priority": descriptor.priority,
+            "kind": descriptor.kind,
+            "require_admin": descriptor.permissions.require_admin,
         }
 
     def get_handlers_by_event_type(self, event_type: str) -> list[dict[str, Any]]:
@@ -2210,15 +2226,36 @@ class SdkPluginBridge:
         }
 
     def _handler_to_dashboard_item(self, handler: SdkHandlerRef) -> dict[str, Any]:
+        trigger = handler.descriptor.trigger
+        description = self._descriptor_description(handler.descriptor)
+        if not description and isinstance(trigger, CommandTrigger):
+            description = f"Command: {trigger.command}"
+        if not description:
+            description = "无描述"
+        if isinstance(trigger, CommandTrigger):
+            event_type = "SDKCommandEvent"
+            event_type_h = "SDK 指令触发"
+        elif isinstance(trigger, MessageTrigger):
+            event_type = "SDKMessageEvent"
+            event_type_h = "SDK 消息触发"
+        elif isinstance(trigger, EventTrigger):
+            event_type = "SDKEventTrigger"
+            event_type_h = "SDK 事件触发"
+        elif isinstance(trigger, ScheduleTrigger):
+            event_type = "SDKScheduleEvent"
+            event_type_h = "SDK 定时触发"
+        else:
+            event_type = "SDKHandler"
+            event_type_h = "SDK 行为触发"
+
         base = {
-            "event_type": "SDKMessageEvent",
-            "event_type_h": "SDK 消息触发",
+            "event_type": event_type,
+            "event_type_h": event_type_h,
             "handler_full_name": handler.handler_id,
-            "desc": "SDK handler",
+            "desc": description,
             "handler_name": handler.handler_name,
             "has_admin": handler.descriptor.permissions.require_admin,
         }
-        trigger = handler.descriptor.trigger
         if isinstance(trigger, CommandTrigger):
             return {**base, "type": "指令", "cmd": trigger.command}
         if isinstance(trigger, MessageTrigger):

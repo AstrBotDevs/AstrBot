@@ -8,12 +8,19 @@ import pytest
 from astrbot_sdk.protocol.descriptors import (
     CommandRouteSpec,
     CommandTrigger,
+    EventTrigger,
     HandlerDescriptor,
+    MessageTrigger,
     PlatformFilterSpec,
+    ScheduleTrigger,
 )
 
-from astrbot.core.sdk_bridge.plugin_bridge import SdkPluginBridge
-from tests.fixtures.mocks import mock_discord_modules, mock_telegram_modules
+from astrbot.core.sdk_bridge.plugin_bridge import SdkHandlerRef, SdkPluginBridge
+
+pytest_plugins = (
+    "tests.fixtures.mocks.discord",
+    "tests.fixtures.mocks.telegram",
+)
 
 
 class _BridgeStarContext:
@@ -179,3 +186,82 @@ def test_discord_collect_commands_includes_sdk_candidates(
     )
 
     assert adapter.collect_commands() == [("gf", "AI girlfriend commands")]
+
+
+@pytest.mark.unit
+def test_sdk_bridge_dashboard_handler_items_use_real_descriptions_and_fallbacks() -> (
+    None
+):
+    bridge = SdkPluginBridge(_BridgeStarContext())
+
+    command_item = bridge._handler_to_dashboard_item(  # noqa: SLF001
+        SdkHandlerRef(
+            descriptor=HandlerDescriptor(
+                id="ai_girlfriend:main.chat",
+                trigger=CommandTrigger(
+                    command="gf chat",
+                    description="Switch to AI girlfriend persona",
+                ),
+            ),
+            declaration_order=0,
+        )
+    )
+    fallback_command_item = bridge._handler_to_dashboard_item(  # noqa: SLF001
+        SdkHandlerRef(
+            descriptor=HandlerDescriptor(
+                id="ai_girlfriend:main.mood",
+                trigger=CommandTrigger(command="gf mood"),
+            ),
+            declaration_order=1,
+        )
+    )
+    message_item = bridge._handler_to_dashboard_item(  # noqa: SLF001
+        SdkHandlerRef(
+            descriptor=HandlerDescriptor(
+                id="ai_girlfriend:main.memory",
+                trigger=MessageTrigger(keywords=["memory"]),
+                description="Capture structured memory hints",
+            ),
+            declaration_order=2,
+        )
+    )
+    event_item = bridge._handler_to_dashboard_item(  # noqa: SLF001
+        SdkHandlerRef(
+            descriptor=HandlerDescriptor(
+                id="ai_girlfriend:main.waiting",
+                trigger=EventTrigger(event_type="waiting_llm_request"),
+            ),
+            declaration_order=3,
+        )
+    )
+    schedule_item = bridge._handler_to_dashboard_item(  # noqa: SLF001
+        SdkHandlerRef(
+            descriptor=HandlerDescriptor(
+                id="ai_girlfriend:main.maintenance",
+                trigger=ScheduleTrigger(interval_seconds=60),
+            ),
+            declaration_order=4,
+        )
+    )
+
+    assert command_item["event_type_h"] == "SDK 指令触发"
+    assert command_item["desc"] == "Switch to AI girlfriend persona"
+    assert command_item["type"] == "指令"
+    assert command_item["cmd"] == "gf chat"
+
+    assert fallback_command_item["desc"] == "Command: gf mood"
+
+    assert message_item["event_type_h"] == "SDK 消息触发"
+    assert message_item["desc"] == "Capture structured memory hints"
+    assert message_item["type"] == "关键词"
+    assert message_item["cmd"] == "memory"
+
+    assert event_item["event_type_h"] == "SDK 事件触发"
+    assert event_item["desc"] == "无描述"
+    assert event_item["type"] == "事件"
+    assert event_item["cmd"] == "waiting_llm_request"
+
+    assert schedule_item["event_type_h"] == "SDK 定时触发"
+    assert schedule_item["desc"] == "无描述"
+    assert schedule_item["type"] == "定时"
+    assert schedule_item["cmd"] == "60"

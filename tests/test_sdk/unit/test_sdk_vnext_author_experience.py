@@ -5,12 +5,8 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
-from click.testing import CliRunner
-from pydantic import BaseModel, Field
-
 import astrbot_sdk.runtime.supervisor as supervisor_module
-from astrbot.core.sdk_bridge.plugin_bridge import SdkPluginBridge
+import pytest
 from astrbot_sdk._command_model import (
     parse_command_model_remainder,
     resolve_command_model_param,
@@ -27,18 +23,19 @@ from astrbot_sdk.decorators import (
     ConversationMeta,
     LimiterMeta,
     admin_only,
-    cooldown,
     conversation_command,
+    cooldown,
     get_handler_meta,
     group_only,
     message_types,
     on_command,
     on_event,
     on_message,
+    on_schedule,
     platforms,
     priority,
-    rate_limit,
     private_only,
+    rate_limit,
 )
 from astrbot_sdk.errors import AstrBotError, ErrorCodes
 from astrbot_sdk.events import MessageEvent
@@ -47,12 +44,10 @@ from astrbot_sdk.message_result import MessageBuilder, MessageChain
 from astrbot_sdk.protocol.descriptors import (
     CapabilityDescriptor,
     CommandTrigger,
-    EventTrigger,
     HandlerDescriptor,
     MessageTypeFilterSpec,
     Permissions,
     PlatformFilterSpec,
-    ScheduleTrigger,
     SessionRef,
 )
 from astrbot_sdk.runtime.capability_dispatcher import CapabilityDispatcher
@@ -73,6 +68,10 @@ from astrbot_sdk.runtime.supervisor import SupervisorRuntime
 from astrbot_sdk.runtime.worker import GroupWorkerRuntime
 from astrbot_sdk.star import Star
 from astrbot_sdk.testing import MockClock, SDKTestEnvironment
+from click.testing import CliRunner
+from pydantic import BaseModel, Field
+
+from astrbot.core.sdk_bridge.plugin_bridge import SdkPluginBridge
 
 
 class _Peer:
@@ -126,7 +125,9 @@ class _Peer:
         raise AssertionError(f"unexpected capability: {capability}")
 
 
-def _event_payload(text: str, *, session_id: str = "demo:private:user-1") -> dict[str, object]:
+def _event_payload(
+    text: str, *, session_id: str = "demo:private:user-1"
+) -> dict[str, object]:
     return {
         "text": text,
         "session_id": session_id,
@@ -167,7 +168,7 @@ def _write_sdk_plugin(
         "\n".join(
             [
                 f"name: {name}",
-                'runtime:',
+                "runtime:",
                 '  python: "3.11"',
                 "components:",
                 "  - class: main:DemoPlugin",
@@ -192,21 +193,25 @@ def test_decorator_alias_and_conflict_rules() -> None:
     assert meta.trigger.aliases == ["repeat", "say"]
 
     with pytest.raises(ValueError, match="platforms"):
+
         @platforms("qq")
         @on_message(platforms=["wechat"])
         async def _platform_conflict(event: MessageEvent, ctx: Context) -> None: ...
 
     with pytest.raises(ValueError, match="消息类型约束"):
+
         @group_only()
         @private_only()
         async def _scope_conflict(event: MessageEvent, ctx: Context) -> None: ...
 
     with pytest.raises(ValueError, match="不能叠加"):
+
         @rate_limit(1, 60)
         @cooldown(10)
         async def _limiter_conflict(event: MessageEvent, ctx: Context) -> None: ...
 
     with pytest.raises(ValueError, match="只适用于 on_command/on_message"):
+
         @on_event("ready")
         @rate_limit(1, 60)
         async def _event_limiter_conflict(ctx: Context) -> None: ...
@@ -226,6 +231,76 @@ def test_decorator_alias_and_conflict_rules() -> None:
         busy_message="busy",
         grace_period=1.0,
     )
+
+
+@pytest.mark.unit
+def test_handler_descriptions_flow_from_decorators_to_loaded_descriptors(
+    tmp_path: Path,
+) -> None:
+    @on_message(keywords=["hello"], description="Handle hello messages")
+    async def hello(event: MessageEvent, ctx: Context) -> None: ...
+
+    @on_event("ready", description="React when the runtime is ready")
+    async def ready(event: MessageEvent, ctx: Context) -> None: ...
+
+    @on_schedule(interval_seconds=60, description="Run periodic maintenance")
+    async def tick(ctx: Context) -> None: ...
+
+    hello_meta = get_handler_meta(hello)
+    ready_meta = get_handler_meta(ready)
+    tick_meta = get_handler_meta(tick)
+    assert hello_meta is not None
+    assert ready_meta is not None
+    assert tick_meta is not None
+    assert hello_meta.description == "Handle hello messages"
+    assert ready_meta.description == "React when the runtime is ready"
+    assert tick_meta.description == "Run periodic maintenance"
+
+    env = SDKTestEnvironment(tmp_path)
+    plugin_dir = _write_sdk_plugin(
+        env.plugin_dir("handler_descriptions"),
+        name="handler_descriptions",
+        main_source="\n".join(
+            [
+                (
+                    "from astrbot_sdk import Context, MessageEvent, Star, "
+                    "on_command, on_event, on_message, on_schedule"
+                ),
+                "",
+                "class DemoPlugin(Star):",
+                '    @on_command("hello", description="Say hello politely")',
+                "    async def hello(self, event: MessageEvent, ctx: Context) -> None:",
+                '        await event.reply("hi")',
+                "",
+                '    @on_message(keywords=["ping"], description="React to ping messages")',
+                "    async def ping(self, event: MessageEvent, ctx: Context) -> None:",
+                '        await event.reply("pong")',
+                "",
+                '    @on_event("ready", description="Observe ready events")',
+                "    async def ready(self, event: MessageEvent, ctx: Context) -> None:",
+                "        return None",
+                "",
+                '    @on_schedule(interval_seconds=60, description="Run periodic maintenance")',
+                "    async def tick(self, ctx: Context) -> None:",
+                "        return None",
+            ]
+        ),
+    )
+
+    plugin = load_plugin_spec(plugin_dir)
+    validate_plugin_spec(plugin)
+    loaded = load_plugin(plugin)
+    descriptors = {
+        handler.descriptor.id.rsplit(".", 1)[-1]: handler.descriptor
+        for handler in loaded.handlers
+    }
+
+    assert descriptors["hello"].description == "Say hello politely"
+    assert isinstance(descriptors["hello"].trigger, CommandTrigger)
+    assert descriptors["hello"].trigger.description == "Say hello politely"
+    assert descriptors["ping"].description == "React to ping messages"
+    assert descriptors["ready"].description == "Observe ready events"
+    assert descriptors["tick"].description == "Run periodic maintenance"
 
     @admin_only
     @priority(7)
@@ -358,7 +433,7 @@ async def test_plugin_logger_watch_and_default_on_error_render_details() -> None
     await Star().on_error(error, event, ctx)
 
     assert event.replies == [
-        "fix it\n文档：https://docs.astrbot.org/sdk/errors#invalid-input\n详情：{\"field\": \"name\"}"
+        'fix it\n文档：https://docs.astrbot.org/sdk/errors#invalid-input\n详情：{"field": "name"}'
     ]
 
 
@@ -372,7 +447,9 @@ async def test_request_logger_binding_for_handler_and_capability_paths() -> None
         async def handle(self, event: MessageEvent, ctx: Context) -> None:
             ctx.logger.info("handler log")
 
-        async def capability(self, payload: dict[str, object], ctx: Context) -> dict[str, object]:
+        async def capability(
+            self, payload: dict[str, object], ctx: Context
+        ) -> dict[str, object]:
             ctx.logger.info("capability log")
             return {"ok": True}
 
@@ -460,7 +537,7 @@ def test_discovery_issue_surfaces_to_dashboard_failed_item(tmp_path: Path) -> No
         "\n".join(
             [
                 "name: broken",
-                'runtime:',
+                "runtime:",
                 '  python: "3.11"',
                 "components:",
                 "  - class: main:BrokenPlugin",
@@ -584,7 +661,7 @@ def test_loaded_plugin_issue_metadata_is_preserved_in_bridge(tmp_path: Path) -> 
                     "from astrbot_sdk import Context, Star, on_schedule, rate_limit",
                     "",
                     "class DemoPlugin(Star):",
-                    '    @on_schedule(interval_seconds=60)',
+                    "    @on_schedule(interval_seconds=60)",
                     "    @rate_limit(1, 60)",
                     "    async def broken(self, ctx: Context) -> None:",
                     "        return None",
@@ -700,7 +777,9 @@ async def test_supervisor_metadata_includes_discovery_issues(
         async def start(self) -> None:
             return None
 
-        async def initialize(self, handlers, *, provided_capabilities, metadata) -> None:
+        async def initialize(
+            self, handlers, *, provided_capabilities, metadata
+        ) -> None:
             self.initialized_metadata = metadata
 
         async def stop(self) -> None:
@@ -795,8 +874,12 @@ async def test_rate_limit_and_cooldown_behaviors() -> None:
         handlers=[limited],
     )
 
-    await _invoke_handler(dispatcher, handler_id=handler_id, text="ping", request_id="r1")
-    await _invoke_handler(dispatcher, handler_id=handler_id, text="ping", request_id="r2")
+    await _invoke_handler(
+        dispatcher, handler_id=handler_id, text="ping", request_id="r1"
+    )
+    await _invoke_handler(
+        dispatcher, handler_id=handler_id, text="ping", request_id="r2"
+    )
 
     assert peer.sent_messages[0]["text"] == "ok"
     assert peer.sent_messages[1]["text"] == "操作过于频繁，请稍后再试。"
@@ -1034,7 +1117,10 @@ async def test_message_builder_event_helpers_and_media_helper(
                 {"type": "text", "data": {"text": "hello"}},
                 {"type": "at", "data": {"qq": "123"}},
                 {"type": "image", "data": {"file": "https://example.com/a.png"}},
-                {"type": "file", "data": {"name": "a.txt", "file": "https://example.com/a.txt"}},
+                {
+                    "type": "file",
+                    "data": {"name": "a.txt", "file": "https://example.com/a.txt"},
+                },
             ],
         }
     )
@@ -1147,7 +1233,9 @@ class _StickyConversationPlugin(Star):
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_conversation_reject_and_replace_modes() -> None:
-    async def _exercise(mode: str) -> tuple[HandlerDispatcher, _Peer, list[ConversationState]]:
+    async def _exercise(
+        mode: str,
+    ) -> tuple[HandlerDispatcher, _Peer, list[ConversationState]]:
         peer = _Peer()
         states: list[ConversationState] = []
         owner = _ConversationPlugin(states)
@@ -1203,7 +1291,9 @@ async def test_conversation_reject_and_replace_modes() -> None:
         return dispatcher, peer, states
 
     reject_dispatcher, reject_peer, reject_states = await _exercise("reject")
-    assert [item["text"] for item in reject_peer.sent_messages if item["kind"] == "text"] == [
+    assert [
+        item["text"] for item in reject_peer.sent_messages if item["kind"] == "text"
+    ] == [
         "question?",
         "busy now",
         "answer:42",
@@ -1212,7 +1302,9 @@ async def test_conversation_reject_and_replace_modes() -> None:
     assert ConversationState.REPLACED not in reject_states
 
     replace_dispatcher, replace_peer, replace_states = await _exercise("replace")
-    assert [item["text"] for item in replace_peer.sent_messages if item["kind"] == "text"] == [
+    assert [
+        item["text"] for item in replace_peer.sent_messages if item["kind"] == "text"
+    ] == [
         "question?",
         "question?",
         "answer:42",
@@ -1223,7 +1315,9 @@ async def test_conversation_reject_and_replace_modes() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_conversation_replace_injects_exception_and_rejects_stale_messages() -> None:
+async def test_conversation_replace_injects_exception_and_rejects_stale_messages() -> (
+    None
+):
     peer = _Peer()
     states: list[ConversationState] = []
     replaced_errors: list[type[Exception]] = []

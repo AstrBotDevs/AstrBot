@@ -209,17 +209,25 @@ async def test_mock_context_platform_and_session_managers() -> None:
                 plugin_name="sdk-disabled",
                 handler_full_name="sdk-disabled:main.on_message",
                 trigger_type="message",
+                description="disabled handler",
                 event_types=[],
                 enabled=True,
                 group_path=[],
+                priority=1,
+                kind="handler",
+                require_admin=False,
             ),
             HandlerMetadata(
                 plugin_name="sdk-reserved",
                 handler_full_name="sdk-reserved:main.on_message",
                 trigger_type="message",
+                description="reserved handler",
                 event_types=[],
                 enabled=True,
                 group_path=[],
+                priority=5,
+                kind="hook",
+                require_admin=True,
             ),
         ],
     )
@@ -236,6 +244,10 @@ async def test_mock_context_platform_and_session_managers() -> None:
         is False
     )
     assert [item.plugin_name for item in handlers] == ["sdk-reserved"]
+    assert handlers[0].description == "reserved handler"
+    assert handlers[0].priority == 5
+    assert handlers[0].kind == "hook"
+    assert handlers[0].require_admin is True
     assert await ctx.session_services.is_llm_enabled_for_session(session) is False
     assert await ctx.session_services.should_process_llm_request(session) is False
     await ctx.session_services.set_llm_status_for_session(session, True)
@@ -679,9 +691,13 @@ async def test_mock_context_registry_client_round_trip() -> None:
                 "plugin_name": "sdk-demo",
                 "handler_full_name": "sdk-demo:demo.on_waiting",
                 "trigger_type": "event",
+                "description": "Observe waiting requests",
                 "event_types": ["waiting_llm_request"],
                 "enabled": True,
                 "group_path": [],
+                "priority": 7,
+                "kind": "hook",
+                "require_admin": True,
             }
         ],
     )
@@ -689,10 +705,18 @@ async def test_mock_context_registry_client_round_trip() -> None:
     handlers = await ctx.registry.get_handlers_by_event_type("waiting_llm_request")
     assert len(handlers) == 1
     assert handlers[0].handler_full_name == "sdk-demo:demo.on_waiting"
+    assert handlers[0].description == "Observe waiting requests"
+    assert handlers[0].priority == 7
+    assert handlers[0].kind == "hook"
+    assert handlers[0].require_admin is True
 
     handler = await ctx.registry.get_handler_by_full_name("sdk-demo:demo.on_waiting")
     assert handler is not None
     assert handler.plugin_name == "sdk-demo"
+    assert handler.description == "Observe waiting requests"
+    assert handler.priority == 7
+    assert handler.kind == "hook"
+    assert handler.require_admin is True
 
     request_id = "req-registry-whitelist"
     set_result = await ctx.router.execute(
