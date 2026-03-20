@@ -620,6 +620,16 @@ def _slugify_plugin_name(value: str) -> str:
     return slug or "my_plugin"
 
 
+def _normalize_plugin_name(value: str) -> str:
+    normalized = _slugify_plugin_name(value)
+    if normalized.startswith("astrbot_plugin_"):
+        return normalized
+    normalized = normalized.removeprefix("astrbot_plugin")
+    normalized = normalized.strip("_")
+    suffix = normalized or "my_plugin"
+    return f"astrbot_plugin_{suffix}"
+
+
 def _class_name_for_plugin(value: str) -> str:
     parts = [part for part in re.split(r"[^a-zA-Z0-9]+", value) if part]
     if not parts:
@@ -632,16 +642,23 @@ def _sanitize_build_part(value: str) -> str:
     return sanitized or "artifact"
 
 
-def _render_init_plugin_yaml(*, plugin_name: str, display_name: str) -> str:
+def _render_init_plugin_yaml(
+    *,
+    plugin_name: str,
+    display_name: str,
+    desc: str,
+    author: str,
+    version: str,
+) -> str:
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
     class_name = _class_name_for_plugin(plugin_name)
     return dedent(
         f"""\
         name: {plugin_name}
         display_name: {display_name}
-        desc: 使用 AstrBot SDK 创建的插件
-        author: your-name
-        version: 0.1.0
+        desc: {desc}
+        author: {author}
+        version: {version}
         runtime:
           python: "{python_version}"
         components:
@@ -808,19 +825,42 @@ def _iter_build_files(plugin_dir: Path, output_dir: Path) -> list[Path]:
     return files
 
 
-def _init_plugin(name: str) -> None:
-    target_dir = Path(name)
+def _prompt_nonempty_text(prompt: str) -> str:
+    while True:
+        value = click.prompt(prompt, type=str, default="", show_default=False).strip()
+        if value:
+            return value
+        click.echo("该字段不能为空，请重新输入。")
+
+
+def _collect_init_metadata(name: str | None) -> tuple[str, str, str, str]:
+    if name is not None:
+        return name, "", "", "1.0.0"
+
+    plugin_name = _prompt_nonempty_text("插件名字")
+    author = click.prompt("作者", type=str, default="", show_default=False).strip()
+    desc = click.prompt("描述", type=str, default="", show_default=False).strip()
+    version = click.prompt("版本", type=str, default="1.0.0", show_default=True).strip()
+    return plugin_name, author, desc, version or "1.0.0"
+
+
+def _init_plugin(name: str | None) -> None:
+    raw_name, author, desc, version = _collect_init_metadata(name)
+    plugin_name = _normalize_plugin_name(raw_name)
+    target_dir = Path(plugin_name)
     if target_dir.exists():
         raise _CliPluginValidationError(f"目标目录已存在：{target_dir}")
 
-    plugin_name = _slugify_plugin_name(target_dir.name)
-    display_name = target_dir.name
+    display_name = raw_name.strip() or plugin_name
     target_dir.mkdir(parents=True, exist_ok=False)
     (target_dir / "tests").mkdir()
     (target_dir / "plugin.yaml").write_text(
         _render_init_plugin_yaml(
             plugin_name=plugin_name,
             display_name=display_name,
+            desc=desc,
+            author=author,
+            version=version,
         ),
         encoding="utf-8",
     )
@@ -837,7 +877,7 @@ def _init_plugin(name: str) -> None:
         _render_init_test_py(plugin_name=plugin_name),
         encoding="utf-8",
     )
-    click.echo(f"已创建插件骨架：{target_dir}")
+    click.echo(f"已创建插件：{target_dir}")
     click.echo("后续命令：")
     click.echo(f"  astrbot-sdk validate --plugin-dir {target_dir}")
     click.echo(
@@ -915,13 +955,13 @@ def run(plugins_dir: Path, protocol_stdout: str | None) -> None:
 
 
 @cli.command()
-@click.argument("name", type=str)
-def init(name: str) -> None:
+@click.argument("name", type=str, required=False)
+def init(name: str | None) -> None:
     """Create a new plugin skeleton in the target directory."""
     _run_sync_entrypoint(
         lambda: _init_plugin(name),
-        log_message=f"创建插件骨架：{name}",
-        context={"target": Path(name)},
+        log_message=f"创建插件：{name or '<interactive>'}",
+        context={"target": name or "<interactive>"},
     )
 
 
