@@ -194,7 +194,7 @@ class Provider(AbstractProvider):
     async def test(self, test_timeout: float = 45.0) -> None:
         # Use anyio.fail_after to enforce timeout in async context.
         # This avoids direct asyncio.wait_for usage inside async functions.
-        async with anyio.fail_after(test_timeout):
+        with anyio.fail_after(test_timeout):
             await self.text_chat(prompt="REPLY `PONG` ONLY")
 
 
