@@ -124,6 +124,7 @@ class HandlerDispatcher:
             ctx = Context(
                 peer=self._peer,
                 plugin_id=requested_plugin_id or self._plugin_id,
+                request_id=message.id,
                 cancel_token=cancel_token,
                 source_event_payload=event_payload
                 if isinstance(event_payload, dict)
@@ -145,6 +146,7 @@ class HandlerDispatcher:
                     ctx = Context(
                         peer=self._peer,
                         plugin_id=plugin_id,
+                        request_id=message.id,
                         cancel_token=cancel_token,
                         source_event_payload=event_payload
                         if isinstance(event_payload, dict)
@@ -170,6 +172,7 @@ class HandlerDispatcher:
         ctx = Context(
             peer=self._peer,
             plugin_id=plugin_id,
+            request_id=message.id,
             cancel_token=cancel_token,
             source_event_payload=event_payload
             if isinstance(event_payload, dict)

@@ -244,6 +244,7 @@ class Context:
         *,
         peer,
         plugin_id: str,
+        request_id: str | None = None,
         cancel_token: CancelToken | None = None,
         logger: Any | None = None,
         source_event_payload: dict[str, Any] | None = None,
@@ -256,7 +257,11 @@ class Context:
             cancel_token: 取消令牌，None 时创建新令牌
             logger: 日志器，None 时使用默认 logger 并绑定 plugin_id
         """
-        proxy = CapabilityProxy(peer, caller_plugin_id=plugin_id)
+        proxy = CapabilityProxy(
+            peer,
+            caller_plugin_id=plugin_id,
+            request_scope_id=request_id,
+        )
         if isinstance(logger, PluginLogger):
             bound_logger = logger
         else:
@@ -293,6 +298,7 @@ class Context:
             else PluginLogger(plugin_id=plugin_id, logger=bound_logger)
         )
         self.cancel_token = cancel_token or CancelToken()
+        self.request_id = request_id
         self._source_event_payload = (
             dict(source_event_payload) if isinstance(source_event_payload, dict) else {}
         )
