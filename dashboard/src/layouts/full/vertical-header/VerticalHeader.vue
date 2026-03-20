@@ -221,6 +221,10 @@ const isPreRelease = (version: string) => {
 
 // 账户修改
 async function accountEdit() {
+  if (accountEditStatus.value.loading) {
+    return;
+  }
+
   accountEditStatus.value.error = false;
   accountEditStatus.value.success = false;
 
@@ -229,12 +233,13 @@ async function accountEdit() {
     return;
   }
 
+  accountEditStatus.value.loading = true;
+
   const { valid } = await accountFormRef.value.validate();
   if (!valid) {
+    accountEditStatus.value.loading = false;
     return;
   }
-
-  accountEditStatus.value.loading = true;
 
   const passwordHash = password.value ? md5(password.value) : '';
   const newPasswordHash = newPassword.value ? md5(newPassword.value) : '';
