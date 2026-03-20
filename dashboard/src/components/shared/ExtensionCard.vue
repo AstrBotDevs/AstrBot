@@ -326,6 +326,30 @@ const viewChangelog = () => {
               </div>
 
               <div
+                v-if="!marketMode && extension.author"
+                class="extension-author-row"
+              >
+                <v-icon
+                  icon="mdi-account"
+                  size="x-small"
+                  class="extension-author-row__icon"
+                ></v-icon>
+                <a
+                  v-if="extension.social_link"
+                  :href="extension.social_link"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="extension-author-row__link"
+                  @click.stop
+                >
+                  {{ extension.author }}
+                </a>
+                <span v-else class="extension-author-row__text">
+                  {{ extension.author }}
+                </span>
+              </div>
+
+              <div
                 class="extension-desc"
                 :class="{ 'text-caption': $vuetify.display.xs }"
               >
@@ -408,6 +432,14 @@ const viewChangelog = () => {
             <v-list-item-title>{{ tm("buttons.viewInfo") }}</v-list-item-title>
           </v-list-item>
 
+          <v-list-item
+            class="styled-menu-item"
+            prepend-icon="mdi-text-box-search-outline"
+            @click="viewChangelog"
+          >
+            <v-list-item-title>{{ tm("pluginChangelog.menuTitle") }}</v-list-item-title>
+          </v-list-item>
+
           <v-list-item class="styled-menu-item" prepend-icon="mdi-update" @click="updateExtension">
             <v-list-item-title>{{
               extension.has_update
@@ -463,6 +495,39 @@ const viewChangelog = () => {
 
 .extension-chip-group {
   gap: 8px;
+}
+
+.extension-author-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  color: rgb(var(--v-theme-primary));
+  min-width: 0;
+}
+
+.extension-author-row__icon {
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  flex-shrink: 0;
+}
+
+.extension-author-row__link,
+.extension-author-row__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.extension-author-row__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.extension-author-row__link:hover {
+  text-decoration: underline;
 }
 
 .extension-desc {
