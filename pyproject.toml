@@ -66,7 +66,7 @@ dependencies = [
   "packaging>=24.2",
   "quart-cors>=0.8.0",
   "anyio>=4.12.1",
-  "argon2>=0.1.10",
+  "argon2-cffi>=23.1.0",
 ]
 
 [dependency-groups]
