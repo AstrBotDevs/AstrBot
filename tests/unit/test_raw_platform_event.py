@@ -342,3 +342,33 @@ class TestEmitRawPlatformEventPluginSet:
 
             event = mock_hook.call_args[0][0]
             assert event.plugins_name == ["specific"]
+
+    @pytest.mark.asyncio
+    async def test_emit_raw_platform_event_propagates_true(self):
+        """Scene 11: emit_raw_platform_event propagates True from hook."""
+        platform = self._make_platform({"plugin_set": ["*"]})
+
+        with patch(
+            "astrbot.core.pipeline.context_utils.call_raw_platform_event_hook",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_hook:
+            result = await platform.emit_raw_platform_event({"data": 1})
+
+            assert result is True
+            mock_hook.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_emit_raw_platform_event_propagates_false(self):
+        """Scene 12: emit_raw_platform_event propagates False from hook."""
+        platform = self._make_platform({"plugin_set": ["*"]})
+
+        with patch(
+            "astrbot.core.pipeline.context_utils.call_raw_platform_event_hook",
+            new_callable=AsyncMock,
+            return_value=False,
+        ) as mock_hook:
+            result = await platform.emit_raw_platform_event({"data": 1})
+
+            assert result is False
+            mock_hook.assert_awaited_once()
