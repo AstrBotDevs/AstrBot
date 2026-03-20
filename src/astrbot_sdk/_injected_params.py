@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any
+
+try:
+    from typing import get_type_hints
+except ImportError:  # pragma: no cover
+    get_type_hints = None
 
 from ._typing_utils import unwrap_optional
 
@@ -32,6 +38,34 @@ def is_framework_injected_parameter(name: str, annotation: Any) -> bool:
     return False
 
 
+def legacy_arg_parameter_names(handler: Any) -> list[str]:
+    try:
+        signature = inspect.signature(handler)
+    except (TypeError, ValueError):
+        return []
+    try:
+        if get_type_hints is None:
+            type_hints = {}
+        else:
+            type_hints = get_type_hints(handler)
+    except Exception:
+        type_hints = {}
+
+    names: list[str] = []
+    for parameter in signature.parameters.values():
+        if parameter.kind not in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ):
+            continue
+        if is_framework_injected_parameter(
+            parameter.name, type_hints.get(parameter.name)
+        ):
+            continue
+        names.append(parameter.name)
+    return names
+
+
 def _framework_injected_types() -> tuple[type[Any], ...]:
     from .clients.llm import LLMResponse
     from .context import Context
@@ -52,4 +86,4 @@ def _framework_injected_types() -> tuple[type[Any], ...]:
     )
 
 
-__all__ = ["is_framework_injected_parameter"]
+__all__ = ["is_framework_injected_parameter", "legacy_arg_parameter_names"]
