@@ -5,18 +5,17 @@ from datetime import datetime, timedelta
 
 from astrbot.core import logger
 from astrbot.core.config.astrbot_config import RateLimitStrategy
+from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.stage import Stage, register_stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-
-from ..context import PipelineContext
-from ..stage import Stage, register_stage
 
 
 @register_stage
 class RateLimitStage(Stage):
     """检查是否需要限制消息发送的限流器｡
 
-    使用 Fixed Window 算法｡
-    如果触发限流,将 stall 流水线,直到下一个时间窗口来临时自动唤醒｡
+    使用基于请求时间戳队列的滑动窗口(sliding log)算法｡
+    如果触发限流,将 stall 流水线,直到最早请求离开当前滑动窗口后自动唤醒｡
     """
 
     def __init__(self) -> None:
