@@ -38,9 +38,7 @@ class MetadataCapabilityMixin(CapabilityRouterBridgeBase):
     async def _metadata_save_plugin_config(
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
-        caller_plugin_id = self._require_caller_plugin_id(
-            "metadata.save_plugin_config"
-        )
+        caller_plugin_id = self._require_caller_plugin_id("metadata.save_plugin_config")
         plugin = self._plugins.get(caller_plugin_id)
         if plugin is None:
             return {"config": None}
