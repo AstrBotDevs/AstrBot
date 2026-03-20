@@ -8,6 +8,7 @@ from typing import cast
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
 from telegram.constants import ChatType
+from telegram.error import InvalidToken, Unauthorized
 from telegram.ext import ApplicationBuilder, ContextTypes, ExtBot, filters
 from telegram.ext import MessageHandler as TelegramMessageHandler
 
@@ -167,16 +168,13 @@ class TelegramPlatformAdapter(Platform):
 
         while not self._terminating:
             try:
+                logger.info("Starting Telegram polling...")
                 await self.application.updater.start_polling(
                     error_callback=self._on_polling_error
                 )
                 logger.info("Telegram Platform Adapter is running.")
-                polling_check_event = asyncio.Event()
-                while self.application.updater.running and not self._terminating:
-                    try:
-                        await asyncio.wait_for(polling_check_event.wait(), timeout=1)
-                    except TimeoutError:
-                        continue
+                while self.application.updater.running and not self._terminating:  # noqa: ASYNC110
+                    await asyncio.sleep(1)
 
                 if not self._terminating:
                     logger.warning(
@@ -185,6 +183,11 @@ class TelegramPlatformAdapter(Platform):
                     )
             except asyncio.CancelledError:
                 raise
+            except (Unauthorized, InvalidToken) as e:
+                logger.error(
+                    f"Telegram token is invalid or unauthorized: {e}. Polling stopped."
+                )
+                break
             except Exception as e:
                 logger.exception(
                     "Telegram polling crashed with exception: "
@@ -198,7 +201,7 @@ class TelegramPlatformAdapter(Platform):
     def _on_polling_error(self, error: Exception) -> None:
         logger.error(
             f"Telegram polling request failed: {type(error).__name__}: {error!s}",
-            exc_info=(type(error), error, error.__traceback__),
+            exc_info=error,
         )
 
     async def register_commands(self) -> None:
