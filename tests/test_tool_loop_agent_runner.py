@@ -536,6 +536,119 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
     assert ticket.consumed is False
 
 
+@pytest.mark.asyncio
+async def test_follow_up_accepted_when_active_and_not_stopping(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    """Test that follow-up is accepted when runner is active and stop is not requested."""
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    # Runner is active (not done) and stop is not requested
+    assert not runner.done()
+    assert runner._stop_requested is False
+
+    ticket = runner.follow_up(message_text="valid follow-up message")
+
+    assert ticket is not None, "Follow-up should be accepted when runner is active and not stopping"
+    assert ticket.text == "valid follow-up message"
+    assert ticket.consumed is False
+    assert ticket in runner._pending_follow_ups
+
+
+@pytest.mark.asyncio
+async def test_follow_up_rejected_when_stop_requested(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    """Test that follow-up is rejected when stop has been requested."""
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    # Request stop
+    runner.request_stop()
+    assert runner._stop_requested is True
+
+    ticket = runner.follow_up(message_text="follow-up after stop")
+
+    assert ticket is None, "Follow-up should be rejected after stop is requested"
+    assert len(runner._pending_follow_ups) == 0
+
+
+@pytest.mark.asyncio
+async def test_follow_up_rejected_when_runner_done(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    """Test that follow-up is rejected when runner is done."""
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    # Run to completion
+    async for _ in runner.step_until_done(10):
+        pass
+
+    # Runner should be done
+    assert runner.done()
+
+    ticket = runner.follow_up(message_text="follow-up after done")
+
+    assert ticket is None, "Follow-up should be rejected when runner is done"
+
+
+@pytest.mark.asyncio
+async def test_follow_up_rejected_after_stop_before_tool_call(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    """Test that follow-ups submitted after stop are not merged into tool results."""
+
+    mock_event = MockEvent("test:FriendMessage:stop_race", "u1")
+    run_context = ContextWrapper(context=MockAgentContext(mock_event))
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=run_context,
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    # Add a follow-up before stop
+    ticket_before_stop = runner.follow_up(message_text="before stop")
+    assert ticket_before_stop is not None
+
+    # Request stop
+    runner.request_stop()
+
+    # Try to add a follow-up after stop
+    ticket_after_stop = runner.follow_up(message_text="after stop")
+    assert ticket_after_stop is None, "Follow-up after stop should be rejected"
+
+    # Verify only the pre-stop follow-up is in the queue
+    assert len(runner._pending_follow_ups) == 1
+    assert runner._pending_follow_ups[0].text == "before stop"
+
+
 if __name__ == "__main__":
     # 运行测试
     pytest.main([__file__, "-v"])

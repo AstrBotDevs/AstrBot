@@ -302,7 +302,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         message_text: str,
     ) -> FollowUpTicket | None:
         """Queue a follow-up message for the next tool result."""
-        if self.done():
+        if self.done() or self._stop_requested:
             return None
         text = (message_text or "").strip()
         if not text:
