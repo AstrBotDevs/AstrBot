@@ -2531,7 +2531,7 @@ CONFIG_METADATA_2 = {
                     },
                     "periodic_context_compaction": {
                         "type": "object",
-                        "items": {
+                        "properties": {
                             "enabled": {
                                 "type": "bool",
                             },

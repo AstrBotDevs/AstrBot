@@ -42,6 +42,14 @@ class _RoundResult:
 EligibilityInfo = tuple[list[Message], int]
 
 
+@dataclass
+class _RunStatus:
+    started_at: str | None = None
+    finished_at: str | None = None
+    error: str | None = None
+    report: dict[str, Any] | None = None
+
+
 @dataclass(frozen=True)
 class CompactionConfig:
     enabled: bool
@@ -154,10 +162,39 @@ class PeriodicContextCompactionScheduler:
         self._token_counter = EstimateTokenCounter()
         self._history_parser = MessageHistoryParser()
         self._bootstrapped = False
-        self._last_report: dict[str, Any] | None = None
-        self._last_started_at: str | None = None
-        self._last_finished_at: str | None = None
-        self._last_error: str | None = None
+        self._last_status = _RunStatus()
+
+    @property
+    def _last_report(self) -> dict[str, Any] | None:
+        return self._last_status.report
+
+    @_last_report.setter
+    def _last_report(self, value: dict[str, Any] | None) -> None:
+        self._last_status.report = value
+
+    @property
+    def _last_started_at(self) -> str | None:
+        return self._last_status.started_at
+
+    @_last_started_at.setter
+    def _last_started_at(self, value: str | None) -> None:
+        self._last_status.started_at = value
+
+    @property
+    def _last_finished_at(self) -> str | None:
+        return self._last_status.finished_at
+
+    @_last_finished_at.setter
+    def _last_finished_at(self, value: str | None) -> None:
+        self._last_status.finished_at = value
+
+    @property
+    def _last_error(self) -> str | None:
+        return self._last_status.error
+
+    @_last_error.setter
+    def _last_error(self, value: str | None) -> None:
+        self._last_status.error = value
 
     def get_status(self) -> dict[str, Any]:
         cfg = self._load_config()
@@ -166,10 +203,11 @@ class PeriodicContextCompactionScheduler:
             "bootstrapped": self._bootstrapped,
             "stop_requested": self._stop_event.is_set(),
             "config": asdict(cfg),
-            "last_started_at": self._last_started_at,
-            "last_finished_at": self._last_finished_at,
-            "last_error": self._last_error,
-            "last_report": self._last_report,
+            "last_started_at": self._last_status.started_at,
+            "last_finished_at": self._last_status.finished_at,
+            "last_error": self._last_status.error,
+            "last_report": self._last_status.report,
+            "last_status": asdict(self._last_status),
         }
 
     async def run(self) -> None:
@@ -195,7 +233,7 @@ class PeriodicContextCompactionScheduler:
                         break
 
             try:
-                report = await self.run_once(reason="scheduled")
+                report = await self.run_once(reason="scheduled", cfg=cfg)
                 logger.info(
                     "[ContextCompact] run done(%s): scanned=%s compacted=%s skipped=%s failed=%s elapsed=%.2fs",
                     report.get("reason", "unknown"),
@@ -206,7 +244,12 @@ class PeriodicContextCompactionScheduler:
                     report.get("elapsed_sec", 0.0),
                 )
             except Exception as exc:
-                self._last_error = str(exc)
+                self._last_status.error = str(exc)
+                self._last_status.finished_at = self._now_iso()
+                if self._last_status.started_at is None:
+                    self._last_status.started_at = self._last_status.finished_at
+                if self._last_status.report is None:
+                    self._last_status.report = {}
                 logger.error(
                     "[ContextCompact] scheduler run error: %s",
                     exc,
@@ -224,14 +267,16 @@ class PeriodicContextCompactionScheduler:
         self,
         reason: str = "manual",
         max_conversations_override: int | None = None,
+        cfg: CompactionConfig | None = None,
     ) -> dict[str, Any]:
         """Run one compaction sweep.
 
         Exposed so future admin command/cron endpoints can trigger ad-hoc compaction.
         """
         async with self._running_lock:
-            self._last_started_at = self._now_iso()
-            cfg = self._load_config()
+            started_at = self._now_iso()
+            if cfg is None:
+                cfg = self._load_config()
             started = time.monotonic()
             stats = _CompactionStats()
 
@@ -245,9 +290,11 @@ class PeriodicContextCompactionScheduler:
                     "elapsed_sec": 0.0,
                     "message": "disabled",
                 }
-                self._last_report = report
-                self._last_finished_at = self._now_iso()
-                self._last_error = None
+                self._set_last_status(
+                    started_at=started_at,
+                    report=report,
+                    error=None,
+                )
                 return report
 
             max_to_compact, max_to_scan, scan_page_size = self._resolve_run_limits(
@@ -279,9 +326,11 @@ class PeriodicContextCompactionScheduler:
                 "failed": stats.failed,
                 "elapsed_sec": elapsed,
             }
-            self._last_report = report
-            self._last_finished_at = self._now_iso()
-            self._last_error = None
+            self._set_last_status(
+                started_at=started_at,
+                report=report,
+                error=None,
+            )
             return report
 
     @staticmethod
@@ -335,6 +384,19 @@ class PeriodicContextCompactionScheduler:
             stats.skipped += 1
         else:
             stats.failed += 1
+
+    def _set_last_status(
+        self,
+        started_at: str,
+        report: dict[str, Any],
+        error: str | None,
+    ) -> None:
+        self._last_status = _RunStatus(
+            started_at=started_at,
+            finished_at=self._now_iso(),
+            error=error,
+            report=report,
+        )
 
     async def _sleep_or_stop(self, seconds: int) -> None:
         try:

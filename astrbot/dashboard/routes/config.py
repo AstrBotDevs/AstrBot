@@ -160,7 +160,10 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                 for item in value:
                     validate(item, meta["items"], path=f"{path}{key}.")
             elif meta["type"] == "object" and isinstance(value, dict):
-                validate(value, meta["items"], path=f"{path}{key}.")
+                object_schema = meta.get("items")
+                if not isinstance(object_schema, dict):
+                    object_schema = meta.get("properties", {})
+                validate(value, object_schema, path=f"{path}{key}.")
 
             if meta["type"] == "int" and not isinstance(value, int):
                 casted = try_cast(value, "int")
