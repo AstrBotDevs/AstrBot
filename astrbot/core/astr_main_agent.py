@@ -50,6 +50,10 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
     retrieve_knowledge_base,
 )
+from astrbot.core.context_memory import (
+    build_pinned_memory_system_block,
+    load_context_memory_config,
+)
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Reply
 from astrbot.core.persona_error_reply import (
@@ -621,6 +625,28 @@ def _append_system_reminders(
         req.extra_user_content_parts.append(TextPart(text=system_content))
 
 
+def _inject_context_memory(
+    req: ProviderRequest,
+    cfg: dict,
+) -> None:
+    """Inject manually pinned top-level memories into system prompt.
+
+    Vector retrieval enhancement is intentionally deferred to a follow-up PR.
+    This function only handles manually configured pinned memories.
+    """
+    if not isinstance(cfg, dict):
+        return
+    cm_cfg = load_context_memory_config(cfg)
+    memory_block = build_pinned_memory_system_block(cm_cfg)
+    if not memory_block:
+        return
+
+    if req.system_prompt and req.system_prompt.strip():
+        req.system_prompt = f"{req.system_prompt}\n\n{memory_block}"
+    else:
+        req.system_prompt = memory_block
+
+
 async def _decorate_llm_request(
     event: AstrMessageEvent,
     req: ProviderRequest,
@@ -659,6 +685,7 @@ async def _decorate_llm_request(
     if tz is None:
         tz = plugin_context.get_config().get("timezone")
     _append_system_reminders(event, req, cfg, tz)
+    _inject_context_memory(req, cfg)
 
 
 def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:

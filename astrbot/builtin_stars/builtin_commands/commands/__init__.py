@@ -3,6 +3,7 @@
 from .admin import AdminCommands
 from .alter_cmd import AlterCmdCommands
 from .context_compaction import ContextCompactionCommands
+from .context_memory import ContextMemoryCommands
 from .conversation import ConversationCommands
 from .help import HelpCommand
 from .llm import LLMCommands
@@ -19,6 +20,7 @@ __all__ = [
     "AlterCmdCommands",
     "ConversationCommands",
     "ContextCompactionCommands",
+    "ContextMemoryCommands",
     "HelpCommand",
     "LLMCommands",
     "PersonaCommands",

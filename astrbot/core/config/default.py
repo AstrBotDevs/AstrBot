@@ -38,6 +38,19 @@ PERIODIC_CONTEXT_COMPACTION_DEFAULTS = {
     "dry_run": False,
 }
 
+CONTEXT_MEMORY_DEFAULTS = {
+    "enabled": False,
+    "inject_pinned_memory": True,
+    "pinned_memories": [],
+    "pinned_max_items": 8,
+    "pinned_max_chars_per_item": 400,
+    # Reserved switches for follow-up PRs (manual opt-in only).
+    "retrieval_enabled": False,
+    "retrieval_backend": "",
+    "retrieval_provider_id": "",
+    "retrieval_top_k": 5,
+}
+
 # 默认配置
 DEFAULT_CONFIG = {
     "config_version": 2,
@@ -119,6 +132,7 @@ DEFAULT_CONFIG = {
         "context_token_counter_mode": "estimate",
         "compact_context_after_tool_call": False,
         "periodic_context_compaction": dict(PERIODIC_CONTEXT_COMPACTION_DEFAULTS),
+        "context_memory": dict(CONTEXT_MEMORY_DEFAULTS),
         "max_context_length": -1,
         "dequeue_context_length": 1,
         "streaming_response": False,
@@ -2594,6 +2608,39 @@ CONFIG_METADATA_2 = {
                             },
                         },
                     },
+                    "context_memory": {
+                        "type": "object",
+                        "properties": {
+                            "enabled": {
+                                "type": "bool",
+                            },
+                            "inject_pinned_memory": {
+                                "type": "bool",
+                            },
+                            "pinned_memories": {
+                                "type": "list",
+                                "items": {"type": "string"},
+                            },
+                            "pinned_max_items": {
+                                "type": "int",
+                            },
+                            "pinned_max_chars_per_item": {
+                                "type": "int",
+                            },
+                            "retrieval_enabled": {
+                                "type": "bool",
+                            },
+                            "retrieval_backend": {
+                                "type": "string",
+                            },
+                            "retrieval_provider_id": {
+                                "type": "string",
+                            },
+                            "retrieval_top_k": {
+                                "type": "int",
+                            },
+                        },
+                    },
                     "max_context_length": {
                         "type": "int",
                     },
@@ -3449,6 +3496,78 @@ CONFIG_METADATA_3 = {
                         "hint": "开启后只记录日志，不实际写回数据库。",
                         "condition": {
                             "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.enabled": {
+                        "description": "启用上下文记忆注入",
+                        "type": "bool",
+                        "hint": "启用后可将手动维护的顶层记忆注入到 system prompt，并预留向量记忆检索接口。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.inject_pinned_memory": {
+                        "description": "注入手动顶层记忆",
+                        "type": "bool",
+                        "hint": "将 `pinned_memories` 作为高优先级记忆注入系统提示词。",
+                        "condition": {
+                            "provider_settings.context_memory.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.pinned_max_items": {
+                        "description": "顶层记忆最大条数",
+                        "type": "int",
+                        "hint": "通过管理命令添加手动顶层记忆时允许保留的最大条目数。",
+                        "condition": {
+                            "provider_settings.context_memory.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.pinned_max_chars_per_item": {
+                        "description": "单条顶层记忆最大字符数",
+                        "type": "int",
+                        "hint": "超出长度的条目会被截断，避免 system prompt 膨胀。",
+                        "condition": {
+                            "provider_settings.context_memory.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.retrieval_enabled": {
+                        "description": "启用检索增强（开发中）",
+                        "type": "bool",
+                        "hint": "预留开关，默认关闭；向量检索增强建议在后续 PR 中实现。",
+                        "condition": {
+                            "provider_settings.context_memory.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.retrieval_backend": {
+                        "description": "检索后端标识（预留）",
+                        "type": "string",
+                        "hint": "例如 zep/mem0/custom，当前版本仅用于配置预留。",
+                        "condition": {
+                            "provider_settings.context_memory.retrieval_enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.retrieval_provider_id": {
+                        "description": "检索重排模型提供商 ID（预留）",
+                        "type": "string",
+                        "_special": "select_provider",
+                        "hint": "当前版本仅保留配置，不会触发额外检索调用。",
+                        "condition": {
+                            "provider_settings.context_memory.retrieval_enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.retrieval_top_k": {
+                        "description": "检索 Top-K（预留）",
+                        "type": "int",
+                        "hint": "后续检索增强功能默认使用的召回条数。",
+                        "condition": {
+                            "provider_settings.context_memory.retrieval_enabled": True,
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
