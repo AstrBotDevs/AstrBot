@@ -174,7 +174,10 @@ class SystemCapabilityMixin(CapabilityRouterBridgeBase):
         self, _request_id: str, _payload: dict[str, Any], _token
     ) -> dict[str, Any]:
         plugin_id = self._require_caller_plugin_id("system.get_data_dir")
-        data_dir = self._system_data_root / plugin_id
+        data_dir = self._plugin_data_dir(
+            plugin_id,
+            capability_name="system.get_data_dir",
+        )
         data_dir.mkdir(parents=True, exist_ok=True)
         return {"path": str(data_dir)}
 

@@ -33,7 +33,6 @@ from .events import MessageEvent
 _OwnerT = TypeVar("_OwnerT")
 _P = ParamSpec("_P")
 _ResultT = TypeVar("_ResultT")
-_WaiterKey = tuple[str, str]
 
 
 class _SessionWaiterDecorator(Protocol):
@@ -116,7 +115,6 @@ class SessionController:
 @dataclass(slots=True)
 class _WaiterEntry:
     session_key: str
-    plugin_id: str
     handler: Callable[[SessionController, MessageEvent], Awaitable[Any]]
     controller: SessionController
     record_history_chains: bool
@@ -126,12 +124,8 @@ class SessionWaiterManager:
     def __init__(self, *, plugin_id: str, peer) -> None:
         self._plugin_id = plugin_id
         self._peer = peer
-        self._entries: dict[_WaiterKey, _WaiterEntry] = {}
-        self._locks: dict[_WaiterKey, asyncio.Lock] = {}
-
-    @staticmethod
-    def _make_key(*, plugin_id: str, session_key: str) -> _WaiterKey:
-        return (plugin_id, session_key)
+        self._entries: dict[str, _WaiterEntry] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
 
     async def register(
         self,
@@ -143,23 +137,20 @@ class SessionWaiterManager:
     ) -> Any:
         if event._context is None:
             raise RuntimeError("session_waiter requires runtime context")
-        plugin_id = event._context.plugin_id
         session_key = event.unified_msg_origin
-        key = self._make_key(plugin_id=plugin_id, session_key=session_key)
         entry = _WaiterEntry(
             session_key=session_key,
-            plugin_id=plugin_id,
             handler=handler,
             controller=SessionController(),
             record_history_chains=record_history_chains,
         )
-        replaced = key in self._entries
-        self._entries[key] = entry
-        self._locks.setdefault(key, asyncio.Lock())
+        replaced = session_key in self._entries
+        self._entries[session_key] = entry
+        self._locks.setdefault(session_key, asyncio.Lock())
         if replaced:
             logger.warning(
                 "Session waiter replaced: plugin_id=%s session_key=%s",
-                plugin_id,
+                self._plugin_id,
                 session_key,
             )
         await self._peer.invoke(
@@ -170,7 +161,7 @@ class SessionWaiterManager:
         try:
             return await entry.controller.future
         finally:
-            await self.unregister(session_key, plugin_id=plugin_id)
+            await self.unregister(session_key)
 
     async def wait_for_event(
         self,
@@ -199,18 +190,9 @@ class SessionWaiterManager:
         )
         return future.result()
 
-    async def unregister(
-        self, session_key: str, *, plugin_id: str | None = None
-    ) -> None:
-        if plugin_id is None:
-            plugin_ids = self.get_waiter_plugin_ids(session_key)
-            if len(plugin_ids) != 1:
-                return
-            plugin_id = plugin_ids[0]
-
-        key = self._make_key(plugin_id=plugin_id, session_key=session_key)
-        self._entries.pop(key, None)
-        self._locks.pop(key, None)
+    async def unregister(self, session_key: str) -> None:
+        self._entries.pop(session_key, None)
+        self._locks.pop(session_key, None)
         try:
             await self._peer.invoke(
                 "system.session_waiter.unregister",
@@ -219,30 +201,17 @@ class SessionWaiterManager:
         except Exception:
             logger.debug(
                 "Failed to unregister session waiter: plugin_id=%s session_key=%s",
-                plugin_id,
+                self._plugin_id,
                 session_key,
             )
 
-    async def fail(
-        self,
-        session_key: str,
-        error: Exception,
-        *,
-        plugin_id: str | None = None,
-    ) -> bool:
-        if plugin_id is None:
-            plugin_ids = self.get_waiter_plugin_ids(session_key)
-            if len(plugin_ids) != 1:
-                return False
-            plugin_id = plugin_ids[0]
-
-        key = self._make_key(plugin_id=plugin_id, session_key=session_key)
-        entry = self._entries.get(key)
+    async def fail(self, session_key: str, error: Exception) -> bool:
+        entry = self._entries.get(session_key)
         if entry is None:
             return False
-        lock = self._locks.setdefault(key, asyncio.Lock())
+        lock = self._locks.setdefault(session_key, asyncio.Lock())
         async with lock:
-            current = self._entries.get(key)
+            current = self._entries.get(session_key)
             if current is None:
                 return False
             current.controller.stop(error)
@@ -253,35 +222,15 @@ class SessionWaiterManager:
                 current.controller.current_event.set()
             return True
 
-    def has_active_waiter(self, event: MessageEvent) -> bool:
-        session_key = event.unified_msg_origin
-        return any(
-            entry.session_key == session_key and not entry.controller.future.done()
-            for entry in self._entries.values()
-        )
-
     def has_waiter(self, event: MessageEvent) -> bool:
-        return self.has_active_waiter(event)
+        return event.unified_msg_origin in self._entries
 
-    def get_waiter_plugin_ids(self, session_key: str) -> list[str]:
-        return [
-            entry.plugin_id
-            for entry in self._entries.values()
-            if entry.session_key == session_key and not entry.controller.future.done()
-        ]
-
-    async def dispatch(
-        self, event: MessageEvent, *, plugin_id: str | None = None
-    ) -> dict[str, Any]:
-        if event._context is None:
-            raise RuntimeError("session_waiter dispatch requires runtime context")
-        current_plugin_id = plugin_id or event._context.plugin_id
+    async def dispatch(self, event: MessageEvent) -> dict[str, Any]:
         session_key = event.unified_msg_origin
-        key = self._make_key(plugin_id=current_plugin_id, session_key=session_key)
-        entry = self._entries.get(key)
+        entry = self._entries.get(session_key)
         if entry is None:
             return {"sent_message": False, "stop": False, "call_llm": False}
-        lock = self._locks.setdefault(key, asyncio.Lock())
+        lock = self._locks.setdefault(session_key, asyncio.Lock())
         async with lock:
             if entry.record_history_chains:
                 chain = []
