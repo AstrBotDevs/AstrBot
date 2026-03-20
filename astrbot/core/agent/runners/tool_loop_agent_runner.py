@@ -104,6 +104,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_compress_provider: Provider | None = None,
         # truncate by turns compressor
         truncate_turns: int = 1,
+        # context token counting mode
+        token_counter_mode: str = "estimate",
+        # run context compression immediately after tool execution
+        compact_context_after_tool_call: bool = False,
         # customize
         custom_token_counter: TokenCounter | None = None,
         custom_compressor: ContextCompressor | None = None,
@@ -118,11 +122,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.llm_compress_keep_recent = llm_compress_keep_recent
         self.llm_compress_provider = llm_compress_provider
         self.truncate_turns = truncate_turns
+        self.token_counter_mode = token_counter_mode
+        self.compact_context_after_tool_call = compact_context_after_tool_call
         self.custom_token_counter = custom_token_counter
         self.custom_compressor = custom_compressor
         # we will do compress when:
         # 1. before requesting LLM
-        # TODO: 2. after LLM output a tool call
+        # 2. optionally after tool execution, controlled by config
         self.context_config = ContextConfig(
             # <=0 will never do compress
             max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
@@ -132,6 +138,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent=self.llm_compress_keep_recent,
             llm_compress_provider=self.llm_compress_provider,
+            token_counter_mode=self.token_counter_mode,
+            token_counter_model=provider.get_model(),
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
         )
@@ -617,6 +625,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
 
             self.req.append_tool_calls_result(tool_calls_result)
+
+            if self.compact_context_after_tool_call:
+                self.run_context.messages = await self.context_manager.process(
+                    self.run_context.messages,
+                )
 
     async def step_until_done(
         self, max_step: int

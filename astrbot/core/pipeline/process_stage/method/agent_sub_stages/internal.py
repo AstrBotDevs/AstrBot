@@ -91,6 +91,13 @@ class InternalAgentSubStage(Stage):
         self.llm_compress_provider_id: str = settings.get(
             "llm_compress_provider_id", ""
         )
+        self.context_token_counter_mode: str = str(
+            settings.get("context_token_counter_mode", "estimate")
+        )
+        self.compact_context_after_tool_call: bool = settings.get(
+            "compact_context_after_tool_call",
+            False,
+        )
         self.max_context_length = settings["max_context_length"]  # int
         self.dequeue_context_length: int = min(
             max(1, settings["dequeue_context_length"]),
@@ -125,6 +132,8 @@ class InternalAgentSubStage(Stage):
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent=self.llm_compress_keep_recent,
             llm_compress_provider_id=self.llm_compress_provider_id,
+            context_token_counter_mode=self.context_token_counter_mode,
+            compact_context_after_tool_call=self.compact_context_after_tool_call,
             max_context_length=self.max_context_length,
             dequeue_context_length=self.dequeue_context_length,
             llm_safety_mode=self.llm_safety_mode,

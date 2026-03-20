@@ -3,7 +3,7 @@ from astrbot import logger
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
 from .config import ContextConfig
-from .token_counter import EstimateTokenCounter
+from .token_counter import create_token_counter
 from .truncator import ContextTruncator
 
 
@@ -25,7 +25,10 @@ class ContextManager:
         """
         self.config = config
 
-        self.token_counter = config.custom_token_counter or EstimateTokenCounter()
+        self.token_counter = config.custom_token_counter or create_token_counter(
+            config.token_counter_mode,
+            model=config.token_counter_model,
+        )
         self.truncator = ContextTruncator()
 
         if config.custom_compressor:

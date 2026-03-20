@@ -4,6 +4,8 @@ from astrbot.core.agent.context.token_counter import (
     AUDIO_TOKEN_ESTIMATE,
     IMAGE_TOKEN_ESTIMATE,
     EstimateTokenCounter,
+    TokenizerTokenCounter,
+    create_token_counter,
 )
 from astrbot.core.agent.message import (
     AudioURLPart,
@@ -12,7 +14,6 @@ from astrbot.core.agent.message import (
     TextPart,
     ThinkPart,
 )
-
 
 counter = EstimateTokenCounter()
 
@@ -101,3 +102,17 @@ class TestToolCalls:
         # 文本 + tool call JSON 都应被计算
         text_only = counter.count_tokens([_msg("assistant", "calling tool")])
         assert tokens > text_only
+
+
+class TestCounterFactory:
+    def test_create_estimate_mode(self):
+        created = create_token_counter("estimate")
+        assert isinstance(created, EstimateTokenCounter)
+
+    def test_create_unknown_mode_fallback(self):
+        created = create_token_counter("unknown-mode")
+        assert isinstance(created, EstimateTokenCounter)
+
+    def test_create_tokenizer_mode_returns_valid_counter_type(self):
+        created = create_token_counter("tokenizer", model="gpt-4")
+        assert isinstance(created, (TokenizerTokenCounter, EstimateTokenCounter))

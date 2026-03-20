@@ -119,6 +119,10 @@ class MainAgentBuildConfig:
     """The number of most recent turns to keep during llm_compress strategy."""
     llm_compress_provider_id: str = ""
     """The provider ID for the LLM used in context compression."""
+    context_token_counter_mode: str = "estimate"
+    """Token counting mode for context compaction: estimate, tokenizer, auto."""
+    compact_context_after_tool_call: bool = False
+    """Whether to run context compaction check immediately after tool execution."""
     max_context_length: int = -1
     """The maximum number of turns to keep in context. -1 means no limit.
     This enforce max turns before compression"""
@@ -1203,6 +1207,8 @@ async def build_main_agent(
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent=config.llm_compress_keep_recent,
         llm_compress_provider=_get_compress_provider(config, plugin_context),
+        token_counter_mode=config.context_token_counter_mode,
+        compact_context_after_tool_call=config.compact_context_after_tool_call,
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,

@@ -116,6 +116,8 @@ DEFAULT_CONFIG = {
         ),
         "llm_compress_keep_recent": 6,
         "llm_compress_provider_id": "",
+        "context_token_counter_mode": "estimate",
+        "compact_context_after_tool_call": False,
         "periodic_context_compaction": dict(PERIODIC_CONTEXT_COMPACTION_DEFAULTS),
         "max_context_length": -1,
         "dequeue_context_length": 1,
@@ -2530,6 +2532,12 @@ CONFIG_METADATA_2 = {
                     "prompt_prefix": {
                         "type": "string",
                     },
+                    "context_token_counter_mode": {
+                        "type": "string",
+                    },
+                    "compact_context_after_tool_call": {
+                        "type": "bool",
+                    },
                     "periodic_context_compaction": {
                         "type": "object",
                         "properties": {
@@ -3270,6 +3278,24 @@ CONFIG_METADATA_3 = {
                         "hint": "留空时将降级为“按对话轮数截断”的策略。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_token_counter_mode": {
+                        "description": "Token 计数模式",
+                        "type": "string",
+                        "options": ["estimate", "tokenizer", "auto"],
+                        "labels": ["估算", "Tokenizer", "自动（优先 Tokenizer）"],
+                        "hint": "用于上下文压缩触发判断。tokenizer 模式会优先使用 tiktoken，不可用时回退估算。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compact_context_after_tool_call": {
+                        "description": "工具调用后立即检查压缩",
+                        "type": "bool",
+                        "hint": "开启后，每次工具执行回写上下文后都会立刻触发一次上下文压缩检查。",
+                        "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },

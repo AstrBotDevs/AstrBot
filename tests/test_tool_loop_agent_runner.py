@@ -536,6 +536,55 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
     assert ticket.consumed is False
 
 
+@pytest.mark.asyncio
+async def test_compact_context_after_tool_call_enabled(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = True
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        compact_context_after_tool_call=True,
+    )
+
+    runner.context_manager.process = AsyncMock(  # type: ignore[method-assign]
+        side_effect=lambda messages, trusted_token_usage=0: messages,
+    )
+
+    async for _ in runner.step():
+        pass
+
+    assert runner.context_manager.process.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_compact_context_after_tool_call_disabled_by_default(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = True
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    runner.context_manager.process = AsyncMock(  # type: ignore[method-assign]
+        side_effect=lambda messages, trusted_token_usage=0: messages,
+    )
+
+    async for _ in runner.step():
+        pass
+
+    assert runner.context_manager.process.await_count == 1
+
+
 if __name__ == "__main__":
     # 运行测试
     pytest.main([__file__, "-v"])
