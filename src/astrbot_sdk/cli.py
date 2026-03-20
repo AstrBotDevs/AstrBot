@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import sys
 import typing
@@ -24,7 +25,7 @@ from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from pathlib import Path
 from textwrap import dedent
-from typing import Any
+from typing import IO, Any
 
 import click
 from loguru import logger
@@ -151,6 +152,52 @@ def _run_sync_entrypoint(
         if exit_code == EXIT_UNEXPECTED:
             logger.exception("CLI 异常退出")
         raise SystemExit(exit_code) from exc
+
+
+def _resolve_protocol_stdout(
+    protocol_stdout: str | None,
+) -> tuple[IO[str] | None, IO[str] | None]:
+    target = protocol_stdout
+    if target is None:
+        target = "silent" if sys.stdout.isatty() else "console"
+    if target == "console":
+        return sys.stdout, None
+    if target == "silent":
+        opened_stdout = open(os.devnull, "w", encoding="utf-8")
+        return opened_stdout, opened_stdout
+    opened_stdout = open(target, "w", encoding="utf-8")
+    return opened_stdout, opened_stdout
+
+
+async def _run_supervisor_with_protocol_stdout(
+    *,
+    plugins_dir: Path,
+    protocol_stdout: str | None,
+) -> None:
+    transport_stdout, opened_stdout = _resolve_protocol_stdout(protocol_stdout)
+    try:
+        await run_supervisor(plugins_dir=plugins_dir, stdout=transport_stdout)
+    finally:
+        if opened_stdout is not None:
+            opened_stdout.close()
+
+
+async def _run_worker_with_protocol_stdout(
+    *,
+    plugin_dir: Path | None,
+    group_metadata: Path | None,
+    protocol_stdout: str | None,
+) -> None:
+    transport_stdout, opened_stdout = _resolve_protocol_stdout(protocol_stdout)
+    try:
+        await run_plugin_worker(
+            plugin_dir=plugin_dir,
+            group_metadata=group_metadata,
+            stdout=transport_stdout,
+        )
+    finally:
+        if opened_stdout is not None:
+            opened_stdout.close()
 
 
 def _classify_cli_exception(exc: Exception) -> tuple[int, str, str]:
@@ -846,12 +893,24 @@ def cli(ctx, verbose: bool) -> None:
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
     help="Directory containing plugin folders",
 )
-def run(plugins_dir: Path) -> None:
+@click.option(
+    "--protocol-stdout",
+    default=None,
+    type=str,
+    help=(
+        "Where to write protocol stdout: silent (discard), console, or a file "
+        "path. Defaults to silent on TTY; console when stdout is piped."
+    ),
+)
+def run(plugins_dir: Path, protocol_stdout: str | None) -> None:
     """Start the plugin supervisor over stdio."""
     _run_async_entrypoint(
-        run_supervisor(plugins_dir=plugins_dir),
+        _run_supervisor_with_protocol_stdout(
+            plugins_dir=plugins_dir,
+            protocol_stdout=protocol_stdout,
+        ),
         log_message=f"启动插件主管进程，插件目录：{plugins_dir}",
-        context={"plugins_dir": plugins_dir},
+        context={"plugins_dir": plugins_dir, "protocol_stdout": protocol_stdout},
     )
 
 
@@ -987,7 +1046,20 @@ def dev(
     required=False,
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
 )
-def worker(plugin_dir: Path | None, group_metadata: Path | None) -> None:
+@click.option(
+    "--protocol-stdout",
+    default=None,
+    type=str,
+    help=(
+        "Where to write protocol stdout: silent (discard), console, or a file "
+        "path. Defaults to silent on TTY; console when stdout is piped."
+    ),
+)
+def worker(
+    plugin_dir: Path | None,
+    group_metadata: Path | None,
+    protocol_stdout: str | None,
+) -> None:
     """Internal command used by the supervisor to start a worker."""
     if plugin_dir is None and group_metadata is None:
         raise click.UsageError("Either --plugin-dir or --group-metadata is required")
@@ -997,15 +1069,16 @@ def worker(plugin_dir: Path | None, group_metadata: Path | None) -> None:
         )
 
     target = str(group_metadata or plugin_dir)
-    if group_metadata is not None:
-        entrypoint = run_plugin_worker(group_metadata=group_metadata)
-    else:
-        entrypoint = run_plugin_worker(plugin_dir=plugin_dir)
+    entrypoint = _run_worker_with_protocol_stdout(
+        plugin_dir=plugin_dir,
+        group_metadata=group_metadata,
+        protocol_stdout=protocol_stdout,
+    )
     _run_async_entrypoint(
         entrypoint,
         log_message=f"启动插件工作进程：{target}",
         log_level="debug",
-        context={"plugin_dir": plugin_dir},
+        context={"plugin_dir": plugin_dir, "protocol_stdout": protocol_stdout},
     )
 
 
