@@ -90,12 +90,12 @@ class TruncateByTurnsCompressor:
     async def __call__(self, messages: list[Message]) -> list[Message]:
         """Compress messages by removing oldest turns."""
         truncator = ContextTruncator()
-        
+
         truncated_messages = truncator.truncate_by_dropping_oldest_turns(
             messages,
             drop_turns=self.truncate_turns,
         )
-        
+
         return truncated_messages
 
 
@@ -148,24 +148,24 @@ def split_history(
 
 def _generate_summary_cache_key(messages: list[Message]) -> str:
     """Generate a cache key for summary based on full history.
-    
+
     Uses role and content from all messages to create a collision-resistant key.
     """
     if not messages:
         return ""
-    
+
     key_parts = []
     for msg in messages:
         content = msg.content if isinstance(msg.content, str) else str(msg.content)
         key_parts.append(f"{msg.role}:{content[:50]}")
-    
+
     return "|".join(key_parts)
 
 
 class LLMSummaryCompressor:
     """LLM-based summary compressor.
     Uses LLM to summarize the old conversation history, keeping the latest messages.
-    
+
     Optimizations:
     - 支持增量摘要，只摘要超出的部分
     - 添加摘要缓存避免重复摘要
@@ -198,7 +198,7 @@ class LLMSummaryCompressor:
             "3. If there was an initial user goal, state it first and describe the current progress/status.\n"
             "4. Write the summary in the user's language.\n"
         )
-        
+
         # 新增: 摘要缓存
         self._summary_cache: dict[str, str] = {}
         self._max_cache_size = 50
@@ -228,7 +228,7 @@ class LLMSummaryCompressor:
         1. Divide messages: keep the system message and the latest N messages.
         2. Send the old messages + the instruction message to the LLM.
         3. Reconstruct the message list: [system message, summary message, latest messages].
-        
+
         Optimizations:
         - 添加摘要缓存
         - 检查是否已有摘要，避免重复生成
@@ -245,13 +245,13 @@ class LLMSummaryCompressor:
 
         # 生成缓存键
         cache_key = _generate_summary_cache_key(messages_to_summarize)
-        
+
         # 尝试从缓存获取摘要
         summary_content = None
         if cache_key in self._summary_cache:
             summary_content = self._summary_cache[cache_key]
             logger.debug("Using cached summary")
-        
+
         # 如果缓存没有，生成新摘要
         if summary_content is None:
             # build payload
@@ -262,7 +262,7 @@ class LLMSummaryCompressor:
             try:
                 response = await self.provider.text_chat(contexts=llm_payload)
                 summary_content = response.completion_text
-                
+
                 # 缓存摘要
                 if len(self._summary_cache) < self._max_cache_size:
                     self._summary_cache[cache_key] = summary_content
@@ -270,7 +270,7 @@ class LLMSummaryCompressor:
                     # 简单的缓存淘汰
                     self._summary_cache.pop(next(iter(self._summary_cache)))
                     self._summary_cache[cache_key] = summary_content
-                    
+
             except Exception as e:
                 logger.error(f"Failed to generate summary: {e}")
                 return messages
@@ -295,7 +295,7 @@ class LLMSummaryCompressor:
         result.extend(recent_messages)
 
         return result
-    
+
     def clear_cache(self) -> None:
         """清空摘要缓存。"""
         self._summary_cache.clear()

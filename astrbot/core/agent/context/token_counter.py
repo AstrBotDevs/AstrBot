@@ -44,7 +44,7 @@ class EstimateTokenCounter:
 
     Supports multimodal content: images, audio, and thinking parts
     are all counted so that the context compressor can trigger in time.
-    
+
     Optimizations:
     - 使用更精确的 token 估算算法
     - 缓存重复计算结果
@@ -53,7 +53,7 @@ class EstimateTokenCounter:
 
     def __init__(self, cache_size: int = 100) -> None:
         """Initialize the token counter with optional cache.
-        
+
         Args:
             cache_size: Maximum number of message lists to cache (default: 100).
         """
@@ -64,7 +64,7 @@ class EstimateTokenCounter:
 
     def _get_cache_key(self, messages: list[Message]) -> int:
         """Generate a cache key for messages based on full history structure.
-        
+
         Uses role, content, and tool_calls for each message to create a
         collision-resistant hash.
         """
@@ -78,7 +78,7 @@ class EstimateTokenCounter:
                 content_repr = msg.content
             else:
                 content_repr = str(msg.content)
-            
+
             # 处理 tool_calls
             tool_repr = ()
             if msg.tool_calls:
@@ -86,9 +86,9 @@ class EstimateTokenCounter:
                     sorted(tc.items()) if isinstance(tc, dict) else (str(tc),)
                     for tc in msg.tool_calls
                 )
-            
+
             h = hash((h, msg.role, content_repr, tool_repr))
-        
+
         return h
 
     def count_tokens(
@@ -96,16 +96,16 @@ class EstimateTokenCounter:
     ) -> int:
         if trusted_token_usage > 0:
             return trusted_token_usage
-            
+
         # 尝试从缓存获取
         cache_key = self._get_cache_key(messages)
         if cache_key in self._cache:
             self._hit_count += 1
             return self._cache[cache_key]
-        
+
         self._miss_count += 1
         total = self._count_tokens_internal(messages)
-        
+
         # 缓存结果
         if len(self._cache) < self._cache_size:
             self._cache[cache_key] = total
@@ -115,7 +115,7 @@ class EstimateTokenCounter:
             for key in keys_to_remove:
                 del self._cache[key]
             self._cache[cache_key] = total
-        
+
         return total
 
     def _count_tokens_internal(self, messages: list[Message]) -> int:
@@ -123,7 +123,7 @@ class EstimateTokenCounter:
         total = 0
         for msg in messages:
             message_tokens = 0
-            
+
             content = msg.content
             if isinstance(content, str):
                 message_tokens += self._estimate_tokens(content)
@@ -150,7 +150,7 @@ class EstimateTokenCounter:
 
     def _estimate_tokens(self, text: str) -> int:
         """Estimate tokens using improved algorithm.
-        
+
         Optimizations:
         - 更精确的中英文混合文本估算
         - 考虑特殊字符和数字
@@ -158,12 +158,12 @@ class EstimateTokenCounter:
         """
         if not text:
             return 0
-            
+
         chinese_count = 0
         english_count = 0
         digit_count = 0
         special_count = 0
-        
+
         for c in text:
             if "\u4e00" <= c <= "\u9fff":
                 chinese_count += 1
@@ -173,18 +173,18 @@ class EstimateTokenCounter:
                 english_count += 1
             else:
                 special_count += 1
-        
+
         # 使用更精确的估算比率
         chinese_tokens = int(chinese_count * 0.55)
         english_tokens = int(english_count * 0.25)
         digit_tokens = int(digit_count * 0.4)
         special_tokens = int(special_count * 0.2)
-        
+
         return chinese_tokens + english_tokens + digit_tokens + special_tokens
 
     def get_cache_stats(self) -> dict:
         """Get cache hit/miss statistics.
-        
+
         Returns:
             Dictionary with cache stats.
         """
@@ -196,7 +196,7 @@ class EstimateTokenCounter:
             "hit_rate": f"{hit_rate:.1f}%",
             "cache_size": len(self._cache)
         }
-    
+
     def clear_cache(self) -> None:
         """Clear the token count cache."""
         self._cache.clear()
