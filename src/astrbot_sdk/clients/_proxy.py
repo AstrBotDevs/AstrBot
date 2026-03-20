@@ -44,12 +44,15 @@ class _CapabilityPeerLike(Protocol):
         payload: dict[str, Any],
         *,
         stream: bool = False,
+        request_id: str | None = None,
     ) -> dict[str, Any]: ...
 
     async def invoke_stream(
         self,
         capability: str,
         payload: dict[str, Any],
+        *,
+        request_id: str | None = None,
     ) -> AsyncIterator[Any]: ...
 
 
@@ -66,6 +69,7 @@ class CapabilityProxy:
         self,
         peer: _CapabilityPeerLike,
         caller_plugin_id: str | None = None,
+        request_scope_id: str | None = None,
     ) -> None:
         """初始化能力代理。
 
@@ -74,6 +78,7 @@ class CapabilityProxy:
         """
         self._peer = peer
         self._caller_plugin_id = caller_plugin_id
+        self._request_scope_id = request_scope_id
 
     def _get_descriptor(self, name: str):
         """获取能力描述符。
@@ -114,6 +119,17 @@ class CapabilityProxy:
         if stream and not descriptor.supports_stream:
             raise AstrBotError.invalid_input(f"{name} 不支持 stream=true")
 
+    def _prepare_payload(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if (
+            not isinstance(self._request_scope_id, str)
+            or not self._request_scope_id
+            or not name.startswith("system.event.")
+        ):
+            return payload
+        scoped_payload = dict(payload)
+        scoped_payload.setdefault("_request_scope_id", self._request_scope_id)
+        return scoped_payload
+
     async def call(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         """执行普通能力调用（非流式）。
 
@@ -132,8 +148,9 @@ class CapabilityProxy:
             print(result["text"])
         """
         self._ensure_available(name, stream=False)
+        prepared_payload = self._prepare_payload(name, payload)
         with caller_plugin_scope(self._caller_plugin_id):
-            return await self._peer.invoke(name, payload, stream=False)
+            return await self._peer.invoke(name, prepared_payload, stream=False)
 
     async def stream(
         self,
@@ -157,8 +174,9 @@ class CapabilityProxy:
                 print(delta["text"], end="")
         """
         self._ensure_available(name, stream=True)
+        prepared_payload = self._prepare_payload(name, payload)
         with caller_plugin_scope(self._caller_plugin_id):
-            event_stream = await self._peer.invoke_stream(name, payload)
+            event_stream = await self._peer.invoke_stream(name, prepared_payload)
         async for event in event_stream:
             if event.phase == "delta":
                 yield event.data

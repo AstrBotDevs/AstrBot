@@ -48,6 +48,7 @@ plugins/.venv/
 # Tool caches
 .uv-cache/
 .astrbot/
+.codex-local/
 
 # IDE files
 .idea/
@@ -56,3 +57,4 @@ plugins/.venv/
 uv.lock
 /astrBot/
 plugins/
+.serena/

@@ -114,6 +114,7 @@ class CapabilityDispatcher:
         ctx = Context(
             peer=self._peer,
             plugin_id=plugin_id,
+            request_id=message.id,
             cancel_token=cancel_token,
         )
         bound_logger = cast(PluginLogger, ctx.logger).bind(
@@ -160,6 +161,7 @@ class CapabilityDispatcher:
         ctx = Context(
             peer=self._peer,
             plugin_id=plugin_id,
+            request_id=message.id,
             cancel_token=cancel_token,
             source_event_payload=event_payload
             if isinstance(event_payload, dict)
