@@ -21,6 +21,7 @@
         },
         "description": {
             "openai": "Поддерживаются все провайдеры, совместимые с OpenAI API.",
+            "kimi_code": "Специальная интеграция Kimi CodingPlan / Kimi Code с отдельной совместимой адаптацией Anthropic API.",
             "vllm_rerank": "Также поддерживает Jina AI, Cohere, PPIO и другие.",
             "default": "Преобразование речи в текст"
         }
