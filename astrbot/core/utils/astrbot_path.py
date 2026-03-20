@@ -121,12 +121,20 @@ class AstrbotPaths:
 
     async def async_dashboard_version(self) -> str | None:
         try:
-            # Use async context manager to open and read the file asynchronously.
-            async with anyio.open_file(self.dist / "assets" / "version", mode="r") as f:
+            # anyio.open_file returns a coroutine that yields an async file object.
+            # Await it to get the file object, then use it and close it explicitly.
+            f = await anyio.open_file(self.dist / "assets" / "version", mode="r")
+            try:
                 data = await f.read()
                 if data is None:
                     return None
                 return data.strip()
+            finally:
+                # Ensure we close the async file handle; ignore close errors defensively.
+                try:
+                    await f.aclose()
+                except Exception:
+                    pass
         except (FileNotFoundError, OSError):
             return None
         except Exception:
