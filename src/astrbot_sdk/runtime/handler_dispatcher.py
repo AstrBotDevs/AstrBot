@@ -65,7 +65,11 @@ from ..protocol.descriptors import (
     ScheduleTrigger,
 )
 from ..schedule import ScheduleContext
-from ..session_waiter import SessionWaiterManager
+from ..session_waiter import (
+    SessionWaiterManager,
+    _mark_session_waiter_handler_task,
+    _unmark_session_waiter_handler_task,
+)
 from ..star import Star
 from ._command_matching import (
     build_command_args,
@@ -203,6 +207,8 @@ class HandlerDispatcher:
                     schedule_context=schedule_context,
                 )
             )
+        _mark_session_waiter_handler_task(task)
+        task.add_done_callback(_unmark_session_waiter_handler_task)
         self._active[message.id] = (task, cancel_token)
         try:
             return await task

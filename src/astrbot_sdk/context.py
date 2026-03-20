@@ -64,6 +64,10 @@ from .llm.tools import LLMToolManager
 from .message_components import BaseMessageComponent
 from .message_result import MessageChain
 from .message_session import MessageSession
+from .session_waiter import (
+    _mark_session_waiter_background_task,
+    _unmark_session_waiter_background_task,
+)
 
 PlatformCompatContent = (
     str | MessageChain | Sequence[BaseMessageComponent] | Sequence[dict[str, Any]]
@@ -583,6 +587,20 @@ class Context:
         task: Awaitable[Any],
         desc: str,
     ) -> asyncio.Task[Any]:
+        """Register a background task owned by the current SDK context.
+
+        This is the recommended way to launch follow-up work that should outlive
+        the current handler dispatch, including `session_waiter(...)` flows.
+        Directly awaiting a waiter inside the current handler keeps the original
+        dispatch open until the next message arrives.
+
+        Example:
+            await event.reply("请输入用户名:")
+            await ctx.register_task(
+                self.collect_username(event),
+                "waiter:collect_username",
+            )
+        """
         task_desc = str(desc)
 
         async def _wrap_future(future: asyncio.Future[Any]) -> Any:
@@ -597,7 +615,10 @@ class Context:
         else:
             raise TypeError("register_task requires an awaitable task object")
 
+        _mark_session_waiter_background_task(background_task)
+
         def _on_done(done_task: asyncio.Task[Any]) -> None:
+            _unmark_session_waiter_background_task(done_task)
             if done_task.cancelled():
                 debug_logger = getattr(self.logger, "debug", None)
                 if callable(debug_logger):

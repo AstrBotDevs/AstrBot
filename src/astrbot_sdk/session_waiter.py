@@ -14,13 +14,15 @@
 注意事项：
 在当前桥接设计中，不应在普通 SDK handler 内直接 await session_waiter，
 这会导致首次 dispatch 保持打开直到下一条消息到达。
-如需非阻塞的会话等待，应从后台任务启动或添加显式的调度/恢复机制。
+推荐写法是 `await ctx.register_task(waiter(...), "...")`，让 waiter 在后台任务中
+承接后续消息；直接 await 仅适用于你明确需要保持当前 dispatch 挂起的场景。
 """
 
 from __future__ import annotations
 
 import asyncio
 import time
+import weakref
 from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
 from functools import wraps
@@ -34,6 +36,26 @@ _OwnerT = TypeVar("_OwnerT")
 _P = ParamSpec("_P")
 _ResultT = TypeVar("_ResultT")
 _WaiterKey = tuple[str, str]
+
+_HANDLER_TASKS: weakref.WeakSet[asyncio.Task[Any]] = weakref.WeakSet()
+_REGISTERED_BACKGROUND_TASKS: weakref.WeakSet[asyncio.Task[Any]] = weakref.WeakSet()
+_WARNED_DIRECT_WAIT_TASKS: weakref.WeakSet[asyncio.Task[Any]] = weakref.WeakSet()
+
+
+def _mark_session_waiter_handler_task(task: asyncio.Task[Any]) -> None:
+    _HANDLER_TASKS.add(task)
+
+
+def _unmark_session_waiter_handler_task(task: asyncio.Task[Any]) -> None:
+    _HANDLER_TASKS.discard(task)
+
+
+def _mark_session_waiter_background_task(task: asyncio.Task[Any]) -> None:
+    _REGISTERED_BACKGROUND_TASKS.add(task)
+
+
+def _unmark_session_waiter_background_task(task: asyncio.Task[Any]) -> None:
+    _REGISTERED_BACKGROUND_TASKS.discard(task)
 
 
 class _SessionWaiterDecorator(Protocol):
@@ -144,6 +166,7 @@ class SessionWaiterManager:
         if event._context is None:
             raise RuntimeError("session_waiter requires runtime context")
         plugin_id = event._context.plugin_id
+        self._warn_if_direct_wait_in_handler(event)
         session_key = event.unified_msg_origin
         key = self._make_key(plugin_id=plugin_id, session_key=session_key)
         entry = _WaiterEntry(
@@ -171,6 +194,25 @@ class SessionWaiterManager:
             return await entry.controller.future
         finally:
             await self.unregister(session_key, plugin_id=plugin_id)
+
+    def _warn_if_direct_wait_in_handler(self, event: MessageEvent) -> None:
+        current_task = asyncio.current_task()
+        if current_task is None:
+            return
+        if current_task not in _HANDLER_TASKS:
+            return
+        if current_task in _REGISTERED_BACKGROUND_TASKS:
+            return
+        if current_task in _WARNED_DIRECT_WAIT_TASKS:
+            return
+        _WARNED_DIRECT_WAIT_TASKS.add(current_task)
+        logger.warning(
+            "Direct await on session_waiter blocks the current handler dispatch; "
+            'prefer `await ctx.register_task(waiter(...), "...")`: '
+            "plugin_id={} session_key={}",
+            self._plugin_id,
+            event.unified_msg_origin,
+        )
 
     async def wait_for_event(
         self,
