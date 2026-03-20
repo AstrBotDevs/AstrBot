@@ -109,18 +109,48 @@ class HandlerDispatcher:
                 "some features may not work as expected"
             )
 
+    def has_active_waiter(self, event: MessageEvent) -> bool:
+        return self._session_waiters.has_active_waiter(event)
+
     async def invoke(self, message, cancel_token: CancelToken) -> dict[str, Any]:
         handler_id = str(message.input.get("handler_id", ""))
         if handler_id == "__sdk_session_waiter__":
-            plugin_id = self._plugin_id
+            event_payload = message.input.get("event", {})
+            requested_plugin_id = str(message.input.get("plugin_id") or "").strip()
             ctx = Context(
-                peer=self._peer, plugin_id=plugin_id, cancel_token=cancel_token
+                peer=self._peer,
+                plugin_id=requested_plugin_id or self._plugin_id,
+                cancel_token=cancel_token,
+                source_event_payload=event_payload
+                if isinstance(event_payload, dict)
+                else None,
             )
-            event = MessageEvent.from_payload(
-                message.input.get("event", {}), context=ctx
-            )
+            event = MessageEvent.from_payload(event_payload, context=ctx)
+            session_key = event.unified_msg_origin
+            if requested_plugin_id:
+                plugin_id = requested_plugin_id
+            else:
+                plugin_ids = self._session_waiters.get_waiter_plugin_ids(session_key)
+                if len(plugin_ids) > 1:
+                    raise LookupError(
+                        "multiple active session_waiters found for session; "
+                        "dispatch requires explicit plugin identity"
+                    )
+                plugin_id = plugin_ids[0] if plugin_ids else self._plugin_id
+                if plugin_id != ctx.plugin_id:
+                    ctx = Context(
+                        peer=self._peer,
+                        plugin_id=plugin_id,
+                        cancel_token=cancel_token,
+                        source_event_payload=event_payload
+                        if isinstance(event_payload, dict)
+                        else None,
+                    )
+                    event = MessageEvent.from_payload(event_payload, context=ctx)
             event.bind_reply_handler(self._create_reply_handler(ctx, event))
-            task = asyncio.create_task(self._session_waiters.dispatch(event))
+            task = asyncio.create_task(
+                self._session_waiters.dispatch(event, plugin_id=plugin_id)
+            )
             self._active[message.id] = (task, cancel_token)
             try:
                 return await task
@@ -499,6 +529,7 @@ class HandlerDispatcher:
             await self._session_waiters.fail(
                 active.session.session_key,
                 ConversationReplaced("conversation replaced by a newer session"),
+                plugin_id=self._resolve_plugin_id(loaded),
             )
             await asyncio.sleep(0)
             active.task.cancel()
