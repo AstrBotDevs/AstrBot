@@ -17,7 +17,6 @@ from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.network_utils import (
-    create_proxy_client,
     is_connection_error,
     log_connection_failure,
 )
@@ -30,6 +29,30 @@ from ..register import register_provider_adapter
     "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
+    @staticmethod
+    def _normalize_custom_headers(provider_config: dict) -> dict[str, str] | None:
+        custom_headers = provider_config.get("custom_headers", {})
+        if not isinstance(custom_headers, dict) or not custom_headers:
+            return None
+        normalized_headers: dict[str, str] = {}
+        for key, value in custom_headers.items():
+            normalized_headers[str(key)] = str(value)
+        return normalized_headers or None
+
+    @classmethod
+    def _resolve_custom_headers(
+        cls,
+        provider_config: dict,
+        *,
+        required_headers: dict[str, str] | None = None,
+    ) -> dict[str, str] | None:
+        merged_headers = cls._normalize_custom_headers(provider_config) or {}
+        if required_headers:
+            for header_name, header_value in required_headers.items():
+                if not merged_headers.get(header_name, "").strip():
+                    merged_headers[header_name] = header_value
+        return merged_headers or None
+
     def __init__(
         self,
         provider_config,
@@ -47,6 +70,7 @@ class ProviderAnthropic(Provider):
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
         self.thinking_config = provider_config.get("anth_thinking_config", {})
+        self.custom_headers = self._resolve_custom_headers(provider_config)
 
         if use_api_key:
             self._init_api_key(provider_config)
@@ -67,7 +91,12 @@ class ProviderAnthropic(Provider):
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
-        return create_proxy_client("Anthropic", proxy)
+        if proxy:
+            logger.info(f"[Anthropic] 使用代理: {proxy}")
+            return httpx.AsyncClient(proxy=proxy, headers=self.custom_headers)
+        if self.custom_headers:
+            return httpx.AsyncClient(headers=self.custom_headers)
+        return None
 
     def _apply_thinking_config(self, payloads: dict) -> None:
         thinking_type = self.thinking_config.get("type", "")
