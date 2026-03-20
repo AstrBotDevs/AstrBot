@@ -207,6 +207,7 @@ class Peer:
             str, tuple[asyncio.Task[None], CancelToken, asyncio.Event]
         ] = {}
         self._remote_initialized = asyncio.Event()
+        self._remote_initialized_successfully = False
         self._transport_watch_task: asyncio.Task[None] | None = None
 
     def set_initialize_handler(self, handler: InitializeHandler) -> None:
@@ -228,6 +229,7 @@ class Peer:
         self._stopping = False
         self.negotiated_protocol_version = None
         self._remote_initialized.clear()
+        self._remote_initialized_successfully = False
         self.transport.set_message_handler(self._handle_raw_message)
         await self.transport.start()
         self._transport_watch_task = asyncio.create_task(self._watch_transport_closed())
@@ -295,7 +297,7 @@ class Peer:
             )
             if not done:
                 raise TimeoutError()
-            if init_waiter in done:
+            if init_waiter in done and self._remote_initialized_successfully:
                 return
             raise AstrBotError.protocol_error("连接在初始化完成前关闭")
         finally:
@@ -372,6 +374,7 @@ class Peer:
         self.remote_capability_map = {item.name: item for item in output.capabilities}
         self.remote_metadata = output.metadata
         self.negotiated_protocol_version = negotiated_protocol_version
+        self._remote_initialized_successfully = True
         self._remote_initialized.set()
         return output
 
@@ -578,6 +581,7 @@ class Peer:
                 output=output.model_dump(),
             )
         )
+        self._remote_initialized_successfully = True
         self._remote_initialized.set()
 
     async def _handle_invoke(

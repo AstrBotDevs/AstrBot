@@ -14,16 +14,19 @@
 注意事项：
 在当前桥接设计中，不应在普通 SDK handler 内直接 await session_waiter，
 这会导致首次 dispatch 保持打开直到下一条消息到达。
-如需非阻塞的会话等待，应从后台任务启动或添加显式的调度/恢复机制。
+推荐写法是 `await ctx.register_task(waiter(...), "...")`，让 waiter 在后台任务中
+承接后续消息；直接 await 仅适用于你明确需要保持当前 dispatch 挂起的场景。
 """
 
 from __future__ import annotations
 
 import asyncio
 import time
+import weakref
 from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
 from functools import wraps
+from contextvars import ContextVar
 from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar, cast, overload
 
 from loguru import logger
@@ -34,6 +37,31 @@ from .events import MessageEvent
 _OwnerT = TypeVar("_OwnerT")
 _P = ParamSpec("_P")
 _ResultT = TypeVar("_ResultT")
+_WaiterKey = tuple[str, str]
+
+_HANDLER_TASKS: weakref.WeakSet[asyncio.Task[Any]] = weakref.WeakSet()
+_REGISTERED_BACKGROUND_TASKS: weakref.WeakSet[asyncio.Task[Any]] = weakref.WeakSet()
+_WARNED_DIRECT_WAIT_TASKS: weakref.WeakSet[asyncio.Task[Any]] = weakref.WeakSet()
+_ACTIVE_WAITER_KEY: ContextVar[_WaiterKey | None] = ContextVar(
+    "astrbot_sdk_active_waiter_key",
+    default=None,
+)
+
+
+def _mark_session_waiter_handler_task(task: asyncio.Task[Any]) -> None:
+    _HANDLER_TASKS.add(task)
+
+
+def _unmark_session_waiter_handler_task(task: asyncio.Task[Any]) -> None:
+    _HANDLER_TASKS.discard(task)
+
+
+def _mark_session_waiter_background_task(task: asyncio.Task[Any]) -> None:
+    _REGISTERED_BACKGROUND_TASKS.add(task)
+
+
+def _unmark_session_waiter_background_task(task: asyncio.Task[Any]) -> None:
+    _REGISTERED_BACKGROUND_TASKS.discard(task)
 
 
 class _SessionWaiterDecorator(Protocol):
@@ -128,7 +156,11 @@ class SessionWaiterManager:
         self._plugin_id = plugin_id
         self._peer = peer
         self._entries: dict[str, dict[str, _WaiterEntry]] = {}
-        self._locks: dict[tuple[str, str], asyncio.Lock] = {}
+        self._locks: dict[_WaiterKey, asyncio.Lock] = {}
+
+    @staticmethod
+    def _make_key(*, plugin_id: str, session_key: str) -> _WaiterKey:
+        return (plugin_id, session_key)
 
     async def register(
         self,
@@ -140,6 +172,7 @@ class SessionWaiterManager:
     ) -> Any:
         if event._context is None:
             raise RuntimeError("session_waiter requires runtime context")
+        self._warn_if_direct_wait_in_handler(event)
         session_key = event.unified_msg_origin
         plugin_id = self._resolve_plugin_id(event)
         entry = _WaiterEntry(
@@ -150,14 +183,21 @@ class SessionWaiterManager:
             record_history_chains=record_history_chains,
         )
         previous = self._entries.setdefault(session_key, {}).get(plugin_id)
+        restorable_previous: _WaiterEntry | None = None
         self._entries[session_key][plugin_id] = entry
         self._lock_for(session_key, plugin_id)
         if previous is not None:
             previous.unregister_enabled = False
-            self._finish_entry(
-                previous,
-                RuntimeError("session waiter replaced by a newer waiter"),
-            )
+            if _ACTIVE_WAITER_KEY.get() == self._make_key(
+                plugin_id=plugin_id,
+                session_key=session_key,
+            ):
+                restorable_previous = previous
+            else:
+                self._finish_entry(
+                    previous,
+                    RuntimeError("session waiter replaced by a newer waiter"),
+                )
             logger.warning(
                 "Session waiter replaced: plugin_id={} session_key={}",
                 plugin_id,
@@ -173,12 +213,37 @@ class SessionWaiterManager:
         except Exception:
             entry.unregister_enabled = False
             await self._remove_entry(entry)
+            if restorable_previous is not None:
+                self._entries.setdefault(session_key, {})[plugin_id] = (
+                    restorable_previous
+                )
+                restorable_previous.unregister_enabled = True
+                self._lock_for(session_key, plugin_id)
             raise
         try:
             return await entry.controller.future
         finally:
             if entry.unregister_enabled:
                 await self.unregister(session_key, plugin_id=plugin_id)
+
+    def _warn_if_direct_wait_in_handler(self, event: MessageEvent) -> None:
+        current_task = asyncio.current_task()
+        if current_task is None:
+            return
+        if current_task not in _HANDLER_TASKS:
+            return
+        if current_task in _REGISTERED_BACKGROUND_TASKS:
+            return
+        if current_task in _WARNED_DIRECT_WAIT_TASKS:
+            return
+        _WARNED_DIRECT_WAIT_TASKS.add(current_task)
+        logger.warning(
+            "Direct await on session_waiter blocks the current handler dispatch; "
+            'prefer `await ctx.register_task(waiter(...), "...")`: '
+            "plugin_id={} session_key={}",
+            event._context.plugin_id,
+            event.unified_msg_origin,
+        )
 
     async def wait_for_event(
         self,
@@ -269,13 +334,16 @@ class SessionWaiterManager:
             self._finish_entry(current, error)
             return True
 
-    def has_waiter(self, event: MessageEvent) -> bool:
+    def has_active_waiter(self, event: MessageEvent) -> bool:
         session_key = event.unified_msg_origin
         event_plugin_id = self._event_plugin_id(event)
         if event_plugin_id is not None:
             entry = self._get_entry(session_key, event_plugin_id)
             return entry is not None and not entry.controller.future.done()
         return bool(self.get_waiter_plugin_ids(session_key))
+
+    def has_waiter(self, event: MessageEvent) -> bool:
+        return self.has_active_waiter(event)
 
     def get_waiter_plugin_ids(self, session_key: str) -> list[str]:
         return sorted(
@@ -290,6 +358,8 @@ class SessionWaiterManager:
         *,
         plugin_id: str | None = None,
     ) -> dict[str, Any]:
+        if event._context is None:
+            raise RuntimeError("session_waiter dispatch requires runtime context")
         session_key = event.unified_msg_origin
         entry = self._select_entry(
             session_key,
@@ -318,12 +388,21 @@ class SessionWaiterManager:
                 if isinstance(raw_chain, list):
                     chain = [dict(item) for item in raw_chain if isinstance(item, dict)]
                 current.controller.history_chains.append(chain)
+        active_key_token = _ACTIVE_WAITER_KEY.set(
+            self._make_key(
+                plugin_id=current.plugin_id,
+                session_key=current.session_key,
+            )
+        )
+        try:
             await current.handler(current.controller, waiter_event)
-            return {
-                "sent_message": False,
-                "stop": waiter_event.is_stopped(),
-                "call_llm": False,
-            }
+        finally:
+            _ACTIVE_WAITER_KEY.reset(active_key_token)
+        return {
+            "sent_message": False,
+            "stop": waiter_event.is_stopped(),
+            "call_llm": False,
+        }
 
     def _resolve_plugin_id(self, event: MessageEvent) -> str:
         caller_plugin_id = current_caller_plugin_id()
@@ -433,15 +512,16 @@ class SessionWaiterManager:
     ) -> MessageEvent:
         from .context import Context
 
-        source_payload = (
-            dict(event.raw) if isinstance(event.raw, dict) else event.to_payload()
-        )
+        source_payload = self._source_payload_from_event(event)
         cancel_token = (
             event._context.cancel_token if event._context is not None else None
         )
         waiter_context = Context(
             peer=self._peer,
             plugin_id=entry.plugin_id,
+            request_id=(
+                event._context.request_id if event._context is not None else None
+            ),
             cancel_token=cancel_token,
             source_event_payload=source_payload,
         )
@@ -451,6 +531,17 @@ class SessionWaiterManager:
             source_payload,
             context=waiter_context,
         )
+
+    @staticmethod
+    def _source_payload_from_event(event: MessageEvent) -> dict[str, Any]:
+        raw_payload = event.raw if isinstance(event.raw, dict) else None
+        if raw_payload is not None and {
+            "text",
+            "session_id",
+            "platform",
+        }.issubset(raw_payload):
+            return dict(raw_payload)
+        return event.to_payload()
 
 
 def session_waiter(

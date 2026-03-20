@@ -471,11 +471,16 @@ class PluginHarness:
         start_index: int,
         event_payload: dict[str, Any],
     ) -> None:
+        settled_rounds = 0
         for _ in range(20):
             if len(self.platform_sink.records) > start_index:
                 return
             await asyncio.sleep(0)
-            if not self._has_waiter_for_event(event_payload):
+            if self._has_waiter_for_event(event_payload):
+                settled_rounds = 0
+                continue
+            settled_rounds += 1
+            if settled_rounds >= 3:
                 return
 
     async def _run_lifecycle(self, method_name: str) -> None:

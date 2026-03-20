@@ -65,7 +65,11 @@ from ..protocol.descriptors import (
     ScheduleTrigger,
 )
 from ..schedule import ScheduleContext
-from ..session_waiter import SessionWaiterManager
+from ..session_waiter import (
+    SessionWaiterManager,
+    _mark_session_waiter_handler_task,
+    _unmark_session_waiter_handler_task,
+)
 from ..star import Star
 from ._command_matching import (
     build_command_args,
@@ -109,25 +113,53 @@ class HandlerDispatcher:
                 "some features may not work as expected"
             )
 
+    def has_active_waiter(self, event: MessageEvent) -> bool:
+        return self._session_waiters.has_active_waiter(event)
+
     async def invoke(self, message, cancel_token: CancelToken) -> dict[str, Any]:
         handler_id = str(message.input.get("handler_id", ""))
         if handler_id == "__sdk_session_waiter__":
-            requested_plugin_id = (
-                str(message.input.get("plugin_id", "")).strip() or None
-            )
             event_payload = message.input.get("event", {})
+            requested_plugin_id = str(message.input.get("plugin_id") or "").strip()
             ctx = Context(
                 peer=self._peer,
                 plugin_id=requested_plugin_id or self._plugin_id,
+                request_id=message.id,
                 cancel_token=cancel_token,
-                source_event_payload=(
-                    dict(event_payload) if isinstance(event_payload, dict) else None
-                ),
+                source_event_payload=event_payload
+                if isinstance(event_payload, dict)
+                else None,
             )
             event = MessageEvent.from_payload(event_payload, context=ctx)
-            task = asyncio.create_task(
-                self._session_waiters.dispatch(event, plugin_id=requested_plugin_id)
-            )
+            session_key = event.unified_msg_origin
+            if requested_plugin_id:
+                plugin_id = requested_plugin_id
+            else:
+                plugin_ids = self._session_waiters.get_waiter_plugin_ids(session_key)
+                if len(plugin_ids) > 1:
+                    raise LookupError(
+                        "multiple active session_waiters found for session; "
+                        "dispatch requires explicit plugin identity"
+                    )
+                plugin_id = plugin_ids[0] if plugin_ids else self._plugin_id
+                if plugin_id != ctx.plugin_id:
+                    ctx = Context(
+                        peer=self._peer,
+                        plugin_id=plugin_id,
+                        request_id=message.id,
+                        cancel_token=cancel_token,
+                        source_event_payload=event_payload
+                        if isinstance(event_payload, dict)
+                        else None,
+                    )
+                    event = MessageEvent.from_payload(event_payload, context=ctx)
+            event.bind_reply_handler(self._create_reply_handler(ctx, event))
+            with caller_plugin_scope(plugin_id):
+                task = asyncio.create_task(
+                    self._session_waiters.dispatch(event, plugin_id=plugin_id)
+                )
+            _mark_session_waiter_handler_task(task)
+            task.add_done_callback(_unmark_session_waiter_handler_task)
             self._active[message.id] = (task, cancel_token)
             try:
                 return await task
@@ -143,6 +175,7 @@ class HandlerDispatcher:
         ctx = Context(
             peer=self._peer,
             plugin_id=plugin_id,
+            request_id=message.id,
             cancel_token=cancel_token,
             source_event_payload=event_payload
             if isinstance(event_payload, dict)
@@ -180,14 +213,13 @@ class HandlerDispatcher:
                     schedule_context=schedule_context,
                 )
             )
+        _mark_session_waiter_handler_task(task)
+        task.add_done_callback(_unmark_session_waiter_handler_task)
         self._active[message.id] = (task, cancel_token)
         try:
             return await task
         finally:
             self._active.pop(message.id, None)
-
-    def has_active_waiter(self, event: MessageEvent) -> bool:
-        return self._session_waiters.has_waiter(event)
 
     def _resolve_plugin_id(self, loaded: LoadedHandler) -> str:
         if loaded.plugin_id:
