@@ -1,14 +1,14 @@
 from ..register import register_provider_adapter
 from .anthropic_source import ProviderAnthropic
 
-KIMI_CODE_API_BASE = "https://api.kimi.com/coding/"
-KIMI_CODE_DEFAULT_MODEL = "kimi-code"
+KIMI_CODE_API_BASE = "https://api.kimi.com/coding"
+KIMI_CODE_DEFAULT_MODEL = "kimi-for-coding"
 KIMI_CODE_USER_AGENT = "claude-code/0.1.0"
 
 
 @register_provider_adapter(
     "kimi_code_chat_completion",
-    "Kimi Code Chat Completion 提供商适配器",
+    "Kimi Code Provider Adapter",
 )
 class ProviderKimiCode(ProviderAnthropic):
     def __init__(

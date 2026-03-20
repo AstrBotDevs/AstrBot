@@ -1115,7 +1115,7 @@ CONFIG_METADATA_2 = {
                         "custom_headers": {},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
-                    "Kimi CodingPlan": {
+                    "Kimi Coding Plan": {
                         "id": "kimi-code",
                         "provider": "kimi-code",
                         "type": "kimi_code_chat_completion",
