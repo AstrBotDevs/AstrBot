@@ -74,27 +74,21 @@ class ExperimentalContextMemoryBackends:
     migration_adapter: ContextMemoryMigrationAdapter | None = None
 
 
-_backends = ExperimentalContextMemoryBackends()
-
-
-def configure_context_memory_backends(
+def make_experimental_context_memory_backends(
     *,
     evolution_backend: ContextMemoryEvolutionBackend | None = None,
     migration_adapter: ContextMemoryMigrationAdapter | None = None,
-) -> None:
-    """Configure optional experimental backends in one cohesive entry point."""
-    _backends.evolution_backend = evolution_backend
-    _backends.migration_adapter = migration_adapter
-
-
-def get_experimental_context_memory_backends() -> ExperimentalContextMemoryBackends:
-    return _backends
+) -> ExperimentalContextMemoryBackends:
+    """Create an experimental backend bundle without module-level mutable state."""
+    return ExperimentalContextMemoryBackends(
+        evolution_backend=evolution_backend,
+        migration_adapter=migration_adapter,
+    )
 
 __all__ = [
     "VectorLongTermMemoryRetriever",
     "ContextMemoryEvolutionBackend",
     "ContextMemoryMigrationAdapter",
     "ExperimentalContextMemoryBackends",
-    "configure_context_memory_backends",
-    "get_experimental_context_memory_backends",
+    "make_experimental_context_memory_backends",
 ]
