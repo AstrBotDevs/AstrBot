@@ -1069,6 +1069,10 @@
         "description": "Custom request headers",
         "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."
       },
+      "ollama_disable_thinking": {
+        "description": "Disable thinking mode",
+        "hint": "Close Ollama thinking mode."
+      },
       "custom_extra_body": {
         "description": "Custom request body parameters",
         "hint": "Add extra parameters to requests, such as temperature, top_p, max_tokens, etc.",
