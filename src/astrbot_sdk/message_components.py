@@ -1,11 +1,13 @@
-"""Backward-compatible message component exports.
+"""Backward-compatible alias for ``astrbot_sdk.message.components``.
 
-The SDK internals now live under ``astrbot_sdk.message.*``. Keep this module as a
-thin compatibility layer so existing plugin imports and generated docs continue to
-work during the package layout migration.
+This module intentionally aliases the implementation module instead of re-exporting
+names one by one so private helpers keep working with existing monkeypatch sites.
 """
 
-from .message.components import *  # noqa: F401,F403
-from .message.components import __all__ as _message_components_all
+from __future__ import annotations
 
-__all__ = list(_message_components_all)
+import sys
+
+from .message import components as _components_module
+
+sys.modules[__name__] = _components_module
