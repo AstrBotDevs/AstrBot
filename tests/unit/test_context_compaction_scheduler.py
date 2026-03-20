@@ -47,7 +47,8 @@ def test_load_config_normalizes_values() -> None:
     assert cfg.enabled is True
     assert cfg.interval_minutes == 1
     assert cfg.target_tokens == 1024
-    assert cfg.trigger_tokens == 1025
+    assert cfg.trigger_tokens == 1000
+    assert cfg.trigger_min_context_ratio == pytest.approx(0.3)
     assert cfg.max_rounds == 2
 
 
@@ -111,12 +112,12 @@ def test_load_config_clamps_numeric_minimums(
 @pytest.mark.parametrize(
     ("raw_cfg", "expected_target", "expected_trigger"),
     [
-        ({"target_tokens": 1024}, 1024, 1536),
-        ({"target_tokens": 1024, "trigger_tokens": None}, 1024, 1536),
-        ({"target_tokens": 1024, "trigger_tokens": 512}, 1024, 1025),
-        ({"target_tokens": 1024, "trigger_tokens": "512"}, 1024, 1025),
+        ({"target_tokens": 1024}, 1024, 0),
+        ({"target_tokens": 1024, "trigger_tokens": None}, 1024, 0),
+        ({"target_tokens": 1024, "trigger_tokens": 512}, 1024, 512),
+        ({"target_tokens": 1024, "trigger_tokens": "512"}, 1024, 512),
         ({"target_tokens": 1024, "trigger_tokens": 2048}, 1024, 2048),
-        ({"target_tokens": 10}, 512, 768),
+        ({"target_tokens": 10}, 512, 0),
     ],
 )
 def test_load_config_token_threshold_normalization(
@@ -129,6 +130,24 @@ def test_load_config_token_threshold_normalization(
 
     assert cfg.target_tokens == expected_target
     assert cfg.trigger_tokens == expected_trigger
+
+
+@pytest.mark.parametrize(
+    ("raw_ratio", "expected"),
+    [
+        (0.3, 0.3),
+        ("30", 0.3),
+        ("0.25", 0.25),
+        (-1, 0.0),
+        (500, 1.0),
+    ],
+)
+def test_load_config_trigger_ratio_normalization(raw_ratio, expected: float) -> None:
+    scheduler = _build_scheduler(
+        {"periodic_context_compaction": {"trigger_min_context_ratio": raw_ratio}}
+    )
+    cfg = scheduler._load_config()
+    assert cfg.trigger_min_context_ratio == pytest.approx(expected)
 
 
 @pytest.mark.parametrize("raw_value", [None, 1, "not-a-dict", []])
@@ -186,6 +205,76 @@ def test_is_idle_enough_respects_threshold() -> None:
     assert PeriodicContextCompactionScheduler._is_idle_enough(None, 10) is True
 
 
+def test_resolve_run_limits_treats_max_scan_as_upper_bound() -> None:
+    scheduler = _build_scheduler({})
+    cfg = replace(
+        scheduler._load_config(),
+        max_conversations_per_run=8,
+        max_scan_per_run=3,
+        scan_page_size=5,
+    )
+
+    max_to_compact, max_to_scan, page_size = scheduler._resolve_run_limits(cfg, None)
+    assert max_to_compact == 3
+    assert max_to_scan == 3
+    assert page_size == 10
+
+    max_to_compact, max_to_scan, _ = scheduler._resolve_run_limits(cfg, 20)
+    assert max_to_compact == 3
+    assert max_to_scan == 3
+
+
+def test_resolve_trigger_tokens_prefers_manual_value() -> None:
+    scheduler = _build_scheduler({})
+    cfg = replace(
+        scheduler._load_config(),
+        target_tokens=1024,
+        trigger_tokens=1500,
+        trigger_min_context_ratio=0.3,
+    )
+    provider = SimpleNamespace(
+        provider_config={"max_context_tokens": 32768},
+        get_model=lambda: "unknown-model",
+    )
+
+    resolved = scheduler._resolve_trigger_tokens(cfg, provider)
+    assert resolved == 1500
+
+
+def test_resolve_trigger_tokens_uses_ratio_when_auto_mode() -> None:
+    scheduler = _build_scheduler({})
+    cfg = replace(
+        scheduler._load_config(),
+        target_tokens=1024,
+        trigger_tokens=0,
+        trigger_min_context_ratio=0.3,
+    )
+    provider = SimpleNamespace(
+        provider_config={"max_context_tokens": 32768},
+        get_model=lambda: "unknown-model",
+    )
+
+    resolved = scheduler._resolve_trigger_tokens(cfg, provider)
+    assert resolved == 9830
+
+
+def test_resolve_trigger_tokens_falls_back_when_provider_context_unknown() -> None:
+    scheduler = _build_scheduler({})
+    cfg = replace(
+        scheduler._load_config(),
+        target_tokens=1024,
+        trigger_tokens=0,
+        trigger_min_context_ratio=0.3,
+    )
+    provider = SimpleNamespace(
+        provider_config={"max_context_tokens": 0},
+        get_model=lambda: "unknown-model",
+    )
+
+    resolved = scheduler._resolve_trigger_tokens(cfg, provider)
+    assert resolved == 1536
+
+
 @pytest.mark.asyncio
 async def test_compact_one_conversation_dry_run_reports_skipped() -> None:
     scheduler = _build_scheduler({"periodic_context_compaction": {"enabled": True}})
@@ -210,6 +299,7 @@ async def test_compact_one_conversation_dry_run_reports_skipped() -> None:
             rounds=1,
         )
     )
+    scheduler._resolve_trigger_tokens = lambda _cfg, _provider: 1  # type: ignore[method-assign]
     scheduler._token_counter = SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 50)
     scheduler._persist_compacted_history = AsyncMock(  # type: ignore[method-assign]
         return_value=True

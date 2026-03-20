@@ -19,6 +19,7 @@ from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db.po import ConversationV2
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import Provider
+from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
 if TYPE_CHECKING:
     from astrbot.core.provider.manager import ProviderManager
@@ -62,6 +63,7 @@ class CompactionConfig:
     min_messages: int
     target_tokens: int
     trigger_tokens: int
+    trigger_min_context_ratio: float
     max_rounds: int
     truncate_turns: int
     keep_recent: int
@@ -84,14 +86,11 @@ class CompactionConfig:
         cfg.update(raw_cfg)
 
         target_tokens = cls._to_int(cfg.get("target_tokens"), 4096, 512)
-        raw_trigger = raw_cfg.get("trigger_tokens")
-        trigger_default = max(int(target_tokens * 1.5), target_tokens + 1)
-        if raw_trigger is None or (isinstance(raw_trigger, str) and not raw_trigger):
-            trigger_tokens = trigger_default
-        else:
-            trigger_tokens = cls._to_int(raw_trigger, trigger_default, 512)
-        if trigger_tokens <= target_tokens:
-            trigger_tokens = target_tokens + 1
+        trigger_tokens = cls._to_int(cfg.get("trigger_tokens"), 0, 0)
+        trigger_min_context_ratio = cls._to_ratio(
+            cfg.get("trigger_min_context_ratio"),
+            0.3,
+        )
 
         return cls(
             enabled=cls._to_bool(cfg.get("enabled"), False),
@@ -108,6 +107,7 @@ class CompactionConfig:
             min_messages=cls._to_int(cfg.get("min_messages"), 14, 2),
             target_tokens=target_tokens,
             trigger_tokens=trigger_tokens,
+            trigger_min_context_ratio=trigger_min_context_ratio,
             max_rounds=cls._to_int(cfg.get("max_rounds"), 3, 1),
             truncate_turns=cls._to_int(cfg.get("truncate_turns"), 1, 1),
             keep_recent=cls._to_int(cfg.get("keep_recent"), 6, 0),
@@ -137,6 +137,16 @@ class CompactionConfig:
         except Exception:
             parsed = default
         return max(parsed, min_value)
+
+    @staticmethod
+    def _to_ratio(value: Any, default: float) -> float:
+        try:
+            parsed = float(value)
+        except Exception:
+            parsed = default
+        if parsed > 1.0 and parsed <= 100.0:
+            parsed = parsed / 100.0
+        return min(max(parsed, 0.0), 1.0)
 
 
 class PeriodicContextCompactionScheduler:
@@ -316,10 +326,11 @@ class PeriodicContextCompactionScheduler:
         cfg: CompactionConfig,
         max_conversations_override: int | None,
     ) -> tuple[int, int, int]:
+        max_to_scan = max(1, int(cfg.max_scan_per_run))
         max_to_compact = max(1, int(cfg.max_conversations_per_run))
         if max_conversations_override is not None:
             max_to_compact = max(1, int(max_conversations_override))
-        max_to_scan = max(max_to_compact, int(cfg.max_scan_per_run))
+        max_to_compact = min(max_to_compact, max_to_scan)
         scan_page_size = max(10, int(cfg.scan_page_size))
         return max_to_compact, max_to_scan, scan_page_size
 
@@ -395,6 +406,10 @@ class PeriodicContextCompactionScheduler:
         if not provider:
             return "failed"
 
+        trigger_tokens = self._resolve_trigger_tokens(cfg, provider)
+        if before_tokens < trigger_tokens:
+            return "skipped"
+
         round_result = await self._run_compaction_rounds(
             messages=messages,
             provider=provider,
@@ -445,10 +460,41 @@ class PeriodicContextCompactionScheduler:
 
         trusted_usage = conv.token_usage if isinstance(conv.token_usage, int) else 0
         before_tokens = self._token_counter.count_tokens(messages, trusted_usage)
-        if before_tokens < cfg.trigger_tokens:
-            return None
-
         return messages, before_tokens
+
+    def _resolve_trigger_tokens(self, cfg: CompactionConfig, provider: Provider) -> int:
+        if cfg.trigger_tokens > 0:
+            return cfg.trigger_tokens
+
+        max_context_tokens = self._resolve_provider_max_context(provider)
+        if max_context_tokens > 0:
+            return max(1, int(max_context_tokens * cfg.trigger_min_context_ratio))
+
+        return max(int(cfg.target_tokens * 1.5), cfg.target_tokens + 1)
+
+    @staticmethod
+    def _resolve_provider_max_context(provider: Provider) -> int:
+        configured = provider.provider_config.get("max_context_tokens", 0)
+        try:
+            configured_tokens = int(configured)
+        except Exception:
+            configured_tokens = 0
+        if configured_tokens > 0:
+            return configured_tokens
+
+        model = provider.get_model()
+        model_info = LLM_METADATAS.get(model)
+        if not isinstance(model_info, dict):
+            return 0
+        limit = model_info.get("limit")
+        if not isinstance(limit, dict):
+            return 0
+        context = limit.get("context")
+        try:
+            context_tokens = int(context)
+        except Exception:
+            context_tokens = 0
+        return max(context_tokens, 0)
 
     async def _run_compaction_rounds(
         self,

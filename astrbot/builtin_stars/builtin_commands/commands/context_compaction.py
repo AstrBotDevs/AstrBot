@@ -24,6 +24,12 @@ class ContextCompactionCommands:
         status = scheduler.get_status()
         cfg = status.get("config", {})
         last = status.get("last_report") or {}
+        trigger_tokens = cfg.get("trigger_tokens", "?")
+        trigger_ratio = cfg.get("trigger_min_context_ratio", "?")
+        if isinstance(trigger_tokens, int) and trigger_tokens <= 0:
+            trigger_text = f"自动({trigger_ratio}x模型上下文)"
+        else:
+            trigger_text = str(trigger_tokens)
 
         lines = ["定时上下文压缩状态："]
         lines.append(
@@ -37,7 +43,7 @@ class ContextCompactionCommands:
             f" | 每轮最多扫描={cfg.get('max_scan_per_run', '?')}"
         )
         lines.append(
-            f"触发Token={cfg.get('trigger_tokens', '?')}"
+            f"触发Token={trigger_text}"
             f" | 目标Token={cfg.get('target_tokens', '?')}"
             f" | 最大轮次={cfg.get('max_rounds', '?')}"
         )

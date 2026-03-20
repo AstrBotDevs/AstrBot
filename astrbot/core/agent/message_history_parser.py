@@ -14,21 +14,26 @@ class MessageHistoryParser:
             if not isinstance(item, dict):
                 continue
 
-            try:
-                parsed.append(Message.model_validate(item))
+            msg = self._try_validate(item)
+            if msg is not None:
+                parsed.append(msg)
                 continue
-            except Exception:
-                pass
 
             fallback = self.sanitize_message_dict(item)
             if not fallback:
                 continue
-            try:
-                parsed.append(Message.model_validate(fallback))
-            except Exception:
-                continue
+            msg = self._try_validate(fallback)
+            if msg is not None:
+                parsed.append(msg)
 
         return parsed
+
+    @staticmethod
+    def _try_validate(data: dict[str, Any]) -> Message | None:
+        try:
+            return Message.model_validate(data)
+        except Exception:
+            return None
 
     def sanitize_message_dict(self, item: dict[str, Any]) -> dict[str, Any] | None:
         role = str(item.get("role", "")).strip().lower()

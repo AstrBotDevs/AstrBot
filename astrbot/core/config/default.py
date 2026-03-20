@@ -28,7 +28,8 @@ PERIODIC_CONTEXT_COMPACTION_DEFAULTS = {
     "min_idle_minutes": 15,
     "min_messages": 14,
     "target_tokens": 4096,
-    "trigger_tokens": 6144,
+    "trigger_tokens": 0,
+    "trigger_min_context_ratio": 0.3,
     "max_rounds": 3,
     "truncate_turns": 1,
     "keep_recent": 6,
@@ -2562,6 +2563,9 @@ CONFIG_METADATA_2 = {
                             "trigger_tokens": {
                                 "type": "int",
                             },
+                            "trigger_min_context_ratio": {
+                                "type": "float",
+                            },
                             "max_rounds": {
                                 "type": "int",
                             },
@@ -3352,7 +3356,16 @@ CONFIG_METADATA_3 = {
                     "provider_settings.periodic_context_compaction.trigger_tokens": {
                         "description": "触发 Token 阈值",
                         "type": "int",
-                        "hint": "会话估算 token 超过此值才触发压缩。",
+                        "hint": "会话估算 token 超过此值才触发压缩。<=0 表示自动按模型最大上下文比例计算。",
+                        "condition": {
+                            "provider_settings.periodic_context_compaction.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.periodic_context_compaction.trigger_min_context_ratio": {
+                        "description": "自动触发比例",
+                        "type": "float",
+                        "hint": "当触发 Token 阈值 <= 0 时生效。默认 0.3（即模型最大上下文的 30%）。支持填写 0~1 或 0~100（百分比）。",
                         "condition": {
                             "provider_settings.periodic_context_compaction.enabled": True,
                             "provider_settings.agent_runner_type": "local",
