@@ -422,18 +422,18 @@ class AstrBotDashboard:
 
         dashboard_config = self.config.get("dashboard", {})
         host = (
-            os.environ.get("ASTRBOT_DASHBOARD_HOST")
+            os.environ.get("ASTRBOT_HOST")
             or os.environ.get("DASHBOARD_HOST")
             or dashboard_config.get("host", "0.0.0.0")
         )
         port = int(
-            os.environ.get("ASTRBOT_DASHBOARD_PORT")
+            os.environ.get("ASTRBOT_PORT")
             or os.environ.get("DASHBOARD_PORT")
             or dashboard_config.get("port", 6185)
         )
         ssl_config = dashboard_config.get("ssl", {})
         ssl_enable = _parse_env_bool(
-            os.environ.get("ASTRBOT_DASHBOARD_SSL_ENABLE")
+            os.environ.get("ASTRBOT_SSL_ENABLE")
             or os.environ.get("DASHBOARD_SSL_ENABLE"),
             ssl_config.get("enable", False),
         )
