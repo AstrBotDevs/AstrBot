@@ -396,6 +396,7 @@ CONFIG_METADATA_2 = {
                         "telegram_command_register": True,
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
+                        "telegram_polling_restart_delay": 5.0,
                     },
                     "Discord": {
                         "id": "discord",
@@ -685,6 +686,11 @@ CONFIG_METADATA_2 = {
                         "description": "Telegram 命令自动刷新间隔",
                         "type": "int",
                         "hint": "Telegram 命令自动刷新间隔，单位为秒。",
+                    },
+                    "telegram_polling_restart_delay": {
+                        "description": "Telegram 轮询重启延迟",
+                        "type": "float",
+                        "hint": "当轮询意外结束尝试自动重启时的延迟时间，理论上越短恢复越快，但过短（<0.1s）可能导致死循环针对 API 服务器的请求阻断。单位为秒。默认为 5s。",
                     },
                     "id": {
                         "description": "机器人名称",
