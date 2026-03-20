@@ -97,13 +97,14 @@ const releasesHeader = computed(() => [
 // Form validation
 const formValid = ref(true);
 const accountFormRef = ref<VForm | null>(null);
+const isPasswordChangeAttempted = computed(() => !!newPassword.value || !!confirmPassword.value);
 const passwordRules = computed(() => [
-  (v: string) => !!v || t('core.header.accountDialog.validation.passwordRequired'),
-  (v: string) => v.length >= 8 || t('core.header.accountDialog.validation.passwordMinLength')
+  (v: string) => !isPasswordChangeAttempted.value || !!v || t('core.header.accountDialog.validation.passwordRequired'),
+  (v: string) => !v || v.length >= 8 || t('core.header.accountDialog.validation.passwordMinLength')
 ]);
 const confirmPasswordRules = computed(() => [
-  (v: string) => !newPassword.value || !!v || t('core.header.accountDialog.validation.passwordRequired'),
-  (v: string) => !newPassword.value || v === newPassword.value || t('core.header.accountDialog.validation.passwordMatch')
+  (v: string) => !isPasswordChangeAttempted.value || !!v || t('core.header.accountDialog.validation.passwordRequired'),
+  (v: string) => !isPasswordChangeAttempted.value || v === newPassword.value || t('core.header.accountDialog.validation.passwordMatch')
 ]);
 const usernameRules = computed(() => [
   (v: string) => !v || v.length >= 3 || t('core.header.accountDialog.validation.usernameMinLength')
@@ -223,7 +224,12 @@ async function accountEdit() {
   accountEditStatus.value.error = false;
   accountEditStatus.value.success = false;
 
-  const { valid } = await accountFormRef.value?.validate() ?? { valid: false };
+  if (!accountFormRef.value) {
+    console.error('Account form reference is not available.');
+    return;
+  }
+
+  const { valid } = await accountFormRef.value.validate();
   if (!valid) {
     return;
   }
