@@ -532,6 +532,10 @@
         "description": "Telegram Command Auto Refresh Interval",
         "hint": "Telegram command auto-refresh interval in seconds."
       },
+      "telegram_polling_restart_delay": {
+        "description": "Telegram Polling Restart Delay",
+        "hint": "Waiting time in seconds when the polling loop needs to restart after unexpected exits. Defaults to 5s."
+      },
       "telegram_token": {
         "description": "Bot Token",
         "hint": "If you are in mainland China, set a proxy or change api_base in Other Settings."
