@@ -1,10 +1,22 @@
 """如需修改配置,请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改｡"""
 
+import binascii
+import hashlib
 import os
+import secrets
 from importlib import metadata
 from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+
+def _generate_random_dashboard_password_hash() -> str:
+    iterations = 200_000
+    salt = secrets.token_bytes(16)
+    secret = secrets.token_bytes(32)
+    dk = hashlib.pbkdf2_hmac("sha256", secret, salt, iterations)
+    return f"pbkdf2_sha256${iterations}${binascii.hexlify(salt).decode()}${dk.hex()}"
+
 
 try:
     __version__ = metadata.version("AstrBot")
@@ -203,7 +215,7 @@ DEFAULT_CONFIG = {
     "dashboard": {
         "enable": True,
         "username": "astrbot",
-        "password": "e045f42cb3af61cad0d5ea200ad3faa9ff185b844af554dd1294195c6050511a",
+        "password": _generate_random_dashboard_password_hash(),
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,

@@ -11,10 +11,6 @@ import anyio
 import psutil
 from quart import request
 
-from astrbot.cli.commands.cmd_conf import (
-    DEFAULT_DASHBOARD_PASSWORD_MD5,
-    DEFAULT_DASHBOARD_PASSWORD_SHA256,
-)
 from astrbot.core import DEMO_MODE, logger
 from astrbot.core.config import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -71,14 +67,7 @@ class StatRoute(Route):
         return {"hours": hours, "minutes": minutes, "seconds": seconds}
 
     def is_default_cred(self):
-        username = self.config["dashboard"]["username"]
-        password = self.config["dashboard"]["password"]
-        return (
-            username == "astrbot"
-            and password
-            in {DEFAULT_DASHBOARD_PASSWORD_MD5, DEFAULT_DASHBOARD_PASSWORD_SHA256}
-            and not DEMO_MODE
-        )
+        return False
 
     async def get_version(self):
         need_migration = await check_migration_needed_v4(self.core_lifecycle.db)

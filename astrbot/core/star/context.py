@@ -15,6 +15,7 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.exceptions import ProviderNotFoundError
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_mgr import PersonaManager
@@ -37,7 +38,6 @@ from astrbot.core.star.filter.platform_adapter_type import (
 )
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 
-from ..exceptions import ProviderNotFoundError
 from .filter.command import CommandFilter
 from .filter.regex import RegexFilter
 from .star import StarMetadata, star_map, star_registry
@@ -46,6 +46,7 @@ from .star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
+    from astrbot.core.astr_agent_context import AstrAgentContext
     from astrbot.core.cron.manager import CronJobManager
 
 
@@ -62,10 +63,10 @@ class StarManagerProtocol(Protocol):
 class Context:
     """暴露给插件的接口上下文｡"""
 
-    registered_web_apis: list = []
+    registered_web_apis: list | None = None
 
     # 向后兼容的变量
-    _register_tasks: list[Awaitable[Any]] = []
+    _register_tasks: list[Awaitable[Any]] | None = None
     _star_manager: StarManagerProtocol | None = None
 
     def __init__(
@@ -165,6 +166,9 @@ class Context:
         contexts: list[Message] | None = None,
         max_steps: int = 30,
         tool_call_timeout: int = 60,
+        stream: bool = False,
+        agent_hooks: BaseAgentRunHooks[AstrAgentContext] | None = None,
+        agent_context: AstrAgentContext | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Run an agent loop that allows the LLM to call tools iteratively until a final answer is produced.
@@ -180,12 +184,10 @@ class Context:
             system_prompt: System prompt to guide the LLM's behavior, if provided, it will always insert as the first system message in the context
             contexts: context messages for the LLM
             max_steps: Maximum number of tool calls before stopping the loop
-            **kwargs: Additional keyword arguments. The kwargs will not be passed to the LLM directly for now, but can include:
-                stream: bool - whether to stream the LLM response
-                agent_hooks: BaseAgentRunHooks[AstrAgentContext] - hooks to run during agent execution
-                agent_context: AstrAgentContext - context to use for the agent
-
-                other kwargs will be DIRECTLY passed to the runner.reset() method
+            stream: Whether to stream the LLM response.
+            agent_hooks: Hooks to run during agent execution.
+            agent_context: Context to use for the agent. If omitted, a new one is created.
+            **kwargs: Additional keyword arguments passed directly to `runner.reset()`.
 
         Returns:
             The final LLMResponse after tool calls are completed.
@@ -205,8 +207,7 @@ class Context:
         if not prov or not isinstance(prov, Provider):
             raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
 
-        agent_hooks = kwargs.get("agent_hooks") or BaseAgentRunHooks[AstrAgentContext]()
-        agent_context = kwargs.get("agent_context")
+        agent_hooks = agent_hooks or BaseAgentRunHooks[AstrAgentContext]()
 
         context_ = []
         for msg in contexts or []:
@@ -230,14 +231,6 @@ class Context:
         agent_runner = ToolLoopAgentRunner()
         tool_executor = FunctionToolExecutor()
 
-        streaming = kwargs.get("stream", False)
-
-        other_kwargs = {
-            k: v
-            for k, v in kwargs.items()
-            if k not in ["stream", "agent_hooks", "agent_context"]
-        }
-
         await agent_runner.reset(
             provider=prov,
             request=request,
@@ -247,8 +240,8 @@ class Context:
             ),
             tool_executor=tool_executor,
             agent_hooks=agent_hooks,
-            streaming=streaming,
-            **other_kwargs,
+            streaming=stream,
+            **kwargs,
         )
         async for _ in agent_runner.step_until_done(max_steps):
             pass
@@ -522,6 +515,8 @@ class Context:
         Note:
             如果相同路由和方法已注册,会替换现有的 API｡
         """
+        if self.registered_web_apis is None:
+            self.registered_web_apis = []
         for idx, api in enumerate(self.registered_web_apis):
             if api[0] == route and methods == api[2]:
                 self.registered_web_apis[idx] = (route, view_handler, methods, desc)
@@ -687,4 +682,6 @@ class Context:
         Note:
             该方法已弃用｡
         """
+        if self._register_tasks is None:
+            self._register_tasks = []
         self._register_tasks.append(task)

@@ -111,7 +111,7 @@ async def check_dashboard_files(webui_dir: str | None = None):
     return data_dist_path
 
 
-async def main_async(webui_dir_arg: str | None) -> None:
+async def main_async(webui_dir_arg: str | None, log_broker: LogBroker) -> None:
     """主异步入口"""
     # 检查仪表板文件
     webui_dir = await check_dashboard_files(webui_dir_arg)
@@ -148,4 +148,4 @@ if __name__ == "__main__":
     LogManager.set_queue_handler(logger, log_broker)
 
     # 只使用一次 asyncio.run()
-    asyncio.run(main_async(args.webui_dir))
+    asyncio.run(main_async(args.webui_dir, log_broker))

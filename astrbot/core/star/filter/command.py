@@ -6,8 +6,8 @@ from typing import Any
 
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.star.star_handler import StarHandlerMetadata
 
-from ..star_handler import StarHandlerMetadata
 from . import HandlerFilter
 from .custom_filter import CustomFilter
 
@@ -177,7 +177,7 @@ class CommandFilter(HandlerFilter):
             return self._cmpl_cmd_names
         self._cmpl_cmd_names = [
             f"{parent} {cmd}" if parent else cmd
-            for cmd in [self.command_name] + list(self.alias)
+            for cmd in [self.command_name, *self.alias]
             for parent in self.parent_command_names or [""]
         ]
         return self._cmpl_cmd_names

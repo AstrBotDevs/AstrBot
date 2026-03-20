@@ -129,7 +129,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             if not msg_type:
                 return f"error: messages[{idx}].type is required."
 
-            file_from_sandbox = False
+            _file_from_sandbox = False
 
             try:
                 if msg_type == "plain":
@@ -143,7 +143,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if path:
                         (
                             local_path,
-                            file_from_sandbox,
+                            _file_from_sandbox,
                         ) = await self._resolve_path_from_sandbox(context, path)
                         components.append(Comp.Image.fromFileSystem(path=local_path))
                     elif url:
@@ -156,7 +156,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if path:
                         (
                             local_path,
-                            file_from_sandbox,
+                            _file_from_sandbox,
                         ) = await self._resolve_path_from_sandbox(context, path)
                         components.append(Comp.Record.fromFileSystem(path=local_path))
                     elif url:

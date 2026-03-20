@@ -12,9 +12,7 @@ from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import astrbot_paths
 
 from .cmd_conf import (
-    _validate_dashboard_password,
     ensure_config_file,
-    prompt_dashboard_password,
     set_dashboard_credentials,
 )
 
@@ -105,35 +103,33 @@ async def initialize_astrbot(
         else:
             click.echo("No config.template found; skipping .env generation")
 
-    if admin_password and not admin_username:
+    if admin_password is not None:
         raise click.ClickException(
-            "--admin-password requires --admin-username to be provided"
+            "--admin-password is no longer supported during init. "
+            "Run 'astrbot conf password' after initialization."
         )
 
+    effective_admin_username = (
+        admin_username.strip()
+        if admin_username
+        else str(DEFAULT_CONFIG["dashboard"]["username"])
+    )
     if admin_username:
-        password_hash = (
-            _validate_dashboard_password(admin_password)
-            if admin_password is not None
-            else None
-        )
-        if password_hash is None:
-            if yes or os.environ.get("ASTRBOT_SYSTEMD") == "1":
-                raise click.ClickException(
-                    "Non-interactive init requires --admin-password when --admin-username is set"
-                )
-            password_hash = prompt_dashboard_password("Dashboard admin password")
-
         config = ensure_config_file()
         set_dashboard_credentials(
             config,
-            username=admin_username.strip(),
-            password_hash=password_hash,
+            username=effective_admin_username,
+            password_hash=None,
         )
         config_path.write_text(
             json.dumps(config, ensure_ascii=False, indent=2),
             encoding="utf-8-sig",
         )
-        click.echo(f"Configured dashboard admin username: {admin_username.strip()}")
+    click.echo(f"Configured dashboard admin username: {effective_admin_username}")
+    click.echo(
+        "Dashboard password is not initialized for interactive use. "
+        "Run 'astrbot conf password' before the first login."
+    )
 
     if not backend_only and (
         yes
@@ -165,7 +161,7 @@ async def initialize_astrbot(
     "-p",
     "--admin-password",
     type=str,
-    help="Set dashboard admin password during initialization without prompting",
+    help="Deprecated. Run `astrbot conf password` after initialization.",
 )
 @click.option(
     "--root",

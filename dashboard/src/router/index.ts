@@ -17,7 +17,7 @@ export const router = createRouter({
 interface AuthStore {
   username: string;
   returnUrl: string | null;
-  login(username: string, password: string, passwordMd5?: string): Promise<void>;
+  login(username: string, password: string): Promise<void>;
   logout(): void;
   has_token(): boolean;
 }

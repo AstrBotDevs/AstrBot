@@ -3,7 +3,6 @@ import { ref, computed, watch } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import axios from "@/utils/request";
 import Logo from "@/components/shared/Logo.vue";
-import { hashDashboardPassword } from "@/utils/passwordHash";
 import { useAuthStore } from "@/stores/auth";
 import { useCommonStore } from "@/stores/common";
 import { MarkdownRender, enableKatex, enableMermaid } from "markstream-vue";
@@ -271,19 +270,11 @@ async function accountEdit() {
   accountEditStatus.value.error = false;
   accountEditStatus.value.success = false;
 
-  const [passwordHashes, newPasswordHashes, confirmPasswordHashes] =
-    await Promise.all([
-      hashDashboardPassword(password.value),
-      hashDashboardPassword(newPassword.value),
-      hashDashboardPassword(confirmPassword.value),
-    ]);
-
   axios
     .post("/api/auth/account/edit", {
-      password: passwordHashes.sha256,
-      password_md5: passwordHashes.md5,
-      new_password: newPasswordHashes.sha256,
-      confirm_password: confirmPasswordHashes.sha256,
+      password: password.value,
+      new_password: newPassword.value,
+      confirm_password: confirmPassword.value,
       new_username: newUsername.value ? newUsername.value : username,
     })
     .then((res) => {

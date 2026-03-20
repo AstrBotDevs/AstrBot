@@ -63,3 +63,5 @@ GenieData/
 .kilocode/
 .serena
 .worktrees/
+
+.env

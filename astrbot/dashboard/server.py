@@ -260,7 +260,8 @@ class AstrBotDashboard:
     def _init_plugin_route_index(self):
         """将插件路由索引,避免 O(n) 查找"""
         self._plugin_route_map: dict[tuple[str, str], Callable] = {}
-
+        if self.core_lifecycle.star_context.registered_web_apis is None:
+            self.core_lifecycle.star_context.registered_web_apis = []
         for (
             route,
             handler,

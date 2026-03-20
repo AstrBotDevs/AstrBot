@@ -13,6 +13,7 @@ import pytest_asyncio
 from quart import Quart
 from werkzeug.datastructures import FileStorage
 
+from astrbot.cli.commands.cmd_conf import hash_dashboard_password_secure
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
@@ -27,6 +28,8 @@ from tests.fixtures.helpers import (
     create_mock_updater_update,
 )
 
+TEST_DASHBOARD_PASSWORD = "astrbot-test-password"
+
 
 @pytest_asyncio.fixture(scope="module")
 async def core_lifecycle_td(tmp_path_factory):
@@ -36,6 +39,10 @@ async def core_lifecycle_td(tmp_path_factory):
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
+    core_lifecycle.astrbot_config["dashboard"]["username"] = "astrbot"
+    core_lifecycle.astrbot_config["dashboard"]["password"] = (
+        hash_dashboard_password_secure(TEST_DASHBOARD_PASSWORD)
+    )
     try:
         yield core_lifecycle
     finally:
@@ -66,7 +73,7 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": core_lifecycle_td.astrbot_config["dashboard"]["password"],
+            "password": TEST_DASHBOARD_PASSWORD,
         },
     )
     data = await response.get_json()
@@ -90,31 +97,32 @@ async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": core_lifecycle_td.astrbot_config["dashboard"]["password"],
+            "password": TEST_DASHBOARD_PASSWORD,
         },
     )
     data = await response.get_json()
-    assert data["status"] == "ok" and "token" in data["data"]
+    assert data["status"] == "ok"
+    assert "token" in data["data"]
 
 
 @pytest.mark.asyncio
-async def test_auth_login_accepts_legacy_md5_password(
+async def test_auth_login_rejects_legacy_md5_password(
     app: Quart, core_lifecycle_td: AstrBotCoreLifecycle
 ):
     test_client = app.test_client()
     username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
-    legacy_md5 = hashlib.md5(b"astrbot").hexdigest()
+    legacy_md5 = hashlib.md5(TEST_DASHBOARD_PASSWORD.encode("utf-8")).hexdigest()
 
     response = await test_client.post(
         "/api/auth/login",
         json={
             "username": username,
-            "password": "invalid-sha256",
+            "password": "",
             "password_md5": legacy_md5,
         },
     )
     data = await response.get_json()
-    assert data["status"] == "ok"
+    assert data["status"] == "error"
 
 
 @pytest.mark.asyncio
@@ -125,7 +133,8 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
     response = await test_client.get("/api/stat/get", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
-    assert data["status"] == "ok" and "platform" in data["data"]
+    assert data["status"] == "ok"
+    assert "platform" in data["data"]
 
 
 @pytest.mark.asyncio

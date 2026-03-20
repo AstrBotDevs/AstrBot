@@ -1,29 +1,19 @@
 <script setup lang="ts">
-import { ref, useCssModule } from "vue";
+import { ref } from "vue";
 import { useAuthStore } from "@/stores/auth";
 import { Form } from "vee-validate";
-import md5 from "js-md5";
 import { useModuleI18n } from "@/i18n/composables";
 
 const { tm: t } = useModuleI18n("features/auth");
 
-const valid = ref(false);
 const show1 = ref(false);
 const password = ref("");
 const username = ref("");
 const loading = ref(false);
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-async function validate(values: any, { setErrors }: any) {
+async function validate(_values: any, { setErrors }: any) {
   loading.value = true;
-
-  // md5加密
-  let password_ = password.value;
-  if (password.value != "") {
-    // js-md5 在不同的模块解析下可能被视为一个不可调用的命名空间。
-    // 在这里通过类型断言为一个可调用签名，既能通过类型检查，又保留运行时行为。
-    password_ = (md5 as unknown as (s: string) => string)(password.value);
-  }
 
   const authStore = useAuthStore();
   const redirectParam = new URLSearchParams(window.location.search).get(
@@ -32,9 +22,8 @@ async function validate(values: any, { setErrors }: any) {
   // 将 string | null 显式断言为与 store 兼容的类型，避免因 store 初始状态推断不完整而导致的编译错误
   authStore.returnUrl = redirectParam as unknown as string | null;
   return authStore
-    .login(username.value, password_)
-    .then((res) => {
-      console.log(res);
+    .login(username.value, password.value)
+    .then(() => {
       loading.value = false;
     })
     .catch((err) => {
@@ -86,7 +75,6 @@ async function validate(values: any, { setErrors }: any) {
       class="login-btn mt-8"
       variant="flat"
       size="large"
-      :disabled="valid"
       type="submit"
     >
       <span class="login-btn-text">{{ t("login") }}</span>
