@@ -148,7 +148,7 @@ async def test_platform_client_accepts_message_session() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_mock_context_p0_6_platform_and_session_managers() -> None:
+async def test_mock_context_platform_and_session_managers() -> None:
     ctx = MockContext(plugin_id="sdk-demo")
     session = "test-platform:group:room-7"
     ctx.router.set_session_plugin_config(

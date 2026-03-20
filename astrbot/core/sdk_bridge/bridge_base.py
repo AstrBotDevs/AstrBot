@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, cast
 
-from astrbot_sdk._invocation_context import current_caller_plugin_id
+from astrbot_sdk._internal.invocation_context import current_caller_plugin_id
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.runtime.capability_router import CapabilityRouter
 

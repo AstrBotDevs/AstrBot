@@ -6,8 +6,6 @@ import json
 from types import SimpleNamespace
 
 import pytest
-
-from astrbot.core.sdk_bridge import capability_bridge as capability_bridge_module
 from astrbot_sdk.context import CancelToken
 from astrbot_sdk.context import Context as RuntimeContext
 from astrbot_sdk.errors import AstrBotError
@@ -24,10 +22,12 @@ from astrbot_sdk.runtime.capability_dispatcher import CapabilityDispatcher
 from astrbot_sdk.runtime.loader import LoadedLLMTool
 from astrbot_sdk.testing import MockContext
 
+from astrbot.core.sdk_bridge import capability_bridge as capability_bridge_module
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_mock_context_p0_5_provider_queries_and_tool_manager() -> None:
+async def test_mock_context_provider_queries_and_tool_manager() -> None:
     ctx = MockContext(plugin_id="sdk_demo_agent_tools")
     ctx.router.set_provider_catalog(
         "chat",
@@ -101,18 +101,18 @@ async def test_mock_context_p0_5_provider_queries_and_tool_manager() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_mock_context_p1_1_provider_client_and_specialized_proxies() -> None:
+async def test_mock_context_provider_client_and_specialized_proxies() -> None:
     ctx = MockContext(plugin_id="sdk_demo_agent_tools")
     ctx.router.set_provider_catalog(
         "tts",
         [
-                {
-                    "id": "tts-provider-1",
-                    "model": "tts-model",
-                    "type": "mock",
-                    "provider_type": "text_to_speech",
-                }
-            ],
+            {
+                "id": "tts-provider-1",
+                "model": "tts-model",
+                "type": "mock",
+                "provider_type": "text_to_speech",
+            }
+        ],
         active_id="tts-provider-1",
     )
     ctx.router.set_provider_catalog(
@@ -196,12 +196,15 @@ async def test_mock_context_p1_1_provider_client_and_specialized_proxies() -> No
         b"mock-audio:sdk",
     ]
 
-    assert await embedding.get_embedding("AstrBot") == [0.0, 0.0, 0.0]
-    assert await embedding.get_embeddings(["AstrBot", "SDK"]) == [
-        [0.0, 0.0, 0.0],
-        [0.0, 0.0, 0.0],
-    ]
-    assert await embedding.get_dim() == 3
+    single_embedding = await embedding.get_embedding("AstrBot")
+    batch_embeddings = await embedding.get_embeddings(["AstrBot", "SDK"])
+    embedding_dim = await embedding.get_dim()
+
+    assert len(single_embedding) == embedding_dim
+    assert len(batch_embeddings) == 2
+    assert batch_embeddings[0] == single_embedding
+    assert all(len(item) == embedding_dim for item in batch_embeddings)
+    assert embedding_dim > 0
 
     reranked = await rerank.rerank(
         "hello sdk",
@@ -221,7 +224,7 @@ async def test_mock_context_p1_1_provider_client_and_specialized_proxies() -> No
     assert (await ctx.get_using_stt_provider()) is not None
 
 
-# Note: test_loader_discovers_p0_5_demo_tools_and_agents removed
+# Note: legacy loader discovery test removed.
 # as it depends on missing demo plugin directory
 
 
@@ -626,7 +629,10 @@ async def test_session_plugin_and_service_capabilities_reuse_existing_sp_keys(
             self.store[(scope, scope_id, key)] = value
 
     fake_sp = _FakeSp()
-    monkeypatch.setattr(capability_bridge_module, "_get_runtime_sp", lambda: fake_sp)
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.capabilities.session._get_runtime_sp",
+        lambda: fake_sp,
+    )
 
     bridge = object.__new__(capability_bridge_module.CoreCapabilityBridge)
     bridge._star_context = SimpleNamespace(

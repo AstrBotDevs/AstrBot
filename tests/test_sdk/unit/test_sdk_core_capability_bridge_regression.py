@@ -1,9 +1,11 @@
 # ruff: noqa: E402
 from __future__ import annotations
 
+import sqlite3
 import sys
 import types
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -179,18 +181,14 @@ async def test_core_capability_bridge_serves_registered_plugin_config() -> None:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_core_memory_search_uses_hybrid_ranking_and_runtime_stats(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fake_sp = _FakeMemorySp()
     embedding_provider = _FakeEmbeddingProvider()
     plugin_bridge = _FakePluginBridge()
     bridge = CoreCapabilityBridge(
         star_context=_FakeMemoryStarContext(embedding_provider),
         plugin_bridge=plugin_bridge,
-    )
-    monkeypatch.setattr(
-        "astrbot.core.sdk_bridge.capabilities.basic._get_runtime_sp",
-        lambda: fake_sp,
     )
     monkeypatch.setattr(
         "astrbot.core.sdk_bridge.capabilities.basic._get_runtime_provider_types",
@@ -199,6 +197,10 @@ async def test_core_memory_search_uses_hybrid_ranking_and_runtime_stats(
     monkeypatch.setattr(
         "astrbot.core.sdk_bridge.capabilities.provider._get_runtime_provider_types",
         lambda: (object, object, _FakeEmbeddingProvider, object),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.capabilities.basic.get_astrbot_plugin_data_path",
+        lambda: str(tmp_path / "plugin_data"),
     )
 
     await bridge._memory_save(
@@ -238,9 +240,9 @@ async def test_core_memory_search_uses_hybrid_ranking_and_runtime_stats(
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_core_memory_sidecars_are_scoped_per_plugin(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fake_sp = _FakeMemorySp()
     embedding_provider = _FakeEmbeddingProvider()
 
     class _RoutingPluginBridge(_FakePluginBridge):
@@ -256,16 +258,16 @@ async def test_core_memory_sidecars_are_scoped_per_plugin(
         plugin_bridge=_RoutingPluginBridge(),
     )
     monkeypatch.setattr(
-        "astrbot.core.sdk_bridge.capabilities.basic._get_runtime_sp",
-        lambda: fake_sp,
-    )
-    monkeypatch.setattr(
         "astrbot.core.sdk_bridge.capabilities.basic._get_runtime_provider_types",
         lambda: (object, object, _FakeEmbeddingProvider, object),
     )
     monkeypatch.setattr(
         "astrbot.core.sdk_bridge.capabilities.provider._get_runtime_provider_types",
         lambda: (object, object, _FakeEmbeddingProvider, object),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.capabilities.basic.get_astrbot_plugin_data_path",
+        lambda: str(tmp_path / "plugin_data"),
     )
 
     await bridge._memory_save(
@@ -295,16 +297,16 @@ async def test_core_memory_sidecars_are_scoped_per_plugin(
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_core_memory_ttl_restores_expiration_after_sidecar_reset(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fake_sp = _FakeMemorySp()
     bridge = CoreCapabilityBridge(
         star_context=_FakeMemoryStarContext(),
         plugin_bridge=_FakePluginBridge(),
     )
     monkeypatch.setattr(
-        "astrbot.core.sdk_bridge.capabilities.basic._get_runtime_sp",
-        lambda: fake_sp,
+        "astrbot.core.sdk_bridge.capabilities.basic.get_astrbot_plugin_data_path",
+        lambda: str(tmp_path / "plugin_data"),
     )
 
     await bridge._memory_save_with_ttl(
@@ -317,19 +319,36 @@ async def test_core_memory_ttl_restores_expiration_after_sidecar_reset(
         None,
     )
 
-    stored_key = ("sdk_memory", "ai_girlfriend", "temp-note")
-    stored = fake_sp.store[stored_key]
-    assert isinstance(stored, dict)
-    assert "expires_at" in stored
+    backend = bridge._memory_backend_for_plugin("ai_girlfriend")
+    assert backend._db_path.exists() is True  # noqa: SLF001
+    with sqlite3.connect(backend._db_path) as conn:  # noqa: SLF001
+        row = conn.execute(
+            """
+            SELECT expires_at
+            FROM memory_records
+            WHERE namespace = ? AND key = ?
+            """,
+            ("", "temp-note"),
+        ).fetchone()
+        assert row is not None
+        assert row[0] is not None
 
+    bridge._memory_backends_by_plugin = {}
     bridge._memory_index_by_plugin = {}
     bridge._memory_dirty_keys_by_plugin = {}
     bridge._memory_expires_at_by_plugin = {}
-    stored["expires_at"] = (
-        datetime.now(timezone.utc) - timedelta(seconds=1)
-    ).isoformat()
+    expired_at = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+    with sqlite3.connect(backend._db_path) as conn:  # noqa: SLF001
+        conn.execute(
+            """
+            UPDATE memory_records
+            SET expires_at = ?
+            WHERE namespace = ? AND key = ?
+            """,
+            (expired_at, "", "temp-note"),
+        )
+        conn.commit()
 
     result = await bridge._memory_get("req-1", {"key": "temp-note"}, None)
 
     assert result == {"value": None}
-    assert stored_key not in fake_sp.store

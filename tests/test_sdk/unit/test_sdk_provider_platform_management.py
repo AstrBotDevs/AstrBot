@@ -57,7 +57,7 @@ def _install_optional_dependency_stubs() -> None:
 _install_optional_dependency_stubs()
 
 from astrbot_sdk import PlatformStatus
-from astrbot_sdk._invocation_context import caller_plugin_scope
+from astrbot_sdk._internal.invocation_context import caller_plugin_scope
 from astrbot_sdk.clients.provider import ProviderManagerClient
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.llm.entities import ProviderType
@@ -68,7 +68,7 @@ from astrbot.core.sdk_bridge.capability_bridge import CoreCapabilityBridge
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_mock_context_p1_3_merged_provider_config_is_reserved_only() -> None:
+async def test_mock_context_merged_provider_config_is_reserved_only() -> None:
     ordinary_ctx = MockContext(plugin_id="plain-plugin")
     with caller_plugin_scope("plain-plugin"):
         with pytest.raises(AstrBotError, match="reserved/system"):
@@ -96,7 +96,7 @@ async def test_mock_context_p1_3_merged_provider_config_is_reserved_only() -> No
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_mock_context_p1_3_merged_provider_config_keeps_nested_payload() -> None:
+async def test_mock_context_merged_provider_config_keeps_nested_payload() -> None:
     ctx = MockContext(
         plugin_id="reserved-plugin",
         plugin_metadata={"reserved": True},
@@ -197,7 +197,7 @@ async def test_provider_client_get_merged_provider_config_rejects_non_reserved_p
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_mock_context_p1_3_provider_management_is_reserved_only() -> None:
+async def test_mock_context_provider_management_is_reserved_only() -> None:
     ordinary_ctx = MockContext(plugin_id="plain-plugin")
     with pytest.raises(AstrBotError, match="reserved/system"):
         await ordinary_ctx.provider_manager.get_insts()
@@ -262,7 +262,7 @@ async def test_mock_context_p1_3_provider_management_is_reserved_only() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_mock_context_p1_3_platform_facade_refresh_and_clear_errors() -> None:
+async def test_mock_context_platform_facade_refresh_and_clear_errors() -> None:
     ordinary_ctx = MockContext(plugin_id="plain-plugin")
     ordinary_platform = await ordinary_ctx.get_platform_inst("mock-platform")
     assert ordinary_platform is not None
@@ -506,7 +506,7 @@ class _FakePluginBridge:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_p1_3_core_bridge_reserved_gate_and_stream_cleanup() -> None:
+async def test_core_bridge_reserved_gate_and_stream_cleanup() -> None:
     provider_manager = _FakeProviderManager()
     platform = _FakePlatform()
     bridge = CoreCapabilityBridge(
@@ -587,7 +587,7 @@ async def test_p1_3_core_bridge_reserved_gate_and_stream_cleanup() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_p1_3_core_bridge_merged_provider_config_reserved_gate() -> None:
+async def test_core_bridge_merged_provider_config_reserved_gate() -> None:
     provider_manager = _FakeProviderManager()
     bridge = CoreCapabilityBridge(
         star_context=cast(
@@ -617,7 +617,7 @@ async def test_p1_3_core_bridge_merged_provider_config_reserved_gate() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_p1_3_core_bridge_merged_provider_config_returns_merged_shape() -> None:
+async def test_core_bridge_merged_provider_config_returns_merged_shape() -> None:
     provider_manager = _FakeProviderManager()
     bridge = CoreCapabilityBridge(
         star_context=cast(
@@ -670,7 +670,7 @@ async def test_p1_3_core_bridge_merged_provider_config_returns_merged_shape() ->
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_p1_3_core_bridge_merged_provider_config_unknown_provider_fails() -> None:
+async def test_core_bridge_merged_provider_config_unknown_provider_fails() -> None:
     provider_manager = _FakeProviderManager()
     bridge = CoreCapabilityBridge(
         star_context=cast(

@@ -52,7 +52,6 @@ def _install_optional_dependency_stubs() -> None:
 
 _install_optional_dependency_stubs()
 
-from astrbot.core.sdk_bridge.capability_bridge import CoreCapabilityBridge
 from astrbot_sdk import MessageSession
 from astrbot_sdk.clients.managers import (
     ConversationCreateParams,
@@ -65,10 +64,12 @@ from astrbot_sdk.clients.managers import (
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.testing import MockContext
 
+from astrbot.core.sdk_bridge.capability_bridge import CoreCapabilityBridge
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_mock_context_p1_2_manager_clients_round_trip() -> None:
+async def test_mock_context_manager_clients_round_trip() -> None:
     ctx = MockContext(plugin_id="sdk-demo")
 
     assert ctx.persona_manager is ctx.personas
@@ -261,7 +262,7 @@ class _FakeKnowledgeBaseManager:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_p1_2_bridge_serializes_kb_record_and_preserves_delete_none_semantics() -> (
+async def test_bridge_serializes_kb_record_and_preserves_delete_none_semantics() -> (
     None
 ):
     fake_conversation_manager = _FakeConversationManager()
@@ -326,7 +327,7 @@ async def test_p1_2_bridge_serializes_kb_record_and_preserves_delete_none_semant
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_p1_2_bridge_validates_conversation_session_inputs() -> None:
+async def test_bridge_validates_conversation_session_inputs() -> None:
     bridge = CoreCapabilityBridge(
         star_context=SimpleNamespace(
             persona_manager=_FakePersonaManager(),
