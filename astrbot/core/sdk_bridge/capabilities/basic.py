@@ -1,16 +1,55 @@
 from __future__ import annotations
 
-import json
+from pathlib import Path
 from typing import Any
 
+from astrbot_sdk._memory_backend import PluginMemoryBackend
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.runtime.capability_router import StreamExecution
 
-from ..bridge_base import _get_runtime_sp
+from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+
+from ..bridge_base import _get_runtime_provider_types, _get_runtime_sp
 from ._host import CapabilityMixinHost
 
 
 class BasicCapabilityMixin(CapabilityMixinHost):
+    def _memory_backend_for_plugin(self, plugin_id: str) -> PluginMemoryBackend:
+        backend = self._memory_backends_by_plugin.get(plugin_id)
+        if backend is None:
+            backend = PluginMemoryBackend(
+                Path(get_astrbot_plugin_data_path()) / plugin_id
+            )
+            self._memory_backends_by_plugin[plugin_id] = backend
+        return backend
+
+    def _resolve_memory_embedding_provider_id(
+        self,
+        payload: dict[str, Any],
+        *,
+        required: bool,
+    ) -> str | None:
+        provider_id = str(payload.get("provider_id", "")).strip()
+        _, _, embedding_provider_cls, _ = _get_runtime_provider_types()
+        if provider_id:
+            provider = self._star_context.get_provider_by_id(provider_id)
+            if provider is None or not isinstance(provider, embedding_provider_cls):
+                raise AstrBotError.invalid_input(
+                    f"memory.search unknown embedding provider: {provider_id}"
+                )
+            return provider_id
+        providers = self._star_context.get_all_embedding_providers()
+        if providers:
+            provider = providers[0]
+            provider_id = str(getattr(provider.meta(), "id", "") or "").strip()
+            if provider_id:
+                return provider_id
+        if required:
+            raise AstrBotError.invalid_input(
+                "memory.search requires an embedding provider",
+            )
+        return None
+
     def _register_db_capabilities(self) -> None:
         self.register(
             self._builtin_descriptor("db.get", "Read plugin kv"),
@@ -211,13 +250,92 @@ class BasicCapabilityMixin(CapabilityMixinHost):
     ) -> dict[str, Any]:
         plugin_id = self._resolve_plugin_id(request_id)
         query = str(payload.get("query", ""))
-        entries = await self._load_memory_entries(plugin_id)
-        items = [
-            {"key": key, "value": value}
-            for key, value in entries.items()
-            if query in key or query in json.dumps(value, ensure_ascii=False)
-        ]
+        mode = str(payload.get("mode", "auto")).strip().lower() or "auto"
+        limit = self._optional_int(payload.get("limit"))
+        raw_min_score = payload.get("min_score")
+        min_score = float(raw_min_score) if raw_min_score is not None else None
+        namespace = str(payload.get("namespace")) if payload.get("namespace") else None
+        include_descendants = bool(payload.get("include_descendants", True))
+        provider_id = self._resolve_memory_embedding_provider_id(
+            payload,
+            required=mode in {"vector", "hybrid"},
+        )
+        effective_mode = mode
+        if effective_mode == "auto":
+            effective_mode = "hybrid" if provider_id is not None else "keyword"
+        backend = self._memory_backend_for_plugin(plugin_id)
+        items = await backend.search(
+            query,
+            namespace=namespace,
+            include_descendants=include_descendants,
+            mode=effective_mode,
+            limit=limit,
+            min_score=min_score,
+            provider_id=provider_id,
+            embed_one=(
+                (
+                    lambda text: self._memory_embedding_for_text(
+                        request_id,
+                        provider_id,
+                        text,
+                        _token,
+                    )
+                )
+                if provider_id is not None and effective_mode in {"vector", "hybrid"}
+                else None
+            ),
+            embed_many=(
+                (
+                    lambda texts: self._memory_embeddings_for_texts(
+                        request_id,
+                        provider_id,
+                        texts,
+                        _token,
+                    )
+                )
+                if provider_id is not None and effective_mode in {"vector", "hybrid"}
+                else None
+            ),
+        )
         return {"items": items}
+
+    async def _memory_embedding_for_text(
+        self,
+        request_id: str,
+        provider_id: str,
+        text: str,
+        token,
+    ) -> list[float]:
+        output = await self._provider_embedding_get_embedding(
+            request_id,
+            {"provider_id": provider_id, "text": text},
+            token,
+        )
+        embedding = output.get("embedding")
+        if not isinstance(embedding, list):
+            return []
+        return [float(item) for item in embedding]
+
+    async def _memory_embeddings_for_texts(
+        self,
+        request_id: str,
+        provider_id: str,
+        texts: list[str],
+        token,
+    ) -> list[list[float]]:
+        output = await self._provider_embedding_get_embeddings(
+            request_id,
+            {"provider_id": provider_id, "texts": texts},
+            token,
+        )
+        embeddings = output.get("embeddings")
+        if not isinstance(embeddings, list):
+            return []
+        return [
+            [float(value) for value in item]
+            for item in embeddings
+            if isinstance(item, list)
+        ]
 
     async def _memory_save(
         self,
@@ -229,11 +347,14 @@ class BasicCapabilityMixin(CapabilityMixinHost):
         value = payload.get("value")
         if not isinstance(value, dict):
             raise AstrBotError.invalid_input("memory.save requires an object value")
-        await _get_runtime_sp().put_async(
-            self.MEMORY_SCOPE,
-            plugin_id,
+        await self._memory_backend_for_plugin(plugin_id).save(
             str(payload.get("key", "")),
             value,
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
         )
         return {}
 
@@ -244,11 +365,13 @@ class BasicCapabilityMixin(CapabilityMixinHost):
         _token,
     ) -> dict[str, Any]:
         plugin_id = self._resolve_plugin_id(request_id)
-        value = await _get_runtime_sp().get_async(
-            self.MEMORY_SCOPE,
-            plugin_id,
+        value = await self._memory_backend_for_plugin(plugin_id).get(
             str(payload.get("key", "")),
-            None,
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
         )
         return {"value": value}
 
@@ -259,10 +382,13 @@ class BasicCapabilityMixin(CapabilityMixinHost):
         _token,
     ) -> dict[str, Any]:
         plugin_id = self._resolve_plugin_id(request_id)
-        await _get_runtime_sp().remove_async(
-            self.MEMORY_SCOPE,
-            plugin_id,
+        await self._memory_backend_for_plugin(plugin_id).delete(
             str(payload.get("key", "")),
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
         )
         return {}
 
@@ -279,11 +405,15 @@ class BasicCapabilityMixin(CapabilityMixinHost):
                 "memory.save_with_ttl requires an object value"
             )
         ttl_seconds = int(payload.get("ttl_seconds", 0))
-        await _get_runtime_sp().put_async(
-            self.MEMORY_SCOPE,
-            plugin_id,
+        await self._memory_backend_for_plugin(plugin_id).save_with_ttl(
             str(payload.get("key", "")),
-            {"value": value, "ttl_seconds": ttl_seconds},
+            value,
+            ttl_seconds,
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
         )
         return {}
 
@@ -297,22 +427,14 @@ class BasicCapabilityMixin(CapabilityMixinHost):
         keys_payload = payload.get("keys")
         if not isinstance(keys_payload, list):
             raise AstrBotError.invalid_input("memory.get_many requires a keys array")
-        items = []
-        for key in keys_payload:
-            key_text = str(key)
-            stored = await _get_runtime_sp().get_async(
-                self.MEMORY_SCOPE,
-                plugin_id,
-                key_text,
-                None,
-            )
-            if (
-                isinstance(stored, dict)
-                and "value" in stored
-                and "ttl_seconds" in stored
-            ):
-                stored = stored["value"]
-            items.append({"key": key_text, "value": stored})
+        items = await self._memory_backend_for_plugin(plugin_id).get_many(
+            [str(key) for key in keys_payload],
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+        )
         return {"items": items}
 
     async def _memory_delete_many(
@@ -325,66 +447,33 @@ class BasicCapabilityMixin(CapabilityMixinHost):
         keys_payload = payload.get("keys")
         if not isinstance(keys_payload, list):
             raise AstrBotError.invalid_input("memory.delete_many requires a keys array")
-        deleted_count = 0
-        for key in keys_payload:
-            key_text = str(key)
-            existing = await _get_runtime_sp().get_async(
-                self.MEMORY_SCOPE,
-                plugin_id,
-                key_text,
-                None,
-            )
-            if existing is None:
-                continue
-            await _get_runtime_sp().remove_async(
-                self.MEMORY_SCOPE,
-                plugin_id,
-                key_text,
-            )
-            deleted_count += 1
+        deleted_count = await self._memory_backend_for_plugin(plugin_id).delete_many(
+            [str(key) for key in keys_payload],
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+        )
         return {"deleted_count": deleted_count}
 
     async def _memory_stats(
         self,
         request_id: str,
-        _payload: dict[str, Any],
+        payload: dict[str, Any],
         _token,
     ) -> dict[str, Any]:
         plugin_id = self._resolve_plugin_id(request_id)
-        entries = await self._load_memory_entries(plugin_id)
-        ttl_entries = sum(
-            1
-            for value in entries.values()
-            if isinstance(value, dict) and "value" in value and "ttl_seconds" in value
+        stats = await self._memory_backend_for_plugin(plugin_id).stats(
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+            include_descendants=bool(payload.get("include_descendants", True)),
         )
-        total_bytes = sum(
-            len(str(key)) + len(str(value)) for key, value in entries.items()
-        )
-        return {
-            "total_items": len(entries),
-            "total_bytes": total_bytes,
-            "plugin_id": plugin_id,
-            "ttl_entries": ttl_entries,
-        }
-
-    async def _load_memory_entries(self, plugin_id: str) -> dict[str, Any]:
-        items = await _get_runtime_sp().range_get_async(
-            self.MEMORY_SCOPE,
-            plugin_id,
-            None,
-        )
-        entries: dict[str, Any] = {}
-        for item in items:
-            key = str(getattr(item, "key", ""))
-            if not key:
-                continue
-            entries[key] = await _get_runtime_sp().get_async(
-                self.MEMORY_SCOPE,
-                plugin_id,
-                key,
-                None,
-            )
-        return entries
+        stats["plugin_id"] = plugin_id
+        return stats
 
     def _register_http_capabilities(self) -> None:
         self.register(

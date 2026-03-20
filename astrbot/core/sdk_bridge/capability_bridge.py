@@ -35,6 +35,7 @@ class CoreCapabilityBridge(
         self._star_context = star_context
         self._plugin_bridge = plugin_bridge
         self._event_streams: dict[str, Any] = {}
+        self._memory_backends_by_plugin: dict[str, Any] = {}
         self._memory_index_by_plugin: dict[str, dict[str, dict[str, Any]]] = {}
         self._memory_dirty_keys_by_plugin: dict[str, set[str]] = {}
         self._memory_expires_at_by_plugin: dict[str, dict[str, Any]] = {}

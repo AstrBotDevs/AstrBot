@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -9,6 +10,7 @@ if TYPE_CHECKING:
         _event_streams: dict[str, Any]
         _plugin_bridge: Any
         _star_context: Any
+        _memory_backends_by_plugin: dict[str, Any]
         _memory_index_by_plugin: dict[str, dict[str, dict[str, Any]]]
         _memory_dirty_keys_by_plugin: dict[str, set[str]]
         _memory_expires_at_by_plugin: dict[str, dict[str, Any]]
@@ -85,6 +87,20 @@ if TYPE_CHECKING:
             provider_label: str,
             expected_type: type[Any],
         ) -> Any: ...
+
+        def _provider_embedding_get_embedding(
+            self,
+            request_id: str,
+            payload: dict[str, Any],
+            token: Any,
+        ) -> Awaitable[dict[str, Any]]: ...
+
+        def _provider_embedding_get_embeddings(
+            self,
+            request_id: str,
+            payload: dict[str, Any],
+            token: Any,
+        ) -> Awaitable[dict[str, Any]]: ...
 
         def _reserved_plugin_names(self) -> set[str]: ...
 
