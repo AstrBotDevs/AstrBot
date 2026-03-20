@@ -210,6 +210,26 @@ class ProviderOpenAIOfficial(Provider):
 
         self.reasoning_key = "reasoning_content"
 
+    def _ollama_disable_thinking_enabled(self) -> bool:
+        value = self.provider_config.get("ollama_disable_thinking", False)
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    def _apply_provider_specific_extra_body_overrides(
+        self, extra_body: dict[str, Any]
+    ) -> None:
+        if self.provider_config.get("provider") != "ollama":
+            return
+        if not self._ollama_disable_thinking_enabled():
+            return
+
+        # Ollama's OpenAI-compatible endpoint reliably maps reasoning_effort=none
+        # to think=false, while direct think=false passthrough is not stable.
+        extra_body.pop("reasoning", None)
+        extra_body.pop("think", None)
+        extra_body["reasoning_effort"] = "none"
+
     async def get_models(self):
         try:
             models_str = []
@@ -245,6 +265,7 @@ class ProviderOpenAIOfficial(Provider):
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
+        self._apply_provider_specific_extra_body_overrides(extra_body)
 
         model = payloads.get("model", "").lower()
 
@@ -295,6 +316,7 @@ class ProviderOpenAIOfficial(Provider):
                 to_del.append(key)
         for key in to_del:
             del payloads[key]
+        self._apply_provider_specific_extra_body_overrides(extra_body)
 
         stream = await self.client.chat.completions.create(
             **payloads,
