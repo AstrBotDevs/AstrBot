@@ -11,6 +11,7 @@ from astrbot.core.agent.message import Message
 from astrbot.core.config.default import PERIODIC_CONTEXT_COMPACTION_DEFAULTS
 from astrbot.core.context_compaction_scheduler import (
     CompactionConfig,
+    CompactionPolicy,
     PeriodicContextCompactionScheduler,
 )
 
@@ -200,9 +201,9 @@ def test_is_idle_enough_respects_threshold() -> None:
     old = now - timedelta(minutes=30)
     recent = now - timedelta(minutes=2)
 
-    assert PeriodicContextCompactionScheduler._is_idle_enough(old, 10) is True
-    assert PeriodicContextCompactionScheduler._is_idle_enough(recent, 10) is False
-    assert PeriodicContextCompactionScheduler._is_idle_enough(None, 10) is True
+    assert CompactionPolicy.is_idle_enough(old, 10) is True
+    assert CompactionPolicy.is_idle_enough(recent, 10) is False
+    assert CompactionPolicy.is_idle_enough(None, 10) is True
 
 
 def test_resolve_run_limits_treats_max_scan_as_upper_bound() -> None:
@@ -232,12 +233,13 @@ def test_resolve_trigger_tokens_prefers_manual_value() -> None:
         trigger_tokens=1500,
         trigger_min_context_ratio=0.3,
     )
+    policy = CompactionPolicy(cfg=cfg, token_counter=SimpleNamespace())
     provider = SimpleNamespace(
         provider_config={"max_context_tokens": 32768},
         get_model=lambda: "unknown-model",
     )
 
-    resolved = scheduler._resolve_trigger_tokens(cfg, provider)
+    resolved = policy.resolve_trigger_tokens(provider)
     assert resolved == 1500
 
 
@@ -249,12 +251,13 @@ def test_resolve_trigger_tokens_uses_ratio_when_auto_mode() -> None:
         trigger_tokens=0,
         trigger_min_context_ratio=0.3,
     )
+    policy = CompactionPolicy(cfg=cfg, token_counter=SimpleNamespace())
     provider = SimpleNamespace(
         provider_config={"max_context_tokens": 32768},
         get_model=lambda: "unknown-model",
     )
 
-    resolved = scheduler._resolve_trigger_tokens(cfg, provider)
+    resolved = policy.resolve_trigger_tokens(provider)
     assert resolved == 9830
 
 
@@ -266,12 +269,13 @@ def test_resolve_trigger_tokens_falls_back_when_provider_context_unknown() -> No
         trigger_tokens=0,
         trigger_min_context_ratio=0.3,
     )
+    policy = CompactionPolicy(cfg=cfg, token_counter=SimpleNamespace())
     provider = SimpleNamespace(
         provider_config={"max_context_tokens": 0},
         get_model=lambda: "unknown-model",
     )
 
-    resolved = scheduler._resolve_trigger_tokens(cfg, provider)
+    resolved = policy.resolve_trigger_tokens(provider)
     assert resolved == 1536
 
 
@@ -299,7 +303,7 @@ def test_resolve_token_counter_uses_configured_mode_and_provider_model(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_compact_one_conversation_dry_run_reports_skipped() -> None:
+async def test_compact_one_conversation_dry_run_reports_skipped(monkeypatch) -> None:
     scheduler = _build_scheduler({"periodic_context_compaction": {"enabled": True}})
     cfg = replace(scheduler._load_config(), dry_run=True)
 
@@ -309,10 +313,6 @@ async def test_compact_one_conversation_dry_run_reports_skipped() -> None:
         content=[],
         token_usage=0,
         updated_at=None,
-    )
-    scheduler._check_eligibility = lambda _conv, _cfg, _counter: (  # type: ignore[method-assign]
-        [Message(role="user", content="before")],
-        100,
     )
     scheduler._resolve_provider = AsyncMock(  # type: ignore[method-assign]
         return_value=SimpleNamespace(get_model=lambda: "gpt-4o")
@@ -324,12 +324,21 @@ async def test_compact_one_conversation_dry_run_reports_skipped() -> None:
             rounds=1,
         )
     )
-    scheduler._resolve_trigger_tokens = lambda _cfg, _provider: 1  # type: ignore[method-assign]
     scheduler._resolve_token_counter = lambda _provider: SimpleNamespace(  # type: ignore[method-assign]
         count_tokens=lambda *_args, **_kwargs: 50
     )
     scheduler._persist_compacted_history = AsyncMock(  # type: ignore[method-assign]
         return_value=True
+    )
+    monkeypatch.setattr(
+        CompactionPolicy,
+        "check_eligibility",
+        lambda self, _conv, _parser: ([Message(role="user", content="before")], 100),
+    )
+    monkeypatch.setattr(
+        CompactionPolicy,
+        "resolve_trigger_tokens",
+        lambda self, _provider: 1,
     )
 
     outcome = await scheduler._compact_one_conversation(conv, cfg)

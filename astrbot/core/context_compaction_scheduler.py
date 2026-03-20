@@ -122,6 +122,78 @@ class CompactionConfig:
         )
 
 
+@dataclass(frozen=True)
+class CompactionPolicy:
+    cfg: CompactionConfig
+    token_counter: TokenCounter
+
+    def check_eligibility(
+        self,
+        conv: ConversationV2,
+        history_parser: MessageHistoryParser,
+    ) -> EligibilityInfo | None:
+        history = conv.content
+        if not isinstance(history, list) or len(history) < self.cfg.min_messages:
+            return None
+
+        if not self.is_idle_enough(conv.updated_at, self.cfg.min_idle_minutes):
+            return None
+
+        messages = history_parser.parse(history)
+        if len(messages) < self.cfg.min_messages:
+            return None
+
+        trusted_usage = conv.token_usage if isinstance(conv.token_usage, int) else 0
+        before_tokens = self.token_counter.count_tokens(messages, trusted_usage)
+        return messages, before_tokens
+
+    def resolve_trigger_tokens(self, provider: Provider) -> int:
+        if self.cfg.trigger_tokens > 0:
+            return self.cfg.trigger_tokens
+
+        max_context_tokens = self.resolve_provider_max_context(provider)
+        if max_context_tokens > 0:
+            return max(1, int(max_context_tokens * self.cfg.trigger_min_context_ratio))
+
+        return max(int(self.cfg.target_tokens * 1.5), self.cfg.target_tokens + 1)
+
+    @staticmethod
+    def resolve_provider_max_context(provider: Provider) -> int:
+        configured = provider.provider_config.get("max_context_tokens", 0)
+        try:
+            configured_tokens = int(configured)
+        except Exception:
+            configured_tokens = 0
+        if configured_tokens > 0:
+            return configured_tokens
+
+        model = provider.get_model()
+        model_info = LLM_METADATAS.get(model)
+        if not isinstance(model_info, dict):
+            return 0
+        limit = model_info.get("limit")
+        if not isinstance(limit, dict):
+            return 0
+        context = limit.get("context")
+        try:
+            context_tokens = int(context)
+        except Exception:
+            context_tokens = 0
+        return max(context_tokens, 0)
+
+    @staticmethod
+    def is_idle_enough(updated_at: datetime | None, min_idle_minutes: int) -> bool:
+        if min_idle_minutes <= 0:
+            return True
+        if updated_at is None:
+            return True
+        now = datetime.now(timezone.utc)
+        at = updated_at
+        if at.tzinfo is None:
+            at = at.replace(tzinfo=timezone.utc)
+        return (now - at).total_seconds() >= (min_idle_minutes * 60)
+
+
 class PeriodicContextCompactionScheduler:
     """Periodically compact conversation history and persist summarized history back to DB.
 
@@ -378,12 +450,13 @@ class PeriodicContextCompactionScheduler:
             return "failed"
 
         token_counter = self._resolve_token_counter(provider)
-        eligibility = self._check_eligibility(conv, cfg, token_counter)
+        policy = CompactionPolicy(cfg=cfg, token_counter=token_counter)
+        eligibility = policy.check_eligibility(conv, self._history_parser)
         if eligibility is None:
             return "skipped"
         messages, before_tokens = eligibility
 
-        trigger_tokens = self._resolve_trigger_tokens(cfg, provider)
+        trigger_tokens = policy.resolve_trigger_tokens(provider)
         if before_tokens < trigger_tokens:
             return "skipped"
 
@@ -419,61 +492,6 @@ class PeriodicContextCompactionScheduler:
             round_result,
         )
         return "compacted"
-
-    def _check_eligibility(
-        self,
-        conv: ConversationV2,
-        cfg: CompactionConfig,
-        token_counter: TokenCounter,
-    ) -> EligibilityInfo | None:
-        history = conv.content
-        if not isinstance(history, list) or len(history) < cfg.min_messages:
-            return None
-
-        if not self._is_idle_enough(conv.updated_at, cfg.min_idle_minutes):
-            return None
-
-        messages = self._history_parser.parse(history)
-        if len(messages) < cfg.min_messages:
-            return None
-
-        trusted_usage = conv.token_usage if isinstance(conv.token_usage, int) else 0
-        before_tokens = token_counter.count_tokens(messages, trusted_usage)
-        return messages, before_tokens
-
-    def _resolve_trigger_tokens(self, cfg: CompactionConfig, provider: Provider) -> int:
-        if cfg.trigger_tokens > 0:
-            return cfg.trigger_tokens
-
-        max_context_tokens = self._resolve_provider_max_context(provider)
-        if max_context_tokens > 0:
-            return max(1, int(max_context_tokens * cfg.trigger_min_context_ratio))
-
-        return max(int(cfg.target_tokens * 1.5), cfg.target_tokens + 1)
-
-    @staticmethod
-    def _resolve_provider_max_context(provider: Provider) -> int:
-        configured = provider.provider_config.get("max_context_tokens", 0)
-        try:
-            configured_tokens = int(configured)
-        except Exception:
-            configured_tokens = 0
-        if configured_tokens > 0:
-            return configured_tokens
-
-        model = provider.get_model()
-        model_info = LLM_METADATAS.get(model)
-        if not isinstance(model_info, dict):
-            return 0
-        limit = model_info.get("limit")
-        if not isinstance(limit, dict):
-            return 0
-        context = limit.get("context")
-        try:
-            context_tokens = int(context)
-        except Exception:
-            context_tokens = 0
-        return max(context_tokens, 0)
 
     async def _run_compaction_rounds(
         self,
@@ -648,18 +666,6 @@ class PeriodicContextCompactionScheduler:
 
         self._token_counter_cache[cache_key] = resolved
         return resolved
-
-    @staticmethod
-    def _is_idle_enough(updated_at: datetime | None, min_idle_minutes: int) -> bool:
-        if min_idle_minutes <= 0:
-            return True
-        if updated_at is None:
-            return True
-        now = datetime.now(timezone.utc)
-        at = updated_at
-        if at.tzinfo is None:
-            at = at.replace(tzinfo=timezone.utc)
-        return (now - at).total_seconds() >= (min_idle_minutes * 60)
 
     @staticmethod
     def _messages_equal(a: list[Message], b: list[Message]) -> bool:
