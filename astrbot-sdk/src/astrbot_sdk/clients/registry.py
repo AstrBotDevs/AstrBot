@@ -8,14 +8,25 @@ from typing import Any
 from ._proxy import CapabilityProxy
 
 
+def _coerce_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 @dataclass(slots=True)
 class HandlerMetadata:
     plugin_name: str
     handler_full_name: str
     trigger_type: str
+    description: str | None = None
     event_types: list[str] = field(default_factory=list)
     enabled: bool = True
     group_path: list[str] = field(default_factory=list)
+    priority: int = 0
+    kind: str = "handler"
+    require_admin: bool = False
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> HandlerMetadata:
@@ -23,6 +34,11 @@ class HandlerMetadata:
             plugin_name=str(data.get("plugin_name", "")),
             handler_full_name=str(data.get("handler_full_name", "")),
             trigger_type=str(data.get("trigger_type", "")),
+            description=(
+                None
+                if data.get("description") is None
+                else str(data.get("description", "")).strip() or None
+            ),
             event_types=[
                 str(item)
                 for item in data.get("event_types", [])
@@ -34,6 +50,9 @@ class HandlerMetadata:
                 for item in data.get("group_path", [])
                 if isinstance(item, str)
             ],
+            priority=_coerce_int(data.get("priority", 0), 0),
+            kind=str(data.get("kind", "handler") or "handler"),
+            require_admin=bool(data.get("require_admin", False)),
         )
 
 

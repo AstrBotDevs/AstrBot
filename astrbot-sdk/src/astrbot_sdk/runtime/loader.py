@@ -969,6 +969,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                             trigger=meta.trigger,
                             kind=cast(HandlerKind, meta.kind),
                             contract=meta.contract,
+                            description=meta.description,
                             priority=meta.priority,
                             permissions=meta.permissions.model_copy(deep=True),
                             filters=[

@@ -118,6 +118,7 @@ class HandlerMeta:
     )
     kind: str = "handler"
     contract: str | None = None
+    description: str | None = None
     priority: int = 0
     permissions: Permissions = field(default_factory=Permissions)
     filters: list[FilterSpec] = field(default_factory=list)
@@ -260,6 +261,13 @@ def _validate_message_trigger_compatibility(meta: HandlerMeta) -> None:
         )
 
 
+def _normalize_description(description: str | None) -> str | None:
+    if description is None:
+        return None
+    text = str(description).strip()
+    return text or None
+
+
 def _validate_limiter_args(
     *,
     kind: str,
@@ -356,11 +364,13 @@ def on_command(
 
     def decorator(func: HandlerCallable) -> HandlerCallable:
         meta = _get_or_create_meta(func)
+        normalized_description = _normalize_description(description)
         meta.trigger = CommandTrigger(
             command=canonical,
             aliases=merged_aliases,
-            description=description,
+            description=normalized_description,
         )
+        meta.description = normalized_description
         _validate_message_trigger_compatibility(meta)
         return func
 
@@ -373,6 +383,7 @@ def on_message(
     keywords: list[str] | None = None,
     platforms: list[str] | None = None,
     message_types: list[str] | None = None,
+    description: str | None = None,
 ) -> Callable[[HandlerCallable], HandlerCallable]:
     """注册消息处理方法。
 
@@ -407,6 +418,7 @@ def on_message(
             platforms=platforms or [],
             message_types=message_types or [],
         )
+        meta.description = _normalize_description(description)
         if platforms:
             _set_platform_filter(meta, list(platforms), source="trigger.platforms")
         if message_types:
@@ -446,7 +458,11 @@ def set_command_route_meta(
     return func
 
 
-def on_event(event_type: str) -> Callable[[HandlerCallable], HandlerCallable]:
+def on_event(
+    event_type: str,
+    *,
+    description: str | None = None,
+) -> Callable[[HandlerCallable], HandlerCallable]:
     """注册事件处理方法。
 
     当特定类型的事件发生时触发。用于处理非消息类型的事件，
@@ -467,6 +483,7 @@ def on_event(event_type: str) -> Callable[[HandlerCallable], HandlerCallable]:
     def decorator(func: HandlerCallable) -> HandlerCallable:
         meta = _get_or_create_meta(func)
         meta.trigger = EventTrigger(event_type=event_type)
+        meta.description = _normalize_description(description)
         _validate_message_trigger_compatibility(meta)
         return func
 
@@ -477,6 +494,7 @@ def on_schedule(
     *,
     cron: str | None = None,
     interval_seconds: int | None = None,
+    description: str | None = None,
 ) -> Callable[[HandlerCallable], HandlerCallable]:
     """注册定时任务方法。
 
@@ -505,6 +523,7 @@ def on_schedule(
     def decorator(func: HandlerCallable) -> HandlerCallable:
         meta = _get_or_create_meta(func)
         meta.trigger = ScheduleTrigger(cron=cron, interval_seconds=interval_seconds)
+        meta.description = _normalize_description(description)
         _validate_message_trigger_compatibility(meta)
         return func
 

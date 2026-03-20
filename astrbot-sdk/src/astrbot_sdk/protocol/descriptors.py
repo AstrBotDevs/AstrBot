@@ -257,6 +257,7 @@ class HandlerDescriptor(_DescriptorBase):
     trigger: Trigger
     kind: Literal["handler", "hook", "tool", "session"] = "handler"
     contract: str | None = None
+    description: str | None = None
     priority: int = 0
     permissions: Permissions = Field(default_factory=Permissions)
     filters: list[FilterSpec] = Field(default_factory=list)

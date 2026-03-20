@@ -23,9 +23,13 @@ def _handler_to_payload(handler: HandlerMetadata) -> dict[str, Any]:
         "plugin_name": handler.plugin_name,
         "handler_full_name": handler.handler_full_name,
         "trigger_type": handler.trigger_type,
+        "description": handler.description,
         "event_types": list(handler.event_types),
         "enabled": handler.enabled,
         "group_path": list(handler.group_path),
+        "priority": handler.priority,
+        "kind": handler.kind,
+        "require_admin": handler.require_admin,
     }
 
 
