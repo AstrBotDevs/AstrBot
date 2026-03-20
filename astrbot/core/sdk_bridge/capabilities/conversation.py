@@ -38,6 +38,13 @@ class ConversationCapabilityMixin(CapabilityMixinHost):
             self._builtin_descriptor("conversation.update", "Update conversation"),
             call_handler=self._conversation_update,
         )
+        self.register(
+            self._builtin_descriptor(
+                "conversation.unset_persona",
+                "Unset conversation persona override",
+            ),
+            call_handler=self._conversation_unset_persona,
+        )
 
     async def _conversation_new(
         self,
@@ -217,5 +224,21 @@ class ConversationCapabilityMixin(CapabilityMixinHost):
                 else None
             ),
             token_usage=self._optional_int(raw_conversation.get("token_usage")),
+        )
+        return {}
+
+    async def _conversation_unset_persona(
+        self,
+        _request_id: str,
+        payload: dict[str, object],
+        _token,
+    ) -> dict[str, object]:
+        await self._star_context.conversation_manager.unset_conversation_persona(
+            unified_msg_origin=str(payload.get("session", "")),
+            conversation_id=(
+                str(payload.get("conversation_id"))
+                if payload.get("conversation_id") is not None
+                else None
+            ),
         )
         return {}

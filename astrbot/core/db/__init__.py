@@ -164,6 +164,7 @@ class BaseDatabase(abc.ABC):
         cid: str,
         title: str | None = None,
         persona_id: str | None = None,
+        clear_persona: bool = False,
         content: list[dict] | None = None,
         token_usage: int | None = None,
     ) -> None:

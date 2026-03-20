@@ -558,6 +558,13 @@ class BasicCapabilityMixin(CapabilityMixinHost):
             ),
             call_handler=self._metadata_get_plugin_config,
         )
+        self.register(
+            self._builtin_descriptor(
+                "metadata.save_plugin_config",
+                "Save current plugin config",
+            ),
+            call_handler=self._metadata_save_plugin_config,
+        )
 
     async def _metadata_get_plugin(
         self,
@@ -587,3 +594,17 @@ class BasicCapabilityMixin(CapabilityMixinHost):
         if requested != plugin_id:
             return {"config": None}
         return {"config": self._plugin_bridge.get_plugin_config(plugin_id)}
+
+    async def _metadata_save_plugin_config(
+        self,
+        request_id: str,
+        payload: dict[str, Any],
+        _token,
+    ) -> dict[str, Any]:
+        plugin_id = self._resolve_plugin_id(request_id)
+        config = payload.get("config")
+        if not isinstance(config, dict):
+            raise AstrBotError.invalid_input(
+                "metadata.save_plugin_config requires config object"
+            )
+        return {"config": self._plugin_bridge.save_plugin_config(plugin_id, config)}
