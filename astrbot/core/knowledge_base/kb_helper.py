@@ -141,7 +141,7 @@ class KBHelper:
     async def get_ep(self) -> EmbeddingProvider:
         if not self.kb.embedding_provider_id:
             raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
-        ep: EmbeddingProvider = await self.prov_mgr.get_provider_by_id(
+        ep = await self.prov_mgr.get_provider_by_id(
             self.kb.embedding_provider_id,
         )
         if not ep:
@@ -157,7 +157,7 @@ class KBHelper:
     async def get_rp(self) -> RerankProvider | None:
         if not self.kb.rerank_provider_id:
             return None
-        rp: RerankProvider = await self.prov_mgr.get_provider_by_id(
+        rp = await self.prov_mgr.get_provider_by_id(
             self.kb.rerank_provider_id,
         )
         if not rp:
