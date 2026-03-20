@@ -130,7 +130,6 @@ class PostToolCompactionController:
             and self._last_check_at > 0
             and (now - self._last_check_at) < self.config.debounce_seconds
         ):
-            self._last_check_at = now
             return False
         self._last_check_at = now
 

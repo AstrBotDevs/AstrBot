@@ -683,6 +683,68 @@ def test_post_tool_compaction_handles_token_counter_errors(runner):
     assert runner._should_run_post_tool_compaction() is False
 
 
+def test_post_tool_compaction_debounce_is_not_extended(monkeypatch):
+    config = PostToolCompactionConfig(
+        enabled=True,
+        soft_ratio=0.3,
+        hard_ratio=0.9,
+        min_delta_tokens=0,
+        min_delta_turns=0,
+        debounce_seconds=100,
+    )
+    controller = PostToolCompactionController(config)
+    messages = [object()]
+    token_counter = SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 95)
+
+    # refresh baseline before checks
+    controller.refresh_baseline(
+        messages=messages,
+        token_counter=SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 30),
+    )
+
+    ts = iter([1.0, 10.0, 20.0, 105.0])
+    monkeypatch.setattr(
+        "astrbot.core.agent.runners.tool_loop_agent_runner.time.monotonic",
+        lambda: next(ts),
+    )
+
+    # first check performs decision and sets baseline timestamp
+    assert (
+        controller.should_compact(
+            messages=messages,
+            token_counter=token_counter,
+            max_context_tokens=100,
+        )
+        is True
+    )
+    # next two checks are debounced
+    assert (
+        controller.should_compact(
+            messages=messages,
+            token_counter=token_counter,
+            max_context_tokens=100,
+        )
+        is False
+    )
+    assert (
+        controller.should_compact(
+            messages=messages,
+            token_counter=token_counter,
+            max_context_tokens=100,
+        )
+        is False
+    )
+    # should become eligible at t=105 if debounce anchor remains at first real check (t=1)
+    assert (
+        controller.should_compact(
+            messages=messages,
+            token_counter=token_counter,
+            max_context_tokens=100,
+        )
+        is True
+    )
+
+
 if __name__ == "__main__":
     # 运行测试
     pytest.main([__file__, "-v"])

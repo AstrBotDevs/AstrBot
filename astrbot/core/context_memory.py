@@ -1,111 +1,45 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
+from astrbot.core.config.default import CONTEXT_MEMORY_DEFAULTS
+from astrbot.core.context_memory_backends import (
+    ContextMemoryEvolutionBackend,
+    ContextMemoryMigrationAdapter,
+    VectorLongTermMemoryRetriever,
+    get_context_memory_evolution_backend,
+    get_context_memory_migration_adapter,
+    set_context_memory_evolution_backend,
+    set_context_memory_migration_adapter,
+)
 from astrbot.core.utils.config_normalization import to_bool, to_int
 
-DEFAULT_CONTEXT_MEMORY_SETTINGS: dict[str, Any] = {
-    # Global switch for context-memory related features.
-    "enabled": False,
-    # Manually maintained top-level memories injected into system prompt.
-    "inject_pinned_memory": True,
-    "pinned_max_items": 8,
-    "pinned_max_chars_per_item": 400,
-    # Retrieval enhancement is intentionally reserved for future PRs.
-    "retrieval_enabled": False,
-    "retrieval_backend": "",
-    "retrieval_provider_id": "",
-    "retrieval_top_k": 5,
-}
+
+def _clone_context_memory_defaults() -> dict[str, Any]:
+    defaults = dict(CONTEXT_MEMORY_DEFAULTS)
+    pinned = defaults.get("pinned_memories")
+    defaults["pinned_memories"] = list(pinned) if isinstance(pinned, list) else []
+    return defaults
 
 
-@runtime_checkable
-class VectorLongTermMemoryRetriever(Protocol):
-    """Reserved protocol for future vector-DB long-term memory retrieval."""
+DEFAULT_CONTEXT_MEMORY_SETTINGS: dict[str, Any] = _clone_context_memory_defaults()
 
-    async def retrieve(
-        self,
-        *,
-        unified_msg_origin: str,
-        query: str,
-        top_k: int,
-    ) -> list[str]:
-        """Return ranked memory snippets for prompt assembly."""
-        ...
-
-
-@runtime_checkable
-class ContextMemoryEvolutionBackend(Protocol):
-    """Reserved protocol for MemEvolve-style memory evolution backend integration."""
-
-    async def evolve(
-        self,
-        *,
-        unified_msg_origin: str,
-        turns: list[str],
-        metadata: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Evolve short-term conversation turns into durable memory artifacts."""
-        ...
-
-    async def retrieve(
-        self,
-        *,
-        unified_msg_origin: str,
-        query: str,
-        top_k: int,
-    ) -> list[str]:
-        """Retrieve evolved memory snippets for prompt assembly."""
-        ...
-
-
-@runtime_checkable
-class ContextMemoryMigrationAdapter(Protocol):
-    """Reserved protocol for future context-memory schema/store migration."""
-
-    async def export_session(
-        self,
-        *,
-        unified_msg_origin: str,
-    ) -> dict[str, Any]:
-        """Export memory payload for migration or backup."""
-        ...
-
-    async def import_session(
-        self,
-        *,
-        unified_msg_origin: str,
-        payload: dict[str, Any],
-    ) -> None:
-        """Import migrated memory payload into target backend."""
-        ...
-
-
-_context_memory_evolution_backend: ContextMemoryEvolutionBackend | None = None
-_context_memory_migration_adapter: ContextMemoryMigrationAdapter | None = None
-
-
-def set_context_memory_evolution_backend(
-    backend: ContextMemoryEvolutionBackend | None,
-) -> None:
-    global _context_memory_evolution_backend
-    _context_memory_evolution_backend = backend
-
-
-def get_context_memory_evolution_backend() -> ContextMemoryEvolutionBackend | None:
-    return _context_memory_evolution_backend
-
-
-def set_context_memory_migration_adapter(
-    adapter: ContextMemoryMigrationAdapter | None,
-) -> None:
-    global _context_memory_migration_adapter
-    _context_memory_migration_adapter = adapter
-
-
-def get_context_memory_migration_adapter() -> ContextMemoryMigrationAdapter | None:
-    return _context_memory_migration_adapter
+__all__ = [
+    "ContextMemoryConfig",
+    "DEFAULT_CONTEXT_MEMORY_SETTINGS",
+    "normalize_context_memory_settings",
+    "load_context_memory_config",
+    "ensure_context_memory_settings",
+    "build_pinned_memory_system_block",
+    "VectorLongTermMemoryRetriever",
+    "ContextMemoryEvolutionBackend",
+    "ContextMemoryMigrationAdapter",
+    "set_context_memory_evolution_backend",
+    "get_context_memory_evolution_backend",
+    "set_context_memory_migration_adapter",
+    "get_context_memory_migration_adapter",
+]
 
 
 @dataclass(frozen=True)
