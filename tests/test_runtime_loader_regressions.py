@@ -158,6 +158,7 @@ class SharedPlugin(Star):
         sys.path.insert(0, str(foreign_dir.resolve()))
         sys.path.append(str(plugin_dir.resolve()))
 
+        _purge_module_roots("main")
         __import__("main")
         assert (
             Path(sys.modules["main"].__file__).resolve()
