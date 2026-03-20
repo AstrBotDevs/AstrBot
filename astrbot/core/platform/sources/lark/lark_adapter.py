@@ -470,11 +470,17 @@ class LarkPlatformAdapter(Platform):
         if session.message_type == MessageType.GROUP_MESSAGE:
             id_type = "chat_id"
             receive_id = session.session_id
-            if "%" in receive_id:
+            # 从 session_id 中提取真实的 chat_id（去除 %thread% / %root% 后缀）
+            if "%thread%" in receive_id or "%root%" in receive_id:
+                receive_id = receive_id.split("%")[0]
+            elif "%" in receive_id:
                 receive_id = receive_id.split("%")[1]
         else:
             id_type = "open_id"
             receive_id = session.session_id
+            # 单聊也需要去除 %thread% / %root% 后缀
+            if "%thread%" in receive_id or "%root%" in receive_id:
+                receive_id = receive_id.split("%")[0]
 
         # 复用 LarkMessageEvent 中的通用发送逻辑
         await LarkMessageEvent.send_message_chain(
@@ -580,20 +586,40 @@ class LarkPlatformAdapter(Platform):
             user_id=event.event.sender.sender_id.open_id,
             nickname=event.event.sender.sender_id.open_id[:8],
         )
+        # 构建 session_id：按话题/回复链隔离上下文
         if abm.type == MessageType.GROUP_MESSAGE:
-            abm.session_id = abm.group_id
+            base_id = abm.group_id or ""
+            if message.thread_id:
+                # 话题群中的消息，按 thread_id 隔离
+                abm.session_id = f"{base_id}%thread%{message.thread_id}"
+            elif message.root_id:
+                # 群聊中的回复链，按 root_id 隔离
+                abm.session_id = f"{base_id}%root%{message.root_id}"
+            else:
+                abm.session_id = base_id
         else:
-            abm.session_id = abm.sender.user_id
+            base_id = abm.sender.user_id
+            if message.thread_id:
+                abm.session_id = f"{base_id}%thread%{message.thread_id}"
+            elif message.root_id:
+                # 单聊中的回复链，按 root_id 隔离
+                abm.session_id = f"{base_id}%root%{message.root_id}"
+            else:
+                abm.session_id = base_id
 
-        await self.handle_msg(abm)
+        # 判断消息是否在话题/回复链中
+        # 仅在需要创建话题时标记（已在话题中的消息回复自然在话题内，无需 reply_in_thread）
+        _is_in_thread = bool(message.root_id) and not bool(message.thread_id)
+        await self.handle_msg(abm, is_in_thread=_is_in_thread)
 
-    async def handle_msg(self, abm: AstrBotMessage) -> None:
+    async def handle_msg(self, abm: AstrBotMessage, is_in_thread: bool = False) -> None:
         event = LarkMessageEvent(
             message_str=abm.message_str,
             message_obj=abm,
             platform_meta=self.meta(),
             session_id=abm.session_id,
             bot=self.lark_api,
+            is_in_thread=is_in_thread,
         )
 
         self._event_queue.put_nowait(event)
