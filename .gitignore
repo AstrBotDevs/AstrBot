@@ -63,3 +63,4 @@ GenieData/
 .kilocode/
 .worktrees/
 
+.astrbot_sdk_testing/
