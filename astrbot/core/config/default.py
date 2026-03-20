@@ -1074,7 +1074,7 @@ CONFIG_METADATA_2 = {
                 "type": "list",
                 # provider sources templates
                 "config_template": {
-                    "OpenAI": {
+                    "OpenAI Compatible": {
                         "id": "openai",
                         "provider": "openai",
                         "type": "openai_chat_completion",
