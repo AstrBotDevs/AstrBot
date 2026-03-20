@@ -42,6 +42,19 @@ def _download_to_temp(url: str, prefix: str, fallback_suffix: str = "") -> str:
     return str(target.resolve())
 
 
+async def _download_to_temp_async(
+    url: str,
+    prefix: str,
+    fallback_suffix: str = "",
+) -> str:
+    return await asyncio.to_thread(
+        _download_to_temp,
+        url,
+        prefix,
+        fallback_suffix,
+    )
+
+
 def _stringify_mapping(mapping: Mapping[Any, Any]) -> dict[str, Any]:
     return {str(key): value for key, value in mapping.items()}
 
@@ -248,7 +261,7 @@ class Image(BaseMessageComponent):
         if url.startswith("file:///"):
             return os.path.abspath(url[8:])
         if url.startswith(("http://", "https://")):
-            return _download_to_temp(url, "imgseg", ".jpg")
+            return await _download_to_temp_async(url, "imgseg", ".jpg")
         if url.startswith("base64://"):
             file_path = _temp_path("imgseg", ".jpg")
             file_path.write_bytes(base64.b64decode(url.removeprefix("base64://")))
@@ -286,7 +299,7 @@ class Record(BaseMessageComponent):
         if self.file.startswith("file:///"):
             return os.path.abspath(self.file[8:])
         if self.file.startswith(("http://", "https://")):
-            return _download_to_temp(self.file, "recordseg", ".dat")
+            return await _download_to_temp_async(self.file, "recordseg", ".dat")
         if self.file.startswith("base64://"):
             file_path = _temp_path("recordseg", ".dat")
             file_path.write_bytes(base64.b64decode(self.file.removeprefix("base64://")))
@@ -320,7 +333,7 @@ class Video(BaseMessageComponent):
         if self.file.startswith("file:///"):
             return os.path.abspath(self.file[8:])
         if self.file.startswith(("http://", "https://")):
-            return _download_to_temp(self.file, "videoseg")
+            return await _download_to_temp_async(self.file, "videoseg")
         if os.path.exists(self.file):
             return os.path.abspath(self.file)
         raise ValueError(f"not a valid file: {self.file}")
@@ -366,7 +379,7 @@ class File(BaseMessageComponent):
                 return os.path.abspath(path)
         if self.url:
             suffix = Path(urlparse(self.url).path).suffix
-            target = _download_to_temp(self.url, "fileseg", suffix)
+            target = await _download_to_temp_async(self.url, "fileseg", suffix)
             self.file_ = target
             return target
         return ""

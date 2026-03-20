@@ -148,6 +148,59 @@ async def test_handler_dispatcher_exposes_active_waiter_probe() -> None:
 
 
 @pytest.mark.asyncio
+async def test_session_waiter_fail_defaults_to_current_caller_plugin_scope() -> None:
+    peer = MockPeer(MockCapabilityRouter())
+    dispatcher = HandlerDispatcher(plugin_id="worker-group", peer=peer, handlers=[])
+    event_alpha = _build_event(text="hello", session_id="session-1", peer=peer)
+    event_alpha._context = Context(peer=peer, plugin_id="plugin.alpha")
+    event_beta = _build_event(text="hello", session_id="session-1", peer=peer)
+    event_beta._context = Context(peer=peer, plugin_id="plugin.beta")
+
+    async def waiter_alpha() -> None:
+        with caller_plugin_scope("plugin.alpha"):
+            await dispatcher._session_waiters.register(
+                event=event_alpha,
+                handler=_noop_waiter,
+                timeout=30,
+                record_history_chains=False,
+            )
+
+    async def waiter_beta() -> None:
+        with caller_plugin_scope("plugin.beta"):
+            await dispatcher._session_waiters.register(
+                event=event_beta,
+                handler=_noop_waiter,
+                timeout=30,
+                record_history_chains=False,
+            )
+
+    task_alpha = asyncio.create_task(waiter_alpha())
+    task_beta = asyncio.create_task(waiter_beta())
+    await asyncio.sleep(0)
+
+    with caller_plugin_scope("plugin.alpha"):
+        assert (
+            await dispatcher._session_waiters.fail(
+                "session-1",
+                RuntimeError("stop alpha"),
+            )
+            is True
+        )
+
+    with pytest.raises(RuntimeError, match="stop alpha"):
+        await task_alpha
+    assert dispatcher.has_active_waiter(event_beta) is True
+
+    await dispatcher._session_waiters.fail(
+        "session-1",
+        RuntimeError("stop beta"),
+        plugin_id="plugin.beta",
+    )
+    with pytest.raises(RuntimeError, match="stop beta"):
+        await task_beta
+
+
+@pytest.mark.asyncio
 async def test_session_waiter_dispatch_preserves_source_event_payload() -> None:
     peer = MockPeer(MockCapabilityRouter())
     dispatcher = HandlerDispatcher(plugin_id="test-plugin", peer=peer, handlers=[])

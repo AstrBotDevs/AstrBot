@@ -318,9 +318,14 @@ class SessionWaiterManager:
         *,
         plugin_id: str | None = None,
     ) -> bool:
+        resolved_plugin_id = plugin_id
+        if resolved_plugin_id is None:
+            caller_plugin_id = current_caller_plugin_id()
+            if caller_plugin_id:
+                resolved_plugin_id = caller_plugin_id
         entry = self._select_entry(
             session_key,
-            plugin_id=plugin_id,
+            plugin_id=resolved_plugin_id,
             allow_ambiguous=False,
             missing_result=None,
         )
