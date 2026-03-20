@@ -84,7 +84,7 @@ llm_resp = await self.context.tool_loop_agent(
     prompt="Search for videos related to AstrBot on Bilibili.",
     tools=ToolSet([BilibiliTool()]),
     max_steps=30, # Maximum agent execution steps
-    tool_call_timeout=60, # Tool invocation timeout
+    tool_call_timeout=120, # Tool invocation timeout
 )
 # print(llm_resp.completion_text) # Get the returned text
 ```
