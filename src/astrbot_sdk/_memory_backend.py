@@ -585,6 +585,26 @@ class PluginMemoryBackend:
                         params,
                     ).fetchone()[0]
                 )
+                embedding_where_sql, embedding_params = self._namespace_where(
+                    namespace,
+                    include_descendants=include_descendants,
+                    alias="e",
+                )
+                embedded_items = int(
+                    conn.execute(
+                        f"""
+                        SELECT COUNT(*)
+                        FROM (
+                            SELECT DISTINCT e.namespace, e.key
+                            FROM memory_embeddings e
+                            WHERE {embedding_where_sql}
+                        )
+                        """,
+                        embedding_params,
+                    ).fetchone()[0]
+                )
+                indexed_items = total_items
+                dirty_items = max(indexed_items - embedded_items, 0)
                 provider_rows = conn.execute(
                     """
                     SELECT provider_id, dirty
@@ -602,6 +622,9 @@ class PluginMemoryBackend:
                         else normalize_memory_namespace(namespace)
                     ),
                     "namespace_count": namespace_count,
+                    "indexed_items": indexed_items,
+                    "embedded_items": embedded_items,
+                    "dirty_items": dirty_items,
                     "fts_enabled": self._fts_enabled,
                     "vector_backend": self._vector_backend_label(),
                     "vector_indexes": [
@@ -1273,11 +1296,17 @@ class PluginMemoryBackend:
     @classmethod
     def _faiss_available(cls) -> bool:
         try:
-            cls._import_faiss()
+            faiss = cls._import_faiss()
             cls._import_numpy()
         except Exception:
             return False
-        return True
+        required_attrs = (
+            "IndexFlatIP",
+            "IndexIDMap2",
+            "read_index",
+            "write_index",
+        )
+        return all(hasattr(faiss, attr) for attr in required_attrs)
 
     def _vector_backend_label(self) -> str:
         return "faiss" if self._faiss_available() else "exact"

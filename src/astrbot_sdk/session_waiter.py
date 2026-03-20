@@ -24,9 +24,9 @@ import asyncio
 import time
 import weakref
 from collections.abc import Awaitable, Callable, Coroutine
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from functools import wraps
-from contextvars import ContextVar
 from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar, cast, overload
 
 from loguru import logger

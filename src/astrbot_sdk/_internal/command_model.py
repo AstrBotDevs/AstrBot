@@ -6,10 +6,10 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from .injected_params import is_framework_injected_parameter
-from .typing_utils import unwrap_optional
 from ..errors import AstrBotError
 from ..runtime._command_matching import split_command_remainder
+from .injected_params import is_framework_injected_parameter
+from .typing_utils import unwrap_optional
 
 # TODO:文档内容喵
 COMMAND_MODEL_DOCS_URL = "https://docs.astrbot.org/sdk/parameter-injection"
