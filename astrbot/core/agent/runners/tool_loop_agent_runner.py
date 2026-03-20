@@ -712,6 +712,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                 valid_params = {}  # 参数过滤：只传递函数实际需要的参数
 
+                if func_tool_args is None:
+                    func_tool_args = {}
+
                 # 获取实际的 handler 函数
                 if func_tool.handler:
                     logger.debug(
