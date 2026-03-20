@@ -22,7 +22,7 @@ from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.dashboard.routes.plugin import PluginRoute
-from astrbot.dashboard.server import AstrBotDashboard
+from astrbot.dashboard.server import AstrBotDashboard, _expand_env_placeholders
 from tests.fixtures.helpers import (
     MockPluginBuilder,
     create_mock_updater_install,
@@ -78,6 +78,20 @@ def test_check_port_in_use_ignores_permission_errors(monkeypatch: pytest.MonkeyP
     )
 
     assert server.check_port_in_use("127.0.0.1", 3002) is False
+
+
+def test_expand_env_placeholders_resolves_env_and_default(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("HOST", "0.0.0.0")
+
+    assert _expand_env_placeholders("${HOST}", "host") == "0.0.0.0"
+    assert _expand_env_placeholders("${MISSING:-3002}", "port") == "3002"
+
+
+def test_expand_env_placeholders_raises_for_unresolved_variable():
+    with pytest.raises(ValueError, match="dashboard host: HOST"):
+        _expand_env_placeholders("${HOST}", "host")
 
 
 @pytest_asyncio.fixture(scope="module")
