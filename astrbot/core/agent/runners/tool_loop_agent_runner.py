@@ -139,9 +139,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # TODO: 2. after LLM output a tool call
         self.context_config = ContextConfig(
             # <=0 will never do compress
-            max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
+            max_context_tokens=provider.provider_config.get("max_context_tokens", 4096),
             # enforce max turns before compression
-            enforce_max_turns=self.enforce_max_turns,
+            enforce_max_turns=self.enforce_max_turns if self.enforce_max_turns != -1 else 15,
             truncate_turns=self.truncate_turns,
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent=self.llm_compress_keep_recent,
@@ -606,6 +606,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> T.AsyncGenerator[AgentResponse, None]:
         """Process steps until the agent is done."""
         step_count = 0
+        # TODO:将max_step由30改为一个较小的值
+        max_step = min(max_step, 3)
         while not self.done() and step_count < max_step:
             step_count += 1
             async for resp in self.step():
