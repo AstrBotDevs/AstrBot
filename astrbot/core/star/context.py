@@ -153,7 +153,7 @@ class Context:
         system_prompt: str | None = None,
         contexts: list[Message] | None = None,
         max_steps: int = 30,
-        tool_call_timeout: int = 60,
+        tool_call_timeout: int = 120,
         **kwargs: Any,
     ) -> LLMResponse:
         """Run an agent loop that allows the LLM to call tools iteratively until a final answer is produced.

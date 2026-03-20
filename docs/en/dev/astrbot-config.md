@@ -74,7 +74,7 @@ The default AstrBot configuration is as follows:
         "show_tool_use_status": False,
         "streaming_segmented": False,
         "max_agent_step": 30,
-        "tool_call_timeout": 60,
+        "tool_call_timeout": 120,
     },
     "provider_stt_settings": {
         "enable": False,

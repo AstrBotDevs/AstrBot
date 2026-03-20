@@ -307,8 +307,11 @@ class CronJobManager:
         if cron_payload.get("origin", "tool") == "api":
             cron_event.role = "admin"
 
+        tool_call_timeout = cfg.get("provider_settings", {}).get(
+            "tool_call_timeout", 120
+        )
         config = MainAgentBuildConfig(
-            tool_call_timeout=3600,
+            tool_call_timeout=tool_call_timeout,
             llm_safety_mode=False,
             streaming_response=False,
         )
