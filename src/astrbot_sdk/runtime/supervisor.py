@@ -440,8 +440,12 @@ class SupervisorRuntime:
         self.issues: list[PluginDiscoveryIssue] = []
         self._register_internal_capabilities()
 
-    def _sync_plugin_registry(self, plugins: list[PluginSpec]) -> None:
-        loaded_plugin_set = set(self.loaded_plugins)
+    def _publish_plugin_registry_snapshot(
+        self,
+        plugins: list[PluginSpec],
+        *,
+        enabled_plugins: set[str],
+    ) -> None:
         for plugin in plugins:
             manifest = plugin.manifest_data
             self.capability_router.upsert_plugin(
@@ -453,10 +457,26 @@ class SupervisorRuntime:
                     ),
                     "author": str(manifest.get("author") or ""),
                     "version": str(manifest.get("version") or "0.0.0"),
-                    "enabled": plugin.name in loaded_plugin_set,
+                    "enabled": plugin.name in enabled_plugins,
                 },
                 config=load_plugin_config(plugin),
             )
+
+    def _publish_discovered_plugin_registry(self, plugins: list[PluginSpec]) -> None:
+        """发布已发现插件的静态元数据。
+
+        这一阶段发生在 worker 真正启动前。此时 supervisor 已经知道有哪些插件、
+        它们的 manifest/config 是什么，但尚未确认哪些插件实际完成加载，因此统一
+        以 `enabled=False` 暴露给 metadata 能力。
+        """
+        self._publish_plugin_registry_snapshot(plugins, enabled_plugins=set())
+
+    def _publish_loaded_plugin_registry(self, plugins: list[PluginSpec]) -> None:
+        """在 worker 启动完成后刷新插件启用状态。"""
+        self._publish_plugin_registry_snapshot(
+            plugins,
+            enabled_plugins=set(self.loaded_plugins),
+        )
 
     def _register_internal_capabilities(self) -> None:
         self.capability_router.register(
@@ -663,7 +683,8 @@ class SupervisorRuntime:
             )
             for plugin_name, reason in plan_result.skipped_plugins.items()
         )
-        self._sync_plugin_registry(discovery.plugins)
+        # 先发布静态插件元数据，允许 supervisor 侧在 worker 启动阶段就读取配置/清单。
+        self._publish_discovered_plugin_registry(discovery.plugins)
         try:
             planned_sessions: list[WorkerSession] = []
             if plan_result.groups:
@@ -732,7 +753,8 @@ class SupervisorRuntime:
                     self._register_plugin_capability(descriptor, session, plugin_name)
                 session.start_close_watch()
 
-            self._sync_plugin_registry(discovery.plugins)
+            # worker 启动后再用实际加载结果刷新 enabled 状态，形成显式两阶段发布。
+            self._publish_loaded_plugin_registry(discovery.plugins)
 
             aggregated_handlers = list(self.handler_to_worker.keys())
             logger.info(
