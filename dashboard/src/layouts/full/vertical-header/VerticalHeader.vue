@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
+import type { VForm } from 'vuetify/components';
 import { useCustomizerStore } from '@/stores/customizer';
 import axios from 'axios';
 import Logo from '@/components/shared/Logo.vue';
@@ -95,6 +96,7 @@ const releasesHeader = computed(() => [
 ]);
 // Form validation
 const formValid = ref(true);
+const accountFormRef = ref<VForm | null>(null);
 const passwordRules = computed(() => [
   (v: string) => !!v || t('core.header.accountDialog.validation.passwordRequired'),
   (v: string) => v.length >= 8 || t('core.header.accountDialog.validation.passwordMinLength')
@@ -217,10 +219,16 @@ const isPreRelease = (version: string) => {
 };
 
 // 账户修改
-function accountEdit() {
-  accountEditStatus.value.loading = true;
+async function accountEdit() {
   accountEditStatus.value.error = false;
   accountEditStatus.value.success = false;
+
+  const { valid } = await accountFormRef.value?.validate() ?? { valid: false };
+  if (!valid) {
+    return;
+  }
+
+  accountEditStatus.value.loading = true;
 
   const passwordHash = password.value ? md5(password.value) : '';
   const newPasswordHash = newPassword.value ? md5(newPassword.value) : '';
@@ -824,7 +832,7 @@ onMounted(async () => {
     <!-- 账户对话框 -->
     <v-dialog v-model="dialog" persistent :max-width="$vuetify.display.xs ? '90%' : '500'">
       <v-card class="account-dialog">
-        <v-card-text class="py-6">
+        <v-card-text class="account-dialog__content py-6">
           <div class="d-flex flex-column align-center mb-6">
             <logo :title="t('core.header.logoTitle')" :subtitle="t('core.header.accountDialog.title')"></logo>
           </div>
@@ -840,7 +848,7 @@ onMounted(async () => {
             {{ accountEditStatus.message }}
           </v-alert>
 
-          <v-form v-model="formValid" @submit.prevent="accountEdit">
+          <v-form ref="accountFormRef" v-model="formValid" @submit.prevent="accountEdit">
             <v-text-field v-model="password" :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
               :type="showPassword ? 'text' : 'password'" :label="t('core.header.accountDialog.form.currentPassword')"
               variant="outlined" required clearable @click:append-inner="showPassword = !showPassword"
@@ -914,6 +922,16 @@ onMounted(async () => {
   /* Adds indentation to unordered lists */
   margin-top: 8px;
   margin-bottom: 8px;
+}
+
+.account-dialog {
+  max-height: min(720px, calc(100vh - 32px));
+  display: flex;
+  flex-direction: column;
+}
+
+.account-dialog__content {
+  overflow-y: auto;
 }
 
 .account-dialog .v-card-text {
