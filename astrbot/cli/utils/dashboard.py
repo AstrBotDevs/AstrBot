@@ -15,7 +15,7 @@ class DashboardManager:
         from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 
         if self._bundled_dist.is_dir():
-            click.echo("Dashboard is bundled with the package – skipping download.")
+            click.echo("Dashboard is bundled with the package - skipping download.")
             return
 
         try:
@@ -41,7 +41,10 @@ class DashboardManager:
                             click.echo(f"Failed to install dashboard: {e}")
 
                 case str():
-                    if VersionComparator.compare_version(VERSION, dashboard_version) <= 0:
+                    if (
+                        VersionComparator.compare_version(VERSION, dashboard_version)
+                        <= 0
+                    ):
                         click.echo("Dashboard is already up to date")
                         return
                     try:
