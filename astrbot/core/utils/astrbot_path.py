@@ -106,7 +106,7 @@ class AstrbotPaths:
             return None
 
     @property
-    def bundled_dist(self) -> Path
+    def bundled_dist(self) -> Path :
         return self.project_root / "dashboard" / "dist"
     
     async def async_dashboard_version(self) -> str | None:
