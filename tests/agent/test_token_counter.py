@@ -1,5 +1,8 @@
 """Tests for EstimateTokenCounter multimodal support."""
 
+import sys
+from types import SimpleNamespace
+
 from astrbot.core.agent.context.token_counter import (
     AUDIO_TOKEN_ESTIMATE,
     IMAGE_TOKEN_ESTIMATE,
@@ -116,3 +119,18 @@ class TestCounterFactory:
     def test_create_tokenizer_mode_returns_valid_counter_type(self):
         created = create_token_counter("tokenizer", model="gpt-4")
         assert isinstance(created, (TokenizerTokenCounter, EstimateTokenCounter))
+
+    def test_tokenizer_counter_gracefully_handles_broken_fallback_encoder(
+        self, monkeypatch
+    ):
+        fake_tiktoken = SimpleNamespace(
+            encoding_for_model=lambda _model: (_ for _ in ()).throw(RuntimeError("boom")),
+            get_encoding=lambda _name: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        monkeypatch.setitem(sys.modules, "tiktoken", fake_tiktoken)
+
+        counter = TokenizerTokenCounter(model="gpt-4")
+        assert counter.available is False
+
+        created = create_token_counter("tokenizer", model="gpt-4")
+        assert isinstance(created, EstimateTokenCounter)

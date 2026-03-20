@@ -112,7 +112,12 @@ class TokenizerTokenCounter:
             else:
                 encoding = tiktoken.get_encoding("cl100k_base")
         except Exception:
-            encoding = tiktoken.get_encoding("cl100k_base")
+            try:
+                encoding = tiktoken.get_encoding("cl100k_base")
+            except Exception:
+                self._available = False
+                self._encode = None
+                return
 
         self._available = True
         self._encode = lambda text: len(encoding.encode(text))

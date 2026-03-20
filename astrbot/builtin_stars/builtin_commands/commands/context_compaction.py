@@ -1,5 +1,6 @@
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageChain
+from astrbot.core import logger
 from astrbot.core.context_compaction_scheduler import PeriodicContextCompactionScheduler
 
 
@@ -27,7 +28,10 @@ class ContextCompactionCommands:
         trigger_tokens = cfg.get("trigger_tokens", "?")
         trigger_ratio = cfg.get("trigger_min_context_ratio", "?")
         if isinstance(trigger_tokens, int) and trigger_tokens <= 0:
-            trigger_text = f"自动({trigger_ratio}x模型上下文)"
+            if isinstance(trigger_ratio, (int, float)):
+                trigger_text = f"自动({trigger_ratio}x模型上下文或目标长度估算)"
+            else:
+                trigger_text = "自动(基于目标长度估算)"
         else:
             trigger_text = str(trigger_tokens)
 
@@ -87,7 +91,8 @@ class ContextCompactionCommands:
                 max_conversations_override=limit,
             )
         except Exception as exc:
-            await event.send(MessageChain().message(f"触发压缩失败: {exc}"))
+            logger.error("ctxcompact run failed: %s", exc, exc_info=True)
+            await event.send(MessageChain().message("触发压缩失败，请查看服务端日志。"))
             return
 
         msg = (

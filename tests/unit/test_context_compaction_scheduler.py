@@ -275,6 +275,29 @@ def test_resolve_trigger_tokens_falls_back_when_provider_context_unknown() -> No
     assert resolved == 1536
 
 
+def test_resolve_token_counter_uses_configured_mode_and_provider_model(monkeypatch) -> None:
+    scheduler = _build_scheduler({"context_token_counter_mode": "auto"})
+    provider = SimpleNamespace(get_model=lambda: "gpt-4o")
+    called: dict[str, str | None] = {}
+
+    fake_counter = SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 0)
+
+    def _fake_create(mode: str | None = None, *, model: str | None = None):
+        called["mode"] = mode
+        called["model"] = model
+        return fake_counter
+
+    monkeypatch.setattr(
+        "astrbot.core.context_compaction_scheduler.create_token_counter",
+        _fake_create,
+    )
+
+    resolved = scheduler._resolve_token_counter(provider)
+    assert resolved is fake_counter
+    assert called["mode"] == "auto"
+    assert called["model"] == "gpt-4o"
+
+
 @pytest.mark.asyncio
 async def test_compact_one_conversation_dry_run_reports_skipped() -> None:
     scheduler = _build_scheduler({"periodic_context_compaction": {"enabled": True}})
@@ -287,11 +310,13 @@ async def test_compact_one_conversation_dry_run_reports_skipped() -> None:
         token_usage=0,
         updated_at=None,
     )
-    scheduler._check_eligibility = lambda _conv, _cfg: (  # type: ignore[method-assign]
+    scheduler._check_eligibility = lambda _conv, _cfg, _counter: (  # type: ignore[method-assign]
         [Message(role="user", content="before")],
         100,
     )
-    scheduler._resolve_provider = AsyncMock(return_value=object())  # type: ignore[method-assign]
+    scheduler._resolve_provider = AsyncMock(  # type: ignore[method-assign]
+        return_value=SimpleNamespace(get_model=lambda: "gpt-4o")
+    )
     scheduler._run_compaction_rounds = AsyncMock(  # type: ignore[method-assign]
         return_value=SimpleNamespace(
             messages=[Message(role="user", content="after")],
@@ -300,7 +325,9 @@ async def test_compact_one_conversation_dry_run_reports_skipped() -> None:
         )
     )
     scheduler._resolve_trigger_tokens = lambda _cfg, _provider: 1  # type: ignore[method-assign]
-    scheduler._token_counter = SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 50)
+    scheduler._resolve_token_counter = lambda _provider: SimpleNamespace(  # type: ignore[method-assign]
+        count_tokens=lambda *_args, **_kwargs: 50
+    )
     scheduler._persist_compacted_history = AsyncMock(  # type: ignore[method-assign]
         return_value=True
     )

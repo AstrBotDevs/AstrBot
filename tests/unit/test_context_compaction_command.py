@@ -193,4 +193,4 @@ async def test_run_reports_error_when_scheduler_raises() -> None:
     )
     chain = event.send.await_args.args[0]
     text = chain.get_plain_text(with_other_comps_mark=True)
-    assert text.startswith("触发压缩失败:")
+    assert text == "触发压缩失败，请查看服务端日志。"

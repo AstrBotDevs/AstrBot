@@ -10,7 +10,11 @@ from typing import TYPE_CHECKING, Any
 from astrbot import logger
 from astrbot.core.agent.context.config import ContextConfig
 from astrbot.core.agent.context.manager import ContextManager
-from astrbot.core.agent.context.token_counter import EstimateTokenCounter
+from astrbot.core.agent.context.token_counter import (
+    EstimateTokenCounter,
+    TokenCounter,
+    create_token_counter,
+)
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.message_history_parser import MessageHistoryParser
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -167,7 +171,10 @@ class PeriodicContextCompactionScheduler:
         self.provider_manager = provider_manager
         self._stop_event = asyncio.Event()
         self._running_lock = asyncio.Lock()
+        # Default fallback counter. Actual counter is resolved by provider_settings
+        # (context_token_counter_mode) and provider model when available.
         self._token_counter = EstimateTokenCounter()
+        self._token_counter_cache: dict[tuple[str, str], TokenCounter] = {}
         self._history_parser = MessageHistoryParser()
         self._bootstrapped = False
         self._last_status = _RunStatus()
@@ -397,14 +404,15 @@ class PeriodicContextCompactionScheduler:
         conv: ConversationV2,
         cfg: CompactionConfig,
     ) -> str:
-        eligibility = self._check_eligibility(conv, cfg)
-        if eligibility is None:
-            return "skipped"
-        messages, before_tokens = eligibility
-
         provider = await self._resolve_provider(cfg, conv.user_id)
         if not provider:
             return "failed"
+
+        token_counter = self._resolve_token_counter(provider)
+        eligibility = self._check_eligibility(conv, cfg, token_counter)
+        if eligibility is None:
+            return "skipped"
+        messages, before_tokens = eligibility
 
         trigger_tokens = self._resolve_trigger_tokens(cfg, provider)
         if before_tokens < trigger_tokens:
@@ -414,11 +422,12 @@ class PeriodicContextCompactionScheduler:
             messages=messages,
             provider=provider,
             cfg=cfg,
+            token_counter=token_counter,
         )
         if not round_result.changed:
             return "skipped"
 
-        after_tokens = self._token_counter.count_tokens(round_result.messages)
+        after_tokens = token_counter.count_tokens(round_result.messages)
         if after_tokens >= before_tokens:
             return "skipped"
 
@@ -446,6 +455,7 @@ class PeriodicContextCompactionScheduler:
         self,
         conv: ConversationV2,
         cfg: CompactionConfig,
+        token_counter: TokenCounter,
     ) -> EligibilityInfo | None:
         history = conv.content
         if not isinstance(history, list) or len(history) < cfg.min_messages:
@@ -459,7 +469,7 @@ class PeriodicContextCompactionScheduler:
             return None
 
         trusted_usage = conv.token_usage if isinstance(conv.token_usage, int) else 0
-        before_tokens = self._token_counter.count_tokens(messages, trusted_usage)
+        before_tokens = token_counter.count_tokens(messages, trusted_usage)
         return messages, before_tokens
 
     def _resolve_trigger_tokens(self, cfg: CompactionConfig, provider: Provider) -> int:
@@ -501,15 +511,16 @@ class PeriodicContextCompactionScheduler:
         messages: list[Message],
         provider: Provider,
         cfg: CompactionConfig,
+        token_counter: TokenCounter,
     ) -> _RoundResult:
         compressed = messages
         changed = False
         rounds = 0
         instruction = self._resolve_instruction(cfg)
-        manager = self._build_context_manager(cfg, provider, instruction)
+        manager = self._build_context_manager(cfg, provider, instruction, token_counter)
 
         for _ in range(cfg.max_rounds):
-            current_tokens = self._token_counter.count_tokens(compressed)
+            current_tokens = token_counter.count_tokens(compressed)
             if current_tokens <= cfg.target_tokens:
                 break
 
@@ -528,6 +539,7 @@ class PeriodicContextCompactionScheduler:
         cfg: CompactionConfig,
         provider: Provider,
         instruction: str,
+        token_counter: TokenCounter,
     ) -> ContextManager:
         return ContextManager(
             ContextConfig(
@@ -537,6 +549,7 @@ class PeriodicContextCompactionScheduler:
                 llm_compress_keep_recent=cfg.keep_recent,
                 llm_compress_instruction=instruction,
                 llm_compress_provider=provider,
+                custom_token_counter=token_counter,
             )
         )
 
@@ -634,6 +647,38 @@ class PeriodicContextCompactionScheduler:
         if isinstance(base_instruction, str) and base_instruction.strip():
             return base_instruction.strip()
         return ""
+
+    def _resolve_token_counter(self, provider: Provider | None) -> TokenCounter:
+        provider_settings = self.config_manager.default_conf.get("provider_settings", {})
+        mode = "estimate"
+        if isinstance(provider_settings, dict):
+            mode = str(provider_settings.get("context_token_counter_mode", "estimate"))
+        mode = mode.strip().lower() or "estimate"
+
+        model = ""
+        if provider is not None:
+            try:
+                model = str(provider.get_model() or "")
+            except Exception:
+                model = ""
+        cache_key = (mode, model)
+        cached = self._token_counter_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            resolved = create_token_counter(mode=mode, model=model or None)
+        except Exception as exc:
+            logger.warning(
+                "[ContextCompact] failed to create token counter(mode=%s, model=%s), fallback to estimate: %s",
+                mode,
+                model or "-",
+                exc,
+            )
+            resolved = self._token_counter
+
+        self._token_counter_cache[cache_key] = resolved
+        return resolved
 
     @staticmethod
     def _is_idle_enough(updated_at: datetime | None, min_idle_minutes: int) -> bool:
