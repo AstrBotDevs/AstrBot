@@ -170,6 +170,7 @@
     "sourceExists": "该插件源已存在",
     "installPlugin": "安装插件",
     "randomPlugins": "🎲 随机插件",
+    "itemsPerPage": "每页显示",
     "sourceSafetyWarning": "即使是默认插件源，我们也不能完全保证插件的稳定性和安全性，使用前请谨慎核查。"
   },
   "sort": {

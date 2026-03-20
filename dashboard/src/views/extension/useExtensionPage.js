@@ -5,11 +5,11 @@ import { resolveErrorMessage } from "@/utils/errorUtils";
 import { getValidHashTab, replaceTabRoute } from "@/utils/hashRouteTabs.mjs";
 import { getPlatformDisplayName } from "@/utils/platformUtils";
 import {
-    buildSearchQuery,
-    matchesPluginSearch,
-    normalizeStr,
-    toInitials,
-    toPinyinText,
+  buildSearchQuery,
+  matchesPluginSearch,
+  normalizeStr,
+  toInitials,
+  toPinyinText,
 } from "@/utils/pluginSearch";
 import axios from "axios";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
@@ -180,6 +180,24 @@ export const useExtensionPage = () => {
   const upload_file = ref(null);
   const uploadTab = ref("file");
   const showPluginFullName = ref(false);
+  const marketItemsPerPageOptions = [9, 25, 50, 100];
+  const getInitialMarketListViewMode = () => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      return localStorage.getItem("pluginMarketListViewMode") === "true";
+    }
+    return false;
+  };
+  const getInitialMarketItemsPerPage = () => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const rawValue = Number(localStorage.getItem("pluginMarketItemsPerPage"));
+      if (marketItemsPerPageOptions.includes(rawValue)) {
+        return rawValue;
+      }
+    }
+    return 9;
+  };
+  const marketIsListView = ref(getInitialMarketListViewMode());
+  const marketItemsPerPage = ref(getInitialMarketItemsPerPage());
   const marketSearch = ref("");
   const debouncedMarketSearch = ref("");
   const refreshingMarket = ref(false);
@@ -281,6 +299,39 @@ export const useExtensionPage = () => {
 
     return items;
   });
+
+  const marketPluginHeaders = computed(() => [
+    {
+      title: tm("table.headers.name"),
+      key: "name",
+      sortable: false,
+      width: "28%",
+    },
+    {
+      title: tm("table.headers.description"),
+      key: "desc",
+      sortable: false,
+      width: "40%",
+    },
+    {
+      title: tm("table.headers.version"),
+      key: "version",
+      sortable: false,
+      width: "12%",
+    },
+    {
+      title: tm("table.headers.author"),
+      key: "author",
+      sortable: false,
+      width: "10%",
+    },
+    {
+      title: tm("table.headers.actions"),
+      key: "actions",
+      sortable: false,
+      width: "10%",
+    },
+  ]);
 
   // 过滤要显示的插件
   const filteredExtensions = computed(() => {
@@ -431,15 +482,15 @@ export const useExtensionPage = () => {
   };
 
   // 分页计算属性
-  const displayItemsPerPage = 9; // 固定每页显示9个卡片（3行）
+  const displayItemsPerPage = computed(() => marketItemsPerPage.value);
 
   const totalPages = computed(() => {
-    return Math.ceil(sortedPlugins.value.length / displayItemsPerPage);
+    return Math.ceil(sortedPlugins.value.length / displayItemsPerPage.value);
   });
 
   const paginatedPlugins = computed(() => {
-    const start = (currentPage.value - 1) * displayItemsPerPage;
-    const end = start + displayItemsPerPage;
+    const start = (currentPage.value - 1) * displayItemsPerPage.value;
+    const end = start + displayItemsPerPage.value;
     return sortedPlugins.value.slice(start, end);
   });
 
@@ -483,7 +534,7 @@ export const useExtensionPage = () => {
       Object.assign(extension_data, res.data);
 
       // 同步插件数据到侧边栏共享状态
-      pluginSidebarState.plugins = (res.data?.data || []);
+      pluginSidebarState.plugins = res.data?.data || [];
 
       const failRes = await axios.get("/api/plugin/source/get-failed-plugins");
       failedPluginsDict.value = failRes.data.data || {};
@@ -648,21 +699,28 @@ export const useExtensionPage = () => {
 
     pluginMarketData.value.forEach((plugin) => {
       if (plugin.repo) {
-        onlinePluginsMap.set(normalizeInstallUrl(plugin.repo).toLowerCase(), plugin);
+        onlinePluginsMap.set(
+          normalizeInstallUrl(plugin.repo).toLowerCase(),
+          plugin,
+        );
       }
       const normalizedName = normalizeStr(plugin.name);
       onlinePluginsNameMap.set(normalizedName, plugin);
     });
 
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
-    
+
     data.forEach((extension) => {
-      const repoKey = extension.repo ? normalizeInstallUrl(extension.repo).toLowerCase() : undefined;
+      const repoKey = extension.repo
+        ? normalizeInstallUrl(extension.repo).toLowerCase()
+        : undefined;
       const onlinePlugin = repoKey ? onlinePluginsMap.get(repoKey) : null;
 
       // 使用 marketplace_name 进行市场匹配（后端已统一为减号格式）
       const normalizedExtensionName = normalizeStr(extension.marketplace_name);
-      const onlinePluginByName = onlinePluginsNameMap.get(normalizedExtensionName);
+      const onlinePluginByName = onlinePluginsNameMap.get(
+        normalizedExtensionName,
+      );
 
       const matchedPlugin = repoKey ? onlinePlugin : onlinePluginByName;
 
@@ -1263,7 +1321,9 @@ export const useExtensionPage = () => {
 
     for (let i = 0; i < pluginMarketData.value.length; i++) {
       const plugin = pluginMarketData.value[i];
-      const repoKey = plugin.repo ? normalizeInstallUrl(plugin.repo).toLowerCase() : undefined;
+      const repoKey = plugin.repo
+        ? normalizeInstallUrl(plugin.repo).toLowerCase()
+        : undefined;
       const matchedInstalled =
         (repoKey && installedByRepo.get(repoKey)) ||
         installedByName.get(normalizeStr(plugin.name));
@@ -1700,6 +1760,19 @@ export const useExtensionPage = () => {
     }, 300); // 300ms 防抖延迟
   });
 
+  watch(marketIsListView, (newVal) => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      localStorage.setItem("pluginMarketListViewMode", String(newVal));
+    }
+  });
+
+  watch(marketItemsPerPage, (newVal) => {
+    currentPage.value = 1;
+    if (typeof window !== "undefined" && window.localStorage) {
+      localStorage.setItem("pluginMarketItemsPerPage", String(newVal));
+    }
+  });
+
   watch(
     [() => dialog.value, () => extension_url.value, () => uploadTab.value],
     async ([dialogOpen, _, currentUploadTab]) => {
@@ -1809,6 +1882,7 @@ export const useExtensionPage = () => {
     upload_file,
     uploadTab,
     showPluginFullName,
+    marketIsListView,
     marketSearch,
     debouncedMarketSearch,
     refreshingMarket,
@@ -1818,6 +1892,7 @@ export const useExtensionPage = () => {
     normalizeStr,
     toPinyinText,
     toInitials,
+    marketPluginHeaders,
     filteredExtensions,
     filteredPlugins,
     filteredMarketPlugins,
@@ -1826,6 +1901,8 @@ export const useExtensionPage = () => {
     randomPlugins,
     shufflePlugins,
     refreshRandomPlugins,
+    marketItemsPerPage,
+    marketItemsPerPageOptions,
     displayItemsPerPage,
     totalPages,
     paginatedPlugins,
