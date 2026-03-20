@@ -47,9 +47,18 @@ class ContextManager:
                 truncate_turns=config.truncate_turns
             )
         
-        # 缓存上一次计算的 token 数，避免重复计算
+        # 缓存上一次计算的消息指纹和 token 数
+        self._last_messages_fingerprint: int | None = None
         self._last_token_count: int | None = None
         self._compression_count = 0
+
+    def _get_messages_fingerprint(self, messages: list[Message]) -> int:
+        """生成消息列表的指纹，用于检测消息内容是否变化。"""
+        if not messages:
+            return 0
+        
+        # 使用 token counter 的缓存键作为指纹
+        return self.token_counter._get_cache_key(messages)
 
     async def process(
         self, messages: list[Message], trusted_token_usage: int = 0
@@ -77,16 +86,19 @@ class ContextManager:
             # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
                 # 优化: 使用缓存的 token 计数或计算新值
+                current_fingerprint = self._get_messages_fingerprint(messages)
+                
                 if trusted_token_usage > 0:
                     total_tokens = trusted_token_usage
-                elif self._last_token_count is not None:
-                    # 简单检查：如果消息数量没变，使用缓存
-                    if len(result) == len(messages):
-                        total_tokens = self._last_token_count
-                    else:
-                        total_tokens = self.token_counter.count_tokens(result)
+                elif (self._last_messages_fingerprint is not None and 
+                      self._last_messages_fingerprint == current_fingerprint and
+                      self._last_token_count is not None):
+                    # 消息内容没变化，使用缓存的 token 计数
+                    total_tokens = self._last_token_count
                 else:
+                    # 消息内容变了，需要重新计算
                     total_tokens = self.token_counter.count_tokens(result)
+                    self._last_messages_fingerprint = current_fingerprint
                 
                 # 更新缓存
                 self._last_token_count = total_tokens
@@ -95,6 +107,8 @@ class ContextManager:
                     result, total_tokens, self.config.max_context_tokens
                 ):
                     result = await self._run_compression(result, total_tokens)
+                    # 压缩后更新指纹
+                    self._last_messages_fingerprint = self._get_messages_fingerprint(result)
 
             return result
         except Exception as e:
@@ -133,6 +147,7 @@ class ContextManager:
 
         # 更新缓存
         self._last_token_count = tokens_after_compression
+        self._last_messages_fingerprint = self._get_messages_fingerprint(messages)
         
         # last check - 优化: 减少不必要的递归调用
         if self.compressor.should_compress(
@@ -145,6 +160,7 @@ class ContextManager:
             messages = self.truncator.truncate_by_halving(messages)
             # 更新缓存
             self._last_token_count = self.token_counter.count_tokens(messages)
+            self._last_messages_fingerprint = self._get_messages_fingerprint(messages)
 
         return messages
     
@@ -157,6 +173,7 @@ class ContextManager:
         stats = {
             "compression_count": self._compression_count,
             "last_token_count": self._last_token_count,
+            "last_messages_fingerprint": self._last_messages_fingerprint,
         }
         
         # 如果 token counter 有缓存统计，也一并返回
@@ -169,5 +186,6 @@ class ContextManager:
         """重置统计信息。"""
         self._compression_count = 0
         self._last_token_count = None
+        self._last_messages_fingerprint = None
         if hasattr(self.token_counter, 'clear_cache'):
             self.token_counter.clear_cache()

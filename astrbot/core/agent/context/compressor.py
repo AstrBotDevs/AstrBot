@@ -55,10 +55,6 @@ class ContextCompressor(Protocol):
 class TruncateByTurnsCompressor:
     """Truncate by turns compressor implementation.
     Truncates the message list by removing older turns.
-    
-    Optimizations:
-    - 动态调整每次截断的轮数
-    - 支持增量压缩，避免过度截断
     """
 
     def __init__(
@@ -72,10 +68,6 @@ class TruncateByTurnsCompressor:
         """
         self.truncate_turns = truncate_turns
         self.compression_threshold = compression_threshold
-        # 新增: 最小保留轮数，避免截断过多
-        self.min_keep_turns = 2
-        # 新增: 动态调整标志
-        self._last_truncate_turns = truncate_turns
 
     def should_compress(
         self, messages: list[Message], current_tokens: int, max_tokens: int
@@ -96,32 +88,15 @@ class TruncateByTurnsCompressor:
         return usage_rate > self.compression_threshold
 
     async def __call__(self, messages: list[Message]) -> list[Message]:
-        """Compress messages by removing oldest turns.
-        
-        Optimizations:
-        - 根据当前使用率动态调整截断轮数
-        - 避免一次性截断过多
-        """
+        """Compress messages by removing oldest turns."""
         truncator = ContextTruncator()
-        
-        # 计算需要的截断轮数
-        truncate_turns = self._calculate_truncate_turns(messages)
         
         truncated_messages = truncator.truncate_by_dropping_oldest_turns(
             messages,
-            drop_turns=truncate_turns,
+            drop_turns=self.truncate_turns,
         )
         
-        self._last_truncate_turns = truncate_turns
         return truncated_messages
-    
-    def _calculate_truncate_turns(self, messages: list[Message]) -> int:
-        """动态计算需要截断的轮数。
-        
-        基于消息数量和当前使用率，智能调整截断策略。
-        """
-        # 简单场景: 使用配置的截断轮数
-        return max(1, self.truncate_turns)
 
 
 def split_history(
@@ -169,6 +144,22 @@ def split_history(
     recent_messages = non_system_messages[split_index:]
 
     return system_messages, messages_to_summarize, recent_messages
+
+
+def _generate_summary_cache_key(messages: list[Message]) -> str:
+    """Generate a cache key for summary based on full history.
+    
+    Uses role and content from all messages to create a collision-resistant key.
+    """
+    if not messages:
+        return ""
+    
+    key_parts = []
+    for msg in messages:
+        content = msg.content if isinstance(msg.content, str) else str(msg.content)
+        key_parts.append(f"{msg.role}:{content[:50]}")
+    
+    return "|".join(key_parts)
 
 
 class LLMSummaryCompressor:
@@ -253,7 +244,7 @@ class LLMSummaryCompressor:
             return messages
 
         # 生成缓存键
-        cache_key = self._generate_cache_key(messages_to_summarize)
+        cache_key = _generate_summary_cache_key(messages_to_summarize)
         
         # 尝试从缓存获取摘要
         summary_content = None
@@ -304,18 +295,6 @@ class LLMSummaryCompressor:
         result.extend(recent_messages)
 
         return result
-    
-    def _generate_cache_key(self, messages: list[Message]) -> str:
-        """生成缓存键。
-        
-        使用消息数量和最后一条消息的哈希作为缓存键。
-        """
-        if not messages:
-            return ""
-        # 使用简洁的方式生成缓存键
-        msg_count = len(messages)
-        last_msg_preview = str(messages[-1])[:50] if messages else ""
-        return f"{msg_count}:{hash(last_msg_preview)}"
     
     def clear_cache(self) -> None:
         """清空摘要缓存。"""

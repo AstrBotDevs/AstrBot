@@ -34,10 +34,8 @@ class TokenCounter(Protocol):
 IMAGE_TOKEN_ESTIMATE = 765
 AUDIO_TOKEN_ESTIMATE = 500
 
-# Tool call token 开销估算
-# 基于 OpenAI 定价: ~$0.01 / 1K tokens for tool calls
-# 典型 tool call 约 100-300 tokens
-TOOL_CALL_TOKEN_ESTIMATE = 200
+# 每条消息的固定开销（role、content wrapper 等）
+PER_MESSAGE_OVERHEAD = 4
 
 
 class EstimateTokenCounter:
@@ -65,14 +63,33 @@ class EstimateTokenCounter:
         self._miss_count = 0
 
     def _get_cache_key(self, messages: list[Message]) -> int:
-        """Generate a cache key for messages.
+        """Generate a cache key for messages based on full history structure.
         
-        Uses message content hash for quick cache lookup.
+        Uses role, content, and tool_calls for each message to create a
+        collision-resistant hash.
         """
-        # 使用消息数量和最后一条消息的内容作为简单缓存键
         if not messages:
             return 0
-        return hash((len(messages), str(messages[-1])[:100]))
+
+        h = 0
+        for msg in messages:
+            # 处理 content
+            if isinstance(msg.content, str):
+                content_repr = msg.content
+            else:
+                content_repr = str(msg.content)
+            
+            # 处理 tool_calls
+            tool_repr = ()
+            if msg.tool_calls:
+                tool_repr = tuple(
+                    sorted(tc.items()) if isinstance(tc, dict) else (str(tc),)
+                    for tc in msg.tool_calls
+                )
+            
+            h = hash((h, msg.role, content_repr, tool_repr))
+        
+        return h
 
     def count_tokens(
         self, messages: list[Message], trusted_token_usage: int = 0
@@ -105,24 +122,29 @@ class EstimateTokenCounter:
         """Internal token counting implementation."""
         total = 0
         for msg in messages:
+            message_tokens = 0
+            
             content = msg.content
             if isinstance(content, str):
-                total += self._estimate_tokens(content)
+                message_tokens += self._estimate_tokens(content)
             elif isinstance(content, list):
                 for part in content:
                     if isinstance(part, TextPart):
-                        total += self._estimate_tokens(part.text)
+                        message_tokens += self._estimate_tokens(part.text)
                     elif isinstance(part, ThinkPart):
-                        total += self._estimate_tokens(part.think)
+                        message_tokens += self._estimate_tokens(part.think)
                     elif isinstance(part, ImageURLPart):
-                        total += IMAGE_TOKEN_ESTIMATE
+                        message_tokens += IMAGE_TOKEN_ESTIMATE
                     elif isinstance(part, AudioURLPart):
-                        total += AUDIO_TOKEN_ESTIMATE
+                        message_tokens += AUDIO_TOKEN_ESTIMATE
 
             if msg.tool_calls:
                 for tc in msg.tool_calls:
                     tc_str = json.dumps(tc if isinstance(tc, dict) else tc.model_dump())
-                    total += self._estimate_tokens(tc_str)
+                    message_tokens += self._estimate_tokens(tc_str)
+
+            # 添加每条消息的固定开销
+            total += message_tokens + PER_MESSAGE_OVERHEAD
 
         return total
 
@@ -153,20 +175,12 @@ class EstimateTokenCounter:
                 special_count += 1
         
         # 使用更精确的估算比率
-        # 中文: ~0.55 tokens/char (考虑标点和空格)
-        # 英文: ~0.25 tokens/char
-        # 数字: ~0.4 tokens/char
-        # 特殊字符: ~0.2 tokens/char
-        
         chinese_tokens = int(chinese_count * 0.55)
         english_tokens = int(english_count * 0.25)
         digit_tokens = int(digit_count * 0.4)
         special_tokens = int(special_count * 0.2)
         
-        # 添加消息格式开销 (role, content wrapper 等)
-        overhead = 4
-        
-        return chinese_tokens + english_tokens + digit_tokens + special_tokens + overhead
+        return chinese_tokens + english_tokens + digit_tokens + special_tokens
 
     def get_cache_stats(self) -> dict:
         """Get cache hit/miss statistics.

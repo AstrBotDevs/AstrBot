@@ -2,19 +2,23 @@
 
 这些测试验证了上下文压缩模块的优化功能:
 1. Token 估算算法的精确性
-2. 缓存机制的有效性
-3. 压缩器的增量压缩支持
+2. 缓存机制的有效性（使用强缓存键）
+3. 压缩器的功能
 """
 
 import pytest
 import asyncio
 from unittest.mock import Mock, AsyncMock
 
-from astrbot.core.agent.context.token_counter import EstimateTokenCounter
+from astrbot.core.agent.context.token_counter import (
+    EstimateTokenCounter,
+    PER_MESSAGE_OVERHEAD,
+)
 from astrbot.core.agent.context.compressor import (
     TruncateByTurnsCompressor,
     LLMSummaryCompressor,
     split_history,
+    _generate_summary_cache_key,
 )
 from astrbot.core.agent.context.manager import ContextManager
 from astrbot.core.agent.context.config import ContextConfig
@@ -71,9 +75,11 @@ class TestEstimateTokenCounter:
         ]
         tokens = self.counter.count_tokens(messages)
         assert tokens > 0
+        # 验证每条消息都有固定开销
+        assert tokens >= PER_MESSAGE_OVERHEAD * len(messages)
 
-    def test_cache_functionality(self):
-        """测试缓存功能。"""
+    def test_cache_functionality_with_strong_key(self):
+        """测试使用强缓存键的缓存功能。"""
         messages = [
             Message(role="user", content="测试消息"),
             Message(role="assistant", content="测试回复"),
@@ -90,6 +96,38 @@ class TestEstimateTokenCounter:
         # 检查缓存统计
         stats = self.counter.get_cache_stats()
         assert stats["hits"] >= 1
+
+    def test_different_messages_different_cache_keys(self):
+        """测试不同消息产生不同的缓存键。"""
+        messages1 = [
+            Message(role="user", content="消息1"),
+            Message(role="assistant", content="回复1"),
+        ]
+        messages2 = [
+            Message(role="user", content="消息2"),
+            Message(role="assistant", content="回复2"),
+        ]
+        
+        key1 = self.counter._get_cache_key(messages1)
+        key2 = self.counter._get_cache_key(messages2)
+        
+        assert key1 != key2
+
+    def test_same_messages_same_cache_key(self):
+        """测试相同消息产生相同的缓存键。"""
+        messages1 = [
+            Message(role="user", content="相同消息"),
+            Message(role="assistant", content="相同回复"),
+        ]
+        messages2 = [
+            Message(role="user", content="相同消息"),
+            Message(role="assistant", content="相同回复"),
+        ]
+        
+        key1 = self.counter._get_cache_key(messages1)
+        key2 = self.counter._get_cache_key(messages2)
+        
+        assert key1 == key2
 
     def test_cache_clear(self):
         """测试缓存清除。"""
@@ -162,6 +200,42 @@ class TestSplitHistory:
         
         assert len(to_summarize) == 0  # 没有需要摘要的消息
         assert len(recent) == 2
+
+
+class TestGenerateSummaryCacheKey:
+    """Test cases for summary cache key generation."""
+
+    def test_different_histories_different_keys(self):
+        """测试不同历史记录产生不同的缓存键。"""
+        messages1 = [
+            Message(role="user", content="用户消息1"),
+            Message(role="assistant", content="助手回复1"),
+        ]
+        messages2 = [
+            Message(role="user", content="用户消息2"),
+            Message(role="assistant", content="助手回复2"),
+        ]
+        
+        key1 = _generate_summary_cache_key(messages1)
+        key2 = _generate_summary_cache_key(messages2)
+        
+        assert key1 != key2
+
+    def test_same_history_same_key(self):
+        """测试相同历史记录产生相同的缓存键。"""
+        messages1 = [
+            Message(role="user", content="相同消息"),
+            Message(role="assistant", content="相同回复"),
+        ]
+        messages2 = [
+            Message(role="user", content="相同消息"),
+            Message(role="assistant", content="相同回复"),
+        ]
+        
+        key1 = _generate_summary_cache_key(messages1)
+        key2 = _generate_summary_cache_key(messages2)
+        
+        assert key1 == key2
 
 
 class TestLLMSummaryCompressor:
@@ -265,6 +339,7 @@ class TestContextManager:
         
         assert "compression_count" in stats
         assert "last_token_count" in stats
+        assert "last_messages_fingerprint" in stats
 
     def test_reset_stats(self):
         """测试重置统计信息。"""
@@ -274,6 +349,7 @@ class TestContextManager:
         
         assert self.manager._compression_count == 0
         assert self.manager._last_token_count is None
+        assert self.manager._last_messages_fingerprint is None
 
 
 if __name__ == "__main__":
