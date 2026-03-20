@@ -486,7 +486,7 @@ async def _ensure_img_caption(
             plugin_context,
         )
         if caption:
-            req.extra_user_content_parts.append(
+            req.transient_extra_user_content_parts.append(
                 TextPart(text=f"<image_caption>{caption}</image_caption>")
             )
             req.image_urls = []
@@ -495,7 +495,7 @@ async def _ensure_img_caption(
 
 
 def _append_quoted_image_attachment(req: ProviderRequest, image_path: str) -> None:
-    req.extra_user_content_parts.append(
+    req.transient_extra_user_content_parts.append(
         TextPart(text=f"[Image Attachment in quoted message: path {image_path}]")
     )
 
@@ -570,7 +570,7 @@ async def _process_quote_message(
 
     quoted_content = "\n".join(content_parts)
     quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
-    req.extra_user_content_parts.append(TextPart(text=quoted_text))
+    req.transient_extra_user_content_parts.append(TextPart(text=quoted_text))
 
 
 def _append_system_reminders(
@@ -614,7 +614,7 @@ def _append_system_reminders(
         system_content = (
             "<system_reminder>" + "\n".join(system_parts) + "</system_reminder>"
         )
-        req.extra_user_content_parts.append(TextPart(text=system_content))
+        req.transient_extra_user_content_parts.append(TextPart(text=system_content))
 
 
 async def _decorate_llm_request(
@@ -1027,13 +1027,13 @@ async def build_main_agent(
                 if isinstance(comp, Image):
                     image_path = await comp.convert_to_file_path()
                     req.image_urls.append(image_path)
-                    req.extra_user_content_parts.append(
+                    req.transient_extra_user_content_parts.append(
                         TextPart(text=f"[Image Attachment: path {image_path}]")
                     )
                 elif isinstance(comp, File):
                     file_path = await comp.get_file()
                     file_name = comp.name or os.path.basename(file_path)
-                    req.extra_user_content_parts.append(
+                    req.transient_extra_user_content_parts.append(
                         TextPart(
                             text=f"[File Attachment: name {file_name}, path {file_path}]"
                         )
@@ -1058,7 +1058,7 @@ async def build_main_agent(
                         elif isinstance(reply_comp, File):
                             file_path = await reply_comp.get_file()
                             file_name = reply_comp.name or os.path.basename(file_path)
-                            req.extra_user_content_parts.append(
+                            req.transient_extra_user_content_parts.append(
                                 TextPart(
                                     text=(
                                         f"[File Attachment in quoted message: "
@@ -1130,7 +1130,9 @@ async def build_main_agent(
             logger.error("Error occurred while applying file extract: %s", exc)
 
     if not req.prompt and not req.image_urls:
-        if not event.get_group_id() and req.extra_user_content_parts:
+        if not event.get_group_id() and (
+            req.extra_user_content_parts or req.transient_extra_user_content_parts
+        ):
             req.prompt = "<attachment>"
         else:
             return None

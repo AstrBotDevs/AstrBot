@@ -187,17 +187,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 m._no_save = True
             messages.append(m)
         if request.prompt is not None:
-            extra_user_content_parts = request.extra_user_content_parts
-            request.extra_user_content_parts = []
-            try:
-                m = await request.assemble_context()
-            finally:
-                request.extra_user_content_parts = extra_user_content_parts
+            m = await request.assemble_context()
             messages.append(Message.model_validate(m))
-            if extra_user_content_parts:
+            if request.transient_extra_user_content_parts:
                 extra_msg = Message(
                     role="user",
-                    content=extra_user_content_parts,
+                    content=request.transient_extra_user_content_parts,
                 )
                 extra_msg._no_save = True
                 messages.append(extra_msg)

@@ -95,6 +95,8 @@ class ProviderRequest:
     """图片 URL 列表"""
     extra_user_content_parts: list[ContentPart] = field(default_factory=list)
     """额外的用户消息内容部分列表，用于在用户消息后添加额外的内容块（如系统提醒、指令等）。支持 dict 或 ContentPart 对象"""
+    transient_extra_user_content_parts: list[ContentPart] = field(default_factory=list)
+    """仅当前请求可见的额外用户消息内容部分列表，不应进入持久化消息历史。"""
     func_tool: ToolSet | None = None
     """可用的函数工具"""
     contexts: list[dict] = field(default_factory=list)
