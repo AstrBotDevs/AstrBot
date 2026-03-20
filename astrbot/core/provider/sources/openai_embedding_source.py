@@ -19,17 +19,15 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         self.provider_config = provider_config
         self.provider_settings = provider_settings
         proxy = provider_config.get("proxy", "")
+        provider_id = provider_config.get("id", "unknown_id")
         http_client = None
         if proxy:
-            logger.info(f"[OpenAI Embedding] 使用代理: {proxy}")
+            logger.info(f"[OpenAI Embedding] {provider_id} Using proxy: {proxy}")
             http_client = httpx.AsyncClient(proxy=proxy)
-        api_base = provider_config.get("embedding_api_base", "").strip()
-        if not api_base:
-            api_base = "https://api.openai.com/v1"
-        else:
-            api_base = api_base.removesuffix("/")
-            if not api_base.endswith("/v1"):
-                api_base = f"{api_base}/v1"
+        api_base = provider_config.get(
+            "embedding_api_base", "https://api.openai.com/v1"
+        ).strip()
+        logger.info(f"[OpenAI Embedding] {provider_id} Using API Base: {api_base}")
         self.client = AsyncOpenAI(
             api_key=provider_config.get("embedding_api_key"),
             base_url=api_base,
