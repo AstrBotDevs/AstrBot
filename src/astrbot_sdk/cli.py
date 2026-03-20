@@ -108,6 +108,9 @@ def _run_async_entrypoint(
     log_method(log_message)
     try:
         asyncio.run(entrypoint)
+    except (click.Abort, KeyboardInterrupt):
+        click.echo("\n创建插件已优雅地中断。", err=True)
+        raise SystemExit(130)
     except Exception as exc:
         exit_code, error_code, hint = _classify_cli_exception(exc)
         docs_url = exc.docs_url if isinstance(exc, AstrBotError) else ""
@@ -136,6 +139,9 @@ def _run_sync_entrypoint(
     log_method(log_message)
     try:
         entrypoint()
+    except (click.Abort, KeyboardInterrupt):
+        click.echo("\n创建插件已优雅地中断。", err=True)
+        raise SystemExit(130)
     except Exception as exc:
         exit_code, error_code, hint = _classify_cli_exception(exc)
         docs_url = exc.docs_url if isinstance(exc, AstrBotError) else ""
