@@ -1393,9 +1393,37 @@
         "description": "超时时间",
         "hint": "超时时间，单位为秒。"
       },
+      "mimo-stt-system-prompt": {
+        "description": "系统提示词",
+        "hint": "用于指导 MiMo STT 转录行为的 system prompt。"
+      },
+      "mimo-stt-user-prompt": {
+        "description": "用户提示词",
+        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。"
+      },
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
+      },
+      "mimo-tts-voice": {
+        "description": "音色",
+        "hint": "MiMo TTS 的音色名称。可选值包括 'mimo_default'、'default_en'、'default_zh'。"
+      },
+      "mimo-tts-format": {
+        "description": "输出格式",
+        "hint": "MiMo TTS 生成音频的格式。支持 'wav'、'mp3'、'pcm'。"
+      },
+      "mimo-tts-style-prompt": {
+        "description": "风格提示词",
+        "hint": "用于控制生成语音的说话风格、语气或情绪，例如温柔、活泼、沉稳等。可留空。"
+      },
+      "mimo-tts-dialect": {
+        "description": "方言",
+        "hint": "指定生成语音时使用的方言或口音，例如四川话、粤语口音等。可留空。"
+      },
+      "mimo-tts-seed-text": {
+        "description": "种子文本",
+        "hint": "用于引导音色和说话方式的参考文本，会影响生成语音的表达风格。"
       },
       "fishaudio-tts-character": {
         "description": "character",
