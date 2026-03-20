@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import astrbot_sdk._memory_backend as memory_backend_module
 import pytest
 from astrbot_sdk._invocation_context import caller_plugin_scope
+from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.runtime.capability_router import CapabilityRouter
 
 
@@ -214,6 +215,8 @@ async def test_memory_save_with_ttl_expires_across_restart(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    base_now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(memory_backend_module, "_utcnow", lambda: base_now)
     router = CapabilityRouter()
 
     await _call(
@@ -236,22 +239,11 @@ async def test_memory_save_with_ttl_expires_across_restart(
         "items": [{"key": "session", "value": {"content": "active session"}}]
     }
 
-    db_path = _memory_db_path(tmp_path, "test-plugin")
-    with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            UPDATE memory_records
-            SET expires_at = ?
-            WHERE namespace = ? AND key = ?
-            """,
-            (
-                (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat(),
-                "users/alice/sessions/1",
-                "session",
-            ),
-        )
-        conn.commit()
-
+    monkeypatch.setattr(
+        memory_backend_module,
+        "_utcnow",
+        lambda: base_now + timedelta(seconds=61),
+    )
     restarted = CapabilityRouter()
     expired = await _call(
         restarted,
@@ -259,6 +251,26 @@ async def test_memory_save_with_ttl_expires_across_restart(
         {"key": "session", "namespace": "users/alice/sessions/1"},
     )
     assert expired == {"value": None}
+
+
+@pytest.mark.asyncio
+async def test_memory_rejects_unsafe_plugin_id(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    router = CapabilityRouter()
+
+    with pytest.raises(AstrBotError) as exc_info:
+        await _call(
+            router,
+            "memory.save",
+            {"key": "profile", "value": {"content": "alice likes blue"}},
+            plugin_id="../escape",
+        )
+
+    assert exc_info.value.code == "invalid_input"
+    assert "safe plugin_id" in exc_info.value.message
 
 
 @pytest.mark.asyncio

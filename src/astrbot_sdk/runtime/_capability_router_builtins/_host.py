@@ -56,6 +56,13 @@ class CapabilityRouterHost:
     def _require_caller_plugin_id(capability_name: str) -> str:
         raise NotImplementedError
 
+    @staticmethod
+    def _validated_plugin_id(plugin_id: str, *, capability_name: str) -> str:
+        raise NotImplementedError
+
+    def _plugin_data_dir(self, plugin_id: str, *, capability_name: str) -> Path:
+        raise NotImplementedError
+
     def register_dynamic_command_route(
         self,
         *,

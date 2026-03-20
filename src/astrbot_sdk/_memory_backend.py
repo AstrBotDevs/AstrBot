@@ -23,6 +23,18 @@ from ._memory_utils import (
     normalize_memory_namespace,
 )
 
+
+def _utcnow() -> datetime:
+    # Centralize time access so expiry tests can advance time without mutating SQLite internals.
+    return datetime.now(timezone.utc)
+
+
+def _sql_placeholders(count: int) -> str:
+    if count <= 0:
+        raise ValueError("count must be positive")
+    return ", ".join("?" for _ in range(count))
+
+
 EmbedMany = Callable[
     [list[str]], "asyncio.Future[list[list[float]]] | list[list[float]]"
 ]
@@ -104,7 +116,7 @@ class PluginMemoryBackend:
         *,
         namespace: str | None = None,
     ) -> None:
-        expires_at = datetime.now(timezone.utc).timestamp() + max(int(ttl_seconds), 0)
+        expires_at = _utcnow().timestamp() + max(int(ttl_seconds), 0)
         await asyncio.to_thread(
             self._save_sync,
             str(key),
@@ -374,7 +386,7 @@ class PluginMemoryBackend:
                     sort_keys=True,
                     default=str,
                 )
-                updated_at = datetime.now(timezone.utc).isoformat()
+                updated_at = _utcnow().isoformat()
                 conn.execute(
                     """
                     INSERT INTO memory_records(namespace, key, stored_json, search_text, expires_at, updated_at)
@@ -438,24 +450,28 @@ class PluginMemoryBackend:
             conn = self._connect()
             try:
                 self._purge_expired_locked(conn)
-                items: list[dict[str, Any]] = []
-                for key in keys:
-                    row = conn.execute(
-                        """
-                        SELECT stored_json
-                        FROM memory_records
-                        WHERE namespace = ? AND key = ?
-                        """,
-                        (namespace, key),
-                    ).fetchone()
-                    stored = self._load_stored_json(row[0]) if row is not None else None
-                    items.append(
-                        {
-                            "key": key,
-                            "value": memory_value_for_search(stored),
-                        }
-                    )
-                return items
+                if not keys:
+                    return []
+                lookup_keys = list(dict.fromkeys(keys))
+                placeholders = _sql_placeholders(len(lookup_keys))
+                rows = conn.execute(
+                    f"""
+                    SELECT key, stored_json
+                    FROM memory_records
+                    WHERE namespace = ? AND key IN ({placeholders})
+                    """,
+                    (namespace, *lookup_keys),
+                ).fetchall()
+                stored_by_key = {
+                    str(row[0]): self._load_stored_json(row[1]) for row in rows
+                }
+                return [
+                    {
+                        "key": key,
+                        "value": memory_value_for_search(stored_by_key.get(key)),
+                    }
+                    for key in keys
+                ]
             finally:
                 conn.close()
 
@@ -475,10 +491,36 @@ class PluginMemoryBackend:
             conn = self._connect()
             try:
                 self._purge_expired_locked(conn)
-                deleted = 0
-                for key in keys:
-                    if self._delete_record_locked(conn, namespace=namespace, key=key):
-                        deleted += 1
+                unique_keys = list(dict.fromkeys(keys))
+                if not unique_keys:
+                    conn.commit()
+                    return 0
+                placeholders = _sql_placeholders(len(unique_keys))
+                provider_rows = conn.execute(
+                    f"""
+                    SELECT DISTINCT provider_id
+                    FROM memory_embeddings
+                    WHERE namespace = ? AND key IN ({placeholders})
+                    """,
+                    (namespace, *unique_keys),
+                ).fetchall()
+                conn.execute(
+                    f"DELETE FROM memory_embeddings WHERE namespace = ? AND key IN ({placeholders})",
+                    (namespace, *unique_keys),
+                )
+                deleted = conn.execute(
+                    f"DELETE FROM memory_records WHERE namespace = ? AND key IN ({placeholders})",
+                    (namespace, *unique_keys),
+                ).rowcount
+                if self._fts_enabled:
+                    conn.execute(
+                        f"DELETE FROM memory_records_fts WHERE namespace = ? AND key IN ({placeholders})",
+                        (namespace, *unique_keys),
+                    )
+                for row in provider_rows:
+                    provider_id = str(row[0]).strip()
+                    if provider_id:
+                        self._mark_vector_dirty_locked(conn, provider_id)
                 conn.commit()
                 return deleted
             finally:
@@ -680,7 +722,7 @@ class PluginMemoryBackend:
                             json.dumps(
                                 vector, ensure_ascii=False, separators=(",", ":")
                             ),
-                            datetime.now(timezone.utc).isoformat(),
+                            _utcnow().isoformat(),
                         ),
                     )
                 self._mark_vector_dirty_locked(conn, provider_id)
@@ -799,7 +841,7 @@ class PluginMemoryBackend:
                         dirty = 0,
                         updated_at = excluded.updated_at
                     """,
-                    (provider_id, datetime.now(timezone.utc).isoformat()),
+                    (provider_id, _utcnow().isoformat()),
                 )
                 conn.commit()
             finally:
@@ -939,7 +981,7 @@ class PluginMemoryBackend:
 
     def _purge_expired_locked(self, conn: sqlite3.Connection) -> None:
         self._init_storage_locked(conn)
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = _utcnow().isoformat()
         rows = conn.execute(
             """
             SELECT namespace, key
@@ -1105,7 +1147,7 @@ class PluginMemoryBackend:
                 dirty = 1,
                 updated_at = excluded.updated_at
             """,
-            (provider_id, datetime.now(timezone.utc).isoformat()),
+            (provider_id, _utcnow().isoformat()),
         )
         self._vector_indexes.pop(provider_id, None)
         self._vector_fallbacks.pop(provider_id, None)

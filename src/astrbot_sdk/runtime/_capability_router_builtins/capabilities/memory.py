@@ -21,12 +21,17 @@ from ..bridge_base import CapabilityRouterBridgeBase
 class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
     def _memory_plugin_id(self) -> str:
         plugin_id = current_caller_plugin_id()
-        return str(plugin_id).strip() or "__anonymous__"
+        return self._validated_plugin_id(
+            str(plugin_id).strip() or "__anonymous__",
+            capability_name="memory.*",
+        )
 
     def _memory_backend_for_plugin(self, plugin_id: str) -> PluginMemoryBackend:
         backend = self._memory_backends.get(plugin_id)
         if backend is None:
-            backend = PluginMemoryBackend(self._system_data_root / plugin_id)
+            backend = PluginMemoryBackend(
+                self._plugin_data_dir(plugin_id, capability_name="memory.*")
+            )
             self._memory_backends[plugin_id] = backend
         return backend
 
