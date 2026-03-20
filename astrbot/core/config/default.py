@@ -18,6 +18,177 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
     "line",
 ]
 
+PERIODIC_CONTEXT_COMPACTION_DEFAULTS = {
+    "enabled": False,
+    "interval_minutes": 30,
+    "startup_delay_seconds": 120,
+    "max_conversations_per_run": 8,
+    "max_scan_per_run": 120,
+    "scan_page_size": 40,
+    "min_idle_minutes": 15,
+    "min_messages": 14,
+    "target_tokens": 4096,
+    "trigger_tokens": 0,
+    "trigger_min_context_ratio": 0.3,
+    "max_rounds": 3,
+    "truncate_turns": 1,
+    "keep_recent": 6,
+    "provider_id": "",
+    "instruction": "",
+    "dry_run": False,
+}
+
+PERIODIC_CONTEXT_COMPACTION_FIELD_META: dict[str, dict[str, Any]] = {
+    "enabled": {
+        "schema_type": "bool",
+        "ui_type": "bool",
+        "description": "启用定时历史压缩",
+        "hint": "后台定时扫描会话历史，使用 LLM 摘要旧消息并回写对话历史，实现多轮 compact context。",
+    },
+    "interval_minutes": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "定时间隔（分钟）",
+        "hint": "每隔多少分钟执行一次压缩扫描。",
+    },
+    "startup_delay_seconds": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "启动延迟（秒）",
+        "hint": "AstrBot 启动后，等待指定秒数再执行首次压缩任务。",
+    },
+    "max_conversations_per_run": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "单次最多压缩会话数",
+        "hint": "每次任务最多实际压缩多少个会话。",
+    },
+    "max_scan_per_run": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "单次最多扫描会话数",
+        "hint": "每次任务最多扫描多少会话（包括被跳过的会话）。",
+    },
+    "scan_page_size": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "分页扫描大小",
+        "hint": "扫描 conversations 表时每页读取条数。",
+    },
+    "min_idle_minutes": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "最小静默时长（分钟）",
+        "hint": "会话最近更新时间小于该值时跳过，避免压缩活跃会话。",
+    },
+    "min_messages": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "最小消息条数",
+        "hint": "少于该消息条数的会话不参与压缩。",
+    },
+    "target_tokens": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "目标 Token 阈值",
+        "hint": "压缩目标上下文大小（token 估算值）。",
+    },
+    "trigger_tokens": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "触发 Token 阈值",
+        "hint": "会话估算 token 超过此值才触发压缩。<=0 表示自动按模型最大上下文比例计算。",
+    },
+    "trigger_min_context_ratio": {
+        "schema_type": "float",
+        "ui_type": "float",
+        "description": "自动触发比例",
+        "hint": "当触发 Token 阈值 <= 0 时生效。默认 0.3（即模型最大上下文的 30%）。支持填写 0~1 或 0~100（百分比）。",
+    },
+    "max_rounds": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "每会话最大压缩轮数",
+        "hint": "单个会话一次任务内最多执行几轮摘要压缩（实现 multiple compact context）。",
+    },
+    "truncate_turns": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "截断轮数（后备）",
+        "hint": "LLM 压缩后仍超限时，按轮截断的每次丢弃轮数。",
+    },
+    "keep_recent": {
+        "schema_type": "int",
+        "ui_type": "int",
+        "description": "保留最近轮数",
+        "hint": "压缩时始终保留最近 N 轮消息。",
+    },
+    "provider_id": {
+        "schema_type": "string",
+        "ui_type": "string",
+        "description": "压缩模型提供商 ID",
+        "hint": "可自定义指定任意可用对话模型；留空时按会话当前模型执行压缩。建议优先选择成本较低、响应较快的模型。",
+        "_special": "select_provider",
+    },
+    "instruction": {
+        "schema_type": "string",
+        "ui_type": "text",
+        "description": "定时压缩提示词",
+        "hint": "留空时复用 provider_settings.llm_compress_instruction。",
+    },
+    "dry_run": {
+        "schema_type": "bool",
+        "ui_type": "bool",
+        "description": "演练模式（不回写）",
+        "hint": "开启后只记录日志，不实际写回数据库。",
+    },
+}
+
+
+def _build_periodic_context_compaction_schema_properties() -> dict[str, dict[str, str]]:
+    return {
+        key: {"type": str(meta["schema_type"])}
+        for key, meta in PERIODIC_CONTEXT_COMPACTION_FIELD_META.items()
+    }
+
+
+def _build_periodic_context_compaction_dashboard_items() -> dict[str, dict[str, Any]]:
+    items: dict[str, dict[str, Any]] = {}
+    base_enabled_condition = {
+        "provider_settings.periodic_context_compaction.enabled": True,
+        "provider_settings.agent_runner_type": "local",
+    }
+    for key, meta in PERIODIC_CONTEXT_COMPACTION_FIELD_META.items():
+        condition = (
+            {"provider_settings.agent_runner_type": "local"}
+            if key == "enabled"
+            else dict(base_enabled_condition)
+        )
+        field: dict[str, Any] = {
+            "description": meta["description"],
+            "type": meta["ui_type"],
+            "hint": meta["hint"],
+            "condition": condition,
+        }
+        if "_special" in meta:
+            field["_special"] = meta["_special"]
+        items[f"provider_settings.periodic_context_compaction.{key}"] = field
+    return items
+
+
+CONTEXT_MEMORY_DEFAULTS = {
+    "enabled": False,
+    "inject_pinned_memory": True,
+    "pinned_memories": [],
+    "pinned_max_items": 8,
+    "pinned_max_chars_per_item": 400,
+    # Reserved switches for follow-up PRs (manual opt-in only).
+    "retrieval_enabled": False,
+    "retrieval_backend": "",
+    "retrieval_provider_id": "",
+    "retrieval_top_k": 5,
+}
+
 # 默认配置
 DEFAULT_CONFIG = {
     "config_version": 2,
@@ -96,6 +267,15 @@ DEFAULT_CONFIG = {
         ),
         "llm_compress_keep_recent": 6,
         "llm_compress_provider_id": "",
+        "context_token_counter_mode": "estimate",
+        "compact_context_after_tool_call": False,
+        "compact_context_soft_ratio": 0.3,
+        "compact_context_hard_ratio": 0.7,
+        "compact_context_min_delta_tokens": 0,
+        "compact_context_min_delta_turns": 0,
+        "compact_context_debounce_seconds": 0,
+        "periodic_context_compaction": dict(PERIODIC_CONTEXT_COMPACTION_DEFAULTS),
+        "context_memory": dict(CONTEXT_MEMORY_DEFAULTS),
         "max_context_length": -1,
         "dequeue_context_length": 1,
         "streaming_response": False,
@@ -2523,6 +2703,64 @@ CONFIG_METADATA_2 = {
                     "prompt_prefix": {
                         "type": "string",
                     },
+                    "context_token_counter_mode": {
+                        "type": "string",
+                    },
+                    "compact_context_after_tool_call": {
+                        "type": "bool",
+                    },
+                    "compact_context_soft_ratio": {
+                        "type": "float",
+                    },
+                    "compact_context_hard_ratio": {
+                        "type": "float",
+                    },
+                    "compact_context_min_delta_tokens": {
+                        "type": "int",
+                    },
+                    "compact_context_min_delta_turns": {
+                        "type": "int",
+                    },
+                    "compact_context_debounce_seconds": {
+                        "type": "int",
+                    },
+                    "periodic_context_compaction": {
+                        "type": "object",
+                        "properties": _build_periodic_context_compaction_schema_properties(),
+                    },
+                    "context_memory": {
+                        "type": "object",
+                        "properties": {
+                            "enabled": {
+                                "type": "bool",
+                            },
+                            "inject_pinned_memory": {
+                                "type": "bool",
+                            },
+                            "pinned_memories": {
+                                "type": "list",
+                                "items": {"type": "string"},
+                            },
+                            "pinned_max_items": {
+                                "type": "int",
+                            },
+                            "pinned_max_chars_per_item": {
+                                "type": "int",
+                            },
+                            "retrieval_enabled": {
+                                "type": "bool",
+                            },
+                            "retrieval_backend": {
+                                "type": "string",
+                            },
+                            "retrieval_provider_id": {
+                                "type": "string",
+                            },
+                            "retrieval_top_k": {
+                                "type": "int",
+                            },
+                        },
+                    },
                     "max_context_length": {
                         "type": "int",
                     },
@@ -3207,6 +3445,142 @@ CONFIG_METADATA_3 = {
                         "hint": "留空时将降级为“按对话轮数截断”的策略。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_token_counter_mode": {
+                        "description": "Token 计数模式",
+                        "type": "string",
+                        "options": ["estimate", "tokenizer", "auto"],
+                        "labels": ["估算", "Tokenizer", "自动（优先 Tokenizer）"],
+                        "hint": "用于上下文压缩触发判断。tokenizer 模式会优先使用 tiktoken，不可用时回退估算。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compact_context_after_tool_call": {
+                        "description": "工具调用后立即检查压缩",
+                        "type": "bool",
+                        "hint": "开启后，每次工具执行回写上下文后都会立刻触发一次上下文压缩检查。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compact_context_soft_ratio": {
+                        "description": "工具后压缩软阈值",
+                        "type": "float",
+                        "hint": "当上下文占比达到该阈值时，按“最小增长量”规则决定是否压缩。支持填写 0~1 或 0~100（百分比）。",
+                        "condition": {
+                            "provider_settings.compact_context_after_tool_call": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compact_context_hard_ratio": {
+                        "description": "工具后压缩硬阈值",
+                        "type": "float",
+                        "hint": "当上下文占比达到该阈值时，强制执行一次压缩。支持填写 0~1 或 0~100（百分比）。",
+                        "condition": {
+                            "provider_settings.compact_context_after_tool_call": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compact_context_min_delta_tokens": {
+                        "description": "工具后最小 Token 增长",
+                        "type": "int",
+                        "hint": "在软阈值区间内，Token 增长低于该值时不触发压缩。0 表示不限制。",
+                        "condition": {
+                            "provider_settings.compact_context_after_tool_call": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compact_context_min_delta_turns": {
+                        "description": "工具后最小消息增长",
+                        "type": "int",
+                        "hint": "在软阈值区间内，消息增长低于该值时不触发压缩。0 表示不限制。",
+                        "condition": {
+                            "provider_settings.compact_context_after_tool_call": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compact_context_debounce_seconds": {
+                        "description": "工具后压缩防抖（秒）",
+                        "type": "int",
+                        "hint": "两次工具后压缩检查的最小间隔秒数。0 表示关闭防抖。",
+                        "condition": {
+                            "provider_settings.compact_context_after_tool_call": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    **_build_periodic_context_compaction_dashboard_items(),
+                    "provider_settings.context_memory.enabled": {
+                        "description": "启用上下文记忆注入",
+                        "type": "bool",
+                        "hint": "启用后可将手动维护的顶层记忆注入到 system prompt，并预留向量记忆检索接口。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.inject_pinned_memory": {
+                        "description": "注入手动顶层记忆",
+                        "type": "bool",
+                        "hint": "将 `pinned_memories` 作为高优先级记忆注入系统提示词。",
+                        "condition": {
+                            "provider_settings.context_memory.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.pinned_max_items": {
+                        "description": "顶层记忆最大条数",
+                        "type": "int",
+                        "hint": "通过管理命令添加手动顶层记忆时允许保留的最大条目数。",
+                        "condition": {
+                            "provider_settings.context_memory.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.pinned_max_chars_per_item": {
+                        "description": "单条顶层记忆最大字符数",
+                        "type": "int",
+                        "hint": "超出长度的条目会被截断，避免 system prompt 膨胀。",
+                        "condition": {
+                            "provider_settings.context_memory.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.retrieval_enabled": {
+                        "description": "启用检索增强（开发中）",
+                        "type": "bool",
+                        "hint": "预留开关，默认关闭；向量检索增强建议在后续 PR 中实现。",
+                        "condition": {
+                            "provider_settings.context_memory.enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.retrieval_backend": {
+                        "description": "检索后端标识（预留）",
+                        "type": "string",
+                        "hint": "例如 zep/mem0/custom，当前版本仅用于配置预留。",
+                        "condition": {
+                            "provider_settings.context_memory.retrieval_enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.retrieval_provider_id": {
+                        "description": "检索重排模型提供商 ID（预留）",
+                        "type": "string",
+                        "_special": "select_provider",
+                        "hint": "当前版本仅保留配置，不会触发额外检索调用。",
+                        "condition": {
+                            "provider_settings.context_memory.retrieval_enabled": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_memory.retrieval_top_k": {
+                        "description": "检索 Top-K（预留）",
+                        "type": "int",
+                        "hint": "后续检索增强功能默认使用的召回条数。",
+                        "condition": {
+                            "provider_settings.context_memory.retrieval_enabled": True,
                             "provider_settings.agent_runner_type": "local",
                         },
                     },

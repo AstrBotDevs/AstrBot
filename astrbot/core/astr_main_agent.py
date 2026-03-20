@@ -50,6 +50,10 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
     retrieve_knowledge_base,
 )
+from astrbot.core.context_memory import (
+    build_pinned_memory_system_block,
+    load_context_memory_config,
+)
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Reply
 from astrbot.core.persona_error_reply import (
@@ -57,6 +61,7 @@ from astrbot.core.persona_error_reply import (
     set_persona_custom_error_message_on_event,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.prompt_assembly_router import assemble_system_prompt
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
@@ -119,6 +124,20 @@ class MainAgentBuildConfig:
     """The number of most recent turns to keep during llm_compress strategy."""
     llm_compress_provider_id: str = ""
     """The provider ID for the LLM used in context compression."""
+    context_token_counter_mode: str = "estimate"
+    """Token counting mode for context compaction: estimate, tokenizer, auto."""
+    compact_context_after_tool_call: bool = False
+    """Whether to run context compaction check immediately after tool execution."""
+    compact_context_soft_ratio: float = 0.3
+    """Soft trigger threshold for post-tool-call context compaction."""
+    compact_context_hard_ratio: float = 0.7
+    """Hard trigger threshold for post-tool-call context compaction."""
+    compact_context_min_delta_tokens: int = 0
+    """Minimum token growth required before post-tool-call compaction runs in soft zone."""
+    compact_context_min_delta_turns: int = 0
+    """Minimum message growth required before post-tool-call compaction runs in soft zone."""
+    compact_context_debounce_seconds: int = 0
+    """Debounce window for post-tool-call compaction checks."""
     max_context_length: int = -1
     """The maximum number of turns to keep in context. -1 means no limit.
     This enforce max turns before compression"""
@@ -617,6 +636,34 @@ def _append_system_reminders(
         req.extra_user_content_parts.append(TextPart(text=system_content))
 
 
+def _inject_context_memory(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    cfg: dict,
+) -> None:
+    """Inject manually pinned top-level memories into system prompt.
+
+    Vector retrieval enhancement is intentionally deferred to a follow-up PR.
+    This function only handles manually configured pinned memories.
+    """
+    if not isinstance(cfg, dict):
+        return
+    cm_cfg = load_context_memory_config(cfg)
+    memory_block = build_pinned_memory_system_block(cm_cfg)
+    retrieved_facts = event.get_extra("retrieved_long_term_facts")
+    summarized_history = event.get_extra("compacted_history_summary")
+    req.system_prompt = assemble_system_prompt(
+        base_system_prompt=req.system_prompt or "",
+        retrieved_long_term_facts=retrieved_facts
+        if isinstance(retrieved_facts, list)
+        else None,
+        summarized_history=summarized_history
+        if isinstance(summarized_history, str)
+        else "",
+        pinned_memory_block=memory_block,
+    )
+
+
 async def _decorate_llm_request(
     event: AstrMessageEvent,
     req: ProviderRequest,
@@ -655,6 +702,7 @@ async def _decorate_llm_request(
     if tz is None:
         tz = plugin_context.get_config().get("timezone")
     _append_system_reminders(event, req, cfg, tz)
+    _inject_context_memory(event, req, cfg)
 
 
 def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
@@ -1203,6 +1251,13 @@ async def build_main_agent(
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent=config.llm_compress_keep_recent,
         llm_compress_provider=_get_compress_provider(config, plugin_context),
+        token_counter_mode=config.context_token_counter_mode,
+        compact_context_after_tool_call=config.compact_context_after_tool_call,
+        compact_context_soft_ratio=config.compact_context_soft_ratio,
+        compact_context_hard_ratio=config.compact_context_hard_ratio,
+        compact_context_min_delta_tokens=config.compact_context_min_delta_tokens,
+        compact_context_min_delta_turns=config.compact_context_min_delta_turns,
+        compact_context_debounce_seconds=config.compact_context_debounce_seconds,
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,

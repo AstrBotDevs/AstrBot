@@ -1,5 +1,6 @@
 import os
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -9,7 +10,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
+from astrbot.core.agent.runners.tool_loop_agent_runner import (
+    PostToolCompactionConfig,
+    PostToolCompactionController,
+    ToolLoopAgentRunner,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
@@ -534,6 +539,210 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
 
     assert ticket.resolved.is_set() is True
     assert ticket.consumed is False
+
+
+@pytest.mark.asyncio
+async def test_compact_context_after_tool_call_enabled(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = True
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        compact_context_after_tool_call=True,
+    )
+
+    runner.context_manager.process = AsyncMock(  # type: ignore[method-assign]
+        side_effect=lambda messages, trusted_token_usage=0: messages,
+    )
+
+    async for _ in runner.step():
+        pass
+
+    assert runner.context_manager.process.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_compact_context_after_tool_call_disabled_by_default(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = True
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    runner.context_manager.process = AsyncMock(  # type: ignore[method-assign]
+        side_effect=lambda messages, trusted_token_usage=0: messages,
+    )
+
+    async for _ in runner.step():
+        pass
+
+    assert runner.context_manager.process.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_compact_context_after_tool_call_honors_debounce(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = True
+    mock_provider.provider_config["max_context_tokens"] = 100
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        compact_context_after_tool_call=True,
+        compact_context_soft_ratio=0.3,
+        compact_context_hard_ratio=0.4,
+        compact_context_debounce_seconds=3600,
+    )
+
+    runner.context_manager.token_counter = SimpleNamespace(
+        count_tokens=lambda *_args, **_kwargs: 90
+    )
+    runner.context_manager.process = AsyncMock(  # type: ignore[method-assign]
+        side_effect=lambda messages, trusted_token_usage=0: messages,
+    )
+
+    # step 1: pre-LLM compact + post-tool compact
+    async for _ in runner.step():
+        pass
+    # step 2: pre-LLM compact + post-tool compact skipped by debounce
+    async for _ in runner.step():
+        pass
+
+    assert runner.context_manager.process.await_count == 3
+
+
+def test_post_tool_compaction_soft_zone_respects_min_delta(runner):
+    runner.post_tool_compaction = PostToolCompactionConfig(
+        enabled=True,
+        soft_ratio=0.3,
+        hard_ratio=0.9,
+        min_delta_tokens=10,
+        min_delta_turns=10,
+        debounce_seconds=0,
+    )
+    runner.post_tool_compaction_controller = PostToolCompactionController(
+        runner.post_tool_compaction
+    )
+    runner.context_config = SimpleNamespace(max_context_tokens=100)
+    runner.run_context = SimpleNamespace(messages=[object(), object()])
+    runner.context_manager = SimpleNamespace(
+        token_counter=SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 35)
+    )
+    runner.post_tool_compaction_controller.refresh_baseline(
+        messages=runner.run_context.messages,
+        token_counter=SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 30),
+    )
+
+    # ratio=0.35 in soft zone, token delta=5 and message delta=0 -> should skip
+    assert runner._should_run_post_tool_compaction() is False
+
+    runner.context_manager = SimpleNamespace(
+        token_counter=SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 95)
+    )
+    # ratio=0.95 in hard zone -> force compaction
+    assert runner._should_run_post_tool_compaction() is True
+
+
+def test_post_tool_compaction_handles_token_counter_errors(runner):
+    runner.post_tool_compaction = PostToolCompactionConfig(
+        enabled=True,
+        soft_ratio=0.3,
+        hard_ratio=0.9,
+        min_delta_tokens=10,
+        min_delta_turns=10,
+        debounce_seconds=0,
+    )
+    runner.post_tool_compaction_controller = PostToolCompactionController(
+        runner.post_tool_compaction
+    )
+    runner.context_config = SimpleNamespace(max_context_tokens=100)
+    runner.run_context = SimpleNamespace(messages=[object(), object()])
+
+    def _raise(*_args, **_kwargs):
+        raise RuntimeError("counter broken")
+
+    runner.context_manager = SimpleNamespace(
+        token_counter=SimpleNamespace(count_tokens=_raise)
+    )
+
+    assert runner._should_run_post_tool_compaction() is False
+
+
+def test_post_tool_compaction_debounce_is_not_extended(monkeypatch):
+    config = PostToolCompactionConfig(
+        enabled=True,
+        soft_ratio=0.3,
+        hard_ratio=0.9,
+        min_delta_tokens=0,
+        min_delta_turns=0,
+        debounce_seconds=100,
+    )
+    controller = PostToolCompactionController(config)
+    messages = [object()]
+    token_counter = SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 95)
+
+    # refresh baseline before checks
+    controller.refresh_baseline(
+        messages=messages,
+        token_counter=SimpleNamespace(count_tokens=lambda *_args, **_kwargs: 30),
+    )
+
+    ts = iter([1.0, 10.0, 20.0, 105.0])
+    monkeypatch.setattr(
+        "astrbot.core.agent.runners.tool_loop_agent_runner.time.monotonic",
+        lambda: next(ts),
+    )
+
+    # first check performs decision and sets baseline timestamp
+    assert (
+        controller.should_compact(
+            messages=messages,
+            token_counter=token_counter,
+            max_context_tokens=100,
+        )
+        is True
+    )
+    # next two checks are debounced
+    assert (
+        controller.should_compact(
+            messages=messages,
+            token_counter=token_counter,
+            max_context_tokens=100,
+        )
+        is False
+    )
+    assert (
+        controller.should_compact(
+            messages=messages,
+            token_counter=token_counter,
+            max_context_tokens=100,
+        )
+        is False
+    )
+    # should become eligible at t=105 if debounce anchor remains at first real check (t=1)
+    assert (
+        controller.should_compact(
+            messages=messages,
+            token_counter=token_counter,
+            max_context_tokens=100,
+        )
+        is True
+    )
 
 
 if __name__ == "__main__":

@@ -1,9 +1,12 @@
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.core.star.filter.command import GreedyStr
 
 from .commands import (
     AdminCommands,
     AlterCmdCommands,
+    ContextCompactionCommands,
+    ContextMemoryCommands,
     ConversationCommands,
     HelpCommand,
     LLMCommands,
@@ -26,6 +29,8 @@ class Main(star.Star):
         self.plugin_c = PluginCommands(self.context)
         self.admin_c = AdminCommands(self.context)
         self.conversation_c = ConversationCommands(self.context)
+        self.ctxcompact_c = ContextCompactionCommands(self.context)
+        self.ctxmem_c = ContextMemoryCommands(self.context)
         self.provider_c = ProviderCommands(self.context)
         self.persona_c = PersonaCommands(self.context)
         self.alter_cmd_c = AlterCmdCommands(self.context)
@@ -126,6 +131,74 @@ class Main(star.Star):
     ) -> None:
         """查看或者切换 LLM Provider"""
         await self.provider_c.provider(event, idx, idx2)
+
+    @filter.command_group("ctxcompact")
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    def ctxcompact(self) -> None:
+        """上下文定时压缩管理"""
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @ctxcompact.command("status")
+    async def ctxcompact_status(self, event: AstrMessageEvent) -> None:
+        """查看定时上下文压缩状态"""
+        await self.ctxcompact_c.status(event)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @ctxcompact.command("run")
+    async def ctxcompact_run(
+        self,
+        event: AstrMessageEvent,
+        limit: int | None = None,
+    ) -> None:
+        """手动触发一次上下文压缩（可选 limit 覆盖本次压缩会话数）"""
+        await self.ctxcompact_c.run(event, limit)
+
+    @filter.command_group("ctxmem")
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    def ctxmem(self) -> None:
+        """上下文记忆管理（手动顶层记忆）"""
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @ctxmem.command("status")
+    async def ctxmem_status(self, event: AstrMessageEvent) -> None:
+        """查看上下文记忆状态"""
+        await self.ctxmem_c.status(event)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @ctxmem.command("ls")
+    async def ctxmem_ls(self, event: AstrMessageEvent) -> None:
+        """查看手动顶层记忆列表"""
+        await self.ctxmem_c.ls(event)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @ctxmem.command("add")
+    async def ctxmem_add(self, event: AstrMessageEvent, text: GreedyStr) -> None:
+        """添加一条手动顶层记忆。ctxmem add <text>"""
+        await self.ctxmem_c.add(event, text)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @ctxmem.command("rm")
+    async def ctxmem_rm(self, event: AstrMessageEvent, index: int) -> None:
+        """删除一条手动顶层记忆。ctxmem rm <index>"""
+        await self.ctxmem_c.rm(event, index)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @ctxmem.command("clear")
+    async def ctxmem_clear(self, event: AstrMessageEvent) -> None:
+        """清空手动顶层记忆"""
+        await self.ctxmem_c.clear(event)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @ctxmem.command("enable")
+    async def ctxmem_enable(self, event: AstrMessageEvent, value: str = "") -> None:
+        """开关上下文记忆注入。ctxmem enable [on|off]"""
+        await self.ctxmem_c.enable(event, value)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @ctxmem.command("retrieval")
+    async def ctxmem_retrieval(self, event: AstrMessageEvent, value: str = "") -> None:
+        """开关检索增强预留开关。ctxmem retrieval [on|off]"""
+        await self.ctxmem_c.retrieval(event, value)
 
     @filter.command("reset")
     async def reset(self, message: AstrMessageEvent) -> None:

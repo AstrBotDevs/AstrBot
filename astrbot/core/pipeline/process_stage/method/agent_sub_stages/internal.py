@@ -29,6 +29,7 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.config_normalization import to_non_negative_int, to_ratio
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
@@ -91,6 +92,33 @@ class InternalAgentSubStage(Stage):
         self.llm_compress_provider_id: str = settings.get(
             "llm_compress_provider_id", ""
         )
+        self.context_token_counter_mode: str = str(
+            settings.get("context_token_counter_mode", "estimate")
+        )
+        self.compact_context_after_tool_call: bool = settings.get(
+            "compact_context_after_tool_call",
+            False,
+        )
+        self.compact_context_soft_ratio: float = to_ratio(
+            settings.get("compact_context_soft_ratio", 0.3),
+            0.3,
+        )
+        self.compact_context_hard_ratio: float = to_ratio(
+            settings.get("compact_context_hard_ratio", 0.7),
+            0.7,
+        )
+        self.compact_context_min_delta_tokens: int = to_non_negative_int(
+            settings.get("compact_context_min_delta_tokens", 0),
+            0,
+        )
+        self.compact_context_min_delta_turns: int = to_non_negative_int(
+            settings.get("compact_context_min_delta_turns", 0),
+            0,
+        )
+        self.compact_context_debounce_seconds: int = to_non_negative_int(
+            settings.get("compact_context_debounce_seconds", 0),
+            0,
+        )
         self.max_context_length = settings["max_context_length"]  # int
         self.dequeue_context_length: int = min(
             max(1, settings["dequeue_context_length"]),
@@ -125,6 +153,13 @@ class InternalAgentSubStage(Stage):
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent=self.llm_compress_keep_recent,
             llm_compress_provider_id=self.llm_compress_provider_id,
+            context_token_counter_mode=self.context_token_counter_mode,
+            compact_context_after_tool_call=self.compact_context_after_tool_call,
+            compact_context_soft_ratio=self.compact_context_soft_ratio,
+            compact_context_hard_ratio=self.compact_context_hard_ratio,
+            compact_context_min_delta_tokens=self.compact_context_min_delta_tokens,
+            compact_context_min_delta_turns=self.compact_context_min_delta_turns,
+            compact_context_debounce_seconds=self.compact_context_debounce_seconds,
             max_context_length=self.max_context_length,
             dequeue_context_length=self.dequeue_context_length,
             llm_safety_mode=self.llm_safety_mode,

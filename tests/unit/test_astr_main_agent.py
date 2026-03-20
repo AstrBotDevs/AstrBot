@@ -663,6 +663,100 @@ class TestDecorateLlmRequest:
 
         assert req.prompt == "Hello"
 
+    @pytest.mark.asyncio
+    async def test_decorate_llm_request_injects_pinned_context_memory(
+        self, mock_event, mock_context
+    ):
+        module = ama
+        req = ProviderRequest(prompt="Hello", system_prompt="System")
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            provider_settings={
+                "context_memory": {
+                    "enabled": True,
+                    "inject_pinned_memory": True,
+                    "pinned_memories": [
+                        "用户喜欢先结论后细节。",
+                        "优先使用中文回复。",
+                    ],
+                    "pinned_max_items": 8,
+                    "pinned_max_chars_per_item": 200,
+                }
+            },
+        )
+
+        with patch.object(mock_context, "get_config") as mock_get_config:
+            mock_get_config.return_value = {}
+            await module._decorate_llm_request(mock_event, req, mock_context, config)
+
+        assert "<top_level_memory>" in req.system_prompt
+        assert "1. 用户喜欢先结论后细节。" in req.system_prompt
+        assert "2. 优先使用中文回复。" in req.system_prompt
+
+    @pytest.mark.asyncio
+    async def test_decorate_llm_request_skips_pinned_memory_when_disabled(
+        self, mock_event, mock_context
+    ):
+        module = ama
+        req = ProviderRequest(prompt="Hello", system_prompt="System")
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            provider_settings={
+                "context_memory": {
+                    "enabled": True,
+                    "inject_pinned_memory": False,
+                    "pinned_memories": ["这条不应被注入。"],
+                }
+            },
+        )
+
+        with patch.object(mock_context, "get_config") as mock_get_config:
+            mock_get_config.return_value = {}
+            await module._decorate_llm_request(mock_event, req, mock_context, config)
+
+        assert "<top_level_memory>" not in req.system_prompt
+
+    @pytest.mark.asyncio
+    async def test_decorate_llm_request_assembles_prompt_layers_in_order(
+        self, mock_event, mock_context
+    ):
+        module = ama
+        req = ProviderRequest(prompt="Hello", system_prompt="System")
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            provider_settings={
+                "context_memory": {
+                    "enabled": True,
+                    "inject_pinned_memory": True,
+                    "pinned_memories": ["固定偏好A"],
+                }
+            },
+        )
+
+        extras = {
+            "retrieved_long_term_facts": ["事实1", "事实2"],
+            "compacted_history_summary": "历史摘要S",
+        }
+        mock_event.get_extra.side_effect = lambda key: extras.get(key)
+
+        with patch.object(mock_context, "get_config") as mock_get_config:
+            mock_get_config.return_value = {}
+            await module._decorate_llm_request(mock_event, req, mock_context, config)
+
+        system_prompt = req.system_prompt
+        assert "System" in system_prompt
+        assert "<long_term_facts>" in system_prompt
+        assert "<summarized_history>" in system_prompt
+        assert "<top_level_memory>" in system_prompt
+        # ordering: base -> long_term_facts -> summarized_history -> top_level_memory
+        assert system_prompt.index("System") < system_prompt.index("<long_term_facts>")
+        assert system_prompt.index("<long_term_facts>") < system_prompt.index(
+            "<summarized_history>"
+        )
+        assert system_prompt.index("<summarized_history>") < system_prompt.index(
+            "<top_level_memory>"
+        )
+
 
 class TestModalitiesFix:
     """Tests for _modalities_fix function."""

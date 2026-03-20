@@ -94,6 +94,18 @@ class TestContextManager:
 
         assert isinstance(manager.compressor, TruncateByTurnsCompressor)
 
+    @patch("astrbot.core.agent.context.manager.create_token_counter")
+    def test_init_uses_token_counter_mode(self, mock_create_token_counter):
+        """Test token counter mode wiring into ContextManager."""
+        fake_counter = MagicMock()
+        mock_create_token_counter.return_value = fake_counter
+        config = ContextConfig(token_counter_mode="auto", token_counter_model="gpt-4")
+
+        manager = ContextManager(config)
+
+        mock_create_token_counter.assert_called_once_with("auto", model="gpt-4")
+        assert manager.token_counter is fake_counter
+
     # ==================== Empty and Edge Cases ====================
 
     @pytest.mark.asyncio

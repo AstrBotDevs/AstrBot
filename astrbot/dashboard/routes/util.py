@@ -15,7 +15,7 @@ def get_schema_item(schema: dict | None, key_path: str) -> dict | None:
 
     同时支持：
     - 扁平 schema（直接 key 命中）
-    - 嵌套 object schema（{type: "object", items: {...}}）
+    - 嵌套 object schema（{type: "object", items/properties: {...}}）
     """
 
     if not isinstance(schema, dict) or not key_path:
@@ -33,7 +33,9 @@ def get_schema_item(schema: dict | None, key_path: str) -> dict | None:
             return meta
         if not isinstance(meta, dict) or meta.get("type") != "object":
             return None
-        current = meta.get("items", {})
+        current = meta.get("items")
+        if not isinstance(current, dict):
+            current = meta.get("properties", {})
     return None
 
 

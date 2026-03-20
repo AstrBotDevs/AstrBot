@@ -243,6 +243,19 @@ class SQLiteDatabase(BaseDatabase):
                 base_query = base_query.where(
                     col(ConversationV2.platform_id).in_(kwargs["platforms"]),
                 )
+            if "updated_before" in kwargs and kwargs["updated_before"] is not None:
+                updated_before = kwargs["updated_before"]
+                base_query = base_query.where(
+                    or_(
+                        col(ConversationV2.updated_at).is_(None),
+                        col(ConversationV2.updated_at) <= updated_before,
+                    ),
+                )
+            if "min_messages" in kwargs and kwargs["min_messages"]:
+                min_messages = max(1, int(kwargs["min_messages"]))
+                base_query = base_query.where(
+                    func.json_array_length(col(ConversationV2.content)) >= min_messages,
+                )
 
             # Get total count matching the filters
             count_query = select(func.count()).select_from(base_query.subquery())
