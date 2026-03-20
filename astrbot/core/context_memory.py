@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from astrbot.core.config.default import CONTEXT_MEMORY_DEFAULTS
-from astrbot.core.context_memory_backends import (
+from astrbot.core.context_memory_experimental_backends import (
     ContextMemoryEvolutionBackend,
     ContextMemoryMigrationAdapter,
     VectorLongTermMemoryRetriever,
