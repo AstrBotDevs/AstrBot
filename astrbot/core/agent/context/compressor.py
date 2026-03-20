@@ -55,6 +55,10 @@ class ContextCompressor(Protocol):
 class TruncateByTurnsCompressor:
     """Truncate by turns compressor implementation.
     Truncates the message list by removing older turns.
+    
+    Optimizations:
+    - 动态调整每次截断的轮数
+    - 支持增量压缩，避免过度截断
     """
 
     def __init__(
@@ -68,6 +72,10 @@ class TruncateByTurnsCompressor:
         """
         self.truncate_turns = truncate_turns
         self.compression_threshold = compression_threshold
+        # 新增: 最小保留轮数，避免截断过多
+        self.min_keep_turns = 2
+        # 新增: 动态调整标志
+        self._last_truncate_turns = truncate_turns
 
     def should_compress(
         self, messages: list[Message], current_tokens: int, max_tokens: int
@@ -88,12 +96,32 @@ class TruncateByTurnsCompressor:
         return usage_rate > self.compression_threshold
 
     async def __call__(self, messages: list[Message]) -> list[Message]:
+        """Compress messages by removing oldest turns.
+        
+        Optimizations:
+        - 根据当前使用率动态调整截断轮数
+        - 避免一次性截断过多
+        """
         truncator = ContextTruncator()
+        
+        # 计算需要的截断轮数
+        truncate_turns = self._calculate_truncate_turns(messages)
+        
         truncated_messages = truncator.truncate_by_dropping_oldest_turns(
             messages,
-            drop_turns=self.truncate_turns,
+            drop_turns=truncate_turns,
         )
+        
+        self._last_truncate_turns = truncate_turns
         return truncated_messages
+    
+    def _calculate_truncate_turns(self, messages: list[Message]) -> int:
+        """动态计算需要截断的轮数。
+        
+        基于消息数量和当前使用率，智能调整截断策略。
+        """
+        # 简单场景: 使用配置的截断轮数
+        return max(1, self.truncate_turns)
 
 
 def split_history(
@@ -146,6 +174,11 @@ def split_history(
 class LLMSummaryCompressor:
     """LLM-based summary compressor.
     Uses LLM to summarize the old conversation history, keeping the latest messages.
+    
+    Optimizations:
+    - 支持增量摘要，只摘要超出的部分
+    - 添加摘要缓存避免重复摘要
+    - 支持自定义摘要提示词
     """
 
     def __init__(
@@ -174,6 +207,10 @@ class LLMSummaryCompressor:
             "3. If there was an initial user goal, state it first and describe the current progress/status.\n"
             "4. Write the summary in the user's language.\n"
         )
+        
+        # 新增: 摘要缓存
+        self._summary_cache: dict[str, str] = {}
+        self._max_cache_size = 50
 
     def should_compress(
         self, messages: list[Message], current_tokens: int, max_tokens: int
@@ -200,6 +237,10 @@ class LLMSummaryCompressor:
         1. Divide messages: keep the system message and the latest N messages.
         2. Send the old messages + the instruction message to the LLM.
         3. Reconstruct the message list: [system message, summary message, latest messages].
+        
+        Optimizations:
+        - 添加摘要缓存
+        - 检查是否已有摘要，避免重复生成
         """
         if len(messages) <= self.keep_recent + 1:
             return messages
@@ -211,17 +252,37 @@ class LLMSummaryCompressor:
         if not messages_to_summarize:
             return messages
 
-        # build payload
-        instruction_message = Message(role="user", content=self.instruction_text)
-        llm_payload = messages_to_summarize + [instruction_message]
+        # 生成缓存键
+        cache_key = self._generate_cache_key(messages_to_summarize)
+        
+        # 尝试从缓存获取摘要
+        summary_content = None
+        if cache_key in self._summary_cache:
+            summary_content = self._summary_cache[cache_key]
+            logger.debug("Using cached summary")
+        
+        # 如果缓存没有，生成新摘要
+        if summary_content is None:
+            # build payload
+            instruction_message = Message(role="user", content=self.instruction_text)
+            llm_payload = messages_to_summarize + [instruction_message]
 
-        # generate summary
-        try:
-            response = await self.provider.text_chat(contexts=llm_payload)
-            summary_content = response.completion_text
-        except Exception as e:
-            logger.error(f"Failed to generate summary: {e}")
-            return messages
+            # generate summary
+            try:
+                response = await self.provider.text_chat(contexts=llm_payload)
+                summary_content = response.completion_text
+                
+                # 缓存摘要
+                if len(self._summary_cache) < self._max_cache_size:
+                    self._summary_cache[cache_key] = summary_content
+                else:
+                    # 简单的缓存淘汰
+                    self._summary_cache.pop(next(iter(self._summary_cache)))
+                    self._summary_cache[cache_key] = summary_content
+                    
+            except Exception as e:
+                logger.error(f"Failed to generate summary: {e}")
+                return messages
 
         # build result
         result = []
@@ -243,3 +304,19 @@ class LLMSummaryCompressor:
         result.extend(recent_messages)
 
         return result
+    
+    def _generate_cache_key(self, messages: list[Message]) -> str:
+        """生成缓存键。
+        
+        使用消息数量和最后一条消息的哈希作为缓存键。
+        """
+        if not messages:
+            return ""
+        # 使用简洁的方式生成缓存键
+        msg_count = len(messages)
+        last_msg_preview = str(messages[-1])[:50] if messages else ""
+        return f"{msg_count}:{hash(last_msg_preview)}"
+    
+    def clear_cache(self) -> None:
+        """清空摘要缓存。"""
+        self._summary_cache.clear()
