@@ -70,6 +70,7 @@ import yaml
 
 from .._command_model import resolve_command_model_param
 from .._injected_params import is_framework_injected_parameter
+from .._plugin_ids import validate_plugin_id
 from .._typing_utils import unwrap_optional
 from ..decorators import (
     ConversationMeta,
@@ -666,6 +667,10 @@ def validate_plugin_spec(plugin: PluginSpec) -> None:
     raw_name = manifest_data.get("name")
     if not isinstance(raw_name, str) or not raw_name:
         raise ValueError(f"{manifest_label} 缺少 name。")
+    try:
+        validate_plugin_id(raw_name)
+    except ValueError as exc:
+        raise ValueError(f"{manifest_label} 的 name 不合法：{exc}") from exc
 
     raw_runtime = manifest_data.get("runtime") or {}
     raw_python = raw_runtime.get("python")

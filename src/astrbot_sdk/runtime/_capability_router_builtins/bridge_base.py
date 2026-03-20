@@ -5,8 +5,11 @@ import hashlib
 import math
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
+from ..._plugin_ids import resolve_plugin_data_dir, validate_plugin_id
+from ...errors import AstrBotError
 from ...protocol.descriptors import (
     BUILTIN_CAPABILITY_SCHEMAS,
     CapabilityDescriptor,
@@ -67,6 +70,25 @@ def _mock_embedding_vector(text: str, *, provider_id: str) -> list[float]:
 
 
 class CapabilityRouterBridgeBase(CapabilityRouterHost):
+    _memory_backends: dict[str, Any]
+
+    @staticmethod
+    def _validated_plugin_id(plugin_id: str, *, capability_name: str) -> str:
+        try:
+            return validate_plugin_id(plugin_id)
+        except ValueError as exc:
+            raise AstrBotError.invalid_input(
+                f"{capability_name} requires a safe plugin_id: {exc}"
+            ) from exc
+
+    def _plugin_data_dir(self, plugin_id: str, *, capability_name: str) -> Path:
+        try:
+            return resolve_plugin_data_dir(self._system_data_root, plugin_id)
+        except ValueError as exc:
+            raise AstrBotError.invalid_input(
+                f"{capability_name} requires a safe plugin_id: {exc}"
+            ) from exc
+
     def _builtin_descriptor(
         self,
         name: str,
