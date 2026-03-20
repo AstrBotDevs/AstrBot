@@ -52,22 +52,12 @@ class BwrapConfig:
 
 def build_bwrap_cmd(config: BwrapConfig, script_cmd: list[str]) -> list[str]:
     """Helper to build a bubblewrap command."""
-    cmd = [
-        "bwrap",
-        "--unshare-pid",
-        "--unshare-ipc",
-        "--unshare-uts",
-        "--die-with-parent",
-        "--dir", "/tmp",
-        "--dir", "/var/tmp",
-        "--proc", "/proc",
-        "--dev", "/dev",
-        "--bind", config.workspace_dir, config.workspace_dir,  # Bind workspace to itself so paths match
-    ]
+    cmd = ["bwrap"]
     
     if not config.share_net:
         cmd.append("--unshare-net")
-        
+
+    # Bind paths to itself so paths match
     for path in config.ro_binds:
         if os.path.exists(path):
             cmd.extend(["--ro-bind", path, path])
@@ -78,6 +68,19 @@ def build_bwrap_cmd(config: BwrapConfig, script_cmd: list[str]) -> list[str]:
             continue
         if os.path.exists(path):
             cmd.extend(["--bind", path, path])
+
+    # Make system binds the last to avoid issues about ro `/`
+    cmd.extend([
+        "--unshare-pid",
+        "--unshare-ipc",
+        "--unshare-uts",
+        "--die-with-parent",
+        "--dir", "/tmp",
+        "--dir", "/var/tmp",
+        "--proc", "/proc",
+        "--dev", "/dev",
+        "--bind", config.workspace_dir, config.workspace_dir,
+    ])
             
     cmd.extend(["--"])
     cmd.extend(script_cmd)
@@ -272,6 +275,15 @@ class BwrapBooter(ComputerBooter):
         self._fs = HostBackedFileSystemComponent(self.config.workspace_dir)
         self._python = BwrapPythonComponent(self.config)
         self._shell = BwrapShellComponent(self.config)
+        test_shl = await self._shell.exec(command = "ls > /dev/null")
+        if test_shl["exit_code"] != 0:
+            raise RuntimeError(
+            '''BubbleWrap sandbox fails to exec test shell command "ls > /dev/null".
+stderr:\n{}'''.format(test_shl["stderr"]))
+        test_py = await self._python.exec(code = "print('Yes')")
+        if test_py["exit_code"] != 0:
+            raise RuntimeError('''BubbleWrap sandbox fails to exec test python code "print('Yes')".
+stderr:\n{}'''.format(test_py["stderr"]))
 
     async def shutdown(self) -> None:
         if self.config and os.path.exists(self.config.workspace_dir):
