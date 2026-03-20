@@ -251,6 +251,22 @@ class CapabilityBridgeBase(CapabilityRouter):
             "updated_at": self._to_iso_datetime(getattr(kb, "updated_at", None)),
         }
 
+    def _serialize_kb_document(self, document: Any) -> dict[str, Any] | None:
+        if document is None:
+            return None
+        return {
+            "doc_id": str(getattr(document, "doc_id", "") or ""),
+            "kb_id": str(getattr(document, "kb_id", "") or ""),
+            "doc_name": str(getattr(document, "doc_name", "") or ""),
+            "file_type": str(getattr(document, "file_type", "") or ""),
+            "file_size": int(getattr(document, "file_size", 0) or 0),
+            "file_path": str(getattr(document, "file_path", "") or ""),
+            "chunk_count": int(getattr(document, "chunk_count", 0) or 0),
+            "media_count": int(getattr(document, "media_count", 0) or 0),
+            "created_at": self._to_iso_datetime(getattr(document, "created_at", None)),
+            "updated_at": self._to_iso_datetime(getattr(document, "updated_at", None)),
+        }
+
     @staticmethod
     def _serialize_member(member: Any) -> dict[str, Any] | None:
         if member is None:

@@ -118,6 +118,8 @@ if TYPE_CHECKING:
 
         def _serialize_kb(self, kb_helper_or_record: Any) -> dict[str, Any] | None: ...
 
+        def _serialize_kb_document(self, document: Any) -> dict[str, Any] | None: ...
+
 else:
 
     class CapabilityMixinHost:
