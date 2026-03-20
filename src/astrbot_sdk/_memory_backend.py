@@ -35,6 +35,16 @@ def _sql_placeholders(count: int) -> str:
     return ", ".join("?" for _ in range(count))
 
 
+def _normalize_scope_namespace(namespace: str | None) -> str | None:
+    if namespace is None:
+        return None
+    return normalize_memory_namespace(namespace)
+
+
+def _escape_like_value(value: str) -> str:
+    return str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 EmbedMany = Callable[
     [list[str]], "asyncio.Future[list[list[float]]] | list[list[float]]"
 ]
@@ -187,7 +197,7 @@ class PluginMemoryBackend:
         namespace: str | None = None,
         include_descendants: bool = True,
     ) -> dict[str, Any]:
-        normalized_namespace = normalize_memory_namespace(namespace)
+        normalized_namespace = _normalize_scope_namespace(namespace)
         return await asyncio.to_thread(
             self._stats_sync,
             normalized_namespace,
@@ -207,7 +217,7 @@ class PluginMemoryBackend:
         embed_one: EmbedOne | None = None,
         embed_many: EmbedMany | None = None,
     ) -> list[dict[str, Any]]:
-        normalized_namespace = normalize_memory_namespace(namespace)
+        normalized_namespace = _normalize_scope_namespace(namespace)
         normalized_mode = str(mode).strip().lower() or "keyword"
         query_text = str(query)
 
@@ -321,7 +331,7 @@ class PluginMemoryBackend:
         self,
         *,
         provider_id: str,
-        namespace: str,
+        namespace: str | None,
         include_descendants: bool,
         embed_one: EmbedOne | None,
         embed_many: EmbedMany | None,
@@ -526,7 +536,11 @@ class PluginMemoryBackend:
             finally:
                 conn.close()
 
-    def _stats_sync(self, namespace: str, include_descendants: bool) -> dict[str, Any]:
+    def _stats_sync(
+        self,
+        namespace: str | None,
+        include_descendants: bool,
+    ) -> dict[str, Any]:
         with self._lock:
             conn = self._connect()
             try:
@@ -582,7 +596,11 @@ class PluginMemoryBackend:
                     "total_items": total_items,
                     "total_bytes": total_bytes,
                     "ttl_entries": ttl_entries,
-                    "namespace": display_memory_namespace(namespace),
+                    "namespace": (
+                        None
+                        if namespace is None
+                        else normalize_memory_namespace(namespace)
+                    ),
                     "namespace_count": namespace_count,
                     "fts_enabled": self._fts_enabled,
                     "vector_backend": self._vector_backend_label(),
@@ -600,7 +618,7 @@ class PluginMemoryBackend:
     def _keyword_candidates_sync(
         self,
         query: str,
-        namespace: str,
+        namespace: str | None,
         include_descendants: bool,
         limit: int | None,
     ) -> list[_StoredRecord]:
@@ -666,7 +684,7 @@ class PluginMemoryBackend:
     def _missing_embeddings_sync(
         self,
         provider_id: str,
-        namespace: str,
+        namespace: str | None,
         include_descendants: bool,
     ) -> list[_StoredRecord]:
         with self._lock:
@@ -734,7 +752,7 @@ class PluginMemoryBackend:
         self,
         provider_id: str,
         query_embedding: list[float],
-        namespace: str,
+        namespace: str | None,
         include_descendants: bool,
         limit: int | None,
     ) -> list[_VectorCandidate]:
@@ -853,7 +871,7 @@ class PluginMemoryBackend:
         conn: sqlite3.Connection,
         provider_id: str,
         query_embedding: list[float],
-        namespace: str,
+        namespace: str | None,
         include_descendants: bool,
         fetch_limit: int,
     ) -> list[_VectorCandidate]:
@@ -931,7 +949,7 @@ class PluginMemoryBackend:
         conn: sqlite3.Connection,
         provider_id: str,
         query_embedding: list[float],
-        namespace: str,
+        namespace: str | None,
         include_descendants: bool,
         fetch_limit: int,
     ) -> list[_VectorCandidate]:
@@ -1200,19 +1218,24 @@ class PluginMemoryBackend:
 
     @staticmethod
     def _namespace_where(
-        namespace: str,
+        namespace: str | None,
         *,
         include_descendants: bool,
         alias: str | None = None,
     ) -> tuple[str, tuple[Any, ...]]:
         column = f"{alias}.namespace" if alias else "namespace"
+        if namespace is None:
+            return "1 = 1", ()
         normalized_namespace = normalize_memory_namespace(namespace)
         if not normalized_namespace:
-            return "1 = 1", ()
+            if include_descendants:
+                return "1 = 1", ()
+            return f"{column} = ''", ()
         if include_descendants:
+            escaped_namespace = _escape_like_value(normalized_namespace)
             return (
-                f"({column} = ? OR {column} LIKE ?)",
-                (normalized_namespace, f"{normalized_namespace}/%"),
+                f"({column} = ? OR {column} LIKE ? ESCAPE '\\')",
+                (normalized_namespace, f"{escaped_namespace}/%"),
             )
         return f"{column} = ?", (normalized_namespace,)
 

@@ -104,16 +104,18 @@ def join_memory_namespace(*parts: Any) -> str:
 
 def memory_namespace_matches(
     candidate: str,
-    namespace: str,
+    namespace: str | None,
     *,
     include_descendants: bool,
 ) -> bool:
     """Check whether a stored namespace belongs to the requested scope."""
 
+    if namespace is None:
+        return True
     normalized_candidate = normalize_memory_namespace(candidate)
     normalized_namespace = normalize_memory_namespace(namespace)
     if not normalized_namespace:
-        return True
+        return include_descendants or normalized_candidate == ""
     if normalized_candidate == normalized_namespace:
         return True
     return include_descendants and normalized_candidate.startswith(

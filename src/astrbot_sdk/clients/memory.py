@@ -63,9 +63,17 @@ class MemoryClient:
             namespace=join_memory_namespace(self._namespace, *parts),
         )
 
-    def _resolve_namespace(self, namespace: str | None) -> str | None:
-        resolved = join_memory_namespace(self._namespace, namespace)
-        return resolved or None
+    def _resolve_exact_namespace(self, namespace: str | None) -> str:
+        if namespace is None:
+            return self._namespace
+        return join_memory_namespace(self._namespace, namespace)
+
+    def _resolve_scope_namespace(self, namespace: str | None) -> tuple[bool, str]:
+        if namespace is None:
+            if self._namespace:
+                return True, self._namespace
+            return False, ""
+        return True, join_memory_namespace(self._namespace, namespace)
 
     async def search(
         self,
@@ -109,8 +117,8 @@ class MemoryClient:
             payload["min_score"] = min_score
         if provider_id is not None:
             payload["provider_id"] = provider_id
-        resolved_namespace = self._resolve_namespace(namespace)
-        if resolved_namespace is not None:
+        has_namespace, resolved_namespace = self._resolve_scope_namespace(namespace)
+        if has_namespace:
             payload["namespace"] = resolved_namespace
         payload["include_descendants"] = bool(include_descendants)
         output = await self._proxy.call("memory.search", payload)
@@ -160,9 +168,7 @@ class MemoryClient:
         if extra:
             payload.update(extra)
         request: dict[str, Any] = {"key": key, "value": payload}
-        resolved_namespace = self._resolve_namespace(namespace)
-        if resolved_namespace is not None:
-            request["namespace"] = resolved_namespace
+        request["namespace"] = self._resolve_exact_namespace(namespace)
         await self._proxy.call("memory.save", request)
 
     async def get(
@@ -187,9 +193,7 @@ class MemoryClient:
                 print(f"用户偏好主题: {pref.get('theme')}")
         """
         payload: dict[str, Any] = {"key": key}
-        resolved_namespace = self._resolve_namespace(namespace)
-        if resolved_namespace is not None:
-            payload["namespace"] = resolved_namespace
+        payload["namespace"] = self._resolve_exact_namespace(namespace)
         output = await self._proxy.call("memory.get", payload)
         value = output.get("value")
         return value if isinstance(value, dict) else None
@@ -209,9 +213,7 @@ class MemoryClient:
             await ctx.memory.delete("old_note")
         """
         payload: dict[str, Any] = {"key": key}
-        resolved_namespace = self._resolve_namespace(namespace)
-        if resolved_namespace is not None:
-            payload["namespace"] = resolved_namespace
+        payload["namespace"] = self._resolve_exact_namespace(namespace)
         await self._proxy.call("memory.delete", payload)
 
     async def save_with_ttl(
@@ -253,9 +255,7 @@ class MemoryClient:
             "value": value,
             "ttl_seconds": ttl_seconds,
         }
-        resolved_namespace = self._resolve_namespace(namespace)
-        if resolved_namespace is not None:
-            payload["namespace"] = resolved_namespace
+        payload["namespace"] = self._resolve_exact_namespace(namespace)
         await self._proxy.call("memory.save_with_ttl", payload)
 
     async def get_many(
@@ -282,9 +282,7 @@ class MemoryClient:
                     print(f"{item['key']}: {item['value']}")
         """
         payload: dict[str, Any] = {"keys": keys}
-        resolved_namespace = self._resolve_namespace(namespace)
-        if resolved_namespace is not None:
-            payload["namespace"] = resolved_namespace
+        payload["namespace"] = self._resolve_exact_namespace(namespace)
         output = await self._proxy.call("memory.get_many", payload)
         items = output.get("items")
         if not isinstance(items, (list, tuple)):
@@ -312,9 +310,7 @@ class MemoryClient:
             print(f"删除了 {deleted} 条记忆")
         """
         payload: dict[str, Any] = {"keys": keys}
-        resolved_namespace = self._resolve_namespace(namespace)
-        if resolved_namespace is not None:
-            payload["namespace"] = resolved_namespace
+        payload["namespace"] = self._resolve_exact_namespace(namespace)
         output = await self._proxy.call("memory.delete_many", payload)
         return int(output.get("deleted_count", 0))
 
@@ -346,14 +342,24 @@ class MemoryClient:
         payload: dict[str, Any] = {
             "include_descendants": bool(include_descendants),
         }
-        resolved_namespace = self._resolve_namespace(namespace)
-        if resolved_namespace is not None:
+        has_namespace, resolved_namespace = self._resolve_scope_namespace(namespace)
+        if has_namespace:
             payload["namespace"] = resolved_namespace
         output = await self._proxy.call("memory.stats", payload)
         stats = {
             "total_items": output.get("total_items", 0),
             "total_bytes": output.get("total_bytes"),
         }
+        if "namespace" in output:
+            stats["namespace"] = output.get("namespace")
+        if "namespace_count" in output:
+            stats["namespace_count"] = output.get("namespace_count")
+        if "fts_enabled" in output:
+            stats["fts_enabled"] = output.get("fts_enabled")
+        if "vector_backend" in output:
+            stats["vector_backend"] = output.get("vector_backend")
+        if "vector_indexes" in output:
+            stats["vector_indexes"] = output.get("vector_indexes")
         if "plugin_id" in output:
             stats["plugin_id"] = output.get("plugin_id")
         if "ttl_entries" in output:

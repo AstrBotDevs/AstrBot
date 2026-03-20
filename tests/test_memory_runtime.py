@@ -318,3 +318,98 @@ async def test_memory_stats_can_scope_by_namespace(
     assert scoped["total_items"] == 2
     assert scoped["namespace_count"] == 2
     assert scoped["fts_enabled"] in {True, False}
+
+
+@pytest.mark.asyncio
+async def test_memory_search_and_stats_can_target_root_namespace_exactly(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    router = CapabilityRouter()
+
+    await _call(
+        router,
+        "memory.save",
+        {"key": "root-note", "value": {"content": "shared note at root"}},
+    )
+    await _call(
+        router,
+        "memory.save",
+        {
+            "key": "child-note",
+            "namespace": "users/alice",
+            "value": {"content": "shared note in child namespace"},
+        },
+    )
+
+    result = await _call(
+        router,
+        "memory.search",
+        {
+            "query": "shared note",
+            "namespace": "",
+            "include_descendants": False,
+            "mode": "keyword",
+        },
+    )
+    stats = await _call(
+        router,
+        "memory.stats",
+        {"namespace": "", "include_descendants": False},
+    )
+
+    assert [(item.get("namespace"), item["key"]) for item in result["items"]] == [
+        (None, "root-note")
+    ]
+    assert stats["namespace"] == ""
+    assert stats["total_items"] == 1
+
+
+@pytest.mark.asyncio
+async def test_memory_namespace_scope_escapes_like_wildcards(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    router = CapabilityRouter()
+
+    await _call(
+        router,
+        "memory.save",
+        {
+            "key": "safe",
+            "namespace": "team_1/room",
+            "value": {"content": "team scoped note"},
+        },
+    )
+    await _call(
+        router,
+        "memory.save",
+        {
+            "key": "leak",
+            "namespace": "teamA1/room",
+            "value": {"content": "team scoped note"},
+        },
+    )
+
+    result = await _call(
+        router,
+        "memory.search",
+        {
+            "query": "team scoped",
+            "namespace": "team_1",
+            "include_descendants": True,
+            "mode": "keyword",
+        },
+    )
+    stats = await _call(
+        router,
+        "memory.stats",
+        {"namespace": "team_1", "include_descendants": True},
+    )
+
+    assert [(item["namespace"], item["key"]) for item in result["items"]] == [
+        ("team_1/room", "safe")
+    ]
+    assert stats["total_items"] == 1
