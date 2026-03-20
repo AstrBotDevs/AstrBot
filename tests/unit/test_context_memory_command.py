@@ -134,3 +134,49 @@ async def test_add_truncates_long_memory_item() -> None:
     assert stored == ["1234567890"]
     text = event.send.await_args.args[0].get_plain_text(with_other_comps_mark=True)
     assert "已截断到 10 字符" in text
+
+
+@pytest.mark.asyncio
+async def test_ls_preview_length_uses_config_limit() -> None:
+    cfg = DummyConfig(
+        {
+            "provider_settings": {
+                "context_memory": {
+                    "pinned_memories": ["abcdefghijklmno"],
+                    "pinned_max_items": 3,
+                    "pinned_max_chars_per_item": 10,
+                }
+            }
+        }
+    )
+    command = _build_command_with_cfg(cfg)
+    event = _build_event()
+
+    await command.ls(event)
+
+    text = event.send.await_args.args[0].get_plain_text(with_other_comps_mark=True)
+    assert "1. abcdefghij" in text
+    assert "1. abcdefghijk" not in text
+
+
+@pytest.mark.asyncio
+async def test_ls_preview_length_is_capped_by_display_limit() -> None:
+    long_text = "x" * 250
+    cfg = DummyConfig(
+        {
+            "provider_settings": {
+                "context_memory": {
+                    "pinned_memories": [long_text],
+                    "pinned_max_items": 3,
+                    "pinned_max_chars_per_item": 999,
+                }
+            }
+        }
+    )
+    command = _build_command_with_cfg(cfg)
+    event = _build_event()
+
+    await command.ls(event)
+
+    text = event.send.await_args.args[0].get_plain_text(with_other_comps_mark=True)
+    assert ("1. " + ("x" * 180) + "...") in text

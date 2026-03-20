@@ -648,6 +648,25 @@ def test_post_tool_compaction_soft_zone_respects_min_delta(runner):
     assert runner._should_run_post_tool_compaction() is True
 
 
+def test_post_tool_compaction_handles_token_counter_errors(runner):
+    runner.compact_context_after_tool_call = True
+    runner.compact_context_soft_ratio = 0.3
+    runner.compact_context_hard_ratio = 0.9
+    runner.compact_context_min_delta_tokens = 10
+    runner.compact_context_min_delta_turns = 10
+    runner.context_config = SimpleNamespace(max_context_tokens=100)
+    runner.run_context = SimpleNamespace(messages=[object(), object()])
+
+    def _raise(*_args, **_kwargs):
+        raise RuntimeError("counter broken")
+
+    runner.context_manager = SimpleNamespace(
+        token_counter=SimpleNamespace(count_tokens=_raise)
+    )
+
+    assert runner._should_run_post_tool_compaction() is False
+
+
 if __name__ == "__main__":
     # 运行测试
     pytest.main([__file__, "-v"])

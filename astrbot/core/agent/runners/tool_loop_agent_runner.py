@@ -272,9 +272,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # No explicit token budget configured: preserve legacy behavior.
             return True
 
-        current_tokens = self.context_manager.token_counter.count_tokens(
-            self.run_context.messages
-        )
+        try:
+            current_tokens = self.context_manager.token_counter.count_tokens(
+                self.run_context.messages
+            )
+        except Exception:
+            return False
         current_messages = len(self.run_context.messages)
         current_ratio = current_tokens / max(1, max_context_tokens)
 

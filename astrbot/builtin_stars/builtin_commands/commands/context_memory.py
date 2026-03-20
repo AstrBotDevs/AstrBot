@@ -6,6 +6,8 @@ from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.core.context_memory import ensure_context_memory_settings
 
+PINNED_PREVIEW_MAX_CHARS = 180
+
 
 class ContextMemoryCommands:
     def __init__(self, context: star.Context) -> None:
@@ -69,11 +71,21 @@ class ContextMemoryCommands:
             await event.send(MessageChain().message("当前没有手动顶层记忆。"))
             return
 
+        configured_max_chars = cm_cfg.get("pinned_max_chars_per_item", 400)
+        try:
+            configured_max_chars = int(configured_max_chars)
+        except Exception:
+            configured_max_chars = 400
+        preview_max_chars = min(
+            max(1, configured_max_chars),
+            PINNED_PREVIEW_MAX_CHARS,
+        )
+
         lines = ["手动顶层记忆列表："]
         for idx, text in enumerate(pinned, start=1):
             text_str = str(text)
-            if len(text_str) > 180:
-                text_str = text_str[:180] + "..."
+            if len(text_str) > preview_max_chars:
+                text_str = text_str[:preview_max_chars] + "..."
             lines.append(f"{idx}. {text_str}")
         await event.send(MessageChain().message("\n".join(lines)))
 

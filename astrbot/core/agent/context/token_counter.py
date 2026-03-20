@@ -80,6 +80,9 @@ class EstimateTokenCounter:
         other_count = len(text) - chinese_count
         return int(chinese_count * 0.6 + other_count * 0.3)
 
+    def estimate_text_tokens(self, text: str) -> int:
+        return self._estimate_tokens(text)
+
 
 class TokenizerTokenCounter:
     """Tokenizer-based token counter.
@@ -159,11 +162,11 @@ class TokenizerTokenCounter:
 
     def _encode_len(self, text: str) -> int:
         if not self._encode:
-            return self._estimate._estimate_tokens(text)
+            return self._estimate.estimate_text_tokens(text)
         try:
             return self._encode(text)
         except Exception:
-            return self._estimate._estimate_tokens(text)
+            return self._estimate.estimate_text_tokens(text)
 
 
 def create_token_counter(
