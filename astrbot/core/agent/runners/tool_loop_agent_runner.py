@@ -623,6 +623,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> T.AsyncGenerator[AgentResponse, None]:
         """Process steps until the agent is done."""
         step_count = 0
+        max_step = min(max_step, 3)
         while not self.done() and step_count < max_step:
             step_count += 1
             async for resp in self.step():
