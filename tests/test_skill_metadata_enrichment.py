@@ -49,6 +49,39 @@ def test_parse_frontmatter_quoted_description():
     assert _parse_frontmatter_description(text) == "quoted value"
 
 
+def test_parse_frontmatter_multiline_literal_description():
+    text = (
+        "---\n"
+        "name: humanizer-zh\n"
+        "description: |\n"
+        "  去除文本中的 AI 生成痕迹。\n"
+        "  适用于编辑或审阅文本，使其听起来更自然。\n"
+        "---\n"
+    )
+    assert _parse_frontmatter_description(text) == (
+        "去除文本中的 AI 生成痕迹。\n适用于编辑或审阅文本，使其听起来更自然。"
+    )
+
+
+def test_parse_frontmatter_multiline_folded_description():
+    text = (
+        "---\n"
+        "name: humanizer-zh\n"
+        "description: >\n"
+        "  去除文本中的 AI 生成痕迹。\n"
+        "  适用于编辑或审阅文本，使其听起来更自然。\n"
+        "---\n"
+    )
+    assert _parse_frontmatter_description(text) == (
+        "去除文本中的 AI 生成痕迹。 适用于编辑或审阅文本，使其听起来更自然。"
+    )
+
+
+def test_parse_frontmatter_invalid_yaml_returns_empty():
+    text = "---\ndescription: [broken\n---\n"
+    assert _parse_frontmatter_description(text) == ""
+
+
 # ---------- build_skills_prompt tests ----------
 
 

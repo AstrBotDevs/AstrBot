@@ -1,0 +1,31 @@
+{
+    "s": 0,
+    "d": {
+        "channel_type": "PERSON",
+        "type": 255,
+        "target_id": "7324688132731983",
+        "author_id": "1",
+        "content": "[系统消息]",
+        "extra": {
+            "type": "guild_member_offline",
+            "body": {
+                "user_id": "2732467349811313213",
+                "event_time": 1772589748914,
+                "guilds": [
+                    "78941897317309873120973"
+                ]
+            }
+        },
+        "msg_id": "e91b4451-75ce-47bd-bda6-e4498ed8d30d",
+        "msg_timestamp": 1772589748933,
+        "nonce": "",
+        "from_type": 1
+    },
+    "extra": {
+        "verifyToken": "kW4FH_ASHio1hosd",
+        "encryptKey": "",
+        "callbackUrl": "",
+        "intent": 255
+    },
+    "sn": 1
+}
