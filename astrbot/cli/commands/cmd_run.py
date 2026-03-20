@@ -53,7 +53,7 @@ import click
 from dotenv import load_dotenv
 from filelock import FileLock, Timeout
 
-from astrbot.cli.utils import check_astrbot_root, check_dashboard
+from astrbot.cli.utils import check_dashboard
 from astrbot.runtime_bootstrap import initialize_runtime_bootstrap
 
 initialize_runtime_bootstrap()
@@ -232,7 +232,7 @@ def run(
 
             astrbot_root = astrbot_paths.root
 
-        if not check_astrbot_root(astrbot_root):
+        if not astrbot_paths.is_root:
             raise click.ClickException(
                 f"{astrbot_root} is not a valid AstrBot root directory. Use 'astrbot init' to initialize",
             )

@@ -76,9 +76,8 @@ class AstrbotPaths:
     @property
     def is_root(self) -> bool:
         """Check if the path is an AstrBot root directory"""
-        if not isinstance(self.root, Path):
-            path = Path(self.root)
-        if not path.exists() or not path.is_dir():
+
+        if not self.root.exists() or not self.root.is_dir():
             return False
         if not (self.root / ".astrbot").exists():
             return False

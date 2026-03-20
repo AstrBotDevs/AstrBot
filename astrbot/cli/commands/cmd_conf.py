@@ -23,7 +23,6 @@ from typing import Any
 
 import click
 
-from astrbot.cli.utils import check_astrbot_root
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import astrbot_paths
 
@@ -285,7 +284,7 @@ def _load_config() -> dict[str, Any]:
     Ensures the astrbot root is valid before proceeding.
     """
     root = astrbot_paths.root
-    if not check_astrbot_root(root):
+    if not astrbot_paths.is_root:
         raise click.ClickException(
             f"{root} is not a valid AstrBot root directory. Use 'astrbot init' to initialize"
         )

@@ -58,12 +58,15 @@ def save_temp_img(img: Image.Image | bytes) -> str:
     timestamp = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
     p = os.path.join(temp_dir, f"io_temp_img_{timestamp}.jpg")
 
+
     if isinstance(img, Image.Image):
         img.save(p)
     else:
         with open(p, "wb") as f:
             f.write(img)
     return p
+
+
 
 
 async def download_image_by_url(
@@ -204,11 +207,13 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
         logger.info("下载完成")
 
 
+
 def file_to_base64(file_path: str) -> str:
     with open(file_path, "rb") as f:
         data_bytes = f.read()
         base64_str = base64.b64encode(data_bytes).decode()
     return "base64://" + base64_str
+
 
 
 def get_local_ip_addresses() -> list[IPv4Address | IPv6Address]:
@@ -226,6 +231,7 @@ def get_local_ip_addresses() -> list[IPv4Address | IPv6Address]:
                     network_ips.append(ip)
 
     return network_ips
+
 
 
 async def get_public_ip_address() -> list[IPv4Address | IPv6Address]:
@@ -258,6 +264,7 @@ async def get_public_ip_address() -> list[IPv4Address | IPv6Address]:
     return list(found_ips.values())
 
 
+
 async def get_dashboard_version():
     # First check user data directory (manually updated / downloaded dashboard).
     dist_dir = os.path.join(get_astrbot_data_path(), "dist")
@@ -273,6 +280,7 @@ async def get_dashboard_version():
                 v = (await f.read()).strip()
                 return v
     return None
+
 
 
 async def download_dashboard(
