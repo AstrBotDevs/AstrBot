@@ -126,6 +126,22 @@ const viewChangelog = () => {
   emit("view-changelog", props.extension);
 };
 
+const safeSocialLink = computed(() => {
+  const socialLink = props.extension?.social_link;
+  if (typeof socialLink !== "string" || !socialLink.trim().length) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(socialLink);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? parsed.href
+      : "";
+  } catch {
+    return "";
+  }
+});
+
 </script>
 
 <template>
@@ -335,16 +351,19 @@ const viewChangelog = () => {
                   class="extension-author-row__icon"
                 ></v-icon>
                 <a
-                  v-if="extension.social_link"
-                  :href="extension.social_link"
+                  v-if="safeSocialLink"
+                  :href="safeSocialLink"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="extension-author-row__link"
+                  class="extension-author-row__link text-subtitle-2 font-weight-medium"
                   @click.stop
                 >
                   {{ extension.author }}
                 </a>
-                <span v-else class="extension-author-row__text">
+                <span
+                  v-else
+                  class="extension-author-row__text text-subtitle-2 font-weight-medium"
+                >
                   {{ extension.author }}
                 </span>
               </div>
@@ -517,12 +536,14 @@ const viewChangelog = () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.95rem;
-  font-weight: 500;
+}
+
+.extension-author-row__link,
+.extension-author-row__text {
+  color: rgb(var(--v-theme-primary));
 }
 
 .extension-author-row__link {
-  color: inherit;
   text-decoration: none;
 }
 
