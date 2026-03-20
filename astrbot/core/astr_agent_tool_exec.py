@@ -294,6 +294,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
         agent_max_step = int(prov_settings.get("max_agent_step", 30))
         stream = prov_settings.get("streaming_response", False)
+        tool_call_timeout = run_context.tool_call_timeout
         llm_resp = await ctx.tool_loop_agent(
             event=event,
             chat_provider_id=prov_id,
@@ -303,6 +304,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             tools=toolset,
             contexts=contexts,
             max_steps=agent_max_step,
+            tool_call_timeout=tool_call_timeout,
             stream=stream,
         )
         yield mcp.types.CallToolResult(
