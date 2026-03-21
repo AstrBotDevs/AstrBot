@@ -197,7 +197,7 @@ def _classify_cli_exception(exc: Exception) -> tuple[int, str, str]:
         return (
             EXIT_PLUGIN_LOAD,
             "plugin_load_error",
-            "请检查插件目录、plugin.yaml、requirements.txt 和导入路径",
+            "请检查插件目录、plugin.yaml、requirements.txt（如有）和导入路径",
         )
     if isinstance(exc, LookupError):
         return (

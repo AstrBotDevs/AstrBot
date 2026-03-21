@@ -919,9 +919,8 @@ config = await ctx.metadata.get_plugin_config()
 if config:
     api_key = config.get("api_key")
 
-# 获取其他插件配置会失败并返回 None
-other_config = await ctx.metadata.get_plugin_config("other_plugin")
-# other_config 为 None，并记录警告日志
+# 获取其他插件配置会抛 PermissionError
+await ctx.metadata.get_plugin_config("other_plugin")
 ```
 
 ---

@@ -661,9 +661,6 @@ def validate_plugin_spec(plugin: PluginSpec) -> None:
     manifest_data = plugin.manifest_data
     manifest_label = f"插件 '{plugin.name}'（{plugin.manifest_path}）"
 
-    if not plugin.requirements_path.exists():
-        raise ValueError(f"{manifest_label} 缺少 requirements.txt。")
-
     raw_name = manifest_data.get("name")
     if not isinstance(raw_name, str) or not raw_name:
         raise ValueError(f"{manifest_label} 缺少 name。")
@@ -729,11 +726,6 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
                     plugin_id=skip_key,
                     message="插件发现失败",
                     details=details,
-                    hint=(
-                        "即使没有依赖，也需要创建一个空的 requirements.txt 文件。"
-                        if "requirements.txt" in details
-                        else ""
-                    ),
                 )
             )
             continue

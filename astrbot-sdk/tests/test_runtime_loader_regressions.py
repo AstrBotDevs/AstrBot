@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterator
 
 from astrbot_sdk.runtime.loader import (
+    discover_plugins,
     load_plugin,
     load_plugin_spec,
     validate_plugin_spec,
@@ -21,6 +22,7 @@ def _write_plugin(
     class_name: str,
     main_source: str,
     extra_files: dict[str, str] | None = None,
+    write_requirements: bool = True,
 ) -> None:
     plugin_dir.mkdir(parents=True, exist_ok=True)
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
@@ -41,7 +43,8 @@ components:
         + "\n",
         encoding="utf-8",
     )
-    (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
+    if write_requirements:
+        (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
     (plugin_dir / "main.py").write_text(main_source.lstrip(), encoding="utf-8")
 
     for relative_path, content in (extra_files or {}).items():
@@ -217,3 +220,34 @@ class FixturePlugin(Star):
         assert (
             copied_fixture / "__pycache__" / f"main.{cache_tag}.pyc"
         ).read_bytes() != b"stale main bytecode"
+
+
+def test_discover_plugins_allows_plugins_without_requirements_file(
+    tmp_path: Path,
+) -> None:
+    plugins_dir = tmp_path / "plugins"
+    plugin_dir = plugins_dir / "no_requirements"
+    _write_plugin(
+        plugin_dir,
+        plugin_name="no_requirements",
+        class_name="NoRequirementsPlugin",
+        main_source="""
+from astrbot_sdk import Star
+
+
+class NoRequirementsPlugin(Star):
+    value = "no-deps"
+""",
+        write_requirements=False,
+    )
+
+    discovered = discover_plugins(plugins_dir)
+
+    assert [plugin.name for plugin in discovered.plugins] == ["no_requirements"]
+    assert discovered.skipped_plugins == {}
+    assert discovered.issues == []
+
+    with _preserve_import_state("main"):
+        instance = _load_first_instance(plugin_dir)
+
+    assert instance.value == "no-deps"

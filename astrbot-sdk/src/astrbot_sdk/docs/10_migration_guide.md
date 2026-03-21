@@ -481,7 +481,7 @@ if __name__ == "__main__":
 ## 获取帮助
 
 - 查看完整文档：[docs/](./)
-- 提交问题：[GitHub Issues](https://github.com/your-repo/issues)
+- 提交问题：[GitHub Issues](https://github.com/AstrBotDevs/AstrBot/issues)
 - 迁移示例：[examples/migration/](./examples/migration/)
 
 ---

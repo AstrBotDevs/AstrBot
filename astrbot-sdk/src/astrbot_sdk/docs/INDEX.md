@@ -96,28 +96,6 @@
 - 安全最佳实践
 - 安全审计指南
 
----
-
-## 🔍 发现的代码问题（已验证并更新）
-
-### 已修复问题 ✅
-
-1. **Provider change hook 资源泄漏** (已修复)
-   - 位置: `astrbot_sdk/clients/provider.py:293-303`
-   - 状态: ✅ 已添加 `unregister_provider_change_hook()` 方法
-   - 文档: [11_security_checklist.md](./11_security_checklist.md)
-
-2. **PlatformCompatFacade 并发安全** (已修复)
-   - 位置: `astrbot_sdk/context.py:85`
-   - 状态: ✅ 已添加 `_state_lock: asyncio.Lock`
-   - 文档: [11_security_checklist.md](./11_security_checklist.md)
-
-3. **直接修改 provider dict** (已修复)
-   - 位置: `astrbot_sdk/runtime/_capability_router_builtins.py:869-884`
-   - 状态: ✅ 已使用 `dict(provider)` 创建副本
-   - 文档: [11_security_checklist.md](./11_security_checklist.md)
-
----
 
 ## 📝 文档使用建议
 
@@ -143,7 +121,7 @@
 - **项目地址**: https://github.com/AstrBotDevs/AstrBot
 - **SDK 版本**: v4.0
 - **协议版本**: P0.6
-- **Python 要求**: >= 3.10
+- **Python 要求**: >= 3.12
 
 ---
 

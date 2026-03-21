@@ -287,7 +287,7 @@ class MemoryClient:
         items = output.get("items")
         if not isinstance(items, (list, tuple)):
             return []
-        return [dict(item) for item in items]
+        return [dict(item) for item in items if isinstance(item, dict)]
 
     async def delete_many(
         self,
