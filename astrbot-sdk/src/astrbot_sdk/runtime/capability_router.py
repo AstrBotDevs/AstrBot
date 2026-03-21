@@ -212,6 +212,7 @@ class _RegisteredPlugin:
     llm_tools: dict[str, dict[str, Any]] = field(default_factory=dict)
     active_llm_tools: set[str] = field(default_factory=set)
     agents: dict[str, dict[str, Any]] = field(default_factory=dict)
+    skills: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 class CapabilityRouter(BuiltinCapabilityRouterMixin):

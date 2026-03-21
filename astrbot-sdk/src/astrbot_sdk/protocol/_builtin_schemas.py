@@ -908,6 +908,35 @@ REGISTRY_COMMAND_REGISTER_INPUT_SCHEMA = _object_schema(
     ignore_prefix={"type": "boolean"},
 )
 REGISTRY_COMMAND_REGISTER_OUTPUT_SCHEMA = _object_schema()
+SKILL_REGISTER_INPUT_SCHEMA = _object_schema(
+    required=("name", "path"),
+    name={"type": "string"},
+    path={"type": "string"},
+    description={"type": "string"},
+)
+SKILL_REGISTER_OUTPUT_SCHEMA = _object_schema(
+    required=("name", "description", "path", "skill_dir"),
+    name={"type": "string"},
+    description={"type": "string"},
+    path={"type": "string"},
+    skill_dir={"type": "string"},
+)
+SKILL_UNREGISTER_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+)
+SKILL_UNREGISTER_OUTPUT_SCHEMA = _object_schema(
+    required=("removed",),
+    removed={"type": "boolean"},
+)
+SKILL_LIST_INPUT_SCHEMA = _object_schema()
+SKILL_LIST_OUTPUT_SCHEMA = _object_schema(
+    required=("skills",),
+    skills={
+        "type": "array",
+        "items": SKILL_REGISTER_OUTPUT_SCHEMA,
+    },
+)
 HTTP_REGISTER_API_INPUT_SCHEMA = _object_schema(
     required=("route", "methods", "handler_capability"),
     route={"type": "string"},
@@ -1458,6 +1487,18 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": REGISTRY_COMMAND_REGISTER_INPUT_SCHEMA,
         "output": REGISTRY_COMMAND_REGISTER_OUTPUT_SCHEMA,
     },
+    "skill.register": {
+        "input": SKILL_REGISTER_INPUT_SCHEMA,
+        "output": SKILL_REGISTER_OUTPUT_SCHEMA,
+    },
+    "skill.unregister": {
+        "input": SKILL_UNREGISTER_INPUT_SCHEMA,
+        "output": SKILL_UNREGISTER_OUTPUT_SCHEMA,
+    },
+    "skill.list": {
+        "input": SKILL_LIST_INPUT_SCHEMA,
+        "output": SKILL_LIST_OUTPUT_SCHEMA,
+    },
     "http.register_api": {
         "input": HTTP_REGISTER_API_INPUT_SCHEMA,
         "output": HTTP_REGISTER_API_OUTPUT_SCHEMA,
@@ -1935,6 +1976,12 @@ __all__ = [
     "KNOWLEDGE_BASE_UPDATE_SCHEMA",
     "REGISTRY_COMMAND_REGISTER_INPUT_SCHEMA",
     "REGISTRY_COMMAND_REGISTER_OUTPUT_SCHEMA",
+    "SKILL_REGISTER_INPUT_SCHEMA",
+    "SKILL_REGISTER_OUTPUT_SCHEMA",
+    "SKILL_UNREGISTER_INPUT_SCHEMA",
+    "SKILL_UNREGISTER_OUTPUT_SCHEMA",
+    "SKILL_LIST_INPUT_SCHEMA",
+    "SKILL_LIST_OUTPUT_SCHEMA",
     "REGISTRY_GET_HANDLER_BY_FULL_NAME_INPUT_SCHEMA",
     "REGISTRY_GET_HANDLER_BY_FULL_NAME_OUTPUT_SCHEMA",
     "REGISTRY_GET_HANDLERS_BY_EVENT_TYPE_INPUT_SCHEMA",

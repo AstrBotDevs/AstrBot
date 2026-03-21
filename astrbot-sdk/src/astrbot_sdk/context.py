@@ -19,6 +19,7 @@ Attributes:
     kbs: 知识库管理客户端
     http: HTTP 客户端，用于注册 API 端点
     metadata: 元数据客户端，用于查询插件信息
+    skills: Skill 客户端，用于向 AstrBot 注册插件技能
     plugin_id: 当前插件的唯一标识
     logger: 绑定了插件 ID 的日志器
     cancel_token: 取消令牌，用于处理请求取消
@@ -47,6 +48,7 @@ from .clients import (
     PlatformStats,
     PlatformStatus,
     RegistryClient,
+    SkillClient,
 )
 from .clients._proxy import CapabilityProxy
 from .clients.files import FileServiceClient
@@ -58,6 +60,7 @@ from .clients.managers import (
 )
 from .clients.provider import ProviderClient, ProviderManagerClient
 from .clients.session import SessionPluginManager, SessionServiceManager
+from .clients.skills import SkillRegistration
 from .errors import AstrBotError
 from .llm.entities import LLMToolSpec, ProviderMeta, ProviderRequest
 from .llm.tools import LLMToolManager
@@ -285,6 +288,7 @@ class Context:
         self.http = HTTPClient(proxy)
         self.metadata = MetadataClient(proxy, plugin_id)
         self.registry = RegistryClient(proxy)
+        self.skills = SkillClient(proxy)
         self.session_plugins = SessionPluginManager(proxy)
         self.session_services = SessionServiceManager(proxy)
         self.persona_manager = self.personas
@@ -515,6 +519,22 @@ class Context:
         if dispatcher is not None and hasattr(dispatcher, "remove_llm_tool"):
             dispatcher.remove_llm_tool(self.plugin_id, str(name))
         return removed
+
+    async def register_skill(
+        self,
+        *,
+        name: str,
+        path: str | Path,
+        description: str = "",
+    ) -> SkillRegistration:
+        return await self.skills.register(
+            name=name,
+            path=str(path),
+            description=description,
+        )
+
+    async def unregister_skill(self, name: str) -> bool:
+        return await self.skills.unregister(name)
 
     async def tool_loop_agent(
         self,

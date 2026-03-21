@@ -107,3 +107,21 @@ class StarTools:
     @classmethod
     async def unregister_llm_tool(cls, name: str) -> bool:
         return await cls._require_context().unregister_llm_tool(name)
+
+    @classmethod
+    async def register_skill(
+        cls,
+        *,
+        name: str,
+        path: str,
+        description: str = "",
+    ):
+        return await cls._require_context().skills.register(
+            name=name,
+            path=path,
+            description=description,
+        )
+
+    @classmethod
+    async def unregister_skill(cls, name: str) -> bool:
+        return await cls._require_context().skills.unregister(name)

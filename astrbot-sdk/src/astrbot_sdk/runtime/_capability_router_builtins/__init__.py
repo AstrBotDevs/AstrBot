@@ -13,6 +13,7 @@ from .capabilities import (
     PlatformCapabilityMixin,
     ProviderCapabilityMixin,
     SessionCapabilityMixin,
+    SkillCapabilityMixin,
     SystemCapabilityMixin,
 )
 
@@ -26,6 +27,7 @@ class BuiltinCapabilityRouterMixin(
     MetadataCapabilityMixin,
     ProviderCapabilityMixin,
     SessionCapabilityMixin,
+    SkillCapabilityMixin,
     PersonaCapabilityMixin,
     ConversationCapabilityMixin,
     KnowledgeBaseCapabilityMixin,
@@ -42,6 +44,7 @@ class BuiltinCapabilityRouterMixin(
         self._register_provider_capabilities()
         self._register_agent_tool_capabilities()
         self._register_session_capabilities()
+        self._register_skill_capabilities()
         self._register_persona_capabilities()
         self._register_conversation_capabilities()
         self._register_kb_capabilities()
