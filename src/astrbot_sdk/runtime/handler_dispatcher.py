@@ -325,6 +325,7 @@ class HandlerDispatcher:
                     self._append_injected_payloads(
                         summary,
                         injected_payloads,
+                        event=event,
                         event_type=event_type,
                     )
                     return summary
@@ -339,6 +340,7 @@ class HandlerDispatcher:
             self._append_injected_payloads(
                 summary,
                 injected_payloads,
+                event=event,
                 event_type=event_type,
             )
             return summary
@@ -775,6 +777,7 @@ class HandlerDispatcher:
         summary: dict[str, Any],
         injected_payloads: _InjectedEventPayloads,
         *,
+        event: MessageEvent,
         event_type: str,
     ) -> None:
         if (
@@ -795,6 +798,8 @@ class HandlerDispatcher:
             and injected_payloads.event_result is not None
         ):
             summary["event_result"] = injected_payloads.event_result.to_payload()
+        if event._should_serialize_sdk_local_extras():  # noqa: SLF001
+            summary["sdk_local_extras"] = event._sdk_local_extras_payload()  # noqa: SLF001
 
     def _format_handler_injection_error(
         self,

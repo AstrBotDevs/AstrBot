@@ -698,6 +698,8 @@ event.set_extra("custom_flag", True)
 event.set_extra("temp_data", {"count": 5})
 ```
 
+> 请求范围内的 SDK hooks 会保留 JSON-safe 的本地 extras。不可 JSON 序列化的值只在当前 handler 内可见，不会自动带到后续 hook。
+
 ---
 
 ### `get_extra(key, default)`
@@ -993,6 +995,32 @@ def get_message_outline(self) -> str
 ```
 
 **返回**: 消息摘要文本
+
+---
+
+### `get_sent_message_outline()`
+
+获取 `after_message_sent` 事件里的实际发送摘要文本。
+
+**签名**:
+```python
+def get_sent_message_outline(self) -> str
+```
+
+**返回**: 机器人实际发送的摘要文本；非发送后事件通常返回空字符串
+
+---
+
+### `get_sent_messages()`
+
+获取 `after_message_sent` 事件里的实际发送消息组件。
+
+**签名**:
+```python
+def get_sent_messages(self) -> list[BaseMessageComponent]
+```
+
+**返回**: 机器人实际发送的消息组件列表；非发送后事件通常返回空列表
 
 ---
 

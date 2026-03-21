@@ -223,6 +223,10 @@ async def handle_request(self, event, ctx: Context):
 | `llm_response` | `MessageEvent`, `Context`, `LLMResponse` | 否，适合观察和提取回复内容 |
 | `decorating_result` | `MessageEvent`, `Context`, `MessageEventResult` | 是，可直接修改结果消息链 |
 | `after_message_sent` | `MessageEvent`, `Context` | 否，适合落库、记忆、统计 |
+| `calling_func_tool` | `MessageEvent`, `Context` | 否，可读取 `event.raw["tool_name"]` / `event.raw["tool_args"]` |
+| `using_llm_tool` | `MessageEvent`, `Context` | 否，可读取 `event.raw["tool_name"]` / `event.raw["tool_args"]` |
+| `llm_tool_respond` | `MessageEvent`, `Context` | 否，可读取 `event.raw["tool_name"]` / `event.raw["tool_result"]` |
+| `plugin_error` | `MessageEvent`, `Context` | 否，可读取 `event.raw["plugin_name"]` / `event.raw["error"]` |
 
 最小示例：
 
@@ -303,6 +307,8 @@ class PersonaSample(Star):
     @on_event("after_message_sent")
     async def persist(self, event: MessageEvent, ctx: Context) -> None:
         reply = str(event.get_extra("last_reply", "") or "").strip()
+        if not reply:
+            reply = str(event.get_sent_message_outline() or "").strip()
         if reply:
             await ctx.db.set("sample:last_reply", reply)
 ```
@@ -314,6 +320,15 @@ class PersonaSample(Star):
 3. 不同平台的事件类型可能不同，需要查阅平台文档
 4. `llm_request` 和 `decorating_result` 注入的是可变对象，修改会回写到 AstrBot 主链路
 5. `llm_response` 主要用于观测和提取结果，不应用来替代主回复流程
+6. 请求范围内的 JSON-safe `event.set_extra()` 数据会在同一次请求的 SDK hooks 之间保留；非 JSON-safe 值只在当前 handler 内可见
+7. `after_message_sent` 会保留 `event.text` 作为原始用户输入；读取机器人实际发送内容时，优先使用 `event.get_sent_message_outline()` 和 `event.get_sent_messages()`
+
+#### 系统事件附加字段
+
+- `calling_func_tool` / `using_llm_tool`: `event.raw["tool_name"]`, `event.raw["tool_args"]`
+- `llm_tool_respond`: `event.raw["tool_name"]`, `event.raw["tool_args"]`, `event.raw["tool_result"]`
+- `plugin_error`: `event.raw["plugin_name"]`, `event.raw["handler_name"]`, `event.raw["error"]`, `event.raw["traceback"]`
+- `after_message_sent`: `event.get_sent_message_outline()`, `event.get_sent_messages()`
 
 ---
 
