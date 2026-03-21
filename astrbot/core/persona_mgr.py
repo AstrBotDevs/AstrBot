@@ -33,15 +33,40 @@ class PersonaManager:
         self.selected_default_persona_v3: Personality | None = None
         self.persona_v3_config: list[dict] = []
         self.folder_manager = FolderResourceManager[PersonaFolder, Persona](
-            create_folder=self.db.insert_persona_folder,
-            get_folder=self.db.get_persona_folder_by_id,
-            get_folders=self.db.get_persona_folders,
-            get_all_folders=self.db.get_all_persona_folders,
-            update_folder=self.db.update_persona_folder,
-            delete_folder=self.db.delete_persona_folder,
-            get_items_by_folder=self.db.get_personas_by_folder,
-            move_item_to_folder=self.db.move_persona_to_folder,
-            batch_update_sort_order=self.db.batch_update_sort_order,
+            create_folder=lambda **kwargs: self.db.insert_resource_folder(
+                "persona",
+                **kwargs,
+            ),
+            get_folder=lambda folder_id: self.db.get_resource_folder_by_id(
+                "persona",
+                folder_id,
+            ),
+            get_folders=lambda parent_id: self.db.get_resource_folders(
+                "persona",
+                parent_id,
+            ),
+            get_all_folders=lambda: self.db.get_all_resource_folders("persona"),
+            update_folder=lambda **kwargs: self.db.update_resource_folder(
+                "persona",
+                **kwargs,
+            ),
+            delete_folder=lambda folder_id: self.db.delete_resource_folder(
+                "persona",
+                folder_id,
+            ),
+            get_items_by_folder=lambda folder_id: self.db.get_resources_by_folder(
+                "persona",
+                folder_id,
+            ),
+            move_item_to_folder=lambda item_id, folder_id: self.db.move_resource_to_folder(
+                "persona",
+                item_id,
+                folder_id,
+            ),
+            batch_update_sort_order=lambda items: self.db.batch_update_resource_sort_order(
+                "persona",
+                items,
+            ),
             on_item_moved=self._sync_persona_cache_after_move,
             on_sort_order_updated=self._refresh_persona_cache_after_sort_update,
         )

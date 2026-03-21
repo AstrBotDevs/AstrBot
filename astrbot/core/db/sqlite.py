@@ -38,6 +38,16 @@ TxResult = T.TypeVar("TxResult")
 CRON_FIELD_NOT_SET = object()
 
 
+class FolderResourceConfig(T.TypedDict):
+    folder_model: type[SQLModel]
+    item_model: type[SQLModel]
+    item_id_field: str
+    folder_fk_field: str
+    sort_order_field: str
+    item_sort_type: str
+    get_item_by_id: Callable[[str], Awaitable[T.Any]]
+
+
 class SQLiteDatabase(BaseDatabase):
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
@@ -80,6 +90,19 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(
                 text("ALTER TABLE personas ADD COLUMN sort_order INTEGER DEFAULT 0")
             )
+
+    def _get_folder_resource_config(self, resource_type: str) -> FolderResourceConfig:
+        if resource_type == "persona":
+            return {
+                "folder_model": PersonaFolder,
+                "item_model": Persona,
+                "item_id_field": "persona_id",
+                "folder_fk_field": "folder_id",
+                "sort_order_field": "sort_order",
+                "item_sort_type": "persona",
+                "get_item_by_id": self.get_persona_by_id,
+            }
+        raise ValueError(f"Unsupported folder resource type: {resource_type}")
 
     async def _ensure_persona_skills_column(self, conn) -> None:
         """确保 personas 表有 skills 列。
@@ -769,18 +792,22 @@ class SQLiteDatabase(BaseDatabase):
     # Persona Folder Management
     # ====
 
-    async def insert_persona_folder(
+    async def insert_resource_folder(
         self,
+        resource_type: str,
         name: str,
         parent_id: str | None = None,
         description: str | None = None,
         sort_order: int = 0,
-    ) -> PersonaFolder:
-        """Insert a new persona folder."""
+    ) -> T.Any:
+        """Insert a new folder for the specified resource type."""
+        config = self._get_folder_resource_config(resource_type)
+        folder_model = config["folder_model"]
+
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
-                new_folder = PersonaFolder(
+                new_folder = folder_model(
                     name=name,
                     parent_id=parent_id,
                     description=description,
@@ -791,65 +818,83 @@ class SQLiteDatabase(BaseDatabase):
                 await session.refresh(new_folder)
                 return new_folder
 
-    async def get_persona_folder_by_id(self, folder_id: str) -> PersonaFolder | None:
-        """Get a persona folder by its folder_id."""
+    async def get_resource_folder_by_id(
+        self, resource_type: str, folder_id: str
+    ) -> T.Any | None:
+        """Get a resource folder by its folder_id."""
+        config = self._get_folder_resource_config(resource_type)
+        folder_model = config["folder_model"]
+
         async with self.get_db() as session:
             session: AsyncSession
-            query = select(PersonaFolder).where(PersonaFolder.folder_id == folder_id)
+            query = select(folder_model).where(
+                getattr(folder_model, "folder_id") == folder_id
+            )
             result = await session.execute(query)
             return result.scalar_one_or_none()
 
-    async def get_persona_folders(
-        self, parent_id: str | None = None
-    ) -> list[PersonaFolder]:
-        """Get all persona folders, optionally filtered by parent_id.
+    async def get_resource_folders(
+        self, resource_type: str, parent_id: str | None = None
+    ) -> list[T.Any]:
+        """Get resource folders, optionally filtered by parent_id."""
+        config = self._get_folder_resource_config(resource_type)
+        folder_model = config["folder_model"]
 
-        Args:
-            parent_id: If None, returns root folders only. If specified, returns
-                       children of that folder.
-        """
         async with self.get_db() as session:
             session: AsyncSession
             if parent_id is None:
-                # Get root folders (parent_id is NULL)
                 query = (
-                    select(PersonaFolder)
-                    .where(col(PersonaFolder.parent_id).is_(None))
-                    .order_by(col(PersonaFolder.sort_order), col(PersonaFolder.name))
+                    select(folder_model)
+                    .where(col(getattr(folder_model, "parent_id")).is_(None))
+                    .order_by(
+                        col(getattr(folder_model, "sort_order")),
+                        col(getattr(folder_model, "name")),
+                    )
                 )
             else:
                 query = (
-                    select(PersonaFolder)
-                    .where(PersonaFolder.parent_id == parent_id)
-                    .order_by(col(PersonaFolder.sort_order), col(PersonaFolder.name))
+                    select(folder_model)
+                    .where(getattr(folder_model, "parent_id") == parent_id)
+                    .order_by(
+                        col(getattr(folder_model, "sort_order")),
+                        col(getattr(folder_model, "name")),
+                    )
                 )
             result = await session.execute(query)
             return list(result.scalars().all())
 
-    async def get_all_persona_folders(self) -> list[PersonaFolder]:
-        """Get all persona folders."""
+    async def get_all_resource_folders(self, resource_type: str) -> list[T.Any]:
+        """Get all folders for the specified resource type."""
+        config = self._get_folder_resource_config(resource_type)
+        folder_model = config["folder_model"]
+
         async with self.get_db() as session:
             session: AsyncSession
-            query = select(PersonaFolder).order_by(
-                col(PersonaFolder.sort_order), col(PersonaFolder.name)
+            query = select(folder_model).order_by(
+                col(getattr(folder_model, "sort_order")),
+                col(getattr(folder_model, "name")),
             )
             result = await session.execute(query)
             return list(result.scalars().all())
 
-    async def update_persona_folder(
+    async def update_resource_folder(
         self,
+        resource_type: str,
         folder_id: str,
         name: str | None = None,
         parent_id: T.Any = NOT_GIVEN,
         description: T.Any = NOT_GIVEN,
         sort_order: int | None = None,
-    ) -> PersonaFolder | None:
-        """Update a persona folder."""
+    ) -> T.Any | None:
+        """Update a folder for the specified resource type."""
+        config = self._get_folder_resource_config(resource_type)
+        folder_model = config["folder_model"]
+
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
-                query = update(PersonaFolder).where(
-                    col(PersonaFolder.folder_id) == folder_id
+                query = update(folder_model).where(
+                    col(getattr(folder_model, "folder_id")) == folder_id
                 )
                 values: dict[str, T.Any] = {}
                 if name is not None:
@@ -862,9 +907,177 @@ class SQLiteDatabase(BaseDatabase):
                     values["sort_order"] = sort_order
                 if not values:
                     return None
-                query = query.values(**values)
-                await session.execute(query)
-        return await self.get_persona_folder_by_id(folder_id)
+                await session.execute(query.values(**values))
+        return await self.get_resource_folder_by_id(resource_type, folder_id)
+
+    async def delete_resource_folder(self, resource_type: str, folder_id: str) -> None:
+        """Delete a folder for the specified resource type."""
+        config = self._get_folder_resource_config(resource_type)
+        folder_model = config["folder_model"]
+        item_model = config["item_model"]
+        folder_fk_field = config["folder_fk_field"]
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    update(item_model)
+                    .where(col(getattr(item_model, folder_fk_field)) == folder_id)
+                    .values(**{folder_fk_field: None})
+                )
+                await session.execute(
+                    delete(folder_model).where(
+                        col(getattr(folder_model, "folder_id")) == folder_id
+                    ),
+                )
+
+    async def move_resource_to_folder(
+        self,
+        resource_type: str,
+        resource_id: str,
+        folder_id: str | None,
+    ) -> T.Any | None:
+        """Move a resource to a folder (or root if folder_id is None)."""
+        config = self._get_folder_resource_config(resource_type)
+        item_model = config["item_model"]
+        item_id_field = config["item_id_field"]
+        folder_fk_field = config["folder_fk_field"]
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    update(item_model)
+                    .where(col(getattr(item_model, item_id_field)) == resource_id)
+                    .values(**{folder_fk_field: folder_id})
+                )
+        return await config["get_item_by_id"](resource_id)
+
+    async def get_resources_by_folder(
+        self, resource_type: str, folder_id: str | None = None
+    ) -> list[T.Any]:
+        """Get all resources in a specific folder."""
+        config = self._get_folder_resource_config(resource_type)
+        item_model = config["item_model"]
+        folder_fk_field = config["folder_fk_field"]
+        sort_order_field = config["sort_order_field"]
+        item_id_field = config["item_id_field"]
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            if folder_id is None:
+                query = (
+                    select(item_model)
+                    .where(col(getattr(item_model, folder_fk_field)).is_(None))
+                    .order_by(
+                        col(getattr(item_model, sort_order_field)),
+                        col(getattr(item_model, item_id_field)),
+                    )
+                )
+            else:
+                query = (
+                    select(item_model)
+                    .where(getattr(item_model, folder_fk_field) == folder_id)
+                    .order_by(
+                        col(getattr(item_model, sort_order_field)),
+                        col(getattr(item_model, item_id_field)),
+                    )
+                )
+            result = await session.execute(query)
+            return list(result.scalars().all())
+
+    async def batch_update_resource_sort_order(
+        self,
+        resource_type: str,
+        items: list[dict],
+    ) -> None:
+        """Batch update sort_order for resources and folders."""
+        if not items:
+            return
+
+        config = self._get_folder_resource_config(resource_type)
+        folder_model = config["folder_model"]
+        item_model = config["item_model"]
+        item_id_field = config["item_id_field"]
+        sort_order_field = config["sort_order_field"]
+        item_sort_type = config["item_sort_type"]
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                for item in items:
+                    item_id = item.get("id")
+                    item_type = item.get("type")
+                    sort_order = item.get("sort_order")
+
+                    if item_id is None or item_type is None or sort_order is None:
+                        continue
+
+                    if item_type == item_sort_type:
+                        await session.execute(
+                            update(item_model)
+                            .where(col(getattr(item_model, item_id_field)) == item_id)
+                            .values(**{sort_order_field: sort_order})
+                        )
+                    elif item_type == "folder":
+                        await session.execute(
+                            update(folder_model)
+                            .where(col(getattr(folder_model, "folder_id")) == item_id)
+                            .values(**{sort_order_field: sort_order})
+                        )
+
+    async def insert_persona_folder(
+        self,
+        name: str,
+        parent_id: str | None = None,
+        description: str | None = None,
+        sort_order: int = 0,
+    ) -> PersonaFolder:
+        """Insert a new persona folder."""
+        return await self.insert_resource_folder(
+            "persona",
+            name=name,
+            parent_id=parent_id,
+            description=description,
+            sort_order=sort_order,
+        )
+
+    async def get_persona_folder_by_id(self, folder_id: str) -> PersonaFolder | None:
+        """Get a persona folder by its folder_id."""
+        return await self.get_resource_folder_by_id("persona", folder_id)
+
+    async def get_persona_folders(
+        self, parent_id: str | None = None
+    ) -> list[PersonaFolder]:
+        """Get all persona folders, optionally filtered by parent_id.
+
+        Args:
+            parent_id: If None, returns root folders only. If specified, returns
+                       children of that folder.
+        """
+        return await self.get_resource_folders("persona", parent_id)
+
+    async def get_all_persona_folders(self) -> list[PersonaFolder]:
+        """Get all persona folders."""
+        return await self.get_all_resource_folders("persona")
+
+    async def update_persona_folder(
+        self,
+        folder_id: str,
+        name: str | None = None,
+        parent_id: T.Any = NOT_GIVEN,
+        description: T.Any = NOT_GIVEN,
+        sort_order: int | None = None,
+    ) -> PersonaFolder | None:
+        """Update a persona folder."""
+        return await self.update_resource_folder(
+            "persona",
+            folder_id=folder_id,
+            name=name,
+            parent_id=parent_id,
+            description=description,
+            sort_order=sort_order,
+        )
 
     async def delete_persona_folder(self, folder_id: str) -> None:
         """Delete a persona folder by its folder_id.
@@ -872,35 +1085,13 @@ class SQLiteDatabase(BaseDatabase):
         Note: This will also set folder_id to NULL for all personas in this folder,
         moving them to the root directory.
         """
-        async with self.get_db() as session:
-            session: AsyncSession
-            async with session.begin():
-                # Move personas to root directory
-                await session.execute(
-                    update(Persona)
-                    .where(col(Persona.folder_id) == folder_id)
-                    .values(folder_id=None)
-                )
-                # Delete the folder
-                await session.execute(
-                    delete(PersonaFolder).where(
-                        col(PersonaFolder.folder_id) == folder_id
-                    ),
-                )
+        await self.delete_resource_folder("persona", folder_id)
 
     async def move_persona_to_folder(
         self, persona_id: str, folder_id: str | None
     ) -> Persona | None:
         """Move a persona to a folder (or root if folder_id is None)."""
-        async with self.get_db() as session:
-            session: AsyncSession
-            async with session.begin():
-                await session.execute(
-                    update(Persona)
-                    .where(col(Persona.persona_id) == persona_id)
-                    .values(folder_id=folder_id)
-                )
-        return await self.get_persona_by_id(persona_id)
+        return await self.move_resource_to_folder("persona", persona_id, folder_id)
 
     async def get_personas_by_folder(
         self, folder_id: str | None = None
@@ -910,22 +1101,7 @@ class SQLiteDatabase(BaseDatabase):
         Args:
             folder_id: If None, returns personas in root directory.
         """
-        async with self.get_db() as session:
-            session: AsyncSession
-            if folder_id is None:
-                query = (
-                    select(Persona)
-                    .where(col(Persona.folder_id).is_(None))
-                    .order_by(col(Persona.sort_order), col(Persona.persona_id))
-                )
-            else:
-                query = (
-                    select(Persona)
-                    .where(Persona.folder_id == folder_id)
-                    .order_by(col(Persona.sort_order), col(Persona.persona_id))
-                )
-            result = await session.execute(query)
-            return list(result.scalars().all())
+        return await self.get_resources_by_folder("persona", folder_id)
 
     async def batch_update_sort_order(
         self,
@@ -939,32 +1115,7 @@ class SQLiteDatabase(BaseDatabase):
                 - type: Either "persona" or "folder"
                 - sort_order: The new sort_order value
         """
-        if not items:
-            return
-
-        async with self.get_db() as session:
-            session: AsyncSession
-            async with session.begin():
-                for item in items:
-                    item_id = item.get("id")
-                    item_type = item.get("type")
-                    sort_order = item.get("sort_order")
-
-                    if item_id is None or item_type is None or sort_order is None:
-                        continue
-
-                    if item_type == "persona":
-                        await session.execute(
-                            update(Persona)
-                            .where(col(Persona.persona_id) == item_id)
-                            .values(sort_order=sort_order)
-                        )
-                    elif item_type == "folder":
-                        await session.execute(
-                            update(PersonaFolder)
-                            .where(col(PersonaFolder.folder_id) == item_id)
-                            .values(sort_order=sort_order)
-                        )
+        await self.batch_update_resource_sort_order("persona", items)
 
     async def insert_preference_or_update(self, scope, scope_id, key, value):
         """Insert a new preference record or update if it exists."""
