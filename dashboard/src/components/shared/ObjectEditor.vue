@@ -87,7 +87,7 @@
                   variant="outlined"
                   hide-details="auto"
                   :placeholder="t('core.common.objectEditor.placeholders.jsonValue')"
-                  @blur="updateJSON(index, pair.value)"
+                  @blur="validateJSON(pair)"
                   :error-messages="pair.jsonError"
                 ></v-text-field>
               </v-col>
@@ -354,12 +354,12 @@ function addKeyValuePair() {
   }
 }
 
-function updateJSON(index, newValue) {
+function validateJSON(pair) {
   try {
-    JSON.parse(newValue)
-    localKeyValuePairs.value[index].jsonError = ''
+    JSON.parse(pair.value)
+    pair.jsonError = ''
   } catch (e) {
-    localKeyValuePairs.value[index].jsonError = t('core.common.objectEditor.invalidJson')
+    pair.jsonError = t('core.common.objectEditor.invalidJson')
   }
 }
 
