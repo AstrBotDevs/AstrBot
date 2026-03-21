@@ -26,6 +26,7 @@ from astrbot.core.db.po import (
     SessionProjectRelation,
     Stats,
 )
+from astrbot.core.sentinels import NOT_GIVEN
 
 
 @dataclass
@@ -403,8 +404,8 @@ class BaseDatabase(abc.ABC):
         resource_type: str,
         folder_id: str,
         name: str | None = None,
-        parent_id: T.Any = None,
-        description: T.Any = None,
+        parent_id: T.Any = NOT_GIVEN,
+        description: T.Any = NOT_GIVEN,
         sort_order: int | None = None,
     ) -> T.Any | None:
         """Update a folder for the specified resource type."""
@@ -442,7 +443,7 @@ class BaseDatabase(abc.ABC):
         ...
 
     # ====
-    # Folder Management
+    # Folder Resource Items
     # ====
 
     @abc.abstractmethod
@@ -524,8 +525,8 @@ class BaseDatabase(abc.ABC):
         self,
         folder_id: str,
         name: str | None = None,
-        parent_id: T.Any = None,
-        description: T.Any = None,
+        parent_id: T.Any = NOT_GIVEN,
+        description: T.Any = NOT_GIVEN,
         sort_order: int | None = None,
     ) -> PersonaFolder | None:
         """Update a persona folder."""

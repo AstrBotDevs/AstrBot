@@ -3,6 +3,7 @@ from typing import Any
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import PluginCatalogFolder
 from astrbot.core.folder_resource_manager import FolderResourceManager
+from astrbot.core.sentinels import NOT_GIVEN
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_manager import PluginManager
 
@@ -53,8 +54,13 @@ class PluginCatalogManager:
 
     async def sync_catalog(self) -> None:
         runtime_plugins = self._get_runtime_plugins()
+        existing_plugins = await self.db.get_all_resources("plugin")
+        existing_by_name = {
+            getattr(plugin_resource, "plugin_name"): plugin_resource
+            for plugin_resource in existing_plugins
+        }
         for plugin in runtime_plugins:
-            existing = await self.db.get_resource_by_id("plugin", plugin.name)
+            existing = existing_by_name.get(plugin.name)
             folder_id = getattr(existing, "folder_id", None) if existing else None
             sort_order = getattr(existing, "sort_order", 0) if existing else 0
             await self.db.upsert_resource(
@@ -116,8 +122,8 @@ class PluginCatalogManager:
         self,
         folder_id: str,
         name: str | None = None,
-        parent_id: str | None = None,
-        description: str | None = None,
+        parent_id: Any = NOT_GIVEN,
+        description: Any = NOT_GIVEN,
         sort_order: int | None = None,
     ) -> PluginCatalogFolder | None:
         return await self.folder_manager.update_folder(
@@ -143,15 +149,6 @@ class PluginCatalogManager:
             plugin
             for plugin in self.plugin_manager.context.get_all_stars()
             if plugin.name
-            and any(
-                [
-                    plugin.name,
-                    plugin.author,
-                    plugin.desc,
-                    plugin.version,
-                    plugin.display_name,
-                ]
-            )
         ]
 
     @staticmethod

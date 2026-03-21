@@ -930,6 +930,11 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             async with session.begin():
                 await session.execute(
+                    update(folder_model)
+                    .where(col(getattr(folder_model, "parent_id")) == folder_id)
+                    .values(parent_id=None)
+                )
+                await session.execute(
                     update(item_model)
                     .where(col(getattr(item_model, folder_fk_field)) == folder_id)
                     .values(**{folder_fk_field: None})

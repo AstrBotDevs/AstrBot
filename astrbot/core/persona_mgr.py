@@ -272,8 +272,8 @@ class PersonaManager:
         self,
         folder_id: str,
         name: str | None = None,
-        parent_id: str | None = None,
-        description: str | None = None,
+        parent_id: object = NOT_GIVEN,
+        description: object = NOT_GIVEN,
         sort_order: int | None = None,
     ) -> PersonaFolder | None:
         """更新文件夹信息"""

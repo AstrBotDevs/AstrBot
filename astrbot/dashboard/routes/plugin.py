@@ -28,6 +28,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_temp_path,
 )
+from astrbot.core.sentinels import NOT_GIVEN
 
 from .route import Response, Route, RouteContext
 
@@ -586,8 +587,10 @@ class PluginRoute(Route):
             data = await request.get_json()
             folder_id = data.get("folder_id")
             name = data.get("name")
-            parent_id = data.get("parent_id")
-            description = data.get("description")
+            parent_id = data["parent_id"] if "parent_id" in data else NOT_GIVEN
+            description = (
+                data["description"] if "description" in data else NOT_GIVEN
+            )
             sort_order = data.get("sort_order")
 
             if not folder_id:

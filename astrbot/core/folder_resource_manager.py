@@ -1,6 +1,8 @@
 from collections.abc import Awaitable, Callable
 from typing import Any, Generic, TypeVar
 
+from astrbot.core.sentinels import NOT_GIVEN
+
 TFolder = TypeVar("TFolder")
 TItem = TypeVar("TItem")
 
@@ -62,8 +64,8 @@ class FolderResourceManager(Generic[TFolder, TItem]):
         self,
         folder_id: str,
         name: str | None = None,
-        parent_id: str | None = None,
-        description: str | None = None,
+        parent_id: Any = NOT_GIVEN,
+        description: Any = NOT_GIVEN,
         sort_order: int | None = None,
     ) -> TFolder | None:
         return await self._update_folder(
