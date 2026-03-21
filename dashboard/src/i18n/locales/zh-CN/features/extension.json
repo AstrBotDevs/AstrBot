@@ -96,6 +96,16 @@
   "market": {
     "recommended": "🥳 推荐",
     "allPlugins": "📦 全部插件",
+    "category": "分类",
+    "categories": {
+      "all": "全部",
+      "ai_tools": "AI 增强",
+      "entertainment": "娱乐",
+      "productivity": "效率",
+      "integrations": "外部集成",
+      "utilities": "生活实用",
+      "other": "其他"
+    },
     "showFullName": "完整名称",
     "devDocs": "插件开发文档",
     "submitRepo": "提交插件仓库",
