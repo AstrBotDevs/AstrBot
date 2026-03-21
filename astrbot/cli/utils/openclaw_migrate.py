@@ -55,10 +55,10 @@ def _pick_existing_column(columns: set[str], candidates: tuple[str, ...]) -> str
 
 
 def _timestamp_from_epoch(raw: float | int | str) -> str | None:
-    ts = float(raw)
-    if ts > 1e12:
-        ts /= 1000.0
     try:
+        ts = float(raw)
+        if ts > 1e12:
+            ts /= 1000.0
         return dt.datetime.fromtimestamp(ts, tz=dt.timezone.utc).isoformat()
     except Exception:
         return None
@@ -115,16 +115,41 @@ def _parse_structured_line(line: str) -> tuple[str, str] | None:
 def _discover_memory_columns(
     cursor: sqlite3.Cursor, db_path: Path
 ) -> tuple[str, str, str | None, str | None]:
-    columns = {
+    table_info_rows = cursor.execute("PRAGMA table_info(memories)").fetchall()
+    columns_in_order = [
         str(row[1]).strip().lower()
-        for row in cursor.execute("PRAGMA table_info(memories)").fetchall()
-    }
+        for row in table_info_rows
+        if str(row[1]).strip()
+    ]
+    columns = set(columns_in_order)
 
-    key_col = _pick_existing_column(columns, SQLITE_KEY_CANDIDATES) or "rowid"
+    key_col = _pick_existing_column(columns, SQLITE_KEY_CANDIDATES)
+    if key_col is None:
+        pk_columns = sorted(
+            (
+                (int(row[5]), str(row[1]).strip().lower())
+                for row in table_info_rows
+                if int(row[5]) > 0 and str(row[1]).strip()
+            ),
+            key=lambda item: item[0],
+        )
+        if pk_columns:
+            key_col = pk_columns[0][1]
+    if key_col is None:
+        try:
+            cursor.execute("SELECT rowid FROM memories LIMIT 1").fetchone()
+            key_col = "rowid"
+        except sqlite3.Error:
+            key_col = columns_in_order[0] if columns_in_order else None
+
     content_col = _pick_existing_column(columns, SQLITE_CONTENT_CANDIDATES)
     if content_col is None:
         raise click.ClickException(
             f"OpenClaw sqlite exists at {db_path}, but no content-like column found"
+        )
+    if key_col is None:
+        raise click.ClickException(
+            f"OpenClaw sqlite exists at {db_path}, but no key-like or usable fallback column found"
         )
     category_col = _pick_existing_column(columns, SQLITE_CATEGORY_CANDIDATES)
     ts_col = _pick_existing_column(columns, SQLITE_TS_CANDIDATES)

@@ -109,6 +109,54 @@ def test_migration_supports_legacy_sqlite_columns(tmp_path: Path) -> None:
     assert entries[0].get("timestamp") is not None
 
 
+def test_migration_handles_without_rowid_memories_table(tmp_path: Path) -> None:
+    source_root = tmp_path / ".openclaw"
+    workspace = source_root / "workspace"
+    db_dir = workspace / "memory"
+    db_dir.mkdir(parents=True)
+    (workspace / "notes").mkdir(parents=True, exist_ok=True)
+    (workspace / "MEMORY.md").write_text("", encoding="utf-8")
+
+    db_path = db_dir / "brain.db"
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE memories (
+                value TEXT NOT NULL,
+                type TEXT NOT NULL,
+                updated_at INTEGER,
+                PRIMARY KEY (value, type)
+            ) WITHOUT ROWID
+            """
+        )
+        conn.execute(
+            "INSERT INTO memories (value, type, updated_at) VALUES (?, ?, ?)",
+            ("without-rowid-content", "core", 1700000000),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    astrbot_root = tmp_path / "astrbot"
+    astrbot_root.mkdir(parents=True)
+    _prepare_astrbot_root(astrbot_root)
+
+    report = run_openclaw_migration(
+        source_root=source_root,
+        astrbot_root=astrbot_root,
+        dry_run=False,
+        target_dir=Path("data/migrations/openclaw/test-without-rowid"),
+    )
+
+    assert report.target_dir is not None
+    entries = _read_migrated_memory_entries(Path(report.target_dir))
+    assert len(entries) == 1
+    assert entries[0].get("content") == "without-rowid-content"
+    assert entries[0].get("category") == "core"
+    assert entries[0].get("key") == "without-rowid-content"
+
+
 def test_run_openclaw_migration_dry_run(tmp_path: Path) -> None:
     source_root = tmp_path / ".openclaw"
     source_root.mkdir(parents=True)

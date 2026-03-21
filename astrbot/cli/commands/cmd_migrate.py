@@ -76,7 +76,7 @@ def migrate_openclaw(
     click.echo(f"  Copied files:       {report.copied_workspace_files}")
     click.echo(f"  Imported memories:  {report.copied_memory_entries}")
     click.echo(f"  Timeline written:   {report.wrote_timeline}")
-    click.echo(f"  Config TOML written:{report.wrote_config_toml}")
+    click.echo(f"  Config TOML written: {report.wrote_config_toml}")
     click.echo("Done.")
 
 
