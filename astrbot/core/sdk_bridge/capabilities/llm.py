@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, TypeGuard
 
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.runtime.capability_router import StreamExecution
+
+from astrbot import logger
 
 from ..bridge_base import _get_runtime_tool_types
 from ._host import CapabilityMixinHost
@@ -13,6 +16,17 @@ from ._host import CapabilityMixinHost
 if TYPE_CHECKING:
     from astrbot.core.agent.tool import ToolSet
     from astrbot.core.provider.entities import LLMResponse
+
+
+class _ChatProvider(Protocol):
+    async def text_chat(self, **kwargs: Any) -> LLMResponse: ...
+
+    async def text_chat_stream(self, **kwargs: Any) -> AsyncIterator[LLMResponse]: ...
+
+
+class _ProviderMetaLike(Protocol):
+    id: str
+    model: str | None
 
 
 class LLMCapabilityMixin(CapabilityMixinHost):
@@ -81,9 +95,17 @@ class LLMCapabilityMixin(CapabilityMixinHost):
             payload,
             request_id=request_id,
         )
+        started_at = time.perf_counter()
+        provider_label = self._describe_provider(provider)
 
         async def fallback_iterator() -> AsyncIterator[dict[str, Any]]:
+            logger.warning(
+                f"SDK llm.stream_chat fell back to non-streaming provider.text_chat for {provider_label}"
+            )
             response = await provider.text_chat(**request_kwargs)
+            logger.info(
+                f"SDK llm.stream_chat fallback first output for {provider_label} after {time.perf_counter() - started_at:.3f}s"
+            )
             for char in response.completion_text:
                 token.raise_if_cancelled()
                 await asyncio.sleep(0)
@@ -93,15 +115,26 @@ class LLMCapabilityMixin(CapabilityMixinHost):
             try:
                 stream = provider.text_chat_stream(**request_kwargs)
                 yielded_text = False
+                first_text_logged = False
                 async for response in stream:
                     token.raise_if_cancelled()
                     text = response.completion_text
                     if response.is_chunk:
                         if text:
+                            if not first_text_logged:
+                                first_text_logged = True
+                                logger.info(
+                                    f"SDK llm.stream_chat first streamed chunk for {provider_label} after {time.perf_counter() - started_at:.3f}s"
+                                )
                             yielded_text = True
                             yield {"text": text}
                         continue
                     if text:
+                        if not first_text_logged:
+                            first_text_logged = True
+                            logger.info(
+                                f"SDK llm.stream_chat first final chunk for {provider_label} after {time.perf_counter() - started_at:.3f}s"
+                            )
                         if yielded_text:
                             yield {"_final_text": text}
                         else:
@@ -145,7 +178,7 @@ class LLMCapabilityMixin(CapabilityMixinHost):
         payload: dict[str, Any],
         *,
         request_id: str,
-    ) -> tuple[Any, dict[str, Any]]:
+    ) -> tuple[_ChatProvider, dict[str, Any]]:
         request_context = self._plugin_bridge.resolve_request_session(request_id)
         provider_id = payload.get("provider_id")
         if provider_id:
@@ -161,7 +194,32 @@ class LLMCapabilityMixin(CapabilityMixinHost):
                 "No active chat provider is available",
                 hint="Please configure a chat provider in AstrBot first",
             )
+        if not self._is_chat_provider(provider):
+            raise AstrBotError.invalid_input(
+                f"Provider '{provider_id}' is not a chat provider",
+                hint="Please choose a configured chat provider for llm.chat requests",
+            )
         return provider, self._normalize_llm_payload(payload)
+
+    @staticmethod
+    def _describe_provider(provider: _ChatProvider) -> str:
+        provider_meta_getter = getattr(provider, "meta", None)
+        if not callable(provider_meta_getter):
+            return provider.__class__.__name__
+        provider_meta = provider_meta_getter()
+        if not LLMCapabilityMixin._is_provider_meta(provider_meta):
+            return provider.__class__.__name__
+        return f"{provider_meta.id}/{provider_meta.model}"
+
+    @staticmethod
+    def _is_chat_provider(provider: object) -> TypeGuard[_ChatProvider]:
+        return callable(getattr(provider, "text_chat", None)) and callable(
+            getattr(provider, "text_chat_stream", None)
+        )
+
+    @staticmethod
+    def _is_provider_meta(value: object) -> TypeGuard[_ProviderMetaLike]:
+        return hasattr(value, "id") and hasattr(value, "model")
 
     @staticmethod
     def _normalize_llm_payload(payload: dict[str, Any]) -> dict[str, Any]:

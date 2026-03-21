@@ -41,11 +41,12 @@ def _install_optional_dependency_stubs() -> None:
 
 _install_optional_dependency_stubs()
 
+from astrbot_sdk.clients.llm import ChatMessage, LLMClient
+from astrbot_sdk.errors import AstrBotError
+
 from astrbot.core.provider.entities import LLMResponse as CoreLLMResponse
 from astrbot.core.provider.entities import TokenUsage
 from astrbot.core.sdk_bridge.capability_bridge import CoreCapabilityBridge
-from astrbot_sdk.clients.llm import ChatMessage, LLMClient
-from astrbot_sdk.errors import AstrBotError
 
 
 class _RecordingProxy:
@@ -387,6 +388,24 @@ async def test_core_llm_bridge_raises_when_no_provider_available() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_core_llm_bridge_rejects_non_chat_provider_for_explicit_provider_id() -> (
+    None
+):
+    bridge = CoreCapabilityBridge(
+        star_context=_FakeStarContext(provider_by_id=_FakeSTTProvider()),
+        plugin_bridge=_FakePluginBridge(),
+    )
+
+    with pytest.raises(AstrBotError, match="is not a chat provider"):
+        await bridge._llm_chat(
+            "req-3b",
+            {"prompt": "hello", "provider_id": "stt-provider"},
+            None,
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_core_llm_bridge_chat_raw_keeps_old_fields_and_returns_optional_extensions() -> (
     None
 ):
@@ -543,9 +562,10 @@ async def test_core_provider_bridge_specialized_capabilities(
     )
     streamed = [item async for item in execution.iterator]
     assert [item["text"] for item in streamed] == ["hello", "sdk"]
-    assert [
-        base64.b64decode(item["audio_base64"]) for item in streamed
-    ] == [b"audio:hello", b"audio:sdk"]
+    assert [base64.b64decode(item["audio_base64"]) for item in streamed] == [
+        b"audio:hello",
+        b"audio:sdk",
+    ]
     assert tts_provider.stream_inputs == ["hello", "sdk"]
 
     bridge._star_context._provider_by_id = embedding_provider
