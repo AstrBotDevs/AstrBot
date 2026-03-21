@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
+import os
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
+
+try:
+    from astrbot.core.config.default import VERSION as _ASTRBOT_VERSION
+except Exception:  # noqa: BLE001
+    _ASTRBOT_VERSION = ""
 
 __all__ = ["PluginLogEntry", "PluginLogger"]
 
@@ -41,6 +49,57 @@ class _PluginLogBroker:
 
 
 _BROKERS: dict[str, _PluginLogBroker] = {}
+
+_SHORT_LEVEL_NAMES = {
+    "DEBUG": "DBUG",
+    "INFO": "INFO",
+    "WARNING": "WARN",
+    "ERROR": "ERRO",
+    "CRITICAL": "CRIT",
+}
+
+_ANSI_RESET = "\u001b[0m"
+_ANSI_GREEN = "\u001b[32m"
+_ANSI_LEVEL_COLORS = {
+    "DEBUG": "\u001b[1;34m",
+    "INFO": "\u001b[1;36m",
+    "WARNING": "\u001b[1;33m",
+    "ERROR": "\u001b[31m",
+    "CRITICAL": "\u001b[1;31m",
+}
+
+
+def _get_short_level_name(level_name: str) -> str:
+    return _SHORT_LEVEL_NAMES.get(level_name.upper(), level_name[:4].upper())
+
+
+def _build_source_file(pathname: str | None) -> str:
+    if not pathname:
+        return "unknown"
+    dirname = os.path.dirname(pathname)
+    return (
+        os.path.basename(dirname) + "." + os.path.basename(pathname).replace(".py", "")
+    )
+
+
+def _plugin_tag_from_path(pathname: str | None) -> str:
+    if not pathname:
+        return "[Plug]"
+    norm_path = os.path.normpath(pathname)
+    if any(
+        marker in norm_path
+        for marker in (
+            os.path.normpath("data/plugins"),
+            os.path.normpath("data/sdk_plugins"),
+            os.path.normpath("astrbot/builtin_stars"),
+        )
+    ):
+        return "[Plug]"
+    return "[Core]"
+
+
+def _level_color(level: str) -> str:
+    return _ANSI_LEVEL_COLORS.get(level.upper(), _ANSI_RESET)
 
 
 def _get_broker(plugin_id: str) -> _PluginLogBroker:
@@ -87,28 +146,71 @@ class PluginLogger:
             yield entry
 
     def log(self, level: str, message: Any, *args: Any, **kwargs: Any) -> None:
-        self._logger.log(level, message, *args, **kwargs)
-        self._publish(str(level).upper(), message, *args, **kwargs)
+        normalized_level = str(level).upper()
+        self._emit_console(normalized_level, message, *args, **kwargs)
+        self._publish(normalized_level, message, *args, **kwargs)
 
     def debug(self, message: Any, *args: Any, **kwargs: Any) -> None:
-        self._logger.debug(message, *args, **kwargs)
+        self._emit_console("DEBUG", message, *args, **kwargs)
         self._publish("DEBUG", message, *args, **kwargs)
 
     def info(self, message: Any, *args: Any, **kwargs: Any) -> None:
-        self._logger.info(message, *args, **kwargs)
+        self._emit_console("INFO", message, *args, **kwargs)
         self._publish("INFO", message, *args, **kwargs)
 
     def warning(self, message: Any, *args: Any, **kwargs: Any) -> None:
-        self._logger.warning(message, *args, **kwargs)
+        self._emit_console("WARNING", message, *args, **kwargs)
         self._publish("WARNING", message, *args, **kwargs)
 
     def error(self, message: Any, *args: Any, **kwargs: Any) -> None:
-        self._logger.error(message, *args, **kwargs)
+        self._emit_console("ERROR", message, *args, **kwargs)
         self._publish("ERROR", message, *args, **kwargs)
 
     def exception(self, message: Any, *args: Any, **kwargs: Any) -> None:
-        self._logger.exception(message, *args, **kwargs)
-        self._publish("ERROR", message, *args, **kwargs)
+        formatted_message = self._format_message(message, *args, **kwargs)
+        self._emit_console("ERROR", formatted_message, exception=True)
+        self._publish("ERROR", formatted_message)
+
+    def _emit_console(
+        self,
+        level: str,
+        message: Any,
+        *args: Any,
+        exception: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        formatted_message = self._format_message(message, *args, **kwargs)
+        pathname, source_line = self._caller_info()
+        plugin_tag = _plugin_tag_from_path(pathname)
+        source_file = _build_source_file(pathname)
+        version_tag = (
+            f" [v{_ASTRBOT_VERSION}]"
+            if _ASTRBOT_VERSION and level in {"WARNING", "ERROR", "CRITICAL"}
+            else ""
+        )
+        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        level_text = _get_short_level_name(level)
+        level_color = _level_color(level)
+        line = (
+            f"{_ANSI_GREEN}[{timestamp}]{_ANSI_RESET} {plugin_tag} "
+            f"{level_color}[{level_text}]{_ANSI_RESET}{version_tag} "
+            f"[{source_file}:{source_line}]: {level_color}{formatted_message}{_ANSI_RESET}"
+        )
+        if exception:
+            self._logger.opt(raw=True, exception=True).log(level, line + "\n")
+            return
+        self._logger.opt(raw=True).log(level, line + "\n")
+
+    def _caller_info(self) -> tuple[str | None, int]:
+        frame = inspect.currentframe()
+        if frame is None:
+            return None, 0
+        frame = frame.f_back
+        while frame is not None and frame.f_globals.get("__name__") == __name__:
+            frame = frame.f_back
+        if frame is None:
+            return None, 0
+        return str(frame.f_code.co_filename), int(frame.f_lineno)
 
     def _publish(self, level: str, message: Any, *args: Any, **kwargs: Any) -> None:
         entry = PluginLogEntry(
