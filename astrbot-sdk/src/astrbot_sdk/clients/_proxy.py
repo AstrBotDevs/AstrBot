@@ -89,16 +89,14 @@ class CapabilityProxy:
         Returns:
             能力描述符，若不存在则返回 None
         """
-        capability_map = getattr(self._peer, "__dict__", {}).get(
-            "remote_capability_map",
-            {},
-        )
+        capability_map = getattr(self._peer, "remote_capability_map", {})
+        if not isinstance(capability_map, Mapping):
+            return None
         return capability_map.get(name)
 
     def _remote_initialized(self) -> bool:
-        peer_state = getattr(self._peer, "__dict__", {})
-        return bool(peer_state.get("remote_peer")) or bool(
-            peer_state.get("remote_capability_map", {})
+        return bool(getattr(self._peer, "remote_peer", None)) or bool(
+            getattr(self._peer, "remote_capability_map", {})
         )
 
     def _ensure_available(self, name: str, *, stream: bool) -> None:
