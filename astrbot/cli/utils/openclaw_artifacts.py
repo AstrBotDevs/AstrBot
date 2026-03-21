@@ -103,7 +103,9 @@ def _write_timeline(path: Path, entries: list[MemoryEntry], source_root: Path) -
         snippet = entry.content.replace("\n", " ").strip()
         if len(snippet) > 160:
             snippet = snippet[:157] + "..."
-        lines.append(f"- [{ts}] ({entry.category}) `{entry.key}`: {snippet}")
+        safe_key = (entry.key or "").replace("`", "\\`")
+        safe_snippet = snippet.replace("`", "\\`")
+        lines.append(f"- [{ts}] ({entry.category}) `{safe_key}`: {safe_snippet}")
 
     lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")

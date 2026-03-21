@@ -455,6 +455,55 @@ def test_run_openclaw_migration_invalid_sqlite_raises_click_exception(
     assert "brain.db" in err_text
 
 
+def test_run_openclaw_migration_supports_sqlite_path_with_spaces(tmp_path: Path) -> None:
+    source_root = tmp_path / ".openclaw with spaces"
+    source_root.mkdir(parents=True)
+    _prepare_openclaw_source(source_root)
+
+    astrbot_root = tmp_path / "astrbot"
+    astrbot_root.mkdir(parents=True)
+    _prepare_astrbot_root(astrbot_root)
+
+    report = run_openclaw_migration(
+        source_root=source_root,
+        astrbot_root=astrbot_root,
+        dry_run=True,
+    )
+
+    assert report.memory_entries_from_sqlite >= 1
+
+
+def test_run_openclaw_migration_timeline_escapes_backticks(tmp_path: Path) -> None:
+    source_root = tmp_path / ".openclaw"
+    source_root.mkdir(parents=True)
+    _prepare_openclaw_source(source_root)
+
+    memory_md = source_root / "workspace" / "MEMORY.md"
+    memory_md.write_text(
+        memory_md.read_text(encoding="utf-8")
+        + "- **key`tick**: content has `tick` too\n",
+        encoding="utf-8",
+    )
+
+    astrbot_root = tmp_path / "astrbot"
+    astrbot_root.mkdir(parents=True)
+    _prepare_astrbot_root(astrbot_root)
+
+    report = run_openclaw_migration(
+        source_root=source_root,
+        astrbot_root=astrbot_root,
+        dry_run=False,
+        target_dir=Path("data/migrations/openclaw/test-timeline-backticks"),
+    )
+
+    assert report.target_dir is not None
+    timeline = (Path(report.target_dir) / "time_brief_history.md").read_text(
+        encoding="utf-8"
+    )
+    assert "`key\\`tick`" in timeline
+    assert "content has \\`tick\\` too" in timeline
+
+
 def test_json_to_toml_quotes_special_keys() -> None:
     payload = {
         "normal key": "ok",
