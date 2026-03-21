@@ -397,14 +397,16 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         return f"Message sent to session {target_session}"
 
 
-def check_all_kb(kb_list: list[KBHelper|None]) -> bool:
+def check_all_kb(kb_list: list[KBHelper | None]) -> bool:
     """检查是否所有的知识库都为空
     Args:
         kb_list: 所选的知识库
     Returns:
         bool: 是否全为空
     """
-    return not any(kb and (kb.kb.doc_count != 0 or kb.kb.chunk_count != 0) for kb in kb_list)
+    return not any(
+        kb and (kb.kb.doc_count != 0 or kb.kb.chunk_count != 0) for kb in kb_list
+    )
 
 
 async def retrieve_knowledge_base(
