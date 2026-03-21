@@ -37,7 +37,8 @@
                   variant="outlined"
                   hide-details
                   :placeholder="t('core.common.objectEditor.placeholders.keyName')"
-                  @blur="updateKey(index, pair.key)"
+                  @focus="pair._originalKey = pair.key"
+                  @blur="onKeyBlur(pair)"
                 ></v-text-field>
               </v-col>
               <v-col cols="7" class="pl-2 d-flex align-center justify-end">
@@ -369,39 +370,30 @@ function removeKeyValuePairByKey(key) {
   }
 }
 
-function updateKey(index, newKey) {
-  const originalKey = localKeyValuePairs.value[index].key
-  // 如果键名没有改变，则不执行任何操作
-  if (originalKey === newKey) return
+function onKeyBlur(pair) {
+  const originalKey = pair._originalKey
+  const newKey = pair.key
+  if (originalKey === undefined || originalKey === newKey) return
 
-  // 检查新键名是否已存在
-  const isKeyExists = localKeyValuePairs.value.some((pair, i) => i !== index && pair.key === newKey)
+  const isKeyExists = localKeyValuePairs.value.some(p => p !== pair && p.key === newKey)
   if (isKeyExists) {
-    // 如果键名已存在，提示用户并恢复原值
     alert(t('core.common.objectEditor.keyExists'))
-    // 将键名恢复为修改前的原始值
-    localKeyValuePairs.value[index].key = originalKey
+    pair.key = originalKey
     return
   }
 
-  // 检查新键名是否有模板
   const template = templateSchema.value[newKey]
   if (template) {
-    // 更新类型和默认值
-    localKeyValuePairs.value[index].type = template.type || localKeyValuePairs.value[index].type
-    if (localKeyValuePairs.value[index].value === undefined || localKeyValuePairs.value[index].value === null || localKeyValuePairs.value[index].value === '') {
-      localKeyValuePairs.value[index].value = template.default !== undefined ? template.default : localKeyValuePairs.value[index].value
+    pair.type = template.type || pair.type
+    if (pair.value === undefined || pair.value === null || pair.value === '') {
+      pair.value = template.default !== undefined ? template.default : pair.value
     }
-    localKeyValuePairs.value[index].slider = template.slider
-    localKeyValuePairs.value[index].template = template
+    pair.slider = template.slider
+    pair.template = template
   } else {
-    // 清除模板信息
-    localKeyValuePairs.value[index].slider = undefined
-    localKeyValuePairs.value[index].template = undefined
+    pair.slider = undefined
+    pair.template = undefined
   }
-
-  // 更新本地副本
-  localKeyValuePairs.value[index].key = newKey
 }
 
 function isTemplateKeyAdded(templateKey) {
