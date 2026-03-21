@@ -232,7 +232,7 @@ class DiscordPlatformAdapter(Platform):
             nickname=message.author.display_name,
         )
         message_chain = []
-        # 如果机器人被 @，在 message_chain 开头添加 At 组件
+        # 如果机器人被 @,在 message_chain 开头添加 At 组件
         if bot_was_mentioned:
             message_chain.insert(
                 0, At(qq=str(self.client.user.id), name=self.client.user.name)
