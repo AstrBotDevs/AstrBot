@@ -664,6 +664,116 @@ class TestDecorateLlmRequest:
         assert req.prompt == "Hello"
 
 
+class TestProcessQuoteMessage:
+    """Tests for quoted message processing."""
+
+    @pytest.mark.asyncio
+    async def test_process_quote_message_skips_caption_for_multimodal_auto_mode(
+        self, mock_event, mock_context, tmp_path
+    ):
+        """Auto mode should skip quoted-image captioning for multimodal providers."""
+        module = ama
+        image_path = tmp_path / "quoted.png"
+        image_path.write_bytes(b"quoted-image")
+        quote = Reply(
+            id="reply-1",
+            chain=[Image.fromFileSystem(image_path)],
+            sender_nickname="Alice",
+            message_str="[Image]",
+        )
+        mock_event.message_obj.message = [quote]
+
+        req = ProviderRequest(prompt="Hello")
+        provider = MagicMock(spec=Provider)
+        provider.provider_config = {"id": "vision-model", "modalities": ["image"]}
+        provider.text_chat = AsyncMock()
+        mock_context.get_using_provider.return_value = provider
+
+        with patch.object(
+            module,
+            "extract_quoted_message_text",
+            AsyncMock(return_value="quoted text"),
+        ):
+            await module._process_quote_message(
+                mock_event,
+                req,
+                "",
+                mock_context,
+                {"quoted_image_caption_mode": "auto"},
+            )
+
+        provider.text_chat.assert_not_called()
+        assert len(req.extra_user_content_parts) == 1
+        assert (
+            req.extra_user_content_parts[0].text
+            == "<Quoted Message>\n(Alice): quoted text\n</Quoted Message>"
+        )
+
+    @pytest.mark.asyncio
+    async def test_process_quote_message_captions_for_text_only_provider_in_auto_mode(
+        self, mock_event, mock_context, tmp_path
+    ):
+        """Auto mode should keep quoted-image captioning for text-only providers."""
+        module = ama
+        image_path = tmp_path / "quoted.png"
+        image_path.write_bytes(b"quoted-image")
+        quote = Reply(
+            id="reply-2",
+            chain=[Image.fromFileSystem(image_path)],
+            sender_nickname="Alice",
+            message_str="[Image]",
+        )
+        mock_event.message_obj.message = [quote]
+
+        req = ProviderRequest(prompt="Hello")
+        provider = MagicMock(spec=Provider)
+        provider.provider_config = {"id": "text-only", "modalities": ["tool_use"]}
+        provider.text_chat = AsyncMock(
+            return_value=MagicMock(completion_text="a cat on the table")
+        )
+        mock_context.get_using_provider.return_value = provider
+
+        with patch.object(
+            module,
+            "extract_quoted_message_text",
+            AsyncMock(return_value="quoted text"),
+        ):
+            await module._process_quote_message(
+                mock_event,
+                req,
+                "",
+                mock_context,
+                {"quoted_image_caption_mode": "auto"},
+            )
+
+        provider.text_chat.assert_awaited_once()
+        assert len(req.extra_user_content_parts) == 1
+        assert (
+            req.extra_user_content_parts[0].text
+            == "<Quoted Message>\n(Alice): quoted text\n[Image Caption in quoted message]: a cat on the table\n</Quoted Message>"
+        )
+
+
+class TestProviderSupportsImages:
+    """Tests for provider image modality detection."""
+
+    def test_provider_supports_images_accepts_provider_like_proxy(self):
+        """Provider-like objects should be detected via provider_config."""
+        provider = MagicMock(spec=Provider)
+        provider.provider_config = {"modalities": ["text", "image"]}
+
+        assert ama._provider_supports_images(provider) is True
+
+    def test_provider_supports_images_defaults_to_false_on_invalid_modalities(self):
+        """Invalid or missing modality declarations should not imply image support."""
+        provider = MagicMock(spec=Provider)
+        provider.provider_config = {"modalities": None}
+        assert ama._provider_supports_images(provider) is False
+
+        provider.provider_config = {"modalities": {"image": True}}
+        assert ama._provider_supports_images(provider) is False
+
+
 class TestModalitiesFix:
     """Tests for _modalities_fix function."""
 

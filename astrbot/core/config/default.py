@@ -71,6 +71,7 @@ DEFAULT_CONFIG = {
         "fallback_chat_models": [],
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
+        "quoted_image_caption_mode": "auto",
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
         "wake_prefix": "",
         "web_search": False,
@@ -3422,6 +3423,16 @@ CONFIG_METADATA_3 = {
                         "description": "引用图片回退解析上限",
                         "type": "int",
                         "hint": "引用/转发消息回退解析图片时的最大注入数量，超出会截断。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.quoted_image_caption_mode": {
+                        "description": "引用图片转述策略",
+                        "type": "string",
+                        "options": ["auto", "always", "never"],
+                        "labels": ["自动", "总是转述", "从不转述"],
+                        "hint": "auto 仅在当前对话模型不支持图片时转述引用图片；always 始终转述；never 从不转述。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },

@@ -511,11 +511,61 @@ def _get_quoted_message_parser_settings(
     return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)
 
 
+def _provider_supports_images(provider: object | None) -> bool:
+    if provider is None:
+        return False
+
+    provider_config = getattr(provider, "provider_config", None)
+    if not isinstance(provider_config, dict):
+        return False
+
+    modalities = provider_config.get("modalities")
+    if modalities is None:
+        return False
+    if isinstance(modalities, str):
+        return "image" in {part.strip() for part in modalities.split(",") if part}
+    if not isinstance(modalities, (list, tuple, set)):
+        return False
+    return "image" in {str(part).strip() for part in modalities if str(part).strip()}
+
+
+def _resolve_quoted_image_caption_mode(
+    provider_settings: dict[str, object] | None,
+) -> str:
+    if not isinstance(provider_settings, dict):
+        return "auto"
+
+    mode = provider_settings.get("quoted_image_caption_mode", "auto")
+    if not isinstance(mode, str):
+        return "auto"
+
+    normalized = mode.strip().lower()
+    if normalized in {"auto", "always", "never"}:
+        return normalized
+    return "auto"
+
+
+def _should_caption_quoted_images(
+    event: AstrMessageEvent,
+    plugin_context: Context,
+    provider_settings: dict[str, object] | None,
+) -> bool:
+    mode = _resolve_quoted_image_caption_mode(provider_settings)
+    if mode == "always":
+        return True
+    if mode == "never":
+        return False
+
+    active_provider = _select_provider(event, plugin_context)
+    return not _provider_supports_images(active_provider)
+
+
 async def _process_quote_message(
     event: AstrMessageEvent,
     req: ProviderRequest,
     img_cap_prov_id: str,
     plugin_context: Context,
+    provider_settings: dict[str, object] | None = None,
     quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
 ) -> None:
     quote = None
@@ -546,7 +596,9 @@ async def _process_quote_message(
                 image_seg = comp
                 break
 
-    if image_seg:
+    if image_seg and _should_caption_quoted_images(
+        event, plugin_context, provider_settings
+    ):
         try:
             prov = None
             if img_cap_prov_id:
@@ -648,6 +700,7 @@ async def _decorate_llm_request(
         req,
         img_cap_prov_id,
         plugin_context,
+        cfg,
         quoted_message_settings,
     )
 

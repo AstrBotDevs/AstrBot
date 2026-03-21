@@ -284,6 +284,15 @@
           "description": "Forwarded Image Fetch Limit",
           "hint": "Maximum number of images injected from forwarded-message parsing; extra images are truncated."
         },
+        "quoted_image_caption_mode": {
+          "description": "Quoted Image Caption Strategy",
+          "hint": "In auto mode, quoted images are only captioned when the active chat model cannot process images directly.",
+          "labels": [
+            "Auto",
+            "Always Caption",
+            "Never Caption"
+          ]
+        },
         "quoted_message_parser": {
           "max_component_chain_depth": {
             "description": "Forwarded Rich-Text Parse Depth",
