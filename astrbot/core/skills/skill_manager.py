@@ -25,6 +25,28 @@ _SANDBOX_SKILLS_CACHE_VERSION = 1
 _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
+def _default_sandbox_skill_path(name: str) -> str:
+    return f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{name}/SKILL.md"
+
+
+def _normalize_cached_sandbox_skill_path(name: str, path: str) -> str:
+    normalized = str(path or "").strip().replace("\\", "/")
+    if not normalized:
+        return _default_sandbox_skill_path(name)
+
+    pure_path = PurePosixPath(normalized)
+    if ".." in pure_path.parts:
+        return _default_sandbox_skill_path(name)
+
+    if pure_path.name != "SKILL.md":
+        return _default_sandbox_skill_path(name)
+
+    if pure_path.parent.name != name:
+        return _default_sandbox_skill_path(name)
+
+    return str(pure_path)
+
+
 def _is_ignored_zip_entry(name: str) -> bool:
     parts = PurePosixPath(name).parts
     if not parts:
@@ -159,10 +181,10 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
                 description = "Read SKILL.md for details."
 
         if skill.source_type == "sandbox_only":
-            rendered_path = (
-                f"{SANDBOX_WORKSPACE_ROOT!s}/{SANDBOX_SKILLS_ROOT!s}/"
-                f"{display_name}/SKILL.md"
-            )
+            # Prefer the actual path from sandbox cache if available
+            rendered_path = _sanitize_prompt_path_for_prompt(skill.path)
+            if not rendered_path:
+                rendered_path = _default_sandbox_skill_path(skill.name)
         else:
             rendered_path = _sanitize_prompt_path_for_prompt(skill.path)
             if not rendered_path:
@@ -287,13 +309,13 @@ class SkillManager:
             if not name or not _SKILL_NAME_RE.match(name):
                 continue
             description = str(item.get("description", "") or "")
-            path = str(item.get("path", "") or "")
-            if not path:
-                path = f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{name}/SKILL.md"
+            path = _normalize_cached_sandbox_skill_path(
+                name, str(item.get("path", "") or "")
+            )
             deduped[name] = {
                 "name": name,
                 "description": description,
-                "path": path.replace("\\", "/"),
+                "path": path,
             }
         cache = {
             "version": _SANDBOX_SKILLS_CACHE_VERSION,
@@ -337,12 +359,13 @@ class SkillManager:
             if not isinstance(item, dict):
                 continue
             name = str(item.get("name", "") or "").strip()
-            path = str(item.get("path", "") or "").strip().replace("\\", "/")
+            path = _normalize_cached_sandbox_skill_path(
+                name, str(item.get("path", "") or "")
+            )
             if not name or not _SKILL_NAME_RE.match(name):
                 continue
             sandbox_cached_descriptions[name] = str(item.get("description", "") or "")
-            if path:
-                sandbox_cached_paths[name] = path
+            sandbox_cached_paths[name] = path
 
         for entry in sorted(Path(self.skills_root).iterdir()):
             if not entry.is_dir():
@@ -377,9 +400,9 @@ class SkillManager:
             source_type = "both" if sandbox_exists else "local_only"
             source_label = "synced" if sandbox_exists else "local"
             if runtime == "sandbox" and show_sandbox_path:
-                path_str = sandbox_cached_paths.get(skill_name) or (
-                    f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
-                )
+                path_str = sandbox_cached_paths.get(
+                    skill_name
+                ) or _default_sandbox_skill_path(skill_name)
             else:
                 path_str = str(skill_md)
             path_str = path_str.replace("\\", "/")
@@ -415,12 +438,12 @@ class SkillManager:
                 if active_only and not active:
                     continue
                 description = sandbox_cached_descriptions.get(skill_name, "")
-                if show_sandbox_path:
-                    path_str = f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
-                else:
-                    path_str = sandbox_cached_paths.get(skill_name, "")
-                    if not path_str:
-                        path_str = f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
+                # For sandbox_only skills, show_sandbox_path is implicitly True
+                # since there is no local path to show. Always prefer the
+                # actual path from sandbox cache.
+                path_str = sandbox_cached_paths.get(
+                    skill_name
+                ) or _default_sandbox_skill_path(skill_name)
                 skills_by_name[skill_name] = SkillInfo(
                     name=skill_name,
                     description=description,

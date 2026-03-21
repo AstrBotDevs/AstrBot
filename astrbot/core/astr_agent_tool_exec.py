@@ -368,6 +368,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             tools=toolset,
             contexts=contexts,
             max_steps=agent_max_step,
+            tool_call_timeout=run_context.tool_call_timeout,
             stream=stream,
         )
         yield mcp.types.CallToolResult(
@@ -548,7 +549,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
 
         config = MainAgentBuildConfig(
-            tool_call_timeout=3600,
+            tool_call_timeout=run_context.tool_call_timeout,
             streaming_response=ctx.get_config()
             .get("provider_settings", {})
             .get("stream", False),

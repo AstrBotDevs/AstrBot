@@ -1,7 +1,6 @@
 import asyncio
 import os
 import time
-import uuid
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any, cast
@@ -92,32 +91,37 @@ class WebChatAdapter(Platform):
         active_request_ids = self._webchat_queue_mgr.list_back_request_ids(
             conversation_id
         )
-        subscription_request_ids = [
-            req_id for req_id in active_request_ids if req_id.startswith("ws_sub_")
+        stream_request_ids = [
+            req_id for req_id in active_request_ids if not req_id.startswith("ws_sub_")
         ]
-        target_request_ids = subscription_request_ids or active_request_ids
+        target_request_ids = stream_request_ids or active_request_ids
 
-        if target_request_ids:
-            for request_id in target_request_ids:
-                await WebChatMessageEvent._send(
-                    request_id,
-                    message_chain,
-                    session.session_id,
+        if not target_request_ids:
+            # No active streams to consume this proactive message.
+            # Persist directly and return to avoid creating an unused queue.
+            try:
+                await self._save_proactive_message(conversation_id, message_chain)
+            except Exception as e:
+                logger.error(
+                    f"[WebChatAdapter] Failed to save proactive message: {e}",
+                    exc_info=True,
                 )
-        else:
-            message_id = f"active_{uuid.uuid4()!s}"
+            await super().send_by_session(session, message_chain)
+            return
+
+        for request_id in target_request_ids:
             await WebChatMessageEvent._send(
-                message_id,
+                request_id,
                 message_chain,
                 session.session_id,
+                streaming=True,
+                emit_complete=True,
             )
 
-        should_persist = (
-            bool(subscription_request_ids)
-            or not active_request_ids
-            or all(req_id.startswith("active_") for req_id in active_request_ids)
-        )
-        if should_persist:
+        # If only passive subscription queues exist for this conversation,
+        # keep a proactive save as a fallback since they are not tied to
+        # the normal streaming persistence path.
+        if not stream_request_ids:
             try:
                 await self._save_proactive_message(conversation_id, message_chain)
             except Exception as e:

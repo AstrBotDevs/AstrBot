@@ -311,8 +311,11 @@ class CronJobManager:
 
         from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
 
+        tool_call_timeout = cfg.get("provider_settings", {}).get(
+            "tool_call_timeout", 120
+        )
         config = MainAgentBuildConfig(
-            tool_call_timeout=3600,
+            tool_call_timeout=tool_call_timeout,
             llm_safety_mode=False,
             streaming_response=False,
             tool_providers=[ComputerToolProvider()],
