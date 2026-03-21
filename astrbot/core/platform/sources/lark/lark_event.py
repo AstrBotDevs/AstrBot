@@ -785,9 +785,7 @@ class LarkMessageEvent(AstrMessageEvent):
             if buffer:
                 buffer.squash_plain()
                 await self.send(buffer)
-            await Metric.upload(
-                msg_event_tick=1, adapter_name=self.platform_meta.name
-            )
+            await Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
             self._has_send_oper = True
 
         try:
@@ -806,9 +804,7 @@ class LarkMessageEvent(AstrMessageEvent):
                         # Flush final text to the current card
                         if delta and delta != last_sent:
                             sequence += 1
-                            await self._update_streaming_text(
-                                card_id, delta, sequence
-                            )
+                            await self._update_streaming_text(card_id, delta, sequence)
                         sequence += 1
                         await self._close_streaming_mode(card_id, sequence)
                         # Reset for lazy new-card creation
@@ -857,9 +853,7 @@ class LarkMessageEvent(AstrMessageEvent):
 
         # If no text was produced at all, no card was created
         if card_id is None:
-            await Metric.upload(
-                msg_event_tick=1, adapter_name=self.platform_meta.name
-            )
+            await Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
             self._has_send_oper = True
             return
 
