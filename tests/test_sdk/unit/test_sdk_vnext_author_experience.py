@@ -537,8 +537,6 @@ def test_discovery_issue_surfaces_to_dashboard_failed_item(tmp_path: Path) -> No
         "\n".join(
             [
                 "name: broken",
-                "runtime:",
-                '  python: "3.11"',
                 "components:",
                 "  - class: main:BrokenPlugin",
             ]
@@ -554,7 +552,7 @@ def test_discovery_issue_surfaces_to_dashboard_failed_item(tmp_path: Path) -> No
     issue = discovered.issues[0]
     assert issue.plugin_id == "broken"
     assert issue.phase == "discovery"
-    assert "requirements.txt" in issue.details
+    assert "runtime.python" in issue.details
 
     bridge = SdkPluginBridge(_BridgeStarContext())
     bridge._set_discovery_issues(discovered.issues)  # noqa: SLF001
@@ -761,7 +759,7 @@ async def test_supervisor_metadata_includes_discovery_issues(
         phase="discovery",
         plugin_id="broken",
         message="插件发现失败",
-        details="missing requirements.txt",
+        details="missing runtime.python",
     )
 
     class _FakePeer:
@@ -795,7 +793,7 @@ async def test_supervisor_metadata_includes_discovery_issues(
         "discover_plugins",
         lambda _plugins_dir: PluginDiscoveryResult(
             plugins=[],
-            skipped_plugins={"broken": "missing requirements.txt"},
+            skipped_plugins={"broken": "missing runtime.python"},
             issues=[issue],
         ),
     )
