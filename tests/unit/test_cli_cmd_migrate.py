@@ -52,3 +52,54 @@ def test_migrate_openclaw_reports_config_toml_field_and_relative_target(
     assert "Timeline written:   False" in result.output
     assert "Config TOML written: True" in result.output
 
+
+def test_migrate_openclaw_dry_run_explicit_target_prints_ignore_note(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / ".openclaw"
+    source_root.mkdir(parents=True)
+    astrbot_root = tmp_path / "astrbot"
+    astrbot_root.mkdir(parents=True)
+
+    captured: dict[str, object] = {}
+
+    def _fake_run_openclaw_migration(**kwargs: object) -> MigrationReport:
+        captured.update(kwargs)
+        return MigrationReport(
+            source_root=str(source_root),
+            source_workspace=str(source_root / "workspace"),
+            target_dir=None,
+            dry_run=True,
+            memory_entries_total=0,
+            memory_entries_from_sqlite=0,
+            memory_entries_from_markdown=0,
+            workspace_files_total=0,
+            workspace_bytes_total=0,
+            config_found=False,
+            copied_workspace_files=0,
+            copied_memory_entries=0,
+            wrote_timeline=False,
+            wrote_config_toml=False,
+        )
+
+    monkeypatch.setattr(cmd_migrate, "get_astrbot_root", lambda: astrbot_root)
+    monkeypatch.setattr(cmd_migrate, "run_openclaw_migration", _fake_run_openclaw_migration)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cmd_migrate.migrate,
+        [
+            "openclaw",
+            "--source",
+            str(source_root),
+            "--dry-run",
+            "--target",
+            "data/migrations/custom",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["target_dir"] == Path("data/migrations/custom")
+    assert "Dry-run mode: no files were written." in result.output
+    assert "Note: --target is ignored when --dry-run is enabled." in result.output

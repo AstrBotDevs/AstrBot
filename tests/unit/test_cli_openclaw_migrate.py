@@ -4,6 +4,8 @@ import json
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from astrbot.cli.utils.openclaw_migrate import run_openclaw_migration
 from astrbot.cli.utils.openclaw_toml import json_to_toml
 
@@ -293,6 +295,40 @@ def test_run_openclaw_migration_excludes_target_inside_workspace(tmp_path: Path)
 
     # Files from the output directory itself must not be re-copied into snapshot workspace.
     assert not (target / "workspace" / "snapshot-output" / "stale.txt").exists()
+
+
+def test_run_openclaw_migration_does_not_follow_symlinked_workspace_dirs(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / ".openclaw"
+    source_root.mkdir(parents=True)
+    _prepare_openclaw_source(source_root)
+
+    workspace = source_root / "workspace"
+    external_dir = tmp_path / "external-data"
+    external_dir.mkdir(parents=True, exist_ok=True)
+    (external_dir / "outside.txt").write_text("outside", encoding="utf-8")
+
+    symlink_dir = workspace / "symlinked-outside"
+    try:
+        symlink_dir.symlink_to(external_dir, target_is_directory=True)
+    except (NotImplementedError, OSError) as exc:
+        pytest.skip(f"symlink unsupported in test environment: {exc}")
+
+    astrbot_root = tmp_path / "astrbot"
+    astrbot_root.mkdir(parents=True)
+    _prepare_astrbot_root(astrbot_root)
+
+    report = run_openclaw_migration(
+        source_root=source_root,
+        astrbot_root=astrbot_root,
+        dry_run=False,
+        target_dir=Path("data/migrations/openclaw/test-symlink-scan"),
+    )
+
+    assert report.target_dir is not None
+    target = Path(report.target_dir)
+    assert not (target / "workspace" / "symlinked-outside" / "outside.txt").exists()
 
 
 def test_markdown_parsing_structured_and_plain_lines(tmp_path: Path) -> None:

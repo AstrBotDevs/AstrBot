@@ -68,6 +68,8 @@ def migrate_openclaw(
     if dry_run:
         click.echo("")
         click.echo("Dry-run mode: no files were written.")
+        if target_path is not None:
+            click.echo("Note: --target is ignored when --dry-run is enabled.")
         click.echo("Run without --dry-run to perform migration.")
         return
 
