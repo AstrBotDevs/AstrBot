@@ -2,4 +2,4 @@ node_modules/
 .DS_Store
 dist/
 bun.lock
-pmpm-lock.yaml
+pnpm-lock.yaml

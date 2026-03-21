@@ -1,16 +1,28 @@
-import { fileURLToPath, URL } from 'url';
-import { defineConfig, loadEnv } from 'vite';
-import vue from '@vitejs/plugin-vue';
-import vuetify from 'vite-plugin-vuetify';
-import webfontDl from 'vite-plugin-webfont-dl';
+import { fileURLToPath, URL } from "url";
+import { createRequire } from "module";
+import { defineConfig, loadEnv } from "vite";
+import vue from "@vitejs/plugin-vue";
+import vuetify from "vite-plugin-vuetify";
+import webfontDl from "vite-plugin-webfont-dl";
+
+const require = createRequire(import.meta.url);
+
+// Conditional import for Cloudflare Workers (ESM-only package)
+let cloudflarePlugin: (() => any) | null = null;
+try {
+  const mod = require("@cloudflare/vite-plugin");
+  cloudflarePlugin = mod.cloudflare;
+} catch {
+  // Cloudflare plugin not available, skip
+}
 
 // Vite plugin: run MDI icon font subsetting (build only)
 function mdiSubset() {
   return {
-    name: 'vite-plugin-mdi-subset',
+    name: "vite-plugin-mdi-subset",
     async buildStart() {
-      const { runMdiSubset } = await import('./scripts/subset-mdi-font.mjs');
-      console.log('\n🔧 Running MDI icon font subsetting...');
+      const { runMdiSubset } = await import("./scripts/subset-mdi-font.mjs");
+      console.log("\n🔧 Running MDI icon font subsetting...");
       await runMdiSubset();
     },
   };
@@ -18,15 +30,15 @@ function mdiSubset() {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
-  const basePath = env.VITE_BASE_PATH || process.env.BASE_PATH || '/';
+  const env = loadEnv(mode, process.cwd(), "");
+  const basePath = env.VITE_BASE_PATH || process.env.BASE_PATH || "/";
 
   return {
-    base: command === 'build' ? basePath : '/',
+    base: command === "build" ? basePath : "/",
 
     plugins: [
       // Only run MDI subsetting during production builds, skip in dev server
-      ...(command === 'build' ? [mdiSubset()] : []),
+      ...(command === "build" ? [mdiSubset()] : []),
       vue({
         template: {
           compilerOptions: {
@@ -35,9 +47,10 @@ export default defineConfig(({ command, mode }) => {
         },
       }),
       vuetify({
-        autoImport: true
+        autoImport: true,
       }),
-      webfontDl()
+      webfontDl(),
+      ...(cloudflarePlugin ? [cloudflarePlugin()] : []),
     ],
     resolve: {
       alias: {
@@ -65,9 +78,9 @@ export default defineConfig(({ command, mode }) => {
         "/api": {
           target: env.VITE_DEV_API_PROXY_TARGET || "http://127.0.0.1:6185",
           changeOrigin: true,
-          ws: true
-        }
-      }
-    }
+          ws: true,
+        },
+      },
+    },
   };
 });
