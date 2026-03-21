@@ -3,3 +3,4 @@ node_modules/
 dist/
 bun.lock
 pnpm-lock.yaml
+worker.js

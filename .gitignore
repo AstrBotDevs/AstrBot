@@ -65,3 +65,4 @@ GenieData/
 .worktrees/
 
 .env
+dashboard/warker.js

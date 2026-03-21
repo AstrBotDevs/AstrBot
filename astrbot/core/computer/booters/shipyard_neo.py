@@ -12,13 +12,13 @@ from astrbot.api import logger
 if TYPE_CHECKING:
     from astrbot.core.agent.tool import FunctionTool
 
-from ..olayer import (
+from astrbot.core.computer.booters.base import ComputerBooter
+from astrbot.core.computer.olayer import (
     BrowserComponent,
     FileSystemComponent,
     PythonComponent,
     ShellComponent,
 )
-from .base import ComputerBooter
 
 
 def _maybe_model_dump(value: Any) -> dict[str, Any]:
@@ -49,7 +49,7 @@ class NeoPythonComponent(PythonComponent):
         output_text = payload.get("output", "") or ""
         error_text = payload.get("error", "") or ""
         data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
-        rich_output = data.get("output") if isinstance(data.get("output"), dict) else {}
+        rich_output = (data.get("output") or {}) if isinstance(data, dict) else {}
         if not isinstance(rich_output.get("images"), list):
             rich_output["images"] = []
         if "text" not in rich_output:

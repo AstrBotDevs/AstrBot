@@ -357,7 +357,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     continue
 
         prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
-        agent_max_step = int(prov_settings.get("max_agent_step", 30))
+        agent_max_step = int(prov_settings.get("max_agent_step", 3))
         stream = prov_settings.get("streaming_response", False)
         llm_resp = await ctx.tool_loop_agent(
             event=event,
@@ -583,7 +583,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
         runner = result.agent_runner
-        async for _ in runner.step_until_done(30):
+        async for _ in runner.step_until_done(3):
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()

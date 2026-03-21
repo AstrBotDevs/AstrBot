@@ -67,6 +67,7 @@ dependencies = [
   "quart-cors>=0.8.0",
   "anyio>=4.12.1",
   "argon2-cffi>=23.1.0",
+  "plumbum>=1.10.0",
 ]
 
 [dependency-groups]

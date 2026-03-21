@@ -306,13 +306,6 @@ def run(
                 "ASTRBOT_SSL_CERT",
                 "ASTRBOT_SSL_KEY",
                 "ASTRBOT_SSL_CA_CERTS",
-                # API specific envs
-                "ASTRBOT_API_HOST",
-                "ASTRBOT_API_PORT",
-                "ASTRBOT_API_SSL_ENABLE",
-                "ASTRBOT_API_SSL_CERT",
-                "ASTRBOT_API_SSL_KEY",
-                "ASTRBOT_API_SSL_CA_CERTS",
                 "http_proxy",
                 "https_proxy",
                 "no_proxy",
@@ -341,6 +334,11 @@ def run(
         lock_file = astrbot_root / "astrbot.lock"
         lock = FileLock(lock_file, timeout=5)
         with lock.acquire():
+            click.echo("AstrBot is running...")
+            if backend_only:
+                click.echo("Visit the dashboard at : https://dash.astrbot.men/")
+                click.echo("Backend Requests : localhost or based on https")
+
             asyncio.run(run_astrbot(astrbot_root))
     except KeyboardInterrupt:
         click.echo("AstrBot has been shut down.")

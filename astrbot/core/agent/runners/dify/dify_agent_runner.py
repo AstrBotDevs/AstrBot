@@ -1,10 +1,16 @@
 import base64
 import os
 import sys
-import typing as T
+from collections.abc import AsyncGenerator
+from typing import Any
 
 import astrbot.core.message.components as Comp
 from astrbot.core import logger, sp
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.response import AgentResponseData
+from astrbot.core.agent.run_context import ContextWrapper, TContext
+from astrbot.core.agent.runners.base import AgentResponse, AgentState, BaseAgentRunner
+from astrbot.core.agent.runners.dify.dify_api_client import DifyAPIClient
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -12,12 +18,6 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
-
-from ...hooks import BaseAgentRunHooks
-from ...response import AgentResponseData
-from ...run_context import ContextWrapper, TContext
-from ..base import AgentResponse, AgentState, BaseAgentRunner
-from .dify_api_client import DifyAPIClient
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -35,7 +35,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         run_context: ContextWrapper[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
         provider_config: dict,
-        **kwargs: T.Any,
+        **kwargs: Any,
     ) -> None:
         self.req = request
         self.streaming = kwargs.get("streaming", False)
@@ -100,8 +100,8 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step_until_done(
-        self, max_step: int = 30
-    ) -> T.AsyncGenerator[AgentResponse, None]:
+        self, max_step: int = 3
+    ) -> AsyncGenerator[AgentResponse, None]:
         while not self.done():
             async for resp in self.step():
                 yield resp
