@@ -791,6 +791,15 @@ class LarkMessageEvent(AstrMessageEvent):
             await Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
             self._has_send_oper = True
 
+        async def _flush_and_close_card() -> None:
+            """补发最终文本并关闭当前卡片的流式模式。"""
+            nonlocal sequence
+            if delta and delta != last_sent:
+                sequence += 1
+                await self._update_streaming_text(card_id, delta, sequence)
+            sequence += 1
+            await self._close_streaming_mode(card_id, sequence)
+
         try:
             async for chain in generator:
                 if not isinstance(chain, MessageChain):
@@ -804,12 +813,7 @@ class LarkMessageEvent(AstrMessageEvent):
                         done = True
                         text_changed.set()
                         await sender_task
-                        # Flush final text to the current card
-                        if delta and delta != last_sent:
-                            sequence += 1
-                            await self._update_streaming_text(card_id, delta, sequence)
-                        sequence += 1
-                        await self._close_streaming_mode(card_id, sequence)
+                        await _flush_and_close_card()
                         # Reset for lazy new-card creation
                         card_id = None
                         sequence = 0
@@ -863,13 +867,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 self._has_send_oper = True
             return
 
-        # 必要时补发最终文本 + 关闭流式模式
-        if delta and delta != last_sent:
-            sequence += 1
-            await self._update_streaming_text(card_id, delta, sequence)
-
-        sequence += 1
-        await self._close_streaming_mode(card_id, sequence)
+        await _flush_and_close_card()
 
         # 内联父类 send_streaming 的副作用
         await Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
