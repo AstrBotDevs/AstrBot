@@ -150,7 +150,10 @@ raise AstrBotError.protocol_version_mismatch("协议版本不匹配: v4 vs v5")
 
 ## 错误码参考
 
-### 不可重试错误（retryable=False）
+### 不可立即自动重试错误（retryable=False）
+
+这些错误不适合框架做“立刻重试”的自动恢复；其中 `RATE_LIMITED` 和
+`COOLDOWN_ACTIVE` 仍然可以在等待窗口结束后由用户或插件重新发起调用。
 
 | 错误码 | 说明 | 处理方式 |
 |--------|------|----------|
@@ -163,8 +166,8 @@ raise AstrBotError.protocol_version_mismatch("协议版本不匹配: v4 vs v5")
 | `PROTOCOL_VERSION_MISMATCH` | 协议版本不匹配 | 升级 SDK |
 | `PROTOCOL_ERROR` | 协议错误 | 检查实现 |
 | `INTERNAL_ERROR` | 内部错误 | 联系开发者 |
-| `RATE_LIMITED` | 速率限制 | 等待后重试 |
-| `COOLDOWN_ACTIVE` | 冷却中 | 等待冷却结束 |
+| `RATE_LIMITED` | 速率限制 | 等待速率窗口结束后再重试 |
+| `COOLDOWN_ACTIVE` | 冷却中 | 等待冷却结束后再重试 |
 
 ### 可重试错误（retryable=True）
 

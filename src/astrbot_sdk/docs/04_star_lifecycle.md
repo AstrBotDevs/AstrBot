@@ -413,7 +413,7 @@ my_plugin/
 ├── main.py              # 主入口
 ├── handlers/            # 处理器模块
 ├── utils/               # 工具函数
-├── requirements.txt     # Python 依赖
+├── requirements.txt     # 可选的 Python 依赖
 └── README.md            # 说明文档
 ```
 

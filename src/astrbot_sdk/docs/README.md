@@ -420,8 +420,8 @@ async def test_my_plugin():
 - **完整 API 索引**：[09_api_reference.md](./09_api_reference.md)
 - **错误处理指南**：[06_error_handling.md](./06_error_handling.md)
 - **安全检查清单**：[11_security_checklist.md](./11_security_checklist.md)
-- **提交问题**：[GitHub Issues](https://github.com/your-repo/issues)
-- **参与讨论**：[GitHub Discussions](https://github.com/your-repo/discussions)
+- **提交问题**：[GitHub Issues](https://github.com/AstrBotDevs/astrbot-sdk/issues)
+- **参与讨论**：[GitHub Discussions](https://github.com/AstrBotDevs/astrbot-sdk/discussions)
 
 ---
 
@@ -429,7 +429,7 @@ async def test_my_plugin():
 
 - **SDK 版本**: v4.0
 - **最后更新**: 2026-03-17
-- **Python 要求**: >= 3.10
+- **Python 要求**: >= 3.12
 - **协议版本**: P0.6
 
 ---

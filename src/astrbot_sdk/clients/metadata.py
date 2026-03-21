@@ -89,18 +89,16 @@ class MetadataClient:
     async def get_plugin_config(self, name: str | None = None) -> dict[str, Any] | None:
         target = name or self._plugin_id
         if target != self._plugin_id:
-            import logging
-
-            logging.getLogger(__name__).warning(
-                "get_plugin_config 只支持查询当前插件自己的配置，"
+            raise PermissionError(
+                "get_plugin_config 只允许访问当前插件自己的配置，"
                 f"请求的插件 '{target}' 不是当前插件 '{self._plugin_id}'"
             )
-            return None
         output = await self._proxy.call(
             "metadata.get_plugin_config",
             {"name": target},
         )
-        return output.get("config")
+        config = output.get("config")
+        return dict(config) if isinstance(config, dict) else None
 
     async def save_plugin_config(self, config: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(config, dict):

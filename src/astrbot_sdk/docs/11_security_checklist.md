@@ -155,160 +155,14 @@ except Exception as e:
 
 ## 已知安全问题
 
-> **注意**: 以下标记为 ✅ 已修复 的问题已在当前版本中解决，保留作为历史记录供参考。
+当前版本没有已知的 SDK 框架级高风险未修复项。以下历史回归已经关闭，
+保留在这里帮助开发者理解为什么这些约束存在：
 
----
-
-### ✅ 已修复: Provider change hook 资源泄漏
-
-**位置**: `astrbot_sdk/clients/provider.py:269-288`
-
-**原问题描述**:
-`register_provider_change_hook()` 返回 Task，但没有对应的 `unregister_provider_change_hook()` 方法。
-
-**修复状态**: ✅ 已修复于 `provider.py:293-303`
-
-```python
-# 现在可以安全地注销 hook
-async def unregister_provider_change_hook(
-    self,
-    task: asyncio.Task[None],
-) -> None:
-    if task not in self._change_hook_tasks:
-        return
-    self._change_hook_tasks.discard(task)
-    if not task.done():
-        task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await task
-```
-
-**使用示例**:
-```python
-class MyPlugin(Star):
-    async def on_start(self, ctx):
-        self._hook_task = await ctx.provider_manager.register_provider_change_hook(
-            self.on_provider_change
-        )
-    
-    async def on_stop(self, ctx):
-        # 正确清理资源
-        if hasattr(self, '_hook_task'):
-            await ctx.provider_manager.unregister_provider_change_hook(self._hook_task)
-```
-
----
-
-### ✅ 已修复: PlatformCompatFacade 并发安全
-
-**位置**: `astrbot_sdk/context.py:69`
-
-**原问题描述**:
-从 `frozen=True` 改为可变以支持 `refresh()`，但多个 async 方法可能并发执行状态更新。
-
-**修复状态**: ✅ 已修复于 `context.py:85`
-
-```python
-@dataclass(slots=True)
-class PlatformCompatFacade:
-    _ctx: Context
-    id: str
-    name: str
-    type: str
-    status: PlatformStatus = PlatformStatus.PENDING
-    errors: list[PlatformError] = field(default_factory=list)
-    last_error: PlatformError | None = None
-    unified_webhook: bool = False
-    _state_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)  # ✅ 已添加
-    
-    async def refresh(self) -> None:
-        async with self._state_lock:  # ✅ 使用锁保护
-            await self._refresh_locked()
-```
-
----
-
-### ✅ 已修复: 直接修改 provider dict
-
-**位置**: `astrbot_sdk/runtime/_capability_router_builtins.py:857`
-
-**原问题描述**:
-直接修改 `_provider_catalog` 缓存中的 dict。
-
-**修复状态**: ✅ 已修复 - 代码已创建副本
-
-```python
-# _managed_provider_record_by_id 方法中 (lines 869-884)
-def _managed_provider_record_by_id(self, provider_id: str) -> dict[str, Any] | None:
-    provider = self._provider_payload_by_id(provider_id)
-    if provider is not None:
-        config = self._provider_config_by_id(provider_id) or provider
-        merged = dict(provider)  # ✅ 创建副本
-        merged.update(           # ✅ 修改副本，不影响原始缓存
-            {
-                "enable": config.get("enable", True),
-                "provider_source_id": config.get("provider_source_id"),
-            }
-        )
-        return self._managed_provider_record(merged, loaded=True)
-```
-
----
-
-### 🔴 High: PlatformCompatFacade 并发安全风险
-
-**位置**: `astrbot_sdk/context.py:69`
-
-**问题描述**:
-从 `frozen=True` 改为可变以支持 `refresh()`，但多个 async 方法可能并发执行状态更新，没有锁保护。
-
-**风险等级**: Medium-High
-
-**影响**:
-- 竞态条件
-- 状态不一致
-- 数据损坏
-
-**临时解决方案**:
-```python
-# 避免并发调用 refresh()
-class MyPlugin(Star):
-    def __init__(self):
-        self._refresh_lock = asyncio.Lock()
-    
-    async def safe_refresh(self, platform):
-        async with self._refresh_lock:
-            await platform.refresh()
-```
-
-**修复计划**: 在 `PlatformCompatFacade` 中添加 `asyncio.Lock`
-
----
-
-### 🟡 Medium: 直接修改 provider dict
-
-**位置**: `astrbot_sdk/runtime/_capability_router_builtins.py:857`
-
-**问题描述**:
-```python
-provider.update({...})  # 直接修改了 _provider_catalog 缓存
-```
-
-**风险等级**: Medium
-
-**影响**:
-- 缓存污染
-- 意外的副作用
-- 数据不一致
-
-**临时解决方案**:
-```python
-# 在调用前创建副本
-provider_copy = dict(provider)
-provider_copy.update({...})
-```
-
-**修复计划**: 使用 `dict()` 创建副本后再修改
+- `ProviderManagerClient.register_provider_change_hook()` 现在必须和
+  `unregister_provider_change_hook()` 配对使用，避免残留订阅任务。
+- `PlatformCompatFacade` 内部已经串行化状态刷新，插件侧不需要再额外为
+  `refresh()` / `clear_errors()` 套一层锁来规避 SDK 自身竞态。
+- Provider 管理路径会先复制 provider payload，再做 merge，避免污染共享缓存。
 
 ---
 
@@ -515,7 +369,7 @@ pylint my_plugin/
 如果您发现 SDK 或插件的安全问题，请通过以下方式报告：
 
 1. **不要** 在公开 issue 中报告安全问题
-2. 发送邮件到 security@example.com
+2. 通过项目官方联系渠道私下报告，例如 `community@astrbot.app`
 3. 提供详细的复现步骤
 4. 等待修复后再公开
 

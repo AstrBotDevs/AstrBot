@@ -95,8 +95,16 @@ class CapabilityProxy:
         return capability_map.get(name)
 
     def _remote_initialized(self) -> bool:
-        return bool(getattr(self._peer, "remote_peer", None)) or bool(
-            getattr(self._peer, "remote_capability_map", {})
+        peer_attrs = getattr(self._peer, "__dict__", None)
+        if not isinstance(peer_attrs, dict):
+            return False
+
+        # Avoid getattr() here: MagicMock synthesizes truthy child attributes and
+        # makes an uninitialized peer look ready.
+        remote_peer = peer_attrs.get("remote_peer")
+        capability_map = peer_attrs.get("remote_capability_map")
+        return bool(remote_peer) or (
+            isinstance(capability_map, Mapping) and bool(capability_map)
         )
 
     def _ensure_available(self, name: str, *, stream: bool) -> None:
