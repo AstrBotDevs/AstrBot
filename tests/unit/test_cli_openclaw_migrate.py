@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 
 from astrbot.cli.commands.cmd_migrate import (
+    _json_to_toml,
     _read_openclaw_sqlite_entries,
     run_openclaw_migration,
 )
@@ -56,6 +57,17 @@ def _prepare_openclaw_source(source_root: Path) -> None:
         ),
         encoding="utf-8",
     )
+
+
+def _read_migrated_memory_entries(target_dir: Path) -> list[dict[str, str | None]]:
+    memory_jsonl = target_dir / "memory_entries.jsonl"
+    entries: list[dict[str, str | None]] = []
+    for line in memory_jsonl.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        payload = json.loads(line)
+        entries.append(payload)
+    return entries
 
 
 def test_read_openclaw_sqlite_entries_supports_legacy_columns(tmp_path: Path) -> None:
@@ -139,7 +151,112 @@ def test_run_openclaw_migration_writes_artifacts(tmp_path: Path) -> None:
     assert "时间简史" in timeline
 
     toml_text = (target / "config.migrated.toml").read_text(encoding="utf-8")
-    assert "model = " in toml_text
-    assert "[memory]" in toml_text
-    assert "[[skills]]" in toml_text
+    assert '"model" = ' in toml_text
+    assert '["memory"]' in toml_text
+    assert '[["skills"]]' in toml_text
 
+
+def test_markdown_parsing_structured_and_plain_lines(tmp_path: Path) -> None:
+    source_root = tmp_path / ".openclaw"
+    source_root.mkdir(parents=True)
+    _prepare_openclaw_source(source_root)
+
+    astrbot_root = tmp_path / "astrbot"
+    astrbot_root.mkdir(parents=True)
+    _prepare_astrbot_root(astrbot_root)
+
+    report = run_openclaw_migration(
+        source_root=source_root,
+        astrbot_root=astrbot_root,
+        dry_run=False,
+        target_dir=Path("data/migrations/openclaw/test-markdown"),
+    )
+    assert report.target_dir is not None
+    entries = _read_migrated_memory_entries(Path(report.target_dir))
+
+    memory_md_entries = [
+        entry
+        for entry in entries
+        if str(entry.get("source", "")).endswith("workspace/MEMORY.md")
+    ]
+    style_entries = [entry for entry in memory_md_entries if entry.get("key") == "style"]
+    assert len(style_entries) == 1
+    assert style_entries[0].get("content") == "concise"
+
+    plain_entries = [
+        entry for entry in memory_md_entries if entry.get("content") == "keep logs"
+    ]
+    assert len(plain_entries) == 1
+    assert str(plain_entries[0].get("key", "")).startswith("openclaw_core_")
+
+
+def test_deduplication_between_sqlite_and_markdown_preserves_order(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / ".openclaw"
+    source_root.mkdir(parents=True)
+    _prepare_openclaw_source(source_root)
+
+    memory_md = source_root / "workspace" / "MEMORY.md"
+    memory_md.write_text(
+        memory_md.read_text(encoding="utf-8") + "- likes rust\n",
+        encoding="utf-8",
+    )
+
+    astrbot_root = tmp_path / "astrbot"
+    astrbot_root.mkdir(parents=True)
+    _prepare_astrbot_root(astrbot_root)
+
+    report = run_openclaw_migration(
+        source_root=source_root,
+        astrbot_root=astrbot_root,
+        dry_run=False,
+        target_dir=Path("data/migrations/openclaw/test-dedup"),
+    )
+    assert report.target_dir is not None
+    entries = _read_migrated_memory_entries(Path(report.target_dir))
+    contents = [str(entry.get("content", "")) for entry in entries]
+
+    assert contents.count("likes rust") == 1
+    assert contents.index("likes rust") < contents.index("keep logs")
+
+
+def test_run_openclaw_migration_invalid_config_json_raises_click_exception(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / ".openclaw"
+    source_root.mkdir(parents=True)
+    _prepare_openclaw_source(source_root)
+    (source_root / "config.json").write_text("{ invalid json", encoding="utf-8")
+
+    astrbot_root = tmp_path / "astrbot"
+    astrbot_root.mkdir(parents=True)
+    _prepare_astrbot_root(astrbot_root)
+
+    import click
+    import pytest
+
+    with pytest.raises(click.ClickException) as exc_info:
+        run_openclaw_migration(
+            source_root=source_root,
+            astrbot_root=astrbot_root,
+            dry_run=False,
+            target_dir=Path("data/migrations/openclaw/test-invalid-config"),
+        )
+
+    assert "Failed to parse OpenClaw config JSON" in str(exc_info.value)
+
+
+def test_json_to_toml_quotes_special_keys() -> None:
+    payload = {
+        "normal key": "ok",
+        "nested.obj": {"x y": 1},
+        "list": [{"dot.key": True}],
+    }
+    toml_text = _json_to_toml(payload)
+
+    assert '"normal key" = "ok"' in toml_text
+    assert '["nested.obj"]' in toml_text
+    assert '"x y" = 1' in toml_text
+    assert '[["list"]]' in toml_text
+    assert '"dot.key" = true' in toml_text
