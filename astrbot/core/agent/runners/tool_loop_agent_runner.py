@@ -34,6 +34,12 @@ from astrbot.core.provider.entities import (
     ToolCallsResult,
 )
 from astrbot.core.provider.provider import Provider
+from astrbot.core.tools.claude_strategy import ClaudeToolSearchStrategy
+from astrbot.core.tools.discovery_state import DiscoveryState
+from astrbot.core.tools.generic_strategy import GenericToolSearchStrategy
+from astrbot.core.tools.strategy import ToolSearchStrategy
+from astrbot.core.tools.tool_catalog import ToolCatalog
+from astrbot.core.tools.tool_search_index import ToolSearchIndex
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
@@ -50,6 +56,26 @@ if sys.version_info >= (3, 12):
     from typing import override
 else:
     from typing_extensions import override
+
+
+def _is_claude_provider(provider: Provider) -> bool:
+    """Check whether the provider uses the Anthropic Claude API.
+
+    Detection is based on the registered provider type name,
+    not runtime feature probing (PRV-02).
+    """
+    return provider.provider_config.get("type") == "anthropic_chat_completion"
+
+
+def _count_active_tools(tool_set: ToolSet | None) -> int:
+    """Count active tools only.
+
+    Auto mode should make its threshold decision based on the tools that are
+    actually visible to the model, not disabled tools left in the registry.
+    """
+    if tool_set is None:
+        return 0
+    return sum(1 for tool in tool_set.tools if tool.active)
 
 
 @dataclass(slots=True)
@@ -173,24 +199,77 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
 
-        # These two are used for tool schema mode handling
-        # We now have two modes:
+        # These are used for tool schema mode handling
+        # Supported modes:
         # - "full": use full tool schema for LLM calls, default.
         # - "skills_like": use light tool schema for LLM calls, and re-query with param-only schema when needed.
         #   Light tool schema does not include tool parameters.
         #   This can reduce token usage when tools have large descriptions.
+        # - "tool_search" / "auto": activates tool search with provider-appropriate strategy.
         # See #4681
         self.tool_schema_mode = tool_schema_mode
         self._tool_schema_param_set = None
         self._skill_like_raw_tool_set = None
-        if tool_schema_mode == "skills_like":
+        self._tool_search_catalog: ToolCatalog | None = None
+        self._tool_search_index: ToolSearchIndex | None = None
+        self._tool_search_discovery_state: DiscoveryState | None = None
+        self._tool_search_max_results = 5
+
+        effective_mode = tool_schema_mode
+        self._tool_search_strategy: ToolSearchStrategy | None = None
+
+        if effective_mode in ("tool_search", "auto"):
+            tool_search_config: dict = kwargs.get("tool_search_config") or {}
+            try:
+                if effective_mode == "auto":
+                    threshold = tool_search_config.get("threshold", 25)
+                    tool_count = _count_active_tools(request.func_tool)
+                    if tool_count <= threshold:
+                        effective_mode = "full"
+
+                if effective_mode != "full" and request.func_tool:
+                    catalog = ToolCatalog.from_tool_set(
+                        request.func_tool, tool_search_config
+                    )
+                    if not catalog.deferred_tools:
+                        logger.info(
+                            "tool_search: no deferred tools after partitioning; using 'full' mode."
+                        )
+                        effective_mode = "full"
+                    else:
+                        index = ToolSearchIndex(tools=catalog.deferred_tools)
+                        self._tool_search_catalog = catalog
+                        self._tool_search_index = index
+                        self._tool_search_discovery_state = DiscoveryState()
+                        self._tool_search_max_results = tool_search_config.get(
+                            "max_results", 5
+                        )
+                        self._refresh_tool_search_strategy(provider)
+                        effective_mode = "tool_search"
+                else:
+                    if effective_mode != "full":
+                        effective_mode = "full"
+            except Exception:
+                logger.warning(
+                    "tool_search initialization failed; falling back to 'full' mode.",
+                    exc_info=True,
+                )
+                effective_mode = "full"
+                self._tool_search_catalog = None
+                self._tool_search_index = None
+                self._tool_search_discovery_state = None
+                self._tool_search_strategy = None
+
+        self.tool_schema_mode = effective_mode
+
+        if effective_mode == "skills_like":
             tool_set = self.req.func_tool
             if not tool_set:
                 return
             self._skill_like_raw_tool_set = tool_set
             light_set = tool_set.get_light_tool_set()
             self._tool_schema_param_set = tool_set.get_param_only_tool_set()
-            # MODIFIE the req.func_tool to use light tool schemas
+            # MODIFY the req.func_tool to use light tool schemas
             self.req.func_tool = light_set
 
         messages = []
@@ -209,6 +288,25 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 Message(role="system", content=request.system_prompt),
             )
         self.run_context.messages = messages
+
+        # Append tool_search system prompt after mode resolution (SYS-01, SYS-02)
+        if (
+            self.tool_schema_mode == "tool_search"
+            and self._tool_search_strategy is not None
+        ):
+            if (
+                self.run_context.messages
+                and self.run_context.messages[0].role == "system"
+            ):
+                current_content = self.run_context.messages[0].content
+                if isinstance(current_content, str):
+                    from astrbot.core.astr_main_agent_resources import (
+                        TOOL_CALL_PROMPT_TOOL_SEARCH_MODE,
+                    )
+
+                    self.run_context.messages[0].content = (
+                        current_content + f"\n{TOOL_CALL_PROMPT_TOOL_SEARCH_MODE}\n"
+                    )
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
@@ -234,6 +332,40 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         else:
             yield await self.provider.text_chat(**payload)
 
+    def _refresh_tool_search_strategy(self, provider: Provider) -> None:
+        """Rebuild tool_search strategy for the current provider family.
+
+        The strategy owns provider-specific serialization behavior. Fallback may
+        switch from a generic provider to Anthropic (or the reverse), so we
+        rebuild the strategy while reusing the same catalog/index/discovery
+        state to preserve discovered tools across turns.
+        """
+        if (
+            self._tool_search_catalog is None
+            or self._tool_search_index is None
+            or self._tool_search_discovery_state is None
+        ):
+            self._tool_search_strategy = None
+            return
+
+        if _is_claude_provider(provider):
+            strategy: ToolSearchStrategy = ClaudeToolSearchStrategy(
+                self._tool_search_catalog,
+                self._tool_search_index,
+                self._tool_search_max_results,
+                discovery_state=self._tool_search_discovery_state,
+            )
+        else:
+            strategy = GenericToolSearchStrategy(
+                self._tool_search_catalog,
+                self._tool_search_index,
+                self._tool_search_max_results,
+                discovery_state=self._tool_search_discovery_state,
+            )
+
+        self._tool_search_strategy = strategy
+        self.req.func_tool = strategy.build_tool_set()
+
     async def _iter_llm_responses_with_fallback(
         self,
     ) -> T.AsyncGenerator[LLMResponse, None]:
@@ -253,6 +385,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     candidate_id,
                 )
             self.provider = candidate
+            if (
+                self.tool_schema_mode == "tool_search"
+                and self._tool_search_strategy is not None
+            ):
+                self._refresh_tool_search_strategy(candidate)
             has_stream_output = False
             try:
                 async for resp in self._iter_llm_responses(include_model=idx == 0):
@@ -385,6 +522,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.run_context.messages, trusted_token_usage=token_usage
         )
         self._simple_print_message_role("[AftCompact]")
+
+        # Per-turn tool set reassembly for tool_search mode
+        if (
+            self._tool_search_strategy is not None
+            and self.tool_schema_mode == "tool_search"
+        ):
+            self.req.func_tool = self._tool_search_strategy.build_tool_set()
 
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:

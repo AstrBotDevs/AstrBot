@@ -1179,11 +1179,14 @@ async def build_main_agent(
         asyncio.create_task(_handle_webchat(event, req, provider))
 
     if req.func_tool and req.func_tool.tools:
-        tool_prompt = (
-            TOOL_CALL_PROMPT
-            if config.tool_schema_mode == "full"
-            else TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
-        )
+        if config.tool_schema_mode == "skills_like":
+            tool_prompt = TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
+        elif config.tool_schema_mode in ("tool_search", "auto"):
+            # tool_search/auto prompt is injected by the runner AFTER mode resolution
+            # in reset(). Injecting here would double-inject or inject for auto→full fallback.
+            tool_prompt = TOOL_CALL_PROMPT
+        else:
+            tool_prompt = TOOL_CALL_PROMPT
         req.system_prompt += f"\n{tool_prompt}\n"
 
     action_type = event.get_extra("action_type")
@@ -1209,6 +1212,7 @@ async def build_main_agent(
         fallback_providers=_get_fallback_chat_providers(
             provider, plugin_context, config.provider_settings
         ),
+        tool_search_config=config.provider_settings.get("tool_search", {}),
     )
 
     if apply_reset:

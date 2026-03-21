@@ -113,11 +113,12 @@ class ProviderAnthropic(Provider):
                 "type": "enabled",
             }
 
-    def _prepare_payload(self, messages: list[dict]):
+    def _prepare_payload(self, messages: list[dict], tools: ToolSet | None = None):
         """准备 Anthropic API 的请求 payload
 
         Args:
             messages: OpenAI 格式的消息列表，包含用户输入和系统提示等信息
+            tools: The current tool set, used for Anthropic-specific overrides
         Returns:
             system_prompt: 系统提示内容
             new_messages: 处理后的消息列表，去除系统提示
@@ -125,6 +126,8 @@ class ProviderAnthropic(Provider):
         """
         system_prompt = ""
         new_messages = []
+        tool_call_name_by_id: dict[str, str] = {}
+        tool_search_formatter = getattr(tools, "_anthropic_tool_search_formatter", None)
         for message in messages:
             if message["role"] == "system":
                 system_prompt = message["content"] or "<empty system prompt>"
@@ -155,10 +158,13 @@ class ProviderAnthropic(Provider):
 
                 if "tool_calls" in message and isinstance(message["tool_calls"], list):
                     for tool_call in message["tool_calls"]:
+                        tool_call_id = tool_call["id"]
+                        tool_name = tool_call["function"]["name"]
+                        tool_call_name_by_id[tool_call_id] = tool_name
                         blocks.append(  # noqa: PERF401
                             {
                                 "type": "tool_use",
-                                "name": tool_call["function"]["name"],
+                                "name": tool_name,
                                 "input": (
                                     json.loads(tool_call["function"]["arguments"])
                                     if isinstance(
@@ -167,7 +173,7 @@ class ProviderAnthropic(Provider):
                                     )
                                     else tool_call["function"]["arguments"]
                                 ),
-                                "id": tool_call["id"],
+                                "id": tool_call_id,
                             },
                         )
                 new_messages.append(
@@ -177,6 +183,16 @@ class ProviderAnthropic(Provider):
                     },
                 )
             elif message["role"] == "tool":
+                tool_result_content = message["content"] or "<empty response>"
+                if (
+                    callable(tool_search_formatter)
+                    and message["tool_call_id"] in tool_call_name_by_id
+                    and tool_call_name_by_id[message["tool_call_id"]] == "tool_search"
+                    and isinstance(message.get("content"), str)
+                ):
+                    formatted_content = tool_search_formatter(message["content"])
+                    if formatted_content:
+                        tool_result_content = formatted_content
                 new_messages.append(
                     {
                         "role": "user",
@@ -184,7 +200,7 @@ class ProviderAnthropic(Provider):
                             {
                                 "type": "tool_result",
                                 "tool_use_id": message["tool_call_id"],
-                                "content": message["content"] or "<empty response>",
+                                "content": tool_result_content,
                             },
                         ],
                     },
@@ -511,7 +527,7 @@ class ProviderAnthropic(Provider):
                 for tcr in tool_calls_result:
                     context_query.extend(tcr.to_openai_messages())
 
-        system_prompt, new_messages = self._prepare_payload(context_query)
+        system_prompt, new_messages = self._prepare_payload(context_query, func_tool)
 
         model = model or self.get_model()
 
@@ -567,7 +583,7 @@ class ProviderAnthropic(Provider):
                 for tcr in tool_calls_result:
                     context_query.extend(tcr.to_openai_messages())
 
-        system_prompt, new_messages = self._prepare_payload(context_query)
+        system_prompt, new_messages = self._prepare_payload(context_query, func_tool)
 
         model = model or self.get_model()
 

@@ -219,6 +219,10 @@ class ToolSet:
 
     def anthropic_schema(self) -> list[dict]:
         """Convert tools to Anthropic API format."""
+        override = getattr(self, "_anthropic_schema_override", None)
+        if override is not None:
+            return override
+
         result = []
         for tool in self.tools:
             input_schema = {"type": "object"}
