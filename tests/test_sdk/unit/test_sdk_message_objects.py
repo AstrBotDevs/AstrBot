@@ -210,20 +210,31 @@ def test_payload_to_components_and_event_local_state() -> None:
             "platform_id": "demo",
             "message_type": "private",
             "message_outline": "hello [UnknownComponent]",
+            "sent_message_outline": "assistant reply",
             "messages": [
                 {"type": "text", "data": {"text": "hello"}},
                 {"type": "mystery", "data": {"payload": 1}},
             ],
-            "extras": {"seed": "value"},
+            "sent_messages": [
+                {"type": "text", "data": {"text": "assistant reply"}},
+            ],
+            "extras": {"seed": "value", "local": "seed"},
+            "host_extras": {"seed": "value"},
+            "sdk_local_extras": {"local": "seed"},
         }
     )
 
     messages = event.get_messages()
+    sent_messages = event.get_sent_messages()
     assert len(messages) == 2
     assert isinstance(messages[0], Plain)
     assert isinstance(messages[1], UnknownComponent)
+    assert len(sent_messages) == 1
+    assert isinstance(sent_messages[0], Plain)
     assert event.get_message_outline() == "hello [UnknownComponent]"
+    assert event.get_sent_message_outline() == "assistant reply"
     assert event.get_extra("seed") == "value"
+    assert event.get_extra("local") == "seed"
 
     event.set_extra("local", 42)
     assert event.get_extra("local") == 42
@@ -242,6 +253,31 @@ def test_payload_to_components_and_event_local_state() -> None:
     chain_result = event.chain_result([Plain("sdk", convert=False)])
     assert chain_result.type is EventResultType.CHAIN
     assert chain_result.chain.get_plain_text() == "sdk"
+
+
+@pytest.mark.unit
+def test_message_event_to_payload_drops_non_serializable_sdk_local_extras() -> None:
+    event = MessageEvent.from_payload(
+        {
+            "text": "hello",
+            "session_id": "demo:private:user-1",
+            "platform": "demo",
+            "platform_id": "demo",
+            "message_type": "private",
+            "extras": {"seed": "value"},
+            "host_extras": {"seed": "value"},
+            "sdk_local_extras": {},
+        }
+    )
+
+    event.set_extra("persisted", "ok")
+    event.set_extra("bad", object())
+
+    payload = event.to_payload()
+
+    assert payload["extras"] == {"seed": "value", "persisted": "ok"}
+    assert payload["sdk_local_extras"] == {"persisted": "ok"}
+    assert "bad" not in payload["sdk_local_extras"]
 
 
 @pytest.mark.unit

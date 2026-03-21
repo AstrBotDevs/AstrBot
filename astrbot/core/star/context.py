@@ -463,6 +463,8 @@ class Context:
             if platform.meta().id == session.platform_name:
                 await platform.send_by_session(session, message_chain)
                 if self.sdk_plugin_bridge is not None:
+                    from astrbot_sdk.message.components import component_to_payload_sync
+
                     try:
                         await self.sdk_plugin_bridge.dispatch_system_event(
                             "after_message_sent",
@@ -474,6 +476,13 @@ class Context:
                                 "message_outline": message_chain.get_plain_text(
                                     with_other_comps_mark=True
                                 ),
+                                "sent_message_outline": message_chain.get_plain_text(
+                                    with_other_comps_mark=True
+                                ),
+                                "sent_messages": [
+                                    component_to_payload_sync(component)
+                                    for component in message_chain.chain
+                                ],
                             },
                         )
                     except Exception as exc:

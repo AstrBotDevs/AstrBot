@@ -331,6 +331,7 @@ class ThirdPartyAgentSubStage(Stage):
                         "prompt": req.prompt,
                         "provider_id": self.prov_id,
                     },
+                    provider_request=req,
                 )
             except Exception as exc:
                 logger.warning("SDK llm_request dispatch failed: %s", exc)

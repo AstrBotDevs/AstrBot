@@ -112,8 +112,9 @@ typeCheckingMode = "basic"
 pythonVersion = "3.10"
 reportMissingTypeStubs = false
 reportMissingImports = false
-include = ["astrbot"]
+include = ["astrbot", "astrbot-sdk/src"]
 exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
+extraPaths = ["astrbot-sdk/src"]
 
 [tool.hatch.metadata]
 allow-direct-references = true

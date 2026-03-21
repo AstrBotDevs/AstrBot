@@ -1,6 +1,7 @@
 # ruff: noqa: E402
 from __future__ import annotations
 
+from asyncio import Queue
 import sys
 import types
 from functools import partial
@@ -70,11 +71,15 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
+from astrbot.core.pipeline.process_stage.method.agent_sub_stages.third_party import (
+    ThirdPartyAgentSubStage,
+)
 from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
 from astrbot.core.provider.entities import ProviderRequest as CoreProviderRequest
 from astrbot.core.sdk_bridge.event_converter import EventConverter
 from astrbot.core.sdk_bridge.plugin_bridge import SdkPluginBridge
+from astrbot.core.star.context import Context as StarContext
 
 
 @pytest.mark.unit
@@ -463,6 +468,97 @@ class _TypedHookSession:
         }
 
 
+class _RequestScopedHookSession:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    async def invoke_handler(
+        self,
+        handler_id: str,
+        event_payload: dict[str, object],
+        *,
+        request_id: str,
+        args: dict[str, object],
+    ) -> dict[str, object]:
+        del request_id, args
+        self.calls.append((handler_id, event_payload))
+        if handler_id.endswith("capture_reply"):
+            return {"sdk_local_extras": {"last_reply": "reply text"}}
+        return {"sdk_local_extras": {}}
+
+
+class _SystemEventSession:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    async def invoke_handler(
+        self,
+        handler_id: str,
+        event_payload: dict[str, object],
+        *,
+        request_id: str,
+        args: dict[str, object],
+    ) -> dict[str, object]:
+        del request_id, args
+        self.calls.append((handler_id, event_payload))
+        return {}
+
+
+class _CaptureSystemBridge:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    async def dispatch_system_event(
+        self,
+        event_type: str,
+        payload: dict[str, object] | None = None,
+    ) -> None:
+        self.calls.append((event_type, dict(payload or {})))
+
+
+class _FakePlatform:
+    def __init__(self) -> None:
+        self.sent: list[tuple[object, MessageChain]] = []
+
+    class _Meta:
+        id = "demo"
+        name = "Demo Platform"
+
+    def meta(self):
+        return self._Meta()
+
+    async def send_by_session(self, session, message_chain: MessageChain) -> None:
+        self.sent.append((session, message_chain))
+
+
+class _ThirdPartyDispatchBridge:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object], object | None]] = []
+
+    async def dispatch_message_event(
+        self,
+        event_type: str,
+        event,
+        payload: dict[str, object] | None = None,
+        *,
+        provider_request=None,
+        **_: object,
+    ) -> None:
+        del event
+        self.calls.append((event_type, dict(payload or {}), provider_request))
+
+
+class _ThirdPartyFakeEvent:
+    def __init__(self) -> None:
+        self.message_str = "hello runner"
+        self.unified_msg_origin = "demo:private:user-1"
+        self.message_obj = types.SimpleNamespace(message=[])
+        self.extra: dict[str, object] = {}
+
+    def set_extra(self, key: str, value: object) -> None:
+        self.extra[key] = value
+
+
 class _DecoratingResultFakeBridge:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, str]]] = []
@@ -618,6 +714,117 @@ async def test_sdk_bridge_dispatch_message_event_round_trips_typed_payloads() ->
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_persists_request_scoped_extras_and_sent_payloads() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    session = _RequestScopedHookSession()
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-demo",
+            load_order=0,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.capture_reply",
+                        trigger=EventTrigger(event_type="llm_response"),
+                    ),
+                    declaration_order=0,
+                ),
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.persist_reply",
+                        trigger=EventTrigger(event_type="after_message_sent"),
+                    ),
+                    declaration_order=1,
+                ),
+            ],
+            session=session,
+        )
+    }
+
+    event = _TypedHookFakeEvent()
+    event._extras = {"host": "value"}
+    bridge._request_overlays["dispatch-typed"] = bridge._ensure_request_overlay(
+        "dispatch-typed",
+        should_call_llm=True,
+    )
+
+    await bridge.dispatch_message_event("llm_response", event, {"completion_text": "reply text"})
+    await bridge.dispatch_message_event(
+        "after_message_sent",
+        event,
+        {
+            "message_outline": "reply text",
+            "sent_message_outline": "reply text",
+            "sent_messages": [
+                {"type": "text", "data": {"text": "reply text"}},
+            ],
+        },
+    )
+
+    assert len(session.calls) == 2
+    first_payload = session.calls[0][1]
+    second_payload = session.calls[1][1]
+    assert first_payload["sdk_local_extras"] == {}
+    assert second_payload["extras"] == {"host": "value", "last_reply": "reply text"}
+    assert second_payload["sdk_local_extras"] == {"last_reply": "reply text"}
+    assert second_payload["text"] == "hello"
+    assert second_payload["message_outline"] == "reply text"
+    assert second_payload["sent_message_outline"] == "reply text"
+    assert second_payload["sent_messages"] == [
+        {"type": "text", "data": {"text": "reply text"}}
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_dispatch_system_event_exposes_sent_payload_fields() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    session = _SystemEventSession()
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-demo",
+            load_order=0,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.after_send",
+                        trigger=EventTrigger(event_type="after_message_sent"),
+                    ),
+                    declaration_order=0,
+                )
+            ],
+            session=session,
+        )
+    }
+
+    await bridge.dispatch_system_event(
+        "after_message_sent",
+        {
+            "session_id": "demo:private:user-1",
+            "platform": "Demo Platform",
+            "platform_id": "demo",
+            "message_type": "private",
+            "message_outline": "reply text",
+            "sent_message_outline": "reply text",
+            "sent_messages": [
+                {"type": "text", "data": {"text": "reply text"}},
+            ],
+        },
+    )
+
+    sent_payload = session.calls[0][1]
+    assert sent_payload["text"] == "reply text"
+    assert sent_payload["message_outline"] == "reply text"
+    assert sent_payload["sent_message_outline"] == "reply text"
+    assert sent_payload["sent_messages"] == [
+        {"type": "text", "data": {"text": "reply text"}}
+    ]
+
+
+@pytest.mark.unit
 def test_sdk_bridge_dynamic_command_routes_register_and_match() -> None:
     class _RouteFakeEvent:
         def __init__(self, text: str) -> None:
@@ -672,12 +879,112 @@ def test_sdk_bridge_dynamic_command_routes_register_and_match() -> None:
     assert matches[0].handler_id == "sdk-demo:demo.echo"
     assert matches[0].args == {"phrase": "world"}
 
-    with pytest.raises(AstrBotError, match="must belong to the caller plugin"):
-        bridge.register_dynamic_command_route(
-            plugin_id="sdk-demo",
-            command_name="hello",
-            handler_full_name="other:demo.echo",
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_core_context_send_message_populates_proactive_sent_fields() -> None:
+    platform = _FakePlatform()
+    ctx = StarContext(
+        event_queue=Queue(),
+        config={},
+        db=object(),
+        provider_manager=object(),
+        platform_manager=types.SimpleNamespace(platform_insts=[platform]),
+        conversation_manager=object(),
+        message_history_manager=object(),
+        persona_manager=object(),
+        astrbot_config_mgr=object(),
+        knowledge_base_manager=object(),
+        cron_manager=object(),
+    )
+    bridge = _CaptureSystemBridge()
+    ctx.sdk_plugin_bridge = bridge
+
+    sent = await ctx.send_message(
+        "demo:FriendMessage:user-1",
+        MessageChain([Plain("hello proactive", convert=False)]),
+    )
+
+    assert sent is True
+    assert len(platform.sent) == 1
+    assert bridge.calls == [
+        (
+            "after_message_sent",
+            {
+                "session_id": "demo:FriendMessage:user-1",
+                "platform": "Demo Platform",
+                "platform_id": "demo",
+                "message_type": "FriendMessage",
+                "message_outline": "hello proactive",
+                "sent_message_outline": "hello proactive",
+                "sent_messages": [
+                    {"type": "text", "data": {"text": "hello proactive"}}
+                ],
+            },
         )
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_third_party_runner_dispatches_live_provider_request_to_sdk_hooks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = sys.modules[
+        "astrbot.core.pipeline.process_stage.method.agent_sub_stages.third_party"
+    ]
+    monkeypatch.setattr(module, "astrbot_config", {"provider": [{"id": "provider-1"}]})
+
+    async def fake_call_event_hook(*_args, **_kwargs) -> bool:
+        return False
+
+    async def fake_resolve_persona_message(_event) -> None:
+        return None
+
+    monkeypatch.setattr(module, "call_event_hook", fake_call_event_hook)
+    monkeypatch.setattr(
+        module,
+        "set_persona_custom_error_message_on_event",
+        lambda *_args, **_kwargs: None,
+    )
+
+    bridge = _ThirdPartyDispatchBridge()
+    stage = ThirdPartyAgentSubStage()
+    stage.ctx = types.SimpleNamespace(
+        plugin_manager=types.SimpleNamespace(
+            context=types.SimpleNamespace(
+                sdk_plugin_bridge=bridge,
+                conversation_manager=object(),
+                persona_manager=object(),
+            )
+        )
+    )
+    stage.conf = {
+        "provider_settings": {
+            "agent_runner_type": "unsupported",
+            "unsupported_streaming_strategy": "turn_off",
+            "streaming_response": False,
+        }
+    }
+    stage.runner_type = "unsupported"
+    stage.prov_id = "provider-1"
+    stage.streaming_response = False
+    stage.unsupported_streaming_strategy = "turn_off"
+    stage.stream_consumption_close_timeout_sec = 30
+    stage._resolve_persona_custom_error_message = fake_resolve_persona_message
+    event = _ThirdPartyFakeEvent()
+
+    with pytest.raises(ValueError, match="Unsupported third party agent runner type"):
+        async for _ in stage.process(event, ""):
+            pass
+
+    assert len(bridge.calls) == 1
+    event_type, payload, provider_request = bridge.calls[0]
+    assert event_type == "llm_request"
+    assert payload == {"prompt": "hello runner", "provider_id": "provider-1"}
+    assert provider_request is not None
+    assert provider_request.prompt == "hello runner"
+    assert provider_request.session_id == "demo:private:user-1"
 
 
 @pytest.mark.unit

@@ -11,7 +11,7 @@ from typing import Any
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.llm.agents import AgentSpec
 from astrbot_sdk.llm.entities import LLMToolSpec
-from astrbot_sdk.message_components import component_to_payload_sync
+from astrbot_sdk.message.components import component_to_payload_sync
 from astrbot_sdk.protocol.descriptors import (
     CommandTrigger,
     CompositeFilterSpec,
@@ -130,6 +130,7 @@ class _RequestOverlayState:
     dispatch_token: str
     should_call_llm: bool
     requested_llm: bool = False
+    sdk_local_extras: dict[str, Any] = field(default_factory=dict)
     result_payload: dict[str, Any] | None = None
     result_object: MessageEventResult | None = None
     result_is_set: bool = False
@@ -181,6 +182,8 @@ class SdkDynamicCommandRoute:
 
 
 class SdkPluginBridge:
+    _DROP_VALUE = object()
+
     def __init__(self, star_context) -> None:
         self.star_context = star_context
         self.plugins_dir = Path(get_astrbot_data_path()) / "sdk_plugins"
@@ -757,6 +760,7 @@ class SdkPluginBridge:
                 plugin_id=record.plugin_id,
                 request_id=request_id,
             )
+            self._apply_request_scoped_event_payload(payload, overlay)
             task = asyncio.create_task(
                 record.session.invoke_handler(
                     match.handler_id,
@@ -802,6 +806,13 @@ class SdkPluginBridge:
             handler_result = EventConverter.extract_handler_result(
                 output if isinstance(output, dict) else {}
             )
+            if isinstance(output, dict) and "sdk_local_extras" in output:
+                self._persist_sdk_local_extras_from_handler(
+                    overlay,
+                    output.get("sdk_local_extras"),
+                    plugin_id=record.plugin_id,
+                    handler_id=match.handler_id,
+                )
             result.executed_handlers.append(
                 {"plugin_id": record.plugin_id, "handler_id": match.handler_id}
             )
@@ -1113,10 +1124,111 @@ class SdkPluginBridge:
         )
         return {
             "type": "chain" if chain else "empty",
-            "chain": [
-                component_to_payload_sync(component) for component in (chain or [])
-            ],
+            "chain": SdkPluginBridge._components_to_sdk_payload(chain),
         }
+
+    @staticmethod
+    def _components_to_sdk_payload(
+        components: list[Any] | tuple[Any, ...] | None,
+    ) -> list[dict[str, Any]]:
+        return [
+            component_to_payload_sync(component) for component in (components or [])
+        ]
+
+    @classmethod
+    def _sanitize_sdk_extra_value(cls, value: Any) -> Any:
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, (list, tuple)):
+            items = []
+            for item in value:
+                normalized = cls._sanitize_sdk_extra_value(item)
+                if normalized is not cls._DROP_VALUE:
+                    items.append(normalized)
+            return items
+        if isinstance(value, dict):
+            normalized_dict: dict[str, Any] = {}
+            for key, item in value.items():
+                normalized = cls._sanitize_sdk_extra_value(item)
+                if normalized is not cls._DROP_VALUE:
+                    normalized_dict[str(key)] = normalized
+            return normalized_dict
+        model_dump = getattr(value, "model_dump", None)
+        if callable(model_dump):
+            try:
+                return cls._sanitize_sdk_extra_value(model_dump())
+            except Exception:
+                return cls._DROP_VALUE
+        try:
+            json.dumps(value)
+        except (TypeError, ValueError):
+            return cls._DROP_VALUE
+        return value
+
+    @classmethod
+    def _normalize_sdk_local_extras(
+        cls,
+        payload: Any,
+    ) -> tuple[dict[str, Any], list[str]]:
+        if not isinstance(payload, dict):
+            return {}, []
+        normalized: dict[str, Any] = {}
+        dropped_keys: list[str] = []
+        for key, value in payload.items():
+            normalized_value = cls._sanitize_sdk_extra_value(value)
+            if normalized_value is cls._DROP_VALUE:
+                dropped_keys.append(str(key))
+                continue
+            normalized[str(key)] = normalized_value
+        return normalized, dropped_keys
+
+    @classmethod
+    def _apply_request_scoped_event_payload(
+        cls,
+        event_payload: dict[str, Any],
+        overlay: _RequestOverlayState,
+    ) -> None:
+        host_extras = (
+            dict(event_payload["extras"])
+            if isinstance(event_payload.get("extras"), dict)
+            else {}
+        )
+        sdk_local_extras = dict(overlay.sdk_local_extras)
+        merged_extras = dict(host_extras)
+        merged_extras.update(sdk_local_extras)
+        event_payload["host_extras"] = host_extras
+        event_payload["sdk_local_extras"] = sdk_local_extras
+        event_payload["extras"] = merged_extras
+
+    @classmethod
+    def _persist_sdk_local_extras_from_handler(
+        cls,
+        overlay: _RequestOverlayState,
+        payload: Any,
+        *,
+        plugin_id: str,
+        handler_id: str,
+    ) -> None:
+        if payload is None:
+            overlay.sdk_local_extras = {}
+            return
+        if not isinstance(payload, dict):
+            logger.warning(
+                "SDK event handler returned invalid sdk_local_extras: plugin=%s handler=%s payload_type=%s",
+                plugin_id,
+                handler_id,
+                type(payload).__name__,
+            )
+            return
+        normalized, dropped_keys = cls._normalize_sdk_local_extras(payload)
+        overlay.sdk_local_extras = normalized
+        for key in dropped_keys:
+            logger.warning(
+                "Dropped non-serializable sdk_local_extras entry: plugin=%s handler=%s key=%s",
+                plugin_id,
+                handler_id,
+                key,
+            )
 
     @staticmethod
     def _core_provider_request_to_sdk_payload(
@@ -1396,6 +1508,8 @@ class SdkPluginBridge:
             "self_id": str((payload or {}).get("self_id", "")),
             "raw": {"event_type": event_type, **(payload or {})},
         }
+        for key, value in (payload or {}).items():
+            event_payload[key] = value
         matches = self._match_event_handlers(event_type)
         for record, descriptor in matches:
             if record.session is None:
@@ -1473,6 +1587,7 @@ class SdkPluginBridge:
             }
             for key, value in (payload or {}).items():
                 event_payload[key] = value
+            self._apply_request_scoped_event_payload(event_payload, overlay)
             if provider_request is not None:
                 request_payload = self._core_provider_request_to_sdk_payload(
                     provider_request
@@ -1499,6 +1614,13 @@ class SdkPluginBridge:
                     args={},
                 )
                 if isinstance(output, dict):
+                    if "sdk_local_extras" in output:
+                        self._persist_sdk_local_extras_from_handler(
+                            overlay,
+                            output.get("sdk_local_extras"),
+                            plugin_id=record.plugin_id,
+                            handler_id=descriptor.id,
+                        )
                     request_payload = output.get("provider_request")
                     if provider_request is not None and isinstance(
                         request_payload, dict

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from astrbot_sdk.message_components import component_to_payload_sync
+from astrbot_sdk.message.components import component_to_payload_sync
 
 if TYPE_CHECKING:
     from astrbot.core.platform.astr_message_event import AstrMessageEvent

@@ -146,6 +146,20 @@ class RespondStage(Stage):
             return MessageChain(chain).get_plain_text(with_other_comps_mark=True)
         return ""
 
+    @staticmethod
+    def _message_payloads_for_sdk_event(
+        chain: MessageChain | list[BaseMessageComponent] | None,
+    ) -> list[dict]:
+        from astrbot_sdk.message.components import component_to_payload_sync
+
+        if isinstance(chain, MessageChain):
+            components = chain.chain
+        elif isinstance(chain, list):
+            components = chain
+        else:
+            components = []
+        return [component_to_payload_sync(component) for component in components]
+
     def is_seg_reply_required(self, event: AstrMessageEvent) -> bool:
         """检查是否需要分段回复"""
         if not self.enable_seg:
@@ -324,6 +338,12 @@ class RespondStage(Stage):
                         "sender_name": event.get_sender_name(),
                         "self_id": event.get_self_id(),
                         "message_outline": self._message_outline_for_sdk_event(
+                            result.chain
+                        ),
+                        "sent_message_outline": self._message_outline_for_sdk_event(
+                            result.chain
+                        ),
+                        "sent_messages": self._message_payloads_for_sdk_event(
                             result.chain
                         ),
                     },

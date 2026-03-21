@@ -120,6 +120,18 @@ class _DecoratingResultHookPlugin:
         result.chain.append(Plain(" decorated", convert=False))
 
 
+class _SdkLocalExtrasHookPlugin:
+    async def persist(self, event) -> None:
+        assert event.get_extra("host") == "value"
+        assert event.get_extra("local") == "seed"
+        event.set_extra("local", "updated")
+        event.set_extra("bad", object())
+        event.clear_extra()
+        assert event.get_extra("host") == "value"
+        assert event.get_extra("local", "missing") == "missing"
+        event.set_extra("persisted", "reply text")
+
+
 @pytest.mark.unit
 def test_trigger_converter_matches_command_and_respects_admin() -> None:
     descriptor = HandlerDescriptor(
@@ -436,3 +448,51 @@ async def test_handler_dispatcher_injects_and_round_trips_event_result() -> None
 
     assert result["event_result"]["chain"][0]["data"]["text"] == "base"
     assert result["event_result"]["chain"][1]["data"]["text"] == " decorated"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_handler_dispatcher_round_trips_sdk_local_extras() -> None:
+    plugin = _SdkLocalExtrasHookPlugin()
+    dispatcher = HandlerDispatcher(
+        plugin_id="demo",
+        peer=MockPeer(MockCapabilityRouter()),
+        handlers=[
+            LoadedHandler(
+                descriptor=HandlerDescriptor(
+                    id="demo:demo.persist",
+                    trigger=EventTrigger(event_type="after_message_sent"),
+                ),
+                callable=plugin.persist,
+                owner=plugin,
+                plugin_id="demo",
+            )
+        ],
+    )
+
+    result = await dispatcher.invoke(
+        SimpleNamespace(
+            id="req-7",
+            input={
+                "handler_id": "demo:demo.persist",
+                "event": {
+                    "type": "after_message_sent",
+                    "event_type": "after_message_sent",
+                    "text": "hello",
+                    "session_id": "test-session",
+                    "user_id": "test-user",
+                    "platform": "test",
+                    "message_type": "private",
+                    "extras": {"host": "value", "local": "seed"},
+                    "host_extras": {"host": "value"},
+                    "sdk_local_extras": {"local": "seed"},
+                },
+            },
+        ),
+        CancelToken(),
+    )
+
+    assert result["sent_message"] is False
+    assert result["stop"] is False
+    assert result["call_llm"] is False
+    assert result["sdk_local_extras"] == {"persisted": "reply text"}
