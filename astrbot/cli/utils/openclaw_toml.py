@@ -8,20 +8,13 @@ from typing import Any
 NULL_SENTINEL = "__ASTRBOT_OPENCLAW_NULL_SENTINEL_V1__"
 
 
-def _toml_escape(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-
-
 def _toml_quote(value: str) -> str:
-    return f'"{_toml_escape(value)}"'
-
-
-def _toml_format_key(key: str) -> str:
-    return _toml_quote(key)
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    return f'"{escaped}"'
 
 
 def _format_toml_path(path: list[str]) -> str:
-    return ".".join(_toml_format_key(str(part)) for part in path)
+    return ".".join(_toml_quote(str(part)) for part in path)
 
 
 def _normalize_nulls(obj: Any) -> Any:
@@ -73,7 +66,7 @@ def _toml_literal(value: Any) -> str:
         return "[" + ", ".join(_toml_literal(v) for v in value) + "]"
     if isinstance(value, dict):
         pairs = ", ".join(
-            f"{_toml_format_key(str(k))} = {_toml_literal(v)}" for k, v in value.items()
+            f"{_toml_quote(str(k))} = {_toml_literal(v)}" for k, v in value.items()
         )
         return "{ " + pairs + " }"
     return _toml_quote(str(value))
@@ -97,7 +90,7 @@ def json_to_toml(data: dict[str, Any]) -> str:
         if path:
             lines.append(f"[{_format_toml_path(path)}]")
         for key, value in scalar_items:
-            lines.append(f"{_toml_format_key(key)} = {_toml_literal(value)}")
+            lines.append(f"{_toml_quote(key)} = {_toml_literal(value)}")
         if scalar_items and (nested_dicts or array_tables):
             lines.append("")
 
@@ -111,9 +104,7 @@ def json_to_toml(data: dict[str, Any]) -> str:
             for item in items:
                 lines.append(f"[[{_format_toml_path(table_path)}]]")
                 for sub_key, sub_value in item.items():
-                    lines.append(
-                        f"{_toml_format_key(str(sub_key))} = {_toml_literal(sub_value)}"
-                    )
+                    lines.append(f"{_toml_quote(str(sub_key))} = {_toml_literal(sub_value)}")
                 lines.append("")
             if t_idx == len(array_tables) - 1 and lines and lines[-1] == "":
                 lines.pop()

@@ -454,3 +454,15 @@ def test_json_to_toml_preserves_null_sentinel_behavior() -> None:
     assert '["nested"]' in toml_text
     assert '"inner" = "__ASTRBOT_OPENCLAW_NULL_SENTINEL_V1__"' in toml_text
     assert '"list" = ["__ASTRBOT_OPENCLAW_NULL_SENTINEL_V1__", 1]' in toml_text
+
+
+def test_json_to_toml_escapes_quotes_backslashes_and_newlines() -> None:
+    toml_text = json_to_toml(
+        {
+            'k"ey': "line1\nline2",
+            "path": "C:\\tmp\\file.txt",
+        }
+    )
+
+    assert '"k\\"ey" = "line1\\nline2"' in toml_text
+    assert '"path" = "C:\\\\tmp\\\\file.txt"' in toml_text
