@@ -17,16 +17,6 @@ def _format_toml_path(path: list[str]) -> str:
     return ".".join(_toml_quote(str(part)) for part in path)
 
 
-def _normalize_nulls(obj: Any) -> Any:
-    if obj is None:
-        return NULL_SENTINEL
-    if isinstance(obj, dict):
-        return {key: _normalize_nulls(value) for key, value in obj.items()}
-    if isinstance(obj, list):
-        return [_normalize_nulls(value) for value in obj]
-    return obj
-
-
 def _classify_items(
     obj: dict[str, Any],
 ) -> tuple[
@@ -51,6 +41,9 @@ def _classify_items(
 
 
 def _toml_literal(value: Any) -> str:
+    if value is None:
+        # TOML has no null literal; preserve previous output contract.
+        return _toml_quote(NULL_SENTINEL)
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, int):
@@ -81,7 +74,6 @@ def json_to_toml(data: dict[str, Any]) -> str:
       For empty lists we intentionally preserve literal emptiness because the
       element schema is unknown at serialization time.
     """
-    normalized_data = _normalize_nulls(data)
     lines: list[str] = []
 
     def emit_table(obj: dict[str, Any], path: list[str]) -> None:
@@ -109,7 +101,7 @@ def json_to_toml(data: dict[str, Any]) -> str:
             if t_idx == len(array_tables) - 1 and lines and lines[-1] == "":
                 lines.pop()
 
-    emit_table(normalized_data, [])
+    emit_table(data, [])
     if not lines:
         return ""
     return "\n".join(lines).rstrip() + "\n"
