@@ -75,7 +75,9 @@ class FaissVecDB(BaseVecDB):
         ids = ids or [str(uuid.uuid4()) for _ in contents]
 
         if not contents:
-            logger.debug("No contents provided for batch insert; skipping embedding generation.")
+            logger.debug(
+                "No contents provided for batch insert; skipping embedding generation."
+            )
             return []
 
         start = time.time()
