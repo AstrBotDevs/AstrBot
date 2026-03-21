@@ -12,6 +12,7 @@ MessageEvent 是 handler 接收的主要事件类型，封装了：
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -44,6 +45,8 @@ class PlainTextResult:
 
 ReplyHandler = Callable[[str], Awaitable[None]]
 
+_JSON_DROP = object()
+
 
 def _coerce_str(value: Any) -> str:
     if value is None:
@@ -58,6 +61,47 @@ def _coerce_optional_str(value: Any) -> str | None:
         return None
     text = value if isinstance(value, str) else str(value)
     return text or None
+
+
+def _json_safe_value(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (list, tuple)):
+        items = []
+        for item in value:
+            normalized = _json_safe_value(item)
+            if normalized is not _JSON_DROP:
+                items.append(normalized)
+        return items
+    if isinstance(value, dict):
+        normalized_dict: dict[str, Any] = {}
+        for key, item in value.items():
+            normalized = _json_safe_value(item)
+            if normalized is not _JSON_DROP:
+                normalized_dict[str(key)] = normalized
+        return normalized_dict
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return _json_safe_value(model_dump())
+        except Exception:
+            return _JSON_DROP
+    try:
+        json.dumps(value)
+    except (TypeError, ValueError):
+        return _JSON_DROP
+    return value
+
+
+def _json_safe_mapping(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, Any] = {}
+    for key, item in value.items():
+        safe_item = _json_safe_value(item)
+        if safe_item is not _JSON_DROP:
+            normalized[str(key)] = safe_item
+    return normalized
 
 
 class MessageEvent:
@@ -138,18 +182,33 @@ class MessageEvent:
         self._is_admin = bool(is_admin)
         self.raw = raw or {}
         self._stopped = False
-        self._extras = (
-            dict(self.raw.get("extras", {}))
-            if isinstance(self.raw.get("extras"), dict)
-            else {}
+        host_extras = self.raw.get("host_extras")
+        raw_extras = self.raw.get("extras")
+        self._host_extras = _json_safe_mapping(
+            host_extras if isinstance(host_extras, dict) else raw_extras
         )
+        self._host_extras_present = "host_extras" in self.raw or "extras" in self.raw
+        sdk_local_extras = self.raw.get("sdk_local_extras")
+        self._sdk_local_extras = _json_safe_mapping(sdk_local_extras)
+        self._sdk_local_extras_present = "sdk_local_extras" in self.raw
+        self._sdk_local_extras_dirty = False
         messages_payload = self.raw.get("messages")
         self._messages = (
             payloads_to_components(messages_payload)
             if isinstance(messages_payload, list)
             else []
         )
+        self._messages_present = "messages" in self.raw
         self._message_outline = str(self.raw.get("message_outline", self.text))
+        sent_messages_payload = self.raw.get("sent_messages")
+        self._sent_messages = (
+            payloads_to_components(sent_messages_payload)
+            if isinstance(sent_messages_payload, list)
+            else []
+        )
+        self._sent_messages_present = "sent_messages" in self.raw
+        self._sent_message_outline = str(self.raw.get("sent_message_outline", ""))
+        self._sent_message_outline_present = "sent_message_outline" in self.raw
         self._context = context
         self._reply_handler = reply_handler
         if self._reply_handler is None and context is not None:
@@ -232,13 +291,41 @@ class MessageEvent:
         )
         if self.session_ref is not None:
             payload["target"] = self.session_ref.to_payload()
-        if self._extras:
-            payload["extras"] = dict(self._extras)
-        if self._messages:
+        merged_extras = dict(self._host_extras)
+        merged_extras.update(self._sdk_local_extras_payload())
+        if merged_extras:
+            payload["extras"] = merged_extras
+        elif self._host_extras_present:
+            payload["extras"] = {}
+        else:
+            payload.pop("extras", None)
+        if self._host_extras or self._host_extras_present:
+            payload["host_extras"] = dict(self._host_extras)
+        else:
+            payload.pop("host_extras", None)
+        sdk_local_extras = self._sdk_local_extras_payload()
+        if sdk_local_extras or self._should_serialize_sdk_local_extras():
+            payload["sdk_local_extras"] = sdk_local_extras
+        else:
+            payload.pop("sdk_local_extras", None)
+        if self._messages or self._messages_present:
             payload["messages"] = [
                 component_to_payload_sync(component) for component in self._messages
             ]
+        else:
+            payload.pop("messages", None)
         payload["message_outline"] = self._message_outline
+        if self._sent_messages or self._sent_messages_present:
+            payload["sent_messages"] = [
+                component_to_payload_sync(component)
+                for component in self._sent_messages
+            ]
+        else:
+            payload.pop("sent_messages", None)
+        if self._sent_message_outline or self._sent_message_outline_present:
+            payload["sent_message_outline"] = self._sent_message_outline
+        else:
+            payload.pop("sent_message_outline", None)
         return payload
 
     @property
@@ -297,6 +384,10 @@ class MessageEvent:
         """Return SDK message components for the current event."""
         return list(self._messages)
 
+    def get_sent_messages(self) -> list[BaseMessageComponent]:
+        """Return outbound SDK message components for after-send events."""
+        return list(self._sent_messages)
+
     def has_component(self, type_: type[BaseMessageComponent]) -> bool:
         return any(isinstance(component, type_) for component in self._messages)
 
@@ -336,6 +427,10 @@ class MessageEvent:
         """Return the normalized message outline."""
         return self._message_outline
 
+    def get_sent_message_outline(self) -> str:
+        """Return the outbound message outline for after-send events."""
+        return self._sent_message_outline
+
     async def get_group(self) -> dict[str, Any] | None:
         """Get current-group metadata for the bound message request."""
         context = self._require_runtime_context("get_group")
@@ -357,17 +452,31 @@ class MessageEvent:
 
     def set_extra(self, key: str, value: Any) -> None:
         """Store SDK-local transient event data."""
-        self._extras[key] = value
+        self._sdk_local_extras[key] = value
+        self._sdk_local_extras_dirty = True
 
     def get_extra(self, key: str | None = None, default: Any = None) -> Any:
         """Read SDK-local transient event data."""
+        extras = dict(self._host_extras)
+        extras.update(self._sdk_local_extras)
         if key is None:
-            return dict(self._extras)
-        return self._extras.get(key, default)
+            return extras
+        return extras.get(key, default)
 
     def clear_extra(self) -> None:
         """Clear SDK-local transient event data."""
-        self._extras.clear()
+        self._sdk_local_extras.clear()
+        self._sdk_local_extras_dirty = True
+
+    def _sdk_local_extras_payload(self) -> dict[str, Any]:
+        return _json_safe_mapping(self._sdk_local_extras)
+
+    def _should_serialize_sdk_local_extras(self) -> bool:
+        return (
+            self._sdk_local_extras_present
+            or self._sdk_local_extras_dirty
+            or bool(self._sdk_local_extras)
+        )
 
     async def request_llm(self) -> bool:
         """Request the default LLM chain for the current message request."""
