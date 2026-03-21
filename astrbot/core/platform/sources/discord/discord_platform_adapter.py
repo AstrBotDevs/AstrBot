@@ -10,7 +10,7 @@ from discord.errors import HTTPException
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain
+from astrbot.api.message_components import At, File, Image, Plain
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -194,13 +194,16 @@ class DiscordPlatformAdapter(Platform):
 
         # 如果机器人被@,移除@部分
         # 剥离 User Mention (<@id>, <@!id>)
+        bot_was_mentioned = False
         if self.client and self.client.user:
             mention_str = f"<@{self.client.user.id}>"
             mention_str_nickname = f"<@!{self.client.user.id}>"
             if content.startswith(mention_str):
                 content = content[len(mention_str) :].lstrip()
+                bot_was_mentioned = True
             elif content.startswith(mention_str_nickname):
                 content = content[len(mention_str_nickname) :].lstrip()
+                bot_was_mentioned = True
 
         # 剥离 Role Mention(bot 拥有的任一角色被提及,<@&role_id>)
         if (
@@ -229,6 +232,11 @@ class DiscordPlatformAdapter(Platform):
             nickname=message.author.display_name,
         )
         message_chain = []
+        # 如果机器人被 @，在 message_chain 开头添加 At 组件
+        if bot_was_mentioned:
+            message_chain.insert(
+                0, At(qq=str(self.client.user.id), name=self.client.user.name)
+            )
         if abm.message_str:
             message_chain.append(Plain(text=abm.message_str))
         if message.attachments:
