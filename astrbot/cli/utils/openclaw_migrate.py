@@ -159,8 +159,13 @@ def _read_openclaw_sqlite_entries(db_path: Path) -> list[MemoryEntry]:
             ),
             f"{ts_col} AS __timestamp__" if ts_col is not None else "NULL AS __timestamp__",
         ]
+        order_by_clause = (
+            " ORDER BY __timestamp__ ASC, __key__ ASC"
+            if ts_col is not None
+            else " ORDER BY __key__ ASC"
+        )
         rows = cursor.execute(
-            "SELECT " + ", ".join(select_clauses) + " FROM memories"
+            "SELECT " + ", ".join(select_clauses) + " FROM memories" + order_by_clause
         ).fetchall()
 
         entries: list[MemoryEntry] = []
@@ -255,17 +260,24 @@ def _read_openclaw_markdown_entries(workspace_dir: Path) -> list[MemoryEntry]:
     return entries
 
 
-def _entry_signature(entry: MemoryEntry, *, semantic: bool) -> str:
-    if semantic:
-        parts = [entry.content.strip(), entry.category.strip()]
-    else:
-        parts = [
+def _exact_signature(entry: MemoryEntry) -> str:
+    return "\x00".join(
+        [
             entry.key.strip(),
             entry.content.strip(),
             entry.category.strip(),
             entry.timestamp or "",
         ]
-    return "\x00".join(parts)
+    )
+
+
+def _semantic_signature(entry: MemoryEntry) -> str:
+    return "\x00".join(
+        [
+            entry.content.strip(),
+            entry.category.strip(),
+        ]
+    )
 
 
 def _dedup_entries(entries: list[MemoryEntry]) -> list[MemoryEntry]:
@@ -273,8 +285,8 @@ def _dedup_entries(entries: list[MemoryEntry]) -> list[MemoryEntry]:
     seen_semantic: set[str] = set()
     deduped: list[MemoryEntry] = []
     for item in entries:
-        exact_signature = _entry_signature(item, semantic=False)
-        semantic_signature = _entry_signature(item, semantic=True)
+        exact_signature = _exact_signature(item)
+        semantic_signature = _semantic_signature(item)
         if exact_signature in seen_exact or semantic_signature in seen_semantic:
             continue
         seen_exact.add(exact_signature)
@@ -309,6 +321,18 @@ def _collect_workspace_files(workspace_dir: Path) -> list[Path]:
         if path.is_file() and not path.is_symlink():
             files.append(path)
     return sorted(files)
+
+
+def _workspace_total_size(files: list[Path]) -> int:
+    total_bytes = 0
+    for path in files:
+        try:
+            total_bytes += path.stat().st_size
+        except OSError:
+            # Best-effort accounting: files may disappear or become unreadable
+            # during migration scans.
+            continue
+    return total_bytes
 
 
 def _write_jsonl(path: Path, entries: list[MemoryEntry]) -> None:
@@ -365,41 +389,6 @@ def _load_json_or_raise(path: Path) -> dict[str, Any]:
         ) from exc
 
 
-def _build_report(
-    *,
-    source_root: Path,
-    workspace_dir: Path,
-    target_dir: Path | None,
-    dry_run: bool,
-    sqlite_entries: list[MemoryEntry],
-    markdown_entries: list[MemoryEntry],
-    memory_entries: list[MemoryEntry],
-    workspace_files: list[Path],
-    workspace_bytes_total: int,
-    config_found: bool,
-    copied_workspace_files: int,
-    copied_memory_entries: int,
-    wrote_timeline: bool,
-    wrote_config_toml: bool,
-) -> MigrationReport:
-    return MigrationReport(
-        source_root=str(source_root),
-        source_workspace=str(workspace_dir),
-        target_dir=str(target_dir) if target_dir else None,
-        dry_run=dry_run,
-        memory_entries_total=len(memory_entries),
-        memory_entries_from_sqlite=len(sqlite_entries),
-        memory_entries_from_markdown=len(markdown_entries),
-        workspace_files_total=len(workspace_files),
-        workspace_bytes_total=workspace_bytes_total,
-        config_found=config_found,
-        copied_workspace_files=copied_workspace_files,
-        copied_memory_entries=copied_memory_entries,
-        wrote_timeline=wrote_timeline,
-        wrote_config_toml=wrote_config_toml,
-    )
-
-
 def run_openclaw_migration(
     *,
     source_root: Path,
@@ -421,7 +410,7 @@ def run_openclaw_migration(
     memory_entries = _dedup_entries([*sqlite_entries, *markdown_entries])
 
     workspace_files = _collect_workspace_files(workspace_dir)
-    workspace_total_bytes = sum(path.stat().st_size for path in workspace_files)
+    workspace_total_bytes = _workspace_total_size(workspace_files)
 
     config_json_path = _find_openclaw_config_json(source_root, workspace_dir)
     config_obj: dict[str, Any] | None = None
@@ -484,15 +473,15 @@ def run_openclaw_migration(
             )
             wrote_config_toml = True
 
-    report = _build_report(
-        source_root=source_root,
-        workspace_dir=workspace_dir,
-        target_dir=resolved_target,
+    report = MigrationReport(
+        source_root=str(source_root),
+        source_workspace=str(workspace_dir),
+        target_dir=str(resolved_target) if resolved_target else None,
         dry_run=dry_run,
-        sqlite_entries=sqlite_entries,
-        markdown_entries=markdown_entries,
-        memory_entries=memory_entries,
-        workspace_files=workspace_files,
+        memory_entries_total=len(memory_entries),
+        memory_entries_from_sqlite=len(sqlite_entries),
+        memory_entries_from_markdown=len(markdown_entries),
+        workspace_files_total=len(workspace_files),
         workspace_bytes_total=workspace_total_bytes,
         config_found=config_obj is not None,
         copied_workspace_files=copied_workspace_files,

@@ -49,7 +49,14 @@ def _toml_literal(value: Any) -> str:
 
 
 def json_to_toml(data: dict[str, Any]) -> str:
-    """Serialize a JSON-like dict to TOML text used by migration snapshots."""
+    """Serialize a JSON-like dict to TOML text used by migration snapshots.
+
+    Notes:
+    - Empty lists are emitted as `key = []`.
+    - Only non-empty `list[dict]` values are emitted as array-of-tables.
+      For empty lists we intentionally preserve literal emptiness because the
+      element schema is unknown at serialization time.
+    """
     lines: list[str] = []
 
     def emit_table(obj: dict[str, Any], path: list[str]) -> None:
@@ -98,4 +105,3 @@ def json_to_toml(data: dict[str, Any]) -> str:
 
 
 __all__ = ["NULL_SENTINEL", "json_to_toml"]
-
