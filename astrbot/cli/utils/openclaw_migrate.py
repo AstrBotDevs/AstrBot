@@ -11,6 +11,7 @@ from typing import Any
 import click
 
 from .basic import check_astrbot_root
+from .openclaw_toml import json_to_toml
 
 SQLITE_KEY_CANDIDATES = ("key", "id", "name")
 SQLITE_CONTENT_CANDIDATES = ("content", "value", "text", "memory")
@@ -53,31 +54,31 @@ def _pick_existing_column(columns: set[str], candidates: tuple[str, ...]) -> str
     return None
 
 
+def _timestamp_from_epoch(raw: float | int | str) -> str | None:
+    ts = float(raw)
+    if ts > 1e12:
+        ts /= 1000.0
+    try:
+        return dt.datetime.fromtimestamp(ts, tz=dt.timezone.utc).isoformat()
+    except Exception:
+        return None
+
+
 def _normalize_timestamp(raw: Any) -> str | None:
     if raw is None:
         return None
 
     if isinstance(raw, (int, float)):
-        ts = float(raw)
-        if ts > 1e12:
-            ts /= 1000.0
-        try:
-            return dt.datetime.fromtimestamp(ts, tz=dt.timezone.utc).isoformat()
-        except Exception:
-            return str(raw)
+        normalized = _timestamp_from_epoch(raw)
+        return normalized if normalized is not None else str(raw)
 
     text = str(raw).strip()
     if not text:
         return None
 
     if text.isdigit():
-        ts = float(text)
-        if ts > 1e12:
-            ts /= 1000.0
-        try:
-            return dt.datetime.fromtimestamp(ts, tz=dt.timezone.utc).isoformat()
-        except Exception:
-            return text
+        normalized = _timestamp_from_epoch(text)
+        return normalized if normalized is not None else text
 
     maybe_iso = text.replace("Z", "+00:00")
     try:
@@ -111,6 +112,25 @@ def _parse_structured_line(line: str) -> tuple[str, str] | None:
     return key, value
 
 
+def _discover_memory_columns(
+    cursor: sqlite3.Cursor, db_path: Path
+) -> tuple[str, str, str | None, str | None]:
+    columns = {
+        str(row[1]).strip().lower()
+        for row in cursor.execute("PRAGMA table_info(memories)").fetchall()
+    }
+
+    key_col = _pick_existing_column(columns, SQLITE_KEY_CANDIDATES) or "rowid"
+    content_col = _pick_existing_column(columns, SQLITE_CONTENT_CANDIDATES)
+    if content_col is None:
+        raise click.ClickException(
+            f"OpenClaw sqlite exists at {db_path}, but no content-like column found"
+        )
+    category_col = _pick_existing_column(columns, SQLITE_CATEGORY_CANDIDATES)
+    ts_col = _pick_existing_column(columns, SQLITE_TS_CANDIDATES)
+    return key_col, content_col, category_col, ts_col
+
+
 def _read_openclaw_sqlite_entries(db_path: Path) -> list[MemoryEntry]:
     if not db_path.exists():
         return []
@@ -125,19 +145,9 @@ def _read_openclaw_sqlite_entries(db_path: Path) -> list[MemoryEntry]:
         if table_exists is None:
             return []
 
-        columns = {
-            str(row[1]).strip().lower()
-            for row in cursor.execute("PRAGMA table_info(memories)").fetchall()
-        }
-
-        key_col = _pick_existing_column(columns, SQLITE_KEY_CANDIDATES) or "rowid"
-        content_col = _pick_existing_column(columns, SQLITE_CONTENT_CANDIDATES)
-        if content_col is None:
-            raise click.ClickException(
-                f"OpenClaw sqlite exists at {db_path}, but no content-like column found"
-            )
-        category_col = _pick_existing_column(columns, SQLITE_CATEGORY_CANDIDATES)
-        ts_col = _pick_existing_column(columns, SQLITE_TS_CANDIDATES)
+        key_col, content_col, category_col, ts_col = _discover_memory_columns(
+            cursor, db_path
+        )
 
         select_clauses = [
             f"{key_col} AS __key__",
@@ -245,25 +255,26 @@ def _read_openclaw_markdown_entries(workspace_dir: Path) -> list[MemoryEntry]:
     return entries
 
 
+def _entry_signature(entry: MemoryEntry, *, semantic: bool) -> str:
+    if semantic:
+        parts = [entry.content.strip(), entry.category.strip()]
+    else:
+        parts = [
+            entry.key.strip(),
+            entry.content.strip(),
+            entry.category.strip(),
+            entry.timestamp or "",
+        ]
+    return "\x00".join(parts)
+
+
 def _dedup_entries(entries: list[MemoryEntry]) -> list[MemoryEntry]:
     seen_exact: set[str] = set()
     seen_semantic: set[str] = set()
     deduped: list[MemoryEntry] = []
     for item in entries:
-        exact_signature = "\x00".join(
-            [
-                item.key.strip(),
-                item.content.strip(),
-                item.category.strip(),
-                item.timestamp or "",
-            ]
-        )
-        semantic_signature = "\x00".join(
-            [
-                item.content.strip(),
-                item.category.strip(),
-            ]
-        )
+        exact_signature = _entry_signature(item, semantic=False)
+        semantic_signature = _entry_signature(item, semantic=True)
         if exact_signature in seen_exact or semantic_signature in seen_semantic:
             continue
         seen_exact.add(exact_signature)
@@ -298,91 +309,6 @@ def _collect_workspace_files(workspace_dir: Path) -> list[Path]:
         if path.is_file() and not path.is_symlink():
             files.append(path)
     return sorted(files)
-
-
-def _toml_escape(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-
-
-def _toml_quote(value: str) -> str:
-    return f'"{_toml_escape(value)}"'
-
-
-def _toml_format_key(key: str) -> str:
-    return _toml_quote(key)
-
-
-def _toml_literal(value: Any) -> str:
-    if value is None:
-        return '"__NULL__"'
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, float):
-        return repr(value)
-    if isinstance(value, str):
-        return _toml_quote(value)
-    if isinstance(value, list):
-        return "[" + ", ".join(_toml_literal(v) for v in value) + "]"
-    if isinstance(value, dict):
-        pairs = ", ".join(
-            f"{_toml_format_key(str(k))} = {_toml_literal(v)}" for k, v in value.items()
-        )
-        return "{ " + pairs + " }"
-    return _toml_quote(str(value))
-
-
-def _format_toml_path(path: list[str]) -> str:
-    return ".".join(_toml_format_key(str(part)) for part in path)
-
-
-def _json_to_toml(data: dict[str, Any]) -> str:
-    lines: list[str] = []
-
-    def emit_table(obj: dict[str, Any], path: list[str]) -> None:
-        scalar_items: list[tuple[str, Any]] = []
-        nested_dicts: list[tuple[str, dict[str, Any]]] = []
-        array_tables: list[tuple[str, list[dict[str, Any]]]] = []
-
-        for key, value in obj.items():
-            if isinstance(value, dict):
-                nested_dicts.append((str(key), value))
-            elif isinstance(value, list) and value and all(
-                isinstance(item, dict) for item in value
-            ):
-                array_tables.append((str(key), value))
-            else:
-                scalar_items.append((str(key), value))
-
-        if path:
-            lines.append(f"[{_format_toml_path(path)}]")
-        for key, value in scalar_items:
-            lines.append(f"{_toml_format_key(key)} = {_toml_literal(value)}")
-        if scalar_items and (nested_dicts or array_tables):
-            lines.append("")
-
-        for idx, (key, value) in enumerate(nested_dicts):
-            emit_table(value, [*path, key])
-            if idx != len(nested_dicts) - 1 or array_tables:
-                lines.append("")
-
-        for t_idx, (key, items) in enumerate(array_tables):
-            table_path = [*path, key]
-            for item in items:
-                lines.append(f"[[{_format_toml_path(table_path)}]]")
-                for sub_key, sub_value in item.items():
-                    lines.append(
-                        f"{_toml_format_key(str(sub_key))} = {_toml_literal(sub_value)}"
-                    )
-                lines.append("")
-            if t_idx == len(array_tables) - 1 and lines and lines[-1] == "":
-                lines.pop()
-
-    emit_table(data, [])
-    if not lines:
-        return ""
-    return "\n".join(lines).rstrip() + "\n"
 
 
 def _write_jsonl(path: Path, entries: list[MemoryEntry]) -> None:
@@ -545,8 +471,15 @@ def run_openclaw_migration(
                 json.dumps(config_obj, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
+            try:
+                converted_toml = json_to_toml(config_obj)
+            except ValueError as exc:
+                source_hint = str(config_json_path) if config_json_path else "config JSON"
+                raise click.ClickException(
+                    f"Failed to convert {source_hint} to TOML: {exc}"
+                ) from exc
             (resolved_target / "config.migrated.toml").write_text(
-                _json_to_toml(config_obj),
+                converted_toml,
                 encoding="utf-8",
             )
             wrote_config_toml = True
@@ -580,7 +513,5 @@ def run_openclaw_migration(
 __all__ = [
     "MemoryEntry",
     "MigrationReport",
-    "_json_to_toml",
-    "_read_openclaw_sqlite_entries",
     "run_openclaw_migration",
 ]

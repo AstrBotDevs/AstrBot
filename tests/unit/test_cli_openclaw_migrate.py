@@ -4,11 +4,8 @@ import json
 import sqlite3
 from pathlib import Path
 
-from astrbot.cli.commands.cmd_migrate import (
-    _json_to_toml,
-    _read_openclaw_sqlite_entries,
-    run_openclaw_migration,
-)
+from astrbot.cli.utils.openclaw_migrate import run_openclaw_migration
+from astrbot.cli.utils.openclaw_toml import json_to_toml
 
 
 def _prepare_astrbot_root(root: Path) -> None:
@@ -70,9 +67,14 @@ def _read_migrated_memory_entries(target_dir: Path) -> list[dict[str, str | None
     return entries
 
 
-def test_read_openclaw_sqlite_entries_supports_legacy_columns(tmp_path: Path) -> None:
-    db_dir = tmp_path / "memory"
+def test_migration_supports_legacy_sqlite_columns(tmp_path: Path) -> None:
+    source_root = tmp_path / ".openclaw"
+    workspace = source_root / "workspace"
+    db_dir = workspace / "memory"
     db_dir.mkdir(parents=True)
+    (workspace / "notes").mkdir(parents=True, exist_ok=True)
+    (workspace / "MEMORY.md").write_text("", encoding="utf-8")
+
     db_path = db_dir / "brain.db"
     conn = sqlite3.connect(db_path)
     try:
@@ -87,12 +89,24 @@ def test_read_openclaw_sqlite_entries_supports_legacy_columns(tmp_path: Path) ->
     finally:
         conn.close()
 
-    entries = _read_openclaw_sqlite_entries(db_path)
+    astrbot_root = tmp_path / "astrbot"
+    astrbot_root.mkdir(parents=True)
+    _prepare_astrbot_root(astrbot_root)
+
+    report = run_openclaw_migration(
+        source_root=source_root,
+        astrbot_root=astrbot_root,
+        dry_run=False,
+        target_dir=Path("data/migrations/openclaw/test-legacy-sqlite"),
+    )
+
+    assert report.target_dir is not None
+    entries = _read_migrated_memory_entries(Path(report.target_dir))
     assert len(entries) == 1
-    assert entries[0].key == "legacy_key"
-    assert entries[0].content == "legacy_value"
-    assert entries[0].category == "daily"
-    assert entries[0].timestamp is not None
+    assert entries[0].get("key") == "legacy_key"
+    assert entries[0].get("content") == "legacy_value"
+    assert entries[0].get("category") == "daily"
+    assert entries[0].get("timestamp") is not None
 
 
 def test_run_openclaw_migration_dry_run(tmp_path: Path) -> None:
@@ -253,10 +267,17 @@ def test_json_to_toml_quotes_special_keys() -> None:
         "nested.obj": {"x y": 1},
         "list": [{"dot.key": True}],
     }
-    toml_text = _json_to_toml(payload)
+    toml_text = json_to_toml(payload)
 
     assert '"normal key" = "ok"' in toml_text
     assert '["nested.obj"]' in toml_text
     assert '"x y" = 1' in toml_text
     assert '[["list"]]' in toml_text
     assert '"dot.key" = true' in toml_text
+
+
+def test_json_to_toml_rejects_non_finite_float() -> None:
+    import pytest
+
+    with pytest.raises(ValueError):
+        json_to_toml({"invalid": float("nan")})

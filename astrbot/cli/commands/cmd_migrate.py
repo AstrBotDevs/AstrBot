@@ -5,13 +5,7 @@ from pathlib import Path
 import click
 
 from ..utils import get_astrbot_root
-from ..utils.openclaw_migrate import (
-    MemoryEntry,
-    MigrationReport,
-    _json_to_toml,
-    _read_openclaw_sqlite_entries,
-    run_openclaw_migration,
-)
+from ..utils.openclaw_migrate import run_openclaw_migration
 
 
 @click.group(name="migrate")
@@ -86,12 +80,4 @@ def migrate_openclaw(
     click.echo("Done.")
 
 
-__all__ = [
-    "MigrationReport",
-    "MemoryEntry",
-    "_json_to_toml",
-    "_read_openclaw_sqlite_entries",
-    "migrate",
-    "run_openclaw_migration",
-]
-
+__all__ = ["migrate"]
