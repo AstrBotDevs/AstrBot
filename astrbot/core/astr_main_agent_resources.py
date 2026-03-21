@@ -397,17 +397,14 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         return f"Message sent to session {target_session}"
 
 
-def check_all_kb(kb_list: list[KBHelper]) -> bool:
+def check_all_kb(kb_list: list[KBHelper|None]) -> bool:
     """检查是否所有的知识库都为空
     Args:
         kb_list: 所选的知识库
     Returns:
         bool: 是否全为空
     """
-    for kb in kb_list:
-        if kb is not None and (kb.kb.doc_count != 0 or kb.kb.chunk_count != 0):
-            return False
-    return True
+    return not any(kb and (kb.kb.doc_count != 0 or kb.kb.chunk_count != 0) for kb in kb_list)
 
 
 async def retrieve_knowledge_base(
@@ -468,9 +465,8 @@ async def retrieve_knowledge_base(
     if not kb_names:
         return
 
-    all_kbs = []
-    for kb in kb_names:
-        all_kbs.append(await kb_mgr.get_kb_by_name(kb))
+    all_kbs = [await kb_mgr.get_kb_by_name(kb) for kb in kb_names]
+
     if check_all_kb(all_kbs):
         logger.debug("所配置的所有知识库全为空，跳过检索过程")
         return
