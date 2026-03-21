@@ -231,11 +231,10 @@ class DiscordPlatformAdapter(Platform):
         )
         message_chain = []
         # 如果机器人被 @,在 message_chain 开头添加 At 组件
-        if self.client and self.client.user:
-            if bot_was_mentioned:
-                message_chain.insert(
-                    0, At(qq=str(self.client.user.id), name=self.client.user.name)
-                )
+        if self.client and self.client.user and bot_was_mentioned:
+            message_chain.insert(
+                0, At(qq=str(self.client.user.id), name=self.client.user.name)
+            )
         if abm.message_str:
             message_chain.append(Plain(text=abm.message_str))
         if message.attachments:
