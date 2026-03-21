@@ -4,7 +4,6 @@ import datetime as dt
 import sqlite3
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 import click
 
@@ -131,7 +130,7 @@ def _read_openclaw_sqlite_entries(db_path: Path) -> list[MemoryEntry]:
 
     conn: sqlite3.Connection | None = None
     try:
-        db_uri = f"file:{quote(str(db_path.resolve()), safe='/:')}?mode=ro"
+        db_uri = f"{db_path.resolve().as_uri()}?mode=ro"
         conn = sqlite3.connect(db_uri, uri=True)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
