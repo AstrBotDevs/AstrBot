@@ -287,18 +287,10 @@ class ResultDecorateStage(Stage):
                         try:
                             # 正则过滤逻辑
                             text_to_read = comp.text
-                            # 找出当前正在使用的 TTS ID
-                            tts_provider_id = self.ctx.astrbot_config.get(
+                            # 从全局配置中获取正则过滤规则
+                            filter_regex = self.ctx.astrbot_config.get(
                                 "provider_tts_settings", {}
-                            ).get("provider_id", "")
-                            filter_regex = ""
-
-                            # 在服务商列表里，找到正在使用的正则配置
-                            for p_cfg in self.ctx.astrbot_config.get("provider", []):
-                                if p_cfg.get("id") == tts_provider_id:
-                                    filter_regex = p_cfg.get("filter_regex", "")
-                                    break
-
+                            ).get("filter_regex", "")
                             # 替换过滤
                             if filter_regex:
                                 try:
