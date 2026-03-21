@@ -362,3 +362,18 @@ def test_json_to_toml_rejects_non_finite_float() -> None:
 
     with pytest.raises(ValueError):
         json_to_toml({"invalid": float("nan")})
+
+
+def test_json_to_toml_preserves_null_sentinel_behavior() -> None:
+    toml_text = json_to_toml(
+        {
+            "nullable": None,
+            "nested": {"inner": None},
+            "list": [None, 1],
+        }
+    )
+
+    assert '"nullable" = "__NULL__"' in toml_text
+    assert '["nested"]' in toml_text
+    assert '"inner" = "__NULL__"' in toml_text
+    assert '"list" = ["__NULL__", 1]' in toml_text

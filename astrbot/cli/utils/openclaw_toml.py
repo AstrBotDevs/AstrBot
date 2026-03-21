@@ -24,9 +24,40 @@ def _format_toml_path(path: list[str]) -> str:
     return ".".join(_toml_format_key(str(part)) for part in path)
 
 
+def _normalize_nulls(obj: Any) -> Any:
+    if obj is None:
+        return NULL_SENTINEL
+    if isinstance(obj, dict):
+        return {key: _normalize_nulls(value) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [_normalize_nulls(value) for value in obj]
+    return obj
+
+
+def _classify_items(
+    obj: dict[str, Any],
+) -> tuple[
+    list[tuple[str, Any]],
+    list[tuple[str, dict[str, Any]]],
+    list[tuple[str, list[dict[str, Any]]]],
+]:
+    scalar_items: list[tuple[str, Any]] = []
+    nested_dicts: list[tuple[str, dict[str, Any]]] = []
+    array_tables: list[tuple[str, list[dict[str, Any]]]] = []
+
+    for key, value in obj.items():
+        key_text = str(key)
+        if isinstance(value, dict):
+            nested_dicts.append((key_text, value))
+        elif isinstance(value, list) and value and all(isinstance(item, dict) for item in value):
+            array_tables.append((key_text, value))
+        else:
+            scalar_items.append((key_text, value))
+
+    return scalar_items, nested_dicts, array_tables
+
+
 def _toml_literal(value: Any) -> str:
-    if value is None:
-        return _toml_quote(NULL_SENTINEL)
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, int):
@@ -57,22 +88,11 @@ def json_to_toml(data: dict[str, Any]) -> str:
       For empty lists we intentionally preserve literal emptiness because the
       element schema is unknown at serialization time.
     """
+    normalized_data = _normalize_nulls(data)
     lines: list[str] = []
 
     def emit_table(obj: dict[str, Any], path: list[str]) -> None:
-        scalar_items: list[tuple[str, Any]] = []
-        nested_dicts: list[tuple[str, dict[str, Any]]] = []
-        array_tables: list[tuple[str, list[dict[str, Any]]]] = []
-
-        for key, value in obj.items():
-            if isinstance(value, dict):
-                nested_dicts.append((str(key), value))
-            elif isinstance(value, list) and value and all(
-                isinstance(item, dict) for item in value
-            ):
-                array_tables.append((str(key), value))
-            else:
-                scalar_items.append((str(key), value))
+        scalar_items, nested_dicts, array_tables = _classify_items(obj)
 
         if path:
             lines.append(f"[{_format_toml_path(path)}]")
@@ -98,7 +118,7 @@ def json_to_toml(data: dict[str, Any]) -> str:
             if t_idx == len(array_tables) - 1 and lines and lines[-1] == "":
                 lines.pop()
 
-    emit_table(data, [])
+    emit_table(normalized_data, [])
     if not lines:
         return ""
     return "\n".join(lines).rstrip() + "\n"

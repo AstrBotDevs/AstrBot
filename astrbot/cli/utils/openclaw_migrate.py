@@ -47,6 +47,21 @@ class MigrationReport:
     wrote_config_toml: bool
 
 
+@dataclass(slots=True)
+class MemoryCollection:
+    entries: list[MemoryEntry]
+    from_sqlite: int
+    from_markdown: int
+
+
+@dataclass(slots=True)
+class MigrationArtifacts:
+    copied_workspace_files: int
+    copied_memory_entries: int
+    wrote_timeline: bool
+    wrote_config_toml: bool
+
+
 def _pick_existing_column(columns: set[str], candidates: tuple[str, ...]) -> str | None:
     for candidate in candidates:
         if candidate in columns:
@@ -419,6 +434,88 @@ def _load_json_or_raise(path: Path) -> dict[str, Any]:
         ) from exc
 
 
+def _collect_memory_entries(workspace_dir: Path) -> MemoryCollection:
+    sqlite_entries = _read_openclaw_sqlite_entries(workspace_dir / "memory" / "brain.db")
+    markdown_entries = _read_openclaw_markdown_entries(workspace_dir)
+    memory_entries = _dedup_entries([*sqlite_entries, *markdown_entries])
+    return MemoryCollection(
+        entries=memory_entries,
+        from_sqlite=len(sqlite_entries),
+        from_markdown=len(markdown_entries),
+    )
+
+
+def _resolve_target_dir(
+    astrbot_root: Path, target_dir: Path | None, dry_run: bool
+) -> Path | None:
+    if target_dir is not None:
+        return target_dir if target_dir.is_absolute() else (astrbot_root / target_dir)
+    if dry_run:
+        return None
+    run_id = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    return astrbot_root / "data" / "migrations" / "openclaw" / f"run-{run_id}"
+
+
+def _write_migration_artifacts(
+    *,
+    workspace_dir: Path,
+    workspace_files: list[Path],
+    resolved_target: Path,
+    source_root: Path,
+    memory_entries: list[MemoryEntry],
+    config_obj: dict[str, Any] | None,
+    config_json_path: Path | None,
+) -> MigrationArtifacts:
+    workspace_target = resolved_target / "workspace"
+    workspace_target.mkdir(parents=True, exist_ok=True)
+
+    copied_workspace_files = 0
+    for src_file in workspace_files:
+        rel_path = src_file.relative_to(workspace_dir)
+        dst_file = workspace_target / rel_path
+        dst_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_file, dst_file)
+        copied_workspace_files += 1
+
+    copied_memory_entries = 0
+    wrote_timeline = False
+    if memory_entries:
+        _write_jsonl(resolved_target / "memory_entries.jsonl", memory_entries)
+        copied_memory_entries = len(memory_entries)
+        _write_timeline(
+            resolved_target / "time_brief_history.md",
+            memory_entries,
+            source_root,
+        )
+        wrote_timeline = True
+
+    wrote_config_toml = False
+    if config_obj is not None:
+        (resolved_target / "config.original.json").write_text(
+            json.dumps(config_obj, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        try:
+            converted_toml = json_to_toml(config_obj)
+        except ValueError as exc:
+            source_hint = str(config_json_path) if config_json_path else "config JSON"
+            raise click.ClickException(
+                f"Failed to convert {source_hint} to TOML: {exc}"
+            ) from exc
+        (resolved_target / "config.migrated.toml").write_text(
+            converted_toml,
+            encoding="utf-8",
+        )
+        wrote_config_toml = True
+
+    return MigrationArtifacts(
+        copied_workspace_files=copied_workspace_files,
+        copied_memory_entries=copied_memory_entries,
+        wrote_timeline=wrote_timeline,
+        wrote_config_toml=wrote_config_toml,
+    )
+
+
 def run_openclaw_migration(
     *,
     source_root: Path,
@@ -435,9 +532,8 @@ def run_openclaw_migration(
         )
 
     workspace_dir = _find_source_workspace(source_root)
-    sqlite_entries = _read_openclaw_sqlite_entries(workspace_dir / "memory" / "brain.db")
-    markdown_entries = _read_openclaw_markdown_entries(workspace_dir)
-    memory_entries = _dedup_entries([*sqlite_entries, *markdown_entries])
+    memory_collection = _collect_memory_entries(workspace_dir)
+    memory_entries = memory_collection.entries
 
     workspace_files = _collect_workspace_files(workspace_dir)
     workspace_total_bytes = _workspace_total_size(workspace_files)
@@ -447,61 +543,25 @@ def run_openclaw_migration(
     if config_json_path is not None:
         config_obj = _load_json_or_raise(config_json_path)
 
-    resolved_target: Path | None = None
-    if target_dir is not None:
-        resolved_target = (
-            target_dir if target_dir.is_absolute() else (astrbot_root / target_dir)
-        )
-    elif not dry_run:
-        run_id = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-        resolved_target = (
-            astrbot_root / "data" / "migrations" / "openclaw" / f"run-{run_id}"
-        )
-
-    copied_workspace_files = 0
-    copied_memory_entries = 0
-    wrote_timeline = False
-    wrote_config_toml = False
+    resolved_target = _resolve_target_dir(astrbot_root, target_dir, dry_run)
+    artifacts = MigrationArtifacts(
+        copied_workspace_files=0,
+        copied_memory_entries=0,
+        wrote_timeline=False,
+        wrote_config_toml=False,
+    )
 
     if not dry_run and resolved_target is not None:
         resolved_target.mkdir(parents=True, exist_ok=True)
-        workspace_target = resolved_target / "workspace"
-        workspace_target.mkdir(parents=True, exist_ok=True)
-
-        for src_file in workspace_files:
-            rel_path = src_file.relative_to(workspace_dir)
-            dst_file = workspace_target / rel_path
-            dst_file.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src_file, dst_file)
-            copied_workspace_files += 1
-
-        if memory_entries:
-            _write_jsonl(resolved_target / "memory_entries.jsonl", memory_entries)
-            copied_memory_entries = len(memory_entries)
-            _write_timeline(
-                resolved_target / "time_brief_history.md",
-                memory_entries,
-                source_root,
-            )
-            wrote_timeline = True
-
-        if config_obj is not None:
-            (resolved_target / "config.original.json").write_text(
-                json.dumps(config_obj, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            try:
-                converted_toml = json_to_toml(config_obj)
-            except ValueError as exc:
-                source_hint = str(config_json_path) if config_json_path else "config JSON"
-                raise click.ClickException(
-                    f"Failed to convert {source_hint} to TOML: {exc}"
-                ) from exc
-            (resolved_target / "config.migrated.toml").write_text(
-                converted_toml,
-                encoding="utf-8",
-            )
-            wrote_config_toml = True
+        artifacts = _write_migration_artifacts(
+            workspace_dir=workspace_dir,
+            workspace_files=workspace_files,
+            resolved_target=resolved_target,
+            source_root=source_root,
+            memory_entries=memory_entries,
+            config_obj=config_obj,
+            config_json_path=config_json_path,
+        )
 
     report = MigrationReport(
         source_root=str(source_root),
@@ -509,15 +569,15 @@ def run_openclaw_migration(
         target_dir=str(resolved_target) if resolved_target else None,
         dry_run=dry_run,
         memory_entries_total=len(memory_entries),
-        memory_entries_from_sqlite=len(sqlite_entries),
-        memory_entries_from_markdown=len(markdown_entries),
+        memory_entries_from_sqlite=memory_collection.from_sqlite,
+        memory_entries_from_markdown=memory_collection.from_markdown,
         workspace_files_total=len(workspace_files),
         workspace_bytes_total=workspace_total_bytes,
         config_found=config_obj is not None,
-        copied_workspace_files=copied_workspace_files,
-        copied_memory_entries=copied_memory_entries,
-        wrote_timeline=wrote_timeline,
-        wrote_config_toml=wrote_config_toml,
+        copied_workspace_files=artifacts.copied_workspace_files,
+        copied_memory_entries=artifacts.copied_memory_entries,
+        wrote_timeline=artifacts.wrote_timeline,
+        wrote_config_toml=artifacts.wrote_config_toml,
     )
 
     if not dry_run and resolved_target is not None:
