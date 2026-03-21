@@ -21,6 +21,7 @@ import anyio
 
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
 
+
 class AstrbotPaths:
     """Astrbot 项目路径管理类"""
 
@@ -29,7 +30,6 @@ class AstrbotPaths:
         from dotenv import load_dotenv
 
         env_candidates = []
-
 
         # 1) current working directory .env
         env_candidates.append(Path.cwd() / ".env")
@@ -73,7 +73,7 @@ class AstrbotPaths:
     @property
     def has_dashboard(self) -> bool:
         """Check if the dashboard is installed"""
-        if _BUNDLED_DIST.is_dir():
+        if self.bundled_dist.is_dir():
             return True
         dashboard_version = self.dashboard_version
         match dashboard_version:
@@ -86,7 +86,7 @@ class AstrbotPaths:
 
     async def async_has_dashboard(self) -> bool:
         """Check if the dashboard is installed (async)"""
-        if _BUNDLED_DIST.is_dir():
+        if self.bundled_dist.is_dir():
             return True
         dashboard_version = await self.async_dashboard_version()
         match dashboard_version:
@@ -106,9 +106,9 @@ class AstrbotPaths:
             return None
 
     @property
-    def bundled_dist(self) -> Path :
+    def bundled_dist(self) -> Path:
         return self.project_root / "dashboard" / "dist"
-    
+
     async def async_dashboard_version(self) -> str | None:
         try:
             # anyio.open_file returns a coroutine that yields an async file object.
