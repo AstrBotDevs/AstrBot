@@ -90,6 +90,10 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
   }
   return classes.length > 0 ? { class: classes.join(' ') } : {};
 };
+
+const canToggle = (cmd: CommandItem): boolean => cmd.supports_toggle !== false;
+const canRename = (cmd: CommandItem): boolean => cmd.supports_rename !== false;
+const canEditPermission = (cmd: CommandItem): boolean => cmd.supports_permission !== false;
 </script>
 
 <template>
@@ -97,7 +101,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
     <v-data-table
       :headers="commandHeaders"
       :items="items"
-      item-key="handler_full_name"
+      item-value="command_key"
       hover
       :row-props="getRowProps"
       :loading="props.loading"
@@ -147,7 +151,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
       </template>
 
       <template v-slot:item.permission="{ item }">
-        <v-menu location="bottom">
+        <v-menu v-if="canEditPermission(item)" location="bottom">
           <template v-slot:activator="{ props }">
             <v-chip
               v-bind="props"
@@ -177,6 +181,14 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
             </v-list-item>
           </v-list>
         </v-menu>
+        <v-chip
+          v-else
+          :color="getPermissionColor(item.permission)"
+          size="small"
+          class="font-weight-medium"
+        >
+          {{ getPermissionLabel(item.permission) }}
+        </v-chip>
       </template>
 
       <template v-slot:item.enabled="{ item }">
@@ -198,25 +210,39 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
               icon
               size="small"
               color="success"
+              :disabled="!canToggle(item)"
               @click="emit('toggle-command', item)"
             >
               <v-icon size="22">mdi-play</v-icon>
-              <v-tooltip activator="parent" location="top">{{ tm('tooltips.enable') }}</v-tooltip>
+              <v-tooltip activator="parent" location="top">
+                {{ canToggle(item) ? tm('tooltips.enable') : tm('tooltips.sdkReadonly') }}
+              </v-tooltip>
             </v-btn>
             <v-btn
               v-else
               icon
               size="small"
               color="error"
+              :disabled="!canToggle(item)"
               @click="emit('toggle-command', item)"
             >
               <v-icon size="22">mdi-pause</v-icon>
-              <v-tooltip activator="parent" location="top">{{ tm('tooltips.disable') }}</v-tooltip>
+              <v-tooltip activator="parent" location="top">
+                {{ canToggle(item) ? tm('tooltips.disable') : tm('tooltips.sdkReadonly') }}
+              </v-tooltip>
             </v-btn>
 
-            <v-btn icon size="small" color="warning" @click="emit('rename', item)">
+            <v-btn
+              icon
+              size="small"
+              color="warning"
+              :disabled="!canRename(item)"
+              @click="emit('rename', item)"
+            >
               <v-icon size="22">mdi-pencil</v-icon>
-              <v-tooltip activator="parent" location="top">{{ tm('tooltips.rename') }}</v-tooltip>
+              <v-tooltip activator="parent" location="top">
+                {{ canRename(item) ? tm('tooltips.rename') : tm('tooltips.sdkReadonly') }}
+              </v-tooltip>
             </v-btn>
 
             <v-btn icon size="small" @click="emit('view-details', item)">

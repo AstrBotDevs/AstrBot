@@ -1,4 +1,4 @@
-# ruff: noqa: E402
+# ruff: noqa: E402, I001
 from __future__ import annotations
 
 import asyncio
@@ -598,7 +598,7 @@ async def test_context_p0_7_register_commands_and_platform_facade() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_context_p0_7_register_commands_requires_startup_event() -> None:
+async def test_context_register_commands_requires_startup_event() -> None:
     peer = _DummyPeer()
     ctx = Context(peer=peer, plugin_id="sdk-demo")
 
@@ -616,6 +616,26 @@ async def test_context_p0_7_register_commands_requires_startup_event() -> None:
             "sdk-demo:demo.handler",
             ignore_prefix=True,
         )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_context_register_commands_rejects_bool_priority() -> None:
+    peer = _DummyPeer()
+    ctx = Context(
+        peer=peer,
+        plugin_id="sdk-demo",
+        source_event_payload={"event_type": "astrbot_loaded"},
+    )
+
+    with pytest.raises(AstrBotError, match="priority must be an integer"):
+        await ctx.register_commands(
+            "hello",
+            "sdk-demo:demo.handler",
+            priority=True,
+        )
+
+    assert peer.command_registrations == []
 
 
 @pytest.mark.unit
@@ -649,6 +669,7 @@ async def test_context_register_task_logs_background_exceptions() -> None:
     assert "background task failed" in str(msg).lower()
     assert plugin_id == "sdk-demo"
     assert desc == "probe-task"
+    assert logger.debug_calls == []
 
 
 @pytest.mark.unit

@@ -135,6 +135,7 @@ class _RequestOverlayState:
     result_object: MessageEventResult | None = None
     result_is_set: bool = False
     handler_whitelist: set[str] | None = None
+    request_scope_ids: set[str] = field(default_factory=set)
     closed: bool = False
     cleanup_task: asyncio.Task[None] | None = None
 
@@ -769,8 +770,11 @@ class SdkPluginBridge:
                     args=match.args,
                 )
             )
-            self._request_id_to_token[request_id] = dispatch_token
-            self._request_plugin_ids[request_id] = record.plugin_id
+            self._track_request_scope(
+                dispatch_token=dispatch_token,
+                request_id=request_id,
+                plugin_id=record.plugin_id,
+            )
             self._plugin_requests.setdefault(record.plugin_id, {})[request_id] = (
                 _InFlightRequest(
                     request_id=request_id,
@@ -797,8 +801,6 @@ class SdkPluginBridge:
                     request_id,
                     None,
                 )
-                self._request_id_to_token.pop(request_id, None)
-                self._request_plugin_ids.pop(request_id, None)
 
             if inflight is not None and inflight.logical_cancelled:
                 continue
@@ -908,14 +910,31 @@ class SdkPluginBridge:
         self._request_overlays[dispatch_token] = overlay
         return overlay
 
+    def _track_request_scope(
+        self,
+        *,
+        dispatch_token: str,
+        request_id: str,
+        plugin_id: str,
+    ) -> None:
+        # request-scoped system.event.* calls may outlive the original handler RPC
+        # when plugin code moves follow-up work into background tasks.
+        self._request_id_to_token[request_id] = dispatch_token
+        self._request_plugin_ids[request_id] = plugin_id
+        overlay = self._request_overlays.get(dispatch_token)
+        if overlay is not None:
+            overlay.request_scope_ids.add(request_id)
+
     def _close_request_overlay(self, dispatch_token: str) -> None:
         overlay = self._request_overlays.pop(dispatch_token, None)
-        if overlay is None:
-            return
-        overlay.closed = True
-        if overlay.cleanup_task is not None:
-            overlay.cleanup_task.cancel()
-        request_context = self._request_contexts.get(dispatch_token)
+        if overlay is not None:
+            overlay.closed = True
+            if overlay.cleanup_task is not None:
+                overlay.cleanup_task.cancel()
+            for request_id in overlay.request_scope_ids:
+                self._request_id_to_token.pop(request_id, None)
+                self._request_plugin_ids.pop(request_id, None)
+        request_context = self._request_contexts.pop(dispatch_token, None)
         if request_context is not None:
             request_context.cancelled = True
 
@@ -924,11 +943,6 @@ class SdkPluginBridge:
         if not dispatch_token:
             return
         self._close_request_overlay(dispatch_token)
-        self._request_contexts.pop(dispatch_token, None)
-        request_id = getattr(event, "_sdk_last_request_id", None)
-        if request_id:
-            self._request_id_to_token.pop(str(request_id), None)
-            self._request_plugin_ids.pop(str(request_id), None)
 
     def get_request_overlay_by_token(
         self, dispatch_token: str
@@ -1028,9 +1042,7 @@ class SdkPluginBridge:
         overlay.handler_whitelist = None if plugin_names is None else set(plugin_names)
         return True
 
-    def get_handler_whitelist_for_request(
-        self, request_id: str
-    ) -> set[str] | None | object:
+    def get_handler_whitelist_for_request(self, request_id: str) -> set[str] | None:
         overlay = self.get_request_overlay_by_request_id(request_id)
         if overlay is None:
             return None
@@ -1566,8 +1578,11 @@ class SdkPluginBridge:
             request_context.request_id = request_id
             request_context.dispatch_state.event = event
             request_context.cancelled = False
-            self._request_id_to_token[request_id] = dispatch_token
-            self._request_plugin_ids[request_id] = record.plugin_id
+            self._track_request_scope(
+                dispatch_token=dispatch_token,
+                request_id=request_id,
+                plugin_id=record.plugin_id,
+            )
             event_payload = EventConverter.core_to_sdk(
                 event,
                 dispatch_token=dispatch_token,
@@ -1640,9 +1655,6 @@ class SdkPluginBridge:
                     descriptor.id,
                     exc,
                 )
-            finally:
-                self._request_id_to_token.pop(request_id, None)
-                self._request_plugin_ids.pop(request_id, None)
 
     def _match_event_handlers(
         self,
@@ -1820,6 +1832,213 @@ class SdkPluginBridge:
                         descriptor=handler.descriptor,
                     )
         return None
+
+    def list_dashboard_commands(self) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for record in sorted(self._records.values(), key=lambda item: item.load_order):
+            items.extend(self._build_dashboard_command_items(record))
+        items.sort(key=lambda item: str(item.get("effective_command", "")).lower())
+        return items
+
+    def list_dashboard_tools(self) -> list[dict[str, Any]]:
+        tools: list[dict[str, Any]] = []
+        for record in sorted(self._records.values(), key=lambda item: item.load_order):
+            display_name = str(
+                record.plugin.manifest_data.get("display_name") or record.plugin_id
+            )
+            plugin_enabled = record.state not in {
+                SDK_STATE_DISABLED,
+                SDK_STATE_FAILED,
+                SDK_STATE_RELOADING,
+            }
+            for spec in sorted(record.llm_tools.values(), key=lambda item: item.name):
+                tools.append(
+                    {
+                        "tool_key": (f"sdk:{record.plugin_id}:{spec.name}"),
+                        "name": spec.name,
+                        "description": spec.description,
+                        "parameters": dict(spec.parameters_schema),
+                        "active": bool(spec.active) and plugin_enabled,
+                        "origin": "sdk_plugin",
+                        "origin_name": display_name,
+                        "runtime_kind": "sdk",
+                        "plugin_id": record.plugin_id,
+                    }
+                )
+        return tools
+
+    def _build_dashboard_command_items(
+        self,
+        record: SdkPluginRecord,
+    ) -> list[dict[str, Any]]:
+        flat_commands: list[dict[str, Any]] = []
+        for handler in record.handlers:
+            entry = self._build_dashboard_command_entry(
+                record=record,
+                descriptor=handler.descriptor,
+            )
+            if entry is not None:
+                flat_commands.append(entry)
+        for route in getattr(record, "dynamic_command_routes", []):
+            descriptor = self._build_dynamic_route_descriptor(record, route)
+            if descriptor is None:
+                continue
+            entry = self._build_dashboard_command_entry(
+                record=record,
+                descriptor=descriptor,
+                route=route,
+            )
+            if entry is not None:
+                flat_commands.append(entry)
+
+        groups: dict[str, dict[str, Any]] = {}
+        root_items: list[dict[str, Any]] = []
+        for entry in flat_commands:
+            parent_signature = str(entry.get("parent_signature", "")).strip()
+            if not parent_signature:
+                root_items.append(entry)
+                continue
+            group_key = self._dashboard_group_key(record.plugin_id, parent_signature)
+            group = groups.get(group_key)
+            if group is None:
+                group = {
+                    "command_key": group_key,
+                    "handler_full_name": group_key,
+                    "handler_name": parent_signature.split()[-1] or record.plugin_id,
+                    "plugin": record.plugin_id,
+                    "plugin_display_name": str(
+                        record.plugin.manifest_data.get("display_name")
+                        or record.plugin_id
+                    ),
+                    "module_path": str(record.plugin.plugin_dir),
+                    "description": entry.pop("_group_help", "") or "",
+                    "type": "group",
+                    "parent_signature": "",
+                    "parent_group_handler": "",
+                    "original_command": parent_signature,
+                    "current_fragment": parent_signature.split()[-1]
+                    if parent_signature
+                    else "",
+                    "effective_command": parent_signature,
+                    "aliases": [],
+                    "permission": "everyone",
+                    "enabled": bool(entry.get("enabled", False)),
+                    "is_group": True,
+                    "has_conflict": False,
+                    "reserved": False,
+                    "runtime_kind": "sdk",
+                    "supports_toggle": False,
+                    "supports_rename": False,
+                    "supports_permission": False,
+                    "sub_commands": [],
+                }
+                groups[group_key] = group
+                root_items.append(group)
+            elif not group.get("description") and entry.get("_group_help"):
+                group["description"] = entry["_group_help"]
+
+            if entry.get("permission") == "admin":
+                group["permission"] = "admin"
+            group["enabled"] = bool(group["enabled"]) or bool(
+                entry.get("enabled", False)
+            )
+            entry["parent_group_handler"] = group["handler_full_name"]
+            entry.pop("_group_help", None)
+            group["sub_commands"].append(entry)
+
+        for group in groups.values():
+            group["sub_commands"].sort(
+                key=lambda item: str(item.get("effective_command", "")).lower()
+            )
+        for item in root_items:
+            item.pop("_group_help", None)
+        return root_items
+
+    def _build_dashboard_command_entry(
+        self,
+        *,
+        record: SdkPluginRecord,
+        descriptor: HandlerDescriptor,
+        route: SdkDynamicCommandRoute | None = None,
+    ) -> dict[str, Any] | None:
+        trigger = descriptor.trigger
+        if not isinstance(trigger, CommandTrigger):
+            return None
+
+        route_meta = descriptor.command_route
+        effective_command = (
+            str(route_meta.display_command).strip()
+            if route_meta is not None and str(route_meta.display_command).strip()
+            else str(trigger.command).strip()
+        )
+        parent_signature = ""
+        group_help = ""
+        if route_meta is not None and route_meta.group_path:
+            parent_signature = " ".join(
+                str(item).strip() for item in route_meta.group_path if str(item).strip()
+            ).strip()
+            group_help = str(route_meta.group_help or "").strip()
+
+        current_fragment = effective_command
+        if parent_signature and effective_command.startswith(f"{parent_signature} "):
+            current_fragment = effective_command[len(parent_signature) + 1 :].strip()
+
+        enabled = record.state not in {
+            SDK_STATE_DISABLED,
+            SDK_STATE_FAILED,
+            SDK_STATE_RELOADING,
+        }
+        return {
+            "command_key": self._dashboard_command_key(
+                plugin_id=record.plugin_id,
+                handler_full_name=descriptor.id,
+                route=route,
+            ),
+            "handler_full_name": descriptor.id,
+            "handler_name": descriptor.id.rsplit(".", 1)[-1],
+            "plugin": record.plugin_id,
+            "plugin_display_name": str(
+                record.plugin.manifest_data.get("display_name") or record.plugin_id
+            ),
+            "module_path": descriptor.id.rsplit(".", 1)[0],
+            "description": self._descriptor_description(descriptor) or "",
+            "type": "sub_command" if parent_signature else "command",
+            "parent_signature": parent_signature,
+            "parent_group_handler": "",
+            "original_command": effective_command,
+            "current_fragment": current_fragment,
+            "effective_command": effective_command,
+            "aliases": list(trigger.aliases),
+            "permission": (
+                "admin" if descriptor.permissions.require_admin else "everyone"
+            ),
+            "enabled": enabled,
+            "is_group": False,
+            "has_conflict": False,
+            "reserved": False,
+            "runtime_kind": "sdk",
+            "supports_toggle": False,
+            "supports_rename": False,
+            "supports_permission": False,
+            "sub_commands": [],
+            "_group_help": group_help,
+        }
+
+    @staticmethod
+    def _dashboard_command_key(
+        *,
+        plugin_id: str,
+        handler_full_name: str,
+        route: SdkDynamicCommandRoute | None,
+    ) -> str:
+        if route is None:
+            return f"sdk:command:{plugin_id}:{handler_full_name}"
+        route_kind = "regex" if route.use_regex else "command"
+        return f"sdk:route:{plugin_id}:{handler_full_name}:{route_kind}:{route.command_name}"
+
+    @staticmethod
+    def _dashboard_group_key(plugin_id: str, parent_signature: str) -> str:
+        return f"sdk:group:{plugin_id}:{parent_signature}"
 
     def _build_dynamic_route_descriptor(
         self,
@@ -2546,8 +2765,11 @@ class SdkPluginBridge:
                 plugin_id=record.plugin_id,
                 request_id=request_id,
             )
-            self._request_id_to_token[request_id] = dispatch_token
-            self._request_plugin_ids[request_id] = record.plugin_id
+            self._track_request_scope(
+                dispatch_token=dispatch_token,
+                request_id=request_id,
+                plugin_id=record.plugin_id,
+            )
             try:
                 output = await record.session.invoke_handler(
                     "__sdk_session_waiter__",
@@ -2562,9 +2784,6 @@ class SdkPluginBridge:
                     exc,
                 )
                 output = {}
-            finally:
-                self._request_id_to_token.pop(request_id, None)
-                self._request_plugin_ids.pop(request_id, None)
             handler_result = EventConverter.extract_handler_result(
                 output if isinstance(output, dict) else {}
             )

@@ -22,6 +22,13 @@ from ._host import CapabilityMixinHost
 
 
 class SystemCapabilityMixin(CapabilityMixinHost):
+    @staticmethod
+    def _overlay_request_id(request_id: str, payload: dict[str, Any]) -> str:
+        scope_request_id = payload.get("_request_scope_id")
+        if isinstance(scope_request_id, str) and scope_request_id.strip():
+            return scope_request_id
+        return request_id
+
     def _register_system_capabilities(self) -> None:
         self.register(
             self._builtin_descriptor("system.get_data_dir", "Get plugin data dir"),
@@ -418,12 +425,15 @@ class SystemCapabilityMixin(CapabilityMixinHost):
     async def _system_event_llm_get_state(
         self,
         request_id: str,
-        _payload: dict[str, Any],
+        payload: dict[str, Any],
         _token,
     ) -> dict[str, Any]:
-        overlay = self._plugin_bridge.get_request_overlay_by_request_id(request_id)
+        overlay_request_id = self._overlay_request_id(request_id, payload)
+        overlay = self._plugin_bridge.get_request_overlay_by_request_id(
+            overlay_request_id
+        )
         should_call_llm = self._plugin_bridge.get_should_call_llm_for_request(
-            request_id
+            overlay_request_id
         )
         return {
             "should_call_llm": bool(should_call_llm),
@@ -435,20 +445,28 @@ class SystemCapabilityMixin(CapabilityMixinHost):
     async def _system_event_llm_request(
         self,
         request_id: str,
-        _payload: dict[str, Any],
+        payload: dict[str, Any],
         _token,
     ) -> dict[str, Any]:
-        self._plugin_bridge.request_llm_for_request(request_id)
-        return await self._system_event_llm_get_state(request_id, {}, _token)
+        overlay_request_id = self._overlay_request_id(request_id, payload)
+        self._plugin_bridge.request_llm_for_request(overlay_request_id)
+        return await self._system_event_llm_get_state(
+            request_id,
+            {"_request_scope_id": overlay_request_id},
+            _token,
+        )
 
     async def _system_event_result_get(
         self,
         request_id: str,
-        _payload: dict[str, Any],
+        payload: dict[str, Any],
         _token,
     ) -> dict[str, Any]:
+        overlay_request_id = self._overlay_request_id(request_id, payload)
         return {
-            "result": self._plugin_bridge.get_result_payload_for_request(request_id)
+            "result": self._plugin_bridge.get_result_payload_for_request(
+                overlay_request_id
+            )
         }
 
     async def _system_event_result_set(
@@ -462,28 +480,38 @@ class SystemCapabilityMixin(CapabilityMixinHost):
             raise AstrBotError.invalid_input(
                 "system.event.result.set requires an object result payload"
             )
-        if not self._plugin_bridge.set_result_for_request(request_id, result_payload):
+        overlay_request_id = self._overlay_request_id(request_id, payload)
+        if not self._plugin_bridge.set_result_for_request(
+            overlay_request_id,
+            result_payload,
+        ):
             raise AstrBotError.cancelled("The SDK request overlay has been closed")
         return {
-            "result": self._plugin_bridge.get_result_payload_for_request(request_id)
+            "result": self._plugin_bridge.get_result_payload_for_request(
+                overlay_request_id
+            )
         }
 
     async def _system_event_result_clear(
         self,
         request_id: str,
-        _payload: dict[str, Any],
+        payload: dict[str, Any],
         _token,
     ) -> dict[str, Any]:
-        self._plugin_bridge.clear_result_for_request(request_id)
+        overlay_request_id = self._overlay_request_id(request_id, payload)
+        self._plugin_bridge.clear_result_for_request(overlay_request_id)
         return {}
 
     async def _system_event_handler_whitelist_get(
         self,
         request_id: str,
-        _payload: dict[str, Any],
+        payload: dict[str, Any],
         _token,
     ) -> dict[str, Any]:
-        plugin_names = self._plugin_bridge.get_handler_whitelist_for_request(request_id)
+        overlay_request_id = self._overlay_request_id(request_id, payload)
+        plugin_names = self._plugin_bridge.get_handler_whitelist_for_request(
+            overlay_request_id
+        )
         if plugin_names is None:
             return {"plugin_names": None}
         return {"plugin_names": sorted(plugin_names)}
@@ -506,11 +534,17 @@ class SystemCapabilityMixin(CapabilityMixinHost):
             raise AstrBotError.invalid_input(
                 "system.event.handler_whitelist.set requires a string array or null"
             )
+        overlay_request_id = self._overlay_request_id(request_id, payload)
         if not self._plugin_bridge.set_handler_whitelist_for_request(
-            request_id, plugin_names
+            overlay_request_id,
+            plugin_names,
         ):
             raise AstrBotError.cancelled("The SDK request overlay has been closed")
-        return await self._system_event_handler_whitelist_get(request_id, {}, _token)
+        return await self._system_event_handler_whitelist_get(
+            request_id,
+            {"_request_scope_id": overlay_request_id},
+            _token,
+        )
 
     async def _registry_get_handlers_by_event_type(
         self,

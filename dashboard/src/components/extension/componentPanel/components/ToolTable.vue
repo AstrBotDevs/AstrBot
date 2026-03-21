@@ -32,7 +32,7 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
     <v-data-table
       :headers="toolHeaders"
       :items="items"
-      item-value="name"
+      item-value="tool_key"
       hover
       show-expand
       class="tool-table"

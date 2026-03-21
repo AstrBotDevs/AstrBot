@@ -34,6 +34,7 @@ export function useCommandActions(
   ) => {
     try {
       const res = await axios.post('/api/commands/toggle', {
+        command_key: cmd.command_key,
         handler_full_name: cmd.handler_full_name,
         enabled: !cmd.enabled
       });
@@ -67,6 +68,7 @@ export function useCommandActions(
     renameDialog.loading = true;
     try {
       const res = await axios.post('/api/commands/rename', {
+        command_key: renameDialog.command.command_key,
         handler_full_name: renameDialog.command.handler_full_name,
         new_name: renameDialog.newName.trim(),
         aliases: renameDialog.aliases.filter(a => a.trim())
@@ -171,6 +173,7 @@ export function useCommandActions(
   ) => {
     try {
       const res = await axios.post('/api/commands/permission', {
+        command_key: cmd.command_key,
         handler_full_name: cmd.handler_full_name,
         permission: permission
       });

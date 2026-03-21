@@ -5,6 +5,7 @@ import sys
 from types import SimpleNamespace
 
 import pytest
+from astrbot_sdk.llm.entities import LLMToolSpec
 from astrbot_sdk.protocol.descriptors import (
     CommandRouteSpec,
     CommandTrigger,
@@ -265,3 +266,86 @@ def test_sdk_bridge_dashboard_handler_items_use_real_descriptions_and_fallbacks(
     assert schedule_item["desc"] == "无描述"
     assert schedule_item["type"] == "定时"
     assert schedule_item["cmd"] == "60"
+
+
+@pytest.mark.unit
+def test_sdk_bridge_lists_dashboard_commands_and_tools(tmp_path) -> None:
+    bridge = SdkPluginBridge(_BridgeStarContext())
+    bridge._records = {  # noqa: SLF001
+        "sdk-demo": SimpleNamespace(
+            plugin=SimpleNamespace(
+                name="sdk-demo",
+                plugin_dir=tmp_path / "sdk-demo",
+                manifest_data={"display_name": "SDK Demo"},
+            ),
+            plugin_id="sdk-demo",
+            load_order=0,
+            state="enabled",
+            handlers=[
+                SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.chat",
+                        trigger=CommandTrigger(
+                            command="gf chat",
+                            description="Chat with the SDK plugin",
+                            aliases=["girl chat"],
+                        ),
+                        command_route=CommandRouteSpec(
+                            group_path=["gf"],
+                            display_command="gf chat",
+                            group_help="SDK group help",
+                        ),
+                    ),
+                    declaration_order=0,
+                ),
+                SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.ping",
+                        trigger=CommandTrigger(command="ping"),
+                    ),
+                    declaration_order=1,
+                ),
+            ],
+            llm_tools={
+                "memory.search": LLMToolSpec.create(
+                    name="memory.search",
+                    description="Search SDK memory",
+                    parameters_schema={"type": "object", "properties": {}},
+                    active=True,
+                )
+            },
+            dynamic_command_routes=[],
+            session=None,
+        )
+    }
+
+    commands = bridge.list_dashboard_commands()
+    tools = bridge.list_dashboard_tools()
+
+    group = next(item for item in commands if item["type"] == "group")
+    assert group["command_key"] == "sdk:group:sdk-demo:gf"
+    assert group["effective_command"] == "gf"
+    assert group["description"] == "SDK group help"
+    assert group["sub_commands"][0]["effective_command"] == "gf chat"
+    assert group["sub_commands"][0]["aliases"] == ["girl chat"]
+
+    root_command = next(
+        item for item in commands if item["effective_command"] == "ping"
+    )
+    assert root_command["command_key"] == "sdk:command:sdk-demo:sdk-demo:main.ping"
+    assert root_command["runtime_kind"] == "sdk"
+    assert root_command["supports_toggle"] is False
+
+    assert tools == [
+        {
+            "tool_key": "sdk:sdk-demo:memory.search",
+            "name": "memory.search",
+            "description": "Search SDK memory",
+            "parameters": {"type": "object", "properties": {}},
+            "active": True,
+            "origin": "sdk_plugin",
+            "origin_name": "SDK Demo",
+            "runtime_kind": "sdk",
+            "plugin_id": "sdk-demo",
+        }
+    ]

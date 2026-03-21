@@ -504,6 +504,23 @@ class _SystemEventSession:
         return {}
 
 
+class _RequestScopeSession:
+    def __init__(self) -> None:
+        self.request_ids: list[str] = []
+
+    async def invoke_handler(
+        self,
+        handler_id: str,
+        event_payload: dict[str, object],
+        *,
+        request_id: str,
+        args: dict[str, object],
+    ) -> dict[str, object]:
+        del handler_id, event_payload, args
+        self.request_ids.append(request_id)
+        return {}
+
+
 class _CaptureSystemBridge:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
@@ -659,6 +676,84 @@ def test_sdk_request_overlay_controls_llm_result_and_whitelist() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_core_bridge_keeps_request_scope_after_event_hook_returns() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    session = _RequestScopeSession()
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-demo",
+            load_order=0,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.observe",
+                        trigger=EventTrigger(event_type="after_message_sent"),
+                    ),
+                    declaration_order=0,
+                )
+            ],
+            session=session,
+        )
+    }
+
+    event = _TypedHookFakeEvent()
+    bridge._request_overlays["dispatch-typed"] = bridge._ensure_request_overlay(
+        "dispatch-typed",
+        should_call_llm=False,
+    )
+
+    await bridge.dispatch_message_event(
+        "after_message_sent",
+        event,
+        {"message_outline": "reply text"},
+    )
+
+    parent_request_id = session.request_ids[0]
+
+    llm_state = await bridge.capability_bridge.execute(
+        "system.event.llm.request",
+        {"_request_scope_id": parent_request_id},
+        stream=False,
+        cancel_token=None,
+        request_id="child-llm-request",
+    )
+    assert llm_state == {"should_call_llm": True, "requested_llm": True}
+
+    result_payload = {
+        "type": "chain",
+        "chain": [{"type": "text", "data": {"text": "reply text"}}],
+    }
+    set_result = await bridge.capability_bridge.execute(
+        "system.event.result.set",
+        {
+            "_request_scope_id": parent_request_id,
+            "result": result_payload,
+        },
+        stream=False,
+        cancel_token=None,
+        request_id="child-result-set",
+    )
+    assert set_result == {"result": result_payload}
+
+    whitelist = await bridge.capability_bridge.execute(
+        "system.event.handler_whitelist.set",
+        {
+            "_request_scope_id": parent_request_id,
+            "plugin_names": ["sdk-demo"],
+        },
+        stream=False,
+        cancel_token=None,
+        request_id="child-whitelist-set",
+    )
+    assert whitelist == {"plugin_names": ["sdk-demo"]}
+
+    bridge.close_request_overlay_for_event(event)
+    assert bridge.get_request_overlay_by_request_id(parent_request_id) is None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_sdk_bridge_dispatch_message_event_round_trips_typed_payloads() -> None:
     bridge = SdkPluginBridge(_OverlayFakeStarContext())
     session = _TypedHookSession()
@@ -750,7 +845,9 @@ async def test_sdk_bridge_persists_request_scoped_extras_and_sent_payloads() -> 
         should_call_llm=True,
     )
 
-    await bridge.dispatch_message_event("llm_response", event, {"completion_text": "reply text"})
+    await bridge.dispatch_message_event(
+        "llm_response", event, {"completion_text": "reply text"}
+    )
     await bridge.dispatch_message_event(
         "after_message_sent",
         event,

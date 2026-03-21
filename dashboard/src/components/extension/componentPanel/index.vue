@@ -106,8 +106,11 @@ const handleToggleTool = async (tool: ToolItem) => {
   tool.active = !tool.active;
   try {
     const res = await axios.post('/api/tools/toggle-tool', {
+      tool_key: tool.tool_key,
       name: tool.name,
-      activate: tool.active
+      activate: tool.active,
+      runtime_kind: tool.runtime_kind,
+      plugin_id: tool.plugin_id
     });
     if (res.data.status === 'ok') {
       toast(res.data.message || tmTool('messages.toggleToolSuccess'));
