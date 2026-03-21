@@ -3,6 +3,7 @@ from astrbot.api import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
+from astrbot.core.folder_resource_manager import FolderResourceManager
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.sentinels import NOT_GIVEN
 
@@ -31,6 +32,19 @@ class PersonaManager:
         self.personas_v3: list[Personality] = []
         self.selected_default_persona_v3: Personality | None = None
         self.persona_v3_config: list[dict] = []
+        self.folder_manager = FolderResourceManager[PersonaFolder, Persona](
+            create_folder=self.db.insert_persona_folder,
+            get_folder=self.db.get_persona_folder_by_id,
+            get_folders=self.db.get_persona_folders,
+            get_all_folders=self.db.get_all_persona_folders,
+            update_folder=self.db.update_persona_folder,
+            delete_folder=self.db.delete_persona_folder,
+            get_items_by_folder=self.db.get_personas_by_folder,
+            move_item_to_folder=self.db.move_persona_to_folder,
+            batch_update_sort_order=self.db.batch_update_sort_order,
+            on_item_moved=self._sync_persona_cache_after_move,
+            on_sort_order_updated=self._refresh_persona_cache_after_sort_update,
+        )
 
     async def initialize(self) -> None:
         self.personas = await self.get_all_personas()
@@ -181,7 +195,7 @@ class PersonaManager:
         Args:
             folder_id: 文件夹 ID，None 表示根目录
         """
-        return await self.db.get_personas_by_folder(folder_id)
+        return await self.folder_manager.get_items_by_folder(folder_id)
 
     async def move_persona_to_folder(
         self, persona_id: str, folder_id: str | None
@@ -192,13 +206,7 @@ class PersonaManager:
             persona_id: Persona ID
             folder_id: 目标文件夹 ID，None 表示移动到根目录
         """
-        persona = await self.db.move_persona_to_folder(persona_id, folder_id)
-        if persona:
-            for i, p in enumerate(self.personas):
-                if p.persona_id == persona_id:
-                    self.personas[i] = persona
-                    break
-        return persona
+        return await self.folder_manager.move_item_to_folder(persona_id, folder_id)
 
     # ====
     # Persona Folder Management
@@ -212,7 +220,7 @@ class PersonaManager:
         sort_order: int = 0,
     ) -> PersonaFolder:
         """创建新的文件夹"""
-        return await self.db.insert_persona_folder(
+        return await self.folder_manager.create_folder(
             name=name,
             parent_id=parent_id,
             description=description,
@@ -221,7 +229,7 @@ class PersonaManager:
 
     async def get_folder(self, folder_id: str) -> PersonaFolder | None:
         """获取指定文件夹"""
-        return await self.db.get_persona_folder_by_id(folder_id)
+        return await self.folder_manager.get_folder(folder_id)
 
     async def get_folders(self, parent_id: str | None = None) -> list[PersonaFolder]:
         """获取文件夹列表
@@ -229,11 +237,11 @@ class PersonaManager:
         Args:
             parent_id: 父文件夹 ID，None 表示获取根目录下的文件夹
         """
-        return await self.db.get_persona_folders(parent_id)
+        return await self.folder_manager.get_folders(parent_id)
 
     async def get_all_folders(self) -> list[PersonaFolder]:
         """获取所有文件夹"""
-        return await self.db.get_all_persona_folders()
+        return await self.folder_manager.get_all_folders()
 
     async def update_folder(
         self,
@@ -244,7 +252,7 @@ class PersonaManager:
         sort_order: int | None = None,
     ) -> PersonaFolder | None:
         """更新文件夹信息"""
-        return await self.db.update_persona_folder(
+        return await self.folder_manager.update_folder(
             folder_id=folder_id,
             name=name,
             parent_id=parent_id,
@@ -257,7 +265,7 @@ class PersonaManager:
 
         Note: 文件夹内的 personas 会被移动到根目录
         """
-        await self.db.delete_persona_folder(folder_id)
+        await self.folder_manager.delete_folder(folder_id)
 
     async def batch_update_sort_order(self, items: list[dict]) -> None:
         """批量更新 personas 和/或 folders 的排序顺序
@@ -268,7 +276,7 @@ class PersonaManager:
                 - type: "persona" 或 "folder"
                 - sort_order: 新的排序顺序值
         """
-        await self.db.batch_update_sort_order(items)
+        await self.folder_manager.batch_update_sort_order(items)
         # 刷新缓存
         self.personas = await self.get_all_personas()
         self.get_v3_persona_data()
@@ -279,38 +287,17 @@ class PersonaManager:
         Returns:
             树形结构的文件夹列表，每个文件夹包含 children 子列表
         """
-        all_folders = await self.get_all_folders()
-        folder_map: dict[str, dict] = {}
+        return await self.folder_manager.get_folder_tree()
 
-        # 创建文件夹字典
-        for folder in all_folders:
-            folder_map[folder.folder_id] = {
-                "folder_id": folder.folder_id,
-                "name": folder.name,
-                "parent_id": folder.parent_id,
-                "description": folder.description,
-                "sort_order": folder.sort_order,
-                "children": [],
-            }
+    async def _sync_persona_cache_after_move(self, persona: Persona) -> None:
+        for i, cached_persona in enumerate(self.personas):
+            if cached_persona.persona_id == persona.persona_id:
+                self.personas[i] = persona
+                break
 
-        # 构建树形结构
-        root_folders = []
-        for folder_id, folder_data in folder_map.items():
-            parent_id = folder_data["parent_id"]
-            if parent_id is None:
-                root_folders.append(folder_data)
-            elif parent_id in folder_map:
-                folder_map[parent_id]["children"].append(folder_data)
-
-        # 递归排序
-        def sort_folders(folders: list[dict]) -> list[dict]:
-            folders.sort(key=lambda f: (f["sort_order"], f["name"]))
-            for folder in folders:
-                if folder["children"]:
-                    folder["children"] = sort_folders(folder["children"])
-            return folders
-
-        return sort_folders(root_folders)
+    async def _refresh_persona_cache_after_sort_update(self) -> None:
+        self.personas = await self.get_all_personas()
+        self.get_v3_persona_data()
 
     async def create_persona(
         self,
