@@ -135,9 +135,10 @@ def _read_openclaw_sqlite_entries(db_path: Path) -> list[MemoryEntry]:
     if not db_path.exists():
         return []
 
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
+    conn: sqlite3.Connection | None = None
     try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         table_exists = cursor.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='memories' LIMIT 1"
@@ -178,8 +179,7 @@ def _read_openclaw_sqlite_entries(db_path: Path) -> list[MemoryEntry]:
                 MemoryEntry(
                     key=_normalize_key(row["__key__"], idx),
                     content=content,
-                    category=str(row["__category__"] or "core").strip().lower()
-                    or "core",
+                    category=str(row["__category__"] or "core").strip().lower() or "core",
                     timestamp=_normalize_timestamp(row["__timestamp__"]),
                     source=f"sqlite:{db_path}",
                     order=idx,
@@ -187,8 +187,13 @@ def _read_openclaw_sqlite_entries(db_path: Path) -> list[MemoryEntry]:
             )
 
         return entries
+    except sqlite3.Error as exc:
+        raise click.ClickException(
+            f"Failed to read OpenClaw sqlite at {db_path}: {exc}"
+        ) from exc
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
 
 def _parse_markdown_file(

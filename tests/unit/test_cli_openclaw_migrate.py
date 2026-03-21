@@ -261,6 +261,39 @@ def test_run_openclaw_migration_invalid_config_json_raises_click_exception(
     assert "Failed to parse OpenClaw config JSON" in str(exc_info.value)
 
 
+def test_run_openclaw_migration_invalid_sqlite_raises_click_exception(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / ".openclaw"
+    source_root.mkdir(parents=True)
+    workspace = source_root / "workspace"
+    (workspace / "memory").mkdir(parents=True, exist_ok=True)
+    (workspace / "notes").mkdir(parents=True, exist_ok=True)
+    (workspace / "MEMORY.md").write_text("", encoding="utf-8")
+    (workspace / "memory" / "brain.db").write_text(
+        "not a sqlite database",
+        encoding="utf-8",
+    )
+
+    astrbot_root = tmp_path / "astrbot"
+    astrbot_root.mkdir(parents=True)
+    _prepare_astrbot_root(astrbot_root)
+
+    import click
+    import pytest
+
+    with pytest.raises(click.ClickException) as exc_info:
+        run_openclaw_migration(
+            source_root=source_root,
+            astrbot_root=astrbot_root,
+            dry_run=True,
+        )
+
+    err_text = str(exc_info.value)
+    assert "Failed to read OpenClaw sqlite at" in err_text
+    assert "brain.db" in err_text
+
+
 def test_json_to_toml_quotes_special_keys() -> None:
     payload = {
         "normal key": "ok",
