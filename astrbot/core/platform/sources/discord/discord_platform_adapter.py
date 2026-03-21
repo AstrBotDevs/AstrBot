@@ -376,7 +376,7 @@ class DiscordPlatformAdapter(Platform):
                 if not cmd_info:
                     continue
 
-                cmd_name, description, cmd_filter_instance = cmd_info
+                cmd_name, description, _cmd_filter_instance = cmd_info
 
                 # 创建动态回调
                 callback = self._create_dynamic_callback(cmd_name)
