@@ -20,17 +20,6 @@ local_booter: ComputerBooter | None = None
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
 
 
-def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
-    skills: list[Path] = []
-    for entry in sorted(skills_root.iterdir()):
-        if not entry.is_dir():
-            continue
-        skill_md = entry / "SKILL.md"
-        if skill_md.exists():
-            skills.append(entry)
-    return skills
-
-
 def _discover_bay_credentials(endpoint: str) -> str:
     """Try to auto-discover Bay API key from credentials.json.
 
@@ -383,20 +372,21 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
     splitting into `apply` and `scan` phases.
     """
     skills_root = Path(get_astrbot_skills_path())
-    if not skills_root.is_dir():
-        return
-    local_skill_dirs = _list_local_skill_dirs(skills_root)
+    skill_manager = SkillManager(skills_root=str(skills_root))
+    local_skill_sources = skill_manager.list_local_skill_sources()
 
     temp_dir = Path(get_astrbot_temp_path())
     temp_dir.mkdir(parents=True, exist_ok=True)
     zip_base = temp_dir / "skills_bundle"
     zip_path = zip_base.with_suffix(".zip")
+    bundle_dir = temp_dir / f"skills_bundle_{uuid.uuid4().hex}"
 
     try:
-        if local_skill_dirs:
+        if local_skill_sources:
             if zip_path.exists():
                 zip_path.unlink()
-            shutil.make_archive(str(zip_base), "zip", str(skills_root))
+            skill_manager.materialize_local_skill_bundle(bundle_dir)
+            shutil.make_archive(str(zip_base), "zip", root_dir=str(bundle_dir))
             remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
             logger.info("Uploading skills bundle to sandbox...")
             await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
@@ -420,6 +410,8 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             len(managed),
         )
     finally:
+        if bundle_dir.exists():
+            shutil.rmtree(bundle_dir, ignore_errors=True)
         if zip_path.exists():
             try:
                 zip_path.unlink()

@@ -978,6 +978,56 @@ def test_sdk_bridge_dynamic_command_routes_register_and_match() -> None:
 
 
 @pytest.mark.unit
+def test_sdk_bridge_register_skill_requires_plugin_local_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    plugin_root = tmp_path / "sdk_demo"
+    skill_dir = plugin_root / "skills" / "browser-helper"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    skill_dir.joinpath("SKILL.md").write_text(
+        "---\ndescription: demo skill\n---\n# skill\n",
+        encoding="utf-8",
+    )
+
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    published: list[str] = []
+    monkeypatch.setattr(
+        bridge,
+        "_publish_plugin_skills",
+        lambda plugin_id: published.append(plugin_id),
+    )
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            plugin=types.SimpleNamespace(plugin_dir=plugin_root),
+            skills={},
+        )
+    }
+
+    registered = bridge.register_skill(
+        plugin_id="sdk-demo",
+        name="sdk-demo.browser-helper",
+        path="skills/browser-helper",
+        description="",
+    )
+
+    assert registered["name"] == "sdk-demo.browser-helper"
+    assert registered["description"] == "demo skill"
+    assert published == ["sdk-demo"]
+
+    outside_path = tmp_path / "outside" / "SKILL.md"
+    outside_path.parent.mkdir(parents=True, exist_ok=True)
+    outside_path.write_text("# nope", encoding="utf-8")
+    with pytest.raises(Exception, match="must stay inside the plugin directory"):
+        bridge.register_skill(
+            plugin_id="sdk-demo",
+            name="sdk-demo.outside",
+            path=str(outside_path),
+            description="",
+        )
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_core_context_send_message_populates_proactive_sent_fields() -> None:
     platform = _FakePlatform()
@@ -1139,3 +1189,30 @@ async def test_mock_context_registry_client_round_trip() -> None:
         request_id=request_id,
     )
     assert get_result == {"plugin_names": ["sdk-demo"]}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_mock_context_skill_client_round_trip() -> None:
+    ctx = MockContext(plugin_id="sdk-demo")
+
+    registered = await ctx.skills.register(
+        name="sdk-demo.browser-helper",
+        path="/tmp/sdk-demo/browser-helper/SKILL.md",
+        description="demo skill",
+    )
+    assert registered.name == "sdk-demo.browser-helper"
+    assert registered.description == "demo skill"
+    assert registered.skill_dir.replace("\\", "/") == "/tmp/sdk-demo/browser-helper"
+
+    listed = await ctx.skills.list()
+    assert len(listed) == 1
+    assert listed[0].name == "sdk-demo.browser-helper"
+    assert (
+        listed[0].path.replace("\\", "/")
+        == "/tmp/sdk-demo/browser-helper/SKILL.md"
+    )
+
+    removed = await ctx.skills.unregister("sdk-demo.browser-helper")
+    assert removed is True
+    assert await ctx.skills.list() == []

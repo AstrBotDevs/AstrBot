@@ -6,6 +6,7 @@ from .persona import PersonaCapabilityMixin
 from .platform import PlatformCapabilityMixin
 from .provider import ProviderCapabilityMixin
 from .session import SessionCapabilityMixin
+from .skill import SkillCapabilityMixin
 from .system import SystemCapabilityMixin
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     "PlatformCapabilityMixin",
     "ProviderCapabilityMixin",
     "SessionCapabilityMixin",
+    "SkillCapabilityMixin",
     "SystemCapabilityMixin",
 ]

@@ -607,6 +607,80 @@ async def test_registry_command_register_validates_and_forwards_to_bridge() -> N
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_skill_capabilities_forward_to_bridge_and_sync(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sync_calls: list[str] = []
+
+    async def _fake_sync() -> None:
+        sync_calls.append("synced")
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.sync_skills_to_active_sandboxes",
+        _fake_sync,
+    )
+
+    bridge = object.__new__(capability_bridge_module.CoreCapabilityBridge)
+    bridge._resolve_plugin_id = lambda _request_id: "sdk-demo"
+    bridge._plugin_bridge = SimpleNamespace(
+        register_skill=lambda **kwargs: {
+            "name": kwargs["name"],
+            "description": kwargs["description"],
+            "path": kwargs["path"],
+            "skill_dir": "/tmp/skill",
+        },
+        unregister_skill=lambda **kwargs: True,
+        list_registered_skills=lambda plugin_id: [
+            {
+                "name": "sdk-demo.browser-helper",
+                "description": "demo skill",
+                "path": "/tmp/skill/SKILL.md",
+                "skill_dir": "/tmp/skill",
+            }
+        ]
+        if plugin_id == "sdk-demo"
+        else [],
+    )
+
+    registered = await bridge._skill_register(
+        "request-1",
+        {
+            "name": "sdk-demo.browser-helper",
+            "description": "demo skill",
+            "path": "skills/browser-helper",
+        },
+        None,
+    )
+    assert registered == {
+        "name": "sdk-demo.browser-helper",
+        "description": "demo skill",
+        "path": "skills/browser-helper",
+        "skill_dir": "/tmp/skill",
+    }
+
+    listed = await bridge._skill_list("request-2", {}, None)
+    assert listed == {
+        "skills": [
+            {
+                "name": "sdk-demo.browser-helper",
+                "description": "demo skill",
+                "path": "/tmp/skill/SKILL.md",
+                "skill_dir": "/tmp/skill",
+            }
+        ]
+    }
+
+    removed = await bridge._skill_unregister(
+        "request-3",
+        {"name": "sdk-demo.browser-helper"},
+        None,
+    )
+    assert removed == {"removed": True}
+    assert sync_calls == ["synced", "synced"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_session_plugin_and_service_capabilities_reuse_existing_sp_keys(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

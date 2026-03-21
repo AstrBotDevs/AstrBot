@@ -12,6 +12,7 @@ from .capabilities import (
     PlatformCapabilityMixin,
     ProviderCapabilityMixin,
     SessionCapabilityMixin,
+    SkillCapabilityMixin,
     SystemCapabilityMixin,
 )
 from .event_converter import EventConverter
@@ -30,6 +31,7 @@ class CoreCapabilityBridge(
     ConversationCapabilityMixin,
     PersonaCapabilityMixin,
     SessionCapabilityMixin,
+    SkillCapabilityMixin,
     LLMCapabilityMixin,
     BasicCapabilityMixin,
     CapabilityBridgeBase,
@@ -51,6 +53,7 @@ class CoreCapabilityBridge(
         self._register_persona_capabilities()
         self._register_conversation_capabilities()
         self._register_kb_capabilities()
+        self._register_skill_capabilities()
         self._register_system_capabilities()
         self._register_registry_capabilities()
         self._register_db_capabilities()

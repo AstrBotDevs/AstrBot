@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -39,6 +40,10 @@ from astrbot.core.message.message_event_result import MessageChain, MessageEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import LLMResponse as CoreLLMResponse
 from astrbot.core.provider.entities import ProviderRequest as CoreProviderRequest
+from astrbot.core.skills.skill_manager import (
+    SkillManager,
+    _parse_frontmatter_description,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .capability_bridge import CoreCapabilityBridge
@@ -57,6 +62,7 @@ SKIP_SDK_RELOADING = "sdk_reloading"
 SKIP_NO_MATCH = "no_match"
 SKIP_WORKER_FAILED = "worker_failed"
 OVERLAY_TIMEOUT_SECONDS = 300
+SDK_SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 SUPPORTED_SYSTEM_EVENTS = {
     "astrbot_loaded",
     "platform_loaded",
@@ -152,6 +158,7 @@ class SdkPluginRecord:
     llm_tools: dict[str, LLMToolSpec] = field(default_factory=dict)
     active_llm_tools: set[str] = field(default_factory=set)
     agents: dict[str, AgentSpec] = field(default_factory=dict)
+    skills: dict[str, SdkRegisteredSkill] = field(default_factory=dict)
     dynamic_command_routes: list[SdkDynamicCommandRoute] = field(default_factory=list)
     session: WorkerSession | None = None
     restart_attempted: bool = False
@@ -170,6 +177,22 @@ class SdkHttpRoute:
     methods: tuple[str, ...]
     handler_capability: str
     description: str
+
+
+@dataclass(slots=True)
+class SdkRegisteredSkill:
+    name: str
+    description: str
+    skill_dir: Path
+    skill_md_path: Path
+
+    def to_registry_payload(self) -> dict[str, str]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "path": str(self.skill_md_path),
+            "skill_dir": str(self.skill_dir),
+        }
 
 
 @dataclass(slots=True)
@@ -245,6 +268,7 @@ class SdkPluginBridge:
         self._set_discovery_issues(discovered.issues)
         self.env_manager.plan(discovered.plugins)
         known = {plugin.name for plugin in discovered.plugins}
+        SkillManager().prune_sdk_plugin_skills(known)
         for plugin_id in list(self._records.keys()):
             if plugin_id not in known:
                 await self._teardown_plugin(plugin_id)
@@ -560,6 +584,105 @@ class SdkPluginBridge:
         )
         updated.sort(key=lambda item: item.declaration_order)
         record.dynamic_command_routes = updated
+
+    def register_skill(
+        self,
+        *,
+        plugin_id: str,
+        name: str,
+        path: str,
+        description: str = "",
+    ) -> dict[str, str]:
+        record = self._records.get(plugin_id)
+        if record is None:
+            raise AstrBotError.invalid_input(f"Unknown SDK plugin: {plugin_id}")
+
+        skill_name = str(name).strip()
+        if not skill_name or not SDK_SKILL_NAME_RE.fullmatch(skill_name):
+            raise AstrBotError.invalid_input(
+                "skill.register requires a name matching [A-Za-z0-9._-]+"
+            )
+
+        path_text = str(path).strip()
+        if not path_text:
+            raise AstrBotError.invalid_input("skill.register requires path")
+
+        plugin_root = record.plugin.plugin_dir.resolve()
+        requested_path = Path(path_text)
+        resolved_path = (
+            requested_path.resolve()
+            if requested_path.is_absolute()
+            else (plugin_root / requested_path).resolve()
+        )
+
+        skill_dir = resolved_path if resolved_path.is_dir() else resolved_path.parent
+        skill_md_path = (
+            resolved_path / "SKILL.md" if resolved_path.is_dir() else resolved_path
+        )
+        if skill_md_path.name != "SKILL.md" or not skill_md_path.is_file():
+            raise AstrBotError.invalid_input(
+                "skill.register path must point to a skill directory containing SKILL.md or to SKILL.md itself"
+            )
+        if not skill_dir.is_dir():
+            raise AstrBotError.invalid_input(
+                "skill.register resolved skill_dir is not a directory"
+            )
+        if not skill_md_path.is_relative_to(plugin_root):
+            raise AstrBotError.invalid_input(
+                "skill.register path must stay inside the plugin directory"
+            )
+
+        normalized_description = str(description).strip()
+        if not normalized_description:
+            try:
+                normalized_description = _parse_frontmatter_description(
+                    skill_md_path.read_text(encoding="utf-8")
+                )
+            except Exception:
+                normalized_description = ""
+
+        record.skills[skill_name] = SdkRegisteredSkill(
+            name=skill_name,
+            description=normalized_description,
+            skill_dir=skill_dir,
+            skill_md_path=skill_md_path,
+        )
+        self._publish_plugin_skills(plugin_id)
+        return {
+            "name": skill_name,
+            "description": normalized_description,
+            "path": str(skill_md_path),
+            "skill_dir": str(skill_dir),
+        }
+
+    def unregister_skill(self, *, plugin_id: str, name: str) -> bool:
+        record = self._records.get(plugin_id)
+        if record is None:
+            raise AstrBotError.invalid_input(f"Unknown SDK plugin: {plugin_id}")
+        removed = record.skills.pop(str(name).strip(), None) is not None
+        if removed:
+            self._publish_plugin_skills(plugin_id)
+        return removed
+
+    def list_registered_skills(self, plugin_id: str) -> list[dict[str, str]]:
+        record = self._records.get(plugin_id)
+        if record is None:
+            return []
+        return [
+            record.skills[name].to_registry_payload()
+            for name in sorted(record.skills.keys())
+        ]
+
+    def _publish_plugin_skills(self, plugin_id: str) -> None:
+        record = self._records.get(plugin_id)
+        manager = SkillManager()
+        if record is None or not record.skills:
+            manager.remove_sdk_plugin_skills(plugin_id)
+            return
+        manager.replace_sdk_plugin_skills(
+            plugin_id,
+            [skill.to_registry_payload() for skill in record.skills.values()],
+        )
 
     def register_http_api(
         self,
@@ -2218,6 +2341,7 @@ class SdkPluginBridge:
             issues=[dict(item) for item in self._discovery_issues.get(plugin.name, [])],
         )
         self._records[plugin.name] = record
+        self._publish_plugin_skills(plugin.name)
         if disabled:
             self._persist_state_overrides()
             return
@@ -2303,6 +2427,24 @@ class SdkPluginBridge:
         self._http_routes.pop(plugin_id, None)
         self._session_waiters.pop(plugin_id, None)
         await self._unregister_schedule_jobs(plugin_id)
+        skills_changed = False
+        if record is not None and record.skills:
+            record.skills.clear()
+            self._publish_plugin_skills(plugin_id)
+            skills_changed = True
+        if skills_changed:
+            try:
+                from astrbot.core.computer.computer_client import (
+                    sync_skills_to_active_sandboxes,
+                )
+
+                await sync_skills_to_active_sandboxes()
+            except Exception as exc:
+                logger.warning(
+                    "Failed to sync skills after SDK plugin teardown %s: %s",
+                    plugin_id,
+                    exc,
+                )
         if record is None or record.session is None:
             return
         try:
