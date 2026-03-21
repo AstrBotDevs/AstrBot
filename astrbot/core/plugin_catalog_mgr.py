@@ -1,4 +1,3 @@
-from dataclasses import asdict
 from typing import Any
 
 from astrbot.core.db import BaseDatabase
@@ -157,11 +156,20 @@ class PluginCatalogManager:
 
     @staticmethod
     def _serialize_plugin(plugin: StarMetadata, row: Any) -> dict[str, Any]:
-        data = asdict(plugin)
-        data["folder_id"] = getattr(row, "folder_id", None)
-        data["sort_order"] = getattr(row, "sort_order", 0)
-        data.pop("star_cls_type", None)
-        data.pop("star_cls", None)
-        data.pop("module", None)
-        data.pop("config", None)
-        return data
+        return {
+            "name": plugin.name,
+            "repo": "" if plugin.repo is None else plugin.repo,
+            "author": plugin.author,
+            "desc": plugin.desc,
+            "version": plugin.version,
+            "module_path": plugin.module_path,
+            "root_dir_name": plugin.root_dir_name,
+            "reserved": plugin.reserved,
+            "activated": plugin.activated,
+            "display_name": plugin.display_name,
+            "logo_path": plugin.logo_path,
+            "support_platforms": plugin.support_platforms,
+            "astrbot_version": plugin.astrbot_version,
+            "folder_id": getattr(row, "folder_id", None),
+            "sort_order": getattr(row, "sort_order", 0),
+        }
