@@ -568,6 +568,10 @@ class Context:
             raise AstrBotError.invalid_input(
                 "register_commands(ignore_prefix=True) is unsupported in SDK runtime"
             )
+        if isinstance(priority, bool) or not isinstance(priority, int):
+            raise AstrBotError.invalid_input(
+                "register_commands priority must be an integer"
+            )
         await self._proxy.call(
             "registry.command.register",
             {
@@ -575,7 +579,7 @@ class Context:
                 "handler_full_name": str(handler_full_name),
                 "source_event_type": source_event_type,
                 "desc": str(desc),
-                "priority": int(priority),
+                "priority": priority,
                 "use_regex": bool(use_regex),
                 "ignore_prefix": False,
             },

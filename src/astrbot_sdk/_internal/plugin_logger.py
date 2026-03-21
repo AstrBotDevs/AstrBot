@@ -128,16 +128,30 @@ class PluginLogger:
         return self._plugin_id
 
     def bind(self, **kwargs: Any) -> PluginLogger:
+        bind = getattr(self._logger, "bind", None)
+        next_logger = self._logger
+        if callable(bind):
+            try:
+                next_logger = bind(**kwargs)
+            except Exception:
+                next_logger = self._logger
         return PluginLogger(
             plugin_id=self._plugin_id,
-            logger=self._logger.bind(**kwargs),
+            logger=next_logger,
             bound_context={**self._bound_context, **kwargs},
         )
 
     def opt(self, *args: Any, **kwargs: Any) -> PluginLogger:
+        opt = getattr(self._logger, "opt", None)
+        next_logger = self._logger
+        if callable(opt):
+            try:
+                next_logger = opt(*args, **kwargs)
+            except Exception:
+                next_logger = self._logger
         return PluginLogger(
             plugin_id=self._plugin_id,
-            logger=self._logger.opt(*args, **kwargs),
+            logger=next_logger,
             bound_context=self._bound_context,
         )
 
@@ -167,9 +181,8 @@ class PluginLogger:
         self._publish("ERROR", message, *args, **kwargs)
 
     def exception(self, message: Any, *args: Any, **kwargs: Any) -> None:
-        formatted_message = self._format_message(message, *args, **kwargs)
-        self._emit_console("ERROR", formatted_message, exception=True)
-        self._publish("ERROR", formatted_message)
+        self._emit_console("ERROR", message, *args, exception=True, **kwargs)
+        self._publish("ERROR", message, *args, **kwargs)
 
     def _emit_console(
         self,
@@ -179,6 +192,33 @@ class PluginLogger:
         exception: bool = False,
         **kwargs: Any,
     ) -> None:
+        if self._emit_console_with_opt(
+            level,
+            message,
+            *args,
+            exception=exception,
+            **kwargs,
+        ):
+            return
+        self._emit_console_fallback(
+            level,
+            message,
+            *args,
+            exception=exception,
+            **kwargs,
+        )
+
+    def _emit_console_with_opt(
+        self,
+        level: str,
+        message: Any,
+        *args: Any,
+        exception: bool = False,
+        **kwargs: Any,
+    ) -> bool:
+        opt = getattr(self._logger, "opt", None)
+        if not callable(opt):
+            return False
         formatted_message = self._format_message(message, *args, **kwargs)
         pathname, source_line = self._caller_info()
         plugin_tag = _plugin_tag_from_path(pathname)
@@ -196,10 +236,45 @@ class PluginLogger:
             f"{level_color}[{level_text}]{_ANSI_RESET}{version_tag} "
             f"[{source_file}:{source_line}]: {level_color}{formatted_message}{_ANSI_RESET}"
         )
+        try:
+            emitter = opt(raw=True, exception=True) if exception else opt(raw=True)
+            log = getattr(emitter, "log", None)
+            if not callable(log):
+                return False
+            log(level, line + "\n")
+            return True
+        except Exception:
+            return False
+
+    def _emit_console_fallback(
+        self,
+        level: str,
+        message: Any,
+        *args: Any,
+        exception: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        method_names = []
         if exception:
-            self._logger.opt(raw=True, exception=True).log(level, line + "\n")
+            method_names.append("exception")
+        method_names.append(str(level).lower())
+        if exception:
+            method_names.append("error")
+        for method_name in method_names:
+            method = getattr(self._logger, method_name, None)
+            if not callable(method):
+                continue
+            try:
+                method(message, *args, **kwargs)
+            except Exception:
+                continue
             return
-        self._logger.opt(raw=True).log(level, line + "\n")
+        log = getattr(self._logger, "log", None)
+        if callable(log):
+            try:
+                log(level, self._format_message(message, *args, **kwargs))
+            except Exception:
+                return
 
     def _caller_info(self) -> tuple[str | None, int]:
         frame = inspect.currentframe()
