@@ -450,7 +450,7 @@ def test_json_to_toml_preserves_null_sentinel_behavior() -> None:
         }
     )
 
-    assert '"nullable" = "__NULL__"' in toml_text
+    assert '"nullable" = "__ASTRBOT_OPENCLAW_NULL_SENTINEL_V1__"' in toml_text
     assert '["nested"]' in toml_text
-    assert '"inner" = "__NULL__"' in toml_text
-    assert '"list" = ["__NULL__", 1]' in toml_text
+    assert '"inner" = "__ASTRBOT_OPENCLAW_NULL_SENTINEL_V1__"' in toml_text
+    assert '"list" = ["__ASTRBOT_OPENCLAW_NULL_SENTINEL_V1__", 1]' in toml_text

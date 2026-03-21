@@ -24,7 +24,7 @@ def migrate() -> None:
 @click.option(
     "--target",
     "target_path",
-    type=click.Path(path_type=Path, file_okay=False, resolve_path=True),
+    type=click.Path(path_type=Path, file_okay=False, resolve_path=False),
     default=None,
     help=(
         "Custom output directory. If omitted, writes to "

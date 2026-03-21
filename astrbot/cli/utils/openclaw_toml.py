@@ -5,7 +5,7 @@ from typing import Any
 
 # TOML has no null literal. Keep this centralized so behavior is explicit and
 # easy to adjust in future migrations.
-NULL_SENTINEL = "__NULL__"
+NULL_SENTINEL = "__ASTRBOT_OPENCLAW_NULL_SENTINEL_V1__"
 
 
 def _toml_escape(value: str) -> str:
