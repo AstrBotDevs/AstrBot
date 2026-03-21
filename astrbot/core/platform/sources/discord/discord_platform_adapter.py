@@ -1,7 +1,7 @@
 import asyncio
 import re
 import sys
-from typing import Any, cast
+from typing import Any
 
 import discord
 from discord.abc import GuildChannel, Messageable, PrivateChannel
@@ -99,7 +99,6 @@ class DiscordPlatformAdapter(Platform):
             user_id=str(self.client_self_id),
             nickname=self.client.user.display_name,
         )
-        message_obj.self_id = cast(str, self.client_self_id)
         message_obj.session_id = session.session_id
         message_obj.message = message_chain.chain
 
@@ -120,7 +119,7 @@ class DiscordPlatformAdapter(Platform):
         return PlatformMetadata(
             "discord",
             "Discord 适配器",
-            id=cast(str, self.config.get("id")),
+            id=str(self.config.get("id")),
             default_config_tmpl=self.config,
             support_streaming_message=False,
         )
@@ -188,10 +187,9 @@ class DiscordPlatformAdapter(Platform):
 
     def _convert_message_to_abm(self, data: dict) -> AstrBotMessage:
         """将普通消息转换为 AstrBotMessage"""
+
         message = data["message"]
-
         content = message.content
-
         # 如果机器人被@,移除@部分
         # 剥离 User Mention (<@id>, <@!id>)
         bot_was_mentioned = False
@@ -233,10 +231,11 @@ class DiscordPlatformAdapter(Platform):
         )
         message_chain = []
         # 如果机器人被 @,在 message_chain 开头添加 At 组件
-        if bot_was_mentioned:
-            message_chain.insert(
-                0, At(qq=str(self.client.user.id), name=self.client.user.name)
-            )
+        if self.client and self.client.user:
+            if bot_was_mentioned:
+                message_chain.insert(
+                    0, At(qq=str(self.client.user.id), name=self.client.user.name)
+                )
         if abm.message_str:
             message_chain.append(Plain(text=abm.message_str))
         if message.attachments:
@@ -253,7 +252,7 @@ class DiscordPlatformAdapter(Platform):
                     )
         abm.message = message_chain
         abm.raw_message = message
-        abm.self_id = cast(str, self.client_self_id)
+        abm.self_id = str(self.client_self_id)
         abm.session_id = str(message.channel.id)
         abm.message_id = str(message.id)
         return abm
@@ -466,15 +465,18 @@ class DiscordPlatformAdapter(Platform):
                 abm.group_id = str(ctx.channel_id)
 
             abm.message_str = message_str_for_filter
+            # ctx.author can be None in some edge cases
+            author_id = getattr(ctx.author, "id", None) or getattr(ctx.user, "id", None) or "unknown"
+            author_name = getattr(ctx.author, "display_name", None) or getattr(ctx.user, "display_name", None) or "unknown"
             abm.sender = MessageMember(
-                user_id=str(ctx.author.id),
-                nickname=ctx.author.display_name,
+                user_id=str(author_id),
+                nickname=str(author_name),
             )
             abm.message = [Plain(text=message_str_for_filter)]
             abm.raw_message = ctx.interaction
-            abm.self_id = cast(str, self.client_self_id)
+            abm.self_id = str(self.client_self_id)
             abm.session_id = str(ctx.channel_id)
-            abm.message_id = str(ctx.interaction.id)
+            abm.message_id = str(getattr(ctx.interaction, "id", ctx.interaction)) if ctx.interaction else str(getattr(ctx, "id", "unknown"))
 
             # 3. 将消息和 webhook 分别交给 handle_msg 处理
             await self.handle_msg(abm, followup_webhook)
