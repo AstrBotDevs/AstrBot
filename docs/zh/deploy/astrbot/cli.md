@@ -90,3 +90,17 @@ python main.py
 
 
 接下来，你需要部署任何一个消息平台，才能够实现在消息平台上使用 AstrBot。
+
+## OpenClaw 迁移（初步方案）
+
+如果你之前使用过 OpenClaw，AstrBot 现在提供了一个初步迁移命令，可将 OpenClaw 工作区快照导入为 AstrBot 迁移产物（包含记忆条目、工作区文件、配置转换和自动生成的 `time_brief_history.md`）：
+
+```bash
+# 仅预览（不写入）
+astrbot migrate openclaw --dry-run
+
+# 执行迁移
+astrbot migrate openclaw
+```
+
+默认从 `~/.openclaw` 读取，并将迁移结果写入 AstrBot 根目录下 `data/migrations/openclaw/run-<timestamp>`。
