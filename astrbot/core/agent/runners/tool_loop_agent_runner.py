@@ -3,10 +3,10 @@ import copy
 import sys
 import time
 import traceback
-import typing as T
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field
+from typing import Any, Literal, TypeVar
 
 from mcp.types import (
     BlobResourceContents,
@@ -54,10 +54,10 @@ else:
 
 @dataclass(slots=True)
 class _HandleFunctionToolsResult:
-    kind: T.Literal["message_chain", "tool_call_result_blocks", "cached_image"]
+    kind: Literal["message_chain", "tool_call_result_blocks", "cached_image"]
     message_chain: MessageChain | None = None
     tool_call_result_blocks: list[ToolCallMessageSegment] | None = None
-    cached_image: T.Any = None
+    cached_image: Any = None
 
     @classmethod
     def from_message_chain(cls, chain: MessageChain) -> "_HandleFunctionToolsResult":
@@ -70,7 +70,7 @@ class _HandleFunctionToolsResult:
         return cls(kind="tool_call_result_blocks", tool_call_result_blocks=blocks)
 
     @classmethod
-    def from_cached_image(cls, image: T.Any) -> "_HandleFunctionToolsResult":
+    def from_cached_image(cls, image: Any) -> "_HandleFunctionToolsResult":
         return cls(kind="cached_image", cached_image=image)
 
 
@@ -86,7 +86,7 @@ class _ToolExecutionInterrupted(Exception):
     """Raised when a running tool call is interrupted by a stop request."""
 
 
-ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
+ToolExecutorResultT = TypeVar("ToolExecutorResultT")
 
 USER_INTERRUPTION_MESSAGE = (
     "[SYSTEM: User actively interrupted the response generation. "
@@ -123,7 +123,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
         fallback_providers: list[Provider] | None = None,
-        **kwargs: T.Any,
+        **kwargs: Any,
     ) -> None:
         self.req = request
         self.streaming = streaming
@@ -141,7 +141,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # <=0 will never do compress
             max_context_tokens=provider.provider_config.get("max_context_tokens", 4096),
             # enforce max turns before compression
-            enforce_max_turns=self.enforce_max_turns if self.enforce_max_turns != -1 else 15,
+            enforce_max_turns=self.enforce_max_turns
+            if self.enforce_max_turns != -1
+            else 15,
             truncate_turns=self.truncate_turns,
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent=self.llm_compress_keep_recent,
@@ -215,7 +217,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     async def _iter_llm_responses(
         self, *, include_model: bool = True
-    ) -> T.AsyncGenerator[LLMResponse, None]:
+    ) -> AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
         payload = {
             "contexts": self.run_context.messages,  # list[Message]
@@ -236,7 +238,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     async def _iter_llm_responses_with_fallback(
         self,
-    ) -> T.AsyncGenerator[LLMResponse, None]:
+    ) -> AsyncGenerator[LLMResponse, None]:
         """Wrap _iter_llm_responses with provider fallback handling."""
         candidates = [self.provider, *self.fallback_providers]
         total_candidates = len(candidates)
@@ -603,7 +605,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     async def step_until_done(
         self, max_step: int
-    ) -> T.AsyncGenerator[AgentResponse, None]:
+    ) -> AsyncGenerator[AgentResponse, None]:
         """Process steps until the agent is done."""
         step_count = 0
         max_step = min(max_step, 3)
@@ -635,7 +637,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         req: ProviderRequest,
         llm_response: LLMResponse,
-    ) -> T.AsyncGenerator[_HandleFunctionToolsResult, None]:
+    ) -> AsyncGenerator[_HandleFunctionToolsResult, None]:
         """处理函数工具调用｡"""
         tool_call_result_blocks: list[ToolCallMessageSegment] = []
         logger.info(f"Agent 使用工具: {llm_response.tools_call_name}")
@@ -877,9 +879,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     def _build_tool_requery_context(
         self, tool_names: list[str]
-    ) -> list[dict[str, T.Any]]:
+    ) -> list[dict[str, Any]]:
         """Build contexts for re-querying LLM with param-only tool schemas."""
-        contexts: list[dict[str, T.Any]] = []
+        contexts: list[dict[str, Any]] = []
         for msg in self.run_context.messages:
             if hasattr(msg, "model_dump"):
                 contexts.append(msg.model_dump())  # type: ignore[call-arg]
@@ -999,7 +1001,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             data=AgentResponseData(chain=MessageChain(type="aborted")),
         )
 
-    async def _close_executor(self, executor: T.Any) -> None:
+    async def _close_executor(self, executor: Any) -> None:
         close_executor = getattr(executor, "aclose", None)
         if close_executor is None:
             return
@@ -1009,7 +1011,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _iter_tool_executor_results(
         self,
         executor: AsyncIterator[ToolExecutorResultT],
-    ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
+    ) -> AsyncGenerator[ToolExecutorResultT, None]:
         while True:
             if self._is_stop_requested():
                 await self._close_executor(executor)
@@ -1019,6 +1021,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             next_result_task = asyncio.create_task(anext(executor))
             abort_task = asyncio.create_task(self._abort_signal.wait())
+            self.tasks.add(next_result_task)
+            self.tasks.add(abort_task)
+            next_result_task.add_done_callback(self.tasks.discard)
+            abort_task.add_done_callback(self.tasks.discard)
             try:
                 done, _ = await asyncio.wait(
                     {next_result_task, abort_task},
