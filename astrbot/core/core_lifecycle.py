@@ -25,6 +25,7 @@ from astrbot.core.cron import CronJobManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.persona_mgr import PersonaManager
+from astrbot.core.plugin_catalog_mgr import PluginCatalogManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
@@ -199,6 +200,8 @@ class AstrBotCoreLifecycle:
 
         # 扫描、注册插件、实例化插件类
         await self.plugin_manager.reload()
+        self.plugin_catalog_mgr = PluginCatalogManager(self.db, self.plugin_manager)
+        await self.plugin_catalog_mgr.initialize()
 
         # 根据配置实例化各个 Provider
         await self.provider_manager.initialize()

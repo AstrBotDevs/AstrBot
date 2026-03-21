@@ -141,6 +141,53 @@ class Persona(TimestampMixin, SQLModel, table=True):
     )
 
 
+class PluginCatalogFolder(TimestampMixin, SQLModel, table=True):
+    __tablename__: str = "plugin_catalog_folders"
+
+    id: int | None = Field(
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
+    )
+    folder_id: str = Field(
+        max_length=36,
+        nullable=False,
+        unique=True,
+        default_factory=lambda: str(uuid.uuid4()),
+    )
+    name: str = Field(max_length=255, nullable=False)
+    parent_id: str | None = Field(default=None, max_length=36)
+    description: str | None = Field(default=None, sa_type=Text)
+    sort_order: int = Field(default=0)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "folder_id",
+            name="uix_plugin_catalog_folder_id",
+        ),
+    )
+
+
+class PluginCatalogItem(TimestampMixin, SQLModel, table=True):
+    __tablename__: str = "plugin_catalog_items"
+
+    id: int | None = Field(
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
+    )
+    plugin_name: str = Field(max_length=255, nullable=False, unique=True)
+    folder_id: str | None = Field(default=None, max_length=36)
+    sort_order: int = Field(default=0)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "plugin_name",
+            name="uix_plugin_catalog_plugin_name",
+        ),
+    )
+
+
 class CronJob(TimestampMixin, SQLModel, table=True):
     """Cron job definition for scheduler and WebUI management."""
 

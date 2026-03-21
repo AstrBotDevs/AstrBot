@@ -1,7 +1,6 @@
 import asyncio
 import threading
 import typing as T
-from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import CursorResult, Row
@@ -19,6 +18,8 @@ from astrbot.core.db.po import (
     CronJob,
     Persona,
     PersonaFolder,
+    PluginCatalogFolder,
+    PluginCatalogItem,
     PlatformMessageHistory,
     PlatformSession,
     PlatformStat,
@@ -45,7 +46,6 @@ class FolderResourceConfig(T.TypedDict):
     folder_fk_field: str
     sort_order_field: str
     item_sort_type: str
-    get_item_by_id: Callable[[str], Awaitable[T.Any]]
 
 
 class SQLiteDatabase(BaseDatabase):
@@ -100,7 +100,15 @@ class SQLiteDatabase(BaseDatabase):
                 "folder_fk_field": "folder_id",
                 "sort_order_field": "sort_order",
                 "item_sort_type": "persona",
-                "get_item_by_id": self.get_persona_by_id,
+            }
+        if resource_type == "plugin":
+            return {
+                "folder_model": PluginCatalogFolder,
+                "item_model": PluginCatalogItem,
+                "item_id_field": "plugin_name",
+                "folder_fk_field": "folder_id",
+                "sort_order_field": "sort_order",
+                "item_sort_type": "plugin",
             }
         raise ValueError(f"Unsupported folder resource type: {resource_type}")
 
@@ -951,7 +959,7 @@ class SQLiteDatabase(BaseDatabase):
                     .where(col(getattr(item_model, item_id_field)) == resource_id)
                     .values(**{folder_fk_field: folder_id})
                 )
-        return await config["get_item_by_id"](resource_id)
+        return await self.get_resource_by_id(resource_type, resource_id)
 
     async def get_resources_by_folder(
         self, resource_type: str, folder_id: str | None = None
@@ -1025,6 +1033,122 @@ class SQLiteDatabase(BaseDatabase):
                             .where(col(getattr(folder_model, "folder_id")) == item_id)
                             .values(**{sort_order_field: sort_order})
                         )
+
+    async def get_all_resources(self, resource_type: str) -> list[T.Any]:
+        config = self._get_folder_resource_config(resource_type)
+        item_model = config["item_model"]
+        sort_order_field = config["sort_order_field"]
+        item_id_field = config["item_id_field"]
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(item_model).order_by(
+                col(getattr(item_model, sort_order_field)),
+                col(getattr(item_model, item_id_field)),
+            )
+            result = await session.execute(query)
+            return list(result.scalars().all())
+
+    async def get_resource_by_id(
+        self, resource_type: str, resource_id: str
+    ) -> T.Any | None:
+        config = self._get_folder_resource_config(resource_type)
+        item_model = config["item_model"]
+        item_id_field = config["item_id_field"]
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(item_model).where(
+                col(getattr(item_model, item_id_field)) == resource_id
+            )
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    async def upsert_resource(
+        self,
+        resource_type: str,
+        resource_id: str,
+        folder_id: str | None = None,
+        sort_order: int = 0,
+    ) -> T.Any:
+        config = self._get_folder_resource_config(resource_type)
+        item_model = config["item_model"]
+        item_id_field = config["item_id_field"]
+        folder_fk_field = config["folder_fk_field"]
+        sort_order_field = config["sort_order_field"]
+
+        existing = await self.get_resource_by_id(resource_type, resource_id)
+        if existing:
+            async with self.get_db() as session:
+                session: AsyncSession
+                async with session.begin():
+                    await session.execute(
+                        update(item_model)
+                        .where(col(getattr(item_model, item_id_field)) == resource_id)
+                        .values(
+                            **{
+                                folder_fk_field: folder_id,
+                                sort_order_field: sort_order,
+                            }
+                        )
+                    )
+            result = await self.get_resource_by_id(resource_type, resource_id)
+            if result is None:
+                raise ValueError(
+                    f"Failed to reload resource {resource_id!r} for {resource_type}"
+                )
+            return result
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                values = {
+                    item_id_field: resource_id,
+                    folder_fk_field: folder_id,
+                    sort_order_field: sort_order,
+                }
+                item = item_model(**values)
+                session.add(item)
+                await session.flush()
+                await session.refresh(item)
+                return item
+
+    async def delete_resource(
+        self,
+        resource_type: str,
+        resource_id: str,
+    ) -> None:
+        config = self._get_folder_resource_config(resource_type)
+        item_model = config["item_model"]
+        item_id_field = config["item_id_field"]
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(item_model).where(
+                        col(getattr(item_model, item_id_field)) == resource_id
+                    )
+                )
+
+    async def prune_resources(
+        self,
+        resource_type: str,
+        resource_ids: list[str],
+    ) -> None:
+        config = self._get_folder_resource_config(resource_type)
+        item_model = config["item_model"]
+        item_id_field = config["item_id_field"]
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                query = delete(item_model)
+                if resource_ids:
+                    query = query.where(
+                        col(getattr(item_model, item_id_field)).not_in(resource_ids)
+                    )
+                await session.execute(query)
 
     async def insert_persona_folder(
         self,

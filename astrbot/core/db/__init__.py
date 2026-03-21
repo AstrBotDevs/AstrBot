@@ -17,6 +17,8 @@ from astrbot.core.db.po import (
     CronJob,
     Persona,
     PersonaFolder,
+    PluginCatalogFolder,
+    PluginCatalogItem,
     PlatformMessageHistory,
     PlatformSession,
     PlatformStat,
@@ -437,6 +439,51 @@ class BaseDatabase(abc.ABC):
         items: list[dict],
     ) -> None:
         """Batch update sort_order for resources and folders."""
+        ...
+
+    # ====
+    # Folder Management
+    # ====
+
+    @abc.abstractmethod
+    async def get_all_resources(self, resource_type: str) -> list[T.Any]:
+        """Get all resources for the specified resource type."""
+        ...
+
+    @abc.abstractmethod
+    async def get_resource_by_id(
+        self, resource_type: str, resource_id: str
+    ) -> T.Any | None:
+        """Get a resource item by its ID."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_resource(
+        self,
+        resource_type: str,
+        resource_id: str,
+        folder_id: str | None = None,
+        sort_order: int = 0,
+    ) -> T.Any:
+        """Create or update a resource item."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_resource(
+        self,
+        resource_type: str,
+        resource_id: str,
+    ) -> None:
+        """Delete a resource item."""
+        ...
+
+    @abc.abstractmethod
+    async def prune_resources(
+        self,
+        resource_type: str,
+        resource_ids: list[str],
+    ) -> None:
+        """Delete resource items not present in the provided IDs."""
         ...
 
 

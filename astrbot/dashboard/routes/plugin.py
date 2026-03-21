@@ -70,9 +70,20 @@ class PluginRoute(Route):
             "/plugin/source/get": ("GET", self.get_custom_source),
             "/plugin/source/save": ("POST", self.save_custom_source),
             "/plugin/source/get-failed-plugins": ("GET", self.get_failed_plugins),
+            # Folder routes
+            "/plugin/catalog/get": ("GET", self.get_catalog_plugins),
+            "/plugin/catalog/move": ("POST", self.move_plugin),
+            "/plugin/catalog/folders": ("GET", self.list_folders),
+            "/plugin/catalog/folder-tree": ("GET", self.get_folder_tree),
+            "/plugin/catalog/folder/get": ("POST", self.get_folder_detail),
+            "/plugin/catalog/folder/create": ("POST", self.create_folder),
+            "/plugin/catalog/folder/update": ("POST", self.update_folder),
+            "/plugin/catalog/folder/delete": ("POST", self.delete_folder),
+            "/plugin/catalog/reorder": ("POST", self.reorder_items),
         }
         self.core_lifecycle = core_lifecycle
         self.plugin_manager = plugin_manager
+        self.plugin_catalog_mgr = core_lifecycle.plugin_catalog_mgr
         self.register_routes()
 
         self.translated_event_type = {
@@ -425,6 +436,212 @@ class PluginRoute(Route):
             .ok(_plugin_resp, message=self.plugin_manager.failed_plugin_info)
             .__dict__
         )
+
+    async def get_catalog_plugins(self):
+        try:
+            folder_id = request.args.get("folder_id")
+            if folder_id == "":
+                folder_id = None
+            plugins = await self.plugin_catalog_mgr.get_plugins_by_folder(folder_id)
+            return Response().ok(plugins).__dict__
+        except Exception as e:
+            logger.error(f"获取插件目录列表失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"获取插件目录列表失败: {e!s}").__dict__
+
+    async def move_plugin(self):
+        try:
+            data = await request.get_json()
+            plugin_name = data.get("plugin_name")
+            folder_id = data.get("folder_id")
+
+            if not plugin_name:
+                return Response().error("缺少必要参数: plugin_name").__dict__
+
+            await self.plugin_catalog_mgr.move_plugin_to_folder(plugin_name, folder_id)
+            return Response().ok({"message": "插件移动成功"}).__dict__
+        except Exception as e:
+            logger.error(f"移动插件失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"移动插件失败: {e!s}").__dict__
+
+    async def list_folders(self):
+        try:
+            parent_id = request.args.get("parent_id")
+            if parent_id == "":
+                parent_id = None
+            folders = await self.plugin_catalog_mgr.get_folders(parent_id)
+            return (
+                Response()
+                .ok(
+                    [
+                        {
+                            "folder_id": folder.folder_id,
+                            "name": folder.name,
+                            "parent_id": folder.parent_id,
+                            "description": folder.description,
+                            "sort_order": folder.sort_order,
+                            "created_at": folder.created_at.isoformat()
+                            if folder.created_at
+                            else None,
+                            "updated_at": folder.updated_at.isoformat()
+                            if folder.updated_at
+                            else None,
+                        }
+                        for folder in folders
+                    ]
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"获取插件目录文件夹失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"获取插件目录文件夹失败: {e!s}").__dict__
+
+    async def get_folder_tree(self):
+        try:
+            tree = await self.plugin_catalog_mgr.get_folder_tree()
+            return Response().ok(tree).__dict__
+        except Exception as e:
+            logger.error(f"获取插件目录树失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"获取插件目录树失败: {e!s}").__dict__
+
+    async def get_folder_detail(self):
+        try:
+            data = await request.get_json()
+            folder_id = data.get("folder_id")
+
+            if not folder_id:
+                return Response().error("缺少必要参数: folder_id").__dict__
+
+            folder = await self.plugin_catalog_mgr.get_folder(folder_id)
+            if not folder:
+                return Response().error("文件夹不存在").__dict__
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "folder_id": folder.folder_id,
+                        "name": folder.name,
+                        "parent_id": folder.parent_id,
+                        "description": folder.description,
+                        "sort_order": folder.sort_order,
+                        "created_at": folder.created_at.isoformat()
+                        if folder.created_at
+                        else None,
+                        "updated_at": folder.updated_at.isoformat()
+                        if folder.updated_at
+                        else None,
+                    }
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"获取插件目录文件夹详情失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"获取插件目录文件夹详情失败: {e!s}").__dict__
+
+    async def create_folder(self):
+        try:
+            data = await request.get_json()
+            name = data.get("name", "").strip()
+            parent_id = data.get("parent_id")
+            description = data.get("description")
+            sort_order = data.get("sort_order", 0)
+
+            if not name:
+                return Response().error("文件夹名称不能为空").__dict__
+
+            folder = await self.plugin_catalog_mgr.create_folder(
+                name=name,
+                parent_id=parent_id,
+                description=description,
+                sort_order=sort_order,
+            )
+            return (
+                Response()
+                .ok(
+                    {
+                        "message": "文件夹创建成功",
+                        "folder": {
+                            "folder_id": folder.folder_id,
+                            "name": folder.name,
+                            "parent_id": folder.parent_id,
+                            "description": folder.description,
+                            "sort_order": folder.sort_order,
+                            "created_at": folder.created_at.isoformat()
+                            if folder.created_at
+                            else None,
+                            "updated_at": folder.updated_at.isoformat()
+                            if folder.updated_at
+                            else None,
+                        },
+                    }
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"创建插件目录文件夹失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"创建插件目录文件夹失败: {e!s}").__dict__
+
+    async def update_folder(self):
+        try:
+            data = await request.get_json()
+            folder_id = data.get("folder_id")
+            name = data.get("name")
+            parent_id = data.get("parent_id")
+            description = data.get("description")
+            sort_order = data.get("sort_order")
+
+            if not folder_id:
+                return Response().error("缺少必要参数: folder_id").__dict__
+
+            await self.plugin_catalog_mgr.update_folder(
+                folder_id=folder_id,
+                name=name,
+                parent_id=parent_id,
+                description=description,
+                sort_order=sort_order,
+            )
+            return Response().ok({"message": "文件夹更新成功"}).__dict__
+        except Exception as e:
+            logger.error(f"更新插件目录文件夹失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"更新插件目录文件夹失败: {e!s}").__dict__
+
+    async def delete_folder(self):
+        try:
+            data = await request.get_json()
+            folder_id = data.get("folder_id")
+
+            if not folder_id:
+                return Response().error("缺少必要参数: folder_id").__dict__
+
+            await self.plugin_catalog_mgr.delete_folder(folder_id)
+            return Response().ok({"message": "文件夹删除成功"}).__dict__
+        except Exception as e:
+            logger.error(f"删除插件目录文件夹失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"删除插件目录文件夹失败: {e!s}").__dict__
+
+    async def reorder_items(self):
+        try:
+            data = await request.get_json()
+            items = data.get("items", [])
+
+            if not items:
+                return Response().error("items 不能为空").__dict__
+
+            for item in items:
+                if not all(key in item for key in ("id", "type", "sort_order")):
+                    return (
+                        Response()
+                        .error("每个 item 必须包含 id, type, sort_order 字段")
+                        .__dict__
+                    )
+                if item["type"] not in ("plugin", "folder"):
+                    return Response().error("type 字段必须是 'plugin' 或 'folder'").__dict__
+
+            await self.plugin_catalog_mgr.batch_update_sort_order(items)
+            return Response().ok({"message": "排序更新成功"}).__dict__
+        except Exception as e:
+            logger.error(f"更新插件目录排序失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"更新插件目录排序失败: {e!s}").__dict__
 
     async def get_failed_plugins(self):
         """专门获取加载失败的插件列表(字典格式)"""
