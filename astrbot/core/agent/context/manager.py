@@ -45,12 +45,18 @@ class ContextManager:
             )
 
     async def process(
-        self, messages: list[Message], trusted_token_usage: int = 0
+        self,
+        messages: list[Message],
+        trusted_token_usage: int = 0,
+        force_compaction: bool = False,
     ) -> list[Message]:
         """Process the messages.
 
         Args:
             messages: The original message list.
+            trusted_token_usage: Optional trusted token usage hint.
+            force_compaction: Force one compaction pass when token-based compaction
+                is enabled, regardless of compressor threshold.
 
         Returns:
             The processed message list.
@@ -72,7 +78,7 @@ class ContextManager:
                     result, trusted_token_usage
                 )
 
-                if self.compressor.should_compress(
+                if force_compaction or self.compressor.should_compress(
                     result, total_tokens, self.config.max_context_tokens
                 ):
                     result = await self._run_compression(result, total_tokens)

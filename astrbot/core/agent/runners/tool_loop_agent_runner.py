@@ -748,6 +748,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if self._should_run_post_tool_compaction():
                 self.run_context.messages = await self.context_manager.process(
                     self.run_context.messages,
+                    force_compaction=True,
                 )
                 self._refresh_tool_compaction_baseline()
 

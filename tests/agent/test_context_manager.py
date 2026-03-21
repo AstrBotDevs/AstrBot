@@ -223,6 +223,29 @@ class TestContextManager:
                 assert result == messages
 
     @pytest.mark.asyncio
+    async def test_force_compaction_bypasses_threshold_gate(self):
+        """Test that force_compaction bypasses compressor threshold gate."""
+        config = ContextConfig(max_context_tokens=1000)
+        manager = ContextManager(config)
+
+        messages = [self.create_message("user", "Hello")]
+
+        with patch.object(
+            manager.compressor, "should_compress", return_value=False
+        ) as mock_should_compress:
+            with patch.object(
+                manager,
+                "_run_compression",
+                new_callable=AsyncMock,
+                return_value=messages,
+            ) as mock_run_compression:
+                result = await manager.process(messages, force_compaction=True)
+
+                mock_should_compress.assert_not_called()
+                mock_run_compression.assert_called_once()
+                assert result == messages
+
+    @pytest.mark.asyncio
     async def test_token_compression_triggered_above_threshold(self):
         """Test that compression is triggered above threshold."""
         config = ContextConfig(max_context_tokens=100, truncate_turns=1)
