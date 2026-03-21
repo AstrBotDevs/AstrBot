@@ -88,7 +88,11 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             logger.info("Converting opus file to wav using convert_audio_to_wav...")
             await convert_audio_to_wav(audio_url, output_path)
             audio_url = output_path
-        elif lower_audio_url.endswith(".amr") or lower_audio_url.endswith(".silk") or is_tencent:
+        elif (
+            lower_audio_url.endswith(".amr")
+            or lower_audio_url.endswith(".silk")
+            or is_tencent
+        ):
             file_format = await self._get_audio_format(audio_url)
 
             # 判断是否需要转换
