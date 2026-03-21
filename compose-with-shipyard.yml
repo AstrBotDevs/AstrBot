@@ -4,7 +4,10 @@ version: '3.8'
 
 services:
   astrbot:
-    image: soulter/astrbot:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: astrbot:kimi-code
     container_name: astrbot
     restart: always
     ports: # mappings description: https://github.com/AstrBotDevs/AstrBot/issues/497
@@ -37,6 +40,7 @@ services:
       - DEFAULT_SHIP_MEMORY=512m
     volumes:
       - ${PWD}/data/shipyard/bay_data:/app/data
+      - ${PWD}/data/temp:/AstrBot/data/temp           # Bind the local temp directory to the sandbox so that the uploaded file can be accessed in the sandbox
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - astrbot_network

@@ -6,7 +6,7 @@ This documentation may not cover all features comprehensively. If you have any q
 
 ### Discord
 
-<https://discord.gg/PxgzhmxJ>
+<https://discord.gg/hAVk6tgV36>
 
 ### GitHub
 

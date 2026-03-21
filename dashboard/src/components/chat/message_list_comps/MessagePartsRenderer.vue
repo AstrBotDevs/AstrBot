@@ -65,7 +65,8 @@
             v-else-if="renderPart.part.type === 'plain' && renderPart.part.text && renderPart.part.text.trim()"
             custom-id="message-list" :custom-html-tags="['ref']"
             :content="normalizeMarkdownContent(renderPart.part.text)" :typewriter="false"
-            class="markdown-content" :is-dark="isDark" :monacoOptions="{ theme: isDark ? 'vs-dark' : 'vs-light' }" />
+            class="markdown-content" :is-dark="isDark" :monacoOptions="{ theme: isDark ? 'vs-dark' : 'vs-light' }"
+            :key="`${renderPart.key}-${isDark ? 'dark' : 'light'}`"/>
 
         <!-- Image -->
         <div v-else-if="renderPart.part.type === 'image' && renderPart.part.embedded_url" class="embedded-images">

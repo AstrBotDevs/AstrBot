@@ -11,6 +11,7 @@
                     :currSessionId="currSessionId"
                     :selectedProjectId="selectedProjectId"
                     :transportMode="transportMode"
+                    :sendShortcut="sendShortcut"
                     :isDark="isDark"
                     :chatboxMode="chatboxMode"
                     :isMobile="isMobile"
@@ -20,6 +21,7 @@
                     @selectConversation="handleSelectConversation"
                     @editTitle="showEditTitleDialog"
                     @deleteConversation="handleDeleteConversation"
+                    @batchDeleteConversations="handleBatchDeleteConversations"
                     @closeMobileSidebar="closeMobileSidebar"
                     @toggleTheme="toggleTheme"
                     @toggleFullscreen="toggleFullscreen"
@@ -28,6 +30,7 @@
                     @editProject="showEditProjectDialog"
                     @deleteProject="handleDeleteProject"
                     @updateTransportMode="setTransportMode"
+                    @updateSendShortcut="setSendShortcut"
                 />
 
                 <!-- 右侧聊天内容区域 -->
@@ -71,13 +74,14 @@
                                 :stagedImagesUrl="stagedImagesUrl"
                                 :stagedAudioUrl="stagedAudioUrl"
                                 :stagedFiles="stagedNonImageFiles"
-                                :disabled="isStreaming"
+                                :disabled="false"
                                 :is-running="isStreaming || isConvRunning"
                                 :enableStreaming="enableStreaming"
                                 :isRecording="isRecording"
                                 :session-id="currSessionId || null"
                                 :current-session="getCurrentSession"
                                 :replyTo="replyTo"
+                                :send-shortcut="sendShortcut"
                                 @send="handleSendMessage"
                                 @stop="handleStopMessage"
                                 @toggleStreaming="toggleStreaming"
@@ -102,13 +106,14 @@
                                 :stagedImagesUrl="stagedImagesUrl"
                                 :stagedAudioUrl="stagedAudioUrl"
                                 :stagedFiles="stagedNonImageFiles"
-                                :disabled="isStreaming"
+                                :disabled="false"
                                 :is-running="isStreaming || isConvRunning"
                                 :enableStreaming="enableStreaming"
                                 :isRecording="isRecording"
                                 :session-id="currSessionId || null"
                                 :current-session="getCurrentSession"
                                 :replyTo="replyTo"
+                                :send-shortcut="sendShortcut"
                                 @send="handleSendMessage"
                                 @stop="handleStopMessage"
                                 @toggleStreaming="toggleStreaming"
@@ -132,13 +137,14 @@
                             :stagedImagesUrl="stagedImagesUrl"
                             :stagedAudioUrl="stagedAudioUrl"
                             :stagedFiles="stagedNonImageFiles"
-                            :disabled="isStreaming"
+                            :disabled="false"
                             :is-running="isStreaming || isConvRunning"
                             :enableStreaming="enableStreaming"
                             :isRecording="isRecording"
                             :session-id="currSessionId || null"
                             :current-session="getCurrentSession"
                             :replyTo="replyTo"
+                            :send-shortcut="sendShortcut"
                             @send="handleSendMessage"
                             @stop="handleStopMessage"
                             @toggleStreaming="toggleStreaming"
@@ -220,10 +226,13 @@ import { useMediaHandling } from '@/composables/useMediaHandling';
 import { useProjects } from '@/composables/useProjects';
 import type { Project } from '@/components/chat/ProjectList.vue';
 import { useRecording } from '@/composables/useRecording';
+import { useToast } from '@/utils/toast';
 
 interface Props {
     chatboxMode?: boolean;
 }
+type SendShortcut = 'enter' | 'shift_enter';
+const SEND_SHORTCUT_STORAGE_KEY = 'chat_send_shortcut';
 
 const props = withDefaults(defineProps<Props>(), {
     chatboxMode: false
@@ -233,6 +242,7 @@ const router = useRouter();
 const route = useRoute();
 const { t } = useI18n();
 const { tm } = useModuleI18n('features/chat');
+const { warning: toastWarning } = useToast();
 const theme = useTheme();
 const customizer = useCustomizerStore();
 
@@ -257,6 +267,7 @@ const {
     getSessions,
     newSession,
     deleteSession: deleteSessionFn,
+    batchDeleteSessions,
     showEditTitleDialog,
     saveTitle,
     updateSessionTitle,
@@ -330,6 +341,18 @@ interface ReplyInfo {
 const replyTo = ref<ReplyInfo | null>(null);
 
 const isDark = computed(() => useCustomizerStore().uiTheme === 'PurpleThemeDark');
+const sendShortcut = ref<SendShortcut>('shift_enter');
+
+function setSendShortcut(mode: SendShortcut) {
+    sendShortcut.value = mode;
+    localStorage.setItem(SEND_SHORTCUT_STORAGE_KEY, mode);
+}
+
+function focusChatInput() {
+    nextTick(() => {
+        chatInputRef.value?.focusInput?.();
+    });
+}
 
 // 检测是否为手机端
 function checkMobile() {
@@ -488,6 +511,7 @@ async function handleSelectConversation(sessionIds: string[]) {
     nextTick(() => {
         messageList.value?.scrollToBottom();
     });
+    focusChatInput();
 }
 
 function handleNewChat() {
@@ -497,6 +521,7 @@ function handleNewChat() {
     // 退出项目视图
     selectedProjectId.value = null;
     projectSessions.value = [];
+    focusChatInput();
 }
 
 async function handleDeleteConversation(sessionId: string) {
@@ -507,6 +532,33 @@ async function handleDeleteConversation(sessionId: string) {
     if (selectedProjectId.value) {
         const sessions = await getProjectSessions(selectedProjectId.value);
         projectSessions.value = sessions;
+    }
+}
+
+async function handleBatchDeleteConversations(sessionIds: string[]) {
+    try {
+        const result = await batchDeleteSessions(sessionIds);
+
+        // 仅在当前会话成功删除时清除信息
+        if (result.currentSessionDeleted) {
+            messages.value = [];
+        }
+
+        // 失败处理
+        if (result.failed_count > 0) {
+            toastWarning(
+                tm('batch.partialFailure', { failed: result.failed_count, total: sessionIds.length })
+            );
+        }
+
+        // 如果在项目视图中，刷新项目会话列表
+        if (selectedProjectId.value) {
+            const sessions = await getProjectSessions(selectedProjectId.value);
+            projectSessions.value = sessions;
+        }
+    } catch (err) {
+        console.error('Batch delete sessions failed:', err);
+        toastWarning(tm('batch.requestFailed'));
     }
 }
 
@@ -627,6 +679,11 @@ async function handleSendMessage() {
     const selectedProviderId = selection?.providerId || '';
     const selectedModelName = selection?.modelName || '';
 
+    // 点击发送后立即将消息区滚到底部，确保用户看到最新消息
+    nextTick(() => {
+        messageList.value?.scrollToBottom();
+    });
+
     await sendMsg(
         promptToSend,
         filesToSend,
@@ -635,6 +692,11 @@ async function handleSendMessage() {
         selectedModelName,
         replyToSend
     );
+
+    // 发送流程结束后再兜底一次，处理异步渲染场景
+    nextTick(() => {
+        messageList.value?.scrollToBottom();
+    });
 
     // 如果在项目中创建了新会话，将其添加到项目
     if (isCreatingNewSession && currentProjectId && currSessionId.value) {
@@ -694,6 +756,10 @@ watch(sessions, (newSessions) => {
 });
 
 onMounted(() => {
+    const storedShortcut = localStorage.getItem(SEND_SHORTCUT_STORAGE_KEY);
+    if (storedShortcut === 'enter' || storedShortcut === 'shift_enter') {
+        sendShortcut.value = storedShortcut;
+    }
     checkMobile();
     window.addEventListener('resize', checkMobile);
     getSessions();
