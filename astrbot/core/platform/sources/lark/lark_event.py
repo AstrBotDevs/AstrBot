@@ -756,6 +756,7 @@ class LarkMessageEvent(AstrMessageEvent):
         done = False
         text_changed = asyncio.Event()
         sender_task = None
+        fallback_used = False  # 回退路径已处理 Metric，避免重复上报
 
         async def _sender_loop() -> None:
             """信号驱动的文本发送循环，有新内容就发，RTT 自然限流。"""
@@ -774,6 +775,8 @@ class LarkMessageEvent(AstrMessageEvent):
 
         async def _consume_rest_and_fallback(gen, initial_text: str) -> None:
             """Card creation failed; consume remaining chunks and send non-streaming."""
+            nonlocal fallback_used
+            fallback_used = True
             buffer = MessageChain().message(initial_text) if initial_text else None
             async for chain in gen:
                 if not isinstance(chain, MessageChain):
@@ -853,8 +856,11 @@ class LarkMessageEvent(AstrMessageEvent):
 
         # If no text was produced at all, no card was created
         if card_id is None:
-            await Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
-            self._has_send_oper = True
+            if not fallback_used:
+                await Metric.upload(
+                    msg_event_tick=1, adapter_name=self.platform_meta.name
+                )
+                self._has_send_oper = True
             return
 
         # 必要时补发最终文本 + 关闭流式模式
