@@ -18,8 +18,24 @@ from mcp.types import (
 )
 
 from astrbot import logger
-from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
+from astrbot.core.agent.context.compressor import ContextCompressor
+from astrbot.core.agent.context.config import ContextConfig
+from astrbot.core.agent.context.manager import ContextManager
+from astrbot.core.agent.context.token_counter import TokenCounter
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.message import (
+    AssistantMessageSegment,
+    ImageURLPart,
+    Message,
+    TextPart,
+    ThinkPart,
+    ToolCallMessageSegment,
+)
+from astrbot.core.agent.response import AgentResponseData, AgentStats
+from astrbot.core.agent.run_context import ContextWrapper, TContext
+from astrbot.core.agent.runners.base import AgentResponse, AgentState, BaseAgentRunner
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
@@ -34,17 +50,6 @@ from astrbot.core.provider.entities import (
     ToolCallsResult,
 )
 from astrbot.core.provider.provider import Provider
-
-from ..context.compressor import ContextCompressor
-from ..context.config import ContextConfig
-from ..context.manager import ContextManager
-from ..context.token_counter import TokenCounter
-from ..hooks import BaseAgentRunHooks
-from ..message import AssistantMessageSegment, Message, ToolCallMessageSegment
-from ..response import AgentResponseData, AgentStats
-from ..run_context import ContextWrapper, TContext
-from ..tool_executor import BaseFunctionToolExecutor
-from .base import AgentResponse, AgentState, BaseAgentRunner
 
 if sys.version_info >= (3, 12):
     from typing import override
