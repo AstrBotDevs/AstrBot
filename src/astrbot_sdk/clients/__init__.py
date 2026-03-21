@@ -19,6 +19,7 @@ capability clients so `Context` keeps a narrow, stable surface.
     - KnowledgeBaseManagerClient: 知识库管理
     - HTTPClient: Web API 注册
     - MetadataClient: 插件元数据查询
+    - SkillClient: 运行时注册插件 skill
 """
 
 from .db import DBClient
@@ -49,6 +50,7 @@ from .provider import (
 )
 from .registry import HandlerMetadata, RegistryClient
 from .session import SessionPluginManager, SessionServiceManager
+from .skills import SkillClient, SkillRegistration
 
 __all__ = [
     "ChatMessage",
@@ -85,4 +87,6 @@ __all__ = [
     "RegistryClient",
     "SessionPluginManager",
     "SessionServiceManager",
+    "SkillClient",
+    "SkillRegistration",
 ]
