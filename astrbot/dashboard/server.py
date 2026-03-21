@@ -205,14 +205,17 @@ class AstrBotDashboard:
         # 支持通过环境变量 CORS_ALLOW_ORIGIN 配置允许的域名,多个域名用逗号分隔
         # 如果前端使用 withCredentials:true,需要设置具体的域名而非 "*"
         cors_allow_origin = os.environ.get("CORS_ALLOW_ORIGIN", "*")
+        cors_allow_credentials = False
         if cors_allow_origin != "*":
             cors_allow_origin = [
                 origin.strip() for origin in cors_allow_origin.split(",")
             ]
+            # 只有设置具体域名时才允许凭据
+            cors_allow_credentials = True
         self.app = cors(
             self.app,
             allow_origin=cors_allow_origin,
-            allow_credentials=True,
+            allow_credentials=cors_allow_credentials,
             allow_headers=[
                 "Authorization",
                 "Content-Type",
@@ -491,6 +494,8 @@ class AstrBotDashboard:
             or dashboard_config.get("port", 6185)
         )
         resolved_port = _resolve_dashboard_value(port_value, field_name="port")
+        if resolved_port is None:
+            raise ValueError("Port configuration is missing")
         port = int(resolved_port)
         ssl_config = dashboard_config.get("ssl", {})
         ssl_enable = _parse_env_bool(
@@ -550,8 +555,8 @@ class AstrBotDashboard:
             ca_certs = _resolve_dashboard_value(ca_certs, field_name="ssl.ca_certs")
 
             if cert_file and key_file:
-                cert_path = await anyio.Path(cert_file).expanduser()
-                key_path = await anyio.Path(key_file).expanduser()
+                cert_path = await anyio.Path(str(cert_file)).expanduser()
+                key_path = await anyio.Path(str(key_file)).expanduser()
                 if not await cert_path.is_file():
                     raise ValueError(f"SSL 证书文件不存在: {cert_path}")
                 if not await key_path.is_file():
@@ -561,7 +566,7 @@ class AstrBotDashboard:
                 config.keyfile = str(await key_path.resolve())
 
             if ca_certs:
-                ca_path = await anyio.Path(ca_certs).expanduser()
+                ca_path = await anyio.Path(str(ca_certs)).expanduser()
                 if not await ca_path.is_file():
                     raise ValueError(f"SSL CA 证书文件不存在: {ca_path}")
                 config.ca_certs = str(await ca_path.resolve())
