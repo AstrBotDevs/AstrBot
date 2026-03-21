@@ -1,6 +1,7 @@
 import asyncio
 import threading
 import typing as T
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import CursorResult, Row
