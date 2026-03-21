@@ -180,6 +180,30 @@ def test_run_openclaw_migration_dry_run(tmp_path: Path) -> None:
     assert not (astrbot_root / "data" / "migrations" / "openclaw").exists()
 
 
+def test_run_openclaw_migration_dry_run_with_explicit_target_reports_none(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / ".openclaw"
+    source_root.mkdir(parents=True)
+    _prepare_openclaw_source(source_root)
+
+    astrbot_root = tmp_path / "astrbot"
+    astrbot_root.mkdir(parents=True)
+    _prepare_astrbot_root(astrbot_root)
+
+    explicit_target = astrbot_root / "data" / "migrations" / "openclaw" / "dry-run-target"
+    report = run_openclaw_migration(
+        source_root=source_root,
+        astrbot_root=astrbot_root,
+        dry_run=True,
+        target_dir=explicit_target,
+    )
+
+    assert report.dry_run is True
+    assert report.target_dir is None
+    assert not explicit_target.exists()
+
+
 def test_run_openclaw_migration_writes_artifacts(tmp_path: Path) -> None:
     source_root = tmp_path / ".openclaw"
     source_root.mkdir(parents=True)
@@ -216,6 +240,59 @@ def test_run_openclaw_migration_writes_artifacts(tmp_path: Path) -> None:
     assert '"model" = ' in toml_text
     assert '["memory"]' in toml_text
     assert '[["skills"]]' in toml_text
+
+
+def test_run_openclaw_migration_writes_to_default_timestamp_target(tmp_path: Path) -> None:
+    source_root = tmp_path / ".openclaw"
+    source_root.mkdir(parents=True)
+    _prepare_openclaw_source(source_root)
+
+    astrbot_root = tmp_path / "astrbot"
+    astrbot_root.mkdir(parents=True)
+    _prepare_astrbot_root(astrbot_root)
+
+    report = run_openclaw_migration(
+        source_root=source_root,
+        astrbot_root=astrbot_root,
+        dry_run=False,
+        target_dir=None,
+    )
+
+    assert report.target_dir is not None
+    target = Path(report.target_dir)
+    assert target.exists()
+    expected_root = astrbot_root / "data" / "migrations" / "openclaw"
+    assert target.parent == expected_root
+    assert target.name.startswith("run-")
+
+
+def test_run_openclaw_migration_excludes_target_inside_workspace(tmp_path: Path) -> None:
+    source_root = tmp_path / ".openclaw"
+    source_root.mkdir(parents=True)
+    _prepare_openclaw_source(source_root)
+
+    workspace = source_root / "workspace"
+    target_inside_workspace = workspace / "snapshot-output"
+    target_inside_workspace.mkdir(parents=True, exist_ok=True)
+    (target_inside_workspace / "stale.txt").write_text("old artifact", encoding="utf-8")
+
+    astrbot_root = tmp_path / "astrbot"
+    astrbot_root.mkdir(parents=True)
+    _prepare_astrbot_root(astrbot_root)
+
+    report = run_openclaw_migration(
+        source_root=source_root,
+        astrbot_root=astrbot_root,
+        dry_run=False,
+        target_dir=target_inside_workspace,
+    )
+
+    assert report.target_dir is not None
+    target = Path(report.target_dir)
+    assert target == target_inside_workspace
+
+    # Files from the output directory itself must not be re-copied into snapshot workspace.
+    assert not (target / "workspace" / "snapshot-output" / "stale.txt").exists()
 
 
 def test_markdown_parsing_structured_and_plain_lines(tmp_path: Path) -> None:

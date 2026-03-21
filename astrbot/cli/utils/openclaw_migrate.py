@@ -360,11 +360,21 @@ def _find_openclaw_config_json(source_root: Path, workspace_dir: Path) -> Path |
     return None
 
 
-def _collect_workspace_files(workspace_dir: Path) -> list[Path]:
+def _collect_workspace_files(
+    workspace_dir: Path, *, exclude_dir: Path | None = None
+) -> list[Path]:
     files: list[Path] = []
+    exclude_resolved = exclude_dir.resolve() if exclude_dir is not None else None
     for path in workspace_dir.rglob("*"):
-        if path.is_file() and not path.is_symlink():
-            files.append(path)
+        if not path.is_file() or path.is_symlink():
+            continue
+        if exclude_resolved is not None:
+            try:
+                path.resolve().relative_to(exclude_resolved)
+                continue
+            except (OSError, ValueError):
+                pass
+        files.append(path)
     return sorted(files)
 
 
@@ -448,10 +458,10 @@ def _collect_memory_entries(workspace_dir: Path) -> MemoryCollection:
 def _resolve_target_dir(
     astrbot_root: Path, target_dir: Path | None, dry_run: bool
 ) -> Path | None:
-    if target_dir is not None:
-        return target_dir if target_dir.is_absolute() else (astrbot_root / target_dir)
     if dry_run:
         return None
+    if target_dir is not None:
+        return target_dir if target_dir.is_absolute() else (astrbot_root / target_dir)
     run_id = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     return astrbot_root / "data" / "migrations" / "openclaw" / f"run-{run_id}"
 
@@ -535,7 +545,16 @@ def run_openclaw_migration(
     memory_collection = _collect_memory_entries(workspace_dir)
     memory_entries = memory_collection.entries
 
-    workspace_files = _collect_workspace_files(workspace_dir)
+    explicit_target_dir: Path | None = None
+    if target_dir is not None:
+        explicit_target_dir = (
+            target_dir if target_dir.is_absolute() else (astrbot_root / target_dir)
+        )
+
+    workspace_files = _collect_workspace_files(
+        workspace_dir,
+        exclude_dir=explicit_target_dir,
+    )
     workspace_total_bytes = _workspace_total_size(workspace_files)
 
     config_json_path = _find_openclaw_config_json(source_root, workspace_dir)
