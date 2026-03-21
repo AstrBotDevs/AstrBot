@@ -32,7 +32,7 @@
 <a href="https://astrbot.app/">Documentation</a> ｜
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">Roadmap</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue Tracker</a>
+<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue Tracker</a> ｜
 <a href="mailto:community@astrbot.app">Email Support</a>
 </div>
 
