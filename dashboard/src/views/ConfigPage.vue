@@ -126,11 +126,15 @@
         <!-- Config List -->
         <v-list lines="two">
           <v-list-item v-for="config in configInfoList" :key="config.id" :title="config.name">
-            <template v-slot:append v-if="config.id !== 'default'">
+            <template v-slot:append>
               <div class="d-flex align-center" style="gap: 8px;">
+                <v-btn icon="mdi-content-copy" size="small" variant="text" color="primary"
+                  @click="startCopyConfig(config)"></v-btn>
                 <v-btn icon="mdi-pencil" size="small" variant="text" color="warning"
+                  v-if="config.id !== 'default'"
                   @click="startEditConfig(config)"></v-btn>
                 <v-btn icon="mdi-delete" size="small" variant="text" color="error"
+                  v-if="config.id !== 'default'"
                   @click="confirmDeleteConfig(config)"></v-btn>
               </div>
             </template>
@@ -141,7 +145,9 @@
         <v-divider v-if="showConfigForm" class="my-6"></v-divider>
 
         <div v-if="showConfigForm">
-          <h3 class="mb-4">{{ isEditingConfig ? tm('configManagement.editConfig') : tm('configManagement.newConfig') }}</h3>
+          <h3 class="mb-4">
+            {{ isEditingConfig ? tm('configManagement.editConfig') : (isCopyingConfig ? tm('configManagement.copyConfig') : tm('configManagement.newConfig')) }}
+          </h3>
 
           <h4>{{ tm('configManagement.configName') }}</h4>
 
@@ -151,7 +157,7 @@
           <div class="d-flex justify-end mt-4" style="gap: 8px;">
             <v-btn variant="text" @click="cancelConfigForm">{{ tm('buttons.cancel') }}</v-btn>
             <v-btn color="primary" @click="saveConfigForm"
-              :disabled="!configFormData.name">
+              :disabled="!configFormData.name || (isCopyingConfig && !copySourceConfigId)">
               {{ isEditingConfig ? tm('buttons.update') : tm('buttons.create') }}
             </v-btn>
           </div>
@@ -343,6 +349,7 @@ export default {
       configManageDialog: false,
       showConfigForm: false,
       isEditingConfig: false,
+      isCopyingConfig: false,
       config_data_has_changed: false,
       config_data_str: "",
       config_data: {
@@ -371,6 +378,7 @@ export default {
         name: '',
       },
       editingConfigId: null,
+      copySourceConfigId: '',
 
       // 测试聊天
       testChatDrawer: false,
@@ -568,8 +576,9 @@ export default {
       }
     },
     createNewConfig() {
+      const configName = this.normalizeConfigName(this.configFormData.name);
       axios.post('/api/config/abconf/new', {
-        name: this.configFormData.name
+        name: configName
       }).then((res) => {
         if (res.data.status === "ok") {
           this.save_message = res.data.message;
@@ -587,6 +596,24 @@ export default {
         this.save_message = this.tm('configManagement.createFailed');
         this.save_message_snack = true;
         this.save_message_success = "error";
+      });
+    },
+    normalizeConfigName(name) {
+      return (name || '').trim();
+    },
+    hasDuplicateConfigName(name, excludeId = null) {
+      const normalizedName = this.normalizeConfigName(name);
+      if (!normalizedName) {
+        return false;
+      }
+      return this.configInfoList.some((config) => {
+        if (!config || !config.name) {
+          return false;
+        }
+        if (excludeId && config.id === excludeId) {
+          return false;
+        }
+        return this.normalizeConfigName(config.name) === normalizedName;
       });
     },
     async onConfigSelect(value) {
@@ -641,41 +668,103 @@ export default {
     startCreateConfig() {
       this.showConfigForm = true;
       this.isEditingConfig = false;
+      this.isCopyingConfig = false;
       this.configFormData = {
         name: '',
       };
       this.editingConfigId = null;
+      this.copySourceConfigId = '';
     },
     startEditConfig(config) {
       this.showConfigForm = true;
       this.isEditingConfig = true;
+      this.isCopyingConfig = false;
       this.editingConfigId = config.id;
 
       this.configFormData = {
         name: config.name || '',
       };
+      this.copySourceConfigId = '';
+    },
+    startCopyConfig(config) {
+      this.showConfigForm = true;
+      this.isEditingConfig = false;
+      this.isCopyingConfig = true;
+      this.editingConfigId = null;
+      this.copySourceConfigId = config.id;
+      this.configFormData = {
+        name: `${config.name}-copy`,
+      };
     },
     cancelConfigForm() {
       this.showConfigForm = false;
       this.isEditingConfig = false;
+      this.isCopyingConfig = false;
       this.editingConfigId = null;
       this.configFormData = {
         name: '',
       };
+      this.copySourceConfigId = '';
     },
     saveConfigForm() {
-      if (!this.configFormData.name) {
+      const normalizedName = this.normalizeConfigName(this.configFormData.name);
+      if (!normalizedName) {
         this.save_message = this.tm('configManagement.pleaseEnterName');
         this.save_message_snack = true;
         this.save_message_success = "error";
         return;
       }
-
+      const excludeId = this.isEditingConfig ? this.editingConfigId : null;
+      if (this.hasDuplicateConfigName(normalizedName, excludeId)) {
+        this.save_message = this.tm('configManagement.nameExists');
+        this.save_message_snack = true;
+        this.save_message_success = "error";
+        return;
+      }
+      this.configFormData.name = normalizedName;
       if (this.isEditingConfig) {
         this.updateConfigInfo();
+      } else if (this.isCopyingConfig) {
+        this.copyConfig();
       } else {
         this.createNewConfig();
       }
+    },
+    copyConfig() {
+      const configName = this.normalizeConfigName(this.configFormData.name);
+      axios.get('/api/config/abconf', {
+        params: { id: this.copySourceConfigId }
+      }).then((res) => {
+        const sourceConfig = res.data?.data?.config;
+        if (!sourceConfig) {
+          this.save_message = this.tm('configManagement.copyFailed');
+          this.save_message_snack = true;
+          this.save_message_success = "error";
+          return;
+        }
+        return axios.post('/api/config/abconf/new', {
+          name: configName,
+          config: sourceConfig
+        });
+      }).then((res) => {
+        if (!res) return;
+        if (res.data.status === "ok") {
+          this.save_message = res.data.message;
+          this.save_message_snack = true;
+          this.save_message_success = "success";
+          this.getConfigInfoList(res.data.data.conf_id);
+          this.cancelConfigForm();
+        } else {
+          this.save_message = res.data.message;
+          this.save_message_snack = true;
+          this.save_message_success = "error";
+        }
+      }).catch((err) => {
+        console.error(err);
+        this.save_message = err?.response?.data?.message || this.tm('configManagement.copyFailed');
+        this.save_message_snack = true;
+        this.save_message_success = "error";
+      });
     },
     async confirmDeleteConfig(config) {
       const message = this.tm('configManagement.confirmDelete').replace('{name}', config.name);
@@ -707,9 +796,10 @@ export default {
       });
     },
     updateConfigInfo() {
+      const configName = this.normalizeConfigName(this.configFormData.name);
       axios.post('/api/config/abconf/update', {
         id: this.editingConfigId,
-        name: this.configFormData.name
+        name: configName
       }).then((res) => {
         if (res.data.status === "ok") {
           this.save_message = res.data.message;
