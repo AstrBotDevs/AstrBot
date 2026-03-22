@@ -746,6 +746,7 @@ def test_group_worker_metadata_serializes_issues() -> None:
 
     assert metadata["issues"] == [runtime.issues[0].to_payload()]
     assert metadata["skipped_plugins"] == {"sdk-broken": "boom"}
+    assert metadata["acknowledge_global_mcp_risk"] is False
 
 
 @pytest.mark.unit

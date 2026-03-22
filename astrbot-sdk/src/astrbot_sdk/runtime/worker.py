@@ -71,6 +71,22 @@ def _plugin_acknowledges_global_mcp_risk(instances: list[Any]) -> bool:
     )
 
 
+def _metadata_plugin_instances(loaded_plugin: Any) -> list[Any]:
+    """Return plugin instances for metadata-only inspection.
+
+    Metadata serialization is also exercised by lightweight tests that stub
+    ``loaded_plugin`` with only the fields relevant to the payload. Missing
+    ``instances`` means the plugin cannot acknowledge the global MCP risk, but
+    it should not break issue/metadata reporting.
+    """
+    instances = getattr(loaded_plugin, "instances", [])
+    if isinstance(instances, list):
+        return instances
+    if isinstance(instances, tuple):
+        return list(instances)
+    return []
+
+
 def _load_group_plugin_specs(group_metadata_path: Path) -> tuple[str, list[PluginSpec]]:
     try:
         payload = json.loads(group_metadata_path.read_text(encoding="utf-8"))
@@ -324,7 +340,9 @@ class GroupWorkerRuntime:
                 for agent in state.loaded_plugin.agents
             ],
             "acknowledge_global_mcp_risk": any(
-                _plugin_acknowledges_global_mcp_risk(state.loaded_plugin.instances)
+                _plugin_acknowledges_global_mcp_risk(
+                    _metadata_plugin_instances(state.loaded_plugin)
+                )
                 for state in self._active_plugin_states
             ),
         }
@@ -402,7 +420,7 @@ class PluginWorkerRuntime:
                         for item in self.loaded_plugin.agents
                     ],
                     "acknowledge_global_mcp_risk": _plugin_acknowledges_global_mcp_risk(
-                        self.loaded_plugin.instances
+                        _metadata_plugin_instances(self.loaded_plugin)
                     ),
                 },
             )
