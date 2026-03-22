@@ -696,10 +696,51 @@ class TestModalitiesFix:
 
         assert req.func_tool is None
 
+
+class TestProviderRequestAssembleContext:
+    @pytest.mark.asyncio
+    async def test_provider_request_with_image_only_uses_text_placeholder(
+        self, tmp_path
+    ):
+        image_path = tmp_path / "example.jpg"
+        image_path.write_bytes(b"fake-image")
+        req = ProviderRequest(prompt=None, image_urls=[image_path.as_uri()])
+
+        context = await req.assemble_context()
+
+        assert context["role"] == "user"
+        assert isinstance(context["content"], list)
+        assert context["content"][0] == {"type": "text", "text": "[图片]"}
+        assert context["content"][1]["type"] == "image_url"
+
     def test_modalities_fix_all_supported(self, mock_provider):
         """Test modality fix when all features are supported."""
         module = ama
         mock_provider.provider_config = {"modalities": ["image", "tool_use"]}
+        tool_set = ToolSet()
+        tool_set.add_tool(
+            FunctionTool(
+                name="dummy_tool",
+                description="dummy",
+                parameters={"type": "object", "properties": {}},
+            )
+        )
+        req = ProviderRequest(
+            prompt="Hello",
+            image_urls=["/path/to/image.jpg"],
+            func_tool=tool_set,
+        )
+
+        module._modalities_fix(mock_provider, req)
+
+        assert req.prompt == "Hello"
+        assert len(req.image_urls) == 1
+        assert req.func_tool is not None
+
+    def test_modalities_fix_empty_modalities_keeps_image_and_tools(self, mock_provider):
+        """Test modality fix keeps content when modalities are not explicitly configured."""
+        module = ama
+        mock_provider.provider_config = {"modalities": []}
         tool_set = ToolSet()
         tool_set.add_tool(
             FunctionTool(
@@ -993,6 +1034,9 @@ class TestBuildMainAgent:
         module = ama
         mock_image = MagicMock(spec=Image)
         mock_image.convert_to_file_path = AsyncMock(return_value="/path/to/image.jpg")
+        mock_image.url = ""
+        mock_image.file = "file:///path/to/image.jpg"
+        mock_image.path = "/path/to/image.jpg"
         mock_event.message_obj.message = [mock_image]
 
         mock_context.get_provider_by_id.return_value = None
@@ -1017,6 +1061,7 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
+        assert result.provider_request.image_urls == ["file:///path/to/image.jpg"]
 
     @pytest.mark.asyncio
     async def test_build_main_agent_no_prompt_no_images(

@@ -1,4 +1,5 @@
 import asyncio
+import html
 import inspect
 import itertools
 import logging
@@ -126,6 +127,11 @@ class AiocqhttpAdapter(Platform):
         await super().send_by_session(session, message_chain)
 
     async def convert_message(self, event: Event) -> AstrBotMessage | None:
+        raw_message = event.get("raw_message")
+        if isinstance(raw_message, str) and raw_message:
+            # Normalize CQ code escaping for downstream consumers.
+            event["raw_message"] = html.unescape(raw_message)
+
         logger.debug(f"[aiocqhttp] RawMessage {event}")
 
         if event["post_type"] == "message":
@@ -489,7 +495,7 @@ class AiocqhttpAdapter(Platform):
             session_id=message.session_id,
             bot=self.bot,
         )
-
+        logger.debug(f"Handling message: {message_event.message_obj}")
         self.commit_event(message_event)
 
     def get_client(self) -> CQHttp:

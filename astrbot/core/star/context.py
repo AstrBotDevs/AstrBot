@@ -132,6 +132,7 @@ class Context:
         prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
         if not prov or not isinstance(prov, Provider):
             raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
+        logger.debug(f"contexts received in llm_generate: {contexts}")
         llm_resp = await prov.text_chat(
             prompt=prompt,
             image_urls=image_urls,
@@ -198,6 +199,7 @@ class Context:
         agent_context = kwargs.get("agent_context")
 
         context_ = []
+        logger.debug(f"contexts received in tool_loop_agent: {contexts}")
         for msg in contexts or []:
             if isinstance(msg, Message):
                 context_.append(msg.model_dump())

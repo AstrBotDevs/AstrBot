@@ -61,6 +61,11 @@ class EventBus:
             logger.info(
                 f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_name()}/{event.get_sender_id()}: {event.get_message_outline()}",
             )
+            if (
+                f"[{event.get_platform_id()}({event.get_platform_name()})]"
+                == "[alice(aiocqhttp)]"
+            ):
+                logger.debug(f"Full event data: {event.message_obj}")
         # 没有发送者名称: [平台名] 发送者ID: 消息概要
         else:
             logger.info(

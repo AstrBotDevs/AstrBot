@@ -34,10 +34,10 @@ from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "openai_chat_completion",
-    "OpenAI API Chat Completion 提供商适配器",
+    "doubao_chat_completion",
+    "字节豆包 API Chat Completion 提供商适配器",
 )
-class ProviderOpenAIOfficial(Provider):
+class ProviderDoubao(Provider):
     _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
 
     @classmethod
@@ -78,16 +78,14 @@ class ProviderOpenAIOfficial(Provider):
             text = str(candidate).strip()
             if not text:
                 return
-            candidates.append(
-                ProviderOpenAIOfficial._truncate_error_text_candidate(text)
-            )
+            candidates.append(ProviderDoubao._truncate_error_text_candidate(text))
 
         _append_candidate(str(error))
 
         body = getattr(error, "body", None)
         if isinstance(body, dict):
             err_obj = body.get("error")
-            body_text = ProviderOpenAIOfficial._safe_json_dump(
+            body_text = ProviderDoubao._safe_json_dump(
                 {"error": err_obj} if isinstance(err_obj, dict) else body
             )
             _append_candidate(body_text)
@@ -212,37 +210,6 @@ class ProviderOpenAIOfficial(Provider):
         self.set_model(model)
 
         self.reasoning_key = "reasoning_content"
-        # 检测是否使用豆包格式（可通过配置或 api_base 自动判断）
-        self.use_doubao_format = bool(provider_config.get("use_doubao_format", False))
-        api_base = provider_config.get("api_base", "")
-        if not self.use_doubao_format and isinstance(api_base, str):
-            # 自动检测豆包 API
-            self.use_doubao_format = (
-                "volces.com" in api_base or "bytedance" in api_base.lower()
-            )
-
-        if self.use_doubao_format:
-            logger.info(f"检测到豆包 API，将使用豆包图片格式（input_image + 直接 URL）")
-
-    def _ollama_disable_thinking_enabled(self) -> bool:
-        value = self.provider_config.get("ollama_disable_thinking", False)
-        if isinstance(value, str):
-            return value.strip().lower() in {"1", "true", "yes", "on"}
-        return bool(value)
-
-    def _apply_provider_specific_extra_body_overrides(
-        self, extra_body: dict[str, Any]
-    ) -> None:
-        if self.provider_config.get("provider") != "ollama":
-            return
-        if not self._ollama_disable_thinking_enabled():
-            return
-
-        # Ollama's OpenAI-compatible endpoint reliably maps reasoning_effort=none
-        # to think=false, while direct think=false passthrough is not stable.
-        extra_body.pop("reasoning", None)
-        extra_body.pop("think", None)
-        extra_body["reasoning_effort"] = "none"
 
     async def get_models(self):
         try:
@@ -279,7 +246,6 @@ class ProviderOpenAIOfficial(Provider):
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
-        self._apply_provider_specific_extra_body_overrides(extra_body)
 
         model = payloads.get("model", "").lower()
         logger.debug(
@@ -333,7 +299,6 @@ class ProviderOpenAIOfficial(Provider):
                 to_del.append(key)
         for key in to_del:
             del payloads[key]
-        self._apply_provider_specific_extra_body_overrides(extra_body)
 
         stream = await self.client.chat.completions.create(
             **payloads,
@@ -350,10 +315,9 @@ class ProviderOpenAIOfficial(Provider):
                 state.handle_chunk(chunk)
             except Exception as e:
                 logger.warning("Saving chunk state error: " + str(e))
-            if not chunk.choices:
+            if len(chunk.choices) == 0:
                 continue
-            choice = chunk.choices[0]
-            delta = choice.delta
+            delta = chunk.choices[0].delta
             # logger.debug(f"chunk delta: {delta}")
             # handle the content delta
             reasoning = self._extract_reasoning_content(chunk)
@@ -362,7 +326,7 @@ class ProviderOpenAIOfficial(Provider):
             if reasoning:
                 llm_response.reasoning_content = reasoning
                 _y = True
-            if delta and delta.content:
+            if delta.content:
                 # Don't strip streaming chunks to preserve spaces between words
                 completion_text = self._normalize_content(delta.content, strip=False)
                 llm_response.result_chain = MessageChain(
@@ -371,11 +335,6 @@ class ProviderOpenAIOfficial(Provider):
                 _y = True
             if chunk.usage:
                 llm_response.usage = self._extract_usage(chunk.usage)
-            elif choice_usage := getattr(choice, "usage", None):
-                # Workaround for some providers that only return usage in choices[].usage, e.g. MoonshotAI
-                # See https://github.com/AstrBotDevs/AstrBot/issues/6614
-                llm_response.usage = self._extract_usage(choice_usage)
-                state.current_completion_snapshot.usage = choice_usage
             if _y:
                 yield llm_response
 
@@ -390,7 +349,7 @@ class ProviderOpenAIOfficial(Provider):
     ) -> str:
         """Extract reasoning content from OpenAI ChatCompletion if available."""
         reasoning_text = ""
-        if not completion.choices:
+        if len(completion.choices) == 0:
             return reasoning_text
         if isinstance(completion, ChatCompletion):
             choice = completion.choices[0]
@@ -404,11 +363,13 @@ class ProviderOpenAIOfficial(Provider):
                 reasoning_text = str(reasoning_attr)
         return reasoning_text
 
-    def _extract_usage(self, usage: CompletionUsage | dict) -> TokenUsage:
-        ptd = getattr(usage, "prompt_tokens_details", None)
-        cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
-        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
-        completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    def _extract_usage(self, usage: CompletionUsage) -> TokenUsage:
+        ptd = usage.prompt_tokens_details
+        cached = ptd.cached_tokens if ptd and ptd.cached_tokens else 0
+        prompt_tokens = 0 if usage.prompt_tokens is None else usage.prompt_tokens
+        completion_tokens = (
+            0 if usage.completion_tokens is None else usage.completion_tokens
+        )
         return TokenUsage(
             input_other=prompt_tokens - cached,
             input_cached=cached,
@@ -511,7 +472,7 @@ class ProviderOpenAIOfficial(Provider):
         """Parse OpenAI ChatCompletion into LLMResponse"""
         llm_response = LLMResponse("assistant")
 
-        if not completion.choices:
+        if len(completion.choices) == 0:
             raise Exception("API 返回的 completion 为空。")
         choice = completion.choices[0]
 
@@ -600,16 +561,7 @@ class ProviderOpenAIOfficial(Provider):
         extra_user_content_parts: list[ContentPart] | None = None,
         **kwargs,
     ) -> tuple:
-        import traceback
-
-        def target_function():
-            print("=== CALL STACK ===")
-            traceback.print_stack()
-        target_function()
         """准备聊天所需的有效载荷和上下文"""
-        logger.debug(
-            f"Preparing chat payload with prompt: {prompt}, image_urls: {image_urls}, contexts: {contexts}, system_prompt: {system_prompt}, tool_calls_result: {tool_calls_result}, model: {model}, extra_user_content_parts: {extra_user_content_parts}"
-        )
         if contexts is None:
             contexts = []
         new_record = None
@@ -618,15 +570,6 @@ class ProviderOpenAIOfficial(Provider):
                 prompt, image_urls, extra_user_content_parts
             )
         context_query = self._ensure_message_to_dicts(contexts)
-        # Some upstream paths pass image_urls separately while contexts may only contain
-        # a textual placeholder. Recover multimodal image parts from image_urls here.
-        if (
-            prompt is None
-            and image_urls
-            and not self._context_contains_image(context_query)
-        ):
-            fallback_record = await self.assemble_context("", image_urls)
-            context_query.append(fallback_record)
         if new_record:
             context_query.append(new_record)
         if system_prompt:
@@ -645,7 +588,6 @@ class ProviderOpenAIOfficial(Provider):
                     context_query.extend(tcr.to_openai_messages())
 
         model = model or self.get_model()
-        logger.debug(f"Prepared context query for OpenAI API: {context_query}")
 
         payloads = {"messages": context_query, "model": model}
 
@@ -691,8 +633,7 @@ class ProviderOpenAIOfficial(Provider):
             # 最后一次不等待
             if retry_cnt < max_retries - 1:
                 await asyncio.sleep(1)
-            if chosen_key in available_api_keys:
-                available_api_keys.remove(chosen_key)
+            available_api_keys.remove(chosen_key)
             if len(available_api_keys) > 0:
                 chosen_key = random.choice(available_api_keys)
                 return (
@@ -799,12 +740,6 @@ class ProviderOpenAIOfficial(Provider):
             extra_user_content_parts=extra_user_content_parts,
             **kwargs,
         )
-        import traceback
-
-        def target_function():
-            print("=== CALL STACK ===")
-            traceback.print_stack()
-        target_function()
         logger.debug(f"Prepared payloads for OpenAI API: {payloads}")
 
         llm_response = None
@@ -918,7 +853,7 @@ class ProviderOpenAIOfficial(Provider):
             raise last_exception
 
     async def _remove_image_from_context(self, contexts: list):
-        """从上下文中删除所有带有 image 的记录（支持 OpenAI 和豆包格式）"""
+        """从上下文中删除所有带有 image 的记录"""
         new_contexts = []
 
         for context in contexts:
@@ -926,10 +861,8 @@ class ProviderOpenAIOfficial(Provider):
                 # continue
                 new_content = []
                 for item in context["content"]:
-                    # 移除 OpenAI 格式 (type: image_url) 和豆包格式 (type: input_image)
-                    if isinstance(item, dict) and item.get("type") in (
-                        "image_url",
-                        "input_image",
+                    if isinstance(item, dict) and (
+                        item.get("type") in ("image_url", "input_image")
                     ):
                         continue
                     new_content.append(item)
@@ -955,72 +888,57 @@ class ProviderOpenAIOfficial(Provider):
         image_urls: list[str] | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
     ) -> dict:
-        """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
-        logger.debug(f"Assembling context with text: {text}, image_urls: {image_urls}")
+        """组装成符合豆包 API 格式的 role 为 user 的消息段"""
 
-        async def resolve_image_part(image_url: str) -> dict | None:
-            # 豆包格式：直接使用 HTTP URL，不进行 Base64 编码
-            if self.use_doubao_format:
-                if image_url.startswith("http"):
-                    # 豆包需要直接的 HTTP URL
-                    return {
-                        "type": "input_image",
-                        "image_url": image_url,
-                    }
-                else:
-                    logger.warning(
-                        f"豆包格式仅支持 HTTP/HTTPS URL，本地图片 {image_url} 将被忽略。"
-                    )
-                    return None
-
-            # OpenAI 格式：使用 Base64 编码
+        async def resolve_image_url(image_url: str) -> str | None:
+            """豆包 API 需要直接的 URL，不需要转 Base64"""
             if image_url.startswith("http"):
-                image_path = await download_image_by_url(image_url)
-                image_data = await self.encode_image_bs64(image_path)
+                # 网络图片直接返回 URL
+                return image_url
             elif image_url.startswith("file:///"):
-                image_path = image_url.replace("file:///", "")
-                image_data = await self.encode_image_bs64(image_path)
-            else:
-                image_data = await self.encode_image_bs64(image_url)
-            if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                # 本地文件暂不支持（豆包需要网络 URL）
+                logger.warning(f"豆包 API 不支持本地文件，图片 {image_url} 将被忽略。")
                 return None
-            return {
-                "type": "image_url",
-                "image_url": {"url": image_data},
-            }
+            else:
+                # 假定是本地路径，豆包不支持
+                logger.warning(f"豆包 API 需要网络 URL，图片 {image_url} 将被忽略。")
+                return None
 
         # 构建内容块列表
         content_blocks = []
 
-        # 1. 用户原始发言（OpenAI 建议：用户发言在前）
+        # 1. 用户原始发言（豆包格式：input_text）
         if text:
-            content_blocks.append({"type": "text", "text": text})
+            content_blocks.append({"type": "input_text", "text": text})
         elif image_urls:
             # 如果没有文本但有图片，添加占位文本
-            content_blocks.append({"type": "text", "text": "[图片]"})
+            content_blocks.append({"type": "input_text", "text": "[图片]"})
         elif extra_user_content_parts:
             # 如果只有额外内容块，也需要添加占位文本
-            content_blocks.append({"type": "text", "text": " "})
+            content_blocks.append({"type": "input_text", "text": " "})
 
         # 2. 额外的内容块（系统提醒、指令等）
         if extra_user_content_parts:
             for part in extra_user_content_parts:
                 if isinstance(part, TextPart):
-                    content_blocks.append({"type": "text", "text": part.text})
+                    content_blocks.append({"type": "input_text", "text": part.text})
                 elif isinstance(part, ImageURLPart):
-                    image_part = await resolve_image_part(part.image_url.url)
-                    if image_part:
-                        content_blocks.append(image_part)
+                    image_url = await resolve_image_url(part.image_url.url)
+                    if image_url:
+                        content_blocks.append(
+                            {"type": "input_image", "image_url": image_url}
+                        )
                 else:
                     raise ValueError(f"不支持的额外内容块类型: {type(part)}")
 
-        # 3. 图片内容
+        # 3. 图片内容（豆包格式：input_image，image_url 是字符串）
         if image_urls:
             for image_url in image_urls:
-                image_part = await resolve_image_part(image_url)
-                if image_part:
-                    content_blocks.append(image_part)
+                resolved_url = await resolve_image_url(image_url)
+                if resolved_url:
+                    content_blocks.append(
+                        {"type": "input_image", "image_url": resolved_url}
+                    )
 
         # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (
@@ -1028,7 +946,7 @@ class ProviderOpenAIOfficial(Provider):
             and not extra_user_content_parts
             and not image_urls
             and len(content_blocks) == 1
-            and content_blocks[0]["type"] == "text"
+            and content_blocks[0]["type"] == "input_text"
         ):
             return {"role": "user", "content": content_blocks[0]["text"]}
 
@@ -1036,12 +954,9 @@ class ProviderOpenAIOfficial(Provider):
         return {"role": "user", "content": content_blocks}
 
     async def encode_image_bs64(self, image_url: str) -> str:
-        """将图片转换为 base64"""
-        if image_url.startswith("base64://"):
-            return image_url.replace("base64://", "data:image/jpeg;base64,")
-        with open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
-            return "data:image/jpeg;base64," + image_bs64
+        """豆包 API 不需要 Base64 编码，此方法保留以兼容父类"""
+        logger.warning("豆包 API 不支持 Base64 图片编码，请使用网络 URL。")
+        return image_url
 
     async def terminate(self):
         if self.client:
