@@ -762,30 +762,13 @@ class LarkMessageEvent(AstrMessageEvent):
     async def send_streaming(self, generator, use_fallback: bool = False):
         """使用 CardKit 流式卡片实现打字机效果｡
 
-        流程:创建卡片实体 ￫ 发送消息 ￫ 流式更新文本 ￫ 关闭流式模式｡
-        使用解耦发送循环,LLM token 到达时只更新 buffer 并唤醒发送协程,
-        发送频率由网络 RTT 自然限流｡
+        流程：首字到来时创建卡片实体 → 发送消息 → 流式更新文本 → 关闭流式模式。
+        卡片创建延迟到第一个文本 token 到达时，避免工具调用阶段就渲染空卡片。
+        使用解耦发送循环，LLM token 到达时只更新 buffer 并唤醒发送协程，
+        发送频率由网络 RTT 自然限流。
         """
-        # Step 1: 创建流式卡片实体
-        card_id = await self._create_streaming_card()
-        if not card_id:
-            logger.warning("[Lark] 无法创建流式卡片,回退到非流式发送")
-            await self._fallback_send_streaming(generator, use_fallback)
-            return
-
-        # Step 2: 发送卡片消息
-        sent = await self._send_card_message(
-            card_id,
-            reply_message_id=self.message_obj.message_id,
-        )
-        if not sent:
-            logger.error("[Lark] 发送流式卡片消息失败,回退到非流式发送")
-            await self._fallback_send_streaming(generator, use_fallback)
-            return
-
-        logger.info("[Lark] 流式输出: 使用 CardKit 流式卡片")
-
-        # Step 3: 解耦发送循环 (Event-driven, 参考 Telegram Draft 路径)
+        # Lazy-init: card & sender loop created on first text token
+        card_id = None
         sequence = 0
         delta = ""
         last_sent = ""
@@ -842,7 +825,21 @@ class LarkMessageEvent(AstrMessageEvent):
                     continue
 
                 if chain.type == "break":
-                    # 飞书卡片不支持分段,忽略 break
+                    # Tool call boundary: close current card, next text
+                    # token will lazily create a new one below the tool
+                    # status message.
+                    if card_id and sender_task:
+                        done = True
+                        text_changed.set()
+                        await sender_task
+                        await _flush_and_close_card()
+                        # Reset for lazy new-card creation
+                        card_id = None
+                        sequence = 0
+                        delta = ""
+                        last_sent = ""
+                        done = False
+                        sender_task = None
                     continue
 
                 for comp in chain.chain:

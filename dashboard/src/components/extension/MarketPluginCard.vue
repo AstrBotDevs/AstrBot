@@ -50,13 +50,8 @@ const handleInstall = (plugin) => {
         <img
           :src="plugin?.logo || defaultPluginIcon"
           :alt="plugin.name"
-          style="
-            height: 75px;
-            width: 75px;
-            border-radius: 8px;
-            object-fit: cover;
-          "
-        >
+          class="plugin-cover__image"
+        />
       </div>
 
       <div class="plugin-info">
@@ -81,10 +76,7 @@ const handleInstall = (plugin) => {
           </v-chip>
         </div>
 
-        <div
-          class="d-flex align-center"
-          style="gap: 4px; margin-bottom: 6px"
-        >
+        <div class="d-flex align-center plugin-meta">
           <v-icon
             icon="mdi-account"
             size="x-small"
@@ -167,35 +159,7 @@ const handleInstall = (plugin) => {
           />
         </div>
 
-        <div
-          class="d-flex align-center"
-          style="gap: 8px; margin-top: auto"
-        >
-          <div
-            v-if="plugin.stars !== undefined"
-            class="d-flex align-center text-subtitle-2"
-            style="color: rgba(var(--v-theme-on-surface), 0.7)"
-          >
-            <v-icon
-              icon="mdi-star"
-              size="x-small"
-              style="margin-right: 2px"
-            />
-            <span>{{ plugin.stars }}</span>
-          </div>
-          <div
-            v-if="plugin.updated_at"
-            class="d-flex align-center text-subtitle-2"
-            style="color: rgba(var(--v-theme-on-surface), 0.7)"
-          >
-            <v-icon
-              icon="mdi-clock-outline"
-              size="x-small"
-              style="margin-right: 2px"
-            />
-            <span>{{ new Date(plugin.updated_at).toLocaleString() }}</span>
-          </div>
-        </div>
+        <div class="plugin-stats"></div>
       </div>
     </v-card-text>
 
@@ -273,12 +237,14 @@ const handleInstall = (plugin) => {
       >
         {{ tm("buttons.install") }}
       </v-btn>
-      <v-chip
+      <v-btn
         v-else
         color="success"
-        size="x-small"
-        label
-        style="height: 20px"
+        size="small"
+        variant="flat"
+        disabled
+        class="market-action-btn"
+        style="height: 32px"
       >
         ✓ {{ tm("status.installed") }}
       </v-btn>

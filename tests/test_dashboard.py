@@ -248,7 +248,7 @@ async def test_subagent_config_accepts_default_persona(
             headers=authenticated_header,
         )
 
-
+@pytest.mark.asyncio
 @pytest.mark.parametrize("payload", [[], "x"])
 async def test_batch_delete_sessions_rejects_non_object_payload(
     app: Quart, authenticated_header: dict, payload

@@ -339,7 +339,7 @@
         },
         "image_compress_enabled": {
           "description": "启用图片压缩",
-          "hint": "启用后，发送给多模态模型前会先压缩本地大图片。仅对 chat_completion 提供商生效。"
+          "hint": "启用后，发送给多模态模型前会先压缩本地大图片。"
         },
         "image_compress_options": {
           "description": "图片压缩配置",

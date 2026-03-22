@@ -449,6 +449,8 @@ async def _ensure_img_caption(
         for url in req.image_urls:
             compressed_url = await _compress_image_for_provider(url, cfg)
             compressed_urls.append(compressed_url)
+            if _is_generated_compressed_image_path(url, compressed_url):
+                event.track_temporary_local_file(compressed_url)
         caption = await _request_img_caption(
             image_caption_provider,
             cfg,
@@ -578,6 +580,57 @@ def _is_generated_compressed_image_path(
     return os.path.exists(compressed_path)
 
 
+def _get_image_compress_args(
+    provider_settings: dict[str, object] | None,
+) -> tuple[bool, int, int]:
+    if not isinstance(provider_settings, dict):
+        return True, IMAGE_COMPRESS_DEFAULT_MAX_SIZE, IMAGE_COMPRESS_DEFAULT_QUALITY
+
+    enabled = provider_settings.get("image_compress_enabled", True)
+    if not isinstance(enabled, bool):
+        enabled = True
+
+    raw_options = provider_settings.get("image_compress_options", {})
+    options = raw_options if isinstance(raw_options, dict) else {}
+
+    max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
+    if not isinstance(max_size, int):
+        max_size = IMAGE_COMPRESS_DEFAULT_MAX_SIZE
+    max_size = max(max_size, 1)
+
+    quality = options.get("quality", IMAGE_COMPRESS_DEFAULT_QUALITY)
+    if not isinstance(quality, int):
+        quality = IMAGE_COMPRESS_DEFAULT_QUALITY
+    quality = min(max(quality, 1), 100)
+
+    return enabled, max_size, quality
+
+
+async def _compress_image_for_provider(
+    url_or_path: str,
+    provider_settings: dict[str, object] | None,
+) -> str:
+    try:
+        enabled, max_size, quality = _get_image_compress_args(provider_settings)
+        if not enabled:
+            return url_or_path
+        return await compress_image(url_or_path, max_size=max_size, quality=quality)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Image compression failed: %s", exc)
+        return url_or_path
+
+
+def _is_generated_compressed_image_path(
+    original_path: str,
+    compressed_path: str | None,
+) -> bool:
+    if not compressed_path or compressed_path == original_path:
+        return False
+    if compressed_path.startswith("http") or compressed_path.startswith("data:image"):
+        return False
+    return os.path.exists(compressed_path)
+
+
 async def _process_quote_message(
     event: AstrMessageEvent,
     req: ProviderRequest,
@@ -626,13 +679,15 @@ async def _process_quote_message(
 
             if prov and isinstance(prov, Provider):
                 path = await image_seg.convert_to_file_path()
-                image_path = await _compress_image_for_provider(
+                compress_path = await _compress_image_for_provider(
                     path,
                     config.provider_settings if config else None,
                 )
+                if path and _is_generated_compressed_image_path(path, compress_path):
+                    event.track_temporary_local_file(compress_path)
                 llm_resp = await prov.text_chat(
-                    prompt=IMAGE_CAPTION_DEFAULT_PROMPT,
-                    image_urls=[image_path],
+                    prompt="Please describe the image content.",
+                    image_urls=[compress_path],
                 )
                 if llm_resp.completion_text:
                     content_parts.append(
@@ -1062,6 +1117,8 @@ async def build_main_agent(
                         path,
                         config.provider_settings,
                     )
+                    if _is_generated_compressed_image_path(path, image_path):
+                        event.track_temporary_local_file(image_path)
                     req.image_urls.append(image_path)
                     req.extra_user_content_parts.append(
                         TextPart(text=f"[Image Attachment: path {image_path}]")
@@ -1093,6 +1150,8 @@ async def build_main_agent(
                                 path,
                                 config.provider_settings,
                             )
+                            if _is_generated_compressed_image_path(path, image_path):
+                                event.track_temporary_local_file(image_path)
                             req.image_urls.append(image_path)
                             _append_quoted_image_attachment(req, image_path)
                         elif isinstance(reply_comp, File):

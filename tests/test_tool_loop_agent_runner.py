@@ -2,6 +2,7 @@ import asyncio
 import os
 import sys
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -15,9 +16,6 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.astr_agent_run_util import run_agent
-from astrbot.core.message.components import Image
-from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
@@ -849,7 +847,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
         provider=provider,
         request=req,
         run_context=run_context,
-        tool_executor=MockToolExecutor(),
+        tool_executor=cast(Any, MockToolExecutor()),
         agent_hooks=MockHooks(),
         tool_schema_mode="skills_like",
     )
@@ -883,7 +881,7 @@ async def test_follow_up_accepted_when_active_and_not_stopping(
 
     # Runner is active (not done) and stop is not requested
     assert not runner.done()
-    assert runner._stop_requested is False
+    assert runner._is_stop_requested() is False
 
     ticket = runner.follow_up(message_text="valid follow-up message")
 
@@ -910,7 +908,7 @@ async def test_follow_up_rejected_when_stop_requested(
 
     # Request stop
     runner.request_stop()
-    assert runner._stop_requested is True
+    assert runner._is_stop_requested() is True
 
     ticket = runner.follow_up(message_text="follow-up after stop")
 
@@ -1045,7 +1043,7 @@ async def test_follow_up_rejected_and_runner_stops_without_execution(
 
     # Request stop before any execution (simulates /stop command received at start)
     runner.request_stop()
-    assert runner._stop_requested is True
+    assert runner._is_stop_requested() is True
 
     # Try to add follow-up after stop (should be rejected)
     ticket_after = runner.follow_up(message_text="follow-up after stop")
@@ -1103,7 +1101,7 @@ async def test_follow_up_after_stop_not_merged_into_tool_result(
 
     # Request stop (simulates /stop command during active execution)
     runner.request_stop()
-    assert runner._stop_requested is True
+    assert runner._is_stop_requested() is True
 
     # Try to add follow-up after stop (should be rejected)
     ticket_after = runner.follow_up(message_text="invalid after stop")

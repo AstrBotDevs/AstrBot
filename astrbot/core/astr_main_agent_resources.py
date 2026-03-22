@@ -468,7 +468,17 @@ async def retrieve_knowledge_base(
     if not kb_names:
         return
 
+<<<<<<< HEAD
     logger.debug(f"[知识库] 开始检索知识库,数量: {len(kb_names)}, top_k={top_k}")
+=======
+    all_kbs = [await kb_mgr.get_kb_by_name(kb) for kb in kb_names]
+
+    if check_all_kb(all_kbs):
+        logger.debug("所配置的所有知识库全为空，跳过检索过程")
+        return
+
+    logger.debug(f"[知识库] 开始检索知识库，数量: {len(kb_names)}, top_k={top_k}")
+>>>>>>> eab231fd94b8416ac854047e9a976385fcbb386a
     kb_context = await kb_mgr.retrieve(
         query=query,
         kb_names=kb_names,
