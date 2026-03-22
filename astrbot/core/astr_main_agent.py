@@ -522,7 +522,7 @@ async def _compress_image_for_provider(
         if not enabled:
             return url_or_path
         return await compress_image(url_or_path, max_size=max_size, quality=quality)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("Image compression failed: %s", exc)
         return url_or_path
 
@@ -562,7 +562,7 @@ async def _compress_image_for_provider(
         if not enabled:
             return url_or_path
         return await compress_image(url_or_path, max_size=max_size, quality=quality)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("Image compression failed: %s", exc)
         return url_or_path
 
@@ -650,7 +650,7 @@ async def _process_quote_message(
             ):
                 try:
                     os.remove(compress_path)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     logger.warning("Fail to remove temporary compressed image: %s", exc)
 
     quoted_content = "\n".join(content_parts)

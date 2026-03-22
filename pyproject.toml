@@ -69,6 +69,7 @@ dependencies = [
   "anyio>=4.12.1",
   "argon2-cffi>=23.1.0",
   "plumbum>=1.10.0",
+  "textual>=8.1.1",
 ]
 
 [dependency-groups]
@@ -79,6 +80,7 @@ dev = [
   "pytest-asyncio>=1.1.0",
   "pytest-cov>=6.2.1",
   "ruff>=0.15.0",
+  "textual-dev>=1.8.0",
 ]
 
 [project.scripts]
