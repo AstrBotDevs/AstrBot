@@ -9,6 +9,7 @@ import pytest
 from astrbot_sdk.errors import AstrBotError, ErrorCodes
 from astrbot_sdk.protocol.messages import (
     EventMessage,
+    InvokeMessage,
     PeerInfo,
     ResultMessage,
     parse_message,
@@ -43,6 +44,12 @@ class _ControlledTransport(Transport):
 
     def close_unexpected(self) -> None:
         self._closed.set()
+
+
+class _FailingSendTransport(_ControlledTransport):
+    async def send(self, payload: str) -> None:
+        self.sent_payloads.append(payload)
+        raise RuntimeError("send failed")
 
 
 def _make_peer(transport: _ControlledTransport, *, name: str = "test-plugin") -> Peer:
@@ -262,5 +269,33 @@ async def test_invoke_stream_failed_event_becomes_exception() -> None:
                 pass
 
         assert exc_info.value.code == ErrorCodes.INTERNAL_ERROR
+    finally:
+        await _stop_peer(peer)
+
+
+@pytest.mark.asyncio
+async def test_inbound_invoke_send_failure_marks_peer_unusable() -> None:
+    transport = _FailingSendTransport()
+    peer = _make_peer(transport)
+
+    async def handle_invoke(_message: Any, _token: Any) -> dict[str, Any]:
+        return {"ok": True}
+
+    peer.set_invoke_handler(handle_invoke)
+    await peer.start()
+    try:
+        await transport.push_message(
+            InvokeMessage(
+                id="msg_0001",
+                capability="demo.echo",
+                input={},
+                stream=False,
+            )
+        )
+
+        await asyncio.wait_for(peer.wait_closed(), timeout=0.2)
+
+        assert peer._unusable is True
+        assert len(transport.sent_payloads) == 2
     finally:
         await _stop_peer(peer)

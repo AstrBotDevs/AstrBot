@@ -186,20 +186,3 @@ class CapabilityRouterBridgeBase(CapabilityRouterHost):
         except (TypeError, ValueError):
             return None
 
-    def _provider_entry(
-        self,
-        payload: dict[str, Any],
-        capability_name: str,
-        expected_kind: str | None = None,
-    ) -> dict[str, Any]:
-        raise NotImplementedError
-
-    async def _provider_embedding_get_embedding(
-        self, request_id: str, payload: dict[str, Any], token
-    ) -> dict[str, Any]:
-        raise NotImplementedError
-
-    async def _provider_embedding_get_embeddings(
-        self, request_id: str, payload: dict[str, Any], token
-    ) -> dict[str, Any]:
-        raise NotImplementedError

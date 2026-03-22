@@ -1,9 +1,27 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from ....errors import AstrBotError
 from ..bridge_base import CapabilityRouterBridgeBase
+
+# 路由只允许字母、数字、/, -, _, . 以及路径参数 {param}，且必须以 / 开头
+# 禁止 .. 防止路径遍历，禁止连续斜杠
+_ROUTE_SAFE_RE = re.compile(r"^(/[\w\-._{}]*)+$")
+
+
+def _validate_route(route: str, capability_name: str) -> None:
+    """校验 HTTP 路由路径格式，阻止路径遍历和非法字符。"""
+    if ".." in route:
+        raise AstrBotError.invalid_input(
+            f"{capability_name}: 路由路径不允许包含 '..'"
+        )
+    if not _ROUTE_SAFE_RE.match(route):
+        raise AstrBotError.invalid_input(
+            f"{capability_name}: 路由路径格式非法，只允许字母/数字/-/_/./{{param}} 段，"
+            "且必须以 / 开头，如 /foo/bar"
+        )
 
 
 class HttpCapabilityMixin(CapabilityRouterBridgeBase):
@@ -23,6 +41,7 @@ class HttpCapabilityMixin(CapabilityRouterBridgeBase):
             raise AstrBotError.invalid_input(
                 "http.register_api 需要 route 和 handler_capability"
             )
+        _validate_route(route, "http.register_api")
         plugin_name = self._require_caller_plugin_id("http.register_api")
         methods = sorted({method.upper() for method in methods_payload if method})
         entry: dict[str, Any] = {

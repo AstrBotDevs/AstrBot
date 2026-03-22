@@ -5,7 +5,7 @@ import json
 import re
 import sqlite3
 import threading
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,10 +45,8 @@ def _escape_like_value(value: str) -> str:
     return str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-EmbedMany = Callable[
-    [list[str]], "asyncio.Future[list[list[float]]] | list[list[float]]"
-]
-EmbedOne = Callable[[str], "asyncio.Future[list[float]] | list[float]"]
+EmbedMany = Callable[[list[str]], Awaitable[list[list[float]]] | list[list[float]]]
+EmbedOne = Callable[[str], Awaitable[list[float]] | list[float]]
 
 
 @dataclass(slots=True)
