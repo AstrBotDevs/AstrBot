@@ -124,6 +124,8 @@ def test_telegram_collect_commands_includes_sdk_candidates(
     sys.modules["telegram.ext"].ContextTypes.DEFAULT_TYPE = object
     from astrbot.core.platform.sources.telegram import tg_adapter
 
+    monkeypatch.setattr(tg_adapter, "star_handlers_registry", [])
+    monkeypatch.setattr(tg_adapter, "star_map", {})
     monkeypatch.setattr(
         tg_adapter,
         "BotCommand",
@@ -162,10 +164,14 @@ def test_telegram_collect_commands_includes_sdk_candidates(
 @pytest.mark.unit
 def test_discord_collect_commands_includes_sdk_candidates(
     mock_discord_modules,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from astrbot.core.platform.sources.discord.discord_platform_adapter import (
         DiscordPlatformAdapter,
     )
+
+    monkeypatch.setattr("astrbot.core.platform.sources.discord.discord_platform_adapter.star_handlers_registry", [])
+    monkeypatch.setattr("astrbot.core.platform.sources.discord.discord_platform_adapter.star_map", {})
 
     adapter = DiscordPlatformAdapter(
         {"discord_token": "test-token", "id": "discord-test"},

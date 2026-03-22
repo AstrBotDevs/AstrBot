@@ -372,8 +372,11 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
     splitting into `apply` and `scan` phases.
     """
     skills_root = Path(get_astrbot_skills_path())
-    skill_manager = SkillManager(skills_root=str(skills_root))
-    local_skill_sources = skill_manager.list_local_skill_sources()
+    skill_manager: SkillManager | None = None
+    local_skill_sources = []
+    if skills_root.exists():
+        skill_manager = SkillManager(skills_root=str(skills_root))
+        local_skill_sources = skill_manager.list_local_skill_sources()
 
     temp_dir = Path(get_astrbot_temp_path())
     temp_dir.mkdir(parents=True, exist_ok=True)
@@ -383,6 +386,7 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
 
     try:
         if local_skill_sources:
+            assert skill_manager is not None
             if zip_path.exists():
                 zip_path.unlink()
             skill_manager.materialize_local_skill_bundle(bundle_dir)

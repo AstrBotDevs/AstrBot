@@ -5,6 +5,7 @@ filesystem operations, Python execution, shell execution, and security restricti
 """
 
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -795,94 +796,121 @@ class TestComputerClient:
 class TestSyncSkillsToSandbox:
     """Tests for _sync_skills_to_sandbox function."""
 
+    @staticmethod
+    def _sync_exec_results():
+        return [
+            {"exit_code": 0, "stdout": "", "stderr": ""},
+            {"exit_code": 0, "stdout": "", "stderr": ""},
+            {
+                "exit_code": 0,
+                "stdout": '{"managed_skills":[],"skills":[]}',
+                "stderr": "",
+            },
+        ]
+
     @pytest.mark.asyncio
-    async def test_sync_skills_no_skills_dir(self):
-        """Test sync does nothing when skills directory doesn't exist."""
+    async def test_sync_skills_no_skills_dir(self, tmp_path):
+        """Test sync keeps sandbox built-ins when local skills root is absent."""
         from astrbot.core.computer import computer_client
 
         mock_booter = MagicMock()
-        mock_booter.shell.exec = AsyncMock()
+        mock_booter.shell.exec = AsyncMock(side_effect=self._sync_exec_results())
         mock_booter.upload_file = AsyncMock(return_value={"success": True})
+        missing_root = tmp_path / "missing"
 
         with (
             patch(
                 "astrbot.core.computer.computer_client.get_astrbot_skills_path",
-                return_value="/nonexistent/path",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.path.isdir",
-                return_value=False,
-            ),
-        ):
-            await computer_client._sync_skills_to_sandbox(mock_booter)
-            mock_booter.upload_file.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_sync_skills_empty_dir(self):
-        """Test sync does nothing when skills directory is empty."""
-        from astrbot.core.computer import computer_client
-
-        mock_booter = MagicMock()
-        mock_booter.shell.exec = AsyncMock()
-        mock_booter.upload_file = AsyncMock(return_value={"success": True})
-
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.get_astrbot_skills_path",
-                return_value="/tmp/empty",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.path.isdir",
-                return_value=True,
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.Path.iterdir",
-                return_value=iter([]),
-            ),
-        ):
-            await computer_client._sync_skills_to_sandbox(mock_booter)
-            mock_booter.upload_file.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_sync_skills_success(self):
-        """Test successful skills sync."""
-        from astrbot.core.computer import computer_client
-
-        mock_booter = MagicMock()
-        mock_booter.shell.exec = AsyncMock(return_value={"exit_code": 0})
-        mock_booter.upload_file = AsyncMock(return_value={"success": True})
-
-        mock_skill_file = MagicMock()
-        mock_skill_file.name = "skill.py"
-        mock_skill_file.__str__ = lambda: "/tmp/skills/skill.py"
-
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.get_astrbot_skills_path",
-                return_value="/tmp/skills",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.path.isdir",
-                return_value=True,
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.Path.iterdir",
-                return_value=iter([mock_skill_file]),
+                return_value=str(missing_root),
             ),
             patch(
                 "astrbot.core.computer.computer_client.get_astrbot_temp_path",
-                return_value="/tmp",
+                return_value=str(tmp_path),
+            ),
+            patch(
+                "astrbot.core.computer.computer_client._update_sandbox_skills_cache",
+            ),
+        ):
+            await computer_client._sync_skills_to_sandbox(mock_booter)
+            mock_booter.upload_file.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_sync_skills_empty_dir(self, tmp_path):
+        """Test sync keeps sandbox built-ins when local skills root is empty."""
+        from astrbot.core.computer import computer_client
+
+        mock_booter = MagicMock()
+        mock_booter.shell.exec = AsyncMock(side_effect=self._sync_exec_results())
+        mock_booter.upload_file = AsyncMock(return_value={"success": True})
+        skills_root = tmp_path / "skills"
+        skills_root.mkdir()
+
+        with (
+            patch(
+                "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+                return_value=str(skills_root),
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.get_astrbot_temp_path",
+                return_value=str(tmp_path),
+            ),
+            patch(
+                "astrbot.core.computer.computer_client._update_sandbox_skills_cache",
+            ),
+        ):
+            await computer_client._sync_skills_to_sandbox(mock_booter)
+            mock_booter.upload_file.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_sync_skills_success(self, tmp_path):
+        """Test successful skills sync."""
+        from astrbot.core.computer import computer_client
+
+        skills_root = tmp_path / "skills"
+        skills_root.mkdir()
+        mock_booter = MagicMock()
+        mock_booter.shell.exec = AsyncMock(
+            side_effect=[
+                {"exit_code": 0, "stdout": "", "stderr": ""},
+                {"exit_code": 0, "stdout": "", "stderr": ""},
+                {
+                    "exit_code": 0,
+                    "stdout": (
+                        '{"managed_skills":["demo"],"skills":[{"name":"demo",'
+                        '"description":"","path":"skills/demo/SKILL.md"}]}'
+                    ),
+                    "stderr": "",
+                },
+            ]
+        )
+        mock_booter.upload_file = AsyncMock(return_value={"success": True})
+        mock_skill_manager = MagicMock()
+        mock_skill_manager.list_local_skill_sources.return_value = [
+            SimpleNamespace(name="demo")
+        ]
+        mock_skill_manager.materialize_local_skill_bundle.return_value = [
+            SimpleNamespace(name="demo")
+        ]
+
+        with (
+            patch(
+                "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+                return_value=str(skills_root),
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.SkillManager",
+                return_value=mock_skill_manager,
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.get_astrbot_temp_path",
+                return_value=str(tmp_path),
             ),
             patch(
                 "astrbot.core.computer.computer_client.shutil.make_archive",
             ),
             patch(
-                "astrbot.core.computer.computer_client.os.path.exists",
-                return_value=True,
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.remove",
+                "astrbot.core.computer.computer_client._update_sandbox_skills_cache",
             ),
         ):
-            # Should not raise
             await computer_client._sync_skills_to_sandbox(mock_booter)
+            mock_booter.upload_file.assert_awaited_once()
