@@ -45,7 +45,7 @@ _COLOR_MAP = {
 }
 
 # Box drawing characters
-BOX_VERT = "│"
+BOX_VERT = "￨"
 BOX_HORIZ = "─"
 BOX_TL = "┌"
 BOX_TR = "┐"

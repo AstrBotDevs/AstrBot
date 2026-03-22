@@ -202,7 +202,7 @@ class TestContextTruncator:
         messages = self.create_messages(4)
         result = truncator.truncate_by_dropping_oldest_turns(messages, drop_turns=2)
 
-        # 即使 drop 掉所有 turn，也会把 user 消息补回来 (#6196)
+        # 即使 drop 掉所有 turn,也会把 user 消息补回来 (#6196)
         assert len(result) >= 1
         assert result[0].role == "user"
 
@@ -213,7 +213,7 @@ class TestContextTruncator:
         messages = self.create_messages(4)
         result = truncator.truncate_by_dropping_oldest_turns(messages, drop_turns=5)
 
-        # 同理，user 消息会被保留 (#6196)
+        # 同理,user 消息会被保留 (#6196)
         assert len(result) >= 1
         assert result[0].role == "user"
 
@@ -379,7 +379,7 @@ class TestContextTruncator:
     # ==================== #6196: 长 tool chain 只有一条 user 消息 ====================
 
     def _build_tool_chain(self, tool_rounds: int = 20) -> list[Message]:
-        """构造 system -> user -> (assistant -> tool) * N 的长链，只有一条 user。"""
+        """构造 system -> user -> (assistant -> tool) * N 的长链,只有一条 user｡"""
         msgs = [
             self.create_message("system", "You are a helpful assistant."),
             self.create_message("user", "帮我查一下天气"),
@@ -390,7 +390,7 @@ class TestContextTruncator:
         return msgs
 
     def test_drop_oldest_preserves_sole_user(self):
-        """#6196: drop 1 turn 不应丢掉唯一的 user 消息。"""
+        """#6196: drop 1 turn 不应丢掉唯一的 user 消息｡"""
         truncator = ContextTruncator()
         msgs = self._build_tool_chain(20)  # 1 system + 1 user + 40 asst/tool = 42
         result = truncator.truncate_by_dropping_oldest_turns(msgs, drop_turns=1)
@@ -399,7 +399,7 @@ class TestContextTruncator:
         assert roles[0] == "system"
 
     def test_halving_preserves_sole_user(self):
-        """#6196: 对半砍不应丢掉唯一的 user 消息。"""
+        """#6196: 对半砍不应丢掉唯一的 user 消息｡"""
         truncator = ContextTruncator()
         msgs = self._build_tool_chain(20)
         result = truncator.truncate_by_halving(msgs)
@@ -407,7 +407,7 @@ class TestContextTruncator:
         assert "user" in roles, "唯一的 user 消息被丢掉了"
 
     def test_truncate_by_turns_preserves_sole_user(self):
-        """#6196: keep_most_recent_turns 也不应丢掉唯一的 user 消息。"""
+        """#6196: keep_most_recent_turns 也不应丢掉唯一的 user 消息｡"""
         truncator = ContextTruncator()
         msgs = self._build_tool_chain(20)
         result = truncator.truncate_by_turns(
@@ -417,7 +417,7 @@ class TestContextTruncator:
         assert "user" in roles, "唯一的 user 消息被丢掉了"
 
     def test_drop_oldest_heavy_drops_still_has_user(self):
-        """#6196: 大量 drop 也不会丢 user。"""
+        """#6196: 大量 drop 也不会丢 user｡"""
         truncator = ContextTruncator()
         msgs = self._build_tool_chain(30)
         result = truncator.truncate_by_dropping_oldest_turns(msgs, drop_turns=10)
@@ -425,7 +425,7 @@ class TestContextTruncator:
         assert "user" in roles
 
     def test_normal_multi_user_not_affected(self):
-        """正常多 user 对话不受影响。"""
+        """正常多 user 对话不受影响｡"""
         truncator = ContextTruncator()
         msgs = self.create_messages(20, include_system=True)
         result_before = truncator.truncate_by_dropping_oldest_turns(msgs, drop_turns=2)

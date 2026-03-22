@@ -251,6 +251,7 @@ async def test_core_bridge_memory_search_uses_hybrid_embeddings_and_updates_stat
     monkeypatch: pytest.MonkeyPatch,
     _patch_embedding_runtime: None,
 ) -> None:
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     fake_sp = _FakeSp()
     monkeypatch.setattr(

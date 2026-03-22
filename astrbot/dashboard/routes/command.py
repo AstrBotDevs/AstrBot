@@ -54,7 +54,7 @@ class CommandRoute(Route):
         enabled = data.get("enabled")
 
         if command_key is None or enabled is None:
-            return Response().error("command_key 与 enabled 均为必填。").to_json()
+            return Response().error("command_key 与 enabled 均为必填｡").to_json()
 
         if isinstance(enabled, str):
             enabled = enabled.lower() in ("1", "true", "yes", "on")
@@ -82,7 +82,7 @@ class CommandRoute(Route):
         aliases = data.get("aliases")
 
         if not command_key or not new_name:
-            return Response().error("command_key 与 new_name 均为必填。").__dict__
+            return Response().error("command_key 与 new_name 均为必填｡").__dict__
 
         item = await _get_command_payload(self.core_lifecycle, command_key)
         if item.get("runtime_kind") == "sdk":
@@ -106,7 +106,7 @@ class CommandRoute(Route):
         permission = data.get("permission")
 
         if not command_key or not permission:
-            return Response().error("command_key 与 permission 均为必填。").__dict__
+            return Response().error("command_key 与 permission 均为必填｡").__dict__
 
         item = await _get_command_payload(self.core_lifecycle, command_key)
         if item.get("runtime_kind") == "sdk":

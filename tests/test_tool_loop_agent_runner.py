@@ -111,7 +111,7 @@ class MockMixedContentToolExecutor:
                         data="dGVzdA==",
                         mimeType="image/png",
                     ),
-                    TextContent(type="text", text="直播间标题：新游首发：零~红蝶~"),
+                    TextContent(type="text", text="直播间标题:新游首发:零~红蝶~"),
                 ]
             )
             yield result
@@ -465,7 +465,7 @@ async def test_hooks_called_with_max_step(
 async def test_tool_result_includes_all_calltoolresult_content(
     runner, mock_provider, provider_request, mock_hooks, monkeypatch
 ):
-    """工具返回多个 content 项时，tool result 应包含全部内容。"""
+    """工具返回多个 content 项时,tool result 应包含全部内容｡"""
 
     from astrbot.core.agent.tool_image_cache import tool_image_cache
 
@@ -509,7 +509,7 @@ async def test_tool_result_includes_all_calltoolresult_content(
 
     content = str(tool_messages[0].content)
     assert "Image returned and cached at path='/tmp/call_123_0.png'." in content
-    assert "直播间标题：新游首发：零~红蝶~" in content
+    assert "直播间标题:新游首发:零~红蝶~" in content
     assert saved_images == [
         {
             "base64_data": "dGVzdA==",
@@ -785,7 +785,7 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
 
 @pytest.mark.asyncio
 async def test_skills_like_requery_passes_extra_user_content_parts():
-    """skills-like 模式 re-query 时应传递 extra_user_content_parts（如 image_caption）"""
+    """skills-like 模式 re-query 时应传递 extra_user_content_parts(如 image_caption)"""
     from astrbot.core.agent.message import TextPart
 
     captured_kwargs = {}
@@ -794,7 +794,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
         async def text_chat(self, **kwargs) -> LLMResponse:
             self.call_count += 1
             if self.call_count == 1:
-                # 第一次调用：返回工具选择（light schema）
+                # 第一次调用:返回工具选择(light schema)
                 return LLMResponse(
                     role="assistant",
                     completion_text="选择工具",
@@ -804,7 +804,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
                     usage=TokenUsage(input_other=10, output=5),
                 )
             if self.call_count == 2:
-                # 第二次调用：re-query with param schema
+                # 第二次调用:re-query with param schema
                 captured_kwargs.update(kwargs)
                 return LLMResponse(
                     role="assistant",
@@ -814,7 +814,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
                     tools_call_ids=["call_2"],
                     usage=TokenUsage(input_other=10, output=5),
                 )
-            # 后续调用：正常回复
+            # 后续调用:正常回复
             return LLMResponse(
                 role="assistant",
                 completion_text="最终回复",

@@ -27,6 +27,17 @@ local_booter: ComputerBooter | None = None
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
 
 
+def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
+    skills: list[Path] = []
+    for entry in sorted(skills_root.iterdir()):
+        if not entry.is_dir():
+            continue
+        skill_md = entry / "SKILL.md"
+        if skill_md.exists():
+            skills.append(entry)
+    return skills
+
+
 def _discover_bay_credentials(endpoint: str) -> str:
     """Try to auto-discover Bay API key from credentials.json.
 

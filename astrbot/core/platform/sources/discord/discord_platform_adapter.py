@@ -441,7 +441,7 @@ class DiscordPlatformAdapter(Platform):
             raise
 
     def collect_commands(self) -> list[tuple[str, str]]:
-        """收集 legacy 与 SDK 的顶层原生命令。"""
+        """收集 legacy 与 SDK 的顶层原生命令｡"""
         command_dict: dict[str, str] = {}
 
         for handler_md in star_handlers_registry:
@@ -456,7 +456,7 @@ class DiscordPlatformAdapter(Platform):
                 cmd_name, description, _cmd_filter_instance = cmd_info
                 if cmd_name in command_dict:
                     logger.warning(
-                        f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
+                        f"命令名 '{cmd_name}' 重复注册,将使用首次注册的定义: "
                         f"'{command_dict[cmd_name]}'"
                     )
                 command_dict.setdefault(cmd_name, description)
@@ -480,7 +480,7 @@ class DiscordPlatformAdapter(Platform):
                     description = f"{description[:97]}..."
                 if cmd_name in command_dict:
                     logger.warning(
-                        f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
+                        f"命令名 '{cmd_name}' 重复注册,将使用首次注册的定义: "
                         f"'{command_dict[cmd_name]}'"
                     )
                 command_dict.setdefault(cmd_name, description)

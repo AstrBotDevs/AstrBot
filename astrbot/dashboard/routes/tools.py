@@ -515,6 +515,9 @@ class ToolsRoute(Route):
                     ok = sdk_bridge.activate_llm_tool(str(plugin_id), str(tool_name))
                 else:
                     ok = sdk_bridge.deactivate_llm_tool(str(plugin_id), str(tool_name))
+                if ok:
+                    return Response().ok(None, "Operation successful.").__dict__
+                return Response().error("SDK bridge operation failed.").__dict__
             # Internal tools cannot be toggled by users
             for t in self.tool_mgr.func_list:
                 if t.name == tool_name and getattr(t, "source", "") == "internal":

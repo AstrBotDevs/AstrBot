@@ -75,7 +75,7 @@ class SubAgentOrchestrator:
                 if isinstance(persona_tools, list):
                     tools = [str(t).strip() for t in persona_tools if str(t).strip()]
                 else:
-                    tools = None
+                    tools = []
                 if public_description == "" and prompt:
                     public_description = prompt[:120]
             if tools is None:

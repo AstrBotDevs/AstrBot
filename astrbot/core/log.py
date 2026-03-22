@@ -94,7 +94,7 @@ _loguru = _raw_loguru_logger.patch(_patch_record)
 
 
 class _SSLDebugFilter(logging.Filter):
-    """将特定 SSL 错误降级为 DEBUG 级别,避免日志刷屏。"""
+    """将特定 SSL 错误降级为 DEBUG 级别,避免日志刷屏｡"""
 
     _SSL_IGNORE_PATTERNS = (
         "APPLICATION_DATA_AFTER_CLOSE_NOTIFY",
