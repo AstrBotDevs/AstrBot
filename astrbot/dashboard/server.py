@@ -86,7 +86,12 @@ class AstrBotDashboard:
                 # Fall back to expected user path (will fail gracefully later)
                 self.data_path = os.path.abspath(user_dist)
 
-        self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
+        self.app = Quart(
+            "dashboard",
+            static_folder=self.data_path,
+            static_url_path="/",
+            instance_path=str(Path(__file__).parent),
+        )
         APP = self.app  # noqa
         self.app.config["MAX_CONTENT_LENGTH"] = (
             128 * 1024 * 1024
@@ -110,7 +115,7 @@ class AstrBotDashboard:
         )
         self.command_route = CommandRoute(self.context)
         self.cr = ConfigRoute(self.context, core_lifecycle)
-        self.lr = LogRoute(self.context, core_lifecycle.log_broker)
+        self.lr = LogRoute(self.context, core_lifecycle.log_broker, db_helper=db)
         self.sfr = StaticFileRoute(self.context)
         self.ar = AuthRoute(self.context)
         self.api_key_route = ApiKeyRoute(self.context, db)

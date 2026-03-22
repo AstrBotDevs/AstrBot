@@ -31,6 +31,7 @@ from astrbot.core.provider.entities import (
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
+from astrbot.core.utils.trace import _current_span
 
 from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from ....context import PipelineContext, call_event_hook
@@ -185,6 +186,7 @@ class InternalAgentSubStage(Stage):
                 logger.debug("acquired session lock for llm request")
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
+                _llm_span_token = None
                 try:
                     build_cfg = replace(
                         self.main_agent_cfg,
@@ -234,16 +236,25 @@ class InternalAgentSubStage(Stage):
                     runner_registered = True
                     action_type = event.get_extra("action_type")
 
-                    event.trace.record(
-                        "astr_agent_prepare",
-                        system_prompt=req.system_prompt,
+                    _llm_parent = _current_span.get() or event.trace
+                    llm_agent_span = _llm_parent.child(
+                        "LLMAgent", span_type="llm_agent"
+                    )
+                    _sys_prompt = req.system_prompt or ""
+                    llm_agent_span.set_input(
+                        system_prompt=_sys_prompt,
+                        system_prompt_chars=len(_sys_prompt),
+                        context_length=len(req.contexts) if req.contexts else 0,
                         tools=req.func_tool.names() if req.func_tool else [],
                         stream=streaming_response,
-                        chat_provider={
-                            "id": provider.provider_config.get("id", ""),
-                            "model": provider.get_model(),
-                        },
+                        provider=provider.provider_config.get("id", ""),
+                        model=provider.get_model(),
                     )
+                    # Expose span both on the event (legacy) and via ContextVar so
+                    # astr_agent_run_util and any downstream code can resolve the
+                    # parent without an explicit event reference.
+                    event._llm_agent_span = llm_agent_span  # type: ignore[attr-defined]
+                    _llm_span_token = _current_span.set(llm_agent_span)  # noqa: F841
 
                     # 检测 Live Mode
                     if action_type == "live":
@@ -339,10 +350,20 @@ class InternalAgentSubStage(Stage):
 
                     final_resp = agent_runner.get_final_llm_resp()
 
-                    event.trace.record(
-                        "astr_agent_complete",
-                        stats=agent_runner.stats.to_dict(),
-                        resp=final_resp.completion_text if final_resp else None,
+                    _output: dict = {
+                        "response": final_resp.completion_text if final_resp else None,
+                    }
+                    if final_resp:
+                        if final_resp.reasoning_content:
+                            _output["reasoning"] = final_resp.reasoning_content
+                        if final_resp.tools_call_args:
+                            _output["tool_calls"] = final_resp.tools_call_args
+                    llm_agent_span.set_output(**_output)
+                    llm_agent_span.set_meta(**agent_runner.stats.to_dict())
+                    if llm_agent_span.finished_at is None:
+                        llm_agent_span.finish()
+                    event.trace.set_output(
+                        response=final_resp.completion_text if final_resp else None,
                     )
 
                     # 检查事件是否被停止，如果被停止则不保存历史记录
@@ -366,6 +387,13 @@ class InternalAgentSubStage(Stage):
                 finally:
                     if runner_registered and agent_runner is not None:
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
+                    # Ensure llm_agent_span is always finished
+                    llm_span = getattr(event, "_llm_agent_span", None)
+                    if llm_span is not None and llm_span.finished_at is None:
+                        llm_span.finish(status="error")
+                    # Reset ContextVar to the span that was active before this stage
+                    if _llm_span_token is not None:
+                        _current_span.reset(_llm_span_token)
 
         except Exception as e:
             logger.error(f"Error occurred while processing agent: {e}")

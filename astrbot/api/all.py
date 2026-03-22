@@ -52,3 +52,6 @@ from astrbot.core.platform import (
 from astrbot.core.platform.register import register_platform_adapter
 
 from .message_components import *
+
+# tracing
+from .trace import span_context, span_record, get_current_span  # noqa: F401

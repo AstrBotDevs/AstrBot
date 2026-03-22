@@ -75,11 +75,13 @@ class AstrMessageEvent(abc.ABC):
         self.created_at = time()
         """事件创建时间(Unix timestamp)"""
         self.trace = TraceSpan(
-            name="AstrMessageEvent",
+            name="request",
+            span_type="root",
             umo=self.unified_msg_origin,
             sender_name=self.get_sender_name(),
             message_outline=self.get_message_outline(),
         )
+        self.trace.set_input(message=self.message_str or "")
         """用于记录事件处理的 TraceSpan 对象"""
         self.span = self.trace
         """事件级 TraceSpan(别名: span)"""
