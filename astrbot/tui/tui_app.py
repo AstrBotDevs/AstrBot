@@ -106,7 +106,7 @@ class AstrBotTUI:
                 self._history_index += 1
                 self.state.input_buffer = self._input_history[self._history_index]
                 self.state.cursor_x = len(self.state.input_buffer)
-        elif key == key == curses.KEY_DOWN:
+        elif key == curses.KEY_DOWN:
             if self._history_index > 0:
                 self._history_index -= 1
                 self.state.input_buffer = self._input_history[self._history_index]

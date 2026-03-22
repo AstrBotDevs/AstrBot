@@ -122,10 +122,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         return path, False
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
+        self, context: ContextWrapper[AstrAgentContext], **kwargs: Any
     ) -> ToolExecResult:
-        session = kwargs.get("session") or context.context.event.unified_msg_origin
-        messages = kwargs.get("messages")
+        session: str | MessageSession = kwargs.get("session") or context.context.event.unified_msg_origin
+        messages: list[dict[str, Any]] | None = kwargs.get("messages")
 
         if not isinstance(messages, list) or not messages:
             return "error: messages parameter is empty or invalid."
@@ -136,10 +136,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             if not isinstance(msg, dict):
                 return f"error: messages[{idx}] should be an object."
 
-            typed_msg: MessageComponent = msg
-            msg_type = str(typed_msg.get("type", "")).lower()
-            if not msg_type:
+            if "type" not in msg:
                 return f"error: messages[{idx}].type is required."
+            msg_type = str(msg["type"]).lower()
 
             _file_from_sandbox = False
 
