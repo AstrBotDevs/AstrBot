@@ -1,3 +1,4 @@
+# ruff: noqa: I001
 """
 针对 command_model 解析逻辑的边界场景单元测试。
 覆盖：--help 生成、位置参数超限、重复 flag、连字符映射。
@@ -15,7 +16,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from pydantic import BaseModel
 
 from astrbot_sdk._internal.command_model import (
-    CommandModelParseResult,
     ResolvedCommandModelParam,
     format_command_model_help,
     parse_command_model_remainder,

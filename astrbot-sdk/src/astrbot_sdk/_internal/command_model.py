@@ -122,26 +122,28 @@ def parse_command_model_remainder(
         field_name = cli_name.replace("-", "_")
         field = fields.get(field_name)
         if field is None:
-            raise _command_parse_error(f"Unknown field: {field_name}")
+            raise _command_parse_error(f"Unknown option: --{raw_name}")
+        option_name = _format_option_name(field_name)
+        negated_option_name = f"--no-{option_name[2:]}"
         if field_name in explicit_values:
-            raise _command_parse_error(f"Duplicate field: {field_name}")
+            raise _command_parse_error(f"Duplicate option: {option_name}")
         field_type, _is_optional = _supported_scalar_type(field.annotation)
         if field_type is bool:
             if explicit_value is not None:
                 raise _command_parse_error(
-                    f"Boolean field '{field_name}' only supports --{field_name} or --no-{field_name}"
+                    f"Boolean option '{option_name}' only supports {option_name} or {negated_option_name}"
                 )
             explicit_values[field_name] = not negated
             index += 1
             continue
         if negated:
             raise _command_parse_error(
-                f"Non-boolean field '{field_name}' does not support --no-{field_name}"
+                f"Non-boolean option '{option_name}' does not support {negated_option_name}"
             )
         if explicit_value is None:
             index += 1
             if index >= len(tokens):
-                raise _command_parse_error(f"Missing value for field: {field_name}")
+                raise _command_parse_error(f"Missing value for option: {option_name}")
             explicit_value = tokens[index]
         explicit_values[field_name] = explicit_value
         index += 1
@@ -205,6 +207,11 @@ def _supported_scalar_type(annotation: Any) -> tuple[type[Any], bool]:
     if normalized in {str, int, float, bool}:
         return normalized, is_optional
     raise TypeError("only str/int/float/bool and Optional variants are supported")
+
+
+def _format_option_name(field_name: str) -> str:
+    # Surface the canonical CLI spelling so parse errors match the user's option syntax.
+    return f"--{field_name.replace('_', '-')}"
 
 
 def _command_parse_error(message: str) -> AstrBotError:
