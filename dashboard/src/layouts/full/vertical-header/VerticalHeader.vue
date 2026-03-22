@@ -48,6 +48,7 @@ let version = ref('');
 let releases = ref([]);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
+let commitHashInput = ref('');
 const isDesktopReleaseMode = ref(
   typeof window !== 'undefined' && !!window.astrbotDesktop?.isDesktop
 );
@@ -92,6 +93,13 @@ const releasesHeader = computed(() => [
   { title: t('core.header.updateDialog.table.content'), key: 'body' },
   { title: t('core.header.updateDialog.table.sourceUrl'), key: 'zipball_url' },
   { title: t('core.header.updateDialog.table.actions'), key: 'switch' }
+]);
+
+const commitHashRegex = /^[0-9a-f]{40}$/i;
+const isCommitHashValid = computed(() => commitHashRegex.test(commitHashInput.value));
+
+const commitHashRules = computed(() => [
+  (v: string) => !v || commitHashRegex.test(v) || t('core.header.updateDialog.commitHash.invalidFormat')
 ]);
 // Form validation
 const formValid = ref(true);
@@ -730,6 +738,33 @@ onMounted(async () => {
             </div>
 
             <v-divider class="mt-4 mb-4"></v-divider>
+            <div class="my-4">
+              <h3 class="mb-2">{{ t('core.header.updateDialog.commitHash.title') }}</h3>
+              <small class="mb-3 d-block">{{ t('core.header.updateDialog.commitHash.description') }}</small>
+              <div class="d-flex align-center ga-3">
+                <v-text-field
+                  v-model.trim="commitHashInput"
+                  :label="t('core.header.updateDialog.commitHash.label')"
+                  :rules="commitHashRules"
+                  density="compact"
+                  variant="outlined"
+                  hide-details="auto"
+                  maxlength="40"
+                  class="commit-hash-input"
+                />
+                <v-btn
+                  color="primary"
+                  class="commit-hash-btn"
+                  :disabled="!isCommitHashValid"
+                  :loading="installLoading"
+                  @click="switchVersion(commitHashInput)"
+                >
+                  {{ t('core.header.updateDialog.commitHash.install') }}
+                </v-btn>
+              </div>
+            </div>
+
+            <v-divider class="mt-4 mb-4"></v-divider>
             <div style="margin-top: 16px;">
               <h3 class="mb-4">{{ t('core.header.updateDialog.dashboardUpdate.title') }}</h3>
               <div class="mb-4">
@@ -1077,5 +1112,14 @@ onMounted(async () => {
   .v-btn-toggle .v-icon {
     font-size: 16px;
   }
+}
+
+.commit-hash-input {
+  max-width: 420px;
+  font-family: monospace;
+}
+
+.commit-hash-btn {
+  border-radius: 10px;
 }
 </style>

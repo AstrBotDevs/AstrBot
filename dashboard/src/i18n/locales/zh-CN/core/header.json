@@ -47,6 +47,13 @@
     "releaseNotes": {
       "title": "更新日志"
     },
+    "commitHash": {
+      "title": "通过 Commit Hash 更新",
+      "description": "输入 GitHub 仓库的 40 位 commit hash，可以安装尚未发布至正式版的修复和功能。",
+      "label": "输入 commit hash",
+      "install": "安装",
+      "invalidFormat": "请输入有效的 40 位十六进制 commit hash"
+    },
     "redirectConfirm": {
       "title": "即将跳转",
       "message": "将跳转到 GitHub Releases 页面，是否继续？",

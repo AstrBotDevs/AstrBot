@@ -47,6 +47,13 @@
     "releaseNotes": {
       "title": "Release Notes"
     },
+    "commitHash": {
+      "title": "Update via Commit Hash",
+      "description": "Enter a 40-character commit hash from the GitHub repository to install unreleased fixes and features.",
+      "label": "Enter commit hash",
+      "install": "Install",
+      "invalidFormat": "Please enter a valid 40-character hexadecimal commit hash"
+    },
     "redirectConfirm": {
       "title": "Leaving AstrBot",
       "message": "You are about to open the GitHub Releases page. Continue?",
