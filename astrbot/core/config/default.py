@@ -176,7 +176,7 @@ DEFAULT_CONFIG = {
         },
         "image_compress_enabled": True,
         "image_compress_options": {
-            "max_size": 1024,
+            "max_size": 1280,
             "quality": 95,
         },
     },
