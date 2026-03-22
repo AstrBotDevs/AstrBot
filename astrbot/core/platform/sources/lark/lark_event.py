@@ -762,10 +762,10 @@ class LarkMessageEvent(AstrMessageEvent):
     async def send_streaming(self, generator, use_fallback: bool = False):
         """使用 CardKit 流式卡片实现打字机效果｡
 
-        流程：首字到来时创建卡片实体 → 发送消息 → 流式更新文本 → 关闭流式模式。
-        卡片创建延迟到第一个文本 token 到达时，避免工具调用阶段就渲染空卡片。
-        使用解耦发送循环，LLM token 到达时只更新 buffer 并唤醒发送协程，
-        发送频率由网络 RTT 自然限流。
+        流程:首字到来时创建卡片实体 ￫ 发送消息 ￫ 流式更新文本 ￫ 关闭流式模式｡
+        卡片创建延迟到第一个文本 token 到达时,避免工具调用阶段就渲染空卡片｡
+        使用解耦发送循环,LLM token 到达时只更新 buffer 并唤醒发送协程,
+        发送频率由网络 RTT 自然限流｡
         """
         # Lazy-init: card & sender loop created on first text token
         card_id = None
@@ -775,7 +775,7 @@ class LarkMessageEvent(AstrMessageEvent):
         done = False
         text_changed = asyncio.Event()
         sender_task = None
-        fallback_used = False  # 回退路径已处理 Metric，避免重复上报
+        fallback_used = False  # 回退路径已处理 Metric,避免重复上报
 
         async def _sender_loop() -> None:
             """信号驱动的文本发送循环,有新内容就发,RTT 自然限流｡"""
@@ -811,7 +811,7 @@ class LarkMessageEvent(AstrMessageEvent):
             self._has_send_oper = True
 
         async def _flush_and_close_card() -> None:
-            """补发最终文本并关闭当前卡片的流式模式。"""
+            """补发最终文本并关闭当前卡片的流式模式｡"""
             nonlocal sequence
             if delta and delta != last_sent:
                 sequence += 1
@@ -851,7 +851,7 @@ class LarkMessageEvent(AstrMessageEvent):
                             card_id = await self._create_streaming_card()
                             if not card_id:
                                 logger.warning(
-                                    "[Lark] 无法创建流式卡片，回退到非流式发送"
+                                    "[Lark] 无法创建流式卡片,回退到非流式发送"
                                 )
                                 await _consume_rest_and_fallback(generator, delta)
                                 return
@@ -862,7 +862,7 @@ class LarkMessageEvent(AstrMessageEvent):
                             )
                             if not sent:
                                 logger.error(
-                                    "[Lark] 发送流式卡片消息失败，回退到非流式发送"
+                                    "[Lark] 发送流式卡片消息失败,回退到非流式发送"
                                 )
                                 await _consume_rest_and_fallback(generator, delta)
                                 return

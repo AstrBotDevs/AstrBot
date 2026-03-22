@@ -313,8 +313,8 @@ class FunctionToolManager:
                 break
 
     def get_func(self, name) -> FuncTool | None:
-        # 优先返回已激活的工具（后加载的覆盖前面的，与 ToolSet.add_tool 保持一致）
-        # 使用 getattr(..., True) 与 ToolSet.add_tool 保持一致：没有 active 属性的工具视为已激活
+        # 优先返回已激活的工具(后加载的覆盖前面的,与 ToolSet.add_tool 保持一致)
+        # 使用 getattr(..., True) 与 ToolSet.add_tool 保持一致:没有 active 属性的工具视为已激活
         for f in reversed(self.func_list):
             if f.name == name and getattr(f, "active", True):
                 return f
@@ -327,12 +327,12 @@ class FunctionToolManager:
     def get_full_tool_set(self) -> ToolSet:
         """获取完整工具集
 
-        使用 ToolSet.add_tool 进行填充。对于同名工具，去重规则为：
-        - 优先保留 active=True 的工具；
-        - 当 active 状态相同时，后加载的工具会覆盖前面的工具。
+        使用 ToolSet.add_tool 进行填充｡对于同名工具,去重规则为:
+        - 优先保留 active=True 的工具;
+        - 当 active 状态相同时,后加载的工具会覆盖前面的工具｡
 
-        因此，后加载的 inactive 工具不会覆盖已激活的工具；
-        同时，MCP 工具在需要时仍可覆盖被禁用的内置工具。
+        因此,后加载的 inactive 工具不会覆盖已激活的工具;
+        同时,MCP 工具在需要时仍可覆盖被禁用的内置工具｡
         """
         tool_set = ToolSet()
         for tool in self.func_list:

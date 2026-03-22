@@ -1,6 +1,7 @@
 """媒体文件处理工具
 
-提供音视频格式转换､时长获取等功能｡
+提供音视频格式转换｡时长获取等功能｡
+
 """
 
 import asyncio
@@ -9,13 +10,9 @@ import io
 import os
 import subprocess
 import uuid
+from pathlib import Path
 
 import anyio
-
-from PIL import Image as PILImage
-
-from PIL import Image as PILImage
-
 from PIL import Image as PILImage
 
 from astrbot import logger

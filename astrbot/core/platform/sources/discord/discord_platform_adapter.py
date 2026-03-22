@@ -465,8 +465,16 @@ class DiscordPlatformAdapter(Platform):
 
             abm.message_str = message_str_for_filter
             # ctx.author can be None in some edge cases
-            author_id = getattr(ctx.author, "id", None) or getattr(ctx.user, "id", None) or "unknown"
-            author_name = getattr(ctx.author, "display_name", None) or getattr(ctx.user, "display_name", None) or "unknown"
+            author_id = (
+                getattr(ctx.author, "id", None)
+                or getattr(ctx.user, "id", None)
+                or "unknown"
+            )
+            author_name = (
+                getattr(ctx.author, "display_name", None)
+                or getattr(ctx.user, "display_name", None)
+                or "unknown"
+            )
             abm.sender = MessageMember(
                 user_id=str(author_id),
                 nickname=str(author_name),
@@ -475,7 +483,11 @@ class DiscordPlatformAdapter(Platform):
             abm.raw_message = ctx.interaction
             abm.self_id = str(self.client_self_id)
             abm.session_id = str(ctx.channel_id)
-            abm.message_id = str(getattr(ctx.interaction, "id", ctx.interaction)) if ctx.interaction else str(getattr(ctx, "id", "unknown"))
+            abm.message_id = (
+                str(getattr(ctx.interaction, "id", ctx.interaction))
+                if ctx.interaction
+                else str(getattr(ctx, "id", "unknown"))
+            )
 
             # 3. 将消息和 webhook 分别交给 handle_msg 处理
             await self.handle_msg(abm, followup_webhook)

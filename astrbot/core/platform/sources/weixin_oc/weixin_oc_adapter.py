@@ -551,7 +551,7 @@ class WeixinOCAdapter(Platform):
             f"{quote(qrcode_url)}"
         )
         logger.info(
-            "weixin_oc(%s): QR session started, qr_link=%s 请使用手机微信扫码登录，二维码有效期 5 分钟，过期后会自动刷新。",
+            "weixin_oc(%s): QR session started, qr_link=%s 请使用手机微信扫码登录,二维码有效期 5 分钟,过期后会自动刷新｡",
             self.meta().id,
             qr_console_url,
         )
@@ -599,7 +599,7 @@ class WeixinOCAdapter(Platform):
         if status == "expired":
             self._qr_expired_count += 1
             if self._qr_expired_count > 3:
-                login_session.error = "二维码已过期，超过重试次数，等待下次重试"
+                login_session.error = "二维码已过期,超过重试次数,等待下次重试"
                 self._login_session = None
                 return
             logger.warning(
