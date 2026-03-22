@@ -33,6 +33,7 @@ from astrbot.core.computer.tools import (
     RunBrowserSkillTool,
     SyncSkillReleaseTool,
 )
+from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.star.context import Context
@@ -396,6 +397,18 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         return f"Message sent to session {target_session}"
 
 
+def check_all_kb(kb_list: list[KBHelper | None]) -> bool:
+    """检查是否所有的知识库都为空
+    Args:
+        kb_list: 所选的知识库
+    Returns:
+        bool: 是否全为空
+    """
+    return not any(
+        kb and (kb.kb.doc_count != 0 or kb.kb.chunk_count != 0) for kb in kb_list
+    )
+
+
 async def retrieve_knowledge_base(
     query: str,
     umo: str,
@@ -452,6 +465,12 @@ async def retrieve_knowledge_base(
     top_k_fusion = config.get("kb_fusion_top_k", 20)
 
     if not kb_names:
+        return
+
+    all_kbs = [await kb_mgr.get_kb_by_name(kb) for kb in kb_names]
+
+    if check_all_kb(all_kbs):
+        logger.debug("所配置的所有知识库全为空，跳过检索过程")
         return
 
     logger.debug(f"[知识库] 开始检索知识库，数量: {len(kb_names)}, top_k={top_k}")
