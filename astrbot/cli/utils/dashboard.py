@@ -23,10 +23,13 @@ class DashboardManager:
             match dashboard_version:
                 case None:
                     click.echo("Dashboard is not installed")
+                    # Skip interactive prompt when running under systemd
+                    if os.environ.get("ASTRBOT_SYSTEMD") == "1":
+                        click.echo("Skipping interactive dashboard installation in systemd mode.")
+                        return
                     if click.confirm(
                         "Install dashboard?",
                         default=True,
-                        abort=True,
                     ):
                         click.echo("Installing dashboard...")
                         try:
@@ -39,6 +42,8 @@ class DashboardManager:
                             click.echo("Dashboard installed successfully")
                         except Exception as e:
                             click.echo(f"Failed to install dashboard: {e}")
+                    else:
+                        click.echo("Dashboard installation declined.")
 
                 case str():
                     if (
