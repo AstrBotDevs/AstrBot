@@ -198,6 +198,13 @@ Connect AstrBot to your favorite chat platforms.
 | Minimax TTS | Text-to-Speech |
 | Volcano Engine TTS | Text-to-Speech |
 
+## ❤️ Sponsors
+
+<p align="center">
+  <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
+</p>
+
+
 ## ❤️ Contribution
 
 Welcome any Issues/Pull Requests! Just submit your changes to this project :)

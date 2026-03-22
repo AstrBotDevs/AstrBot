@@ -199,9 +199,16 @@ yay -S astrbot-git
 | Minimax TTS | 文本轉語音 |
 | 火山引擎 TTS | 文本轉語音 |
 
+## ❤️ Sponsors
+
+<p align="center">
+  <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
+</p>
+
+
 ## ❤️ 貢獻
 
-歡迎任何 Issues/Pull Requests！只需要將你的更改提交到此項目 ：)
+歡迎任何 Issues/Pull Requests！只需要將你的更改提交到此項目 :)
 
 ### 如何貢獻
 
