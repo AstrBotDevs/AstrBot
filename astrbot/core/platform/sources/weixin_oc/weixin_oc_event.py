@@ -53,10 +53,9 @@ class WeixinOCMessageEvent(AstrMessageEvent):
         )
 
     async def send(self, message: MessageChain) -> None:
-        text = self._build_plain_text(message)
-        if not text:
+        if not message.chain:
             return
-        await self.platform._send_to_session(self.session_id, text, message.chain)
+        await self.platform.send_by_session(self.session, message)
         await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
