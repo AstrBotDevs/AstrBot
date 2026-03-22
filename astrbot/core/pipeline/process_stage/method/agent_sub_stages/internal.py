@@ -8,6 +8,7 @@ from dataclasses import replace
 from astrbot.core import logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
     MainAgentBuildResult,
@@ -22,20 +23,8 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
-from astrbot.core.pipeline.stage import Stage
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.provider.entities import (
-    LLMResponse,
-    ProviderRequest,
-)
-from astrbot.core.star.star_handler import EventType
-from astrbot.core.utils.astrbot_path import get_astrbot_root, get_astrbot_skills_path
-from astrbot.core.utils.metrics import Metric
-from astrbot.core.utils.session_lock import session_lock_manager
-
-from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
-from ....context import PipelineContext, call_event_hook
-from ...follow_up import (
+from astrbot.core.pipeline.context import PipelineContext, call_event_hook
+from astrbot.core.pipeline.process_stage.follow_up import (
     FollowUpCapture,
     finalize_follow_up_capture,
     prepare_follow_up_capture,
@@ -43,11 +32,25 @@ from ...follow_up import (
     try_capture_follow_up,
     unregister_active_runner,
 )
+from astrbot.core.pipeline.stage import Stage
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.provider.entities import (
+    LLMResponse,
+    ProviderRequest,
+)
+from astrbot.core.star.star_handler import EventType
+from astrbot.core.tool_provider import ToolProvider
+from astrbot.core.utils.astrbot_path import get_astrbot_root, get_astrbot_skills_path
+from astrbot.core.utils.metrics import Metric
+from astrbot.core.utils.session_lock import session_lock_manager
 
 
 class InternalAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
+        self.provider_wake_prefix: str = ctx.astrbot_config["provider_settings"][
+            "wake_prefix"
+        ]
         conf = ctx.astrbot_config
         settings = conf["provider_settings"]
         self.streaming_response: bool = settings["streaming_response"]
@@ -118,7 +121,7 @@ class InternalAgentSubStage(Stage):
         from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
         from astrbot.core.cron.cron_tool_provider import CronToolProvider
 
-        _tool_providers = [ComputerToolProvider()]
+        _tool_providers: list[ToolProvider] = [ComputerToolProvider()]
         if self.add_cron_tools:
             _tool_providers.append(CronToolProvider())
 
@@ -149,8 +152,9 @@ class InternalAgentSubStage(Stage):
         )
 
     async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str
-    ) -> AsyncGenerator[None, None]:
+        self,
+        event: AstrMessageEvent,
+    ) -> None | AsyncGenerator[None, None]:
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False
         follow_up_activated = False
@@ -198,7 +202,7 @@ class InternalAgentSubStage(Stage):
                 try:
                     build_cfg = replace(
                         self.main_agent_cfg,
-                        provider_wake_prefix=provider_wake_prefix,
+                        provider_wake_prefix=self.provider_wake_prefix,
                         streaming_response=streaming_response,
                     )
 
@@ -368,7 +372,7 @@ class InternalAgentSubStage(Stage):
                             user_aborted=agent_runner.was_aborted(),
                         )
 
-                    asyncio.create_task(
+                    asyncio.create_task(  # noqa: RUF006
                         Metric.upload(
                             llm_tick=1,
                             model_name=agent_runner.provider.get_model(),

@@ -32,6 +32,8 @@ from astrbot.core.persona_error_reply import (
 if TYPE_CHECKING:
     from astrbot.core.agent.runners.base import BaseAgentRunner
     from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
+from astrbot.core.pipeline.context import PipelineContext, call_event_hook
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
@@ -40,9 +42,6 @@ from astrbot.core.provider.entities import (
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.metrics import Metric
-
-from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
-from ....context import PipelineContext, call_event_hook
 
 AGENT_RUNNER_TYPE_KEY = {
     "dify": "dify_agent_runner_provider_id",
@@ -164,6 +163,9 @@ async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
 class ThirdPartyAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
+        self.provider_wake_prefix: str = ctx.astrbot_config["provider_settings"][
+            "wake_prefix"
+        ]
         self.conf = ctx.astrbot_config
         self.runner_type = self.conf["provider_settings"]["agent_runner_type"]
         self.prov_id = self.conf["provider_settings"].get(
@@ -287,12 +289,13 @@ class ThirdPartyAgentSubStage(Stage):
         yield
 
     async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str
-    ) -> AsyncGenerator[None, None]:
+        self,
+        event: AstrMessageEvent,
+    ) -> None | AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
-        if provider_wake_prefix and not event.message_str.startswith(
-            provider_wake_prefix
+        if self.provider_wake_prefix and not event.message_str.startswith(
+            self.provider_wake_prefix
         ):
             return
 
@@ -312,7 +315,7 @@ class ThirdPartyAgentSubStage(Stage):
         # make provider request
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
-        req.prompt = event.message_str[len(provider_wake_prefix) :]
+        req.prompt = event.message_str[len(self.provider_wake_prefix) :]
         for comp in event.message_obj.message:
             if isinstance(comp, Image):
                 image_path = await comp.convert_to_base64()
@@ -417,7 +420,7 @@ class ThirdPartyAgentSubStage(Stage):
             if not streaming_used:
                 await close_runner_once()
 
-        asyncio.create_task(
+        asyncio.create_task(  # noqa: RUF006
             Metric.upload(
                 llm_tick=1,
                 model_name=self.runner_type,
