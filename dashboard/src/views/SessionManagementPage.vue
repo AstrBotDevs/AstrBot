@@ -137,7 +137,7 @@
               </v-select>
             </v-col>
             <v-col cols="12" md="6" lg="3">
-              <v-select v-model="batchChatProvider" :items="chatProviderOptions" item-title="label" item-value="value"
+              <v-select v-model="batchChatProvider" :items="batchChatProviderOptions" item-title="label" item-value="value"
                 :label="tm('batchOperations.chatProvider')" hide-details clearable variant="solo-filled" flat density="comfortable">
               </v-select>
             </v-col>
@@ -584,9 +584,9 @@ export default {
 
       // Provider 配置
       providerConfig: {
-        chat_completion: null,
-        speech_to_text: null,
-        text_to_speech: null,
+        chat_completion: 'follow',
+        speech_to_text: 'follow',
+        text_to_speech: 'follow',
       },
 
       // 插件配置
@@ -671,7 +671,7 @@ export default {
 
     chatProviderOptions() {
       return [
-        { label: this.tm('provider.followConfig'), value: null },
+        { label: this.tm('provider.followConfig'), value: 'follow' },
         ...this.availableChatProviders.map(p => ({
           label: `${p.name} (${p.model})`,
           value: p.id
@@ -681,7 +681,7 @@ export default {
 
     sttProviderOptions() {
       return [
-        { label: this.tm('provider.followConfig'), value: null },
+        { label: this.tm('provider.followConfig'), value: 'follow' },
         ...this.availableSttProviders.map(p => ({
           label: `${p.name} (${p.model})`,
           value: p.id
@@ -691,7 +691,27 @@ export default {
 
     ttsProviderOptions() {
       return [
-        { label: this.tm('provider.followConfig'), value: null },
+        { label: this.tm('provider.followConfig'), value: 'follow' },
+        ...this.availableTtsProviders.map(p => ({
+          label: `${p.name} (${p.model})`,
+          value: p.id
+        }))
+      ]
+    },
+
+    batchChatProviderOptions() {
+      return [
+        { label: this.tm('provider.followConfig'), value: 'follow' },
+        ...this.availableChatProviders.map(p => ({
+          label: `${p.name} (${p.model})`,
+          value: p.id
+        }))
+      ]
+    },
+
+    batchTtsProviderOptions() {
+      return [
+        { label: this.tm('provider.followConfig'), value: 'follow' },
         ...this.availableTtsProviders.map(p => ({
           label: `${p.name} (${p.model})`,
           value: p.id
@@ -914,9 +934,9 @@ export default {
 
       // 初始化 Provider 配置
       this.providerConfig = {
-        chat_completion: this.editingRules['provider_perf_chat_completion'] || null,
-        speech_to_text: this.editingRules['provider_perf_speech_to_text'] || null,
-        text_to_speech: this.editingRules['provider_perf_text_to_speech'] || null,
+        chat_completion: this.editingRules['provider_perf_chat_completion'] || 'follow',
+        speech_to_text: this.editingRules['provider_perf_speech_to_text'] || 'follow',
+        text_to_speech: this.editingRules['provider_perf_text_to_speech'] || 'follow',
       }
 
       // 初始化插件配置
@@ -997,7 +1017,7 @@ export default {
 
         for (const type of providerTypes) {
           const value = this.providerConfig[type]
-          if (value) {
+          if (value && value !== 'follow') {
             // 有值时更新
             updateTasks.push(
               axios.post('/api/session/update-rule', {
@@ -1007,7 +1027,7 @@ export default {
               })
             )
           } else if (this.editingRules[`provider_perf_${type}`]) {
-            // 选择了"跟随配置文件"（null）且之前有配置，则删除
+            // 选择了"跟随配置文件" (follow) 且之前有配置，则删除
             deleteTasks.push(
               axios.post('/api/session/delete-rule', {
                 umo: this.selectedUmo.umo,
@@ -1035,9 +1055,10 @@ export default {
             this.rulesList.push(item)
           }
           for (const type of providerTypes) {
-            if (this.providerConfig[type]) {
-              item.rules[`provider_perf_${type}`] = this.providerConfig[type]
-              this.editingRules[`provider_perf_${type}`] = this.providerConfig[type]
+            const val = this.providerConfig[type]
+            if (val && val !== 'follow') {
+              item.rules[`provider_perf_${type}`] = val
+              this.editingRules[`provider_perf_${type}`] = val
             } else {
               // 删除本地数据
               delete item.rules[`provider_perf_${type}`]
@@ -1359,7 +1380,7 @@ export default {
             umos,
             group_id: groupId,
             provider_type: 'chat_completion',
-            provider_id: this.batchChatProvider || null
+            provider_id: this.batchChatProvider === 'follow' ? null : this.batchChatProvider
           }))
         }
 
@@ -1369,7 +1390,7 @@ export default {
             umos,
             group_id: groupId,
             provider_type: 'text_to_speech',
-            provider_id: this.batchTtsProvider || null
+            provider_id: this.batchTtsProvider === 'follow' ? null : this.batchTtsProvider
           }))
         }
 
