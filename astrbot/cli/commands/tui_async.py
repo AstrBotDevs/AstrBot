@@ -1,4 +1,8 @@
-"""Async TUI implementation that connects to a running AstrBot instance via HTTP API."""
+"""Async TUI implementation that connects to a running AstrBot instance via HTTP API.
+
+This module provides a terminal UI that connects to AstrBot via the dashboard API,
+supporting streaming responses and all message types.
+"""
 
 from __future__ import annotations
 
@@ -7,9 +11,16 @@ import curses
 import json
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 import httpx
 
+from astrbot.tui.message_handler import (
+    ChatResponse,
+    MessageType,
+    ParsedMessage,
+    SSEMessageParser,
+)
 from astrbot.tui.screen import Screen
 
 
@@ -17,6 +28,8 @@ class MessageSender(Enum):
     USER = "user"
     BOT = "bot"
     SYSTEM = "system"
+    TOOL = "tool"
+    REASONING = "reasoning"
 
 
 @dataclass
@@ -37,7 +50,15 @@ class TUIState:
 
 
 class TUIClient:
-    """TUI client that connects to AstrBot via HTTP API."""
+    """TUI client that connects to AstrBot via HTTP API.
+
+    Supports full streaming responses including:
+    - Plain text (streaming)
+    - Tool calls and results
+    - Reasoning chains
+    - Agent stats
+    - Media (images, audio, files)
+    """
 
     def __init__(
         self,
@@ -64,13 +85,14 @@ class TUIClient:
 
         # Session info
         self.session_id: str | None = None
+        self.conversation_id: str | None = None
 
         # HTTP client
         self._client: httpx.AsyncClient | None = None
         self._headers: dict[str, str] = {}
 
-        # Pending tasks
-        self._pending_tasks: list[asyncio.Task] = []
+        # SSE parser
+        self._parser = SSEMessageParser()
 
     async def connect(self) -> bool:
         """Connect to AstrBot and authenticate."""
@@ -110,11 +132,12 @@ class TUIClient:
                 self.state.status = f"Session error: {session_data.get('msg')}"
                 return False
 
-            self.session_id = session_data.get("data", {}).get("session_id")
-            if not self.session_id:
+            self.conversation_id = session_data.get("data", {}).get("session_id")
+            if not self.conversation_id:
                 self.state.status = "No session_id in response"
                 return False
 
+            self.session_id = self.conversation_id
             self.state.connected = True
             self.state.status = "Connected"
             return True
@@ -133,8 +156,49 @@ class TUIClient:
             await self._client.aclose()
         self.state.connected = False
 
+    async def load_history(self) -> None:
+        """Load message history for the current session."""
+        if not self._client or not self.conversation_id:
+            return
+
+        try:
+            resp = await self._client.get(
+                "/api/chat/get_session",
+                params={"session_id": self.conversation_id},
+                headers=self._headers,
+            )
+            if resp.status_code != 200:
+                return
+
+            data = resp.json()
+            history = data.get("data", {}).get("history", [])
+
+            for record in reversed(history):
+                content = record.get("content", {})
+                msg_type = content.get("type")
+                message_parts = content.get("message", [])
+
+                if msg_type == "user":
+                    for part in message_parts:
+                        if part.get("type") == "plain":
+                            self.add_message(
+                                MessageSender.USER, part.get("text", "")
+                            )
+                elif msg_type == "bot":
+                    for part in message_parts:
+                        if part.get("type") == "plain":
+                            self.add_message(MessageSender.BOT, part.get("text", ""))
+
+        except Exception as e:
+            if self.debug:
+                import traceback
+
+                traceback.print_exc()
+
     def add_message(self, sender: MessageSender, text: str) -> None:
         """Add a message to the chat log."""
+        if not text:
+            return
         self.state.messages.append(Message(sender=sender, text=text))
         if len(self.state.messages) > self._max_messages:
             self.state.messages = self.state.messages[-self._max_messages :]
@@ -184,8 +248,7 @@ class TUIClient:
         # Handle Enter/Return - submit message
         elif key in (curses.KEY_ENTER, 10, 13):
             if self.state.input_buffer.strip():
-                task = asyncio.create_task(self._submit_message())
-                self._pending_tasks.append(task)
+                asyncio.create_task(self._submit_message())
             return True
 
         # Handle history navigation (up/down arrows)
@@ -247,8 +310,8 @@ class TUIClient:
         await self._process_user_message(text)
 
     async def _process_user_message(self, text: str) -> None:
-        """Send message to AstrBot and process the response."""
-        if not self.session_id or not self._client:
+        """Send message to AstrBot and process the streaming response."""
+        if not self.conversation_id or not self._client:
             self.add_system_message("Not connected to AstrBot")
             return
 
@@ -256,9 +319,15 @@ class TUIClient:
 
         try:
             # Format umo for webchat
-            umo = f"webchat:FriendMessage:webchat!{self.username}!{self.session_id}"
+            umo = f"webchat:FriendMessage:webchat!{self.username}!{self.conversation_id}"
 
-            # Send message and stream response
+            # Reset parser for new stream
+            self._parser.reset()
+
+            # Create a placeholder bot message that we'll update
+            placeholder = self.add_message(MessageSender.BOT, "...")
+
+            # Send message and stream response using proper SSE
             async with self._client.stream(
                 "POST",
                 "/api/chat/chat",
@@ -266,44 +335,65 @@ class TUIClient:
                 json={
                     "umo": umo,
                     "message": text,
+                    "session_id": self.conversation_id,
                     "streaming": True,
                 },
                 timeout=None,
             ) as response:
                 if response.status_code != 200:
-                    self.add_system_message(f"Error: HTTP {response.status_code}")
+                    self._update_last_bot_message(f"Error: HTTP {response.status_code}")
                     self.state.status = "Error"
                     return
 
-                # Process streaming response
-                accumulated_text = ""
-
+                # Process streaming SSE
                 async for line in response.aiter_lines():
-                    if not line.startswith("data: "):
+                    parsed = self._parser.parse_line(line)
+                    if parsed is None:
                         continue
 
-                    data_str = line[6:]  # Remove "data: " prefix
-                    try:
-                        data = json.loads(data_str)
-                    except json.JSONDecodeError:
-                        continue
+                    update, is_complete = self._process_parsed_message(parsed)
 
-                    msg_type = data.get("type")
-                    msg_data = data.get("data", "")
+                    # Update display based on message type
+                    if parsed.type == MessageType.TOOL_CALL:
+                        tool_call = json.loads(parsed.data)
+                        self.add_message(
+                            MessageSender.TOOL,
+                            f"[Tool: {tool_call.get('name', 'unknown')}]",
+                        )
+                        self.state.status = "Running tool..."
+                    elif parsed.type == MessageType.TOOL_CALL_RESULT:
+                        try:
+                            tcr = json.loads(parsed.data)
+                            self.add_message(
+                                MessageSender.TOOL,
+                                f"[Result] {tcr.get('result', '')[:100]}...",
+                            )
+                        except json.JSONDecodeError:
+                            pass
+                    elif parsed.type == MessageType.REASONING:
+                        self._update_last_bot_message(
+                            f"[Thinking] {update.reasoning[-200:]}"
+                        )
+                        self.state.status = "Thinking..."
+                    elif parsed.type == MessageType.AGENT_STATS:
+                        self.state.status = f"Tokens: {update.agent_stats.get('total_tokens', 0)}"
+                    elif update.text:
+                        self._update_last_bot_message(update.text)
 
-                    if msg_type == "plain":
-                        accumulated_text += msg_data
-                        self._update_last_bot_message(accumulated_text)
-                    elif msg_type == "image":
-                        self._update_last_bot_message(f"[Image: {msg_data}]")
-                    elif msg_type == "record":
-                        self._update_last_bot_message(f"[Audio: {msg_data}]")
-                    elif msg_type == "file":
-                        self._update_last_bot_message(f"[File: {msg_data}]")
-                    elif msg_type in ("complete", "end"):
+                    if is_complete:
                         break
 
-                self.state.status = "Ready"
+            # Final status
+            if update.reasoning:
+                self.add_message(MessageSender.REASONING, f"[Reasoning]\n{update.reasoning}")
+
+            for tool_display in update.get_tool_calls_display():
+                self.add_message(MessageSender.TOOL, tool_display)
+
+            if update.error:
+                self.add_message(MessageSender.SYSTEM, f"Error: {update.error}")
+
+            self.state.status = "Ready"
 
         except asyncio.CancelledError:
             self.state.status = "Cancelled"
@@ -314,6 +404,12 @@ class TUIClient:
                 import traceback
 
                 traceback.print_exc()
+
+    def _process_parsed_message(
+        self, msg: ParsedMessage
+    ) -> tuple[ChatResponse, bool]:
+        """Process a parsed message and return updated response state."""
+        return self._parser.process_message(msg)
 
     def _update_last_bot_message(self, text: str) -> None:
         """Update the last bot message with new text (for streaming)."""
@@ -351,8 +447,12 @@ class TUIClient:
             self.add_system_message(f"Failed to connect: {self.state.status}")
         else:
             self.add_system_message("Connected to AstrBot!")
-            self.add_system_message("Type your message and press Enter to send.")
-            self.add_system_message("Press ESC or Ctrl+C to exit.")
+            # Load history
+            await self.load_history()
+
+        # Welcome message
+        self.add_system_message("Type your message and press Enter to send.")
+        self.add_system_message("Press ESC or Ctrl+C to exit.")
 
         # Initial render
         self.render()
@@ -377,39 +477,6 @@ class TUIClient:
 
         # Cleanup
         await self.disconnect()
-
-
-def _run_tui_curses(
-    screen: curses.window,
-    host: str,
-    api_key: str | None,
-    username: str,
-    password: str,
-    debug: bool,
-) -> None:
-    """Curses wrapper for the async TUI."""
-    screen.clear()
-    screen.refresh()
-
-    scr = Screen(screen)
-    client = TUIClient(
-        screen=scr,
-        host=host,
-        api_key=api_key,
-        username=username,
-        password=password,
-        debug=debug,
-    )
-
-    # Create a new event loop for this thread since curses runs in its own thread
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(client.run_event_loop(screen))
-    except KeyboardInterrupt:
-        pass
-    finally:
-        loop.close()
 
 
 def run_tui_async(
