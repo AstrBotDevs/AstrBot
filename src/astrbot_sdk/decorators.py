@@ -185,11 +185,12 @@ def _is_valid_validate_config_expected_type(value: Any) -> bool:
 def _validate_validate_config_schema(schema: dict[str, Any]) -> None:
     for field_name, field_schema in schema.items():
         if not isinstance(field_schema, dict):
-            raise TypeError(f"validate_config schema field {field_name!r} must be a dict")
+            raise TypeError(
+                f"validate_config schema field {field_name!r} must be a dict"
+            )
         expected_type = field_schema.get("type")
-        if (
-            expected_type is not None
-            and not _is_valid_validate_config_expected_type(expected_type)
+        if expected_type is not None and not _is_valid_validate_config_expected_type(
+            expected_type
         ):
             raise TypeError(
                 "validate_config schema field "
