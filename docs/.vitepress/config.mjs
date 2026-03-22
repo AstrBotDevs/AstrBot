@@ -327,6 +327,7 @@ export default defineConfig({
               { text: "WeCom Application", link: "/wecom" },
               { text: "WeCom AI Bot", link: "/wecom_ai_bot" },
               { text: "WeChat Official Account", link: "/weixin-official-account" },
+              { text: "Personal WeChat", link: "/weixin_oc" },
               { text: "Lark", link: "/lark" },
               { text: "DingTalk", link: "/dingtalk" },
               { text: "Telegram", link: "/telegram" },
