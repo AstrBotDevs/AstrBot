@@ -6,6 +6,7 @@ for speech recognition. Model: qwen3-asr-flash
 API documentation: https://help.aliyun.com/zh/model-studio/
 """
 
+import asyncio
 import base64
 import os
 import pathlib
@@ -58,9 +59,6 @@ class ProviderQwenASRFlash(STTProvider):
         self.enable_itn = provider_config.get("enable_itn", True)
         self.timeout = provider_config.get("timeout", 30)
 
-        # Set the DashScope API base URL
-        dashscope.base_http_api_url = self.api_base
-
         self.set_model(self.model)
 
     def _get_mime_type(self, file_path: str) -> str:
@@ -85,12 +83,20 @@ class ProviderQwenASRFlash(STTProvider):
         silk_header = b"SILK"
         amr_header = b"#!AMR"
 
+        def _read_header():
+            try:
+                with open(file_path, "rb") as f:
+                    return f.read(8)
+            except FileNotFoundError:
+                return None
+
         try:
-            with open(file_path, "rb") as f:
-                file_header = f.read(8)
-        except FileNotFoundError:
+            file_header = await asyncio.to_thread(_read_header)
+        except Exception:
             return None
 
+        if file_header is None:
+            return None
         if silk_header in file_header:
             return "silk"
         if amr_header in file_header:
@@ -153,14 +159,18 @@ class ProviderQwenASRFlash(STTProvider):
 
         return audio_url, output_path
 
-    def _encode_audio_base64(self, file_path: str) -> str:
+    async def _encode_audio_base64(self, file_path: str) -> str:
         """Encode audio file to base64 data URI."""
         mime_type = self._get_mime_type(file_path)
-        file_path_obj = pathlib.Path(file_path)
-        if not file_path_obj.exists():
-            raise FileNotFoundError(f"Audio file not found: {file_path}")
 
-        base64_str = base64.b64encode(file_path_obj.read_bytes()).decode()
+        def _read_and_encode():
+            file_path_obj = pathlib.Path(file_path)
+            if not file_path_obj.exists():
+                raise FileNotFoundError(f"Audio file not found: {file_path}")
+            file_bytes = file_path_obj.read_bytes()
+            return base64.b64encode(file_bytes).decode()
+
+        base64_str = await asyncio.to_thread(_read_and_encode)
         return f"data:{mime_type};base64,{base64_str}"
 
     async def get_text(self, audio_url: str) -> str:
@@ -179,7 +189,7 @@ class ProviderQwenASRFlash(STTProvider):
             audio_path, output_path = await self._prepare_audio(audio_url)
 
             # Encode audio to base64
-            data_uri = self._encode_audio_base64(audio_path)
+            data_uri = await self._encode_audio_base64(audio_path)
 
             # Build messages for MultiModalConversation API
             messages = [
@@ -191,14 +201,19 @@ class ProviderQwenASRFlash(STTProvider):
             if self.language != "auto":
                 asr_options["language"] = self.language
 
-            # Call API
-            response = MultiModalConversation.call(
-                api_key=self.api_key,
-                model=self.model,
-                messages=messages,
-                result_format="message",
-                asr_options=asr_options,
-            )
+            # Call API in a thread to avoid blocking the event loop
+            def _blocking_call():
+                # Set API base for this call
+                dashscope.base_http_api_url = self.api_base
+                return MultiModalConversation.call(
+                    api_key=self.api_key,
+                    model=self.model,
+                    messages=messages,
+                    result_format="message",
+                    asr_options=asr_options,
+                )
+
+            response = await asyncio.to_thread(_blocking_call)
 
             # Parse response
             if response.status_code != 200:
