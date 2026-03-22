@@ -2,6 +2,7 @@ import asyncio
 import traceback
 from asyncio import Queue
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from astrbot.core import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -12,6 +13,8 @@ from .platform import Platform, PlatformStatus
 from .register import platform_cls_map
 from .sources.webchat.webchat_adapter import WebChatAdapter
 
+if TYPE_CHECKING:
+    from astrbot.core.sdk_bridge.plugin_bridge import SdkPluginBridge
 PLATFORM_ADAPTER_MODULES: dict[str, str] = {
     "aiocqhttp": ".sources.aiocqhttp.aiocqhttp_platform_adapter",
     "qq_official": ".sources.qqofficial.qqofficial_platform_adapter",
@@ -52,6 +55,7 @@ class PlatformManager:
         这个配置中的 unique_session 需要特殊处理,
         约定整个项目中对 unique_session 的引用都从 default 的配置中获取"""
         self.event_queue = event_queue
+        self.sdk_plugin_bridge: SdkPluginBridge | None = None
 
     def _is_valid_platform_id(self, platform_id: str | None) -> bool:
         if not platform_id:
@@ -220,6 +224,7 @@ class PlatformManager:
             return
         cls_type = platform_cls_map[platform_config["type"]]
         inst: Platform = cls_type(platform_config, self.settings, self.event_queue)
+        setattr(inst, "sdk_plugin_bridge", self.sdk_plugin_bridge)
         self._inst_map[platform_config["id"]] = {
             "inst": inst,
             "client_id": inst.client_self_id,
@@ -240,6 +245,17 @@ class PlatformManager:
                 await handler.handler()
             except Exception:
                 logger.error(traceback.format_exc())
+        if self.sdk_plugin_bridge is not None:
+            try:
+                await self.sdk_plugin_bridge.dispatch_system_event(
+                    "platform_loaded",
+                    {
+                        "platform": inst.meta().name,
+                        "platform_id": inst.meta().id,
+                    },
+                )
+            except Exception as exc:
+                logger.warning(f"SDK platform_loaded event dispatch failed: {exc}")
 
     async def _task_wrapper(
         self, task: asyncio.Task, platform: Platform | None = None

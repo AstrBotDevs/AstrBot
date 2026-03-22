@@ -53,6 +53,9 @@ class RespondStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.config = ctx.astrbot_config
+        self.sdk_plugin_bridge = getattr(
+            ctx.plugin_manager.context, "sdk_plugin_bridge", None
+        )
         self.platform_settings: dict = self.config.get("platform_settings", {})
 
         self.reply_with_mention = ctx.astrbot_config["platform_settings"][
@@ -128,12 +131,36 @@ class RespondStage(Stage):
         # 如果所有组件都为空
         return True
 
+    @staticmethod
+    def _message_outline_for_sdk_event(
+        chain: MessageChain | list[BaseMessageComponent] | None,
+    ) -> str:
+        if isinstance(chain, MessageChain):
+            return chain.get_plain_text(with_other_comps_mark=True)
+        if isinstance(chain, list):
+            return MessageChain(chain).get_plain_text(with_other_comps_mark=True)
+        return ""
+
+    @staticmethod
+    def _message_payloads_for_sdk_event(
+        chain: MessageChain | list[BaseMessageComponent] | None,
+    ) -> list[dict]:
+        from astrbot_sdk.message.components import component_to_payload_sync
+
+        if isinstance(chain, MessageChain):
+            components = chain.chain
+        elif isinstance(chain, list):
+            components = chain
+        else:
+            components = []
+        return [component_to_payload_sync(component) for component in components]
+
     def is_seg_reply_required(self, event: AstrMessageEvent) -> bool:
         """检查是否需要分段回复"""
         if not self.enable_seg:
             return False
 
-        if (result := event.get_result()) is None:
+        if (result := self._get_effective_result(event)) is None:
             return False
         if self.only_llm_result and not result.is_model_result():
             return False
@@ -171,7 +198,7 @@ class RespondStage(Stage):
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
-        result = event.get_result()
+        result = self._get_effective_result(event)
         if result is None:
             return
         if event.get_extra("_streaming_finished", False):
@@ -292,5 +319,31 @@ class RespondStage(Stage):
 
         if await call_event_hook(event, EventType.OnAfterMessageSentEvent):
             return
+
+        if self.sdk_plugin_bridge is not None:
+            try:
+                await self.sdk_plugin_bridge.dispatch_message_event(
+                    "after_message_sent",
+                    event,
+                    {
+                        "session_id": event.unified_msg_origin,
+                        "platform": event.get_platform_name(),
+                        "platform_id": event.get_platform_id(),
+                        "message_type": event.get_message_type().value,
+                        "sender_name": event.get_sender_name(),
+                        "self_id": event.get_self_id(),
+                        "message_outline": self._message_outline_for_sdk_event(
+                            result.chain
+                        ),
+                        "sent_message_outline": self._message_outline_for_sdk_event(
+                            result.chain
+                        ),
+                        "sent_messages": self._message_payloads_for_sdk_event(
+                            result.chain
+                        ),
+                    },
+                )
+            except Exception as exc:
+                logger.warning(f"SDK after_message_sent dispatch failed: {exc}")
 
         event.clear_result()

@@ -101,6 +101,13 @@ class ProviderManager:
         if hook not in self._provider_change_hooks:
             self._provider_change_hooks.append(hook)
 
+    def unregister_provider_change_hook(
+        self,
+        hook: Callable[[str, ProviderType, str | None], None],
+    ) -> None:
+        if hook in self._provider_change_hooks:
+            self._provider_change_hooks.remove(hook)
+
     def _notify_provider_changed(
         self,
         provider_id: str,

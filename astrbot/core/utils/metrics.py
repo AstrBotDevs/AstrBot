@@ -3,10 +3,19 @@ import socket
 import sys
 import uuid
 
-import aiohttp
-
-from astrbot.core import db_helper, logger
 from astrbot.core.config import VERSION
+
+
+def _get_aiohttp():
+    import aiohttp
+
+    return aiohttp
+
+
+def _get_runtime_dependencies():
+    from astrbot.core import db_helper, logger
+
+    return db_helper, logger
 
 
 class Metric:
@@ -45,6 +54,7 @@ class Metric:
 
         Powered by TickStats.
         """
+        db_helper, logger = _get_runtime_dependencies()
         if os.environ.get("ASTRBOT_DISABLE_METRICS", "0") == "1":
             return
         base_url = "https://tickstats.soulter.top/api/metric/90a6c2a1"
@@ -69,6 +79,7 @@ class Metric:
             logger.error(f"保存指标到数据库失败: {e}")
 
         try:
+            aiohttp = _get_aiohttp()
             async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.post(base_url, json=payload, timeout=3) as response:
                     if response.status != 200:

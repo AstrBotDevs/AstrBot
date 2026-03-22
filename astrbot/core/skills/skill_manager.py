@@ -18,10 +18,12 @@ from astrbot.core.utils.astrbot_path import AstrbotPaths, astrbot_paths
 
 SKILLS_CONFIG_FILENAME = "skills.json"
 SANDBOX_SKILLS_CACHE_FILENAME = "sandbox_skills_cache.json"
+SDK_PLUGIN_SKILLS_FILENAME = "sdk_plugin_skills.json"
 DEFAULT_SKILLS_CONFIG: dict[str, dict] = {"skills": {}}
 SANDBOX_SKILLS_ROOT = "skills"
 SANDBOX_WORKSPACE_ROOT = "/workspace"
 _SANDBOX_SKILLS_CACHE_VERSION = 1
+_SDK_PLUGIN_SKILLS_VERSION = 1
 
 _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
@@ -92,8 +94,18 @@ class SkillInfo:
     output_schema: dict | None = None
 
 
-def _parse_frontmatter(text: str) -> dict:
-    """Extract metadata from YAML frontmatter.
+@dataclass(frozen=True, slots=True)
+class LocalSkillSource:
+    name: str
+    skill_dir: Path
+    skill_md_path: Path
+    owner_type: str = "standalone"
+    description_override: str = ""
+    plugin_id: str | None = None
+
+
+def _parse_frontmatter_description(text: str) -> str:
+    """Extract the ``description`` value from YAML frontmatter.
 
     Expects the standard SKILL.md format used by OpenAI Codex CLI and
     Anthropic Claude Skills::
@@ -282,6 +294,218 @@ class SkillManager:
         )
         os.makedirs(self.skills_root, exist_ok=True)
 
+    def _read_skill_description(self, skill_md_path: Path) -> str:
+        try:
+            content = skill_md_path.read_text(encoding="utf-8")
+        except Exception:
+            return ""
+        return _parse_frontmatter_description(content)
+
+    def _discover_standalone_skill_sources(self) -> dict[str, LocalSkillSource]:
+        sources: dict[str, LocalSkillSource] = {}
+        skills_root = Path(self.skills_root)
+        if not skills_root.exists():
+            return sources
+
+        for entry in sorted(skills_root.iterdir()):
+            if not entry.is_dir():
+                continue
+            skill_md_path = entry / "SKILL.md"
+            if not skill_md_path.is_file():
+                continue
+            sources[entry.name] = LocalSkillSource(
+                name=entry.name,
+                skill_dir=entry,
+                skill_md_path=skill_md_path,
+                owner_type="standalone",
+            )
+        return sources
+
+    def _load_sdk_plugin_skills_registry(self) -> dict[str, object]:
+        if not os.path.exists(self.sdk_plugin_skills_path):
+            return {"version": _SDK_PLUGIN_SKILLS_VERSION, "plugins": {}}
+        try:
+            with open(self.sdk_plugin_skills_path, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            return {"version": _SDK_PLUGIN_SKILLS_VERSION, "plugins": {}}
+        if not isinstance(data, dict):
+            return {"version": _SDK_PLUGIN_SKILLS_VERSION, "plugins": {}}
+        plugins = data.get("plugins", {})
+        if not isinstance(plugins, dict):
+            plugins = {}
+        return {
+            "version": int(data.get("version", _SDK_PLUGIN_SKILLS_VERSION)),
+            "plugins": plugins,
+        }
+
+    def _save_sdk_plugin_skills_registry(self, registry: dict[str, object]) -> None:
+        registry["version"] = _SDK_PLUGIN_SKILLS_VERSION
+        with open(self.sdk_plugin_skills_path, "w", encoding="utf-8") as f:
+            json.dump(registry, f, ensure_ascii=False, indent=2)
+
+    def replace_sdk_plugin_skills(
+        self,
+        plugin_id: str,
+        skills: list[dict[str, str]],
+    ) -> None:
+        plugin_name = str(plugin_id).strip()
+        if not plugin_name:
+            raise ValueError("plugin_id must not be empty")
+
+        normalized_skills: list[dict[str, str]] = []
+        for item in skills:
+            if not isinstance(item, dict):
+                continue
+            skill_name = str(item.get("name", "")).strip()
+            skill_dir_text = str(item.get("skill_dir", "")).strip()
+            if not skill_name or not _SKILL_NAME_RE.fullmatch(skill_name):
+                continue
+            if not skill_dir_text:
+                continue
+            skill_dir = Path(skill_dir_text).resolve()
+            skill_md_path = Path(
+                str(item.get("path", "")).strip() or str(skill_dir / "SKILL.md")
+            ).resolve()
+            normalized_skills.append(
+                {
+                    "name": skill_name,
+                    "description": str(item.get("description", "") or ""),
+                    "path": str(skill_md_path),
+                    "skill_dir": str(skill_dir),
+                }
+            )
+
+        registry = self._load_sdk_plugin_skills_registry()
+        plugins = registry.get("plugins", {})
+        if not isinstance(plugins, dict):
+            plugins = {}
+        previous_items = plugins.get(plugin_name, [])
+        previous_names = {
+            str(item.get("name", "")).strip()
+            for item in previous_items
+            if isinstance(item, dict)
+        }
+        if normalized_skills:
+            plugins[plugin_name] = sorted(
+                normalized_skills,
+                key=lambda item: str(item.get("name", "")),
+            )
+        else:
+            plugins.pop(plugin_name, None)
+        registry["plugins"] = plugins
+        self._save_sdk_plugin_skills_registry(registry)
+
+        current_names = {item["name"] for item in normalized_skills}
+        for removed_name in sorted(previous_names - current_names):
+            self._remove_skill_from_sandbox_cache(removed_name)
+
+    def remove_sdk_plugin_skills(self, plugin_id: str) -> None:
+        self.replace_sdk_plugin_skills(plugin_id, [])
+
+    def prune_sdk_plugin_skills(self, active_plugin_ids: set[str]) -> None:
+        normalized_ids = {
+            str(item).strip() for item in active_plugin_ids if str(item).strip()
+        }
+        registry = self._load_sdk_plugin_skills_registry()
+        plugins = registry.get("plugins", {})
+        if not isinstance(plugins, dict):
+            return
+
+        removed_skill_names: set[str] = set()
+        updated_plugins: dict[str, object] = {}
+        for plugin_id, items in plugins.items():
+            plugin_name = str(plugin_id).strip()
+            if not plugin_name:
+                continue
+            if plugin_name in normalized_ids:
+                updated_plugins[plugin_name] = items
+                continue
+            if isinstance(items, list):
+                removed_skill_names.update(
+                    str(item.get("name", "")).strip()
+                    for item in items
+                    if isinstance(item, dict)
+                )
+
+        registry["plugins"] = updated_plugins
+        self._save_sdk_plugin_skills_registry(registry)
+        for removed_name in sorted(name for name in removed_skill_names if name):
+            self._remove_skill_from_sandbox_cache(removed_name)
+
+    def _discover_sdk_plugin_skill_sources(self) -> dict[str, LocalSkillSource]:
+        sources: dict[str, LocalSkillSource] = {}
+        registry = self._load_sdk_plugin_skills_registry()
+        plugins = registry.get("plugins", {})
+        if not isinstance(plugins, dict):
+            return sources
+        for plugin_id, items in plugins.items():
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                skill_name = str(item.get("name", "")).strip()
+                skill_dir_text = str(item.get("skill_dir", "")).strip()
+                path_text = str(item.get("path", "")).strip()
+                if not skill_name or not _SKILL_NAME_RE.fullmatch(skill_name):
+                    continue
+                if not skill_dir_text:
+                    continue
+                skill_dir = Path(skill_dir_text)
+                skill_md_path = Path(path_text or str(skill_dir / "SKILL.md"))
+                if not skill_dir.is_dir() or not skill_md_path.is_file():
+                    continue
+                sources.setdefault(
+                    skill_name,
+                    LocalSkillSource(
+                        name=skill_name,
+                        skill_dir=skill_dir,
+                        skill_md_path=skill_md_path,
+                        owner_type="sdk_registered",
+                        description_override=str(item.get("description", "") or ""),
+                        plugin_id=str(plugin_id),
+                    ),
+                )
+        return sources
+
+    def list_local_skill_sources(self) -> list[LocalSkillSource]:
+        sources = self._discover_standalone_skill_sources()
+        for name, source in self._discover_sdk_plugin_skill_sources().items():
+            sources.setdefault(name, source)
+        return [sources[name] for name in sorted(sources)]
+
+    def get_local_skill_source(self, name: str) -> LocalSkillSource | None:
+        for source in self.list_local_skill_sources():
+            if source.name == name:
+                return source
+        return None
+
+    def materialize_local_skill_bundle(
+        self,
+        bundle_root: Path,
+        *,
+        skill_names: list[str] | None = None,
+    ) -> list[LocalSkillSource]:
+        selected_names = (
+            {name for name in skill_names if name} if skill_names is not None else None
+        )
+        bundle_root.mkdir(parents=True, exist_ok=True)
+
+        copied_sources: list[LocalSkillSource] = []
+        for source in self.list_local_skill_sources():
+            if selected_names is not None and source.name not in selected_names:
+                continue
+            target_dir = bundle_root / source.name
+            if target_dir.exists():
+                shutil.rmtree(target_dir)
+            # SDK-registered skills may live inside plugin packages, so bundle
+            # them under the public skill id to give sandbox/runtime a stable
+            # path that is independent from the plugin's internal layout.
+            shutil.copytree(source.skill_dir, target_dir)
+            copied_sources.append(source)
+        return copied_sources
+
     def _load_config(self) -> dict:
         if not os.path.exists(self.config_path):
             self._save_config(DEFAULT_SKILLS_CONFIG.copy())
@@ -428,7 +652,7 @@ class SkillManager:
                     skill_name
                 ) or _default_sandbox_skill_path(skill_name)
             else:
-                path_str = str(skill_md)
+                path_str = str(source.skill_md_path)
             path_str = path_str.replace("\\", "/")
             skills_by_name[skill_name] = SkillInfo(
                 name=skill_name,
@@ -486,8 +710,9 @@ class SkillManager:
         return [skills_by_name[name] for name in sorted(skills_by_name)]
 
     def is_sandbox_only_skill(self, name: str) -> bool:
-        skill_dir = Path(self.skills_root) / name
-        skill_md_exists = _normalize_skill_markdown_path(skill_dir) is not None
+        if self.get_local_skill_source(name) is not None:
+            skill_dir = Path(self.skills_root) / name
+            skill_md_exists = _normalize_skill_markdown_path(skill_dir) is not None
         if skill_md_exists:
             return False
         cache = self._load_sandbox_skills_cache()
@@ -535,9 +760,14 @@ class SkillManager:
                 "Sandbox preset skill cannot be deleted from local skill management."
             )
 
-        skill_dir = Path(self.skills_root) / name
-        if skill_dir.exists():
-            shutil.rmtree(skill_dir)
+        source = self.get_local_skill_source(name)
+        if source is not None and source.owner_type != "standalone":
+            raise PermissionError(
+                "SDK-registered skill cannot be deleted here. Disable or update the owning plugin instead."
+            )
+
+        if source is not None and source.skill_dir.exists():
+            shutil.rmtree(source.skill_dir)
 
         # Ensure UI consistency even when there is no active sandbox session
         # to refresh cache from runtime side.

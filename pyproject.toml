@@ -8,6 +8,7 @@ requires-python = ">=3.12,<3.14"
 keywords = ["Astrbot", "Astrbot Module", "Astrbot Plugin"]
 
 dependencies = [
+  "astrbot-sdk",
   "aiocqhttp>=1.4.4",
   "aiodocker>=0.24.0",
   "aiohttp>=3.11.18",
@@ -83,6 +84,9 @@ dev = [
   "textual-dev>=1.8.0",
 ]
 
+[tool.uv.sources]
+astrbot-sdk = { path = "./astrbot-sdk", editable = true }
+
 [project.scripts]
 astrbot = "astrbot.cli.__main__:cli"
 
@@ -117,8 +121,9 @@ typeCheckingMode = "basic"
 pythonVersion = "3.10"
 reportMissingTypeStubs = false
 reportMissingImports = false
-include = ["astrbot"]
+include = ["astrbot", "astrbot-sdk/src"]
 exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
+extraPaths = ["astrbot-sdk/src"]
 
 [tool.hatch.metadata]
 allow-direct-references = true

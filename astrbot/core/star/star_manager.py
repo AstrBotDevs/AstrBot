@@ -1084,6 +1084,19 @@ class PluginManager:
                         await handler.handler(metadata)
                     except Exception:
                         logger.error(traceback.format_exc())
+                sdk_plugin_bridge = getattr(self.context, "sdk_plugin_bridge", None)
+                if sdk_plugin_bridge is not None:
+                    try:
+                        await sdk_plugin_bridge.dispatch_system_event(
+                            "plugin_loaded",
+                            {
+                                "plugin_name": metadata.name,
+                                "display_name": metadata.display_name or metadata.name,
+                                "version": metadata.version,
+                            },
+                        )
+                    except Exception as exc:
+                        logger.warning("SDK plugin_loaded dispatch failed: %s", exc)
 
             except BaseException as e:
                 logger.error(f"----- 插件 {root_dir_name} 载入失败 -----")
@@ -1627,6 +1640,24 @@ class PluginManager:
                 await handler.handler(star_metadata)
             except Exception:
                 logger.error(traceback.format_exc())
+        sdk_plugin_bridge = (
+            getattr(star_metadata.star_cls.context, "sdk_plugin_bridge", None)
+            if getattr(star_metadata, "star_cls", None)
+            else None
+        )
+        if sdk_plugin_bridge is not None:
+            try:
+                await sdk_plugin_bridge.dispatch_system_event(
+                    "plugin_unloaded",
+                    {
+                        "plugin_name": star_metadata.name,
+                        "display_name": star_metadata.display_name
+                        or star_metadata.name,
+                        "version": star_metadata.version,
+                    },
+                )
+            except Exception as exc:
+                logger.warning("SDK plugin_unloaded dispatch failed: %s", exc)
 
     async def turn_on_plugin(self, plugin_name: str) -> None:
         plugin = self.context.get_registered_star(plugin_name)

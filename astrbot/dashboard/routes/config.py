@@ -1063,7 +1063,7 @@ class ConfigRoute(Route):
         plugin_name = request.args.get("plugin_name", "unknown")
         try:
             await self._save_plugin_configs(post_configs, plugin_name)
-            await self.core_lifecycle.plugin_manager.reload(plugin_name)
+            await self._reload_plugin_after_config_save(plugin_name)
             return (
                 Response()
                 .ok(None, f"保存插件 {plugin_name} 成功~ 机器人正在热重载插件｡")
@@ -1077,6 +1077,16 @@ class ConfigRoute(Route):
             if plugin_md.name == plugin_name:
                 return plugin_md
         return None
+
+    def _sdk_bridge(self):
+        return getattr(self.core_lifecycle, "sdk_plugin_bridge", None)
+
+    async def _reload_plugin_after_config_save(self, plugin_name: str) -> None:
+        sdk_bridge = self._sdk_bridge()
+        if sdk_bridge is not None and sdk_bridge.get_plugin_metadata(plugin_name):
+            await sdk_bridge.reload_plugin(plugin_name)
+            return
+        await self.core_lifecycle.plugin_manager.reload(plugin_name)
 
     def _resolve_config_file_scope(
         self,
@@ -1534,6 +1544,26 @@ class ConfigRoute(Route):
                 }
                 break
 
+        if ret["metadata"] is not None:
+            return ret
+
+        sdk_bridge = self._sdk_bridge()
+        if sdk_bridge is None:
+            return ret
+
+        schema = sdk_bridge.get_plugin_config_schema(plugin_name)
+        if schema is None or not schema:
+            return ret
+        config = sdk_bridge.get_plugin_config(plugin_name) or {}
+        ret["config"] = config
+        ret["metadata"] = {
+            plugin_name: {
+                "description": f"{plugin_name} 配置",
+                "type": "object",
+                "items": schema,
+            },
+        }
+
         return ret
 
     async def _save_astrbot_configs(
@@ -1560,18 +1590,40 @@ class ConfigRoute(Route):
             if plugin_md.name == plugin_name:
                 md = plugin_md
 
-        if not md:
+        if md:
+            if not md.config:
+                raise ValueError(f"插件 {plugin_name} 没有注册配置")
+            assert md.config is not None
+
+            try:
+                errors, post_configs = validate_config(
+                    post_configs, getattr(md.config, "schema", {}), is_core=False
+                )
+                if errors:
+                    raise ValueError(f"格式校验未通过: {errors}")
+                md.config.save_config(post_configs)
+                return
+            except Exception as e:
+                raise e
+
+        sdk_bridge = self._sdk_bridge()
+        if sdk_bridge is None:
             raise ValueError(f"插件 {plugin_name} 不存在")
-        if not md.config:
+
+        schema = sdk_bridge.get_plugin_config_schema(plugin_name)
+        if schema is None:
+            raise ValueError(f"插件 {plugin_name} 不存在")
+        if not schema:
             raise ValueError(f"插件 {plugin_name} 没有注册配置")
-        assert md.config is not None
 
         try:
             errors, post_configs = validate_config(
-                post_configs, getattr(md.config, "schema", {}), is_core=False
+                post_configs,
+                schema,
+                is_core=False,
             )
             if errors:
                 raise ValueError(f"格式校验未通过: {errors}")
-            md.config.save_config(post_configs)
+            sdk_bridge.save_plugin_config(plugin_name, post_configs)
         except Exception as e:
             raise e

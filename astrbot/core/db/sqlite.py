@@ -294,7 +294,13 @@ class SQLiteDatabase(BaseDatabase):
                 return new_conversation
 
     async def update_conversation(
-        self, cid, title=None, persona_id=None, content=None, token_usage=None
+        self,
+        cid,
+        title=None,
+        persona_id=None,
+        clear_persona: bool = False,
+        content=None,
+        token_usage=None,
     ):
         async with self.get_db() as session:
             session: AsyncSession
@@ -305,7 +311,9 @@ class SQLiteDatabase(BaseDatabase):
                 values = {}
                 if title is not None:
                     values["title"] = title
-                if persona_id is not None:
+                if clear_persona:
+                    values["persona_id"] = None
+                elif persona_id is not None:
                     values["persona_id"] = persona_id
                 if content is not None:
                     values["content"] = content
@@ -509,6 +517,121 @@ class SQLiteDatabase(BaseDatabase):
             )
             result = await session.execute(query.offset(offset).limit(page_size))
             return result.scalars().all()
+
+    async def list_sdk_platform_message_history(
+        self,
+        platform_id,
+        user_id,
+        cursor_id=None,
+        limit=50,
+        include_total=False,
+    ):
+        """List SDK message history records ordered by descending id."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = (
+                select(PlatformMessageHistory)
+                .where(
+                    PlatformMessageHistory.platform_id == platform_id,
+                    PlatformMessageHistory.user_id == user_id,
+                )
+                .order_by(desc(PlatformMessageHistory.id))
+            )
+            if cursor_id is not None:
+                query = query.where(PlatformMessageHistory.id < cursor_id)
+            result = await session.execute(query.limit(limit))
+            total: int | None = None
+            if include_total:
+                total_query = (
+                    select(func.count())
+                    .select_from(PlatformMessageHistory)
+                    .where(
+                        PlatformMessageHistory.platform_id == platform_id,
+                        PlatformMessageHistory.user_id == user_id,
+                    )
+                )
+                total_result = await session.execute(total_query)
+                total = int(total_result.scalar() or 0)
+            return list(result.scalars().all()), total
+
+    async def delete_platform_message_before(
+        self,
+        platform_id,
+        user_id,
+        before,
+    ) -> int:
+        """Delete platform message history records strictly older than the boundary."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                result = await session.execute(
+                    delete(PlatformMessageHistory).where(
+                        col(PlatformMessageHistory.platform_id) == platform_id,
+                        col(PlatformMessageHistory.user_id) == user_id,
+                        col(PlatformMessageHistory.created_at) < before,
+                    ),
+                )
+                return int(result.rowcount or 0)
+
+    async def delete_platform_message_after(
+        self,
+        platform_id,
+        user_id,
+        after,
+    ) -> int:
+        """Delete platform message history records strictly newer than the boundary."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                result = await session.execute(
+                    delete(PlatformMessageHistory).where(
+                        col(PlatformMessageHistory.platform_id) == platform_id,
+                        col(PlatformMessageHistory.user_id) == user_id,
+                        col(PlatformMessageHistory.created_at) > after,
+                    ),
+                )
+                return int(result.rowcount or 0)
+
+    async def delete_all_platform_message_history(
+        self,
+        platform_id,
+        user_id,
+    ) -> int:
+        """Delete all platform message history records for a specific user."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                result = await session.execute(
+                    delete(PlatformMessageHistory).where(
+                        col(PlatformMessageHistory.platform_id) == platform_id,
+                        col(PlatformMessageHistory.user_id) == user_id,
+                    ),
+                )
+                return int(result.rowcount or 0)
+
+    async def find_platform_message_history_by_idempotency_key(
+        self,
+        platform_id,
+        user_id,
+        idempotency_key,
+    ) -> PlatformMessageHistory | None:
+        """Find a SDK message history record by its idempotency key."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = (
+                select(PlatformMessageHistory)
+                .where(
+                    PlatformMessageHistory.platform_id == platform_id,
+                    PlatformMessageHistory.user_id == user_id,
+                    func.json_extract(
+                        PlatformMessageHistory.content, "$.idempotency_key"
+                    )
+                    == str(idempotency_key),
+                )
+                .order_by(desc(PlatformMessageHistory.id))
+            )
+            result = await session.execute(query.limit(1))
+            return result.scalar_one_or_none()
 
     async def get_platform_message_history_by_id(
         self, message_id: int

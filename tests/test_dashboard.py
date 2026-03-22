@@ -521,6 +521,136 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
+async def test_commands_api_includes_sdk_dashboard_items(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    old_bridge = getattr(core_lifecycle_td, "sdk_plugin_bridge", None)
+
+    sdk_command = {
+        "command_key": "sdk:command:sdk-demo:sdk-demo:main.chat",
+        "handler_full_name": "sdk-demo:main.chat",
+        "handler_name": "chat",
+        "plugin": "sdk-demo",
+        "plugin_display_name": "SDK Demo",
+        "module_path": "sdk-demo:main",
+        "description": "SDK dashboard command",
+        "type": "command",
+        "parent_signature": "",
+        "parent_group_handler": "",
+        "original_command": "chat",
+        "current_fragment": "chat",
+        "effective_command": "chat",
+        "aliases": [],
+        "permission": "everyone",
+        "enabled": True,
+        "is_group": False,
+        "has_conflict": False,
+        "reserved": False,
+        "runtime_kind": "sdk",
+        "supports_toggle": False,
+        "supports_rename": False,
+        "supports_permission": False,
+        "sub_commands": [],
+    }
+
+    try:
+        core_lifecycle_td.sdk_plugin_bridge = SimpleNamespace(
+            list_dashboard_commands=lambda: [dict(sdk_command)]
+        )
+
+        response = await test_client.get("/api/commands", headers=authenticated_header)
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        items = data["data"]["items"]
+        assert any(
+            item.get("command_key") == sdk_command["command_key"] for item in items
+        )
+
+        toggle_response = await test_client.post(
+            "/api/commands/toggle",
+            json={"command_key": sdk_command["command_key"], "enabled": False},
+            headers=authenticated_header,
+        )
+        toggle_data = await toggle_response.get_json()
+        assert toggle_data["status"] == "error"
+        assert "read-only" in toggle_data["message"]
+    finally:
+        core_lifecycle_td.sdk_plugin_bridge = old_bridge
+
+
+@pytest.mark.asyncio
+async def test_tools_api_includes_and_toggles_sdk_tools(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    old_bridge = getattr(core_lifecycle_td, "sdk_plugin_bridge", None)
+    calls: list[tuple[str, str, str]] = []
+
+    sdk_tool = {
+        "tool_key": "sdk:sdk-demo:memory.search",
+        "name": "memory.search",
+        "description": "Search SDK memory",
+        "parameters": {"type": "object", "properties": {}},
+        "active": True,
+        "origin": "sdk_plugin",
+        "origin_name": "SDK Demo",
+        "runtime_kind": "sdk",
+        "plugin_id": "sdk-demo",
+    }
+
+    class _FakeSdkBridge:
+        def list_dashboard_tools(self):
+            return [dict(sdk_tool)]
+
+        def get_plugin_metadata(self, _plugin_id: str):
+            return {"enabled": True}
+
+        def activate_llm_tool(self, plugin_id: str, name: str) -> bool:
+            calls.append(("activate", plugin_id, name))
+            return True
+
+        def deactivate_llm_tool(self, plugin_id: str, name: str) -> bool:
+            calls.append(("deactivate", plugin_id, name))
+            return True
+
+    try:
+        core_lifecycle_td.sdk_plugin_bridge = _FakeSdkBridge()
+
+        response = await test_client.get(
+            "/api/tools/list", headers=authenticated_header
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert any(
+            item.get("tool_key") == sdk_tool["tool_key"] for item in data["data"]
+        )
+
+        toggle_response = await test_client.post(
+            "/api/tools/toggle-tool",
+            json={
+                "tool_key": sdk_tool["tool_key"],
+                "name": sdk_tool["name"],
+                "activate": False,
+                "runtime_kind": "sdk",
+                "plugin_id": sdk_tool["plugin_id"],
+            },
+            headers=authenticated_header,
+        )
+        toggle_data = await toggle_response.get_json()
+        assert toggle_data["status"] == "ok"
+        assert calls == [("deactivate", "sdk-demo", "memory.search")]
+    finally:
+        core_lifecycle_td.sdk_plugin_bridge = old_bridge
+
+
+@pytest.mark.asyncio
 async def test_check_update(
     app: Quart,
     authenticated_header: dict,

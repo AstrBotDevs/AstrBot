@@ -64,6 +64,7 @@ GenieData/
 .serena
 .worktrees/
 
+.astrbot_sdk_testing/
 .env
 dashboard/warker.js
 dashboard/bun.lock

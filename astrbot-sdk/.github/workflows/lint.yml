@@ -1,0 +1,35 @@
+name: Code Quality Control
+
+on:
+  push:
+    branches: [ "main", "dev" ]
+  pull_request:
+    branches: [ "main", "dev" ]
+
+jobs:
+  lint-and-format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: |
+          pip install pyclean ruff
+
+      - name: 1. Clean python bytecode
+        run: pyclean .
+
+      - name: 2. Ruff format
+        run: ruff format .
+
+      - name: 3. Ruff check and fix
+        run: ruff check . --fix
+        continue-on-error: true
+        env:
+          PYTHONIOENCODING: utf-8

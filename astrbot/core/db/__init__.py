@@ -164,6 +164,7 @@ class BaseDatabase(abc.ABC):
         cid: str,
         title: str | None = None,
         persona_id: str | None = None,
+        clear_persona: bool = False,
         content: list[dict] | None = None,
         token_usage: int | None = None,
     ) -> None:
@@ -211,6 +212,57 @@ class BaseDatabase(abc.ABC):
         page_size: int = 20,
     ) -> list[PlatformMessageHistory]:
         """Get platform message history for a specific user."""
+        ...
+
+    @abc.abstractmethod
+    async def list_sdk_platform_message_history(
+        self,
+        platform_id: str,
+        user_id: str,
+        cursor_id: int | None = None,
+        limit: int = 50,
+        include_total: bool = False,
+    ) -> tuple[list[PlatformMessageHistory], int | None]:
+        """List SDK message history records ordered by descending id."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_platform_message_before(
+        self,
+        platform_id: str,
+        user_id: str,
+        before: datetime.datetime,
+    ) -> int:
+        """Delete platform message history records strictly older than ``before``."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_platform_message_after(
+        self,
+        platform_id: str,
+        user_id: str,
+        after: datetime.datetime,
+    ) -> int:
+        """Delete platform message history records strictly newer than ``after``."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_all_platform_message_history(
+        self,
+        platform_id: str,
+        user_id: str,
+    ) -> int:
+        """Delete all platform message history records for a specific user."""
+        ...
+
+    @abc.abstractmethod
+    async def find_platform_message_history_by_idempotency_key(
+        self,
+        platform_id: str,
+        user_id: str,
+        idempotency_key: str,
+    ) -> PlatformMessageHistory | None:
+        """Find one message history record by the SDK idempotency key."""
         ...
 
     @abc.abstractmethod

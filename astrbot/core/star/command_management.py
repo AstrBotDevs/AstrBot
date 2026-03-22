@@ -4,8 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-from astrbot.api import sp
-from astrbot.core import db_helper, logger
+from astrbot.core import db_helper, logger, sp
 from astrbot.core.db.po import CommandConfig
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
