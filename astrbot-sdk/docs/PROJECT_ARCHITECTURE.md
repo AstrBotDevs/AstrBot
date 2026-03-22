@@ -190,7 +190,7 @@ Worker (Plugin)                 Supervisor (Core)
 | `EventTrigger` | event_type | 事件触发 |
 | `ScheduleTrigger` | cron, interval_seconds | 定时触发 |
 
-### 内置 Capabilities (38个)
+### 内置 Capabilities
 
 #### LLM 命名空间
 
@@ -218,8 +218,19 @@ Worker (Plugin)                 Supervisor (Core)
 | `db.get` / `get_many` | 读取 KV |
 | `db.set` / `set_many` | 写入 KV |
 | `db.delete` | 删除 KV |
-| `db.list` | 列出键（支持前缀过滤） |
-| `db.watch` | 订阅变更（流式） |
+| `db.list` | 列出当前插件命名空间内的键（支持前缀过滤） |
+| `db.watch` | 订阅当前插件命名空间内的变更（流式） |
+
+#### Message History 命名空间
+
+| 能力 | 说明 |
+|------|------|
+| `message_history.list` | 分页读取会话消息历史 |
+| `message_history.get_by_id` | 按 ID 读取单条消息历史 |
+| `message_history.append` | 追加消息历史记录 |
+| `message_history.delete_before` | 删除某时间点之前的记录 |
+| `message_history.delete_after` | 删除某时间点之后的记录 |
+| `message_history.delete_all` | 删除会话内全部消息历史 |
 
 #### Platform 命名空间
 
@@ -234,8 +245,8 @@ Worker (Plugin)                 Supervisor (Core)
 
 | 能力 | 说明 |
 |------|------|
-| `http.register_api` | 注册 HTTP API 端点 |
-| `http.unregister_api` | 注销 HTTP API 端点 |
+| `http.register_api` | 注册 HTTP API 端点，并拦截 `..` 等明显非法路径 |
+| `http.unregister_api` | 注销 HTTP API 端点；不传 methods 时移除该 route 的全部方法 |
 | `http.list_apis` | 列出已注册的 API |
 
 #### Metadata 命名空间
@@ -345,6 +356,7 @@ HandlerDispatcher 支持参数注入，优先级为：
 | `LLMClient` | `chat()`, `chat_raw()`, `stream_chat()` | `llm.*` |
 | `MemoryClient` | `search()`, `save()`, `save_with_ttl()`, `get()`, `get_many()`, `delete()`, `delete_many()`, `stats()` | `memory.*` |
 | `DBClient` | `get()`, `set()`, `get_many()`, `set_many()`, `delete()`, `list()`, `watch()` | `db.*` |
+| `MessageHistoryManagerClient` | `list()`, `get()`, `append()`, `delete_before()`, `delete_after()`, `delete_all()` | `message_history.*` |
 | `PlatformClient` | `send()`, `send_image()`, `send_chain()`, `get_members()` | `platform.*` |
 | `HTTPClient` | `register_api()`, `unregister_api()`, `list_apis()` | `http.*` |
 | `MetadataClient` | `get_plugin()`, `list_plugins()`, `get_current_plugin()`, `get_plugin_config()` | `metadata.*` |

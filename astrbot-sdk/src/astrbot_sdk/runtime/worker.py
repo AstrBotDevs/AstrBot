@@ -25,7 +25,6 @@
 
 from __future__ import annotations
 
-import inspect
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,12 +32,11 @@ from typing import Any
 
 from loguru import logger
 
+from .._internal.decorator_lifecycle import run_lifecycle_with_decorators
 from .._internal.invocation_context import caller_plugin_scope
-from .._internal.star_runtime import bind_star_runtime
 from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
 from ..protocol.messages import PeerInfo
-from ..star import Star
 from .handler_dispatcher import CapabilityDispatcher, HandlerDispatcher
 from .loader import (
     LoadedPlugin,
@@ -117,14 +115,13 @@ async def run_plugin_lifecycle(
     """运行插件生命周期方法。"""
     for instance in instances:
         method = getattr(instance, method_name, None)
-        if method is None:
-            continue
         with caller_plugin_scope(context.plugin_id):
-            owner = instance if isinstance(instance, Star) else None
-            with bind_star_runtime(owner, context):
-                result = method(context)
-                if inspect.isawaitable(result):
-                    await result
+            await run_lifecycle_with_decorators(
+                instance=instance,
+                hook=method if callable(method) else None,
+                method_name=method_name,
+                context=context,
+            )
 
 
 class GroupWorkerRuntime:

@@ -10,12 +10,12 @@
 
 | 文档 | 描述 | 行数 |
 |------|------|------|
-| [README.md](./README.md) | 文档首页、快速开始、核心概念 | ~350 |
-| [01_context_api.md](./01_context_api.md) | Context 类的核心客户端和系统工具方法 | ~650 |
-| [02_event_and_components.md](./02_event_and_components.md) | MessageEvent 和消息组件的使用 | ~480 |
-| [03_decorators.md](./03_decorators.md) | 所有装饰器的详细说明 | ~580 |
-| [04_star_lifecycle.md](./04_star_lifecycle.md) | 插件基类和生命周期钩子 | ~490 |
-| [05_clients.md](./05_clients.md) | 所有客户端的完整 API 文档 | ~422 |
+| [README.md](./README.md) | 文档首页、快速开始、核心概念 | ~450 |
+| [01_context_api.md](./01_context_api.md) | Context 类的核心客户端和系统工具方法 | ~1,000 |
+| [02_event_and_components.md](./02_event_and_components.md) | MessageEvent 和消息组件的使用 | ~590 |
+| [03_decorators.md](./03_decorators.md) | 所有装饰器的详细说明 | ~610 |
+| [04_star_lifecycle.md](./04_star_lifecycle.md) | 插件基类和生命周期钩子 | ~530 |
+| [05_clients.md](./05_clients.md) | 常用客户端速查与详细参考入口 | ~450 |
 
 ### 🔧 进阶主题（中级使用者）
 
@@ -33,20 +33,21 @@
 
 | 文档 | 描述 | 行数 |
 |------|------|------|
-| [09_api_reference.md](./09_api_reference.md) | 所有导出类和函数的完整参考 | ~880 |
-| [10_migration_guide.md](./10_migration_guide.md) | 从旧版本或其他框架迁移 | ~450 |
-| [11_security_checklist.md](./11_security_checklist.md) | 安全开发检查清单和已知问题 | ~480 |
-| [PROJECT_ARCHITECTURE.md](./PROJECT_ARCHITECTURE.md) | SDK 架构设计文档 | ~872 |
+| [09_api_reference.md](./09_api_reference.md) | 所有导出类和函数的完整参考入口 | ~30 |
+| [10_migration_guide.md](./10_migration_guide.md) | 从旧版本或其他框架迁移 | ~490 |
+| [11_security_checklist.md](./11_security_checklist.md) | 安全开发检查清单和已知问题 | ~380 |
+| [PROJECT_ARCHITECTURE.md](./PROJECT_ARCHITECTURE.md) | SDK 架构设计文档 | ~560 |
 
 ---
 
 ## 📊 文档统计
 
-- **总文档数**: 13 个
-- **总内容行数**: ~6,700 行
-- **新增/更新文档**: 7 个
-- **保留原有**: 6 个
-- **API 覆盖率**: 100% (77/77 exports documented)
+- **学习路径文档数**: 13 个
+- **API 子文档数**: 10 个
+- **Markdown 文档总数**: 24 个
+- **总内容行数**: ~15,400 行
+- **客户端与管理器数**: 17 个
+- **API 覆盖率**: 保持与当前公开导出同步（含 `message_history` 新增导出）
 
 ---
 
@@ -58,6 +59,7 @@
 - Context API 完整参考
 - 消息事件处理
 - 消息组件使用
+- Message History 精确消息历史管理
 - 装饰器使用
 - 生命周期管理
 
@@ -83,6 +85,7 @@
 - 所有导出类的完整参考
 - 方法签名
 - 使用示例
+- DB 插件作用域与 HTTP 路由约束说明
 
 ✅ **迁移指南**
 - v3 → v4 迁移
@@ -125,4 +128,4 @@
 
 ---
 
-**最后更新**: 2026-03-17
+**最后更新**: 2026-03-22

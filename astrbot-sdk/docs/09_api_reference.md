@@ -20,7 +20,7 @@
 - [装饰器 API](./api/decorators.md) - 事件触发、限制器、过滤器装饰器
 
 #### 客户端
-- [客户端 API](./api/clients.md) - LLM、Memory、DB、Platform 等 12 个客户端
+- [客户端 API](./api/clients.md) - LLM、Memory、DB、MessageHistory、Platform 等 17 个客户端与管理器
 
 #### 消息处理
 - [消息组件 API](./api/message_components.md) - Plain、Image、At、Record、Video、File 等

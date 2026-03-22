@@ -14,13 +14,12 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ._internal.star_runtime import bind_star_runtime
+from ._internal.decorator_lifecycle import run_lifecycle_with_decorators
 from ._internal.testing_support import (
     InMemoryDB,
     InMemoryMemory,
@@ -255,8 +254,19 @@ class PluginHarness:
             peer=self.peer,
             plugin_id=self.plugin.name,
         )
+        plugin_metadata = _plugin_metadata_from_spec(self.plugin, enabled=True)
+        plugin_metadata["acknowledge_global_mcp_risk"] = any(
+            bool(
+                getattr(
+                    instance.__class__,
+                    "__astrbot_acknowledge_global_mcp_risk__",
+                    False,
+                )
+            )
+            for instance in self.loaded_plugin.instances
+        )
         self.router.upsert_plugin(
-            metadata=_plugin_metadata_from_spec(self.plugin, enabled=True),
+            metadata=plugin_metadata,
             config=load_plugin_config(self.plugin),
         )
         self.router.set_plugin_handlers(
@@ -489,32 +499,12 @@ class PluginHarness:
 
         for instance in self.loaded_plugin.instances:
             hook = self._resolve_lifecycle_hook(instance, method_name)
-            if hook is None:
-                continue
-            args: list[Any] = []
-            try:
-                signature = inspect.signature(hook)
-            except (TypeError, ValueError):
-                signature = None
-            if signature is not None:
-                positional_params = [
-                    parameter
-                    for parameter in signature.parameters.values()
-                    if parameter.kind
-                    in (
-                        inspect.Parameter.POSITIONAL_ONLY,
-                        inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                    )
-                ]
-                if positional_params:
-                    args.append(self.lifecycle_context)
-            with bind_star_runtime(
-                instance if isinstance(instance, Star) else None,
-                self.lifecycle_context,
-            ):
-                result = hook(*args)
-                if inspect.isawaitable(result):
-                    await result
+            await run_lifecycle_with_decorators(
+                instance=instance,
+                hook=hook,
+                method_name=method_name,
+                context=self.lifecycle_context,
+            )
 
     def _match_handlers(
         self,

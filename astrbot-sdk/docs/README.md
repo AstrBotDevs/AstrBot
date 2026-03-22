@@ -12,7 +12,7 @@
 - **[02. 消息事件与组件](./02_event_and_components.md)** - MessageEvent 和消息组件的使用
 - **[03. 装饰器使用指南](./03_decorators.md)** - 所有装饰器的详细说明
 - **[04. Star 类与生命周期](./04_star_lifecycle.md)** - 插件基类和生命周期钩子
-- **[05. 客户端 API 参考](./05_clients.md)** - 所有客户端的完整 API 文档
+- **[05. 常用客户端速查](./05_clients.md)** - 常用客户端的快速上手示例与详细参考入口
 
 ### 🔧 进阶主题（中级使用者）
 
@@ -27,6 +27,7 @@
 适合需要深入了解 SDK 架构和完整 API 的开发者：
 
 - **[09. 完整 API 索引](./09_api_reference.md)** - 所有导出类和函数的完整参考
+- **[客户端 API 详细参考](./api/clients.md)** - 17 个客户端与管理器的完整签名、返回值和示例
 - **[10. 迁移指南](./10_migration_guide.md)** - 从旧版本或其他框架迁移
 - **[11. 安全检查清单](./11_security_checklist.md)** - 安全开发检查清单和已知问题
 
@@ -195,13 +196,30 @@ async for chunk in ctx.llm.stream_chat("讲个故事"):
 ### 2. 数据持久化
 
 ```python
-# DB 客户端（精确匹配）
+# DB 客户端（精确匹配，键空间按插件隔离）
 await ctx.db.set("user:123", {"name": "Alice"})
 data = await ctx.db.get("user:123")
 
 # Memory 客户端（语义搜索）
 await ctx.memory.save("user_pref", {"theme": "dark"})
 results = await ctx.memory.search("用户喜欢什么颜色")
+
+# Message History（保存原始消息链和发送者）
+from astrbot_sdk import MessageHistorySender, MessageSession, Plain
+
+session = MessageSession(
+    platform_id=event.platform_id,
+    message_type=event.message_type,
+    session_id=event.session_id,
+)
+await ctx.message_history.append(
+    session,
+    parts=[Plain(event.message_content, convert=False)],
+    sender=MessageHistorySender(
+        sender_id=event.sender_id,
+        sender_name=event.sender_name,
+    ),
+)
 ```
 
 ### 3. 消息发送
@@ -267,7 +285,7 @@ async def handle_api(request_id: str, payload: dict, cancel_token):
     return {"status": 200, "body": {"result": "ok"}}
 
 await ctx.http.register_api(
-    route="/my-api",
+    route="/my-api",  # 建议使用规范化路径，避免 .. 和重复斜杠
     handler=handle_api,
     methods=["GET", "POST"]
 )
@@ -428,7 +446,7 @@ async def test_my_plugin():
 ## 📚 版本信息
 
 - **SDK 版本**: v4.0
-- **最后更新**: 2026-03-17
+- **最后更新**: 2026-03-22
 - **Python 要求**: >= 3.12
 - **协议版本**: P0.6
 
