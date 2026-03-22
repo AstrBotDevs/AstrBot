@@ -8,6 +8,7 @@ from .capabilities import (
     ConversationCapabilityMixin,
     KnowledgeBaseCapabilityMixin,
     LLMCapabilityMixin,
+    MessageHistoryCapabilityMixin,
     PersonaCapabilityMixin,
     PlatformCapabilityMixin,
     ProviderCapabilityMixin,
@@ -28,6 +29,7 @@ class CoreCapabilityBridge(
     ProviderCapabilityMixin,
     PlatformCapabilityMixin,
     KnowledgeBaseCapabilityMixin,
+    MessageHistoryCapabilityMixin,
     ConversationCapabilityMixin,
     PersonaCapabilityMixin,
     SessionCapabilityMixin,
@@ -52,6 +54,7 @@ class CoreCapabilityBridge(
         self._register_platform_manager_capabilities()
         self._register_persona_capabilities()
         self._register_conversation_capabilities()
+        self._register_message_history_capabilities()
         self._register_kb_capabilities()
         self._register_skill_capabilities()
         self._register_system_capabilities()
