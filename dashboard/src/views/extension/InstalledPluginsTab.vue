@@ -1,5 +1,6 @@
 <script setup>
 import PluginSortControl from "@/components/extension/PluginSortControl.vue";
+import PinnedPluginItem from "@/components/extension/PinnedPluginItem.vue";
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
@@ -194,6 +195,10 @@ const togglePin = (extension) => {
   else pinnedNames.value.splice(idx, 1);
 };
 
+const handlePinnedImgError = (e) => {
+  e.target.src = defaultPluginIcon;
+};
+
 // --- 拖拽功能实现 ---
 const draggedIndex = ref(-1);
 let lastSwapTime = 0;
@@ -374,95 +379,25 @@ const pinnedPlugins = computed(() => {
                           cols="auto"
                           v-for="(p, index) in pinnedPlugins"
                           :key="p.name"
-                          draggable="true"
-                          @dragstart="onDragStart(index)"
-                          @dragover="onDragOver"
-                          @dragenter="onDragEnter($event, index)"
-                          @dragend="onDragEnd"
-                          @drop="onDrop"
                         >
-                          <div
-                            class="pinned-item pinned-card-wrapper"
-                            :class="{ 'is-dragging': draggedIndex === index }"
-                            style="position:relative;"
-                          >
-                            <v-menu offset-y>
-                              <template #activator="{ props }">
-                                <v-avatar v-bind="props" size="72" class="pinned-avatar activator-avatar" :title="p.display_name || p.name">
-                                  <img
-                                    :src="(typeof p.logo === 'string' && p.logo.trim()) ? p.logo : defaultPluginIcon"
-                                    :alt="p.name"
-                                    @error="handlePinnedImgError"
-                                  />
-                                </v-avatar>
-
-                              </template>
-
-                              <v-card>
-                                <v-card-text class="d-flex" style="gap:8px; padding:12px;">
-                                  <v-tooltip location="top" :text="tm('buttons.viewDocs')">
-                                    <template #activator="{ props: a }">
-                                      <v-btn v-bind="a" icon size="small" variant="tonal" color="info" @click.stop="() => viewReadme(p)">
-                                        <v-icon>mdi-book-open-page-variant</v-icon>
-                                      </v-btn>
-                                    </template>
-                                  </v-tooltip>
-
-                                  <v-tooltip location="top" :text="tm('card.actions.pluginConfig')">
-                                    <template #activator="{ props: a }">
-                                      <v-btn v-bind="a" icon size="small" variant="tonal" color="primary" @click.stop="() => openExtensionConfig(p.name)">
-                                        <v-icon>mdi-cog</v-icon>
-                                      </v-btn>
-                                    </template>
-                                  </v-tooltip>
-
-                                  <v-tooltip location="top" :text="tm('card.actions.reloadPlugin')">
-                                    <template #activator="{ props: a }">
-                                      <v-btn v-bind="a" icon size="small" variant="tonal" color="primary" @click.stop="() => reloadPlugin(p.name)">
-                                        <v-icon>mdi-refresh</v-icon>
-                                      </v-btn>
-                                    </template>
-                                  </v-tooltip>
-
-                                  <v-tooltip location="top" :text="tm('buttons.update')">
-                                    <template #activator="{ props: a }">
-                                      <v-btn v-bind="a" icon size="small" variant="tonal" color="warning" @click.stop="() => updateExtension(p.name)">
-                                        <v-icon>mdi-update</v-icon>
-                                      </v-btn>
-                                    </template>
-                                  </v-tooltip>
-
-                                  <v-tooltip location="top" :text="tm('buttons.viewInfo')">
-                                    <template #activator="{ props: a }">
-                                      <v-btn v-bind="a" icon size="small" variant="tonal" color="secondary" @click.stop="() => showPluginInfo(p)">
-                                        <v-icon>mdi-information</v-icon>
-                                      </v-btn>
-                                    </template>
-                                  </v-tooltip>
-
-                                  <v-tooltip location="top" :text="tm('buttons.uninstall')">
-                                    <template #activator="{ props: a }">
-                                      <v-btn v-bind="a" icon size="small" variant="tonal" color="error" @click.stop="() => uninstallExtension(p.name)" v-if="!p.reserved">
-                                        <v-icon>mdi-delete</v-icon>
-                                      </v-btn>
-                                    </template>
-                                  </v-tooltip>
-                                </v-card-text>
-                              </v-card>
-                            </v-menu>
-
-                            <v-btn
-                              icon
-                              size="small"
-                              class="pinned-pin-btn"
-                              :color="isPinned(p.name) ? 'primary' : 'secondary'"
-                              @click.stop="togglePin(p)"
-                              :title="isPinned(p.name) ? tm('buttons.unpin') : tm('buttons.pin')"
-                              style="position:absolute; top:6px; right:6px; min-width:22px; width:22px; height:22px;"
-                            >
-                              <v-icon size="14">{{ isPinned(p.name) ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
-                            </v-btn>
-                          </div>
+                          <PinnedPluginItem
+                            :plugin="p"
+                            :is-pinned="isPinned(p.name)"
+                            :tm="tm"
+                            :dragged="draggedIndex === index"
+                            @toggle-pin="togglePin"
+                            @view-readme="viewReadme"
+                            @open-config="openExtensionConfig"
+                            @reload="reloadPlugin"
+                            @update="updateExtension"
+                            @show-info="showPluginInfo"
+                            @uninstall="uninstallExtension"
+                            @dragstart="onDragStart(index)"
+                            @dragover="onDragOver($event)"
+                            @dragenter="onDragEnter($event, index)"
+                            @dragend="onDragEnd($event)"
+                            @drop="onDrop($event)"
+                          />
                         </v-col>
                       </transition-group>
                     </v-row>
