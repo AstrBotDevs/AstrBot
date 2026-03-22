@@ -48,6 +48,24 @@ const loading = ref(false);
 const isEmpty = ref(false);
 const copyFeedbackTimer = ref(null);
 const lastRequestId = ref(0);
+const scrollContainer = ref(null);
+
+function slugifyHeading(text, slugCounts) {
+  const base = (text || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+
+  if (!base) return "";
+
+  const count = slugCounts.get(base) || 0;
+  slugCounts.set(base, count + 1);
+  return count === 0 ? base : `${base}-${count}`;
+}
 
 onUnmounted(() => {
   if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
@@ -153,6 +171,18 @@ const renderedHtml = computed(() => {
   // 3. 后处理方案：完全隔离，安全性最高
   const tempDiv = document.createElement("div");
   tempDiv.innerHTML = cleanHtml;
+
+  const slugCounts = new Map();
+  tempDiv.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((heading) => {
+    if (heading.id) {
+      slugCounts.set(heading.id, (slugCounts.get(heading.id) || 0) + 1);
+      return;
+    }
+
+    const slug = slugifyHeading(heading.textContent, slugCounts);
+    if (slug) heading.id = slug;
+  });
+
   tempDiv.querySelectorAll("a").forEach((link) => {
     const href = link.getAttribute("href");
     // 强制所有外部链接使用安全的 _blank 策略
@@ -251,18 +281,35 @@ watch(
 
 function handleContainerClick(event) {
   const btn = event.target.closest(".copy-code-btn");
-  if (!btn) return;
-  const code = btn.closest(".code-block-wrapper")?.querySelector("code");
-  if (code) {
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard
-        .writeText(code.textContent)
-        .then(() => showCopyFeedback(btn, true))
-        .catch(() => tryFallbackCopy(code.textContent, btn));
-    } else {
-      tryFallbackCopy(code.textContent, btn);
+  if (btn) {
+    const code = btn.closest(".code-block-wrapper")?.querySelector("code");
+    if (code) {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard
+          .writeText(code.textContent)
+          .then(() => showCopyFeedback(btn, true))
+          .catch(() => tryFallbackCopy(code.textContent, btn));
+      } else {
+        tryFallbackCopy(code.textContent, btn);
+      }
     }
+    return;
   }
+
+  const anchor = event.target.closest('a[href^="#"]');
+  if (!anchor) return;
+
+  const rawHref = anchor.getAttribute("href");
+  const targetId = rawHref ? decodeURIComponent(rawHref.slice(1)) : "";
+  if (!targetId) return;
+
+  const target = scrollContainer.value?.querySelector(
+    `#${CSS.escape(targetId)}`,
+  );
+  if (!target) return;
+
+  event.preventDefault();
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function tryFallbackCopy(text, btn) {
@@ -326,7 +373,7 @@ const showActionArea = computed(() => {
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
-      <v-card-text style="overflow-y: auto">
+      <v-card-text ref="scrollContainer" style="overflow-y: auto">
         <div v-if="showActionArea" class="d-flex justify-space-between mb-4">
           <v-btn
             v-if="modeConfig.showGithubButton && repoUrl"
@@ -436,6 +483,7 @@ const showActionArea = computed(() => {
   margin-bottom: 16px;
   font-weight: 600;
   line-height: 1.25;
+  scroll-margin-top: 12px;
 }
 
 :deep(.markdown-body h1) {

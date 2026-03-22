@@ -1,0 +1,69 @@
+name: sync wiki
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/sync-wiki.yml'
+      - 'docs/scripts/sync_docs_to_wiki.py'
+      - 'docs/tests/test_sync_docs_to_wiki.py'
+      - 'docs/zh/**'
+      - 'docs/en/**'
+
+concurrency:
+  group: sync-wiki-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    if: github.repository == 'AstrBotDevs/AstrBot'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Validate manual ref
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/master'
+        run: |
+          echo "This workflow only publishes from refs/heads/master. Re-run it from the master branch."
+          exit 1
+
+      - name: Check out docs repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Run sync unit tests
+        working-directory: docs
+        run: python -m unittest discover -s tests -p 'test_sync_docs_to_wiki.py' -v
+
+      - name: Validate internal doc links
+        run: python docs/scripts/sync_docs_to_wiki.py --source-root docs --check-links-only
+
+      - name: Clone AstrBot wiki
+        env:
+          WIKI_TOKEN: ${{ secrets.ASTRBOT_WIKI_TOKEN }}
+        run: |
+          test -n "$WIKI_TOKEN"
+          git clone "https://x-access-token:${WIKI_TOKEN}@github.com/AstrBotDevs/AstrBot.wiki.git" wiki
+
+      - name: Generate wiki pages
+        run: python docs/scripts/sync_docs_to_wiki.py --source-root docs --wiki-root wiki
+
+      - name: Commit and push wiki changes
+        working-directory: wiki
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          if git diff --cached --quiet; then
+            echo "No wiki changes to push"
+            exit 0
+          fi
+          git commit -m "docs: sync wiki from AstrBot-1/docs"
+          git push

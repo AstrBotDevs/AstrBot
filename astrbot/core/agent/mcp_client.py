@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+import sys
 from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import Generic
@@ -43,6 +45,22 @@ def _prepare_config(config: dict) -> dict:
         config = config["mcpServers"][first_key]
     config.pop("active", None)
     return config
+
+
+def _prepare_stdio_env(config: dict) -> dict:
+    """Preserve Windows executable resolution for stdio subprocesses."""
+    if sys.platform != "win32":
+        return config
+
+    pathext = os.environ.get("PATHEXT")
+    if not pathext:
+        return config
+
+    prepared = config.copy()
+    env = dict(prepared.get("env") or {})
+    env.setdefault("PATHEXT", pathext)
+    prepared["env"] = env
+    return prepared
 
 
 async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
@@ -144,10 +162,14 @@ class MCPClient:
 
         cfg = _prepare_config(mcp_server_config.copy())
 
-        def logging_callback(msg: str) -> None:
+        def logging_callback(
+            msg: str | mcp.types.LoggingMessageNotificationParams,
+        ) -> None:
             # Handle MCP service error logs
-            print(f"MCP Server {name} Error: {msg}")
-            self.server_errlogs.append(msg)
+            if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
+                if msg.level in ("warning", "error", "critical", "alert", "emergency"):
+                    log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
+                    self.server_errlogs.append(log_msg)
 
         if "url" in cfg:
             success, error_msg = await _quick_test_mcp_connection(cfg)
@@ -210,19 +232,29 @@ class MCPClient:
                 )
 
         else:
+            cfg = _prepare_stdio_env(cfg)
             server_params = mcp.StdioServerParameters(
                 **cfg,
             )
 
-            def callback(msg: str) -> None:
+            def callback(msg: str | mcp.types.LoggingMessageNotificationParams) -> None:
                 # Handle MCP service error logs
-                self.server_errlogs.append(msg)
+                if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
+                    if msg.level in (
+                        "warning",
+                        "error",
+                        "critical",
+                        "alert",
+                        "emergency",
+                    ):
+                        log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
+                        self.server_errlogs.append(log_msg)
 
             stdio_transport = await self.exit_stack.enter_async_context(
                 mcp.stdio_client(
                     server_params,
                     errlog=LogPipe(
-                        level=logging.ERROR,
+                        level=logging.INFO,
                         logger=logger,
                         identifier=f"MCPServer-{name}",
                         callback=callback,

@@ -2,6 +2,7 @@ import os
 import re
 import shutil
 import traceback
+import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -50,6 +51,7 @@ class SkillsRoute(Route):
         self.routes = {
             "/skills": ("GET", self.get_skills),
             "/skills/upload": ("POST", self.upload_skill),
+            "/skills/batch-upload": ("POST", self.batch_upload_skills),
             "/skills/download": ("GET", self.download_skill),
             "/skills/update": ("POST", self.update_skill),
             "/skills/delete": ("POST", self.delete_skill),
@@ -187,6 +189,114 @@ class SkillsRoute(Route):
                     os.remove(temp_path)
                 except Exception:
                     logger.warning(f"Failed to remove temp skill file: {temp_path}")
+
+    async def batch_upload_skills(self):
+        """批量上传多个 skill ZIP 文件"""
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+
+        try:
+            files = await request.files
+            file_list = files.getlist("files")
+
+            if not file_list:
+                return Response().error("No files provided").__dict__
+
+            succeeded = []
+            failed = []
+            skill_mgr = SkillManager()
+            temp_dir = get_astrbot_temp_path()
+            os.makedirs(temp_dir, exist_ok=True)
+
+            for file in file_list:
+                filename = os.path.basename(file.filename or "unknown.zip")
+                temp_path = None
+
+                try:
+                    if not filename.lower().endswith(".zip"):
+                        failed.append(
+                            {
+                                "filename": filename,
+                                "error": "Only .zip files are supported",
+                            }
+                        )
+                        continue
+
+                    temp_path = os.path.join(
+                        temp_dir, f"batch_{uuid.uuid4().hex}_{filename}"
+                    )
+                    await file.save(temp_path)
+
+                    skill_name = skill_mgr.install_skill_from_zip(
+                        temp_path, overwrite=True
+                    )
+                    succeeded.append({"filename": filename, "name": skill_name})
+
+                except Exception as e:
+                    failed.append({"filename": filename, "error": str(e)})
+                finally:
+                    if temp_path and os.path.exists(temp_path):
+                        try:
+                            os.remove(temp_path)
+                        except Exception:
+                            pass
+
+            if succeeded:
+                try:
+                    await sync_skills_to_active_sandboxes()
+                except Exception:
+                    logger.warning(
+                        "Failed to sync uploaded skills to active sandboxes."
+                    )
+
+            total = len(file_list)
+            success_count = len(succeeded)
+
+            if success_count == total:
+                message = f"All {total} skill(s) uploaded successfully."
+                return (
+                    Response()
+                    .ok(
+                        {
+                            "total": total,
+                            "succeeded": succeeded,
+                            "failed": failed,
+                        },
+                        message,
+                    )
+                    .__dict__
+                )
+            if success_count == 0:
+                message = f"Upload failed for all {total} file(s)."
+                resp = Response().error(message)
+                resp.data = {
+                    "total": total,
+                    "succeeded": succeeded,
+                    "failed": failed,
+                }
+                return resp.__dict__
+
+            message = f"Partial success: {success_count}/{total} skill(s) uploaded."
+            return (
+                Response()
+                .ok(
+                    {
+                        "total": total,
+                        "succeeded": succeeded,
+                        "failed": failed,
+                    },
+                    message,
+                )
+                .__dict__
+            )
+
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
 
     async def download_skill(self):
         try:

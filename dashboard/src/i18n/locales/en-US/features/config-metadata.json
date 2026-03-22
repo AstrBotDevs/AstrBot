@@ -78,6 +78,7 @@
     },
     "persona": {
       "description": "Persona",
+      "hint": "Set the default persona for AI conversations. Personas can be managed in the Persona tab.",
       "provider_settings": {
         "default_personality": {
           "description": "Default Persona"
@@ -334,6 +335,22 @@
           "description": "User Prompt",
           "hint": "You can use {{prompt}} as a placeholder for user input. If no placeholder is provided, it will be added before the user input."
         },
+        "image_compress_enabled": {
+          "description": "Enable image compression",
+          "hint": "When enabled, large local images are compressed before being sent to multimodal models."
+        },
+        "image_compress_options": {
+          "description": "Image compression settings",
+          "hint": "Control image resize limits, JPEG quality, and the minimum size threshold for compression.",
+          "max_size": {
+            "description": "Maximum edge length",
+            "hint": "Longest edge of the compressed image in pixels. Images larger than this are resized proportionally."
+          },
+          "quality": {
+            "description": "JPEG quality",
+            "hint": "JPEG output quality from 1 to 100. Higher values preserve more detail but produce larger files."
+          }
+        },
         "reachability_check": {
           "description": "Provider Reachability Check",
           "hint": "When running the /provider command, test provider connectivity in parallel. This actively pings models and may consume extra tokens."
@@ -531,6 +548,10 @@
         "description": "Telegram Command Auto Refresh Interval",
         "hint": "Telegram command auto-refresh interval in seconds."
       },
+      "telegram_polling_restart_delay": {
+        "description": "Telegram Polling Restart Delay",
+        "hint": "Waiting time in seconds when the polling loop needs to restart after unexpected exits. Defaults to 5s."
+      },
       "telegram_token": {
         "description": "Bot Token",
         "hint": "If you are in mainland China, set a proxy or change api_base in Other Settings."
@@ -550,6 +571,10 @@
         "description": "WeCom AI Bot Name",
         "hint": "Must be correct; otherwise some commands won't work."
       },
+      "wecom_ai_bot_connection_mode": {
+        "description": "WeCom AI Bot Connection Mode",
+        "hint": "Webhook mode requires Token/EncodingAESKey; long_connection mode requires BotID/Secret."
+      },
       "wecomaibot_friend_message_welcome_text": {
         "description": "WeCom AI Bot DM Welcome Message",
         "hint": "When a user enters a DM session on that day, reply with a welcome message. Leave empty to disable."
@@ -557,6 +582,30 @@
       "wecomaibot_init_respond_text": {
         "description": "WeCom AI Bot Initial Response Text",
         "hint": "First reply when the bot receives a message. Leave empty to disable."
+      },
+      "wecomaibot_token": {
+        "description": "WeCom AI Bot Token",
+        "hint": "Used for authentication in webhook callback mode."
+      },
+      "wecomaibot_encoding_aes_key": {
+        "description": "WeCom AI Bot EncodingAESKey",
+        "hint": "Used for message encryption/decryption in webhook callback mode."
+      },
+      "wecomaibot_ws_bot_id": {
+        "description": "Long Connection BotID",
+        "hint": "BotID credential for WeCom AI Bot long connection mode."
+      },
+      "wecomaibot_ws_secret": {
+        "description": "Long Connection Secret",
+        "hint": "Secret credential for WeCom AI Bot long connection mode."
+      },
+      "wecomaibot_ws_url": {
+        "description": "Long Connection WebSocket URL",
+        "hint": "Default is wss://openws.work.weixin.qq.com and usually does not need changes."
+      },
+      "wecomaibot_heartbeat_interval": {
+        "description": "Long Connection Heartbeat Interval",
+        "hint": "Heartbeat interval (seconds) in long connection mode. 30 seconds is recommended."
       },
       "wpp_active_message_poll": {
         "description": "Enable Proactive Message Polling",
@@ -585,15 +634,34 @@
         "description": "Send Replies via Webhook Only",
         "hint": "When enabled, all WeCom AI Bot replies are sent through msg_push_webhook_url. The message push webhook supports more message types (such as images, files, etc.). If you do not need the typing effect, it is strongly recommended to use this option. "
       },
+      "weixin_oc_base_url": {
+        "description": "API Base URL",
+        "hint": "Default: https://ilinkai.weixin.qq.com"
+      },
+      "weixin_oc_bot_type": {
+        "description": "bot_type (QR login parameter)",
+        "hint": "Default: 3"
+      },
+      "weixin_oc_qr_poll_interval": {
+        "description": "QR status poll interval (seconds)",
+        "hint": "Polling interval in seconds for QR code status."
+      },
+      "weixin_oc_long_poll_timeout_ms": {
+        "description": "getUpdates long-poll timeout (ms)",
+        "hint": "Timeout parameter for polling messages."
+      },
+      "weixin_oc_api_timeout_ms": {
+        "description": "HTTP timeout (ms)",
+        "hint": "Generic API request timeout."
+      },
+      "weixin_oc_token": {
+        "description": "Token after login (optional)",
+        "hint": "Automatically written after QR login; can be filled manually for advanced scenarios."
+      },
       "kook_bot_token": {
         "description": "Bot Token",
         "type": "string",
         "hint": "Required. The Bot Token obtained from the KOOK Developer Platform."
-      },
-      "kook_bot_nickname": {
-        "description": "Bot Nickname",
-        "type": "string",
-        "hint": "Optional. If the sender nickname matches this value, the message will be ignored to prevent broadcast storms."
       },
       "kook_reconnect_delay": {
         "description": "Reconnect Delay",
@@ -673,11 +741,11 @@
       "platform_settings": {
         "enable_id_white_list": {
           "description": "Enable Whitelist",
-          "hint": "When enabled, only sessions in the whitelist will be responded to."
+          "hint": "When enabled, only sessions in the whitelist will be responded to. If the whitelist is empty, the whitelist is disabled and all IDs are allowed."
         },
         "id_whitelist": {
           "description": "Whitelist ID List",
-          "hint": "Use /sid to get IDs."
+          "hint": "Use /sid to get IDs. If the list is empty, it means whitelist is disabled (all IDs are in the whitelist)."
         },
         "id_whitelist_log": {
           "description": "Output Logs",
@@ -822,7 +890,7 @@
           },
           "interval_method": {
             "description": "Interval Method",
-            "hint": "random 为随机时间，log 为根据消息长度计算，$y=log_<log_base>(x)$，x为字数，y的单位为秒。"
+            "hint": "random uses a random delay. log calculates delay by message length: $y=log_{log\\_base}(x)$, where x is word count and y is in seconds."
           },
           "interval": {
             "description": "Random Interval Time",
@@ -845,7 +913,8 @@
             ]
           },
           "regex": {
-            "description": "Segmentation Regular Expression"
+            "description": "Segmentation Regular Expression",
+            "hint": "Used to identify split points with a regular expression. Prefer patterns that match separators."
           },
           "split_words": {
             "description": "Split Word List",
@@ -1039,6 +1108,10 @@
       "custom_headers": {
         "description": "Custom request headers",
         "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."
+      },
+      "ollama_disable_thinking": {
+        "description": "Disable thinking mode",
+        "hint": "Close Ollama thinking mode."
       },
       "custom_extra_body": {
         "description": "Custom request body parameters",
@@ -1362,9 +1435,37 @@
         "description": "Timeout",
         "hint": "Timeout in seconds."
       },
+      "mimo-stt-system-prompt": {
+        "description": "System prompt",
+        "hint": "System prompt used to guide MiMo STT transcription behavior."
+      },
+      "mimo-stt-user-prompt": {
+        "description": "User prompt",
+        "hint": "Additional user prompt sent to MiMo STT to constrain the returned transcription format."
+      },
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS voice. OpenAI defaults: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'."
+      },
+      "mimo-tts-voice": {
+        "description": "Voice",
+        "hint": "MiMo TTS voice name. Supported values include 'mimo_default', 'default_en', and 'default_zh'."
+      },
+      "mimo-tts-format": {
+        "description": "Output format",
+        "hint": "Audio format generated by MiMo TTS. Supported values: 'wav', 'mp3', and 'pcm'."
+      },
+      "mimo-tts-style-prompt": {
+        "description": "Style prompt",
+        "hint": "Guides speaking style, tone, or emotion such as gentle, lively, or calm. Optional."
+      },
+      "mimo-tts-dialect": {
+        "description": "Dialect",
+        "hint": "Target dialect or accent for generated speech, such as Sichuan dialect. Optional."
+      },
+      "mimo-tts-seed-text": {
+        "description": "Seed text",
+        "hint": "Reference text used to guide voice characteristics and speaking style."
       },
       "fishaudio-tts-character": {
         "description": "character",
