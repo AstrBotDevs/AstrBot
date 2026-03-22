@@ -18,26 +18,26 @@
                         <template v-slot:prepend>
                             <v-icon size="small">mdi-folder-open</v-icon>
                         </template>
-                        <v-list-item-title>{{ labels.open }}</v-list-item-title>
+                        <v-list-item-title>{{ mergedLabels.open }}</v-list-item-title>
                     </v-list-item>
                     <v-list-item @click.stop="$emit('rename')">
                         <template v-slot:prepend>
                             <v-icon size="small">mdi-pencil</v-icon>
                         </template>
-                        <v-list-item-title>{{ labels.rename }}</v-list-item-title>
+                        <v-list-item-title>{{ mergedLabels.rename }}</v-list-item-title>
                     </v-list-item>
                     <v-list-item @click.stop="$emit('move')">
                         <template v-slot:prepend>
                             <v-icon size="small">mdi-folder-move</v-icon>
                         </template>
-                        <v-list-item-title>{{ labels.moveTo }}</v-list-item-title>
+                        <v-list-item-title>{{ mergedLabels.moveTo }}</v-list-item-title>
                     </v-list-item>
                     <v-divider class="my-1" />
                     <v-list-item @click.stop="$emit('delete')" class="text-error">
                         <template v-slot:prepend>
                             <v-icon size="small" color="error">mdi-delete</v-icon>
                         </template>
-                        <v-list-item-title>{{ labels.delete }}</v-list-item-title>
+                        <v-list-item-title>{{ mergedLabels.delete }}</v-list-item-title>
                     </v-list-item>
                 </v-list>
             </v-menu>
