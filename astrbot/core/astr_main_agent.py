@@ -438,6 +438,7 @@ async def _request_img_caption(
 
 
 async def _ensure_img_caption(
+    event: AstrMessageEvent,
     req: ProviderRequest,
     cfg: dict,
     plugin_context: Context,
@@ -526,6 +527,57 @@ async def _compress_image_for_provider(
         return url_or_path
 
 
+def _get_image_compress_args(
+    provider_settings: dict[str, object] | None,
+) -> tuple[bool, int, int]:
+    if not isinstance(provider_settings, dict):
+        return True, IMAGE_COMPRESS_DEFAULT_MAX_SIZE, IMAGE_COMPRESS_DEFAULT_QUALITY
+
+    enabled = provider_settings.get("image_compress_enabled", True)
+    if not isinstance(enabled, bool):
+        enabled = True
+
+    raw_options = provider_settings.get("image_compress_options", {})
+    options = raw_options if isinstance(raw_options, dict) else {}
+
+    max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
+    if not isinstance(max_size, int):
+        max_size = IMAGE_COMPRESS_DEFAULT_MAX_SIZE
+    max_size = max(max_size, 1)
+
+    quality = options.get("quality", IMAGE_COMPRESS_DEFAULT_QUALITY)
+    if not isinstance(quality, int):
+        quality = IMAGE_COMPRESS_DEFAULT_QUALITY
+    quality = min(max(quality, 1), 100)
+
+    return enabled, max_size, quality
+
+
+async def _compress_image_for_provider(
+    url_or_path: str,
+    provider_settings: dict[str, object] | None,
+) -> str:
+    try:
+        enabled, max_size, quality = _get_image_compress_args(provider_settings)
+        if not enabled:
+            return url_or_path
+        return await compress_image(url_or_path, max_size=max_size, quality=quality)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Image compression failed: %s", exc)
+        return url_or_path
+
+
+def _is_generated_compressed_image_path(
+    original_path: str,
+    compressed_path: str | None,
+) -> bool:
+    if not compressed_path or compressed_path == original_path:
+        return False
+    if compressed_path.startswith("http") or compressed_path.startswith("data:image"):
+        return False
+    return os.path.exists(compressed_path)
+
+
 async def _process_quote_message(
     event: AstrMessageEvent,
     req: ProviderRequest,
@@ -565,6 +617,8 @@ async def _process_quote_message(
     if image_seg:
         try:
             prov = None
+            path = None
+            compress_path = None
             if img_cap_prov_id:
                 prov = plugin_context.get_provider_by_id(img_cap_prov_id)
             if prov is None:
@@ -588,6 +642,16 @@ async def _process_quote_message(
                 logger.warning("No provider found for image captioning in quote.")
         except BaseException as exc:
             logger.error("处理引用图片失败: %s", exc)
+        finally:
+            if (
+                compress_path
+                and compress_path != path
+                and os.path.exists(compress_path)
+            ):
+                try:
+                    os.remove(compress_path)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Fail to remove temporary compressed image: %s", exc)
 
     quoted_content = "\n".join(content_parts)
     quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
@@ -656,6 +720,7 @@ async def _decorate_llm_request(
         img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
         if img_cap_prov_id and req.image_urls:
             await _ensure_img_caption(
+                event,
                 req,
                 cfg,
                 plugin_context,

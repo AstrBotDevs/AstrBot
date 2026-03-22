@@ -89,10 +89,12 @@
 <script lang="ts">
 import { defineComponent, type PropType } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
+import BaseFolderCard from '@/components/folder/BaseFolderCard.vue';
 import type { Folder } from '@/components/folder/types';
 
 export default defineComponent({
     name: 'FolderCard',
+    components: { BaseFolderCard },
     props: {
         folder: {
             type: Object as PropType<Folder>,
@@ -104,35 +106,13 @@ export default defineComponent({
         const { tm } = useModuleI18n('features/persona');
         return { tm };
     },
-    data() {
-        return {
-            isDragOver: false
-        };
-    },
     methods: {
-        handleDragOver(event: DragEvent) {
-            if (event.dataTransfer) {
-                event.dataTransfer.dropEffect = 'move';
-            }
-            this.isDragOver = true;
-        },
-        handleDragLeave() {
-            this.isDragOver = false;
-        },
-        handleDrop(event: DragEvent) {
-            this.isDragOver = false;
-            if (!event.dataTransfer) return;
-            
-            try {
-                const data = JSON.parse(event.dataTransfer.getData('application/json'));
-                if (data.type === 'persona') {
-                    this.$emit('persona-dropped', {
-                        persona_id: data.persona_id,
-                        target_folder_id: this.folder.folder_id
-                    });
-                }
-            } catch (e) {
-                console.error('Failed to parse drop data:', e);
+        onItemDropped(data: { item_id: string; item_type: string; target_folder_id: string | null; source_data?: any }) {
+            if (data.item_type === 'persona') {
+                this.$emit('persona-dropped', {
+                    persona_id: data.item_id,
+                    target_folder_id: data.target_folder_id ?? this.folder.folder_id
+                });
             }
         }
     }

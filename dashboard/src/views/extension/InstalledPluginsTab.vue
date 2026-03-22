@@ -1,9 +1,11 @@
 <script setup>
 import PluginSortControl from "@/components/extension/PluginSortControl.vue";
+import PinnedPluginItem from "@/components/extension/PinnedPluginItem.vue";
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import { normalizeTextInput } from "@/utils/inputValue";
+import { ref, computed, watch } from "vue";
 
 const props = defineProps({
   state: {
@@ -155,6 +157,108 @@ const {
   handleLocaleChange,
   searchDebounceTimer,
 } = props.state;
+
+// 置顶插件（保存在 localStorage）
+const PINNED_KEY = "astrbot.pinnedExtensions";
+const pinnedNames = ref([]);
+
+const loadPinned = () => {
+  try {
+    const raw = localStorage.getItem(PINNED_KEY);
+    pinnedNames.value = raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    pinnedNames.value = [];
+  }
+};
+
+const savePinned = () => {
+  try {
+    localStorage.setItem(PINNED_KEY, JSON.stringify(pinnedNames.value || []));
+  } catch (e) {
+    // ignore
+  }
+};
+
+loadPinned();
+
+watch(pinnedNames, () => savePinned(), { deep: true });
+
+const isPinned = (name) => {
+  return pinnedNames.value.includes(name);
+};
+
+const togglePin = (extension) => {
+  const name = extension?.name;
+  if (!name) return;
+  const idx = pinnedNames.value.indexOf(name);
+  if (idx === -1) pinnedNames.value.push(name);
+  else pinnedNames.value.splice(idx, 1);
+};
+
+const handlePinnedImgError = (e) => {
+  e.target.src = defaultPluginIcon;
+};
+
+// --- 拖拽功能实现 ---
+const draggedIndex = ref(-1);
+let lastSwapTime = 0;
+
+const onDragStart = (index) => {
+  draggedIndex.value = index;
+};
+
+const onDragOver = (e) => {
+  e.preventDefault(); // 必须调用，否则不会触发 drop
+};
+
+const onDragEnter = (e, index) => {
+  e.preventDefault();
+  
+  const now = Date.now();
+  if (now - lastSwapTime < 100) return; // 100ms 冷却，防止快速抖动
+
+  if (draggedIndex.value === -1 || draggedIndex.value === index) {
+    return;
+  }
+
+  const newList = [...pinnedNames.value];
+  const item = newList.splice(draggedIndex.value, 1)[0];
+  newList.splice(index, 0, item);
+  
+  pinnedNames.value = newList;
+  draggedIndex.value = index; 
+  lastSwapTime = now;
+};
+
+const onDrop = () => {
+  draggedIndex.value = -1;
+};
+
+const onDragEnd = () => {
+  draggedIndex.value = -1;
+};
+// ----------------
+
+// 映射 name -> plugin 对象（优先从 sortedPlugins 找）
+const pinnedPlugins = computed(() => {
+  if (!Array.isArray(pinnedNames.value)) return [];
+
+  const installedAll = Array.isArray(extension_data?.data) ? extension_data.data : [];
+  const all = Array.isArray(sortedPlugins?.value) ? sortedPlugins.value : [];
+  const filtered = Array.isArray(filteredPlugins?.value) ? filteredPlugins.value : [];
+  const market = Array.isArray(pluginMarketData?.value) ? pluginMarketData.value : [];
+
+  const findByName = (name) => {
+    return (
+      installedAll.find((p) => p.name === name) ||
+      all.find((p) => p.name === name) ||
+      filtered.find((p) => p.name === name) ||
+      market.find((p) => p.name === name)
+    );
+  };
+
+  return pinnedNames.value.map((name) => findByName(name)).filter(Boolean);
+});
 </script>
 
 <template>
@@ -845,5 +949,95 @@ const {
 .fab-button:hover {
   transform: translateY(-4px) scale(1.05);
   box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
+}
+
+.pinned-plugins h3 {
+  font-weight: 600;
+}
+
+.pinned-list {
+  gap: 12px;
+}
+
+.pinned-item {
+  flex: 1 1 180px;
+  max-width: 320px;
+  height: 76px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 4px rgba(16,24,40,0.04);
+}
+
+.pinned-avatar {
+  display: inline-flex;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  cursor: pointer;
+  border-radius: 12px;
+}
+
+.pinned-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pinned-card-wrapper {
+  position: relative;
+  display: inline-block;
+  width: 72px;
+  height: 72px;
+}
+
+.pin-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 5;
+}
+
+.pinned-item-skeleton {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+}
+
+.pinned-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.is-dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+  cursor: grabbing;
+}
+
+[draggable="true"] {
+  cursor: grab;
+}
+
+[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.list-move,
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.3s ease;
+}
+
+.list-enter-from,
+.list-leave-to {
+  opacity: 0;
+  transform: scale(0.6);
+}
+
+.list-leave-active {
+  position: absolute;
 }
 </style>

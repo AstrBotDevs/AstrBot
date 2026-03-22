@@ -34,6 +34,7 @@ from astrbot.core.computer.tools import (
     RunBrowserSkillTool,
     SyncSkillReleaseTool,
 )
+from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.star.context import Context
@@ -395,6 +396,18 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         #         logger.error(f"Error removing temp file {local_path}: {e}")
 
         return f"Message sent to session {target_session}"
+
+
+def check_all_kb(kb_list: list[KBHelper | None]) -> bool:
+    """检查是否所有的知识库都为空
+    Args:
+        kb_list: 所选的知识库
+    Returns:
+        bool: 是否全为空
+    """
+    return not any(
+        kb and (kb.kb.doc_count != 0 or kb.kb.chunk_count != 0) for kb in kb_list
+    )
 
 
 async def retrieve_knowledge_base(

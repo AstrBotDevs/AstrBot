@@ -14,6 +14,8 @@ import anyio
 
 from PIL import Image as PILImage
 
+from PIL import Image as PILImage
+
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 

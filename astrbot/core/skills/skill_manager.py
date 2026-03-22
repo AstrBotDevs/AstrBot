@@ -6,6 +6,7 @@ import re
 import shlex
 import shutil
 import tempfile
+import uuid
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -52,6 +53,29 @@ def _is_ignored_zip_entry(name: str) -> bool:
     if not parts:
         return True
     return parts[0] == "__MACOSX"
+
+
+def _normalize_skill_markdown_path(skill_dir: Path) -> Path | None:
+    """Return the canonical `SKILL.md` path for a skill directory.
+
+    If only legacy `skill.md` exists, it is renamed to `SKILL.md` in-place.
+    """
+    canonical = skill_dir / "SKILL.md"
+    entries = set()
+    if skill_dir.exists():
+        entries = {entry.name for entry in skill_dir.iterdir()}
+    if "SKILL.md" in entries:
+        return canonical
+    legacy = skill_dir / "skill.md"
+    if "skill.md" not in entries:
+        return None
+    try:
+        tmp = skill_dir / f".{uuid.uuid4().hex}.tmp_skill_md"
+        legacy.rename(tmp)
+        tmp.rename(canonical)
+    except OSError:
+        return legacy
+    return canonical
 
 
 @dataclass
@@ -371,8 +395,8 @@ class SkillManager:
             if not entry.is_dir():
                 continue
             skill_name = entry.name
-            skill_md = entry / "SKILL.md"
-            if not skill_md.exists():
+            skill_md = _normalize_skill_markdown_path(entry)
+            if skill_md is None:
                 continue
             active = skill_configs.get(skill_name, {}).get("active", True)
             if skill_name not in skill_configs:
@@ -463,7 +487,7 @@ class SkillManager:
 
     def is_sandbox_only_skill(self, name: str) -> bool:
         skill_dir = Path(self.skills_root) / name
-        skill_md_exists = (skill_dir / "SKILL.md").exists()
+        skill_md_exists = _normalize_skill_markdown_path(skill_dir) is not None
         if skill_md_exists:
             return False
         cache = self._load_sandbox_skills_cache()
@@ -577,6 +601,7 @@ class SkillManager:
                         continue
                     zf.extract(member, tmp_dir)
                 src_dir = Path(tmp_dir) / skill_name
+                _normalize_skill_markdown_path(src_dir)
                 if not src_dir.exists():
                     raise ValueError("Skill folder not found after extraction.")
                 dest_dir = Path(self.skills_root) / skill_name

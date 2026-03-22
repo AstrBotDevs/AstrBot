@@ -81,6 +81,8 @@ const {
   sortOrder,
   randomPluginNames,
   showRandomPlugins,
+  marketCategoryFilter,
+  marketCategoryItems,
   normalizeStr,
   toPinyinText,
   toInitials,
@@ -166,6 +168,13 @@ const marketSortItems = computed(() => [
   { title: tm("sort.author"), value: "author" },
   { title: tm("sort.updated"), value: "updated" },
 ]);
+
+const marketCategorySelectItems = computed(() =>
+  marketCategoryItems.value.map((item) => ({
+    title: `${item.label || ""} (${item.count || 0})`,
+    value: item.value,
+  })),
+);
 </script>
 
 <template>
@@ -418,3 +427,17 @@ const marketSortItems = computed(() => [
     </div>
   </v-tab-item>
 </template>
+
+<style scoped>
+.market-filter-control {
+  min-width: 190px;
+  max-width: 220px;
+}
+
+.market-filter-control :deep(.v-field__input),
+.market-filter-control :deep(.v-field-label),
+.market-filter-control :deep(.v-select__selection-text),
+.market-filter-control :deep(.v-field__prepend-inner) {
+  font-size: 0.875rem;
+}
+</style>

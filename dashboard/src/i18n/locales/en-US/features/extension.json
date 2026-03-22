@@ -96,6 +96,16 @@
   "market": {
     "recommended": "🥳 Recommended",
     "allPlugins": "📦 All Extensions",
+    "category": "Category",
+    "categories": {
+      "all": "All",
+      "ai_tools": "AI Tools",
+      "entertainment": "Entertainment",
+      "productivity": "Productivity",
+      "integrations": "Integrations",
+      "utilities": "Utilities",
+      "other": "Other"
+    },
     "showFullName": "Full Name",
     "devDocs": "Extension Development Docs",
     "submitRepo": "Submit Extension Repository",

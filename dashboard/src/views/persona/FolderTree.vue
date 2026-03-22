@@ -221,7 +221,7 @@ import { defineComponent } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { usePersonaStore } from '@/stores/personaStore';
 import { mapState, mapActions } from 'pinia';
-import FolderTreeNode from './FolderTreeNode.vue';
+import BaseFolderTree from '@/components/folder/BaseFolderTree.vue';
 import type { FolderTreeNode as FolderTreeNodeType } from '@/components/folder/types';
 
 interface ContextMenuState {
@@ -246,7 +246,7 @@ interface DeleteDialogState {
 export default defineComponent({
     name: 'FolderTree',
     components: {
-        FolderTreeNode
+        BaseFolderTree
     },
     emits: ['move-folder', 'error', 'success', 'persona-dropped'],
     setup() {
@@ -276,7 +276,7 @@ export default defineComponent({
         };
     },
     computed: {
-        ...mapState(usePersonaStore, ['folderTree', 'currentFolderId', 'treeLoading']),
+        ...mapState(usePersonaStore, ['folderTree', 'currentFolderId', 'treeLoading', 'expandedFolderIds']),
 
         filteredFolderTree(): FolderTreeNodeType[] {
             if (!this.searchQuery) {
@@ -287,8 +287,7 @@ export default defineComponent({
         }
     },
     methods: {
-        ...mapActions(usePersonaStore, ['navigateToFolder', 'updateFolder', 'deleteFolder']),
-
+        ...mapActions(usePersonaStore, ['navigateToFolder', 'updateFolder', 'deleteFolder', 'toggleFolderExpansion', 'setFolderExpansion']),
         filterTreeBySearch(nodes: FolderTreeNodeType[], query: string): FolderTreeNodeType[] {
             return nodes.filter(node => {
                 const matches = node.name.toLowerCase().includes(query);
@@ -304,51 +303,25 @@ export default defineComponent({
             this.navigateToFolder(folderId);
         },
 
-        handleRootDragOver(event: DragEvent) {
-            if (event.dataTransfer) {
-                event.dataTransfer.dropEffect = 'move';
-            }
-            this.isRootDragOver = true;
+        // rename event from BaseFolderTree
+        onRenameFolder(folder: FolderTreeNodeType) {
+            this.renameDialog.folder = folder;
+            this.renameDialog.name = folder.name;
+            this.renameDialog.show = true;
         },
 
-        handleRootDragLeave() {
-            this.isRootDragOver = false;
+        // delete event from BaseFolderTree
+        onDeleteFolder(folder: FolderTreeNodeType) {
+            this.deleteDialog.folder = folder;
+            this.deleteDialog.show = true;
         },
 
-        handleRootDrop(event: DragEvent) {
-            this.isRootDragOver = false;
-            if (!event.dataTransfer) return;
-            
-            try {
-                const data = JSON.parse(event.dataTransfer.getData('application/json'));
-                if (data.type === 'persona') {
-                    this.$emit('persona-dropped', {
-                        persona_id: data.persona_id,
-                        target_folder_id: null
-                    });
-                }
-            } catch (e) {
-                console.error('Failed to parse drop data:', e);
-            }
-        },
-
-        handleContextMenu(eventData: { event: MouseEvent; folder: FolderTreeNodeType }) {
-            this.contextMenu.target = [eventData.event.clientX, eventData.event.clientY];
-            this.contextMenu.folder = eventData.folder;
-            this.contextMenu.show = true;
-        },
-
-        openFolder() {
-            if (this.contextMenu.folder) {
-                this.navigateToFolder(this.contextMenu.folder.folder_id);
-            }
-        },
-
-        renameFolder() {
-            if (this.contextMenu.folder) {
-                this.renameDialog.folder = this.contextMenu.folder;
-                this.renameDialog.name = this.contextMenu.folder.name;
-                this.renameDialog.show = true;
+        onItemDropped(data: { item_id: string; item_type: string; target_folder_id: string | null; source_data?: any }) {
+            if (data.item_type === 'persona') {
+                this.$emit('persona-dropped', {
+                    persona_id: data.item_id,
+                    target_folder_id: data.target_folder_id
+                });
             }
         },
 
@@ -367,13 +340,6 @@ export default defineComponent({
                 this.$emit('error', error.message || this.tm('folder.messages.renameError'));
             } finally {
                 this.renameDialog.loading = false;
-            }
-        },
-
-        confirmDeleteFolder() {
-            if (this.contextMenu.folder) {
-                this.deleteDialog.folder = this.contextMenu.folder;
-                this.deleteDialog.show = true;
             }
         },
 
