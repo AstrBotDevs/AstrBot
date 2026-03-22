@@ -9,7 +9,7 @@ VERSION = "4.21.0"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
-        "description": "iLink API 地址",
+        "description": "Base URL",
         "type": "string",
         "hint": "默认值: https://ilinkai.weixin.qq.com",
     },

@@ -621,7 +621,7 @@
         "hint": "可选。启用后，企业微信智能机器人的所有回复都改为通过消息推送 Webhook 发送。消息推送 Webhook 支持更多的消息类型（如图片、文件等）。如果不需要打字机效果，强烈建议使用此选项。"
       },
       "weixin_oc_base_url": {
-        "description": "iLink API 地址",
+        "description": "Base URL 地址",
         "hint": "默认值: https://ilinkai.weixin.qq.com"
       },
       "weixin_oc_bot_type": {

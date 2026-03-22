@@ -619,7 +619,7 @@
         "hint": "When enabled, all WeCom AI Bot replies are sent through msg_push_webhook_url. The message push webhook supports more message types (such as images, files, etc.). If you do not need the typing effect, it is strongly recommended to use this option. "
       },
       "weixin_oc_base_url": {
-        "description": "iLink API Base URL",
+        "description": "API Base URL",
         "hint": "Default: https://ilinkai.weixin.qq.com"
       },
       "weixin_oc_bot_type": {
