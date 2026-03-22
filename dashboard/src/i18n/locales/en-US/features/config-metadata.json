@@ -335,6 +335,22 @@
           "description": "User Prompt",
           "hint": "You can use {{prompt}} as a placeholder for user input. If no placeholder is provided, it will be added before the user input."
         },
+        "image_compress_enabled": {
+          "description": "Enable image compression",
+          "hint": "When enabled, large local images are compressed before being sent to multimodal models. Applies only to chat_completion providers."
+        },
+        "image_compress_options": {
+          "description": "Image compression settings",
+          "hint": "Control image resize limits, JPEG quality, and the minimum size threshold for compression.",
+          "max_size": {
+            "description": "Maximum edge length",
+            "hint": "Longest edge of the compressed image in pixels. Images larger than this are resized proportionally."
+          },
+          "quality": {
+            "description": "JPEG quality",
+            "hint": "JPEG output quality from 1 to 100. Higher values preserve more detail but produce larger files."
+          }
+        },
         "reachability_check": {
           "description": "Provider Reachability Check",
           "hint": "When running the /provider command, test provider connectivity in parallel. This actively pings models and may consume extra tokens."

@@ -4,14 +4,23 @@
 """
 
 import asyncio
+import base64
+import io
 import os
 import subprocess
 import uuid
 
 import anyio
 
+from PIL import Image as PILImage
+
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+IMAGE_COMPRESS_DEFAULT_MAX_SIZE = 1280
+IMAGE_COMPRESS_DEFAULT_QUALITY = 95
+IMAGE_COMPRESS_DEFAULT_OPTIMIZE = True
+IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
 
 
 async def get_media_duration(file_path: str) -> int | None:
@@ -317,3 +326,88 @@ async def extract_video_cover(
         return output_path
     except FileNotFoundError:
         raise Exception("ffmpeg not found")
+
+
+def _compress_image_sync(
+    data: bytes,
+    temp_dir: Path,
+    max_size: int,
+    quality: int,
+    optimize: bool,
+) -> str:
+    """Run image compression synchronously via ``asyncio.to_thread``."""
+    with PILImage.open(io.BytesIO(data)) as opened_img:
+        img = opened_img
+        converted_img: PILImage.Image | None = None
+
+        try:
+            if img.mode != "RGB":
+                converted_img = img.convert("RGB")
+                img = converted_img
+
+            if max(img.size) > max_size:
+                img.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
+
+            new_uuid = uuid.uuid4().hex
+            save_path = temp_dir / f"compressed_{new_uuid}.jpg"
+            img.save(save_path, "JPEG", quality=quality, optimize=optimize)
+            logger.debug(f"Image compressed successfully: {save_path}")
+            return str(save_path)
+        finally:
+            if converted_img is not None:
+                converted_img.close()
+
+
+async def compress_image(
+    url_or_path: str,
+    max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
+    quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
+) -> str:
+    """Compress large user-uploaded images.
+
+    Args:
+        url_or_path: Image path or URL.
+        max_size: Longest edge of the compressed image in pixels.
+        quality: JPEG output quality in the range 1-100.
+
+    Returns:
+        The compressed image path. Returns the original path if compression
+        fails or the source does not need compression.
+    """
+    max_size = max(int(max_size), 1)
+    quality = min(max(int(quality), 1), 100)
+    optimize = IMAGE_COMPRESS_DEFAULT_OPTIMIZE
+    min_file_size_bytes = int(IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB * 1024 * 1024)
+    data = None
+    # Skip compression for remote images and return the original value.
+    if url_or_path.startswith("http"):
+        return url_or_path
+    elif url_or_path.startswith("data:image"):
+        _header, encoded = url_or_path.split(",", 1)
+        data = base64.b64decode(encoded)
+        if len(data) < min_file_size_bytes:
+            return url_or_path
+    else:
+        local_path = Path(url_or_path)
+        if not local_path.exists():
+            return url_or_path
+        if local_path.stat().st_size < min_file_size_bytes:
+            return url_or_path
+        with local_path.open("rb") as f:
+            data = f.read()
+
+    if not data:
+        return url_or_path
+
+    temp_dir = Path(get_astrbot_temp_path())
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    # Offload the blocking image processing task to a thread.
+    return await asyncio.to_thread(
+        _compress_image_sync,
+        data,
+        temp_dir,
+        max_size,
+        quality,
+        optimize,
+    )

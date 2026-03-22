@@ -159,6 +159,11 @@ DEFAULT_CONFIG = {
             "shipyard_neo_profile": "python-default",
             "shipyard_neo_ttl": 3600,
         },
+        "image_compress_enabled": True,
+        "image_compress_options": {
+            "max_size": 1024,
+            "quality": 95,
+        },
     },
     # SubAgent orchestrator mode:
     # - main_enable = False: disabled; main LLM mounts tools normally (persona selection).
@@ -3425,6 +3430,29 @@ CONFIG_METADATA_3 = {
                         "description": "用户提示词",
                         "type": "string",
                         "hint": "可使用 {{prompt}} 作为用户输入的占位符｡如果不输入占位符则代表添加在用户输入的前面｡",
+                    },
+                    "provider_settings.image_compress_enabled": {
+                        "description": "启用图片压缩",
+                        "type": "bool",
+                        "hint": "启用后，发送给多模态模型前会先压缩本地大图片。仅对 chat_completion 提供商生效。",
+                    },
+                    "provider_settings.image_compress_options.max_size": {
+                        "description": "最大边长",
+                        "type": "int",
+                        "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。",
+                        "condition": {
+                            "provider_settings.image_compress_enabled": True,
+                        },
+                        "slider": {"min": 256, "max": 4096, "step": 64},
+                    },
+                    "provider_settings.image_compress_options.quality": {
+                        "description": "压缩质量",
+                        "type": "int",
+                        "hint": "JPEG 输出质量，范围为 1-100。值越高，画质越好，文件也越大。",
+                        "condition": {
+                            "provider_settings.image_compress_enabled": True,
+                        },
+                        "slider": {"min": 1, "max": 100, "step": 1},
                     },
                     "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
