@@ -95,8 +95,11 @@ const releasesHeader = computed(() => [
   { title: t('core.header.updateDialog.table.actions'), key: 'switch' }
 ]);
 
+const commitHashRegex = /^[0-9a-f]{40}$/i;
+const isCommitHashValid = computed(() => commitHashRegex.test(commitHashInput.value));
+
 const commitHashRules = computed(() => [
-  (v: string) => !v || /^[0-9a-f]{40}$/i.test(v) || t('core.header.updateDialog.commitHash.invalidFormat')
+  (v: string) => !v || commitHashRegex.test(v) || t('core.header.updateDialog.commitHash.invalidFormat')
 ]);
 // Form validation
 const formValid = ref(true);
@@ -740,7 +743,7 @@ onMounted(async () => {
               <small class="mb-3 d-block">{{ t('core.header.updateDialog.commitHash.description') }}</small>
               <div class="d-flex align-center ga-3">
                 <v-text-field
-                  v-model="commitHashInput"
+                  v-model.trim="commitHashInput"
                   :placeholder="t('core.header.updateDialog.commitHash.placeholder')"
                   :rules="commitHashRules"
                   density="compact"
@@ -752,7 +755,7 @@ onMounted(async () => {
                 <v-btn
                   color="primary"
                   style="border-radius: 10px;"
-                  :disabled="!commitHashInput || !/^[0-9a-f]{40}$/i.test(commitHashInput)"
+                  :disabled="!isCommitHashValid"
                   :loading="installLoading"
                   @click="switchVersion(commitHashInput)"
                 >
