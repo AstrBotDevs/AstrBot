@@ -371,14 +371,14 @@ def test_command_model_parser_help_and_duplicates() -> None:
     assert help_result.help_text is not None
     assert "用法: /echo" in help_result.help_text
 
-    with pytest.raises(AstrBotError, match="Duplicate field"):
+    with pytest.raises(AstrBotError, match="Duplicate option"):
         parse_command_model_remainder(
             remainder="--text a --text b",
             model_param=model_param,
             command_name="echo",
         )
 
-    with pytest.raises(AstrBotError, match="Unknown field"):
+    with pytest.raises(AstrBotError, match="Unknown option"):
         parse_command_model_remainder(
             remainder="--unknown nope",
             model_param=model_param,
