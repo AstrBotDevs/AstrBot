@@ -56,12 +56,21 @@ __all__ = [
     "_load_group_plugin_specs",
 ]
 
+GLOBAL_MCP_RISK_ATTR = "__astrbot_acknowledge_global_mcp_risk__"
+
 
 @dataclass(slots=True)
 class GroupPluginRuntimeState:
     plugin: PluginSpec
     loaded_plugin: LoadedPlugin
     lifecycle_context: RuntimeContext
+
+
+def _plugin_acknowledges_global_mcp_risk(instances: list[Any]) -> bool:
+    return any(
+        bool(getattr(instance.__class__, GLOBAL_MCP_RISK_ATTR, False))
+        for instance in instances
+    )
 
 
 def _load_group_plugin_specs(group_metadata_path: Path) -> tuple[str, list[PluginSpec]]:
@@ -317,6 +326,10 @@ class GroupWorkerRuntime:
                 for state in self._active_plugin_states
                 for agent in state.loaded_plugin.agents
             ],
+            "acknowledge_global_mcp_risk": any(
+                _plugin_acknowledges_global_mcp_risk(state.loaded_plugin.instances)
+                for state in self._active_plugin_states
+            ),
         }
 
     async def _run_lifecycle(
@@ -391,6 +404,9 @@ class PluginWorkerRuntime:
                         }
                         for item in self.loaded_plugin.agents
                     ],
+                    "acknowledge_global_mcp_risk": _plugin_acknowledges_global_mcp_risk(
+                        self.loaded_plugin.instances
+                    ),
                 },
             )
         except Exception:

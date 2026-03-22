@@ -776,6 +776,145 @@ MESSAGE_HISTORY_DELETE_ALL_OUTPUT_SCHEMA = _object_schema(
     required=("deleted_count",),
     deleted_count={"type": "integer"},
 )
+MCP_SERVER_SCOPE_SCHEMA = {"type": "string", "enum": ["local", "global"]}
+MCP_SERVER_RECORD_SCHEMA = _object_schema(
+    required=("name", "scope", "active", "running", "config", "tools", "errlogs"),
+    name={"type": "string"},
+    scope=MCP_SERVER_SCOPE_SCHEMA,
+    active={"type": "boolean"},
+    running={"type": "boolean"},
+    config={"type": "object"},
+    tools={"type": "array", "items": {"type": "string"}},
+    errlogs={"type": "array", "items": {"type": "string"}},
+    last_error=_nullable({"type": "string"}),
+)
+MCP_LOCAL_GET_INPUT_SCHEMA = _object_schema(required=("name",), name={"type": "string"})
+MCP_LOCAL_GET_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=_nullable(MCP_SERVER_RECORD_SCHEMA),
+)
+MCP_LOCAL_LIST_INPUT_SCHEMA = _object_schema()
+MCP_LOCAL_LIST_OUTPUT_SCHEMA = _object_schema(
+    required=("servers",),
+    servers={"type": "array", "items": MCP_SERVER_RECORD_SCHEMA},
+)
+MCP_LOCAL_ENABLE_INPUT_SCHEMA = _object_schema(
+    required=("name",), name={"type": "string"}
+)
+MCP_LOCAL_ENABLE_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=MCP_SERVER_RECORD_SCHEMA,
+)
+MCP_LOCAL_DISABLE_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+)
+MCP_LOCAL_DISABLE_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=MCP_SERVER_RECORD_SCHEMA,
+)
+MCP_LOCAL_WAIT_UNTIL_READY_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+    timeout={"type": "number"},
+)
+MCP_LOCAL_WAIT_UNTIL_READY_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=MCP_SERVER_RECORD_SCHEMA,
+)
+MCP_SESSION_OPEN_INPUT_SCHEMA = _object_schema(
+    required=("name", "config"),
+    name={"type": "string"},
+    config={"type": "object"},
+    timeout={"type": "number"},
+)
+MCP_SESSION_OPEN_OUTPUT_SCHEMA = _object_schema(
+    required=("session_id", "tools"),
+    session_id={"type": "string"},
+    tools={"type": "array", "items": {"type": "string"}},
+)
+MCP_SESSION_LIST_TOOLS_INPUT_SCHEMA = _object_schema(
+    required=("session_id",),
+    session_id={"type": "string"},
+)
+MCP_SESSION_LIST_TOOLS_OUTPUT_SCHEMA = _object_schema(
+    required=("tools",),
+    tools={"type": "array", "items": {"type": "string"}},
+)
+MCP_SESSION_CALL_TOOL_INPUT_SCHEMA = _object_schema(
+    required=("session_id", "tool_name", "args"),
+    session_id={"type": "string"},
+    tool_name={"type": "string"},
+    args={"type": "object"},
+)
+MCP_SESSION_CALL_TOOL_OUTPUT_SCHEMA = _object_schema(
+    required=("result",),
+    result={"type": "object"},
+)
+MCP_SESSION_CLOSE_INPUT_SCHEMA = _object_schema(
+    required=("session_id",),
+    session_id={"type": "string"},
+)
+MCP_SESSION_CLOSE_OUTPUT_SCHEMA = _object_schema()
+MCP_GLOBAL_REGISTER_INPUT_SCHEMA = _object_schema(
+    required=("name", "config"),
+    name={"type": "string"},
+    config={"type": "object"},
+    timeout={"type": "number"},
+)
+MCP_GLOBAL_REGISTER_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=MCP_SERVER_RECORD_SCHEMA,
+)
+MCP_GLOBAL_GET_INPUT_SCHEMA = _object_schema(
+    required=("name",), name={"type": "string"}
+)
+MCP_GLOBAL_GET_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=_nullable(MCP_SERVER_RECORD_SCHEMA),
+)
+MCP_GLOBAL_LIST_INPUT_SCHEMA = _object_schema()
+MCP_GLOBAL_LIST_OUTPUT_SCHEMA = _object_schema(
+    required=("servers",),
+    servers={"type": "array", "items": MCP_SERVER_RECORD_SCHEMA},
+)
+MCP_GLOBAL_ENABLE_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+    timeout={"type": "number"},
+)
+MCP_GLOBAL_ENABLE_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=MCP_SERVER_RECORD_SCHEMA,
+)
+MCP_GLOBAL_DISABLE_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+)
+MCP_GLOBAL_DISABLE_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=MCP_SERVER_RECORD_SCHEMA,
+)
+MCP_GLOBAL_UNREGISTER_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+)
+MCP_GLOBAL_UNREGISTER_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=MCP_SERVER_RECORD_SCHEMA,
+)
+INTERNAL_MCP_LOCAL_EXECUTE_INPUT_SCHEMA = _object_schema(
+    required=("plugin_id", "server_name", "tool_name", "tool_args"),
+    plugin_id={"type": "string"},
+    server_name={"type": "string"},
+    tool_name={"type": "string"},
+    tool_args={"type": "object"},
+)
+INTERNAL_MCP_LOCAL_EXECUTE_OUTPUT_SCHEMA = _object_schema(
+    required=("content", "success"),
+    content=_nullable({"type": "string"}),
+    success={"type": "boolean"},
+)
 KNOWLEDGE_BASE_RECORD_SCHEMA = _object_schema(
     required=("kb_id", "kb_name", "embedding_provider_id", "doc_count", "chunk_count"),
     kb_id={"type": "string"},
@@ -1552,6 +1691,70 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
     "message_history.delete_all": {
         "input": MESSAGE_HISTORY_DELETE_ALL_INPUT_SCHEMA,
         "output": MESSAGE_HISTORY_DELETE_ALL_OUTPUT_SCHEMA,
+    },
+    "mcp.local.get": {
+        "input": MCP_LOCAL_GET_INPUT_SCHEMA,
+        "output": MCP_LOCAL_GET_OUTPUT_SCHEMA,
+    },
+    "mcp.local.list": {
+        "input": MCP_LOCAL_LIST_INPUT_SCHEMA,
+        "output": MCP_LOCAL_LIST_OUTPUT_SCHEMA,
+    },
+    "mcp.local.enable": {
+        "input": MCP_LOCAL_ENABLE_INPUT_SCHEMA,
+        "output": MCP_LOCAL_ENABLE_OUTPUT_SCHEMA,
+    },
+    "mcp.local.disable": {
+        "input": MCP_LOCAL_DISABLE_INPUT_SCHEMA,
+        "output": MCP_LOCAL_DISABLE_OUTPUT_SCHEMA,
+    },
+    "mcp.local.wait_until_ready": {
+        "input": MCP_LOCAL_WAIT_UNTIL_READY_INPUT_SCHEMA,
+        "output": MCP_LOCAL_WAIT_UNTIL_READY_OUTPUT_SCHEMA,
+    },
+    "mcp.session.open": {
+        "input": MCP_SESSION_OPEN_INPUT_SCHEMA,
+        "output": MCP_SESSION_OPEN_OUTPUT_SCHEMA,
+    },
+    "mcp.session.list_tools": {
+        "input": MCP_SESSION_LIST_TOOLS_INPUT_SCHEMA,
+        "output": MCP_SESSION_LIST_TOOLS_OUTPUT_SCHEMA,
+    },
+    "mcp.session.call_tool": {
+        "input": MCP_SESSION_CALL_TOOL_INPUT_SCHEMA,
+        "output": MCP_SESSION_CALL_TOOL_OUTPUT_SCHEMA,
+    },
+    "mcp.session.close": {
+        "input": MCP_SESSION_CLOSE_INPUT_SCHEMA,
+        "output": MCP_SESSION_CLOSE_OUTPUT_SCHEMA,
+    },
+    "mcp.global.register": {
+        "input": MCP_GLOBAL_REGISTER_INPUT_SCHEMA,
+        "output": MCP_GLOBAL_REGISTER_OUTPUT_SCHEMA,
+    },
+    "mcp.global.get": {
+        "input": MCP_GLOBAL_GET_INPUT_SCHEMA,
+        "output": MCP_GLOBAL_GET_OUTPUT_SCHEMA,
+    },
+    "mcp.global.list": {
+        "input": MCP_GLOBAL_LIST_INPUT_SCHEMA,
+        "output": MCP_GLOBAL_LIST_OUTPUT_SCHEMA,
+    },
+    "mcp.global.enable": {
+        "input": MCP_GLOBAL_ENABLE_INPUT_SCHEMA,
+        "output": MCP_GLOBAL_ENABLE_OUTPUT_SCHEMA,
+    },
+    "mcp.global.disable": {
+        "input": MCP_GLOBAL_DISABLE_INPUT_SCHEMA,
+        "output": MCP_GLOBAL_DISABLE_OUTPUT_SCHEMA,
+    },
+    "mcp.global.unregister": {
+        "input": MCP_GLOBAL_UNREGISTER_INPUT_SCHEMA,
+        "output": MCP_GLOBAL_UNREGISTER_OUTPUT_SCHEMA,
+    },
+    "internal.mcp.local.execute": {
+        "input": INTERNAL_MCP_LOCAL_EXECUTE_INPUT_SCHEMA,
+        "output": INTERNAL_MCP_LOCAL_EXECUTE_OUTPUT_SCHEMA,
     },
     "kb.list": {"input": KB_LIST_INPUT_SCHEMA, "output": KB_LIST_OUTPUT_SCHEMA},
     "kb.get": {"input": KB_GET_INPUT_SCHEMA, "output": KB_GET_OUTPUT_SCHEMA},

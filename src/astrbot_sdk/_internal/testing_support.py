@@ -483,6 +483,21 @@ def _normalize_plugin_metadata(
         "version": str(plugin_metadata.get("version") or "0.0.0"),
         "enabled": bool(plugin_metadata.get("enabled", True)),
         "reserved": bool(plugin_metadata.get("reserved", False)),
+        "acknowledge_global_mcp_risk": bool(
+            plugin_metadata.get("acknowledge_global_mcp_risk", False)
+        ),
+        "local_mcp_servers": (
+            {
+                str(server_name): dict(server_payload)
+                for server_name, server_payload in plugin_metadata.get(
+                    "local_mcp_servers",
+                    {},
+                ).items()
+                if str(server_name).strip() and isinstance(server_payload, dict)
+            }
+            if isinstance(plugin_metadata.get("local_mcp_servers"), dict)
+            else {}
+        ),
         "support_platforms": [
             str(item)
             for item in plugin_metadata.get("support_platforms", [])
