@@ -24,6 +24,8 @@ class ColorPair(Enum):
     INPUT_BG = 14
     STATUS_BG = 15
     BORDER = 16
+    TOOL_MSG = 17
+    REASONING_MSG = 18
 
 
 _COLOR_MAP = {
@@ -42,6 +44,8 @@ _COLOR_MAP = {
     ColorPair.INPUT_BG: curses.COLOR_BLACK,
     ColorPair.STATUS_BG: curses.COLOR_BLUE,
     ColorPair.BORDER: curses.COLOR_CYAN,
+    ColorPair.TOOL_MSG: curses.COLOR_MAGENTA,
+    ColorPair.REASONING_MSG: curses.COLOR_BLUE,
 }
 
 # Box drawing characters
@@ -203,6 +207,12 @@ class Screen:
             elif sender == "bot":
                 indicator = "✦"
                 color = self.get_color(ColorPair.BOT_MSG)
+            elif sender == "tool":
+                indicator = "⚙"
+                color = self.get_color(ColorPair.TOOL_MSG)
+            elif sender == "reasoning":
+                indicator = "◎"
+                color = self.get_color(ColorPair.REASONING_MSG)
             else:
                 indicator = "●"
                 color = self.get_color(ColorPair.SYSTEM_MSG)

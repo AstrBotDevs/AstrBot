@@ -49,6 +49,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     "description": "An ordered list of message components to send. `mention_user` type can be used to mention the user.",
                     "items": {
                         "type": "object",
+                        "additionalProperties": {},
                         "properties": {
                             "type": {
                                 "type": "string",
