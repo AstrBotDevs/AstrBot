@@ -167,6 +167,8 @@ class TriggerConverter:
         if isinstance(filter_spec, MessageTypeFilterSpec):
             return cls._message_type_name(event) in filter_spec.message_types
         if isinstance(filter_spec, LocalFilterRefSpec):
+            # Local filter refs point at plugin-process callables. The host bridge
+            # cannot execute them, so trigger matching must stay fail-open here.
             return True
         if isinstance(filter_spec, CompositeFilterSpec):
             results = [

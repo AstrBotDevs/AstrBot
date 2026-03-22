@@ -184,9 +184,17 @@ class LLMCapabilityMixin(CapabilityMixinHost):
         if provider_id:
             provider = self._star_context.get_provider_by_id(str(provider_id))
         else:
+            request_context_has_event = False
+            if request_context is not None:
+                has_event = getattr(request_context, "has_event", None)
+                request_context_has_event = (
+                    bool(has_event)
+                    if has_event is not None
+                    else hasattr(request_context, "event")
+                )
             provider = self._star_context.get_using_provider(
                 request_context.event.unified_msg_origin
-                if request_context is not None
+                if request_context is not None and request_context_has_event
                 else None,
             )
         if provider is None:

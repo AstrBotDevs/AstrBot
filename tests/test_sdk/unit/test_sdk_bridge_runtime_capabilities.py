@@ -62,6 +62,7 @@ from astrbot_sdk.protocol.descriptors import (
     EventTrigger,
     HandlerDescriptor,
     ParamSpec,
+    ScheduleTrigger,
 )
 from astrbot_sdk.testing import MockContext
 
@@ -377,6 +378,15 @@ class _OverlayFakeStarContext:
         return []
 
 
+class _ScheduleDispatchStarContext(_OverlayFakeStarContext):
+    def __init__(self) -> None:
+        super().__init__()
+        self.sent_messages: list[tuple[str, MessageChain]] = []
+
+    async def send_message(self, session: str, message_chain: MessageChain) -> None:
+        self.sent_messages.append((session, message_chain))
+
+
 class _OverlayFakeEvent:
     def __init__(self) -> None:
         self.call_llm = False
@@ -518,6 +528,47 @@ class _RequestScopeSession:
     ) -> dict[str, object]:
         del handler_id, event_payload, args
         self.request_ids.append(request_id)
+        return {}
+
+
+class _ScheduleDispatchSession:
+    def __init__(self, bridge: SdkPluginBridge) -> None:
+        self.bridge = bridge
+        self.request_ids: list[str] = []
+        self.event_capability_results: list[dict[str, object]] = []
+
+    async def invoke_handler(
+        self,
+        handler_id: str,
+        event_payload: dict[str, object],
+        *,
+        request_id: str,
+        args: dict[str, object],
+    ) -> dict[str, object]:
+        del handler_id, event_payload, args
+        self.request_ids.append(request_id)
+        request_context = self.bridge.resolve_request_session(request_id)
+        assert request_context is not None
+        assert request_context.has_event is False
+        send_result = await self.bridge.capability_bridge.execute(
+            "platform.send",
+            {
+                "session": "demo-platform:private:user-1",
+                "text": "scheduled hello",
+            },
+            stream=False,
+            cancel_token=None,
+            request_id=request_id,
+        )
+        assert str(send_result["message_id"]).startswith("sdk_")
+        event_result = await self.bridge.capability_bridge.execute(
+            "system.event.send_typing",
+            {},
+            stream=False,
+            cancel_token=None,
+            request_id=request_id,
+        )
+        self.event_capability_results.append(event_result)
         return {}
 
 
@@ -750,6 +801,71 @@ async def test_core_bridge_keeps_request_scope_after_event_hook_returns() -> Non
 
     bridge.close_request_overlay_for_event(event)
     assert bridge.get_request_overlay_by_request_id(parent_request_id) is None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_schedule_handler_tracks_request_scope_for_proactive_send() -> None:
+    star_context = _ScheduleDispatchStarContext()
+    bridge = SdkPluginBridge(star_context)
+    session = _ScheduleDispatchSession(bridge)
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-demo",
+            load_order=0,
+            session=session,
+        )
+    }
+
+    await bridge._invoke_schedule_handler(
+        plugin_id="sdk-demo",
+        handler_id="sdk-demo:main.tick",
+        trigger=ScheduleTrigger(interval_seconds=60),
+    )
+
+    assert len(star_context.sent_messages) == 1
+    assert star_context.sent_messages[0][0] == "demo-platform:private:user-1"
+    assert star_context.sent_messages[0][1].get_plain_text() == "scheduled hello"
+    assert session.event_capability_results == [{"supported": False}]
+    request_context = bridge.resolve_request_session(session.request_ids[0])
+    assert request_context is not None
+    assert request_context.has_event is False
+    bridge._close_request_overlay(request_context.dispatch_token)
+    assert bridge.resolve_request_session(session.request_ids[0]) is None
+
+
+@pytest.mark.unit
+def test_unregister_http_api_empty_methods_remove_entire_route() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    bridge.register_http_api(
+        plugin_id="sdk-demo",
+        route="/health",
+        methods=["GET", "POST"],
+        handler_capability="http.health",
+        description="health endpoint",
+    )
+
+    bridge.unregister_http_api(
+        plugin_id="sdk-demo",
+        route="/health",
+        methods=["POST"],
+    )
+    assert bridge.list_http_apis("sdk-demo") == [
+        {
+            "route": "/health",
+            "methods": ["GET"],
+            "handler_capability": "http.health",
+            "description": "health endpoint",
+        }
+    ]
+
+    bridge.unregister_http_api(
+        plugin_id="sdk-demo",
+        route="/health",
+        methods=[],
+    )
+    assert bridge.list_http_apis("sdk-demo") == []
 
 
 @pytest.mark.unit
@@ -1208,10 +1324,7 @@ async def test_mock_context_skill_client_round_trip() -> None:
     listed = await ctx.skills.list()
     assert len(listed) == 1
     assert listed[0].name == "sdk-demo.browser-helper"
-    assert (
-        listed[0].path.replace("\\", "/")
-        == "/tmp/sdk-demo/browser-helper/SKILL.md"
-    )
+    assert listed[0].path.replace("\\", "/") == "/tmp/sdk-demo/browser-helper/SKILL.md"
 
     removed = await ctx.skills.unregister("sdk-demo.browser-helper")
     assert removed is True

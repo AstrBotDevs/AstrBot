@@ -68,6 +68,46 @@ class _EventStreamState:
     task: asyncio.Task[None]
 
 
+def _build_message_chain_from_payload(
+    chain_payload: list[dict[str, Any]],
+) -> MessageChain:
+    components = []
+    for item in chain_payload:
+        if not isinstance(item, dict):
+            continue
+        comp_type = str(item.get("type", "")).lower()
+        data = item.get("data", {})
+        if comp_type in {"text", "plain"} and isinstance(data, dict):
+            components.append(Plain(str(data.get("text", "")), convert=False))
+            continue
+        if comp_type == "image" and isinstance(data, dict):
+            file_value = str(data.get("file") or data.get("url") or "")
+            if file_value.startswith(("http://", "https://")):
+                components.append(Image.fromURL(file_value))
+            elif file_value:
+                file_path = (
+                    file_value[8:] if file_value.startswith("file:///") else file_value
+                )
+                components.append(Image.fromFileSystem(file_path))
+            continue
+        component_cls = ComponentTypes.get(comp_type)
+        if component_cls is None:
+            components.append(
+                Plain(json.dumps(item, ensure_ascii=False), convert=False)
+            )
+            continue
+        try:
+            if isinstance(data, dict):
+                components.append(component_cls(**data))
+            else:
+                components.append(Plain(str(item), convert=False))
+        except Exception:
+            components.append(
+                Plain(json.dumps(item, ensure_ascii=False), convert=False)
+            )
+    return MessageChain(components)
+
+
 class CapabilityBridgeBase(CapabilityRouter):
     MEMORY_SCOPE = "sdk_memory"
 
@@ -126,6 +166,9 @@ class CapabilityBridgeBase(CapabilityRouter):
         nested = raw_config.get(session_id)
         if isinstance(nested, dict):
             return dict(nested)
+        # Session plugin config is stored as {session_id: {...}}, but session
+        # service config already lives directly under the per-session storage key.
+        # Accept both shapes so the bridge stays compatible with existing data.
         return dict(raw_config)
 
     def _serialize_persona(self, persona: Any) -> dict[str, Any] | None:
@@ -487,6 +530,14 @@ class CapabilityBridgeBase(CapabilityRouter):
         request_id: str,
         payload: dict[str, Any],
     ):
+        def _has_event(request_context: Any | None) -> bool:
+            if request_context is None:
+                return False
+            has_event = getattr(request_context, "has_event", None)
+            if has_event is not None:
+                return bool(has_event)
+            return hasattr(request_context, "event")
+
         target_payload = payload.get("target")
         dispatch_token = ""
         if isinstance(target_payload, dict):
@@ -498,8 +549,12 @@ class CapabilityBridgeBase(CapabilityRouter):
                     if isinstance(nested_raw, dict):
                         dispatch_token = str(nested_raw.get("dispatch_token", ""))
         if dispatch_token:
-            return self._plugin_bridge.get_request_context_by_token(dispatch_token)
-        return self._plugin_bridge.resolve_request_session(request_id)
+            request_context = self._plugin_bridge.get_request_context_by_token(
+                dispatch_token
+            )
+            return request_context if _has_event(request_context) else None
+        request_context = self._plugin_bridge.resolve_request_session(request_id)
+        return request_context if _has_event(request_context) else None
 
     def _resolve_current_group_request_context(
         self,
@@ -520,40 +575,4 @@ class CapabilityBridgeBase(CapabilityRouter):
 
     @staticmethod
     def _build_core_message_chain(chain_payload: list[dict[str, Any]]) -> MessageChain:
-        components = []
-        for item in chain_payload:
-            if not isinstance(item, dict):
-                continue
-            comp_type = str(item.get("type", "")).lower()
-            data = item.get("data", {})
-            if comp_type in {"text", "plain"} and isinstance(data, dict):
-                components.append(Plain(str(data.get("text", "")), convert=False))
-                continue
-            if comp_type == "image" and isinstance(data, dict):
-                file_value = str(data.get("file") or data.get("url") or "")
-                if file_value.startswith(("http://", "https://")):
-                    components.append(Image.fromURL(file_value))
-                elif file_value:
-                    file_path = (
-                        file_value[8:]
-                        if file_value.startswith("file:///")
-                        else file_value
-                    )
-                    components.append(Image.fromFileSystem(file_path))
-                continue
-            component_cls = ComponentTypes.get(comp_type)
-            if component_cls is None:
-                components.append(
-                    Plain(json.dumps(item, ensure_ascii=False), convert=False)
-                )
-                continue
-            try:
-                if isinstance(data, dict):
-                    components.append(component_cls(**data))
-                else:
-                    components.append(Plain(str(item), convert=False))
-            except Exception:
-                components.append(
-                    Plain(json.dumps(item, ensure_ascii=False), convert=False)
-                )
-        return MessageChain(components)
+        return _build_message_chain_from_payload(chain_payload)

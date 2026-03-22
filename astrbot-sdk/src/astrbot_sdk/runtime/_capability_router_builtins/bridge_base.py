@@ -185,4 +185,3 @@ class CapabilityRouterBridgeBase(CapabilityRouterHost):
             return int(value)
         except (TypeError, ValueError):
             return None
-

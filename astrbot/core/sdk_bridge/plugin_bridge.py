@@ -35,7 +35,6 @@ from astrbot_sdk.runtime.supervisor import WorkerSession
 from quart import request as quart_request
 
 from astrbot.core import logger
-from astrbot.core.message.components import ComponentTypes, Image, Plain
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import LLMResponse as CoreLLMResponse
@@ -46,6 +45,7 @@ from astrbot.core.skills.skill_manager import (
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
+from .bridge_base import _build_message_chain_from_payload
 from .capability_bridge import CoreCapabilityBridge
 from .event_converter import EventConverter
 from .trigger_converter import TriggerConverter, TriggerMatch
@@ -115,11 +115,19 @@ class _RequestContext:
     plugin_id: str
     request_id: str
     dispatch_token: str
-    dispatch_state: _DispatchState
+    dispatch_state: _DispatchState | None
     cancelled: bool = False
 
     @property
+    def has_event(self) -> bool:
+        return self.dispatch_state is not None
+
+    @property
     def event(self) -> AstrMessageEvent:
+        if self.dispatch_state is None:
+            raise AstrBotError.invalid_input(
+                "The current SDK request is not bound to a message event"
+            )
         return self.dispatch_state.event
 
 
@@ -736,6 +744,8 @@ class SdkPluginBridge:
                 updated.append(entry)
                 continue
             if not normalized_methods:
+                # Plugins do not have a separate "delete route" capability, so an
+                # empty method list means "remove every method registered on route".
                 continue
             remaining = tuple(
                 method for method in entry.methods if method not in normalized_methods
@@ -1140,6 +1150,14 @@ class SdkPluginBridge:
     def get_result_payload_for_request(self, request_id: str) -> dict[str, Any] | None:
         overlay = self.get_request_overlay_by_request_id(request_id)
         request_context = self.resolve_request_session(request_id)
+        request_context_has_event = False
+        if request_context is not None:
+            has_event = getattr(request_context, "has_event", None)
+            request_context_has_event = (
+                bool(has_event)
+                if has_event is not None
+                else hasattr(request_context, "event")
+            )
         if overlay is not None and overlay.result_is_set:
             if overlay.result_object is not None:
                 overlay.result_payload = self._legacy_result_to_sdk_payload(
@@ -1150,7 +1168,7 @@ class SdkPluginBridge:
                 if overlay.result_payload is not None
                 else None
             )
-        if request_context is None:
+        if request_context is None or not request_context_has_event:
             return None
         return self._legacy_result_to_sdk_payload(request_context.event.get_result())
 
@@ -1194,43 +1212,7 @@ class SdkPluginBridge:
     def _build_core_message_chain_from_payload(
         chain_payload: list[dict[str, Any]],
     ) -> MessageChain:
-        components = []
-        for item in chain_payload:
-            if not isinstance(item, dict):
-                continue
-            comp_type = str(item.get("type", "")).lower()
-            data = item.get("data", {})
-            if comp_type in {"text", "plain"} and isinstance(data, dict):
-                components.append(Plain(str(data.get("text", "")), convert=False))
-                continue
-            if comp_type == "image" and isinstance(data, dict):
-                file_value = str(data.get("file") or data.get("url") or "")
-                if file_value.startswith(("http://", "https://")):
-                    components.append(Image.fromURL(file_value))
-                elif file_value:
-                    file_path = (
-                        file_value[8:]
-                        if file_value.startswith("file:///")
-                        else file_value
-                    )
-                    components.append(Image.fromFileSystem(file_path))
-                continue
-            component_cls = ComponentTypes.get(comp_type)
-            if component_cls is None:
-                components.append(
-                    Plain(json.dumps(item, ensure_ascii=False), convert=False)
-                )
-                continue
-            try:
-                if isinstance(data, dict):
-                    components.append(component_cls(**data))
-                else:
-                    components.append(Plain(str(item), convert=False))
-            except Exception:
-                components.append(
-                    Plain(json.dumps(item, ensure_ascii=False), convert=False)
-                )
-        return MessageChain(components)
+        return _build_message_chain_from_payload(chain_payload)
 
     @classmethod
     def _build_core_result_from_chain_payload(
@@ -1551,9 +1533,11 @@ class SdkPluginBridge:
             raise AstrBotError.cancelled("The SDK request overlay has been closed")
         if request_context.cancelled:
             raise AstrBotError.cancelled("The SDK request has been cancelled")
-        request_context.dispatch_state.sent_message = True
+        if request_context.dispatch_state is not None:
+            request_context.dispatch_state.sent_message = True
         overlay.should_call_llm = False
-        request_context.event._has_send_oper = True
+        if request_context.has_event:
+            request_context.event._has_send_oper = True
         return f"sdk_{dispatch_token}"
 
     @staticmethod
@@ -2523,8 +2507,20 @@ class SdkPluginBridge:
             in {SDK_STATE_DISABLED, SDK_STATE_FAILED, SDK_STATE_RELOADING}
         ):
             return
+        dispatch_token = uuid.uuid4().hex
         request_id = f"sdk_schedule_{plugin_id}_{uuid.uuid4().hex}"
-        self._request_plugin_ids[request_id] = plugin_id
+        self._ensure_request_overlay(dispatch_token, should_call_llm=False)
+        self._request_contexts[dispatch_token] = _RequestContext(
+            plugin_id=plugin_id,
+            request_id=request_id,
+            dispatch_token=dispatch_token,
+            dispatch_state=None,
+        )
+        self._track_request_scope(
+            dispatch_token=dispatch_token,
+            request_id=request_id,
+            plugin_id=plugin_id,
+        )
         payload = self._build_schedule_payload(
             plugin_id=plugin_id,
             handler_id=handler_id,
@@ -2544,8 +2540,6 @@ class SdkPluginBridge:
                 handler_id,
                 exc,
             )
-        finally:
-            self._request_plugin_ids.pop(request_id, None)
 
     @staticmethod
     def _build_schedule_payload(
