@@ -392,6 +392,9 @@ class ProviderOpenAIOfficial(Provider):
         cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
         prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
         completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+        cached = cached or 0
+        prompt_tokens = prompt_tokens or 0
+        completion_tokens = completion_tokens or 0
         return TokenUsage(
             input_other=prompt_tokens - cached,
             input_cached=cached,
