@@ -17,9 +17,9 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-from ...register import register_platform_adapter
 from .message_parts_helper import (
     message_chain_to_storage_message_parts,
     parse_webchat_message_parts,

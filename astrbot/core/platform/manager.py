@@ -2,7 +2,6 @@ import asyncio
 import traceback
 from asyncio import Queue
 from dataclasses import dataclass
-from importlib import import_module
 
 from astrbot.core import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig

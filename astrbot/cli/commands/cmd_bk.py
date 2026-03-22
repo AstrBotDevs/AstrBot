@@ -7,36 +7,41 @@ from pathlib import Path
 import anyio
 import click
 
-from astrbot.core import astrbot_config, db_helper
+from astrbot.core import db_helper
 from astrbot.core.backup import AstrBotExporter, AstrBotImporter
-
-# Try importing KnowledgeBaseManager to support KB backup
-try:
-    from astrbot.core.knowledge.kb_manager import KnowledgeBaseManager
-except ImportError:
-    try:
-        from astrbot.core.knowledge_base.kb_manager import KnowledgeBaseManager
-    except ImportError:
-        KnowledgeBaseManager = None
 
 
 async def _get_kb_manager():
-    if KnowledgeBaseManager is None:
-        return None
+    """Initialize and return a KnowledgeBaseManager with full dependency chain."""
+    from astrbot.core import astrbot_config, sp
+    from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+    from astrbot.core.persona_mgr import PersonaManager
+    from astrbot.core.provider.manager import ProviderManager
+    from astrbot.core.umop_config_router import UmopConfigRouter
 
-    try:
-        # Best effort initialization
-        kb_mgr = KnowledgeBaseManager(astrbot_config, db_helper)
-        # If there are async load methods, we might need to call them
-        if hasattr(kb_mgr, "load_kbs_from_db"):
-            await kb_mgr.load_kbs_from_db()
-        elif hasattr(kb_mgr, "load_all"):
-            await kb_mgr.load_all()
-        return kb_mgr
-    except Exception:
-        # If KB manager fails to load (e.g. missing dependencies), return None
-        # so we can still backup other data
-        return None
+    ucr = UmopConfigRouter(sp=sp)
+    await ucr.initialize()
+
+    acm = AstrBotConfigManager(
+        default_config=astrbot_config,
+        ucr=ucr,
+        sp=sp,
+    )
+
+    persona_mgr = PersonaManager(db_helper, acm)
+    await persona_mgr.initialize()
+
+    provider_manager = ProviderManager(
+        acm,
+        db_helper,
+        persona_mgr,
+    )
+
+    kb_manager = KnowledgeBaseManager(provider_manager)
+    await kb_manager.initialize()
+
+    return kb_manager
 
 
 @click.group(name="bk")
@@ -138,8 +143,7 @@ def export_data(
                     "GPG tool not found. Please install GnuPG to use encryption/signing features."
                 )
 
-        kb_mgr = await _get_kb_manager()
-        exporter = AstrBotExporter(db_helper, kb_mgr)
+        exporter = AstrBotExporter(db_helper)
 
         async def on_progress(stage, current, total, message):
             click.echo(f"[{stage}] {message}")

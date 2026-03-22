@@ -46,7 +46,6 @@ from .star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
-    from astrbot.core.astr_agent_context import AstrAgentContext
     from astrbot.core.cron.manager import CronJobManager
 
 

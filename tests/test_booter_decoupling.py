@@ -540,8 +540,7 @@ class TestSubagentHandoffTools:
                 session_id=None,
                 sandbox_cfg={"booter": "shipyard"},
             )
-        assert len(tools) == 4
-        assert "astrbot_create_skill_candidate" not in tools
+        assert len(tools) == 0
 
     def test_sandbox_runtime_empty_config_still_gets_default_tools(self):
         try:

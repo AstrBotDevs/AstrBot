@@ -615,7 +615,7 @@ async def _compress_image_for_provider(
         if not enabled:
             return url_or_path
         return await compress_image(url_or_path, max_size=max_size, quality=quality)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("Image compression failed: %s", exc)
         return url_or_path
 
@@ -1293,7 +1293,7 @@ async def build_main_agent(
             ]
 
     if event.get_platform_name() == "webchat":
-        asyncio.create_task(_handle_webchat(event, req, provider))  # noqa: RUF006
+        asyncio.create_task(_handle_webchat(event, req, provider))
 
     if req.func_tool and req.func_tool.tools:
         # Sort tools by name for deterministic serialization so that
