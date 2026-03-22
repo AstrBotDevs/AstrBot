@@ -614,6 +614,30 @@
                 "description": "Отправлять ответы только через Webhook",
                 "hint": "Все ответы WeCom AI Bot будут идти через вебхук пуш-сообщений. Поддерживает больше типов контента."
             },
+            "weixin_oc_base_url": {
+                "description": "URL API iLink",
+                "hint": "Значение по умолчанию: https://ilinkai.weixin.qq.com"
+            },
+            "weixin_oc_bot_type": {
+                "description": "bot_type (параметр входа по QR)",
+                "hint": "Значение по умолчанию: 3"
+            },
+            "weixin_oc_qr_poll_interval": {
+                "description": "Интервал опроса статуса QR (сек)",
+                "hint": "Пауза между запросами статуса QR-кода."
+            },
+            "weixin_oc_long_poll_timeout_ms": {
+                "description": "Таймаут long-poll getUpdates (мс)",
+                "hint": "Параметр таймаута запроса получения сообщений."
+            },
+            "weixin_oc_api_timeout_ms": {
+                "description": "Таймаут HTTP запроса (мс)",
+                "hint": "Общий таймаут для HTTP запросов."
+            },
+            "weixin_oc_token": {
+                "description": "Token после входа (опционально)",
+                "hint": "Автоматически сохраняется после QR логина; для сложных сценариев можно ввести вручную."
+            },
             "kook_bot_token": {
                 "description": "Токен бота",
                 "type": "string",

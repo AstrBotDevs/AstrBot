@@ -7,6 +7,38 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 VERSION = "4.21.0"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
+PERSONAL_WECHAT_CONFIG_METADATA = {
+    "weixin_oc_base_url": {
+        "description": "iLink API 地址",
+        "type": "string",
+        "hint": "默认值: https://ilinkai.weixin.qq.com",
+    },
+    "weixin_oc_bot_type": {
+        "description": "扫码参数 bot_type",
+        "type": "string",
+        "hint": "默认值: 3",
+    },
+    "weixin_oc_qr_poll_interval": {
+        "description": "二维码状态轮询间隔（秒）",
+        "type": "int",
+        "hint": "每隔多少秒轮询一次二维码状态。",
+    },
+    "weixin_oc_long_poll_timeout_ms": {
+        "description": "getUpdates 长轮询超时时间（毫秒）",
+        "type": "int",
+        "hint": "会话消息拉取接口超时参数。",
+    },
+    "weixin_oc_api_timeout_ms": {
+        "description": "HTTP 请求超时（毫秒）",
+        "type": "int",
+        "hint": "通用 API 请求超时参数。",
+    },
+    "weixin_oc_token": {
+        "description": "登录后 token（可留空）",
+        "type": "string",
+        "hint": "扫码登录成功后会自动写入；高级场景可手动填写。",
+    },
+}
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
     "qq_official_webhook",
@@ -363,6 +395,16 @@ CONFIG_METADATA_2 = {
                         "webhook_uuid": "",
                         "callback_server_host": "0.0.0.0",
                         "port": 6198,
+                    },
+                    "个人微信": {
+                        "id": "weixin_personal",
+                        "type": "weixin_oc",
+                        "enable": False,
+                        "weixin_oc_base_url": "https://ilinkai.weixin.qq.com",
+                        "weixin_oc_bot_type": "3",
+                        "weixin_oc_qr_poll_interval": 1,
+                        "weixin_oc_long_poll_timeout_ms": 35_000,
+                        "weixin_oc_api_timeout_ms": 15_000,
                     },
                     "飞书(Lark)": {
                         "id": "lark",
@@ -869,6 +911,7 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。",
                     },
+                    **PERSONAL_WECHAT_CONFIG_METADATA,
                     "webhook_uuid": {
                         "invisible": True,
                         "description": "Webhook UUID",

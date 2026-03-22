@@ -618,6 +618,30 @@
         "description": "Send Replies via Webhook Only",
         "hint": "When enabled, all WeCom AI Bot replies are sent through msg_push_webhook_url. The message push webhook supports more message types (such as images, files, etc.). If you do not need the typing effect, it is strongly recommended to use this option. "
       },
+      "weixin_oc_base_url": {
+        "description": "iLink API Base URL",
+        "hint": "Default: https://ilinkai.weixin.qq.com"
+      },
+      "weixin_oc_bot_type": {
+        "description": "bot_type (QR login parameter)",
+        "hint": "Default: 3"
+      },
+      "weixin_oc_qr_poll_interval": {
+        "description": "QR status poll interval (seconds)",
+        "hint": "Polling interval in seconds for QR code status."
+      },
+      "weixin_oc_long_poll_timeout_ms": {
+        "description": "getUpdates long-poll timeout (ms)",
+        "hint": "Timeout parameter for polling messages."
+      },
+      "weixin_oc_api_timeout_ms": {
+        "description": "HTTP timeout (ms)",
+        "hint": "Generic API request timeout."
+      },
+      "weixin_oc_token": {
+        "description": "Token after login (optional)",
+        "hint": "Automatically written after QR login; can be filled manually for advanced scenarios."
+      },
       "kook_bot_token": {
         "description": "Bot Token",
         "type": "string",

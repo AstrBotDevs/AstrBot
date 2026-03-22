@@ -620,6 +620,30 @@
         "description": "仅使用 Webhook 发送消息",
         "hint": "可选。启用后，企业微信智能机器人的所有回复都改为通过消息推送 Webhook 发送。消息推送 Webhook 支持更多的消息类型（如图片、文件等）。如果不需要打字机效果，强烈建议使用此选项。"
       },
+      "weixin_oc_base_url": {
+        "description": "iLink API 地址",
+        "hint": "默认值: https://ilinkai.weixin.qq.com"
+      },
+      "weixin_oc_bot_type": {
+        "description": "扫码参数 bot_type",
+        "hint": "默认值: 3"
+      },
+      "weixin_oc_qr_poll_interval": {
+        "description": "二维码状态轮询间隔（秒）",
+        "hint": "每隔多少秒轮询一次二维码状态。"
+      },
+      "weixin_oc_long_poll_timeout_ms": {
+        "description": "getUpdates 长轮询超时时间（毫秒）",
+        "hint": "会话消息拉取接口超时参数。"
+      },
+      "weixin_oc_api_timeout_ms": {
+        "description": "HTTP 请求超时（毫秒）",
+        "hint": "通用 API 请求超时参数。"
+      },
+      "weixin_oc_token": {
+        "description": "登录后 token（可留空）",
+        "hint": "扫码登录成功后会自动写入；高级场景可手动填写。"
+      },
       "kook_bot_token": {
         "description": "机器人 Token",
         "type": "string",
