@@ -1451,6 +1451,9 @@ class ConfigRoute(Route):
             "platform_group"
         ]["metadata"]["platform"]
 
+        # 预加载内置平台适配器，确保配置页能展示全部平台选项
+        self.core_lifecycle.platform_manager.preload_builtin_platforms()
+
         # 平台适配器的默认配置模板注入
         platform_default_tmpl = metadata["platform_group"]["metadata"]["platform"][
             "config_template"
