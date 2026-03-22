@@ -11,8 +11,6 @@ from astrbot.core import db_helper
 from astrbot.core.backup import AstrBotExporter, AstrBotImporter
 
 
-
-
 async def _get_kb_manager():
     """Initialize and return a KnowledgeBaseManager with full dependency chain."""
     from astrbot.core import astrbot_config, sp
@@ -21,28 +19,28 @@ async def _get_kb_manager():
     from astrbot.core.persona_mgr import PersonaManager
     from astrbot.core.provider.manager import ProviderManager
     from astrbot.core.umop_config_router import UmopConfigRouter
-    
+
     ucr = UmopConfigRouter(sp=sp)
     await ucr.initialize()
-    
+
     acm = AstrBotConfigManager(
         default_config=astrbot_config,
         ucr=ucr,
         sp=sp,
     )
-    
+
     persona_mgr = PersonaManager(db_helper, acm)
     await persona_mgr.initialize()
-    
+
     provider_manager = ProviderManager(
         acm,
         db_helper,
         persona_mgr,
     )
-    
+
     kb_manager = KnowledgeBaseManager(provider_manager)
     await kb_manager.initialize()
-    
+
     return kb_manager
 
 

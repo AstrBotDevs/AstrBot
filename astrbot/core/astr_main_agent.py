@@ -1293,7 +1293,7 @@ async def build_main_agent(
             ]
 
     if event.get_platform_name() == "webchat":
-        asyncio.create_task(_handle_webchat(event, req, provider))  # noqa: RUF006
+        asyncio.create_task(_handle_webchat(event, req, provider))
 
     if req.func_tool and req.func_tool.tools:
         # Sort tools by name for deterministic serialization so that
