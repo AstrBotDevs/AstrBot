@@ -1025,3 +1025,323 @@ async def test_batch_upload_skills_partial_success(
     assert data["data"]["failed"] == [
         {"filename": "bad_skill.zip", "error": "install failed"}
     ]
+
+
+@pytest.mark.asyncio
+async def test_tui_new_session(app: Quart, authenticated_header: dict):
+    """Test creating a new TUI session."""
+    test_client = app.test_client()
+
+    response = await test_client.get("/api/tui/new_session", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert "session_id" in data["data"]
+    assert data["data"]["platform_id"] == "tui"
+
+
+@pytest.mark.asyncio
+async def test_tui_get_sessions(app: Quart, authenticated_header: dict):
+    """Test getting TUI sessions."""
+    test_client = app.test_client()
+
+    # Create a session first
+    new_session_response = await test_client.get(
+        "/api/tui/new_session", headers=authenticated_header
+    )
+    new_session_data = await new_session_response.get_json()
+    session_id = new_session_data["data"]["session_id"]
+
+    # Get sessions
+    response = await test_client.get("/api/tui/sessions", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert isinstance(data["data"], list)
+    # Find our created session
+    tui_sessions = [s for s in data["data"] if s["session_id"] == session_id]
+    assert len(tui_sessions) == 1
+    assert tui_sessions[0]["platform_id"] == "tui"
+
+
+@pytest.mark.asyncio
+async def test_tui_get_session_with_history(
+    app: Quart, authenticated_header: dict
+):
+    """Test getting a single TUI session with history."""
+    test_client = app.test_client()
+
+    # Create a session first
+    new_session_response = await test_client.get(
+        "/api/tui/new_session", headers=authenticated_header
+    )
+    new_session_data = await new_session_response.get_json()
+    session_id = new_session_data["data"]["session_id"]
+
+    # Get the session
+    response = await test_client.get(
+        f"/api/tui/get_session?session_id={session_id}",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert "history" in data["data"]
+    assert isinstance(data["data"]["history"], list)
+    assert data["data"]["is_running"] is False
+
+
+@pytest.mark.asyncio
+async def test_tui_get_session_missing_session_id(
+    app: Quart, authenticated_header: dict
+):
+    """Test that get_session returns error when session_id is missing."""
+    test_client = app.test_client()
+
+    response = await test_client.get("/api/tui/get_session", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "session_id" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_tui_update_session_display_name(
+    app: Quart, authenticated_header: dict
+):
+    """Test updating a TUI session's display name."""
+    test_client = app.test_client()
+
+    # Create a session first
+    new_session_response = await test_client.get(
+        "/api/tui/new_session", headers=authenticated_header
+    )
+    new_session_data = await new_session_response.get_json()
+    session_id = new_session_data["data"]["session_id"]
+
+    # Update the display name
+    response = await test_client.post(
+        "/api/tui/update_session_display_name",
+        headers=authenticated_header,
+        json={"session_id": session_id, "display_name": "My Test Session"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_tui_update_session_missing_params(
+    app: Quart, authenticated_header: dict
+):
+    """Test that update_session_display_name returns error when params are missing."""
+    test_client = app.test_client()
+
+    # Missing session_id
+    response = await test_client.post(
+        "/api/tui/update_session_display_name",
+        headers=authenticated_header,
+        json={"display_name": "Test"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "session_id" in data["message"]
+
+    # Missing display_name
+    response = await test_client.post(
+        "/api/tui/update_session_display_name",
+        headers=authenticated_header,
+        json={"session_id": "test-session"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "display_name" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_tui_delete_session(
+    app: Quart, authenticated_header: dict
+):
+    """Test deleting a TUI session."""
+    test_client = app.test_client()
+
+    # Create a session first
+    new_session_response = await test_client.get(
+        "/api/tui/new_session", headers=authenticated_header
+    )
+    new_session_data = await new_session_response.get_json()
+    session_id = new_session_data["data"]["session_id"]
+
+    # Delete the session
+    response = await test_client.get(
+        f"/api/tui/delete_session?session_id={session_id}",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+
+    # Verify by listing sessions - the deleted session should not appear
+    sessions_response = await test_client.get(
+        "/api/tui/sessions", headers=authenticated_header
+    )
+    sessions_data = await sessions_response.get_json()
+    tui_sessions = [
+        s for s in sessions_data["data"] if s["session_id"] == session_id
+    ]
+    assert len(tui_sessions) == 0
+
+
+@pytest.mark.asyncio
+async def test_tui_delete_session_missing_id(
+    app: Quart, authenticated_header: dict
+):
+    """Test that delete_session returns error when session_id is missing."""
+    test_client = app.test_client()
+
+    response = await test_client.get("/api/tui/delete_session", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "session_id" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_tui_delete_session_not_found(
+    app: Quart, authenticated_header: dict
+):
+    """Test that delete_session returns error when session is not found."""
+    test_client = app.test_client()
+
+    response = await test_client.get(
+        "/api/tui/delete_session?session_id=nonexistent-session",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "not found" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_tui_stop_session(
+    app: Quart, authenticated_header: dict
+):
+    """Test stopping a TUI session."""
+    test_client = app.test_client()
+
+    # Create a session first
+    new_session_response = await test_client.get(
+        "/api/tui/new_session", headers=authenticated_header
+    )
+    new_session_data = await new_session_response.get_json()
+    session_id = new_session_data["data"]["session_id"]
+
+    # Stop the session (will return 0 since no agent is running)
+    response = await test_client.post(
+        "/api/tui/stop",
+        headers=authenticated_header,
+        json={"session_id": session_id},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["stopped_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_tui_stop_session_missing_params(
+    app: Quart, authenticated_header: dict
+):
+    """Test that stop_session returns error when params are missing."""
+    test_client = app.test_client()
+
+    # Missing session_id
+    response = await test_client.post(
+        "/api/tui/stop",
+        headers=authenticated_header,
+        json={},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "session_id" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_tui_stop_session_not_found(
+    app: Quart, authenticated_header: dict
+):
+    """Test that stop_session returns error when session is not found."""
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/tui/stop",
+        headers=authenticated_header,
+        json={"session_id": "nonexistent-session"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "not found" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_tui_batch_delete_sessions(
+    app: Quart, authenticated_header: dict
+):
+    """Test batch deleting TUI sessions."""
+    test_client = app.test_client()
+
+    # Create two sessions
+    session1_response = await test_client.get(
+        "/api/tui/new_session", headers=authenticated_header
+    )
+    session1_id = (await session1_response.get_json())["data"]["session_id"]
+
+    session2_response = await test_client.get(
+        "/api/tui/new_session", headers=authenticated_header
+    )
+    session2_id = (await session2_response.get_json())["data"]["session_id"]
+
+    # Batch delete
+    response = await test_client.post(
+        "/api/tui/batch_delete_sessions",
+        headers=authenticated_header,
+        json={"session_ids": [session1_id, session2_id]},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["deleted_count"] == 2
+    assert data["data"]["failed_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_tui_batch_delete_sessions_missing_params(
+    app: Quart, authenticated_header: dict
+):
+    """Test that batch_delete_sessions returns error when params are missing."""
+    test_client = app.test_client()
+
+    # Missing session_ids
+    response = await test_client.post(
+        "/api/tui/batch_delete_sessions",
+        headers=authenticated_header,
+        json={},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+    # Invalid session_ids type
+    response = await test_client.post(
+        "/api/tui/batch_delete_sessions",
+        headers=authenticated_header,
+        json={"session_ids": "not-a-list"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
