@@ -6,19 +6,29 @@ from typing import Any
 from ....errors import AstrBotError
 from ..bridge_base import CapabilityRouterBridgeBase
 
-# 路由只允许字母、数字、/, -, _, . 以及路径参数 {param}，且必须以 / 开头
-# 禁止 .. 防止路径遍历，禁止连续斜杠
-_ROUTE_SAFE_RE = re.compile(r"^(/[\w\-._{}]*)+$")
+# 路由只允许字母、数字、/, -, _, . 以及路径参数 {param}，且必须以 / 开头。
+# 参数段必须完整地形如 {param}，同时禁止空段（例如连续斜杠）。
+_ROUTE_SEGMENT_RE = re.compile(r"^(?:[\w\-._]+|\{[\w\-._]+\})$")
 
 
 def _validate_route(route: str, capability_name: str) -> None:
     """校验 HTTP 路由路径格式，阻止路径遍历和非法字符。"""
     if ".." in route:
         raise AstrBotError.invalid_input(f"{capability_name}: 路由路径不允许包含 '..'")
-    if not _ROUTE_SAFE_RE.match(route):
+    if not route.startswith("/"):
         raise AstrBotError.invalid_input(
             f"{capability_name}: 路由路径格式非法，只允许字母/数字/-/_/./{{param}} 段，"
             "且必须以 / 开头，如 /foo/bar"
+        )
+    if route == "/":
+        return
+    segments = route.split("/")[1:]
+    if any(
+        not segment or not _ROUTE_SEGMENT_RE.fullmatch(segment) for segment in segments
+    ):
+        raise AstrBotError.invalid_input(
+            f"{capability_name}: 路由路径格式非法，只允许字母/数字/-/_/./{{param}} 段，"
+            "禁止连续斜杠，且必须以 / 开头，如 /foo/bar"
         )
 
 

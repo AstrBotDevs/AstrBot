@@ -30,7 +30,6 @@ openspec/
 scripts/
 cs/
 test_plugin/astrbot_plugin_interface_coverage
-docs/
 astrbot_sdk/
 !src/astrbot_sdk/
 !src/astrbot_sdk/**

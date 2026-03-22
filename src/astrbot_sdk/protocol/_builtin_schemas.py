@@ -722,7 +722,7 @@ MESSAGE_HISTORY_PAGE_SCHEMA = _object_schema(
 MESSAGE_HISTORY_LIST_INPUT_SCHEMA = _object_schema(
     required=("session",),
     session=MESSAGE_HISTORY_SESSION_SCHEMA,
-    cursor=_nullable({"type": "string"}),
+    cursor=_nullable({"type": "string", "pattern": "^(|[1-9][0-9]*)$"}),
     limit={"type": "integer", "minimum": 1},
 )
 MESSAGE_HISTORY_LIST_OUTPUT_SCHEMA = _object_schema(

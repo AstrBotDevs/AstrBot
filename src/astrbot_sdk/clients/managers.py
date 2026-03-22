@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -58,6 +58,17 @@ def _normalize_message_history_parts(
             )
         normalized.append(component_to_payload_sync(part))
     return normalized
+
+
+def _normalize_message_history_boundary(value: datetime) -> str:
+    if not isinstance(value, datetime):
+        raise TypeError("message_history boundary requires datetime")
+    normalized = value
+    if normalized.tzinfo is None:
+        normalized = normalized.replace(tzinfo=timezone.utc)
+    else:
+        normalized = normalized.astimezone(timezone.utc)
+    return normalized.isoformat()
 
 
 class PersonaRecord(_ManagerModel):
@@ -677,7 +688,7 @@ class MessageHistoryManagerClient:
             "message_history.delete_before",
             {
                 "session": _require_message_history_session(session),
-                "before": before.isoformat(),
+                "before": _normalize_message_history_boundary(before),
             },
         )
         return int(output.get("deleted_count", 0) or 0)
@@ -692,7 +703,7 @@ class MessageHistoryManagerClient:
             "message_history.delete_after",
             {
                 "session": _require_message_history_session(session),
-                "after": after.isoformat(),
+                "after": _normalize_message_history_boundary(after),
             },
         )
         return int(output.get("deleted_count", 0) or 0)
