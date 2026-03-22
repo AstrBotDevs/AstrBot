@@ -323,6 +323,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 tools=toolset,
                 contexts=contexts,
                 max_steps=agent_max_step,
+                tool_call_timeout=run_context.tool_call_timeout,
                 stream=stream,
             )
             if _subagent_span is not None and _subagent_span.finished_at is None:
@@ -516,7 +517,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
         cron_event.role = event.role
         config = MainAgentBuildConfig(
-            tool_call_timeout=3600,
+            tool_call_timeout=run_context.tool_call_timeout,
             streaming_response=ctx.get_config()
             .get("provider_settings", {})
             .get("stream", False),
