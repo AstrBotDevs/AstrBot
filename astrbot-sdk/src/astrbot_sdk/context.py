@@ -20,6 +20,7 @@ Attributes:
     message_history: 消息历史管理客户端
     http: HTTP 客户端，用于注册 API 端点
     metadata: 元数据客户端，用于查询插件信息
+    mcp: MCP 管理客户端，用于本地/全局 MCP 服务管理
     skills: Skill 客户端，用于向 AstrBot 注册插件技能
     plugin_id: 当前插件的唯一标识
     logger: 绑定了插件 ID 的日志器
@@ -42,6 +43,7 @@ from .clients import (
     DBClient,
     HTTPClient,
     LLMClient,
+    MCPManagerClient,
     MemoryClient,
     MetadataClient,
     PlatformClient,
@@ -240,6 +242,7 @@ class Context:
         message_history: 消息历史管理客户端
         http: HTTP 客户端
         metadata: 元数据客户端
+        mcp: MCP 管理客户端
         plugin_id: 当前插件 ID
         logger: 日志器
         cancel_token: 取消令牌
@@ -291,6 +294,7 @@ class Context:
         self.message_history = MessageHistoryManagerClient(proxy)
         self.http = HTTPClient(proxy)
         self.metadata = MetadataClient(proxy, plugin_id)
+        self.mcp = MCPManagerClient(proxy)
         self.registry = RegistryClient(proxy)
         self.skills = SkillClient(proxy)
         self.session_plugins = SessionPluginManager(proxy)
@@ -299,6 +303,7 @@ class Context:
         self.conversation_manager = self.conversations
         self.kb_manager = self.kbs
         self.message_history_manager = self.message_history
+        self.mcp_manager = self.mcp
         self._llm_tool_manager = LLMToolManager(proxy)
         self.plugin_id = plugin_id
         self.logger: PluginLogger = (

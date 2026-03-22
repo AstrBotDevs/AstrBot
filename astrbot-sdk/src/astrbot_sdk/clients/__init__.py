@@ -43,6 +43,7 @@ from .managers import (
     PersonaRecord,
     PersonaUpdateParams,
 )
+from .mcp import MCPManagerClient, MCPServerRecord, MCPServerScope, MCPSession
 from .memory import MemoryClient
 from .metadata import MetadataClient, PluginMetadata, StarMetadata
 from .platform import PlatformClient, PlatformError, PlatformStats, PlatformStatus
@@ -75,6 +76,10 @@ __all__ = [
     "MessageHistorySender",
     "LLMClient",
     "LLMResponse",
+    "MCPManagerClient",
+    "MCPSession",
+    "MCPServerRecord",
+    "MCPServerScope",
     "MemoryClient",
     "ManagedProviderRecord",
     "MetadataClient",

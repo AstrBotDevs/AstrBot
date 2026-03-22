@@ -31,6 +31,7 @@ from .clients.managers import (
     PersonaRecord,
     PersonaUpdateParams,
 )
+from .clients.mcp import MCPManagerClient, MCPServerRecord, MCPServerScope, MCPSession
 from .clients.metadata import PluginMetadata, StarMetadata
 from .clients.platform import PlatformError, PlatformStats, PlatformStatus
 from .clients.provider import (
@@ -48,6 +49,7 @@ from .conversation import (
     ConversationState,
 )
 from .decorators import (
+    acknowledge_global_mcp_risk,
     admin_only,
     conversation_command,
     cooldown,
@@ -133,6 +135,10 @@ __all__ = [
     "KnowledgeBaseRetrieveResultItem",
     "KnowledgeBaseUpdateParams",
     "ManagedProviderRecord",
+    "MCPManagerClient",
+    "MCPSession",
+    "MCPServerRecord",
+    "MCPServerScope",
     "MediaHelper",
     "MessageHistoryManagerClient",
     "MessageHistoryPage",
@@ -169,6 +175,7 @@ __all__ = [
     "StarTools",
     "UnknownComponent",
     "Video",
+    "acknowledge_global_mcp_risk",
     "admin_only",
     "all_of",
     "any_of",

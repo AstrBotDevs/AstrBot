@@ -915,3 +915,14 @@ def register_agent(
         return cls
 
     return decorator
+
+
+def acknowledge_global_mcp_risk(cls: type[Any]) -> type[Any]:
+    """Mark an SDK plugin class as eligible to mutate global MCP state.
+
+    This is intentionally a coarse, class-level marker. Runtime enforcement lives
+    in the Core MCP capability bridge.
+    """
+
+    setattr(cls, "__astrbot_acknowledge_global_mcp_risk__", True)
+    return cls
