@@ -738,7 +738,7 @@ onMounted(async () => {
             </div>
 
             <v-divider class="mt-4 mb-4"></v-divider>
-            <div style="margin-top: 16px; margin-bottom: 16px;">
+            <div class="my-4">
               <h3 class="mb-2">{{ t('core.header.updateDialog.commitHash.title') }}</h3>
               <small class="mb-3 d-block">{{ t('core.header.updateDialog.commitHash.description') }}</small>
               <div class="d-flex align-center ga-3">
@@ -750,11 +750,11 @@ onMounted(async () => {
                   variant="outlined"
                   hide-details="auto"
                   maxlength="40"
-                  style="max-width: 420px; font-family: monospace;"
+                  class="commit-hash-input"
                 />
                 <v-btn
                   color="primary"
-                  style="border-radius: 10px;"
+                  class="commit-hash-btn"
                   :disabled="!isCommitHashValid"
                   :loading="installLoading"
                   @click="switchVersion(commitHashInput)"
@@ -1112,5 +1112,14 @@ onMounted(async () => {
   .v-btn-toggle .v-icon {
     font-size: 16px;
   }
+}
+
+.commit-hash-input {
+  max-width: 420px;
+  font-family: monospace;
+}
+
+.commit-hash-btn {
+  border-radius: 10px;
 }
 </style>
