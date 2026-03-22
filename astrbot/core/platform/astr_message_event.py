@@ -262,7 +262,7 @@ class AstrMessageEvent(abc.ABC):
         目前仅支持: telegram,qq official 私聊｡
         Fallback仅支持 aiocqhttp｡
         """
-        asyncio.create_task(
+        asyncio.create_task(  # noqa: RUF006  # noqa: RUF006
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
         )
         self._has_send_oper = True
@@ -443,7 +443,7 @@ class AstrMessageEvent(abc.ABC):
         # Leverage BLAKE2 hash function to generate a non-reversible hash of the sender ID for privacy.
         hash_obj = hashlib.blake2b(self.get_sender_id().encode("utf-8"), digest_size=16)
         sid = str(uuid.UUID(bytes=hash_obj.digest()))
-        asyncio.create_task(
+        asyncio.create_task(  # noqa: RUF006
             Metric.upload(
                 msg_event_tick=1,
                 adapter_name=self.platform_meta.name,

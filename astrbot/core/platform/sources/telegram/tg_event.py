@@ -521,7 +521,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             )
 
         # 内联父类 send_streaming 的副作用(避免传入已消费的 generator)
-        asyncio.create_task(
+        asyncio.create_task(  # noqa: RUF006
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
         )
         self._has_send_oper = True
