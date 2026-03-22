@@ -158,7 +158,7 @@ history = [
 history = [
     ChatMessage(role="user", content="你好"),
     {"role": "assistant", "content": "你好！"},
-    {"role": "user", "content":今天天气怎么样？"},
+    {"role": "user", "content": "今天天气怎么样？"},
 ]
 ```
 
