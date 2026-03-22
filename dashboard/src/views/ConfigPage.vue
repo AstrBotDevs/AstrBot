@@ -145,9 +145,7 @@
         <v-divider v-if="showConfigForm" class="my-6"></v-divider>
 
         <div v-if="showConfigForm">
-          <h3 class="mb-4">
-            {{ isEditingConfig ? tm('configManagement.editConfig') : (isCopyingConfig ? tm('configManagement.copyConfig') : tm('configManagement.newConfig')) }}
-          </h3>
+          <h3 class="mb-4">{{ configFormTitle }}</h3>
 
           <h4>{{ tm('configManagement.configName') }}</h4>
 
@@ -157,7 +155,7 @@
           <div class="d-flex justify-end mt-4" style="gap: 8px;">
             <v-btn variant="text" @click="cancelConfigForm">{{ tm('buttons.cancel') }}</v-btn>
             <v-btn color="primary" @click="saveConfigForm"
-              :disabled="!configFormData.name || (isCopyingConfig && !copySourceConfigId)">
+              :disabled="isConfigFormSaveDisabled">
               {{ isEditingConfig ? tm('buttons.update') : tm('buttons.create') }}
             </v-btn>
           </div>
@@ -302,6 +300,19 @@ export default {
     },
     selectedConfigInfo() {
       return this.configInfoList.find(info => info.id === this.selectedConfigID) || {};
+    },
+    configFormTitle() {
+      if (this.isEditingConfig) {
+        return this.tm('configManagement.editConfig');
+      }
+      if (this.isCopyingConfig) {
+        return this.tm('configManagement.copyConfig');
+      }
+      return this.tm('configManagement.newConfig');
+    },
+    isConfigFormSaveDisabled() {
+      const isNameEmpty = !this.normalizeConfigName(this.configFormData.name);
+      return isNameEmpty || (this.isCopyingConfig && !this.copySourceConfigId);
     },
     configSelectItems() {
       const items = [...this.configInfoList];
@@ -575,8 +586,7 @@ export default {
         this.save_message_snack = true;
       }
     },
-    createNewConfig() {
-      const configName = this.normalizeConfigName(this.configFormData.name);
+    createNewConfig(configName) {
       axios.post('/api/config/abconf/new', {
         name: configName
       }).then((res) => {
@@ -599,7 +609,7 @@ export default {
       });
     },
     normalizeConfigName(name) {
-      return (name || '').trim();
+      return typeof name === 'string' ? name.trim() : '';
     },
     hasDuplicateConfigName(name, excludeId = null) {
       const normalizedName = this.normalizeConfigName(name);
@@ -665,46 +675,32 @@ export default {
         }
       }
     },
+    setConfigFormState({ mode = 'create', config = null, visible = true } = {}) {
+      this.showConfigForm = visible;
+      this.isEditingConfig = mode === 'edit';
+      this.isCopyingConfig = mode === 'copy';
+      this.editingConfigId = this.isEditingConfig && config ? config.id : null;
+      this.copySourceConfigId = this.isCopyingConfig && config ? config.id : '';
+
+      let name = '';
+      if (this.isEditingConfig && config) {
+        name = config.name || '';
+      } else if (this.isCopyingConfig && config) {
+        name = `${config.name || ''}-copy`;
+      }
+      this.configFormData = { name };
+    },
     startCreateConfig() {
-      this.showConfigForm = true;
-      this.isEditingConfig = false;
-      this.isCopyingConfig = false;
-      this.configFormData = {
-        name: '',
-      };
-      this.editingConfigId = null;
-      this.copySourceConfigId = '';
+      this.setConfigFormState({ mode: 'create' });
     },
     startEditConfig(config) {
-      this.showConfigForm = true;
-      this.isEditingConfig = true;
-      this.isCopyingConfig = false;
-      this.editingConfigId = config.id;
-
-      this.configFormData = {
-        name: config.name || '',
-      };
-      this.copySourceConfigId = '';
+      this.setConfigFormState({ mode: 'edit', config });
     },
     startCopyConfig(config) {
-      this.showConfigForm = true;
-      this.isEditingConfig = false;
-      this.isCopyingConfig = true;
-      this.editingConfigId = null;
-      this.copySourceConfigId = config.id;
-      this.configFormData = {
-        name: `${config.name}-copy`,
-      };
+      this.setConfigFormState({ mode: 'copy', config });
     },
     cancelConfigForm() {
-      this.showConfigForm = false;
-      this.isEditingConfig = false;
-      this.isCopyingConfig = false;
-      this.editingConfigId = null;
-      this.configFormData = {
-        name: '',
-      };
-      this.copySourceConfigId = '';
+      this.setConfigFormState({ visible: false });
     },
     saveConfigForm() {
       const normalizedName = this.normalizeConfigName(this.configFormData.name);
@@ -723,15 +719,14 @@ export default {
       }
       this.configFormData.name = normalizedName;
       if (this.isEditingConfig) {
-        this.updateConfigInfo();
+        this.updateConfigInfo(normalizedName);
       } else if (this.isCopyingConfig) {
-        this.copyConfig();
+        this.copyConfig(normalizedName);
       } else {
-        this.createNewConfig();
+        this.createNewConfig(normalizedName);
       }
     },
-    copyConfig() {
-      const configName = this.normalizeConfigName(this.configFormData.name);
+    copyConfig(configName) {
       axios.get('/api/config/abconf', {
         params: { id: this.copySourceConfigId }
       }).then((res) => {
@@ -795,8 +790,7 @@ export default {
         this.save_message_success = "error";
       });
     },
-    updateConfigInfo() {
-      const configName = this.normalizeConfigName(this.configFormData.name);
+    updateConfigInfo(configName) {
       axios.post('/api/config/abconf/update', {
         id: this.editingConfigId,
         name: configName
