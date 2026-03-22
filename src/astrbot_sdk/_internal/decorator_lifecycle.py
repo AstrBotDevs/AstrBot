@@ -109,6 +109,16 @@ def _normalize_provider_type(value: Any) -> str:
     return str(value).strip().lower()
 
 
+def _is_valid_schema_expected_type(value: Any) -> bool:
+    if isinstance(value, type):
+        return True
+    return (
+        isinstance(value, tuple)
+        and len(value) > 0
+        and all(isinstance(item, type) for item in value)
+    )
+
+
 async def _run_model_validation(
     *,
     instance: Any,
@@ -151,6 +161,15 @@ def _validate_schema_config(
             validated[field_name] = value
             continue
         expected_type = field_schema.get("type")
+        if (
+            expected_type is not None
+            and not _is_valid_schema_expected_type(expected_type)
+        ):
+            errors.append(
+                f"{field_name}: invalid schema 'type' entry {expected_type!r}; "
+                "expected a type or tuple of types"
+            )
+            continue
         if expected_type is not None and not isinstance(value, expected_type):
             errors.append(
                 f"{field_name}: expected {getattr(expected_type, '__name__', expected_type)}, "
