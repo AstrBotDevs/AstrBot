@@ -1,10 +1,22 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from astrbot.core.skills.skill_manager import SkillManager
+
+
+@dataclass
+class MockAstrbotPaths:
+    """Mock AstrbotPaths for testing."""
+    root: Path
+    data: Path
+    config: Path
+    skills: Path
+    temp: Path
 
 
 def _write_skill(root: Path, name: str, description: str) -> None:
@@ -16,25 +28,30 @@ def _write_skill(root: Path, name: str, description: str) -> None:
     )
 
 
-def test_list_skills_merges_local_and_sandbox_cache(monkeypatch, tmp_path: Path):
+def _create_mock_astrbot_paths(tmp_path: Path) -> MockAstrbotPaths:
+    """Create a mock AstrbotPaths object with temp directories."""
     data_dir = tmp_path / "data"
+    config_dir = data_dir / "config"
     temp_dir = tmp_path / "temp"
     skills_root = tmp_path / "skills"
     data_dir.mkdir(parents=True, exist_ok=True)
+    config_dir.mkdir(parents=True, exist_ok=True)
     temp_dir.mkdir(parents=True, exist_ok=True)
     skills_root.mkdir(parents=True, exist_ok=True)
-
-    monkeypatch.setattr(
-        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
-        lambda: str(data_dir),
-    )
-    monkeypatch.setattr(
-        "astrbot.core.skills.skill_manager.get_astrbot_temp_path",
-        lambda: str(temp_dir),
+    return MockAstrbotPaths(
+        root=tmp_path,
+        data=data_dir,
+        config=config_dir,
+        skills=skills_root,
+        temp=temp_dir,
     )
 
-    mgr = SkillManager(skills_root=str(skills_root))
-    _write_skill(skills_root, "custom-local", "local description")
+
+def test_list_skills_merges_local_and_sandbox_cache(tmp_path: Path):
+    mock_paths = _create_mock_astrbot_paths(tmp_path)
+
+    mgr = SkillManager(skills_root=str(mock_paths.skills), astrbot_paths=mock_paths)
+    _write_skill(mock_paths.skills, "custom-local", "local description")
 
     mgr.set_sandbox_skills_cache(
         [
@@ -61,27 +78,9 @@ def test_list_skills_merges_local_and_sandbox_cache(monkeypatch, tmp_path: Path)
     assert by_name["python-sandbox"].path == "/app/skills/python-sandbox/SKILL.md"
 
 
-def test_sandbox_cached_skill_respects_active_and_display_path(
-    monkeypatch,
-    tmp_path: Path,
-):
-    data_dir = tmp_path / "data"
-    temp_dir = tmp_path / "temp"
-    skills_root = tmp_path / "skills"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    skills_root.mkdir(parents=True, exist_ok=True)
-
-    monkeypatch.setattr(
-        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
-        lambda: str(data_dir),
-    )
-    monkeypatch.setattr(
-        "astrbot.core.skills.skill_manager.get_astrbot_temp_path",
-        lambda: str(temp_dir),
-    )
-
-    mgr = SkillManager(skills_root=str(skills_root))
+def test_sandbox_cached_skill_respects_active_and_display_path(tmp_path: Path):
+    mock_paths = _create_mock_astrbot_paths(tmp_path)
+    mgr = SkillManager(skills_root=str(mock_paths.skills), astrbot_paths=mock_paths)
     mgr.set_sandbox_skills_cache(
         [
             {
@@ -108,28 +107,10 @@ def test_sandbox_cached_skill_respects_active_and_display_path(
     assert active_skills[0].name == "browser-automation"
 
 
-def test_sandbox_and_local_path_resolution_with_show_sandbox_path_false(
-    monkeypatch,
-    tmp_path: Path,
-):
-    data_dir = tmp_path / "data"
-    temp_dir = tmp_path / "temp"
-    skills_root = tmp_path / "skills"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    skills_root.mkdir(parents=True, exist_ok=True)
-
-    monkeypatch.setattr(
-        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
-        lambda: str(data_dir),
-    )
-    monkeypatch.setattr(
-        "astrbot.core.skills.skill_manager.get_astrbot_temp_path",
-        lambda: str(temp_dir),
-    )
-
-    mgr = SkillManager(skills_root=str(skills_root))
-    _write_skill(skills_root, "custom-local", "local description")
+def test_sandbox_and_local_path_resolution_with_show_sandbox_path_false(tmp_path: Path):
+    mock_paths = _create_mock_astrbot_paths(tmp_path)
+    mgr = SkillManager(skills_root=str(mock_paths.skills), astrbot_paths=mock_paths)
+    _write_skill(mock_paths.skills, "custom-local", "local description")
     mgr.set_sandbox_skills_cache(
         [
             {
@@ -151,7 +132,7 @@ def test_sandbox_and_local_path_resolution_with_show_sandbox_path_false(
     assert sorted(by_name) == ["custom-local", "python-sandbox"]
     assert by_name["custom-local"].description == "local description"
     local_skill_path = Path(by_name["custom-local"].path)
-    assert local_skill_path.is_relative_to(skills_root)
-    assert local_skill_path == skills_root / "custom-local" / "SKILL.md"
+    assert local_skill_path.is_relative_to(mock_paths.skills)
+    assert local_skill_path == mock_paths.skills / "custom-local" / "SKILL.md"
     assert by_name["python-sandbox"].path == "/app/skills/python-sandbox/SKILL.md"
 
