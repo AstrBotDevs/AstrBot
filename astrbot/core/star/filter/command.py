@@ -93,7 +93,7 @@ class CommandFilter(HandlerFilter):
     def validate_and_convert_params(
         self,
         params: list[Any],
-        param_type: dict[str, type],
+        param_type: dict[str, type | Any],
     ) -> dict[str, Any]:
         """将参数列表 params 根据 param_type 转换为参数字典｡"""
         result = {}

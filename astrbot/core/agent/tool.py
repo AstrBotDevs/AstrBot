@@ -1,6 +1,6 @@
 import copy
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from typing import Any, Generic, cast
+from typing import Any, Generic
 
 import jsonschema
 import mcp

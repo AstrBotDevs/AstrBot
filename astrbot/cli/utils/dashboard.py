@@ -1,5 +1,5 @@
-from importlib import resources
 import os
+from importlib import resources
 from pathlib import Path
 
 import click
@@ -26,7 +26,9 @@ class DashboardManager:
                     click.echo("Dashboard is not installed")
                     # Skip interactive prompt when running under systemd
                     if os.environ.get("ASTRBOT_SYSTEMD") == "1":
-                        click.echo("Skipping interactive dashboard installation in systemd mode.")
+                        click.echo(
+                            "Skipping interactive dashboard installation in systemd mode."
+                        )
                         return
                     if click.confirm(
                         "Install dashboard?",

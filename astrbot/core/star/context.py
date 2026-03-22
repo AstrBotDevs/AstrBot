@@ -46,6 +46,7 @@ from .star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
+    from astrbot.core.astr_agent_context import AstrAgentContext
     from astrbot.core.cron.manager import CronJobManager
 
 
@@ -608,9 +609,11 @@ class Context:
         """
         md = StarHandlerMetadata(
             event_type=EventType.OnLLMRequestEvent,
-            handler_full_name=func_obj.__module__ + "_" + func_obj.__name__,
-            handler_name=func_obj.__name__,
-            handler_module_path=func_obj.__module__,
+            handler_full_name=getattr(func_obj, "__module__", "")
+            + "_"
+            + getattr(func_obj, "__name__", ""),
+            handler_name=getattr(func_obj, "__name__", ""),
+            handler_module_path=getattr(func_obj, "__module__", ""),
             handler=func_obj,
             event_filters=[],
             desc=desc,
@@ -656,9 +659,11 @@ class Context:
         """
         md = StarHandlerMetadata(
             event_type=EventType.AdapterMessageEvent,
-            handler_full_name=awaitable.__module__ + "_" + awaitable.__name__,
-            handler_name=awaitable.__name__,
-            handler_module_path=awaitable.__module__,
+            handler_full_name=getattr(awaitable, "__module__", "")
+            + "_"
+            + getattr(awaitable, "__name__", ""),
+            handler_name=getattr(awaitable, "__name__", ""),
+            handler_module_path=getattr(awaitable, "__module__", ""),
             handler=awaitable,
             event_filters=[],
             desc=desc,
