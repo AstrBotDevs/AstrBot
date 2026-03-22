@@ -1,8 +1,8 @@
-# AstrBot SDK 客户端 API 参考文档
+# AstrBot SDK 常用客户端速查
 
 ## 概述
 
-本文档详细介绍 `astrbot_sdk/clients/` 目录下所有客户端的 API，包括方法签名、使用示例和注意事项。
+本文档聚焦插件开发中最常用的客户端与使用模式，方便快速查阅。完整的方法签名、返回类型和全部客户端/管理器列表请查看 [API 详细参考](./api/clients.md)。
 
 ## 目录
 
@@ -13,6 +13,7 @@
 - [FileServiceClient - 文件服务客户端](#5-fileserviceclient---文件服务客户端)
 - [HTTPClient - HTTP API 客户端](#6-httpclient---http-api-客户端)
 - [MetadataClient - 插件元数据客户端](#7-metadataclient---插件元数据客户端)
+- [其他客户端与管理器](#8-其他客户端与管理器)
 
 ---
 
@@ -126,6 +127,9 @@ print(stats["total_items"], stats.get("embedded_items"), stats.get("dirty_items"
 ---
 
 ## 3. DBClient - KV 数据库客户端
+
+`ctx.db` 的 key 在运行时会自动按插件做命名空间隔离。`list()` 和 `watch()` 返回给插件的
+仍是原始 key 视图，不会暴露内部前缀。
 
 ### 导入
 
@@ -279,6 +283,10 @@ from astrbot_sdk.decorators import provide_capability
 
 ### 方法
 
+当前实现会拦截包含 `..` 的路径和部分明显非法输入，但路由校验并非完全严格。
+文档示例建议统一使用以 `/` 开头、没有重复斜杠的规范化路径。`unregister_api(route)` 在不传
+`methods` 时会移除当前插件在该 route 下注册的全部方法。
+
 #### register_api()
 
 注册 API。
@@ -363,6 +371,23 @@ api_key = config.get("api_key")
 
 ---
 
+## 8. 其他客户端与管理器
+
+下列客户端也属于 `Context` 的公开能力入口。这里给出用途和详细参考入口，避免常用速查页与完整 API 文档重复维护。
+
+- [ProviderClient](./api/clients.md#providerclient---provider-发现客户端): 查询当前可用 Provider，以及当前会话正在使用的 chat / tts / stt Provider。
+- [ProviderManagerClient](./api/clients.md#providermanagerclient---provider-管理客户端): 动态创建、切换、更新、删除 Provider，并监听 Provider 变更。
+- [PersonaManagerClient](./api/clients.md#personamanagerclient---人格管理客户端): 管理人格模板；在 `Context` 中可通过 `ctx.personas` 或 `ctx.persona_manager` 访问。
+- [ConversationManagerClient](./api/clients.md#conversationmanagerclient---对话管理客户端): 管理会话内的多轮对话；在 `Context` 中可通过 `ctx.conversations` 或 `ctx.conversation_manager` 访问。
+- [MessageHistoryManagerClient](./api/clients.md#messagehistorymanagerclient---消息历史管理客户端): 按 `MessageSession` 精确保存消息组件、发送者和元数据；在 `Context` 中可通过 `ctx.message_history` 或 `ctx.message_history_manager` 访问。
+- [KnowledgeBaseManagerClient](./api/clients.md#knowledgebasemanagerclient---知识库管理客户端): 管理知识库、文档和检索；在 `Context` 中可通过 `ctx.kbs` 或 `ctx.kb_manager` 访问。
+- [RegistryClient](./api/clients.md#registryclient---handler-注册表客户端): 查询 handler 元数据，并管理 handler 白名单。
+- [SkillClient](./api/clients.md#skillclient---技能注册客户端): 在运行时注册、注销和列出插件技能目录。
+- [SessionPluginManager](./api/clients.md#sessionpluginmanager---会话插件管理器): 按会话检查插件启用状态并过滤 handler。
+- [SessionServiceManager](./api/clients.md#sessionservicemanager---会话服务管理器): 按会话控制 LLM/TTS 是否启用。
+
+---
+
 ## 客户端使用示例
 
 ### 1. 基本对话流程
@@ -389,6 +414,26 @@ async def handle_message(event: MessageEvent, ctx: Context):
     await ctx.memory.save(f"history:{event.session_id}", {"messages": history})
 
     await ctx.platform.send(event.session_id, reply)
+```
+
+如果你要保存原始消息链、发送者信息或需要分页清理，可以改用 `ctx.message_history`：
+
+```python
+from astrbot_sdk import MessageHistorySender, MessageSession, Plain
+
+session = MessageSession(
+    platform_id=event.platform_id,
+    message_type=event.message_type,
+    session_id=event.session_id,
+)
+await ctx.message_history.append(
+    session,
+    parts=[Plain(event.message_content, convert=False)],
+    sender=MessageHistorySender(
+        sender_id=event.sender_id,
+        sender_name=event.sender_name,
+    ),
+)
 ```
 
 ### 3. 使用数据库持久化
@@ -432,6 +477,8 @@ async def setup_api(event: MessageEvent, ctx: Context):
 
 1. 所有客户端方法都是异步的
 2. 远程调用可能失败，建议使用 try-except
-3. Memory 适合语义搜索，DB 适合精确匹配
-4. 文件操作使用 file service 注册令牌
-5. 平台标识使用 UMO 格式：`"platform:instance:session_id"`
+3. `Memory` 适合语义检索，`DB` 适合结构化 KV，`MessageHistory` 适合精确保存原始消息记录
+4. `DBClient` 的 key 对插件隔离；`list()` 和 `watch()` 返回的 key 仍是插件本地视图
+5. `HTTPClient.register_api()` 当前会拦截 `..` 等明显非法路径，但仍建议插件自行使用规范化 route；`unregister_api(route)` 默认移除该 route 下全部方法
+6. 文件操作使用 file service 注册令牌
+7. 平台标识使用 UMO 格式：`"platform:instance:session_id"`

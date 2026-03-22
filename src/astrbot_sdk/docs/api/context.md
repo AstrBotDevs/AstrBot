@@ -30,8 +30,13 @@ class Context:
     personas: PersonaManagerClient    # 人格管理客户端
     conversations: ConversationManagerClient  # 对话管理客户端
     kbs: KnowledgeBaseManagerClient   # 知识库管理客户端
+    message_history: MessageHistoryManagerClient  # 消息历史管理客户端
     http: HTTPClient                  # HTTP 客户端
     metadata: MetadataClient          # 元数据客户端
+    registry: RegistryClient          # handler 注册表客户端
+    skills: SkillClient               # 技能注册客户端
+    session_plugins: SessionPluginManager    # 会话插件管理器
+    session_services: SessionServiceManager  # 会话服务管理器
 
     # 系统工具
     _llm_tool_manager: LLMToolManager
@@ -41,6 +46,7 @@ class Context:
     persona_manager = personas
     conversation_manager = conversations
     kb_manager = kbs
+    message_history_manager = message_history
 ```
 
 ---
@@ -287,7 +293,8 @@ print(stats["total_items"], stats.get("embedded_items"), stats.get("dirty_items"
 
 ### 3. DB 客户端 (ctx.db)
 
-提供键值存储能力，数据永久保存。
+提供键值存储能力，数据永久保存。运行时会自动把 key 限定在当前插件命名空间中；
+`list()` 与 `watch()` 返回的仍是插件视角的原始 key。
 
 ```python
 # 类型: DBClient
@@ -500,6 +507,7 @@ stt_providers = await ctx.providers.list_stt()
 ### 7. Provider Manager 客户端 (ctx.provider_manager)
 
 提供 Provider 的动态管理能力。
+仅 `reserved/system` 插件可用。普通插件调用会收到 `provider.manager.* is restricted to reserved/system plugins` 错误；普通插件通常应使用 `ctx.providers` 做只读查询。
 
 ```python
 # 类型: ProviderManagerClient
@@ -509,14 +517,15 @@ stt_providers = await ctx.providers.list_stt()
 
 ##### `set_provider()`
 
-设置当前使用的 Provider。
+设置当前全局生效的 Provider。
+`umo` 只会作为变更事件里的来源标识，不会把 Provider 选择限定到单个会话。
 
 ```python
 from astrbot_sdk.llm.entities import ProviderType
 
 await ctx.provider_manager.set_provider(
     "my_provider",
-    ProviderType.TEXT_TO_TEXT,
+    ProviderType.CHAT_COMPLETION,
     umo=event.session_id
 )
 ```
@@ -538,6 +547,7 @@ record = await ctx.provider_manager.get_provider_by_id("my_provider")
 record = await ctx.provider_manager.create_provider({
     "id": "my_provider",
     "type": "openai",
+    "provider_type": "chat_completion",
     "model": "gpt-4"
 })
 
@@ -715,7 +725,7 @@ await ctx.conversations.update_conversation(
 获取知识库。
 
 ```python
-kb = await ctx.kbs.get_kb("my_kb")
+kb = await ctx.kbs.get_kb("kb_123")
 if kb:
     print(f"知识库: {kb.kb_name}")
     print(f"文档数: {kb.doc_count}")
@@ -741,10 +751,89 @@ kb = await ctx.kbs.create_kb(KnowledgeBaseCreateParams(
 删除知识库。
 
 ```python
-deleted = await ctx.kbs.delete_kb("my_kb")
+deleted = await ctx.kbs.delete_kb("kb_123")
 if deleted:
     print("知识库已删除")
 ```
+
+---
+
+### 10.5 Message History 客户端 (ctx.message_history / ctx.message_history_manager)
+
+提供精确消息历史存储能力，按 `MessageSession` 保存原始消息组件、发送者和元数据。
+
+```python
+# 类型: MessageHistoryManagerClient
+```
+
+#### 方法
+
+##### `append()`
+
+```python
+from astrbot_sdk import MessageHistorySender, MessageSession, Plain
+
+session = MessageSession(
+    platform_id=event.platform_id,
+    message_type=event.message_type,
+    session_id=event.session_id,
+)
+record = await ctx.message_history.append(
+    session,
+    parts=[Plain(event.message_content, convert=False)],
+    sender=MessageHistorySender(
+        sender_id=event.sender_id,
+        sender_name=event.sender_name,
+    ),
+    metadata={"source": "message_handler"},
+)
+```
+
+##### `list()`
+
+```python
+session = MessageSession(
+    platform_id=event.platform_id,
+    message_type=event.message_type,
+    session_id=event.session_id,
+)
+page = await ctx.message_history.list(session, limit=20)
+for record in page.records:
+    print(record.id, record.sender.sender_name)
+```
+
+分页时建议直接复用上一页返回的 `next_cursor`，不要自行构造游标值。
+
+##### `get() / get_by_id()`
+
+```python
+session = MessageSession(
+    platform_id=event.platform_id,
+    message_type=event.message_type,
+    session_id=event.session_id,
+)
+record = await ctx.message_history.get(session, 1)
+same_record = await ctx.message_history.get_by_id(session, 1)
+```
+
+##### `delete_before() / delete_after() / delete_all()`
+
+```python
+from datetime import datetime, timezone
+
+session = MessageSession(
+    platform_id=event.platform_id,
+    message_type=event.message_type,
+    session_id=event.session_id,
+)
+await ctx.message_history.delete_before(
+    session,
+    before=datetime(2026, 3, 22, tzinfo=timezone.utc),
+)
+await ctx.message_history.delete_all(session)
+```
+
+当前实现要求传入带时区的 `datetime`，例如 `timezone.utc`。
 
 ---
 
@@ -755,6 +844,10 @@ if deleted:
 ```python
 # 类型: HTTPClient
 ```
+
+当前实现会拦截包含 `..` 的路径和部分明显非法输入，但路由校验并非完全严格。
+文档示例建议统一使用以 `/` 开头、没有重复斜杠的规范化路径。`unregister_api(route)` 在不传
+`methods` 时会移除当前插件在该 route 下注册的全部方法。
 
 #### 方法
 
@@ -856,7 +949,93 @@ if config:
 
 ---
 
-### 13. Session Plugins 客户端 (ctx.session_plugins)
+### 13. Registry 客户端 (ctx.registry)
+
+提供 handler 注册表查询与白名单管理能力。
+
+```python
+# 类型: RegistryClient
+```
+
+#### 方法
+
+##### `get_handlers_by_event_type()`
+
+获取指定事件类型下的全部 handler 元数据。
+
+```python
+handlers = await ctx.registry.get_handlers_by_event_type("message")
+for handler in handlers:
+    print(handler.handler_full_name, handler.priority)
+```
+
+##### `get_handler_by_full_name()`
+
+按完整名称查询单个 handler。
+
+```python
+handler = await ctx.registry.get_handler_by_full_name("my_plugin.on_message")
+if handler:
+    print(handler.trigger_type, handler.require_admin)
+```
+
+##### `set_handler_whitelist() / get_handler_whitelist() / clear_handler_whitelist()`
+
+管理 handler 白名单。
+
+```python
+await ctx.registry.set_handler_whitelist(["plugin_a", "plugin_b"])
+whitelist = await ctx.registry.get_handler_whitelist()
+await ctx.registry.clear_handler_whitelist()
+```
+
+---
+
+### 14. Skills 客户端 (ctx.skills)
+
+提供运行时技能注册与查询能力。
+
+```python
+# 类型: SkillClient
+```
+
+#### 方法
+
+##### `register()`
+
+注册一个技能目录。
+
+```python
+skill = await ctx.skills.register(
+    name="my_skill",
+    path="/path/to/skill",
+    description="我的技能描述",
+)
+print(skill.skill_dir)
+```
+
+##### `unregister()`
+
+注销技能。
+
+```python
+removed = await ctx.skills.unregister("my_skill")
+print(removed)
+```
+
+##### `list()`
+
+列出当前已注册的技能。
+
+```python
+skills = await ctx.skills.list()
+for skill in skills:
+    print(skill.name, skill.path)
+```
+
+---
+
+### 15. Session Plugins 客户端 (ctx.session_plugins)
 
 提供会话级别的插件状态管理能力。
 
@@ -872,8 +1051,8 @@ if config:
 
 ```python
 enabled = await ctx.session_plugins.is_plugin_enabled_for_session(
-    event,  # 可以是 event, session 字符串, 或 MessageSession
-    "my_plugin"
+    event,  # 可以是 event、session 字符串或 MessageSession
+    "my_plugin",
 )
 ```
 
@@ -882,17 +1061,17 @@ enabled = await ctx.session_plugins.is_plugin_enabled_for_session(
 过滤会话启用的处理器。
 
 ```python
-from astrbot_sdk.clients.registry import HandlerMetadata
+from astrbot_sdk.clients import HandlerMetadata
 
 enabled_handlers = await ctx.session_plugins.filter_handlers_by_session(
     event,
-    all_handlers
+    all_handlers,
 )
 ```
 
 ---
 
-### 14. Session Services 客户端 (ctx.session_services)
+### 16. Session Services 客户端 (ctx.session_services)
 
 提供会话级别的 LLM/TTS 服务状态管理能力。
 
@@ -931,6 +1110,37 @@ await ctx.session_services.set_llm_status_for_session(event, False)
 ```python
 if await ctx.session_services.should_process_llm_request(event):
     response = await ctx.llm.chat("...")
+```
+
+##### `is_tts_enabled_for_session()`
+
+检查 TTS 是否对指定会话启用。
+
+```python
+enabled = await ctx.session_services.is_tts_enabled_for_session(event)
+if enabled:
+    await event.reply("TTS 服务可用")
+```
+
+##### `set_tts_status_for_session()`
+
+设置 TTS 服务状态。
+
+```python
+# 启用 TTS
+await ctx.session_services.set_tts_status_for_session(event, True)
+
+# 禁用 TTS
+await ctx.session_services.set_tts_status_for_session(event, False)
+```
+
+##### `should_process_tts_request()`
+
+判断是否应该处理 TTS 请求。
+
+```python
+if await ctx.session_services.should_process_tts_request(event):
+    await handle_tts(text)
 ```
 
 ---
@@ -1339,6 +1549,8 @@ async def handle_message(event: MessageEvent, ctx: Context):
     await ctx.platform.send(event.session_id, reply)
 ```
 
+如果你需要保留原始消息组件、发送者和分页删除能力，应优先使用 `ctx.message_history`。
+
 ---
 
 ### 3. 使用数据库持久化
@@ -1394,15 +1606,20 @@ async def setup_api(event: MessageEvent, ctx: Context):
 
 4. **错误处理**: 所有远程调用都可能失败，建议使用 try-except 处理
 
-5. **Memory vs DB**:
+5. **Memory vs DB vs MessageHistory**:
    - Memory: 语义搜索，适合 AI 上下文
    - DB: 精确匹配，适合结构化数据
+   - MessageHistory: 精确保存消息组件、发送者和元数据
 
-6. **文件操作**: 使用 `ctx.files` 注册文件令牌，不要直接传递本地路径
+6. **DB 作用域**: `ctx.db` 的 key 会自动限制在当前插件命名空间中
 
-7. **平台标识**: 使用 UMO（统一消息来源标识）格式：`"platform:instance:session_id"`
+7. **HTTP 路由**: `ctx.http.register_api()` 当前会拦截 `..` 等明显非法路径，但仍建议插件自行使用规范化 route
 
-8. **配置访问**: `get_plugin_config()` 只支持查询当前插件自己的配置
+8. **文件操作**: 使用 `ctx.files` 注册文件令牌，不要直接传递本地路径
+
+9. **平台标识**: 使用 UMO（统一消息来源标识）格式：`"platform:instance:session_id"`
+
+10. **配置访问**: `get_plugin_config()` 只支持查询当前插件自己的配置
 
 ---
 
@@ -1411,6 +1628,7 @@ async def setup_api(event: MessageEvent, ctx: Context):
 - **LLM 客户端**: `astrbot_sdk.clients.llm.LLMClient`
 - **Memory 客户端**: `astrbot_sdk.clients.memory.MemoryClient`
 - **DB 客户端**: `astrbot_sdk.clients.db.DBClient`
+- **Message History 客户端**: `astrbot_sdk.clients.managers.MessageHistoryManagerClient`
 - **Platform 客户端**: `astrbot_sdk.clients.platform.PlatformClient`
 - **日志器**: `astrbot_sdk._internal.plugin_logger.PluginLogger`
 - **取消令牌**: `astrbot_sdk.context.CancelToken`
@@ -1419,4 +1637,4 @@ async def setup_api(event: MessageEvent, ctx: Context):
 
 **版本**: v4.0
 **模块**: `astrbot_sdk.context.Context`
-**最后更新**: 2026-03-17
+**最后更新**: 2026-03-22
