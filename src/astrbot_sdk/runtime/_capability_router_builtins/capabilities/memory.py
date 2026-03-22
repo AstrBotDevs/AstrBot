@@ -357,10 +357,17 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
             if should_refresh:
                 keys_to_refresh.append(key)
                 texts_to_refresh.append(str(entry["text"]))
-        embeddings = await self._embeddings_for_texts(
-            provider_id=provider_id,
-            texts=texts_to_refresh,
-        )
+        # 分批请求，避免单次 payload 过大导致 OOM 或 413
+        _BATCH_SIZE = 64
+        embeddings: list[list[float]] = []
+        for batch_start in range(0, len(texts_to_refresh), _BATCH_SIZE):
+            batch = texts_to_refresh[batch_start : batch_start + _BATCH_SIZE]
+            embeddings.extend(
+                await self._embeddings_for_texts(
+                    provider_id=provider_id,
+                    texts=batch,
+                )
+            )
         for index, key in enumerate(keys_to_refresh):
             entry = self._memory_index_entry(
                 self._memory_index.get(key),

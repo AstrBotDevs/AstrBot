@@ -73,6 +73,8 @@ import inspect
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import Any
 
+from loguru import logger
+
 from .._internal.invocation_context import (
     caller_plugin_scope,
     current_caller_plugin_id,
@@ -509,11 +511,37 @@ class Peer:
                 started = asyncio.Event()
                 task = asyncio.create_task(self._handle_invoke(message, token, started))
                 self._inbound_tasks[message.id] = (task, token, started)
-                task.add_done_callback(
-                    lambda _task, request_id=message.id: self._inbound_tasks.pop(
-                        request_id, None
+
+                def _on_invoke_done(
+                    _task: asyncio.Task[None], request_id: str = message.id
+                ) -> None:
+                    self._inbound_tasks.pop(request_id, None)
+                    if _task.cancelled():
+                        return
+                    exc = _task.exception()
+                    if exc is None:
+                        return
+                    # 后台 invoke 理论上应把错误编码成协议消息；若异常仍逃逸，通常说明
+                    # 回复发送失败或连接状态异常，必须立刻标记连接失效，避免对端永久等待。
+                    logger.error(
+                        "Peer inbound invoke task crashed unexpectedly: "
+                        "request_id={} error={!r}",
+                        request_id,
+                        exc,
                     )
-                )
+                    error = (
+                        exc
+                        if isinstance(exc, AstrBotError)
+                        else AstrBotError(
+                            code=ErrorCodes.NETWORK_ERROR,
+                            message="处理入站调用响应时连接已失效",
+                            hint=str(exc),
+                            retryable=True,
+                        )
+                    )
+                    asyncio.create_task(self._fail_connection(error))
+
+                task.add_done_callback(_on_invoke_done)
                 return
             if isinstance(message, CancelMessage):
                 await self._handle_cancel(message)

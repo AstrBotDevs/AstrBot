@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import inspect
 from typing import Any
 
@@ -66,6 +67,7 @@ def legacy_arg_parameter_names(handler: Any) -> list[str]:
     return names
 
 
+@functools.lru_cache(maxsize=1)
 def _framework_injected_types() -> tuple[type[Any], ...]:
     from ..clients.llm import LLMResponse
     from ..context import Context

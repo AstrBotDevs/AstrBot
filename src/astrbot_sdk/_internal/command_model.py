@@ -117,7 +117,8 @@ def parse_command_model_remainder(
         if "=" in raw_name:
             raw_name, explicit_value = raw_name.split("=", 1)
         negated = raw_name.startswith("no-")
-        field_name = raw_name[3:] if negated else raw_name
+        # 与 argparse/click 惯例一致：--foo-bar 自动映射为字段名 foo_bar
+        field_name = (raw_name[3:] if negated else raw_name).replace("-", "_")
         field = fields.get(field_name)
         if field is None:
             raise _command_parse_error(f"Unknown field: {field_name}")
