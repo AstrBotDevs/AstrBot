@@ -1,29 +1,32 @@
 <template>
-    <div class="welcome-container fade-in">
-        <div v-if="isLoading" class="loading-overlay-welcome">
-            <v-progress-circular
-                indeterminate
-                size="48"
-                width="4"
-                color="primary"
-            ></v-progress-circular>
-        </div>
-        <template v-else>
-            <div class="welcome-content">
-                <div class="welcome-title">
-                    <span class="bot-name-container">
-                        <span class="bot-name-text">
-                            Hello, I'm <span class="highlight-name">AstrBot</span>
-                        </span>
-                        <span class="bot-name-star">⭐</span>
-                    </span>
-                </div>
-            </div>
-            <div class="welcome-input">
-                <slot></slot>
-            </div>
-        </template>
+  <div class="welcome-container fade-in">
+    <div
+      v-if="isLoading"
+      class="loading-overlay-welcome"
+    >
+      <v-progress-circular
+        indeterminate
+        size="48"
+        width="4"
+        color="primary"
+      />
     </div>
+    <template v-else>
+      <div class="welcome-content">
+        <div class="welcome-title">
+          <span class="bot-name-container">
+            <span class="bot-name-text">
+              Hello, I'm <span class="highlight-name">AstrBot</span>
+            </span>
+            <span class="bot-name-star">⭐</span>
+          </span>
+        </div>
+      </div>
+      <div class="welcome-input">
+        <slot />
+      </div>
+    </template>
+  </div>
 </template>
 
 <script setup lang="ts">

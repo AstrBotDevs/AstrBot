@@ -15,7 +15,7 @@ from .stage_order import STAGES_ORDER
 
 
 class PipelineScheduler:
-    """管道调度器，负责调度各个阶段的执行"""
+    """管道调度器,负责调度各个阶段的执行"""
 
     def __init__(self, context: PipelineContext) -> None:
         ensure_builtin_stages_registered()
@@ -53,7 +53,7 @@ class PipelineScheduler:
                     # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
                     if event.is_stopped():
                         logger.debug(
-                            f"阶段 {stage.__class__.__name__} 已终止事件传播。",
+                            f"阶段 {stage.__class__.__name__} 已终止事件传播｡",
                         )
                         break
 
@@ -63,7 +63,7 @@ class PipelineScheduler:
                     # 此处是后续所有阶段处理完毕后返回的点, 执行后置处理
                     if event.is_stopped():
                         logger.debug(
-                            f"阶段 {stage.__class__.__name__} 已终止事件传播。",
+                            f"阶段 {stage.__class__.__name__} 已终止事件传播｡",
                         )
                         break
             else:
@@ -72,7 +72,7 @@ class PipelineScheduler:
                 await coroutine
 
                 if event.is_stopped():
-                    logger.debug(f"阶段 {stage.__class__.__name__} 已终止事件传播。")
+                    logger.debug(f"阶段 {stage.__class__.__name__} 已终止事件传播｡")
                     break
 
     async def execute(self, event: AstrMessageEvent) -> None:
@@ -86,10 +86,10 @@ class PipelineScheduler:
         try:
             await self._process_stages(event)
 
-            # 如果没有发送操作, 则发送一个空消息, 以便于后续的处理
+            # 发送一个空消息, 以便于后续的处理
             if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
                 await event.send(None)
 
-            logger.debug("pipeline 执行完毕。")
+            logger.debug("pipeline 执行完毕｡")
         finally:
             active_event_registry.unregister(event)

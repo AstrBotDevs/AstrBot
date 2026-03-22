@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios from "@/utils/request";
 import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { getPlatformDisplayName } from "@/utils/platformUtils";
@@ -149,6 +149,7 @@ export const useExtensionPage = () => {
   const showPluginInfoDialog = ref(false);
   const selectedPlugin = ref({});
   const curr_namespace = ref("");
+  const currentConfigPlugin = curr_namespace;
   const updatingAll = ref(false);
   
   const readmeDialog = reactive({

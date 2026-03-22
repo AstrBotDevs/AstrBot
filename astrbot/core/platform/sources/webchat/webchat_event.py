@@ -4,6 +4,8 @@ import os
 import shutil
 import uuid
 
+import aiofiles
+
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Json, Plain, Record
@@ -34,6 +36,7 @@ class WebChatMessageEvent(AstrMessageEvent):
         message: MessageChain | None,
         session_id: str,
         streaming: bool = False,
+        emit_complete: bool = False,
     ) -> str | None:
         request_id = str(message_id)
         conversation_id = _extract_conversation_id(session_id)
@@ -77,11 +80,11 @@ class WebChatMessageEvent(AstrMessageEvent):
                 )
             elif isinstance(comp, Image):
                 # save image to local
-                filename = f"{str(uuid.uuid4())}.jpg"
+                filename = f"{uuid.uuid4()!s}.jpg"
                 path = os.path.join(attachments_dir, filename)
                 image_base64 = await comp.convert_to_base64()
-                with open(path, "wb") as f:
-                    f.write(base64.b64decode(image_base64))
+                async with aiofiles.open(path, "wb") as f:
+                    await f.write(base64.b64decode(image_base64))
                 data = f"[IMAGE]{filename}"
                 await web_chat_back_queue.put(
                     {
@@ -93,11 +96,11 @@ class WebChatMessageEvent(AstrMessageEvent):
                 )
             elif isinstance(comp, Record):
                 # save record to local
-                filename = f"{str(uuid.uuid4())}.wav"
+                filename = f"{uuid.uuid4()!s}.wav"
                 path = os.path.join(attachments_dir, filename)
                 record_base64 = await comp.convert_to_base64()
-                with open(path, "wb") as f:
-                    f.write(base64.b64decode(record_base64))
+                async with aiofiles.open(path, "wb") as f:
+                    await f.write(base64.b64decode(record_base64))
                 data = f"[RECORD]{filename}"
                 await web_chat_back_queue.put(
                     {
@@ -127,6 +130,17 @@ class WebChatMessageEvent(AstrMessageEvent):
             else:
                 logger.debug(f"webchat 忽略: {comp.type}")
 
+        if emit_complete:
+            await web_chat_back_queue.put(
+                {
+                    "type": "complete",
+                    "data": data,
+                    "streaming": streaming,
+                    "chain_type": message.type,
+                    "message_id": message_id,
+                },
+            )
+
         return data
 
     async def send(self, message: MessageChain | None) -> None:
@@ -145,9 +159,9 @@ class WebChatMessageEvent(AstrMessageEvent):
             conversation_id,
         )
         async for chain in generator:
-            # 处理音频流（Live Mode）
+            # 处理音频流(Live Mode)
             if chain.type == "audio_chunk":
-                # 音频流数据，直接发送
+                # 音频流数据,直接发送
                 audio_b64 = ""
                 text = None
 

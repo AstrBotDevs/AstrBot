@@ -66,7 +66,7 @@ class NeoSkillToolBase(FunctionTool):
             result = await neo_call(client, sandbox)
             return _to_json_text(result)
         except Exception as e:
-            return f"{self.error_prefix} {error_action}: {str(e)}"
+            return f"{self.error_prefix} {error_action}: {e!s}"
 
 
 @dataclass
@@ -164,7 +164,10 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
             "type": "object",
             "properties": {
                 "payload": {
-                    "anyOf": [{"type": "object"}, {"type": "array"}],
+                    "anyOf": [
+                        {"type": "object"},
+                        {"type": "array", "items": {"type": "object"}},
+                    ],
                     "description": (
                         "Skill payload JSON. Typical schema: {skill_markdown, inputs, outputs, meta}. "
                         "This only stores content and returns payload_ref; it does not create a candidate or release."
@@ -419,7 +422,7 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
                 }
             )
         except Exception as e:
-            return f"Error promoting skill candidate: {str(e)}"
+            return f"Error promoting skill candidate: {e!s}"
 
 
 @dataclass

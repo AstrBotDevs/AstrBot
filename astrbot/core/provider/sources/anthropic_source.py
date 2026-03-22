@@ -2,6 +2,7 @@ import base64
 import json
 from collections.abc import AsyncGenerator
 
+import aiofiles
 import anthropic
 import httpx
 from anthropic import AsyncAnthropic
@@ -16,7 +17,6 @@ from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.network_utils import (
-    create_proxy_client,
     is_connection_error,
     log_connection_failure,
 )
@@ -29,6 +29,30 @@ from ..register import register_provider_adapter
     "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
+    @staticmethod
+    def _normalize_custom_headers(provider_config: dict) -> dict[str, str] | None:
+        custom_headers = provider_config.get("custom_headers", {})
+        if not isinstance(custom_headers, dict) or not custom_headers:
+            return None
+        normalized_headers: dict[str, str] = {}
+        for key, value in custom_headers.items():
+            normalized_headers[str(key)] = str(value)
+        return normalized_headers or None
+
+    @classmethod
+    def _resolve_custom_headers(
+        cls,
+        provider_config: dict,
+        *,
+        required_headers: dict[str, str] | None = None,
+    ) -> dict[str, str] | None:
+        merged_headers = cls._normalize_custom_headers(provider_config) or {}
+        if required_headers:
+            for header_name, header_value in required_headers.items():
+                if not merged_headers.get(header_name, "").strip():
+                    merged_headers[header_name] = header_value
+        return merged_headers or None
+
     def __init__(
         self,
         provider_config,
@@ -46,6 +70,7 @@ class ProviderAnthropic(Provider):
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
         self.thinking_config = provider_config.get("anth_thinking_config", {})
+        self.custom_headers = self._resolve_custom_headers(provider_config)
 
         if use_api_key:
             self._init_api_key(provider_config)
@@ -66,7 +91,12 @@ class ProviderAnthropic(Provider):
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
-        return create_proxy_client("Anthropic", proxy)
+        if proxy:
+            logger.info(f"[Anthropic] 使用代理: {proxy}")
+            return httpx.AsyncClient(proxy=proxy, headers=self.custom_headers)
+        if self.custom_headers:
+            return httpx.AsyncClient(headers=self.custom_headers)
+        return None
 
     def _apply_thinking_config(self, payloads: dict) -> None:
         thinking_type = self.thinking_config.get("type", "")
@@ -88,10 +118,10 @@ class ProviderAnthropic(Provider):
         """准备 Anthropic API 的请求 payload
 
         Args:
-            messages: OpenAI 格式的消息列表，包含用户输入和系统提示等信息
+            messages: OpenAI 格式的消息列表,包含用户输入和系统提示等信息
         Returns:
             system_prompt: 系统提示内容
-            new_messages: 处理后的消息列表，去除系统提示
+            new_messages: 处理后的消息列表,去除系统提示
 
         """
         system_prompt = ""
@@ -126,7 +156,7 @@ class ProviderAnthropic(Provider):
 
                 if "tool_calls" in message and isinstance(message["tool_calls"], list):
                     for tool_call in message["tool_calls"]:
-                        blocks.append(  # noqa: PERF401
+                        blocks.append(
                             {
                                 "type": "tool_use",
                                 "name": tool_call["function"]["name"],
@@ -254,7 +284,7 @@ class ProviderAnthropic(Provider):
         logger.debug(f"completion: {completion}")
 
         if len(completion.content) == 0:
-            raise Exception("API 返回的 completion 为空。")
+            raise Exception("API 返回的 completion 为空｡")
 
         llm_response = LLMResponse(role="assistant")
 
@@ -341,7 +371,7 @@ class ProviderAnthropic(Provider):
                             id=id,
                         )
                     elif event.content_block.type == "tool_use":
-                        # 工具使用块开始，初始化缓冲区
+                        # 工具使用块开始,初始化缓冲区
                         tool_use_buffer[event.index] = {
                             "id": event.content_block.id,
                             "name": event.content_block.name,
@@ -413,7 +443,7 @@ class ProviderAnthropic(Provider):
                                 id=id,
                             )
                         except json.JSONDecodeError:
-                            # JSON 解析失败，跳过这个工具调用
+                            # JSON 解析失败,跳过这个工具调用
                             logger.warning(f"工具调用参数 JSON 解析失败: {tool_info}")
 
                         # 清理缓冲区
@@ -569,7 +599,7 @@ class ProviderAnthropic(Provider):
         image_urls: list[str] | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
     ):
-        """组装上下文，支持文本和图片"""
+        """组装上下文,支持文本和图片"""
 
         async def resolve_image_url(image_url: str) -> dict | None:
             if image_url.startswith("http"):
@@ -582,7 +612,7 @@ class ProviderAnthropic(Provider):
                 image_data, mime_type = await self.encode_image_bs64(image_url)
 
             if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                logger.warning(f"图片 {image_url} 得到的结果为空,将忽略｡")
                 return None
 
             return {
@@ -600,17 +630,17 @@ class ProviderAnthropic(Provider):
 
         content = []
 
-        # 1. 用户原始发言（OpenAI 建议：用户发言在前）
+        # 1. 用户原始发言(OpenAI 建议:用户发言在前)
         if text:
             content.append({"type": "text", "text": text})
         elif image_urls:
-            # 如果没有文本但有图片，添加占位文本
+            # 如果没有文本但有图片,添加占位文本
             content.append({"type": "text", "text": "[图片]"})
         elif extra_user_content_parts:
-            # 如果只有额外内容块，也需要添加占位文本
+            # 如果只有额外内容块,也需要添加占位文本
             content.append({"type": "text", "text": " "})
 
-        # 2. 额外的内容块（系统提醒、指令等）
+        # 2. 额外的内容块(系统提醒､指令等)
         if extra_user_content_parts:
             for block in extra_user_content_parts:
                 if isinstance(block, TextPart):
@@ -629,7 +659,7 @@ class ProviderAnthropic(Provider):
                 if image_dict:
                     content.append(image_dict)
 
-        # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
+        # 如果只有主文本且没有额外内容块和图片,返回简单格式以保持向后兼容
         if (
             text
             and not extra_user_content_parts
@@ -643,7 +673,7 @@ class ProviderAnthropic(Provider):
         return {"role": "user", "content": content}
 
     async def encode_image_bs64(self, image_url: str) -> tuple[str, str]:
-        """将图片转换为 base64，同时检测实际 MIME 类型"""
+        """将图片转换为 base64,同时检测实际 MIME 类型"""
         if image_url.startswith("base64://"):
             raw_base64 = image_url.replace("base64://", "")
             try:
@@ -652,8 +682,8 @@ class ProviderAnthropic(Provider):
             except Exception:
                 mime_type = "image/jpeg"
             return f"data:{mime_type};base64,{raw_base64}", mime_type
-        with open(image_url, "rb") as f:
-            image_bytes = f.read()
+        async with aiofiles.open(image_url, "rb") as f:
+            image_bytes = await f.read()
             mime_type = self._detect_image_mime_type(image_bytes)
             image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
             return f"data:{mime_type};base64,{image_bs64}", mime_type

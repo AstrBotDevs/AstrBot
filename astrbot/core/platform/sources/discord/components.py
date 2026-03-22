@@ -91,7 +91,7 @@ class DiscordReference(BaseMessageComponent):
 
 
 class DiscordView(BaseMessageComponent):
-    """Discord视图组件，包含按钮和选择菜单"""
+    """Discord视图组件,包含按钮和选择菜单"""
 
     type: str = "discord_view"
 

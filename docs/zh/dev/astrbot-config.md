@@ -73,8 +73,8 @@ AstrBot 默认配置如下：
         "streaming_response": False,
         "show_tool_use_status": False,
         "streaming_segmented": False,
-        "max_agent_step": 30,
-        "tool_call_timeout": 60,
+        "max_agent_step": 3,
+        "tool_call_timeout": 120,
     },
     "provider_stt_settings": {
         "enable": False,

@@ -63,6 +63,11 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     Declare this tool as a background task. Background tasks return immediately
     with a task identifier while the real work continues asynchronously.
     """
+    source: str = "plugin"
+    """
+    Origin of this tool: 'plugin' (from star plugins), 'internal' (AstrBot built-in),
+    or 'mcp' (from MCP servers). Used by WebUI for display grouping.
+    """
 
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
@@ -89,17 +94,36 @@ class ToolSet:
         return len(self.tools) == 0
 
     def add_tool(self, tool: FunctionTool) -> None:
-        """Add a tool to the set."""
-        # 检查是否已存在同名工具
+        """Add a tool to the set.
+
+        If a tool with the same name already exists:
+        - Prefer the one that is active (active=True)
+        - If both have the same active state, use the new one (overwrite)
+        """
         for i, existing_tool in enumerate(self.tools):
             if existing_tool.name == tool.name:
-                self.tools[i] = tool
+                # Use getattr with a default of True for compatibility with tools
+                # that may not define an `active` attribute (e.g., mocks).
+                existing_active = bool(getattr(existing_tool, "active", True))
+                new_active = bool(getattr(tool, "active", True))
+                # Overwrite if new tool is active, or if existing tool is not active
+                if new_active or not existing_active:
+                    self.tools[i] = tool
                 return
         self.tools.append(tool)
 
     def remove_tool(self, name: str) -> None:
         """Remove a tool by its name."""
         self.tools = [tool for tool in self.tools if tool.name != name]
+
+    def normalize(self) -> None:
+        """Sort tools by name for deterministic serialization.
+
+        This ensures the serialized tool schema sent to the LLM is
+        identical across requests regardless of registration/injection
+        order, enabling LLM provider prefix cache hits.
+        """
+        self.tools.sort(key=lambda t: t.name)
 
     def get_tool(self, name: str) -> FunctionTool | None:
         """Get a tool by its name."""
@@ -293,8 +317,15 @@ class ToolSet:
                 if properties:
                     result["properties"] = properties
 
-            if "items" in schema:
-                result["items"] = convert_schema(schema["items"])
+            if target_type == "array":
+                items_schema = schema.get("items")
+                if isinstance(items_schema, dict):
+                    result["items"] = convert_schema(items_schema)
+                else:
+                    # Gemini requires array schemas to include an `items` schema.
+                    # JSON Schema allows omitting it, so fall back to a permissive
+                    # string item schema instead of emitting an invalid declaration.
+                    result["items"] = {"type": "string"}
 
             return result
 

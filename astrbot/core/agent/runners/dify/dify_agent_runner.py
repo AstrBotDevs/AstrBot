@@ -1,10 +1,16 @@
 import base64
 import os
 import sys
-import typing as T
+from collections.abc import AsyncGenerator
+from typing import Any
 
 import astrbot.core.message.components as Comp
 from astrbot.core import logger, sp
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.response import AgentResponseData
+from astrbot.core.agent.run_context import ContextWrapper, TContext
+from astrbot.core.agent.runners.base import AgentResponse, AgentState, BaseAgentRunner
+from astrbot.core.agent.runners.dify.dify_api_client import DifyAPIClient
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -12,12 +18,6 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
-
-from ...hooks import BaseAgentRunHooks
-from ...response import AgentResponseData
-from ...run_context import ContextWrapper, TContext
-from ..base import AgentResponse, AgentState, BaseAgentRunner
-from .dify_api_client import DifyAPIClient
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -35,7 +35,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         run_context: ContextWrapper[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
         provider_config: dict,
-        **kwargs: T.Any,
+        **kwargs: Any,
     ) -> None:
         self.req = request
         self.streaming = kwargs.get("streaming", False)
@@ -76,7 +76,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             except Exception as e:
                 logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
 
-        # 开始处理，转换到运行状态
+        # 开始处理,转换到运行状态
         self._transition_state(AgentState.RUNNING)
 
         try:
@@ -84,15 +84,15 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             async for response in self._execute_dify_request():
                 yield response
         except Exception as e:
-            logger.error(f"Dify 请求失败：{str(e)}")
+            logger.error(f"Dify 请求失败:{e!s}")
             self._transition_state(AgentState.ERROR)
             self.final_llm_resp = LLMResponse(
-                role="err", completion_text=f"Dify 请求失败：{str(e)}"
+                role="err", completion_text=f"Dify 请求失败:{e!s}"
             )
             yield AgentResponse(
                 type="err",
                 data=AgentResponseData(
-                    chain=MessageChain().message(f"Dify 请求失败：{str(e)}")
+                    chain=MessageChain().message(f"Dify 请求失败:{e!s}")
                 ),
             )
         finally:
@@ -100,8 +100,8 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step_until_done(
-        self, max_step: int = 30
-    ) -> T.AsyncGenerator[AgentResponse, None]:
+        self, max_step: int = 3
+    ) -> AsyncGenerator[AgentResponse, None]:
         while not self.done():
             async for resp in self.step():
                 yield resp
@@ -133,10 +133,10 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     mime_type="image/png",
                     file_name="image.png",
                 )
-                logger.debug(f"Dify 上传图片响应：{file_response}")
+                logger.debug(f"Dify 上传图片响应:{file_response}")
                 if "id" not in file_response:
                     logger.warning(
-                        f"上传图片后得到未知的 Dify 响应：{file_response}，图片将忽略。"
+                        f"上传图片后得到未知的 Dify 响应:{file_response},图片将忽略｡"
                     )
                     continue
                 files_payload.append(
@@ -147,7 +147,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     }
                 )
             except Exception as e:
-                logger.warning(f"上传图片失败：{e}")
+                logger.warning(f"上传图片失败:{e}")
                 continue
 
         # 获得会话变量
@@ -166,7 +166,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         match self.api_type:
             case "chat" | "agent" | "chatflow":
                 if not prompt:
-                    prompt = "请描述这张图片。"
+                    prompt = "请描述这张图片｡"
 
                 async for chunk in self.api_client.chat_messages(
                     inputs={
@@ -176,7 +176,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     user=session_id,
                     conversation_id=conversation_id,
                     files=files_payload,
-                    timeout=self.timeout,
+                    request_timeout=self.timeout,
                 ):
                     logger.debug(f"dify resp chunk: {chunk}")
                     if chunk["event"] == "message" or chunk["event"] == "agent_message":
@@ -190,7 +190,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                             )
                             conversation_id = chunk["conversation_id"]
 
-                        # 如果是流式响应，发送增量数据
+                        # 如果是流式响应,发送增量数据
                         if self.streaming and chunk["answer"]:
                             yield AgentResponse(
                                 type="streaming_delta",
@@ -202,7 +202,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                         logger.debug("Dify message end")
                         break
                     elif chunk["event"] == "error":
-                        logger.error(f"Dify 出现错误：{chunk}")
+                        logger.error(f"Dify 出现错误:{chunk}")
                         raise Exception(
                             f"Dify 出现错误 status: {chunk['status']} message: {chunk['message']}"
                         )
@@ -216,17 +216,17 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     },
                     user=session_id,
                     files=files_payload,
-                    timeout=self.timeout,
+                    request_timeout=self.timeout,
                 ):
                     logger.debug(f"dify workflow resp chunk: {chunk}")
                     match chunk["event"]:
                         case "workflow_started":
                             logger.info(
-                                f"Dify 工作流(ID: {chunk['workflow_run_id']})开始运行。"
+                                f"Dify 工作流(ID: {chunk['workflow_run_id']})开始运行｡"
                             )
                         case "node_finished":
                             logger.debug(
-                                f"Dify 工作流节点(ID: {chunk['data']['node_id']} Title: {chunk['data'].get('title', '')})运行结束。"
+                                f"Dify 工作流节点(ID: {chunk['data']['node_id']} Title: {chunk['data'].get('title', '')})运行结束｡"
                             )
                         case "text_chunk":
                             if self.streaming and chunk["data"]["text"]:
@@ -242,24 +242,24 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                             logger.info(
                                 f"Dify 工作流(ID: {chunk['workflow_run_id']})运行结束"
                             )
-                            logger.debug(f"Dify 工作流结果：{chunk}")
+                            logger.debug(f"Dify 工作流结果:{chunk}")
                             if chunk["data"]["error"]:
                                 logger.error(
-                                    f"Dify 工作流出现错误：{chunk['data']['error']}"
+                                    f"Dify 工作流出现错误:{chunk['data']['error']}"
                                 )
                                 raise Exception(
-                                    f"Dify 工作流出现错误：{chunk['data']['error']}"
+                                    f"Dify 工作流出现错误:{chunk['data']['error']}"
                                 )
                             if self.workflow_output_key not in chunk["data"]["outputs"]:
                                 raise Exception(
-                                    f"Dify 工作流的输出不包含指定的键名：{self.workflow_output_key}"
+                                    f"Dify 工作流的输出不包含指定的键名:{self.workflow_output_key}"
                                 )
                             result = chunk
             case _:
-                raise Exception(f"未知的 Dify API 类型：{self.api_type}")
+                raise Exception(f"未知的 Dify API 类型:{self.api_type}")
 
         if not result:
-            logger.warning("Dify 请求结果为空，请查看 Debug 日志。")
+            logger.warning("Dify 请求结果为空,请查看 Debug 日志｡")
 
         # 解析结果
         chain = await self.parse_dify_result(result)

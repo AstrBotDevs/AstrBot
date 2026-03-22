@@ -108,6 +108,25 @@
         "ttsProvider": "TTS-модель",
         "apply": "Применить"
     },
+    "groups": {
+        "title": "Управление группами",
+        "count": "групп: {count}",
+        "addToGroup": "Добавить в группу",
+        "create": "Создать группу",
+        "edit": "Изменить группу",
+        "name": "Имя группы",
+        "sessionsCount": "сессий: {count}",
+        "empty": "Пока нет групп. Нажмите «Создать группу», чтобы добавить.",
+        "availableSessions": "Доступные сессии ({count})",
+        "selectedSessions": "Выбранные сессии ({count})",
+        "searchPlaceholder": "Поиск...",
+        "noMatch": "Нет совпадений",
+        "noMembers": "Нет участников",
+        "customGroupDivider": "── Пользовательские группы ──",
+        "customGroupOption": "📁 {name} ({count})",
+        "groupOption": "{name} (сессий: {count})",
+        "deleteConfirm": "Вы уверены, что хотите удалить группу \"{name}\"?"
+    },
     "status": {
         "enabled": "Включено",
         "disabled": "Выключено"
@@ -124,7 +143,16 @@
         "noChanges": "Изменений не обнаружено",
         "batchDeleteSuccess": "Массовое удаление выполнено",
         "batchDeleteError": "Ошибка массового удаления",
+        "selectSessionsFirst": "Пожалуйста, сначала выберите сессии",
+        "selectAtLeastOneConfig": "Пожалуйста, выберите хотя бы одну настройку для изменения",
+        "batchUpdateSuccess": "Пакетное обновление успешно выполнено",
+        "partialUpdateFailed": "Некоторые обновления не выполнены",
         "batchUpdateError": "Ошибка пакетного обновления",
-        "batchUpdateSuccess": "Пакетное обновление успешно выполнено"
+        "groupNameRequired": "Имя группы не может быть пустым",
+        "saveGroupError": "Ошибка сохранения группы",
+        "deleteGroupError": "Ошибка удаления группы",
+        "selectSessionsToAddFirst": "Пожалуйста, сначала выберите сессии для добавления",
+        "addToGroupSuccess": "Добавлено сессий в группу: {count}",
+        "addToGroupError": "Ошибка добавления в группу"
     }
 }

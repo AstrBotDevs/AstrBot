@@ -3,6 +3,7 @@ import json
 import os
 import uuid
 
+import anyio
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
@@ -69,7 +70,7 @@ TOOL_CALL_PROMPT = (
     "keep the conversation style consistent."
 )
 
-TOOL_CALL_PROMPT_SKILLS_LIKE_MODE = (
+TOOL_CALL_PROMPT_LAZY_LOAD_MODE = (
     "You MUST NOT return an empty response, especially after invoking a tool."
     " Before calling any tool, provide a brief explanatory message to the user stating the purpose of the tool call."
     " Tool schemas are provided in two stages: first only name and description; "
@@ -188,7 +189,12 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
 @dataclass
 class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     name: str = "send_message_to_user"
-    description: str = "Directly send message to the user. Only use this tool when you need to proactively message the user. Otherwise you can directly output the reply in the conversation."
+    description: str = (
+        "Send message to the user. "
+        "Supports various message types including `plain`, `image`, `record`, `video`, `file`, and `mention_user`. "
+        "Use this tool to send media files (`image`, `record`, `video`, `file`), "
+        "or when you need to proactively message the user(such as cron job). For normal text replies, you can output directly."
+    )
 
     parameters: dict = Field(
         default_factory=lambda: {
@@ -241,7 +247,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
         bool: indicates whether the file was downloaded from sandbox.
         """
-        if os.path.exists(path):
+        if await anyio.Path(path).exists():
             return path, False
 
         # Try to check if the file exists in the sandbox
@@ -365,7 +371,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     return (
                         f"error: unsupported message type '{msg_type}' at index {idx}."
                     )
-            except Exception as exc:  # 捕获组件构造异常，避免直接抛出
+            except Exception as exc:  # 捕获组件构造异常,避免直接抛出
                 return f"error: failed to build messages[{idx}] component: {exc}"
 
         try:
@@ -412,7 +418,7 @@ async def retrieve_knowledge_base(
         # 会话级配置
         kb_ids = session_config.get("kb_ids", [])
 
-        # 如果配置为空列表，明确表示不使用知识库
+        # 如果配置为空列表,明确表示不使用知识库
         if not kb_ids:
             logger.info(f"[知识库] 会话 {umo} 已被配置为不使用知识库")
             return
@@ -438,18 +444,18 @@ async def retrieve_knowledge_base(
         if not kb_names:
             return
 
-        logger.debug(f"[知识库] 使用会话级配置，知识库数量: {len(kb_names)}")
+        logger.debug(f"[知识库] 使用会话级配置,知识库数量: {len(kb_names)}")
     else:
         kb_names = config.get("kb_names", [])
         top_k = config.get("kb_final_top_k", 5)
-        logger.debug(f"[知识库] 使用全局配置，知识库数量: {len(kb_names)}")
+        logger.debug(f"[知识库] 使用全局配置,知识库数量: {len(kb_names)}")
 
     top_k_fusion = config.get("kb_fusion_top_k", 20)
 
     if not kb_names:
         return
 
-    logger.debug(f"[知识库] 开始检索知识库，数量: {len(kb_names)}, top_k={top_k}")
+    logger.debug(f"[知识库] 开始检索知识库,数量: {len(kb_names)}, top_k={top_k}")
     kb_context = await kb_mgr.retrieve(
         query=query,
         kb_names=kb_names,

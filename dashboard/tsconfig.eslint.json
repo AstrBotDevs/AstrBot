@@ -1,0 +1,26 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/**/*",
+    "src/**/*.vue",
+    "tests/**/*",
+    "scripts/**/*",
+    "env.d.ts",
+    "*.ts",
+    "*.tsx",
+    "*.mts",
+    "*.cts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "dashboard/dist",
+    "dashboard/node_modules"
+  ]
+}

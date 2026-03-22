@@ -13,7 +13,7 @@ async def migrate_45_to_46(acm: AstrBotConfigManager, ucr: UmopConfigRouter) -> 
         )
         return
 
-    # 如果任何一项带有 umop，则说明需要迁移
+    # 如果任何一项带有 umop,则说明需要迁移
     need_migration = False
     for conf_id, conf_info in abconf_data.items():
         if isinstance(conf_info, dict) and "umop" in conf_info:

@@ -1,13 +1,14 @@
 """媒体文件处理工具
 
-提供音视频格式转换、时长获取等功能。
+提供音视频格式转换､时长获取等功能｡
 """
 
 import asyncio
 import os
 import subprocess
 import uuid
-from pathlib import Path
+
+import anyio
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -20,7 +21,7 @@ async def get_media_duration(file_path: str) -> int | None:
         file_path: 媒体文件路径
 
     Returns:
-        时长（毫秒），如果获取失败返回None
+        时长(毫秒),如果获取失败返回None
     """
     try:
         # 使用ffprobe获取时长
@@ -37,7 +38,7 @@ async def get_media_duration(file_path: str) -> int | None:
             stderr=subprocess.PIPE,
         )
 
-        stdout, stderr = await process.communicate()
+        stdout, _stderr = await process.communicate()
 
         if process.returncode == 0 and stdout:
             duration_seconds = float(stdout.decode().strip())
@@ -50,7 +51,7 @@ async def get_media_duration(file_path: str) -> int | None:
 
     except FileNotFoundError:
         logger.warning(
-            "[Media Utils] ffprobe未安装或不在PATH中，无法获取媒体时长。请安装ffmpeg: https://ffmpeg.org/"
+            "[Media Utils] ffprobe未安装或不在PATH中,无法获取媒体时长｡请安装ffmpeg: https://ffmpeg.org/"
         )
         return None
     except Exception as e:
@@ -63,7 +64,7 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
 
     Args:
         audio_path: 原始音频文件路径
-        output_path: 输出文件路径，如果为None则自动生成
+        output_path: 输出文件路径,如果为None则自动生成
 
     Returns:
         转换后的opus文件路径
@@ -71,14 +72,14 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
     Raises:
         Exception: 转换失败时抛出异常
     """
-    # 如果已经是opus格式，直接返回
+    # 如果已经是opus格式,直接返回
     if audio_path.lower().endswith(".opus"):
         return audio_path
 
     # 生成输出文件路径
     if output_path is None:
         temp_dir = get_astrbot_temp_path()
-        os.makedirs(temp_dir, exist_ok=True)
+        await anyio.Path(temp_dir).mkdir(parents=True, exist_ok=True)
         output_path = os.path.join(temp_dir, f"media_audio_{uuid.uuid4().hex}.opus")
 
     try:
@@ -104,13 +105,13 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
             stderr=subprocess.PIPE,
         )
 
-        stdout, stderr = await process.communicate()
+        _stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
             # 清理可能已生成但无效的临时文件
-            if output_path and os.path.exists(output_path):
+            if output_path and await anyio.Path(output_path).exists():
                 try:
-                    os.remove(output_path)
+                    await anyio.Path(output_path).unlink()
                     logger.debug(
                         f"[Media Utils] 已清理失败的opus输出文件: {output_path}"
                     )
@@ -126,7 +127,7 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
 
     except FileNotFoundError:
         logger.error(
-            "[Media Utils] ffmpeg未安装或不在PATH中，无法转换音频格式。请安装ffmpeg: https://ffmpeg.org/"
+            "[Media Utils] ffmpeg未安装或不在PATH中,无法转换音频格式｡请安装ffmpeg: https://ffmpeg.org/"
         )
         raise Exception("ffmpeg not found")
     except Exception as e:
@@ -141,8 +142,8 @@ async def convert_video_format(
 
     Args:
         video_path: 原始视频文件路径
-        output_format: 目标格式，默认mp4
-        output_path: 输出文件路径，如果为None则自动生成
+        output_format: 目标格式,默认mp4
+        output_path: 输出文件路径,如果为None则自动生成
 
     Returns:
         转换后的视频文件路径
@@ -150,14 +151,14 @@ async def convert_video_format(
     Raises:
         Exception: 转换失败时抛出异常
     """
-    # 如果已经是目标格式，直接返回
+    # 如果已经是目标格式,直接返回
     if video_path.lower().endswith(f".{output_format}"):
         return video_path
 
     # 生成输出文件路径
     if output_path is None:
         temp_dir = get_astrbot_temp_path()
-        os.makedirs(temp_dir, exist_ok=True)
+        await anyio.Path(temp_dir).mkdir(parents=True, exist_ok=True)
         output_path = os.path.join(
             temp_dir,
             f"media_video_{uuid.uuid4().hex}.{output_format}",
@@ -179,13 +180,13 @@ async def convert_video_format(
             stderr=subprocess.PIPE,
         )
 
-        stdout, stderr = await process.communicate()
+        _stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
             # 清理可能已生成但无效的临时文件
-            if output_path and os.path.exists(output_path):
+            if output_path and await anyio.Path(output_path).exists():
                 try:
-                    os.remove(output_path)
+                    await anyio.Path(output_path).unlink()
                     logger.debug(
                         f"[Media Utils] 已清理失败的{output_format}输出文件: {output_path}"
                     )
@@ -203,7 +204,7 @@ async def convert_video_format(
 
     except FileNotFoundError:
         logger.error(
-            "[Media Utils] ffmpeg未安装或不在PATH中，无法转换视频格式。请安装ffmpeg: https://ffmpeg.org/"
+            "[Media Utils] ffmpeg未安装或不在PATH中,无法转换视频格式｡请安装ffmpeg: https://ffmpeg.org/"
         )
         raise Exception("ffmpeg not found")
     except Exception as e:
@@ -216,12 +217,12 @@ async def convert_audio_format(
     output_format: str = "amr",
     output_path: str | None = None,
 ) -> str:
-    """使用ffmpeg将音频转换为指定格式。
+    """使用ffmpeg将音频转换为指定格式｡
 
     Args:
         audio_path: 原始音频文件路径
-        output_format: 目标格式，例如 amr / ogg
-        output_path: 输出文件路径，如果为None则自动生成
+        output_format: 目标格式,例如 amr / ogg
+        output_path: 输出文件路径,如果为None则自动生成
 
     Returns:
         转换后的音频文件路径
@@ -230,8 +231,8 @@ async def convert_audio_format(
         return audio_path
 
     if output_path is None:
-        temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = anyio.Path(get_astrbot_temp_path())
+        await temp_dir.mkdir(parents=True, exist_ok=True)
         output_path = str(temp_dir / f"media_audio_{uuid.uuid4().hex}.{output_format}")
 
     args = ["ffmpeg", "-y", "-i", audio_path]
@@ -249,9 +250,9 @@ async def convert_audio_format(
         )
         _, stderr = await process.communicate()
         if process.returncode != 0:
-            if output_path and os.path.exists(output_path):
+            if output_path and await anyio.Path(output_path).exists():
                 try:
-                    os.remove(output_path)
+                    await anyio.Path(output_path).unlink()
                 except OSError as e:
                     logger.warning(f"[Media Utils] 清理失败的音频输出文件时出错: {e}")
             error_msg = stderr.decode() if stderr else "未知错误"
@@ -263,7 +264,7 @@ async def convert_audio_format(
 
 
 async def convert_audio_to_amr(audio_path: str, output_path: str | None = None) -> str:
-    """将音频转换为amr格式。"""
+    """将音频转换为amr格式｡"""
     return await convert_audio_format(
         audio_path=audio_path,
         output_format="amr",
@@ -272,7 +273,7 @@ async def convert_audio_to_amr(audio_path: str, output_path: str | None = None) 
 
 
 async def convert_audio_to_wav(audio_path: str, output_path: str | None = None) -> str:
-    """将音频转换为wav格式。"""
+    """将音频转换为wav格式｡"""
     return await convert_audio_format(
         audio_path=audio_path,
         output_format="wav",
@@ -284,10 +285,10 @@ async def extract_video_cover(
     video_path: str,
     output_path: str | None = None,
 ) -> str:
-    """从视频中提取封面图（JPG）。"""
+    """从视频中提取封面图(JPG)｡"""
     if output_path is None:
-        temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = anyio.Path(get_astrbot_temp_path())
+        await temp_dir.mkdir(parents=True, exist_ok=True)
         output_path = str(temp_dir / f"media_cover_{uuid.uuid4().hex}.jpg")
 
     try:
@@ -306,9 +307,9 @@ async def extract_video_cover(
         )
         _, stderr = await process.communicate()
         if process.returncode != 0:
-            if output_path and os.path.exists(output_path):
+            if output_path and await anyio.Path(output_path).exists():
                 try:
-                    os.remove(output_path)
+                    await anyio.Path(output_path).unlink()
                 except OSError as e:
                     logger.warning(f"[Media Utils] 清理失败的视频封面文件时出错: {e}")
             error_msg = stderr.decode() if stderr else "未知错误"

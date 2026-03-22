@@ -45,9 +45,15 @@ const platformDetails = computed(() => {
       :style="{ cursor: 'pointer', ...chipStyle }"
       @click.stop="showMenu = !showMenu"
     >
-      <div class="d-flex align-center" style="gap: 2px">
+      <div
+        class="d-flex align-center"
+        style="gap: 2px"
+      >
         <!-- 显示图标，最多 5 个 -->
-        <div class="d-flex align-center mr-1" v-if="platformDetails.some(p => p.icon)">
+        <div
+          v-if="platformDetails.some(p => p.icon)"
+          class="d-flex align-center mr-1"
+        >
           <v-avatar
             v-for="(platform, index) in platformDetails.slice(0, 5)"
             :key="index"
@@ -55,8 +61,15 @@ const platformDetails = computed(() => {
             class="platform-mini-icon"
             :style="{ marginLeft: index > 0 ? '-4px' : '0', zIndex: 10 - index }"
           >
-            <v-img v-if="platform.icon" :src="platform.icon"></v-img>
-            <v-icon v-else icon="mdi-circle-small" :size="size === 'x-small' ? 8 : 10"></v-icon>
+            <v-img
+              v-if="platform.icon"
+              :src="platform.icon"
+            />
+            <v-icon
+              v-else
+              icon="mdi-circle-small"
+              :size="size === 'x-small' ? 8 : 10"
+            />
           </v-avatar>
         </div>
 
@@ -72,7 +85,7 @@ const platformDetails = computed(() => {
           :icon="showMenu ? 'mdi-chevron-up' : 'mdi-chevron-down'"
           :size="size === 'x-small' ? 14 : 16"
           class="ml-n1"
-        ></v-icon>
+        />
       </div>
 
       <v-menu
@@ -83,20 +96,37 @@ const platformDetails = computed(() => {
         transition="scale-transition"
         open-on-hover
       >
-        <v-list density="compact" border elevation="12" class="rounded-lg pa-1">
+        <v-list
+          density="compact"
+          border
+          elevation="12"
+          class="rounded-lg pa-1"
+        >
           <v-list-item
             v-for="platform in platformDetails"
             :key="platform.name"
             min-height="24"
             class="px-2"
           >
-            <template v-slot:prepend>
-              <v-avatar size="14" class="mr-2" v-if="platform.icon">
-                <v-img :src="platform.icon"></v-img>
+            <template #prepend>
+              <v-avatar
+                v-if="platform.icon"
+                size="14"
+                class="mr-2"
+              >
+                <v-img :src="platform.icon" />
               </v-avatar>
-              <v-icon v-else icon="mdi-platform" size="12" class="mr-2"></v-icon>
+              <v-icon
+                v-else
+                icon="mdi-web"
+                size="12"
+                class="mr-2"
+              />
             </template>
-            <v-list-item-title class="text-caption font-weight-bold" style="font-size: 0.75rem !important">
+            <v-list-item-title
+              class="text-caption font-weight-bold"
+              style="font-size: 0.75rem !important"
+            >
               {{ platform.name }}
             </v-list-item-title>
           </v-list-item>

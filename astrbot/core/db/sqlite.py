@@ -1,8 +1,8 @@
 import asyncio
 import threading
-import typing as T
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timedelta, timezone
+from typing import Any, TypeVar, cast
 
 from sqlalchemy import CursorResult, Row
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +34,7 @@ from astrbot.core.db.po import (
 )
 from astrbot.core.sentinels import NOT_GIVEN
 
-TxResult = T.TypeVar("TxResult")
+TxResult = TypeVar("TxResult")
 CRON_FIELD_NOT_SET = object()
 
 
@@ -55,17 +55,17 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(text("PRAGMA temp_store=MEMORY"))
             await conn.execute(text("PRAGMA mmap_size=134217728"))
             await conn.execute(text("PRAGMA optimize"))
-            # 确保 personas 表有 folder_id、sort_order、skills 列（前向兼容）
+            # 确保 personas 表有 folder_id､sort_order､skills 列(前向兼容)
             await self._ensure_persona_folder_columns(conn)
             await self._ensure_persona_skills_column(conn)
             await self._ensure_persona_custom_error_message_column(conn)
             await conn.commit()
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
-        """确保 personas 表有 folder_id 和 sort_order 列。
+        """确保 personas 表有 folder_id 和 sort_order 列｡
 
-        这是为了支持旧版数据库的平滑升级。新版数据库通过 SQLModel
-        的 metadata.create_all 自动创建这些列。
+        这是为了支持旧版数据库的平滑升级｡新版数据库通过 SQLModel
+        的 metadata.create_all 自动创建这些列｡
         """
         result = await conn.execute(text("PRAGMA table_info(personas)"))
         columns = {row[1] for row in result.fetchall()}
@@ -82,10 +82,10 @@ class SQLiteDatabase(BaseDatabase):
             )
 
     async def _ensure_persona_skills_column(self, conn) -> None:
-        """确保 personas 表有 skills 列。
+        """确保 personas 表有 skills 列｡
 
-        这是为了支持旧版数据库的平滑升级。新版数据库通过 SQLModel
-        的 metadata.create_all 自动创建这些列。
+        这是为了支持旧版数据库的平滑升级｡新版数据库通过 SQLModel
+        的 metadata.create_all 自动创建这些列｡
         """
         result = await conn.execute(text("PRAGMA table_info(personas)"))
         columns = {row[1] for row in result.fetchall()}
@@ -94,7 +94,7 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(text("ALTER TABLE personas ADD COLUMN skills JSON"))
 
     async def _ensure_persona_custom_error_message_column(self, conn) -> None:
-        """确保 personas 表有 custom_error_message 列。"""
+        """确保 personas 表有 custom_error_message 列｡"""
         result = await conn.execute(text("PRAGMA table_info(personas)"))
         columns = {row[1] for row in result.fetchall()}
 
@@ -398,7 +398,7 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(result_query)
             rows = result.fetchall()
 
-            # 查询总数（应用相同的筛选条件）
+            # 查询总数(应用相同的筛选条件)
             count_base_query = (
                 select(func.count(col(Preference.scope_id)))
                 .select_from(Preference)
@@ -566,7 +566,7 @@ class SQLiteDatabase(BaseDatabase):
                 query = delete(Attachment).where(
                     col(Attachment.attachment_id) == attachment_id
                 )
-                result = T.cast(CursorResult, await session.execute(query))
+                result = cast(CursorResult, await session.execute(query))
                 return result.rowcount > 0
 
     async def delete_attachments(self, attachment_ids: list[str]) -> int:
@@ -582,7 +582,7 @@ class SQLiteDatabase(BaseDatabase):
                 query = delete(Attachment).where(
                     col(Attachment.attachment_id).in_(attachment_ids)
                 )
-                result = T.cast(CursorResult, await session.execute(query))
+                result = cast(CursorResult, await session.execute(query))
                 return result.rowcount
 
     async def create_api_key(
@@ -663,7 +663,7 @@ class SQLiteDatabase(BaseDatabase):
                     .where(col(ApiKey.key_id) == key_id)
                     .values(revoked_at=datetime.now(timezone.utc))
                 )
-                result = T.cast(CursorResult, await session.execute(query))
+                result = cast(CursorResult, await session.execute(query))
                 return result.rowcount > 0
 
     async def delete_api_key(self, key_id: str) -> bool:
@@ -671,7 +671,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
-                result = T.cast(
+                result = cast(
                     CursorResult,
                     await session.execute(
                         delete(ApiKey).where(col(ApiKey.key_id) == key_id)
@@ -840,8 +840,8 @@ class SQLiteDatabase(BaseDatabase):
         self,
         folder_id: str,
         name: str | None = None,
-        parent_id: T.Any = NOT_GIVEN,
-        description: T.Any = NOT_GIVEN,
+        parent_id: Any = NOT_GIVEN,
+        description: Any = NOT_GIVEN,
         sort_order: int | None = None,
     ) -> PersonaFolder | None:
         """Update a persona folder."""
@@ -851,7 +851,7 @@ class SQLiteDatabase(BaseDatabase):
                 query = update(PersonaFolder).where(
                     col(PersonaFolder.folder_id) == folder_id
                 )
-                values: dict[str, T.Any] = {}
+                values: dict[str, Any] = {}
                 if name is not None:
                     values["name"] = name
                 if parent_id is not NOT_GIVEN:
@@ -1488,7 +1488,7 @@ class SQLiteDatabase(BaseDatabase):
         return query
 
     @staticmethod
-    def _rows_to_session_dicts(rows: T.Sequence[Row[tuple]]) -> list[dict]:
+    def _rows_to_session_dicts(rows: Sequence[Row[tuple]]) -> list[dict]:
         sessions_with_projects = []
         for row in rows:
             platform_session = row[0]
@@ -1549,7 +1549,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
-                values: dict[str, T.Any] = {"updated_at": datetime.now(timezone.utc)}
+                values: dict[str, Any] = {"updated_at": datetime.now(timezone.utc)}
                 if display_name is not None:
                     values["display_name"] = display_name
 
@@ -1637,7 +1637,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
-                values: dict[str, T.Any] = {"updated_at": datetime.now(timezone.utc)}
+                values: dict[str, Any] = {"updated_at": datetime.now(timezone.utc)}
                 if title is not None:
                     values["title"] = title
                 if emoji is not None:

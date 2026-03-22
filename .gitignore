@@ -61,5 +61,8 @@ GenieData/
 .codex/
 .opencode/
 .kilocode/
+.serena
 .worktrees/
 
+.env
+dashboard/warker.js

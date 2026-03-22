@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import cast
 
 import quart
@@ -39,12 +40,15 @@ class QQOfficialWebhook:
         self.client = botpy_client
         self.event_queue = event_queue
         self.shutdown_event = asyncio.Event()
+        # Deduplication cache for webhook retry callbacks.
+        self._seen_event_ids: dict[str, float] = {}
+        self._dedup_ttl: int = 60  # seconds
 
     async def initialize(self) -> None:
         logger.info("正在登录到 QQ 官方机器人...")
         self.user = await self.http.login(self.token)
         logger.info(f"已登录 QQ 官方机器人账号: {self.user}")
-        # 直接注入到 botpy 的 Client，移花接木！
+        # 直接注入到 botpy 的 Client,移花接木!
         self.client.api = self.api
         self.client.http = self.http
 
@@ -85,7 +89,7 @@ class QQOfficialWebhook:
         return await self.handle_callback(quart.request)
 
     async def handle_callback(self, request) -> dict:
-        """处理 webhook 回调，可被统一 webhook 入口复用
+        """处理 webhook 回调,可被统一 webhook 入口复用
 
         Args:
             request: Quart 请求对象
@@ -106,6 +110,22 @@ class QQOfficialWebhook:
             print(signed)
             return signed
 
+        event_id = msg.get("id")
+        if event_id:
+            now = time.monotonic()
+            # Lazily evict expired entries to prevent unbounded growth.
+            expired = [
+                k
+                for k, ts in self._seen_event_ids.items()
+                if now - ts > self._dedup_ttl
+            ]
+            for k in expired:
+                del self._seen_event_ids[k]
+            if event_id in self._seen_event_ids:
+                logger.debug(f"Duplicate webhook event {event_id!r}, skipping.")
+                return {"opcode": 12}
+            self._seen_event_ids[event_id] = now
+
         if event and opcode == BotWebSocket.WS_DISPATCH_EVENT:
             event = msg["t"].lower()
             try:
@@ -119,7 +139,7 @@ class QQOfficialWebhook:
 
     async def start_polling(self) -> None:
         logger.info(
-            f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器。",
+            f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器｡",
         )
         await self.server.run_task(
             host=self.callback_server_host,

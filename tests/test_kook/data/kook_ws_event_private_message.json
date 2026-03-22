@@ -1,0 +1,64 @@
+{
+    "s": 0,
+    "d": {
+        "channel_type": "PERSON",
+        "type": 9,
+        "target_id": "7324688132731983",
+        "author_id": "2732467349811313213",
+        "content": "/help",
+        "extra": {
+            "type": 9,
+            "code": "1738914789hd8fd91098he809h19y491",
+            "author": {
+                "id": "2732467349811313213",
+                "username": "shuiping233",
+                "identify_num": "4198",
+                "online": true,
+                "os": "Websocket",
+                "status": 1,
+                "avatar": "https://example.com",
+                "vip_avatar": "https://example.com",
+                "banner": "",
+                "nickname": "shuiping233",
+                "roles": [],
+                "is_vip": false,
+                "vip_amp": false,
+                "bot": false,
+                "nameplate": [],
+                "kpm_vip": null,
+                "wealth_level": 0,
+                "decorations_id_map": null,
+                "is_sys": false
+            },
+            "visible_only": "",
+            "mention": [],
+            "mention_no_at": [],
+            "mention_all": false,
+            "mention_roles": [],
+            "mention_here": false,
+            "nav_channels": [],
+            "kmarkdown": {
+                "raw_content": "/help",
+                "mention_part": [],
+                "mention_role_part": [],
+                "channel_part": [],
+                "spl": []
+            },
+            "emoji": [],
+            "preview_content": "",
+            "last_msg_content": "/help",
+            "send_msg_device": 0
+        },
+        "msg_id": "b0f57b9e-2cd4-4e07-8f0e-9c1ecfeaa837",
+        "msg_timestamp": 1772587358662,
+        "nonce": "6AwzUe5YjgyC8pAfxcLGjewL",
+        "from_type": 1
+    },
+    "extra": {
+        "verifyToken": "kW4FH_ASHio1hosd",
+        "encryptKey": "",
+        "callbackUrl": "",
+        "intent": 255
+    },
+    "sn": 19
+}

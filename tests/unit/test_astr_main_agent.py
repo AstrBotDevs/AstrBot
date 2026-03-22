@@ -1,6 +1,5 @@
 """Tests for astr_main_agent module."""
 
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -39,6 +38,7 @@ def mock_context():
     ctx.persona_manager.resolve_selected_persona = AsyncMock(
         return_value=(None, None, None, False)
     )
+    ctx.persona_manager.get_persona_v3_by_id = MagicMock(return_value=None)
     ctx.get_llm_tool_manager.return_value = MagicMock()
     ctx.subagent_orchestrator = None
     return ctx
@@ -288,7 +288,7 @@ class TestGetSessionConv:
         conv_mgr.new_conversation = AsyncMock(return_value="new-conv-id")
         conv_mgr.get_conversation = AsyncMock(return_value=None)
 
-        with pytest.raises(RuntimeError, match="无法创建新的对话。"):
+        with pytest.raises(RuntimeError, match="无法创建新的对话｡"):
             await module._get_session_conv(mock_event, mock_context)
 
 
@@ -442,7 +442,7 @@ class TestApplyFileExtract:
 
             await module._apply_file_extract(mock_event, req, sample_config)
 
-        assert req.prompt == "总结一下文件里面讲了什么？"
+        assert req.prompt == "总结一下文件里面讲了什么?"
 
     @pytest.mark.asyncio
     async def test_file_extract_no_api_key(self, mock_event):
@@ -537,6 +537,63 @@ class TestEnsurePersonaAndSkills:
         await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
 
         assert req.func_tool is not None
+
+    @pytest.mark.asyncio
+    async def test_subagent_dedupe_uses_default_persona_tools(
+        self, mock_event, mock_context
+    ):
+        """Test dedupe uses resolved default persona tools in subagent mode."""
+        module = ama
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(None, None, None, False)
+        )
+        mock_context.persona_manager.get_persona_v3_by_id = MagicMock(
+            return_value={"name": "default", "tools": ["tool_a"]}
+        )
+
+        tool_a = FunctionTool(
+            name="tool_a",
+            parameters={"type": "object", "properties": {}},
+            description="tool a",
+        )
+        tool_b = FunctionTool(
+            name="tool_b",
+            parameters={"type": "object", "properties": {}},
+            description="tool b",
+        )
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.func_list = [tool_a, tool_b]
+        tmgr.get_full_tool_set.return_value = ToolSet([tool_a, tool_b])
+        tmgr.get_func.side_effect = lambda name: {"tool_a": tool_a, "tool_b": tool_b}.get(
+            name
+        )
+
+        handoff = MagicMock()
+        handoff.name = "transfer_to_planner"
+        mock_context.subagent_orchestrator = MagicMock(handoffs=[handoff])
+        mock_context.get_config.return_value = {
+            "subagent_orchestrator": {
+                "main_enable": True,
+                "remove_main_duplicate_tools": True,
+                "agents": [
+                    {
+                        "name": "planner",
+                        "enabled": True,
+                        "persona_id": "default",
+                    }
+                ],
+            }
+        }
+
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert req.func_tool is not None
+        assert "transfer_to_planner" in req.func_tool.names()
+        assert "tool_a" not in req.func_tool.names()
+        assert "tool_b" in req.func_tool.names()
 
 
 class TestDecorateLlmRequest:
@@ -1047,6 +1104,103 @@ class TestBuildMainAgent:
         assert result is not None
         assert result.provider_request == existing_req
 
+    @pytest.mark.asyncio
+    async def test_build_main_agent_disables_streaming_for_webchat_gemini_image_output(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test Gemini image output requests force non-streaming on webchat."""
+        module = ama
+        mock_provider.provider_config = {
+            "id": "google_gemini",
+            "type": "googlegenai_chat_completion",
+            "gm_resp_image_modal": True,
+            "modalities": ["image", "tool_use"],
+        }
+        mock_provider.get_model.return_value = "gemini-3-pro-image-preview"
+        mock_event.get_platform_name.return_value = "webchat"
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    streaming_response=True,
+                ),
+            )
+
+        assert result is not None
+        assert mock_runner.reset.call_args.kwargs["streaming"] is False
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_disables_streaming_for_webchat_image_output_model_metadata(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test image-output model metadata forces non-streaming on webchat."""
+        module = ama
+        mock_provider.provider_config = {
+            "id": "test-provider",
+            "type": "openai_chat_completion",
+            "modalities": ["image", "tool_use"],
+        }
+        mock_provider.get_model.return_value = "test-image-output-model"
+        mock_event.get_platform_name.return_value = "webchat"
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch.dict(
+                "astrbot.core.astr_main_agent.LLM_METADATAS",
+                {
+                    "test-image-output-model": {
+                        "id": "test-image-output-model",
+                        "reasoning": False,
+                        "tool_call": False,
+                        "knowledge": "none",
+                        "release_date": "",
+                        "modalities": {"input": ["text"], "output": ["text", "image"]},
+                        "open_weights": False,
+                        "limit": {"context": 0, "output": 0},
+                    }
+                },
+                clear=False,
+            ),
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    streaming_response=True,
+                ),
+            )
+
+        assert result is not None
+        assert mock_runner.reset.call_args.kwargs["streaming"] is False
+
 
 class TestHandleWebchat:
     """Tests for _handle_webchat function."""
@@ -1421,8 +1575,8 @@ class TestApplySandboxTools:
 
         assert "sandboxed environment" in req.system_prompt
 
-    def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch):
-        """Test sandbox tools with shipyard booter configuration."""
+    def test_apply_sandbox_tools_with_shipyard_booter(self):
+        """Test sandbox tools with shipyard booter registers 4 basic tools."""
         module = ama
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,
@@ -1434,56 +1588,33 @@ class TestApplySandboxTools:
             },
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
-
-        monkeypatch.delenv("SHIPYARD_ENDPOINT", raising=False)
-        monkeypatch.delenv("SHIPYARD_ACCESS_TOKEN", raising=False)
 
         module._apply_sandbox_tools(config, req, "session-123")
 
-        assert os.environ.get("SHIPYARD_ENDPOINT") == "https://shipyard.example.com"
-        assert os.environ.get("SHIPYARD_ACCESS_TOKEN") == "test-token"
+        names = req.func_tool.names()
+        assert "astrbot_execute_shell" in names
+        assert len(names) == 4
 
-    def test_apply_sandbox_tools_shipyard_missing_endpoint(self):
-        """Test that shipyard config is skipped when endpoint is missing."""
+    def test_apply_sandbox_tools_neo_booter_registers_18_tools(self):
+        """Test sandbox tools with Neo booter registers all 18 tools."""
         module = ama
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="sandbox",
-            sandbox_cfg={
-                "booter": "shipyard",
-                "shipyard_endpoint": "",
-                "shipyard_access_token": "test-token",
-            },
+            sandbox_cfg={"booter": "shipyard_neo"},
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
+        with patch(
+            "astrbot.core.computer.computer_client.get_sandbox_tools",
+            return_value=[],
+        ):
             module._apply_sandbox_tools(config, req, "session-123")
 
-        mock_logger.error.assert_called_once()
-        assert (
-            "Shipyard sandbox configuration is incomplete"
-            in mock_logger.error.call_args[0][0]
-        )
-
-    def test_apply_sandbox_tools_shipyard_missing_access_token(self):
-        """Test that shipyard config is skipped when access token is missing."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={
-                "booter": "shipyard",
-                "shipyard_endpoint": "https://shipyard.example.com",
-                "shipyard_access_token": "",
-            },
-        )
-        req = ProviderRequest(prompt="Test", func_tool=None)
-
-        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
-            module._apply_sandbox_tools(config, req, "session-123")
-
-        mock_logger.error.assert_called_once()
+        names = req.func_tool.names()
+        assert "astrbot_create_skill_candidate" in names
+        assert "astrbot_execute_browser" in names
+        assert len(names) == 18
 
     def test_apply_sandbox_tools_preserves_existing_toolset(self):
         """Test that existing tools are preserved when adding sandbox tools."""

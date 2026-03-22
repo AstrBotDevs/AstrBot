@@ -1,52 +1,86 @@
 <template>
-    <v-dialog v-model="showDialog" max-width="500px" persistent>
-        <v-card>
-            <v-card-title>
-                <v-icon class="mr-2">mdi-folder-move</v-icon>
-                {{ tm('moveDialog.title') }}
-            </v-card-title>
-            <v-card-text>
-                <p class="text-body-2 text-medium-emphasis mb-4">
-                    {{ tm('moveDialog.description', { name: itemName }) }}
-                </p>
+  <v-dialog
+    v-model="showDialog"
+    max-width="500px"
+    persistent
+  >
+    <v-card>
+      <v-card-title>
+        <v-icon class="mr-2">
+          mdi-folder-move
+        </v-icon>
+        {{ tm('moveDialog.title') }}
+      </v-card-title>
+      <v-card-text>
+        <p class="text-body-2 text-medium-emphasis mb-4">
+          {{ tm('moveDialog.description', { name: itemName }) }}
+        </p>
 
-                <!-- 文件夹选择树 -->
-                <div class="folder-select-tree">
-                    <v-list density="compact" nav class="tree-list">
-                        <!-- 根目录选项 -->
-                        <v-list-item :active="selectedFolderId === null" @click="selectFolder(null)" rounded="lg"
-                            class="mb-1">
-                            <template v-slot:prepend>
-                                <v-icon>mdi-home</v-icon>
-                            </template>
-                            <v-list-item-title>{{ tm('folder.rootFolder') }}</v-list-item-title>
-                        </v-list-item>
+        <!-- 文件夹选择树 -->
+        <div class="folder-select-tree">
+          <v-list
+            density="compact"
+            nav
+            class="tree-list"
+          >
+            <!-- 根目录选项 -->
+            <v-list-item
+              :active="selectedFolderId === null"
+              rounded="lg"
+              class="mb-1"
+              @click="selectFolder(null)"
+            >
+              <template #prepend>
+                <v-icon>mdi-home</v-icon>
+              </template>
+              <v-list-item-title>{{ tm('folder.rootFolder') }}</v-list-item-title>
+            </v-list-item>
 
-                        <!-- 文件夹树 -->
-                        <template v-if="!treeLoading">
-                            <MoveTargetNode v-for="folder in availableFolders" :key="folder.folder_id" :folder="folder"
-                                :depth="0" :selected-folder-id="selectedFolderId" :disabled-folder-ids="disabledFolderIds"
-                                @select="selectFolder" />
-                        </template>
+            <!-- 文件夹树 -->
+            <template v-if="!treeLoading">
+              <MoveTargetNode
+                v-for="folder in availableFolders"
+                :key="folder.folder_id"
+                :folder="folder"
+                :depth="0"
+                :selected-folder-id="selectedFolderId"
+                :disabled-folder-ids="disabledFolderIds"
+                @select="selectFolder"
+              />
+            </template>
 
-                        <!-- 加载状态 -->
-                        <div v-if="treeLoading" class="text-center pa-4">
-                            <v-progress-circular indeterminate size="24" />
-                        </div>
-                    </v-list>
-                </div>
-            </v-card-text>
-            <v-card-actions>
-                <v-spacer />
-                <v-btn variant="text" @click="closeDialog">
-                    {{ tm('buttons.cancel') }}
-                </v-btn>
-                <v-btn color="primary" variant="flat" @click="submitMove" :loading="loading">
-                    {{ tm('buttons.move') }}
-                </v-btn>
-            </v-card-actions>
-        </v-card>
-    </v-dialog>
+            <!-- 加载状态 -->
+            <div
+              v-if="treeLoading"
+              class="text-center pa-4"
+            >
+              <v-progress-circular
+                indeterminate
+                size="24"
+              />
+            </div>
+          </v-list>
+        </div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn
+          variant="text"
+          @click="closeDialog"
+        >
+          {{ tm('buttons.cancel') }}
+        </v-btn>
+        <v-btn
+          color="primary"
+          variant="flat"
+          :loading="loading"
+          @click="submitMove"
+        >
+          {{ tm('buttons.move') }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script lang="ts">

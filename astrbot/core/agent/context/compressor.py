@@ -130,7 +130,6 @@ def split_history(
     # Search backward from split_index to find the first user message
     # This ensures recent_messages starts with a user message (complete turn)
     while split_index > 0 and non_system_messages[split_index].role != "user":
-        # TODO: +=1 or -=1 ? calculate by tokens
         split_index -= 1
 
     # If we couldn't find a user message, keep all messages as recent

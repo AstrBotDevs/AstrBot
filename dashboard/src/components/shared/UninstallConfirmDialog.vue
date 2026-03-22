@@ -15,9 +15,11 @@
           {{ tm('dialogs.uninstall.message') }}
         </div>
         
-        <v-divider class="my-4"></v-divider>
+        <v-divider class="my-4" />
         
-        <div class="text-subtitle-2 mb-3">{{ t('core.common.actions') }}:</div>
+        <div class="text-subtitle-2 mb-3">
+          {{ t('core.common.actions') }}:
+        </div>
         
         <v-checkbox
           v-model="deleteConfig"
@@ -26,10 +28,16 @@
           hide-details
           class="mb-2"
         >
-          <template v-slot:append>
+          <template #append>
             <v-tooltip location="top">
-              <template v-slot:activator="{ props }">
-                <v-icon v-bind="props" size="small" color="grey">mdi-information-outline</v-icon>
+              <template #activator="{ props }">
+                <v-icon
+                  v-bind="props"
+                  size="small"
+                  color="grey"
+                >
+                  mdi-information-outline
+                </v-icon>
               </template>
               <span>{{ tm('dialogs.uninstall.configHint') }}</span>
             </v-tooltip>
@@ -42,10 +50,16 @@
           color="error"
           hide-details
         >
-          <template v-slot:append>
+          <template #append>
             <v-tooltip location="top">
-              <template v-slot:activator="{ props }">
-                <v-icon v-bind="props" size="small" color="grey">mdi-information-outline</v-icon>
+              <template #activator="{ props }">
+                <v-icon
+                  v-bind="props"
+                  size="small"
+                  color="grey"
+                >
+                  mdi-information-outline
+                </v-icon>
               </template>
               <span>{{ tm('dialogs.uninstall.dataHint') }}</span>
             </v-tooltip>
@@ -59,7 +73,7 @@
           density="compact"
           class="mt-4"
         >
-          <template v-slot:prepend>
+          <template #prepend>
             <v-icon>mdi-alert</v-icon>
           </template>
           {{ t('messages.validation.operation_cannot_be_undone') }}
@@ -67,7 +81,7 @@
       </v-card-text>
       
       <v-card-actions>
-        <v-spacer></v-spacer>
+        <v-spacer />
         <v-btn
           color="grey"
           variant="text"

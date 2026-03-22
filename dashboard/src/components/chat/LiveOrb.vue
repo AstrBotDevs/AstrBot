@@ -1,53 +1,111 @@
 <template>
-    <div class="live-orb-container" ref="containerRef" :class="{ 'dark': isDark }" :style="styleVars">
-        <div class="live-orb">
+  <div
+    ref="containerRef"
+    class="live-orb-container"
+    :class="{ 'dark': isDark }"
+    :style="styleVars"
+  >
+    <div class="live-orb" />
+    <div class="eyes-container">
+      <div
+        class="eye"
+        :class="{ 'blink': isBlinking, 'nervous': nervousMode }"
+      >
+        <!-- Nervous Mode > -->
+        <div
+          v-if="nervousMode"
+          class="nervous-eye-content"
+        >
+          <svg
+            viewBox="0 0 30 60"
+            width="100%"
+            height="100%"
+          >
+            <path
+              d="M 0 10 L 30 30 L 0 50"
+              fill="none"
+              stroke="#7d80e4"
+              stroke-width="8"
+            />
+          </svg>
         </div>
-        <div class="eyes-container">
-            <div class="eye" :class="{ 'blink': isBlinking, 'nervous': nervousMode }">
-                <!-- Nervous Mode > -->
-                <div v-if="nervousMode" class="nervous-eye-content">
-                    <svg viewBox="0 0 30 60" width="100%" height="100%">
-                        <path d="M 0 10 L 30 30 L 0 50" fill="none" stroke="#7d80e4" stroke-width="8" />
-                    </svg>
-                </div>
 
-                <!-- Code Mode Layer -->
-                <transition name="fade">
-                    <div v-if="codeMode && !nervousMode" class="code-rain-container">
-                        <div v-for="(col, i) in codeColumns" :key="i" class="code-column" :style="col.style">
-                            {{ col.content }}
-                        </div>
-                    </div>
-                </transition>
+        <!-- Code Mode Layer -->
+        <transition name="fade">
+          <div
+            v-if="codeMode && !nervousMode"
+            class="code-rain-container"
+          >
+            <div
+              v-for="(col, i) in codeColumns"
+              :key="i"
+              class="code-column"
+              :style="col.style"
+            >
+              {{ col.content }}
             </div>
-            <div class="eye" :class="{ 'blink': isBlinking, 'nervous': nervousMode }">
-                <!-- Nervous Mode < -->
-                <div v-if="nervousMode" class="nervous-eye-content">
-                    <svg viewBox="0 0 30 60" width="100%" height="100%">
-                        <path d="M 30 10 L 0 30 L 30 50" fill="none" stroke="#7d80e4" stroke-width="8" />
-                    </svg>
-                </div>
+          </div>
+        </transition>
+      </div>
+      <div
+        class="eye"
+        :class="{ 'blink': isBlinking, 'nervous': nervousMode }"
+      >
+        <!-- Nervous Mode < -->
+        <div
+          v-if="nervousMode"
+          class="nervous-eye-content"
+        >
+          <svg
+            viewBox="0 0 30 60"
+            width="100%"
+            height="100%"
+          >
+            <path
+              d="M 30 10 L 0 30 L 30 50"
+              fill="none"
+              stroke="#7d80e4"
+              stroke-width="8"
+            />
+          </svg>
+        </div>
 
-                <!-- Code Mode Layer -->
-                <transition name="fade">
-                    <div v-if="codeMode && !nervousMode" class="code-rain-container">
-                        <div v-for="(col, i) in codeColumns" :key="i" class="code-column" :style="col.style">
-                            {{ col.content }}
-                        </div>
-                    </div>
-                </transition>
+        <!-- Code Mode Layer -->
+        <transition name="fade">
+          <div
+            v-if="codeMode && !nervousMode"
+            class="code-rain-container"
+          >
+            <div
+              v-for="(col, i) in codeColumns"
+              :key="i"
+              class="code-column"
+              :style="col.style"
+            >
+              {{ col.content }}
             </div>
-        </div>
-
-        <!-- Hair Accessory Star -->
-        <div class="accessory-star">
-            <svg viewBox="0 0 24 24" width="100%" height="100%">
-                <path d="M12 2l2.4 7.2h7.6l-6 4.8 2.4 7.2-6-4.8-6 4.8 2.4-7.2-6-4.8h7.6z"
-                    fill="rgba(125, 128, 228, 0.4)" stroke="rgba(180, 182, 255, 0.6)" stroke-width="3"
-                    stroke-linejoin="round" />
-            </svg>
-        </div>
+          </div>
+        </transition>
+      </div>
     </div>
+
+    <!-- Hair Accessory Star -->
+    <div class="accessory-star">
+      <svg
+        viewBox="0 0 24 24"
+        width="100%"
+        height="100%"
+      >
+        <path
+          d="M12 2l2.4 7.2h7.6l-6 4.8 2.4 7.2-6-4.8-6 4.8 2.4-7.2-6-4.8h7.6z"
+          fill="rgba(125, 128, 228, 0.4)"
+          stroke="rgba(180, 182, 255, 0.6)"
+          stroke-width="3"
+          stroke-linejoin="round"
+        />
+      </svg>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">

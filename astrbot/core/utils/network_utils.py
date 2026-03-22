@@ -73,11 +73,11 @@ def log_connection_failure(
 
     if effective_proxy:
         logger.error(
-            f"[{provider_label}] 网络/代理连接失败 ({error_type})。"
-            f"代理地址: {effective_proxy}，错误: {error}"
+            f"[{provider_label}] 网络/代理连接失败 ({error_type})｡"
+            f"代理地址: {effective_proxy},错误: {error}"
         )
     else:
-        logger.error(f"[{provider_label}] 网络连接失败 ({error_type})。错误: {error}")
+        logger.error(f"[{provider_label}] 网络连接失败 ({error_type})｡错误: {error}")
 
 
 def create_proxy_client(

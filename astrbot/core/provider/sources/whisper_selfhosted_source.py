@@ -3,6 +3,7 @@ import os
 import uuid
 from typing import cast
 
+import anyio
 import whisper
 
 from astrbot.core import logger
@@ -32,18 +33,18 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
 
     async def initialize(self) -> None:
         loop = asyncio.get_running_loop()
-        logger.info("下载或者加载 Whisper 模型中，这可能需要一些时间 ...")
+        logger.info("下载或者加载 Whisper 模型中,这可能需要一些时间 ...")
         self.model = await loop.run_in_executor(
             None,
             whisper.load_model,
             self.model_name,
         )
-        logger.info("Whisper 模型加载完成。")
+        logger.info("Whisper 模型加载完成｡")
 
     async def _is_silk_file(self, file_path) -> bool:
         silk_header = b"SILK"
-        with open(file_path, "rb") as f:
-            file_header = f.read(8)
+        async with anyio.open_file(file_path, "rb") as f:
+            file_header = await f.read(8)
 
         if silk_header in file_header:
             return True
@@ -66,7 +67,7 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
             await download_file(audio_url, path)
             audio_url = path
 
-        if not os.path.exists(audio_url):
+        if not await anyio.Path(audio_url).exists():
             raise FileNotFoundError(f"文件不存在: {audio_url}")
 
         if audio_url.endswith(".amr") or audio_url.endswith(".silk") or is_tencent:

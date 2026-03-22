@@ -25,12 +25,22 @@ class UmopConfigRouter:
         )
         self.umop_to_conf_id = sp_data
 
+    @staticmethod
+    def _split_umo(umo: str) -> tuple[str, str, str] | None:
+        """将 UMO 拆分为 3 个部分,同时保留 session_id 中的 ':'"""
+        if not isinstance(umo, str):
+            return None
+        parts = umo.split(":", 2)
+        if len(parts) != 3:
+            return None
+        return parts[0], parts[1], parts[2]
+
     def _is_umo_match(self, p1: str, p2: str) -> bool:
         """判断 p2 umo 是否逻辑包含于 p1 umo"""
-        p1_ls = p1.split(":")
-        p2_ls = p2.split(":")
+        p1_ls = self._split_umo(p1)
+        p2_ls = self._split_umo(p2)
 
-        if len(p1_ls) != 3 or len(p2_ls) != 3:
+        if p1_ls is None or p2_ls is None:
             return False  # 非法格式
 
         return all(p == "" or fnmatch.fnmatchcase(t, p) for p, t in zip(p1_ls, p2_ls))
@@ -42,7 +52,7 @@ class UmopConfigRouter:
             umo (str): UMO 字符串
 
         Returns:
-            str | None: 配置文件 ID，如果没有找到则返回 None
+            str | None: 配置文件 ID,如果没有找到则返回 None
 
         """
         for pattern, conf_id in self.umop_to_conf_id.items():
@@ -54,15 +64,15 @@ class UmopConfigRouter:
         """更新路由表
 
         Args:
-            new_routing (dict[str, str]): 新的 UMOP 到配置文件 ID 的映射。umo 由三个部分组成 [platform_id]:[message_type]:[session_id]。
-                umop 可以是 "::" (代表所有), 可以是 "[platform_id]::" (代表指定平台下的所有类型消息和会话)。
+            new_routing (dict[str, str]): 新的 UMOP 到配置文件 ID 的映射｡umo 由三个部分组成 [platform_id]:[message_type]:[session_id]｡
+                umop 可以是 "::" (代表所有), 可以是 "[platform_id]::" (代表指定平台下的所有类型消息和会话)｡
 
         Raises:
             ValueError: 如果 new_routing 中的 key 格式不正确
 
         """
         for part in new_routing:
-            if not isinstance(part, str) or len(part.split(":")) != 3:
+            if self._split_umo(part) is None:
                 raise ValueError(
                     "umop keys must be strings in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",
                 )
@@ -81,7 +91,7 @@ class UmopConfigRouter:
             ValueError: 如果 umo 格式不正确
 
         """
-        if not isinstance(umo, str) or len(umo.split(":")) != 3:
+        if self._split_umo(umo) is None:
             raise ValueError(
                 "umop must be a string in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",
             )
@@ -99,7 +109,7 @@ class UmopConfigRouter:
             ValueError: 当 umo 格式不正确时抛出
         """
 
-        if not isinstance(umo, str) or len(umo.split(":")) != 3:
+        if self._split_umo(umo) is None:
             raise ValueError(
                 "umop must be a string in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",
             )
