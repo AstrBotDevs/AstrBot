@@ -28,6 +28,8 @@ async def test_internal_stage_uses_effective_runner_streaming_flag():
     stage = InternalAgentSubStage()
     stage.ctx = MagicMock()
     stage.ctx.plugin_manager.context = MagicMock()
+    stage.ctx.astrbot_config = {"provider_settings": {"wake_prefix": "!"}}
+    stage.provider_wake_prefix = "!"
     stage.streaming_response = True
     stage.unsupported_streaming_strategy = "realtime_segmenting"
     stage.max_step = 5
