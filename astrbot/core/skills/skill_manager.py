@@ -6,6 +6,7 @@ import re
 import shlex
 import shutil
 import tempfile
+import uuid
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -58,6 +59,29 @@ def _is_ignored_zip_entry(name: str) -> bool:
     if not parts:
         return True
     return parts[0] == "__MACOSX"
+
+
+def _normalize_skill_markdown_path(skill_dir: Path) -> Path | None:
+    """Return the canonical `SKILL.md` path for a skill directory.
+
+    If only legacy `skill.md` exists, it is renamed to `SKILL.md` in-place.
+    """
+    canonical = skill_dir / "SKILL.md"
+    entries = set()
+    if skill_dir.exists():
+        entries = {entry.name for entry in skill_dir.iterdir()}
+    if "SKILL.md" in entries:
+        return canonical
+    legacy = skill_dir / "skill.md"
+    if "skill.md" not in entries:
+        return None
+    try:
+        tmp = skill_dir / f".{uuid.uuid4().hex}.tmp_skill_md"
+        legacy.rename(tmp)
+        tmp.rename(canonical)
+    except OSError:
+        return legacy
+    return canonical
 
 
 @dataclass
@@ -281,8 +305,8 @@ class SkillManager:
         for entry in sorted(skills_root.iterdir()):
             if not entry.is_dir():
                 continue
-            skill_md_path = entry / "SKILL.md"
-            if not skill_md_path.is_file():
+            skill_md_path = _normalize_skill_markdown_path(entry)
+            if skill_md_path is None:
                 continue
             sources[entry.name] = LocalSkillSource(
                 name=entry.name,
@@ -779,6 +803,7 @@ class SkillManager:
                         continue
                     zf.extract(member, tmp_dir)
                 src_dir = Path(tmp_dir) / skill_name
+                _normalize_skill_markdown_path(src_dir)
                 if not src_dir.exists():
                     raise ValueError("Skill folder not found after extraction.")
                 dest_dir = Path(self.skills_root) / skill_name

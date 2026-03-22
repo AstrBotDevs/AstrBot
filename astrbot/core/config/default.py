@@ -5,8 +5,40 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.20.1"
+VERSION = "4.22.0"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
+PERSONAL_WECHAT_CONFIG_METADATA = {
+    "weixin_oc_base_url": {
+        "description": "Base URL",
+        "type": "string",
+        "hint": "默认值: https://ilinkai.weixin.qq.com",
+    },
+    "weixin_oc_bot_type": {
+        "description": "扫码参数 bot_type",
+        "type": "string",
+        "hint": "默认值: 3",
+    },
+    "weixin_oc_qr_poll_interval": {
+        "description": "二维码状态轮询间隔（秒）",
+        "type": "int",
+        "hint": "每隔多少秒轮询一次二维码状态。",
+    },
+    "weixin_oc_long_poll_timeout_ms": {
+        "description": "getUpdates 长轮询超时时间（毫秒）",
+        "type": "int",
+        "hint": "会话消息拉取接口超时参数。",
+    },
+    "weixin_oc_api_timeout_ms": {
+        "description": "HTTP 请求超时（毫秒）",
+        "type": "int",
+        "hint": "通用 API 请求超时参数。",
+    },
+    "weixin_oc_token": {
+        "description": "登录后 token（可留空）",
+        "type": "string",
+        "hint": "扫码登录成功后会自动写入；高级场景可手动填写。",
+    },
+}
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
     "qq_official_webhook",
@@ -141,6 +173,11 @@ DEFAULT_CONFIG = {
             "shipyard_neo_access_token": "",
             "shipyard_neo_profile": "python-default",
             "shipyard_neo_ttl": 3600,
+        },
+        "image_compress_enabled": True,
+        "image_compress_options": {
+            "max_size": 1280,
+            "quality": 95,
         },
     },
     # SubAgent orchestrator mode:
@@ -363,6 +400,16 @@ CONFIG_METADATA_2 = {
                         "webhook_uuid": "",
                         "callback_server_host": "0.0.0.0",
                         "port": 6198,
+                    },
+                    "个人微信": {
+                        "id": "weixin_personal",
+                        "type": "weixin_oc",
+                        "enable": False,
+                        "weixin_oc_base_url": "https://ilinkai.weixin.qq.com",
+                        "weixin_oc_bot_type": "3",
+                        "weixin_oc_qr_poll_interval": 1,
+                        "weixin_oc_long_poll_timeout_ms": 35_000,
+                        "weixin_oc_api_timeout_ms": 15_000,
                     },
                     "飞书(Lark)": {
                         "id": "lark",
@@ -869,6 +916,7 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。",
                     },
+                    **PERSONAL_WECHAT_CONFIG_METADATA,
                     "webhook_uuid": {
                         "invisible": True,
                         "description": "Webhook UUID",
@@ -3408,6 +3456,29 @@ CONFIG_METADATA_3 = {
                         "description": "用户提示词",
                         "type": "string",
                         "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。",
+                    },
+                    "provider_settings.image_compress_enabled": {
+                        "description": "启用图片压缩",
+                        "type": "bool",
+                        "hint": "启用后，发送给多模态模型前会先压缩本地大图片。",
+                    },
+                    "provider_settings.image_compress_options.max_size": {
+                        "description": "最大边长",
+                        "type": "int",
+                        "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。",
+                        "condition": {
+                            "provider_settings.image_compress_enabled": True,
+                        },
+                        "slider": {"min": 256, "max": 4096, "step": 64},
+                    },
+                    "provider_settings.image_compress_options.quality": {
+                        "description": "压缩质量",
+                        "type": "int",
+                        "hint": "JPEG 输出质量，范围为 1-100。值越高，画质越好，文件也越大。",
+                        "condition": {
+                            "provider_settings.image_compress_enabled": True,
+                        },
+                        "slider": {"min": 1, "max": 100, "step": 1},
                     },
                     "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",

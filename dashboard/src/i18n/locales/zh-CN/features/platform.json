@@ -123,6 +123,13 @@
     "unknown": "未知",
     "errors": "个错误"
   },
+  "platformQr": {
+    "title": "二维码登录",
+    "show": "查看二维码",
+    "status": "二维码状态",
+    "waiting": "等待二维码",
+    "close": "关闭"
+  },
   "errorDialog": {
     "title": "错误详情",
     "platformId": "平台 ID",

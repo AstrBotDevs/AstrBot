@@ -335,6 +335,22 @@
           "description": "User Prompt",
           "hint": "You can use {{prompt}} as a placeholder for user input. If no placeholder is provided, it will be added before the user input."
         },
+        "image_compress_enabled": {
+          "description": "Enable image compression",
+          "hint": "When enabled, large local images are compressed before being sent to multimodal models."
+        },
+        "image_compress_options": {
+          "description": "Image compression settings",
+          "hint": "Control image resize limits, JPEG quality, and the minimum size threshold for compression.",
+          "max_size": {
+            "description": "Maximum edge length",
+            "hint": "Longest edge of the compressed image in pixels. Images larger than this are resized proportionally."
+          },
+          "quality": {
+            "description": "JPEG quality",
+            "hint": "JPEG output quality from 1 to 100. Higher values preserve more detail but produce larger files."
+          }
+        },
         "reachability_check": {
           "description": "Provider Reachability Check",
           "hint": "When running the /provider command, test provider connectivity in parallel. This actively pings models and may consume extra tokens."
@@ -617,6 +633,30 @@
       "only_use_webhook_url_to_send": {
         "description": "Send Replies via Webhook Only",
         "hint": "When enabled, all WeCom AI Bot replies are sent through msg_push_webhook_url. The message push webhook supports more message types (such as images, files, etc.). If you do not need the typing effect, it is strongly recommended to use this option. "
+      },
+      "weixin_oc_base_url": {
+        "description": "API Base URL",
+        "hint": "Default: https://ilinkai.weixin.qq.com"
+      },
+      "weixin_oc_bot_type": {
+        "description": "bot_type (QR login parameter)",
+        "hint": "Default: 3"
+      },
+      "weixin_oc_qr_poll_interval": {
+        "description": "QR status poll interval (seconds)",
+        "hint": "Polling interval in seconds for QR code status."
+      },
+      "weixin_oc_long_poll_timeout_ms": {
+        "description": "getUpdates long-poll timeout (ms)",
+        "hint": "Timeout parameter for polling messages."
+      },
+      "weixin_oc_api_timeout_ms": {
+        "description": "HTTP timeout (ms)",
+        "hint": "Generic API request timeout."
+      },
+      "weixin_oc_token": {
+        "description": "Token after login (optional)",
+        "hint": "Automatically written after QR login; can be filled manually for advanced scenarios."
       },
       "kook_bot_token": {
         "description": "Bot Token",

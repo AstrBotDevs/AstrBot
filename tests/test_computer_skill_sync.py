@@ -3,9 +3,22 @@ from __future__ import annotations
 import asyncio
 import zipfile
 from pathlib import Path
+from typing import cast
 
 from astrbot.core.computer import computer_client
+from astrbot.core.computer.booters.base import ComputerBooter
 from astrbot.core.skills.skill_manager import SkillManager
+
+
+def _extract_embedded_python(command: str) -> str:
+    start_marker = "$PYBIN - <<'PY'\n"
+    end_marker = "\nPY"
+    start = command.find(start_marker)
+    assert start != -1
+    start += len(start_marker)
+    end = command.rfind(end_marker)
+    assert end != -1
+    return command[start:end]
 
 
 class _FakeShell:
@@ -41,16 +54,15 @@ class _FakeBooter:
         return {"success": True}
 
 
-def _write_sdk_registered_skill(
-    root: Path,
-    skill_name: str,
-) -> None:
+def _write_sdk_registered_skill(root: Path, skill_name: str) -> None:
     skill_dir = root / skill_name
     skill_dir.mkdir(parents=True, exist_ok=True)
     skill_dir.joinpath("SKILL.md").write_text("# demo", encoding="utf-8")
 
 
-def test_sync_skills_keeps_builtin_skills_when_local_is_empty(monkeypatch, tmp_path: Path):
+def test_sync_skills_keeps_builtin_skills_when_local_is_empty(
+    monkeypatch, tmp_path: Path
+):
     data_dir = tmp_path / "data"
     skills_root = tmp_path / "skills"
     temp_root = tmp_path / "temp"
@@ -87,7 +99,7 @@ def test_sync_skills_keeps_builtin_skills_when_local_is_empty(monkeypatch, tmp_p
     booter = _FakeBooter(
         '{"skills":[{"name":"python-sandbox","description":"ship","path":"skills/python-sandbox/SKILL.md"}]}'
     )
-    asyncio.run(computer_client._sync_skills_to_sandbox(booter))
+    asyncio.run(computer_client._sync_skills_to_sandbox(cast(ComputerBooter, booter)))
 
     assert booter.uploads == []
     assert any(cmd == "rm -f skills/skills.zip" for cmd in booter.shell.commands)
@@ -142,7 +154,7 @@ def test_sync_skills_uses_managed_strategy_instead_of_wiping_all(
     booter = _FakeBooter(
         '{"skills":[{"name":"custom-agent-skill","description":"","path":"skills/custom-agent-skill/SKILL.md"}]}'
     )
-    asyncio.run(computer_client._sync_skills_to_sandbox(booter))
+    asyncio.run(computer_client._sync_skills_to_sandbox(cast(ComputerBooter, booter)))
 
     assert len(booter.uploads) == 1
     assert booter.uploads[0][1].replace("\\", "/") == "skills/skills.zip"
@@ -209,7 +221,7 @@ def test_sync_skills_includes_sdk_registered_skills(monkeypatch, tmp_path: Path)
     booter = _FakeBooter(
         '{"skills":[{"name":"sdk-demo.browser-helper","description":"","path":"skills/sdk-demo.browser-helper/SKILL.md"}]}'
     )
-    asyncio.run(computer_client._sync_skills_to_sandbox(booter))
+    asyncio.run(computer_client._sync_skills_to_sandbox(cast(ComputerBooter, booter)))
 
     assert len(booter.uploads) == 1
     assert "sdk-demo.browser-helper/" in booter.uploaded_entries
@@ -222,3 +234,16 @@ def test_sync_skills_includes_sdk_registered_skills(monkeypatch, tmp_path: Path)
         }
     ]
 
+
+def test_build_scan_command_frontmatter_newline_is_escaped_literal():
+    command = computer_client._build_scan_command()
+    script = _extract_embedded_python(command)
+
+    assert 'frontmatter = "\\n".join(lines[1:end_idx])' in script
+
+
+def test_build_scan_command_embedded_python_is_syntax_valid():
+    command = computer_client._build_scan_command()
+    script = _extract_embedded_python(command)
+
+    compile(script, "<scan_script>", "exec")

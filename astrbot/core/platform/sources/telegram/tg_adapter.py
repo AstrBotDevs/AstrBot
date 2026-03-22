@@ -8,7 +8,7 @@ from typing import cast
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
 from telegram.constants import ChatType
-from telegram.error import InvalidToken, Unauthorized
+from telegram.error import Forbidden, InvalidToken
 from telegram.ext import ApplicationBuilder, ContextTypes, ExtBot, filters
 from telegram.ext import MessageHandler as TelegramMessageHandler
 
@@ -184,7 +184,7 @@ class TelegramPlatformAdapter(Platform):
                     )
             except asyncio.CancelledError:
                 raise
-            except (Unauthorized, InvalidToken) as e:
+            except (Forbidden, InvalidToken) as e:
                 logger.error(
                     f"Telegram token is invalid or unauthorized: {e}. Polling stopped."
                 )
