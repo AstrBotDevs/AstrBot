@@ -20,11 +20,11 @@ dependencies = [
     "openai>=2.7.2",
     "pydantic>=2.12.3",
     "pyyaml>=6.0.3",
+    "uv>=0.9.17",
 ]
 
 [project.scripts]
 astr = "astrbot_sdk.cli:cli"
-astrbot-sdk = "astrbot_sdk.cli:cli"
 
 [tool.pytest.ini_options]
 markers = [

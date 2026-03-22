@@ -68,8 +68,8 @@ from .decorators import (
     private_only,
     provide_capability,
     rate_limit,
-    require_admin,
     register_skill,
+    require_admin,
     validate_config,
 )
 from .errors import AstrBotError
