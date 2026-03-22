@@ -93,9 +93,7 @@ async def run_astrbot(astrbot_root: Path) -> None:
         os.environ.get("ASTRBOT_DASHBOARD_ENABLE", os.environ.get("DASHBOARD_ENABLE"))
         == "True"
     ):
-        # Avoid blocking when running under systemd by waiting for input
-        if os.environ.get("ASTRBOT_SYSTEMD") != "1":
-            await DashboardManager().ensure_installed(astrbot_root)
+        await DashboardManager().ensure_installed(astrbot_root)
 
     log_broker = LogBroker()
     LogManager.set_queue_handler(logger, log_broker)

@@ -138,11 +138,7 @@ async def initialize_astrbot(
             default=True,
         )
     ):
-        # 避免在 systemd 模式下因等待输入而阻塞
-        if os.environ.get("ASTRBOT_SYSTEMD") == "1":
-            click.echo("Systemd detected: Skipping dashboard check.")
-        else:
-            await DashboardManager().ensure_installed(astrbot_root)
+        await DashboardManager().ensure_installed(astrbot_root)
     else:
         click.echo("你可以使用在线面版(需支持配置后端)来控制｡")
 
