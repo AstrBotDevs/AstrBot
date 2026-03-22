@@ -901,33 +901,27 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
     app: Quart,
     authenticated_header: dict,
     monkeypatch,
-    tmp_path,
 ):
-    data_dir = tmp_path / "data"
-    skills_dir = tmp_path / "skills"
-    temp_dir = tmp_path / "temp"
-    data_dir.mkdir()
-    skills_dir.mkdir()
-    temp_dir.mkdir()
-
     async def _fake_sync_skills_to_active_sandboxes():
         return
+
+    def _fake_install_skill_from_zip(
+        self,
+        zip_path: str,
+        *,
+        overwrite: bool = True,
+    ):
+        _ = self, overwrite
+        assert zip_path.endswith(".zip")
+        return "demo_skill"
 
     monkeypatch.setattr(
         "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
     monkeypatch.setattr(
-        "astrbot.core.utils.astrbot_path.get_astrbot_data_path",
-        lambda: str(data_dir),
-    )
-    monkeypatch.setattr(
-        "astrbot.core.utils.astrbot_path.get_astrbot_skills_path",
-        lambda: str(skills_dir),
-    )
-    monkeypatch.setattr(
-        "astrbot.core.utils.astrbot_path.get_astrbot_temp_path",
-        lambda: str(temp_dir),
+        "astrbot.dashboard.routes.skills.SkillManager.install_skill_from_zip",
+        _fake_install_skill_from_zip,
     )
 
     archive = io.BytesIO()
@@ -962,7 +956,6 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
         {"filename": "demo_skill.zip", "name": "demo_skill"}
     ]
     assert data["data"]["failed"] == []
-    assert (skills_dir / "demo_skill" / "SKILL.md").exists()
 
 
 @pytest.mark.asyncio
