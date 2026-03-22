@@ -116,14 +116,21 @@
         "error": "Ошибка"
     },
     "runtimeStatus": {
-        "running": "Работает",
-        "error": "Ошибка",
-        "pending": "Ожидание",
-        "stopped": "Остановлен",
-        "unknown": "Неизвестно",
-        "errors": "ошибок"
-    },
-    "errorDialog": {
+    "running": "Работает",
+    "error": "Ошибка",
+    "pending": "Ожидание",
+    "stopped": "Остановлен",
+    "unknown": "Неизвестно",
+    "errors": "ошибок"
+  },
+  "platformQr": {
+    "title": "QR вход",
+    "show": "Показать QR",
+    "status": "Статус QR",
+    "waiting": "Ожидание QR",
+    "close": "Закрыть"
+  },
+  "errorDialog": {
         "title": "Детали ошибки",
         "platformId": "ID платформы",
         "errorCount": "Кол-во ошибок",
