@@ -317,28 +317,24 @@ class SkillsRoute(Route):
                     .__dict__
                 )
 
-            if skill_mgr.get_local_skill_source(name) is None:
+            skill_dir = Path(skill_mgr.skills_root) / name
+            skill_md = skill_dir / "SKILL.md"
+            if not skill_dir.is_dir() or not skill_md.exists():
                 return Response().error("Local skill not found").__dict__
 
             export_dir = Path(get_astrbot_temp_path()) / "skill_exports"
             export_dir.mkdir(parents=True, exist_ok=True)
             zip_base = export_dir / name
             zip_path = zip_base.with_suffix(".zip")
-            bundle_dir = export_dir / f"{name}_{uuid.uuid4().hex}"
             if zip_path.exists():
                 zip_path.unlink()
 
-            try:
-                skill_mgr.materialize_local_skill_bundle(bundle_dir, skill_names=[name])
-                shutil.make_archive(
-                    str(zip_base),
-                    "zip",
-                    root_dir=str(bundle_dir),
-                    base_dir=name,
-                )
-            finally:
-                if bundle_dir.exists():
-                    shutil.rmtree(bundle_dir, ignore_errors=True)
+            shutil.make_archive(
+                str(zip_base),
+                "zip",
+                root_dir=str(skill_mgr.skills_root),
+                base_dir=name,
+            )
 
             return await send_file(
                 str(zip_path),

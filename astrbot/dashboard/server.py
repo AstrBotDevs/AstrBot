@@ -19,7 +19,6 @@ from flask.json.provider import DefaultJSONProvider
 from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 from quart import Quart, g, jsonify, request
-from quart import Response as QuartResponse
 from quart.logging import default_handler
 from quart_cors import cors
 
@@ -307,25 +306,6 @@ class AstrBotDashboard:
             methods=["GET", "POST"],
         )
 
-        self.shutdown_event = shutdown_event
-
-        self._init_jwt_secret()
-
-    async def srv_plug_route(self, subpath, *args, **kwargs):
-        """插件路由"""
-        registered_web_apis = self.core_lifecycle.star_context.registered_web_apis
-        for api in registered_web_apis:
-            route, view_handler, methods, _ = api
-            if route == f"/{subpath}" and request.method in methods:
-                return await view_handler(*args, **kwargs)
-        sdk_bridge = getattr(self.core_lifecycle, "sdk_plugin_bridge", None)
-        if sdk_bridge is not None:
-            output = await sdk_bridge.dispatch_http_request(
-                f"/{subpath}", request.method
-            )
-            if output is not None:
-                return self._build_sdk_plugin_response(output)
-        return jsonify(Response().error("未找到该路由").__dict__)
     def _init_plugin_route_index(self):
         """将插件路由索引,避免 O(n) 查找"""
         self._plugin_route_map: dict[tuple[str, str], Callable] = {}
@@ -347,37 +327,6 @@ class AstrBotDashboard:
             self.config.save_config()
             logger.info("Initialized random JWT secret for dashboard.")
         self._jwt_secret = dashboard_cfg["jwt_secret"]
-
-    @staticmethod
-    def _build_sdk_plugin_response(output: dict) -> QuartResponse:
-        status = int(output.get("status", 200))
-        headers = output.get("headers")
-        if headers is None:
-            headers = {}
-        if not isinstance(headers, dict):
-            raise ValueError("SDK HTTP handler headers must be an object")
-
-        body = output.get("body")
-        if isinstance(body, (dict, list)):
-            response = jsonify(body)
-            response.status_code = status
-            response.headers.setdefault("Content-Type", "application/json")
-        elif isinstance(body, str):
-            response = QuartResponse(
-                body,
-                status=status,
-                content_type="text/plain; charset=utf-8",
-            )
-        elif body is None:
-            response = QuartResponse("", status=status)
-        else:
-            raise ValueError(
-                "SDK HTTP handler body must be object, array, string or null"
-            )
-
-        for key, value in headers.items():
-            response.headers[str(key)] = str(value)
-        return response
 
     async def auth_middleware(self):
         # 放行CORS预检请求

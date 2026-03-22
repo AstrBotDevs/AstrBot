@@ -16,7 +16,8 @@ import time
 import traceback
 from asyncio import Queue
 
-from astrbot.core import LogBroker, LogManager, logger, sp
+from astrbot.api import logger, sp
+from astrbot.core import LogBroker, LogManager
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
@@ -28,7 +29,6 @@ from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.manager import ProviderManager
-from astrbot.core.sdk_bridge import SdkPluginBridge
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.star.star_manager import PluginManager
@@ -200,11 +200,6 @@ class AstrBotCoreLifecycle:
         # 扫描､注册插件､实例化插件类
         await self.plugin_manager.reload()
 
-        self.sdk_plugin_bridge = SdkPluginBridge(self.star_context)
-        self.star_context.sdk_plugin_bridge = self.sdk_plugin_bridge
-        self.platform_manager.sdk_plugin_bridge = self.sdk_plugin_bridge
-        await self.sdk_plugin_bridge.start()
-
         # 根据配置实例化各个 Provider
         await self.provider_manager.initialize()
 
@@ -316,12 +311,6 @@ class AstrBotCoreLifecycle:
             except BaseException:
                 logger.error(traceback.format_exc())
 
-        if getattr(self, "sdk_plugin_bridge", None) is not None:
-            try:
-                await self.sdk_plugin_bridge.dispatch_system_event("astrbot_loaded")
-            except Exception as exc:
-                logger.warning(f"SDK astrbot_loaded event dispatch failed: {exc}")
-
         # 同时运行curr_tasks中的所有任务
         await asyncio.gather(*self.curr_tasks, return_exceptions=True)
 
@@ -336,9 +325,6 @@ class AstrBotCoreLifecycle:
 
         if self.cron_manager:
             await self.cron_manager.shutdown()
-
-        if getattr(self, "sdk_plugin_bridge", None) is not None:
-            await self.sdk_plugin_bridge.stop()
 
         for plugin in self.plugin_manager.context.get_all_stars():
             try:
@@ -365,8 +351,6 @@ class AstrBotCoreLifecycle:
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
-        if getattr(self, "sdk_plugin_bridge", None) is not None:
-            await self.sdk_plugin_bridge.stop()
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()

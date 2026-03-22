@@ -451,21 +451,15 @@ class ToolsRoute(Route):
                     origin_name = "unknown"
 
                 tool_info = {
-                    "tool_key": _build_legacy_tool_key(tool, origin, origin_name),
                     "name": tool.name,
                     "description": tool.description,
                     "parameters": tool.parameters,
                     "active": tool.active,
                     "origin": origin,
                     "origin_name": origin_name,
-                    "runtime_kind": "legacy",
-                    "plugin_id": None,
                     "source": source,
                 }
                 tools_dict.append(tool_info)
-            sdk_bridge = getattr(self.core_lifecycle, "sdk_plugin_bridge", None)
-            if sdk_bridge is not None:
-                tools_dict.extend(sdk_bridge.list_dashboard_tools())
             return Response().ok(data=tools_dict).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -476,45 +470,15 @@ class ToolsRoute(Route):
         try:
             data = await request.json
             tool_name = data.get("name")
-            tool_key = data.get("tool_key")
             action = data.get("activate")  # True or False
-            runtime_kind = str(data.get("runtime_kind", "legacy") or "legacy")
-            plugin_id = data.get("plugin_id")
 
-            if (not tool_name and not tool_key) or action is None:
+            if not tool_name or action is None:
                 return (
                     Response()
-                    .error("Missing required parameters: tool_key/name or activate")
+                    .error("Missing required parameters: name or activate")
                     .__dict__
                 )
 
-            if runtime_kind == "sdk":
-                sdk_bridge = getattr(self.core_lifecycle, "sdk_plugin_bridge", None)
-                if sdk_bridge is None:
-                    return Response().error("SDK bridge is unavailable.").__dict__
-                if not plugin_id or not tool_name:
-                    return (
-                        Response()
-                        .error("SDK tool toggle requires plugin_id and name")
-                        .__dict__
-                    )
-                plugin_metadata = sdk_bridge.get_plugin_metadata(str(plugin_id))
-                if (
-                    action
-                    and plugin_metadata is not None
-                    and not plugin_metadata.get("enabled", False)
-                ):
-                    return (
-                        Response()
-                        .error(
-                            "The SDK plugin is disabled. Enable the plugin before activating its tool."
-                        )
-                        .__dict__
-                    )
-                if action:
-                    ok = sdk_bridge.activate_llm_tool(str(plugin_id), str(tool_name))
-                else:
-                    ok = sdk_bridge.deactivate_llm_tool(str(plugin_id), str(tool_name))
             # Internal tools cannot be toggled by users
             for t in self.tool_mgr.func_list:
                 if t.name == tool_name and getattr(t, "source", "") == "internal":
@@ -526,25 +490,13 @@ class ToolsRoute(Route):
                 except ValueError as e:
                     return Response().error(f"Failed to activate tool: {e!s}").__dict__
             else:
-                if action:
-                    try:
-                        ok = self.tool_mgr.activate_llm_tool(
-                            str(tool_name), star_map=star_map
-                        )
-                    except ValueError as e:
-                        return (
-                            Response().error(f"Failed to activate tool: {e!s}").__dict__
-                        )
-                else:
-                    ok = self.tool_mgr.deactivate_llm_tool(str(tool_name))
+                ok = self.tool_mgr.deactivate_llm_tool(tool_name)
 
             if ok:
                 return Response().ok(None, "Operation successful.").__dict__
             return (
                 Response()
-                .error(
-                    f"Tool {tool_key or tool_name} does not exist or the operation failed."
-                )
+                .error(f"Tool {tool_name} does not exist or the operation failed.")
                 .__dict__
             )
 
@@ -570,11 +522,3 @@ class ToolsRoute(Route):
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(f"Sync failed: {e!s}").__dict__
-
-
-def _build_legacy_tool_key(tool, origin: str, origin_name: str) -> str:
-    if origin == "mcp" and origin_name:
-        return f"mcp:{origin_name}:{tool.name}"
-    if origin == "plugin" and getattr(tool, "handler_module_path", None):
-        return f"plugin:{tool.handler_module_path}:{tool.name}"
-    return f"tool:{tool.name}"

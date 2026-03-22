@@ -90,7 +90,7 @@ async def test_reload_from_config_uses_processed_begin_dialogs_and_deepcopy():
     [
         (None, None),
         ([], []),
-        ("not-a-list", []),
+        ("not-a-list", None),
     ],
 )
 async def test_reload_from_config_tool_normalization(raw_tools, expected_tools):

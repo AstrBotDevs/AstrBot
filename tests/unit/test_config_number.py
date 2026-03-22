@@ -1,5 +1,4 @@
 from unittest.mock import patch
-import pytest
 
 from astrbot.core.utils.config_number import coerce_int_config
 

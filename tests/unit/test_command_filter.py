@@ -1,12 +1,11 @@
+from unittest.mock import MagicMock
+
 import pytest
-import inspect
-import typing
-from unittest.mock import MagicMock, patch
 
 from astrbot.core.star.filter.command import (
+    CommandFilter,
     GreedyStr,
     unwrap_optional,
-    CommandFilter,
 )
 
 
@@ -19,7 +18,7 @@ class TestGreedyStr:
 
 class TestUnwrapOptional:
     def test_optional_with_none(self):
-        annotation = typing.Optional[int]
+        annotation = int | None
         result = unwrap_optional(annotation)
         assert result == (int,)
 
@@ -34,7 +33,7 @@ class TestUnwrapOptional:
         assert result == ()
 
     def test_union_multiple_non_none(self):
-        annotation = typing.Union[int, str, float]
+        annotation = int | str | float
         result = unwrap_optional(annotation)
         assert int in result
         assert str in result
@@ -185,7 +184,7 @@ class TestCommandFilter:
     def test_validate_and_convert_params_greedy_str_not_last(self):
         cf = CommandFilter(command_name="test")
         cf.handler_params = {"rest": GreedyStr, "extra": str}
-        with pytest.raises(ValueError, match="GreedyStr.*必须是最后一个参数"):
+        with pytest.raises(ValueError, match=r"GreedyStr.*必须是最后一个参数"):
             cf.validate_and_convert_params(
                 ["arg1", "arg2"],
                 {"rest": GreedyStr, "extra": str},

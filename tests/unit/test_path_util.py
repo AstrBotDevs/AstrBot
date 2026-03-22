@@ -1,5 +1,3 @@
-import os
-import pytest
 from unittest.mock import patch
 
 from astrbot.core.utils.path_util import path_Mapping

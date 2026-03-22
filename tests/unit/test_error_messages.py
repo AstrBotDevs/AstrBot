@@ -1,5 +1,3 @@
-import pytest
-
 from astrbot.core.star.error_messages import (
     PLUGIN_ERROR_TEMPLATES,
     format_plugin_error,

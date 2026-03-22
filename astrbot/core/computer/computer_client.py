@@ -27,6 +27,17 @@ local_booter: ComputerBooter | None = None
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
 
 
+def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
+    skills: list[Path] = []
+    for entry in sorted(skills_root.iterdir()):
+        if not entry.is_dir():
+            continue
+        skill_md = entry / "SKILL.md"
+        if skill_md.exists():
+            skills.append(entry)
+    return skills
+
+
 def _discover_bay_credentials(endpoint: str) -> str:
     """Try to auto-discover Bay API key from credentials.json.
 
@@ -388,7 +399,6 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
     await temp_dir.mkdir(parents=True, exist_ok=True)
     zip_base = temp_dir / "skills_bundle"
     zip_path = zip_base.with_suffix(".zip")
-    bundle_dir = temp_dir / f"skills_bundle_{uuid.uuid4().hex}"
 
     try:
         if local_skill_dirs:
@@ -420,8 +430,6 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             len(managed),
         )
     finally:
-        if bundle_dir.exists():
-            shutil.rmtree(bundle_dir, ignore_errors=True)
         if zip_path.exists():
             try:
                 zip_path.unlink()
@@ -495,12 +503,6 @@ async def get_booter(
             from .booters.boxlite import BoxliteBooter
 
             client = BoxliteBooter()
-        elif booter_type == "bwrap":
-            from .booters.bwrap import BwrapBooter
-
-            rw_binds = sandbox_cfg.get("bwrap_rw_binds", [])
-            ro_binds = sandbox_cfg.get("bwrap_ro_binds", [])
-            client = BwrapBooter(rw_binds=rw_binds, ro_binds=ro_binds)
         else:
             raise ValueError(f"Unknown booter type: {booter_type}")
 

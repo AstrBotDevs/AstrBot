@@ -1,6 +1,5 @@
 from quart import request
 
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star.command_management import (
     list_command_conflicts,
     list_commands,
@@ -19,13 +18,8 @@ from .route import Response, Route, RouteContext
 
 
 class CommandRoute(Route):
-    def __init__(
-        self,
-        context: RouteContext,
-        core_lifecycle: AstrBotCoreLifecycle,
-    ) -> None:
+    def __init__(self, context: RouteContext) -> None:
         super().__init__(context)
-        self.core_lifecycle = core_lifecycle
         self.routes = {
             "/commands": ("GET", self.get_commands),
             "/commands/conflicts": ("GET", self.get_conflicts),
@@ -36,7 +30,7 @@ class CommandRoute(Route):
         self.register_routes()
 
     async def get_commands(self):
-        commands = await _list_dashboard_commands(self.core_lifecycle)
+        commands = await list_commands()
         summary = {
             "total": len(commands),
             "disabled": len([cmd for cmd in commands if not cmd["enabled"]]),
@@ -50,153 +44,62 @@ class CommandRoute(Route):
 
     async def toggle_command(self):
         data = await request.get_json()
-        command_key = _resolve_command_key(data)
+        handler_full_name = data.get("handler_full_name")
         enabled = data.get("enabled")
 
-        if command_key is None or enabled is None:
-            return Response().error("command_key 与 enabled 均为必填。").to_json()
+        if handler_full_name is None or enabled is None:
+            return Response().error("handler_full_name 与 enabled 均为必填｡").__dict__
 
         if isinstance(enabled, str):
             enabled = enabled.lower() in ("1", "true", "yes", "on")
 
-        item = await _get_command_payload(self.core_lifecycle, command_key)
-        if item.get("runtime_kind") == "sdk":
-            return (
-                Response()
-                .error("SDK commands are read-only in the dashboard.")
-                .__dict__
-            )
-
         try:
-            await toggle_command_service(command_key, bool(enabled))
+            await toggle_command_service(handler_full_name, bool(enabled))
         except ValueError as exc:
             return Response().error(str(exc)).__dict__
 
-        payload = await _get_command_payload(self.core_lifecycle, command_key)
+        payload = await _get_command_payload(handler_full_name)
         return Response().ok(payload).__dict__
 
     async def rename_command(self):
         data = await request.get_json()
-        command_key = _resolve_command_key(data)
+        handler_full_name = data.get("handler_full_name")
         new_name = data.get("new_name")
         aliases = data.get("aliases")
 
-        if not command_key or not new_name:
-            return Response().error("command_key 与 new_name 均为必填。").__dict__
-
-        item = await _get_command_payload(self.core_lifecycle, command_key)
-        if item.get("runtime_kind") == "sdk":
-            return (
-                Response()
-                .error("SDK commands are read-only in the dashboard.")
-                .to_json()
-            )
+        if not handler_full_name or not new_name:
+            return Response().error("handler_full_name 与 new_name 均为必填｡").__dict__
 
         try:
-            await rename_command_service(command_key, new_name, aliases=aliases)
+            await rename_command_service(handler_full_name, new_name, aliases=aliases)
         except ValueError as exc:
             return Response().error(str(exc)).__dict__
 
-        payload = await _get_command_payload(self.core_lifecycle, command_key)
+        payload = await _get_command_payload(handler_full_name)
         return Response().ok(payload).__dict__
 
     async def update_permission(self):
         data = await request.get_json()
-        command_key = _resolve_command_key(data)
+        handler_full_name = data.get("handler_full_name")
         permission = data.get("permission")
 
-        if not command_key or not permission:
-            return Response().error("command_key 与 permission 均为必填。").__dict__
-
-        item = await _get_command_payload(self.core_lifecycle, command_key)
-        if item.get("runtime_kind") == "sdk":
+        if not handler_full_name or not permission:
             return (
-                Response()
-                .error("SDK commands are read-only in the dashboard.")
-                .to_json()
+                Response().error("handler_full_name 与 permission 均为必填｡").__dict__
             )
 
         try:
-            await update_command_permission_service(command_key, permission)
+            await update_command_permission_service(handler_full_name, permission)
         except ValueError as exc:
             return Response().error(str(exc)).__dict__
 
-        payload = await _get_command_payload(self.core_lifecycle, command_key)
+        payload = await _get_command_payload(handler_full_name)
         return Response().ok(payload).__dict__
 
 
-def _resolve_command_key(data: dict | None) -> str | None:
-    if not isinstance(data, dict):
-        return None
-    command_key = data.get("command_key")
-    if command_key:
-        return str(command_key)
-    handler_full_name = data.get("handler_full_name")
-    if handler_full_name:
-        return str(handler_full_name)
-    return None
-
-
-async def _list_dashboard_commands(
-    core_lifecycle: AstrBotCoreLifecycle,
-) -> list[dict]:
-    commands = _decorate_legacy_commands(await list_commands())
-    sdk_bridge = getattr(core_lifecycle, "sdk_plugin_bridge", None)
-    if sdk_bridge is not None:
-        commands.extend(sdk_bridge.list_dashboard_commands())
-    _apply_conflict_flags(commands)
-    commands.sort(key=lambda item: str(item.get("effective_command", "")).lower())
-    return commands
-
-
-def _decorate_legacy_commands(commands: list[dict]) -> list[dict]:
-    for item in commands:
-        _decorate_legacy_command_item(item)
-    return commands
-
-
-def _decorate_legacy_command_item(item: dict) -> None:
-    item["command_key"] = str(item.get("handler_full_name", ""))
-    item["runtime_kind"] = "legacy"
-    item["supports_toggle"] = True
-    item["supports_rename"] = True
-    item["supports_permission"] = True
-    sub_commands = item.get("sub_commands")
-    if not isinstance(sub_commands, list):
-        return
-    for sub in sub_commands:
-        if isinstance(sub, dict):
-            _decorate_legacy_command_item(sub)
-
-
-def _apply_conflict_flags(commands: list[dict]) -> None:
-    counts: dict[str, int] = {}
-    for item in _walk_command_items(commands):
-        command_name = str(item.get("effective_command", "")).strip()
-        if not command_name or not bool(item.get("enabled", False)):
-            continue
-        counts[command_name] = counts.get(command_name, 0) + 1
-
-    for item in _walk_command_items(commands):
-        command_name = str(item.get("effective_command", "")).strip()
-        item["has_conflict"] = bool(command_name and counts.get(command_name, 0) > 1)
-
-
-def _walk_command_items(commands: list[dict]):
-    for item in commands:
-        yield item
-        sub_commands = item.get("sub_commands")
-        if not isinstance(sub_commands, list):
-            continue
-        yield from _walk_command_items(sub_commands)
-
-
-async def _get_command_payload(
-    core_lifecycle: AstrBotCoreLifecycle,
-    command_key: str,
-):
-    commands = await _list_dashboard_commands(core_lifecycle)
-    for cmd in _walk_command_items(commands):
-        if cmd.get("command_key") == command_key:
+async def _get_command_payload(handler_full_name: str):
+    commands = await list_commands()
+    for cmd in commands:
+        if cmd["handler_full_name"] == handler_full_name:
             return cmd
     return {}

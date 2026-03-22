@@ -113,7 +113,7 @@ async def test_internal_stage_uses_effective_runner_streaming_flag():
         ),
     ):
         yielded = []
-        async for item in stage.process(event, provider_wake_prefix=""):
+        async for item in stage.process(event):
             yielded.append(item)
 
     assert yielded == [None]

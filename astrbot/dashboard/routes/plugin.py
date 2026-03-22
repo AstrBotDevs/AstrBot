@@ -88,17 +88,6 @@ class PluginRoute(Route):
 
         self._logo_cache = {}
 
-    def _sdk_bridge(self):
-        return getattr(self.core_lifecycle, "sdk_plugin_bridge", None)
-
-    def _is_sdk_plugin(self, plugin_name: str) -> bool:
-        sdk_bridge = self._sdk_bridge()
-        if sdk_bridge is None:
-            return False
-        return any(
-            plugin["name"] == plugin_name for plugin in sdk_bridge.list_plugins()
-        )
-
     async def check_plugin_compatibility(self):
         try:
             data = await request.get_json()
@@ -158,20 +147,10 @@ class PluginRoute(Route):
         data = await request.get_json()
         plugin_name = data.get("name", None)
         try:
-            if plugin_name and self._is_sdk_plugin(plugin_name):
-                sdk_bridge = self._sdk_bridge()
-                if sdk_bridge is None:
-                    return Response().error("SDK bridge 未初始化").__dict__
-                await sdk_bridge.reload_plugin(plugin_name)
-            else:
-                success, message = await self.plugin_manager.reload(plugin_name)
-                if not success:
-                    return Response().error(message or "插件重载失败").__dict__
-            if plugin_name is None:
-                sdk_bridge = self._sdk_bridge()
-                if sdk_bridge is not None:
-                    await sdk_bridge.reload_all(reset_restart_budget=True)
-            return Response().ok(None, "重载成功。").__dict__
+            success, message = await self.plugin_manager.reload(plugin_name)
+            if not success:
+                return Response().error(message or "插件重载失败").__dict__
+            return Response().ok(None, "重载成功｡").__dict__
         except Exception as e:
             logger.error(f"/api/plugin/reload: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
@@ -448,12 +427,6 @@ class PluginRoute(Route):
             ):
                 continue
             _plugin_resp.append(_t)
-        sdk_bridge = self._sdk_bridge()
-        if sdk_bridge is not None:
-            for plugin in sdk_bridge.list_plugins():
-                if plugin_name and plugin["name"] != plugin_name:
-                    continue
-                _plugin_resp.append(plugin)
         return (
             Response()
             .ok(_plugin_resp, message=self.plugin_manager.failed_plugin_info)
@@ -617,10 +590,6 @@ class PluginRoute(Route):
         plugin_name = post_data["name"]
         delete_config = post_data.get("delete_config", False)
         delete_data = post_data.get("delete_data", False)
-        if self._is_sdk_plugin(plugin_name):
-            return Response().error(
-                "SDK 插件在 MVP 中不支持卸载，请手动移除目录"
-            ).__dict__, 400
         try:
             logger.info(f"正在卸载插件 {plugin_name}")
             await self.plugin_manager.uninstall_plugin(
@@ -673,8 +642,6 @@ class PluginRoute(Route):
         post_data = await request.get_json()
         plugin_name = post_data["name"]
         proxy: str = post_data.get("proxy", None)
-        if self._is_sdk_plugin(plugin_name):
-            return Response().error("SDK 插件在 MVP 中不支持更新").__dict__, 400
         try:
             logger.info(f"正在更新插件 {plugin_name}")
             await self.plugin_manager.update_plugin(plugin_name, proxy)
@@ -749,16 +716,6 @@ class PluginRoute(Route):
 
         post_data = await request.get_json()
         plugin_name = post_data["name"]
-        if self._is_sdk_plugin(plugin_name):
-            sdk_bridge = self._sdk_bridge()
-            if sdk_bridge is None:
-                return Response().error("SDK bridge 未初始化").__dict__, 500
-            try:
-                await sdk_bridge.turn_off_plugin(plugin_name)
-            except ValueError as exc:
-                return Response().error(str(exc)).__dict__, 404
-            logger.info(f"停用 SDK 插件 {plugin_name} 。")
-            return Response().ok(None, "停用成功。").__dict__
         try:
             await self.plugin_manager.turn_off_plugin(plugin_name)
             logger.info(f"停用插件 {plugin_name} ｡")
@@ -777,16 +734,6 @@ class PluginRoute(Route):
 
         post_data = await request.get_json()
         plugin_name = post_data["name"]
-        if self._is_sdk_plugin(plugin_name):
-            sdk_bridge = self._sdk_bridge()
-            if sdk_bridge is None:
-                return Response().error("SDK bridge 未初始化").__dict__, 500
-            try:
-                await sdk_bridge.turn_on_plugin(plugin_name)
-            except ValueError as exc:
-                return Response().error(str(exc)).__dict__, 404
-            logger.info(f"启用 SDK 插件 {plugin_name} 。")
-            return Response().ok(None, "启用成功。").__dict__
         try:
             await self.plugin_manager.turn_on_plugin(plugin_name)
             logger.info(f"启用插件 {plugin_name} ｡")
