@@ -85,6 +85,8 @@ class HttpCapabilityMixin(CapabilityRouterBridgeBase):
                 updated.append(entry)
                 continue
             if not methods:
+                # `HTTPClient.unregister_api(methods=None)` 会归一化为空列表，
+                # 公开语义就是“移除当前插件在该 route 下注册的全部方法”。
                 continue
             remaining_methods = [
                 method for method in entry.get("methods", []) if method not in methods

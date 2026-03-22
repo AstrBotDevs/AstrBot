@@ -160,6 +160,9 @@ def _evaluate_filter_spec_locally(
             None,
         )
         if binding is None:
+            # LocalFilterRefSpec 只在当前 worker 持有同名 local binding 时可真正执行。
+            # 缺失 binding 往往意味着描述符来自远端/测试快照，此时保持 fail-open，
+            # 避免因为无法调用进程内函数而把原本可执行的 handler 错误过滤掉。
             return True
         return binding.evaluate(event=event, ctx=ctx)
     if isinstance(spec, CompositeFilterSpec):
