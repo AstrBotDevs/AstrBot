@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from typing import Any, TypedDict
 
 import anyio
 from pydantic import Field
@@ -22,6 +23,16 @@ from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+
+class MessageComponent(TypedDict, total=False):
+    """Type-safe message component structure."""
+
+    type: str
+    text: str
+    path: str
+    url: str
+    mention_user_id: str
 
 
 @dataclass
@@ -125,7 +136,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             if not isinstance(msg, dict):
                 return f"error: messages[{idx}] should be an object."
 
-            msg_type = str(msg.get("type", "")).lower()
+            typed_msg: MessageComponent = msg
+            msg_type = str(typed_msg.get("type", "")).lower()
             if not msg_type:
                 return f"error: messages[{idx}].type is required."
 

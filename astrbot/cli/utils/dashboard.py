@@ -1,4 +1,5 @@
 import os
+import sys
 from importlib import resources
 from pathlib import Path
 
@@ -24,10 +25,10 @@ class DashboardManager:
             match dashboard_version:
                 case None:
                     click.echo("Dashboard is not installed")
-                    # Skip interactive prompt when running under systemd
-                    if os.environ.get("ASTRBOT_SYSTEMD") == "1":
+                    # Skip interactive prompt in non-interactive environments
+                    if not sys.stdin.isatty():
                         click.echo(
-                            "Skipping interactive dashboard installation in systemd mode."
+                            "Skipping interactive dashboard installation in non-interactive mode."
                         )
                         return
                     if click.confirm(

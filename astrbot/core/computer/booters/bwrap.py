@@ -262,7 +262,9 @@ class HostBackedFileSystemComponent(FileSystemComponent):
 
 
 class BwrapBooter(ComputerBooter):
-    def __init__(self, rw_binds: list[str] | None = None, ro_binds: list[str] | None = None):
+    def __init__(
+        self, rw_binds: list[str] | None = None, ro_binds: list[str] | None = None
+    ):
         self._rw_binds = rw_binds or []
         self._ro_binds = ro_binds or []
         self._fs: HostBackedFileSystemComponent | None = None

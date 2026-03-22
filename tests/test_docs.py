@@ -53,6 +53,7 @@ class TestDocStructure:
             Path("use/knowledge-base-old.md"),
             Path("config/model-config.md"),
             Path("use/astrbot-sandbox.md"),
+            Path("config"),  # en has config dir, zh doesn't
         }
 
         unexpected_missing_en = missing_in_en - known_diffs
