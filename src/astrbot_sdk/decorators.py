@@ -75,6 +75,12 @@ HANDLER_META_ATTR = "__astrbot_handler_meta__"
 CAPABILITY_META_ATTR = "__astrbot_capability_meta__"
 LLM_TOOL_META_ATTR = "__astrbot_llm_tool_meta__"
 AGENT_META_ATTR = "__astrbot_agent_meta__"
+HTTP_API_META_ATTR = "__astrbot_http_api_meta__"
+VALIDATE_CONFIG_META_ATTR = "__astrbot_validate_config_meta__"
+PROVIDER_CHANGE_META_ATTR = "__astrbot_provider_change_meta__"
+BACKGROUND_TASK_META_ATTR = "__astrbot_background_task_meta__"
+MCP_SERVER_META_ATTR = "__astrbot_mcp_server_meta__"
+SKILL_META_ATTR = "__astrbot_skill_meta__"
 
 LimiterScope = Literal["session", "user", "group", "global"]
 LimiterBehavior = Literal["hint", "silent", "error"]
@@ -152,6 +158,48 @@ class AgentMeta:
     spec: AgentSpec
 
 
+@dataclass(slots=True)
+class HttpApiMeta:
+    route: str
+    methods: list[str] = field(default_factory=lambda: ["GET"])
+    description: str = ""
+    capability_name: str | None = None
+
+
+@dataclass(slots=True)
+class ValidateConfigMeta:
+    model: type[BaseModel] | None = None
+    schema: dict[str, Any] | None = None
+
+
+@dataclass(slots=True)
+class ProviderChangeMeta:
+    provider_types: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class BackgroundTaskMeta:
+    description: str = ""
+    auto_start: bool = True
+    on_error: Literal["log", "restart"] = "log"
+
+
+@dataclass(slots=True)
+class MCPServerMeta:
+    name: str
+    scope: Literal["local", "global"] = "global"
+    config: dict[str, Any] | None = None
+    timeout: float = 30.0
+    wait_until_ready: bool = True
+
+
+@dataclass(slots=True)
+class SkillMeta:
+    name: str
+    path: str
+    description: str = ""
+
+
 def _get_or_create_meta(func: HandlerCallable) -> HandlerMeta:
     """获取或创建 handler 元数据。"""
     meta = getattr(func, HANDLER_META_ATTR, None)
@@ -191,6 +239,44 @@ def get_llm_tool_meta(func: HandlerCallable) -> LLMToolMeta | None:
 
 def get_agent_meta(obj: Any) -> AgentMeta | None:
     return getattr(obj, AGENT_META_ATTR, None)
+
+
+def get_http_api_meta(func: HandlerCallable) -> HttpApiMeta | None:
+    return getattr(func, HTTP_API_META_ATTR, None)
+
+
+def get_validate_config_meta(func: HandlerCallable) -> ValidateConfigMeta | None:
+    return getattr(func, VALIDATE_CONFIG_META_ATTR, None)
+
+
+def get_provider_change_meta(func: HandlerCallable) -> ProviderChangeMeta | None:
+    return getattr(func, PROVIDER_CHANGE_META_ATTR, None)
+
+
+def get_background_task_meta(func: HandlerCallable) -> BackgroundTaskMeta | None:
+    return getattr(func, BACKGROUND_TASK_META_ATTR, None)
+
+
+def get_mcp_server_meta(obj: Any) -> list[MCPServerMeta]:
+    values = getattr(obj, MCP_SERVER_META_ATTR, None)
+    if not isinstance(values, list):
+        return []
+    return [item for item in values if isinstance(item, MCPServerMeta)]
+
+
+def get_skill_meta(obj: Any) -> list[SkillMeta]:
+    values = getattr(obj, SKILL_META_ATTR, None)
+    if not isinstance(values, list):
+        return []
+    return [item for item in values if isinstance(item, SkillMeta)]
+
+
+def _append_list_meta(obj: Any, attr_name: str, value: Any) -> None:
+    values = getattr(obj, attr_name, None)
+    if not isinstance(values, list):
+        values = []
+        setattr(obj, attr_name, values)
+    values.append(value)
 
 
 def _replace_filter(meta: HandlerMeta, spec: FilterSpec) -> None:
@@ -526,6 +612,177 @@ def on_schedule(
         meta.description = _normalize_description(description)
         _validate_message_trigger_compatibility(meta)
         return func
+
+    return decorator
+
+
+def http_api(
+    route: str,
+    *,
+    methods: list[str] | None = None,
+    description: str = "",
+    capability_name: str | None = None,
+) -> Callable[[HandlerCallable], HandlerCallable]:
+    normalized_route = str(route).strip()
+    if not normalized_route:
+        raise ValueError("http_api(...) requires a non-empty route")
+    normalized_methods = methods or ["GET"]
+    normalized_methods = [
+        str(item).strip().upper() for item in normalized_methods if str(item).strip()
+    ]
+    if not normalized_methods:
+        raise ValueError("http_api(...) requires at least one HTTP method")
+
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        setattr(
+            func,
+            HTTP_API_META_ATTR,
+            HttpApiMeta(
+                route=normalized_route,
+                methods=normalized_methods,
+                description=str(description),
+                capability_name=(
+                    str(capability_name).strip()
+                    if capability_name is not None
+                    else None
+                ),
+            ),
+        )
+        return func
+
+    return decorator
+
+
+def validate_config(
+    *,
+    model: type[BaseModel] | None = None,
+    schema: dict[str, Any] | None = None,
+) -> Callable[[HandlerCallable], HandlerCallable]:
+    if model is None and schema is None:
+        raise ValueError("validate_config(...) requires model or schema")
+    if model is not None and schema is not None:
+        raise ValueError("validate_config(...) cannot accept model and schema together")
+    if model is not None and (
+        not isinstance(model, type) or not issubclass(model, BaseModel)
+    ):
+        raise TypeError("validate_config model must be a pydantic BaseModel subclass")
+    if schema is not None and not isinstance(schema, dict):
+        raise TypeError("validate_config schema must be a dict")
+
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        setattr(
+            func,
+            VALIDATE_CONFIG_META_ATTR,
+            ValidateConfigMeta(
+                model=model,
+                schema=dict(schema) if isinstance(schema, dict) else None,
+            ),
+        )
+        return func
+
+    return decorator
+
+
+def on_provider_change(
+    *,
+    provider_types: list[str] | tuple[str, ...] | None = None,
+) -> Callable[[HandlerCallable], HandlerCallable]:
+    normalized = [
+        str(item).strip().lower()
+        for item in (provider_types or [])
+        if str(item).strip()
+    ]
+
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        setattr(
+            func,
+            PROVIDER_CHANGE_META_ATTR,
+            ProviderChangeMeta(provider_types=normalized),
+        )
+        return func
+
+    return decorator
+
+
+def background_task(
+    *,
+    description: str = "",
+    auto_start: bool = True,
+    on_error: Literal["log", "restart"] = "log",
+) -> Callable[[HandlerCallable], HandlerCallable]:
+    if on_error not in {"log", "restart"}:
+        raise ValueError("background_task on_error must be 'log' or 'restart'")
+
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        setattr(
+            func,
+            BACKGROUND_TASK_META_ATTR,
+            BackgroundTaskMeta(
+                description=str(description),
+                auto_start=bool(auto_start),
+                on_error=on_error,
+            ),
+        )
+        return func
+
+    return decorator
+
+
+def mcp_server(
+    *,
+    name: str,
+    scope: Literal["local", "global"] = "global",
+    config: dict[str, Any] | None = None,
+    timeout: float = 30.0,
+    wait_until_ready: bool = True,
+):
+    normalized_name = str(name).strip()
+    if not normalized_name:
+        raise ValueError("mcp_server(...) requires a non-empty name")
+    if scope not in {"local", "global"}:
+        raise ValueError("mcp_server scope must be 'local' or 'global'")
+    if config is not None and not isinstance(config, dict):
+        raise TypeError("mcp_server config must be a dict")
+    if float(timeout) <= 0:
+        raise ValueError("mcp_server timeout must be positive")
+
+    meta = MCPServerMeta(
+        name=normalized_name,
+        scope=scope,
+        config=dict(config) if isinstance(config, dict) else None,
+        timeout=float(timeout),
+        wait_until_ready=bool(wait_until_ready),
+    )
+
+    def decorator(target):
+        _append_list_meta(target, MCP_SERVER_META_ATTR, meta)
+        return target
+
+    return decorator
+
+
+def register_skill(
+    *,
+    name: str,
+    path: str,
+    description: str = "",
+):
+    normalized_name = str(name).strip()
+    normalized_path = str(path).strip()
+    if not normalized_name:
+        raise ValueError("register_skill(...) requires a non-empty name")
+    if not normalized_path:
+        raise ValueError("register_skill(...) requires a non-empty path")
+
+    meta = SkillMeta(
+        name=normalized_name,
+        path=normalized_path,
+        description=str(description),
+    )
+
+    def decorator(target):
+        _append_list_meta(target, SKILL_META_ATTR, meta)
+        return target
 
     return decorator
 
