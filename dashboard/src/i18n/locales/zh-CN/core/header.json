@@ -50,7 +50,7 @@
     "commitHash": {
       "title": "通过 Commit Hash 更新",
       "description": "输入 GitHub 仓库的 40 位 commit hash，可以安装尚未发布至正式版的修复和功能。",
-      "placeholder": "输入 commit hash",
+      "label": "输入 commit hash",
       "install": "安装",
       "invalidFormat": "请输入有效的 40 位十六进制 commit hash"
     },

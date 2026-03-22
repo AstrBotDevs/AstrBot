@@ -744,7 +744,7 @@ onMounted(async () => {
               <div class="d-flex align-center ga-3">
                 <v-text-field
                   v-model.trim="commitHashInput"
-                  :placeholder="t('core.header.updateDialog.commitHash.placeholder')"
+                  :label="t('core.header.updateDialog.commitHash.label')"
                   :rules="commitHashRules"
                   density="compact"
                   variant="outlined"
