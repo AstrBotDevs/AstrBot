@@ -4,12 +4,11 @@ LastEditTime: 2025-02-25 14:06:30
 """
 
 import asyncio
-import os
 import re
 from datetime import datetime
-from pathlib import Path
 from typing import cast
 
+import anyio
 from funasr_onnx import SenseVoiceSmall
 from funasr_onnx.utils.postprocess_utils import rich_transcription_postprocess
 
@@ -40,7 +39,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         self.is_emotion = provider_config.get("is_emotion", False)
 
     async def initialize(self) -> None:
-        logger.info("下载或者加载 SenseVoice 模型中，这可能需要一些时间 ...")
+        logger.info("下载或者加载 SenseVoice 模型中,这可能需要一些时间 ...")
 
         # 将模型加载放到线程池中执行
         self.model = await asyncio.get_running_loop().run_in_executor(
@@ -48,18 +47,18 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
             lambda: SenseVoiceSmall(self.model_name, quantize=True, batch_size=16),
         )
 
-        logger.info("SenseVoice 模型加载完成。")
+        logger.info("SenseVoice 模型加载完成｡")
 
     async def get_timestamped_path(self) -> str:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = anyio.Path(get_astrbot_temp_path())
+        await temp_dir.mkdir(parents=True, exist_ok=True)
         return str(temp_dir / timestamp)
 
     async def _is_silk_file(self, file_path) -> bool:
         silk_header = b"SILK"
-        with open(file_path, "rb") as f:
-            file_header = f.read(8)
+        async with anyio.open_file(file_path, "rb") as f:
+            file_header = await f.read(8)
 
         if silk_header in file_header:
             return True
@@ -76,7 +75,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
                 await download_file(audio_url, path)
                 audio_url = path
 
-            if not os.path.isfile(audio_url):
+            if not await anyio.Path(audio_url).is_file():
                 raise FileNotFoundError(f"文件不存在: {audio_url}")
 
             if audio_url.endswith((".amr", ".silk")) or is_tencent:
@@ -97,14 +96,14 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
             )
 
             # res = self.model(audio_url, language="auto", use_itn=True)
-            logger.debug(f"SenseVoice识别到的文案：{res}")
+            logger.debug(f"SenseVoice识别到的文案:{res}")
             text = rich_transcription_postprocess(res[0])
             if self.is_emotion:
                 # 提取第二个匹配的值
                 matches = re.findall(r"<\|([^|]+)\|>", res[0])
                 if len(matches) >= 2:
                     emotion = matches[1]
-                    text = f"(当前的情绪：{emotion}) {text}"
+                    text = f"(当前的情绪:{emotion}) {text}"
                 else:
                     logger.warning("未能提取到情绪信息")
             return text

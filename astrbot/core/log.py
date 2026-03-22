@@ -1,4 +1,4 @@
-"""日志系统，统一将标准 logging 输出转发到 loguru。"""
+"""日志系统,统一将标准 logging 输出转发到 loguru｡"""
 
 import asyncio
 import logging
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 class _RecordEnricherFilter(logging.Filter):
-    """为 logging.LogRecord 注入 AstrBot 日志字段。"""
+    """为 logging.LogRecord 注入 AstrBot 日志字段｡"""
 
     def filter(self, record: logging.LogRecord) -> bool:
         record.plugin_tag = "[Plug]" if _is_plugin_path(record.pathname) else "[Core]"
@@ -93,10 +93,36 @@ def _patch_record(record: "Record") -> None:
 _loguru = _raw_loguru_logger.patch(_patch_record)
 
 
+class _SSLDebugFilter(logging.Filter):
+    """将特定 SSL 错误降级为 DEBUG 级别,避免日志刷屏。"""
+
+    _SSL_IGNORE_PATTERNS = (
+        "APPLICATION_DATA_AFTER_CLOSE_NOTIFY",
+        "SSL: APPLICATION_DATA_AFTER_CLOSE_NOTIFY",
+    )
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        for pattern in self._SSL_IGNORE_PATTERNS:
+            if pattern in msg:
+                record.levelno = logging.DEBUG
+                record.levelname = "DEBUG"
+                return True
+        return True
+
+
 class _LoguruInterceptHandler(logging.Handler):
-    """将 logging 记录转发到 loguru。"""
+    """将 logging 记录转发到 loguru｡"""
 
     def emit(self, record: logging.LogRecord) -> None:
+        # 检查是否需要降级 SSL 相关错误
+        msg = record.getMessage()
+        for pattern in _SSLDebugFilter._SSL_IGNORE_PATTERNS:
+            if pattern in msg:
+                record.levelno = logging.DEBUG
+                record.levelname = "DEBUG"
+                break
+
         try:
             level: str | int = _loguru.level(record.levelname).name
         except ValueError:
@@ -124,7 +150,7 @@ class _LoguruInterceptHandler(logging.Handler):
 
 
 class LogBroker:
-    """日志代理类，用于缓存和分发日志消息。"""
+    """日志代理类,用于缓存和分发日志消息｡"""
 
     def __init__(self) -> None:
         self.log_cache = deque(maxlen=CACHED_SIZE)
@@ -148,7 +174,7 @@ class LogBroker:
 
 
 class LogQueueHandler(logging.Handler):
-    """日志处理器，用于将日志消息发送到 LogBroker。"""
+    """日志处理器,用于将日志消息发送到 LogBroker｡"""
 
     def __init__(self, log_broker: LogBroker) -> None:
         super().__init__()
@@ -179,6 +205,8 @@ class LogManager:
         "asyncio": logging.WARNING,
         "tzlocal": logging.WARNING,
         "apscheduler": logging.WARNING,
+        "quart": logging.WARNING,
+        "hypercorn": logging.WARNING,
     }
 
     @classmethod

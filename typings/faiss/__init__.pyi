@@ -1,10 +1,3 @@
-"""Minimal type stubs for faiss used in this project.
-
-This file only exposes a small subset of the faiss API that the
-project uses, including the runtime-monkeypatched signatures such as
-`Index.add_with_ids` so Pyright/Pylance stops reporting false positives.
-"""
-
 from typing import Any, overload
 
 import numpy as np
@@ -69,14 +62,9 @@ class IndexBinary(Index):
 class InvertedLists:
     def __len__(self) -> int: ...
 
-class AdditiveQuantizer:
-    pass
-
-class Quantizer:
-    pass
-
-class VectorTransform:
-    pass
+class AdditiveQuantizer: ...
+class Quantizer: ...
+class VectorTransform: ...
 
 # SWIG-provided downcast helpers (present in some faiss Python builds).
 def downcast_IndexBinary(obj: Any) -> IndexBinary: ...

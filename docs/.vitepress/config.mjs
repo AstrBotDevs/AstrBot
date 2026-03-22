@@ -87,17 +87,12 @@ export default defineConfig({
               },
               {
                 text: "OneBot v11",
-                base: "/platform/aiocqhttp",
-                collapsed: true,
-                items: [
-                  { text: "NapCat", link: "/napcat" },
-                  { text: "Lagrange", link: "/lagrange" },
-                  { text: "其他端", link: "/others" },
-                ],
+                link: "/aiocqhttp"
               },
               { text: "企微应用", link: "/wecom" },
               { text: "企微智能机器人", link: "/wecom_ai_bot" },
               { text: "微信公众号", link: "/weixin-official-account" },
+              { text: "个人微信", link: "/weixin_oc" },
               { text: "飞书", link: "/lark" },
               { text: "钉钉", link: "/dingtalk" },
               { text: "Telegram", link: "/telegram" },
@@ -111,7 +106,7 @@ export default defineConfig({
                 base: "/platform/satori",
                 collapsed: true,
                 items: [
-                  { text: "使用 LLOneBot", link: "/llonebot" },
+                  { text: "接入 Satori", link: "/guide" },
                   { text: "使用 server-satori", link: "/server-satori" },
                 ],
               },
@@ -327,17 +322,12 @@ export default defineConfig({
               },
               {
                 text: "OneBot v11",
-                base: "/en/platform/aiocqhttp",
-                collapsed: true,
-                items: [
-                  { text: "NapCat", link: "/napcat" },
-                  { text: "Lagrange", link: "/lagrange" },
-                  { text: "Other Clients", link: "/others" },
-                ],
+                link: "/aiocqhttp",
               },
               { text: "WeCom Application", link: "/wecom" },
               { text: "WeCom AI Bot", link: "/wecom_ai_bot" },
               { text: "WeChat Official Account", link: "/weixin-official-account" },
+              { text: "Personal WeChat", link: "/weixin_oc" },
               { text: "Lark", link: "/lark" },
               { text: "DingTalk", link: "/dingtalk" },
               { text: "Telegram", link: "/telegram" },
@@ -350,7 +340,7 @@ export default defineConfig({
                 base: "/en/platform/satori",
                 collapsed: true,
                 items: [
-                  { text: "Using LLOneBot", link: "/llonebot" },
+                  { text: "Connect Satori", link: "/guide" },
                   { text: "Using server-satori", link: "/server-satori" },
                 ],
               },

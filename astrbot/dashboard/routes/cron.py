@@ -48,7 +48,7 @@ class CronRoute(Route):
             jobs = await cron_mgr.list_jobs(job_type)
             data = [self._serialize_job(j) for j in jobs]
             return jsonify(Response().ok(data=data).__dict__)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(traceback.format_exc())
             return jsonify(Response().error(f"Failed to list jobs: {e!s}").__dict__)
 
@@ -119,7 +119,7 @@ class CronRoute(Route):
             )
 
             return jsonify(Response().ok(data=self._serialize_job(job)).__dict__)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(traceback.format_exc())
             return jsonify(Response().error(f"Failed to create job: {e!s}").__dict__)
 
@@ -156,7 +156,7 @@ class CronRoute(Route):
             if not job:
                 return jsonify(Response().error("Job not found").__dict__)
             return jsonify(Response().ok(data=self._serialize_job(job)).__dict__)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(traceback.format_exc())
             return jsonify(Response().error(f"Failed to update job: {e!s}").__dict__)
 
@@ -169,6 +169,6 @@ class CronRoute(Route):
                 )
             await cron_mgr.delete_job(job_id)
             return jsonify(Response().ok(message="deleted").__dict__)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(traceback.format_exc())
             return jsonify(Response().error(f"Failed to delete job: {e!s}").__dict__)

@@ -1,301 +1,456 @@
 <template>
-    <div class="sidebar-panel" 
-        :class="{ 
-            'sidebar-collapsed': sidebarCollapsed && !isMobile,
-            'mobile-sidebar-open': isMobile && mobileMenuOpen,
-            'mobile-sidebar': isMobile
-        }"
-        :style="{ backgroundColor: sidebarCollapsed && !isMobile ? 'rgb(var(--v-theme-surface))' : 'rgb(var(--v-theme-mcpCardBg))' }">
+  <div
+    class="sidebar-panel" 
+    :class="{ 
+      'sidebar-collapsed': sidebarCollapsed && !isMobile,
+      'mobile-sidebar-open': isMobile && mobileMenuOpen,
+      'mobile-sidebar': isMobile
+    }"
+    :style="{ backgroundColor: sidebarCollapsed && !isMobile ? 'rgb(var(--v-theme-surface))' : 'rgb(var(--v-theme-mcpCardBg))' }"
+  >
+    <div
+      v-if="!isMobile"
+      class="sidebar-collapse-btn-container"
+    >
+      <v-btn
+        icon
+        class="sidebar-collapse-btn"
+        variant="text"
+        color="deep-purple"
+        @click="toggleSidebar"
+      >
+        <v-icon>{{ sidebarCollapsed ? 'mdi-chevron-right' : 'mdi-chevron-left' }}</v-icon>
+      </v-btn>
+    </div>
 
-        <div class="sidebar-collapse-btn-container" v-if="!isMobile">
-            <v-btn icon class="sidebar-collapse-btn" @click="toggleSidebar" variant="text" color="deep-purple">
-                <v-icon>{{ sidebarCollapsed ? 'mdi-chevron-right' : 'mdi-chevron-left' }}</v-icon>
-            </v-btn>
-        </div>
+    <div
+      v-if="isMobile"
+      class="sidebar-collapse-btn-container"
+    >
+      <v-btn
+        icon
+        class="sidebar-collapse-btn"
+        variant="text"
+        color="deep-purple"
+        @click="$emit('closeMobileSidebar')"
+      >
+        <v-icon>mdi-close</v-icon>
+      </v-btn>
+    </div>
 
-        <div class="sidebar-collapse-btn-container" v-if="isMobile">
-            <v-btn icon class="sidebar-collapse-btn" @click="$emit('closeMobileSidebar')" variant="text"
-                color="deep-purple">
-                <v-icon>mdi-close</v-icon>
-            </v-btn>
-        </div>
+    <div style="padding: 8px; opacity: 0.6;">
+      <div
+        v-if="!sidebarCollapsed || isMobile"
+        class="new-chat-row"
+      >
+        <v-btn
+          block
+          variant="text"
+          class="new-chat-btn"
+          :disabled="!currSessionId && !selectedProjectId"
+          prepend-icon="mdi-square-edit-outline"
+          @click="$emit('newChat')"
+        >
+          {{ tm('actions.newChat') }}
+        </v-btn>
+        <v-btn
+          v-if="sessions.length > 0"
+          icon
+          size="small"
+          variant="text"
+          :color="batchMode ? 'primary' : undefined"
+          @click="toggleBatchMode"
+        >
+          <v-icon>mdi-checkbox-multiple-marked-outline</v-icon>
+        </v-btn>
+      </div>
+      <v-btn
+        v-if="sidebarCollapsed && !isMobile"
+        icon="mdi-square-edit-outline"
+        rounded="xl"
+        :disabled="!currSessionId && !selectedProjectId"
+        elevation="0"
+        @click="$emit('newChat')"
+      />
+    </div>
 
-        <div style="padding: 8px; opacity: 0.6;">
-            <div class="new-chat-row" v-if="!sidebarCollapsed || isMobile">
-                <v-btn block variant="text" class="new-chat-btn" @click="$emit('newChat')" :disabled="!currSessionId && !selectedProjectId"
-                    prepend-icon="mdi-square-edit-outline">{{ tm('actions.newChat') }}</v-btn>
-                <v-btn v-if="sessions.length > 0" icon size="small" variant="text" @click="toggleBatchMode"
-                    :color="batchMode ? 'primary' : undefined">
-                    <v-icon>mdi-checkbox-multiple-marked-outline</v-icon>
-                </v-btn>
-            </div>
-            <v-btn icon="mdi-square-edit-outline" rounded="xl" @click="$emit('newChat')" :disabled="!currSessionId && !selectedProjectId"
-                v-if="sidebarCollapsed && !isMobile" elevation="0"></v-btn>
-        </div>
+    <!-- Batch action bar -->
+    <div
+      v-if="batchMode && (!sidebarCollapsed || isMobile)"
+      class="batch-action-bar"
+    >
+      <v-btn
+        size="x-small"
+        variant="text"
+        @click="toggleSelectAll"
+      >
+        {{ isAllSelected ? tm('batch.deselectAll') : tm('batch.selectAll') }}
+      </v-btn>
+      <span class="batch-selected-count">{{ tm('batch.selected', { count: batchSelected.length }) }}</span>
+      <v-spacer />
+      <v-btn
+        size="x-small"
+        variant="text"
+        color="error"
+        :disabled="batchSelected.length === 0"
+        @click="handleBatchDelete"
+      >
+        {{ tm('batch.delete') }}
+      </v-btn>
+    </div>
 
-        <!-- Batch action bar -->
-        <div v-if="batchMode && (!sidebarCollapsed || isMobile)" class="batch-action-bar">
-            <v-btn size="x-small" variant="text" @click="toggleSelectAll">
-                {{ isAllSelected ? tm('batch.deselectAll') : tm('batch.selectAll') }}
-            </v-btn>
-            <span class="batch-selected-count">{{ tm('batch.selected', { count: batchSelected.length }) }}</span>
-            <v-spacer />
-            <v-btn size="x-small" variant="text" color="error" :disabled="batchSelected.length === 0"
-                @click="handleBatchDelete">
-                {{ tm('batch.delete') }}
-            </v-btn>
-        </div>
+    <!-- 项目列表组件 -->
+    <ProjectList
+      v-if="!sidebarCollapsed || isMobile"
+      :projects="projects"
+      @selectProject="$emit('selectProject', $event)"
+      @createProject="$emit('createProject')"
+      @editProject="$emit('editProject', $event)"
+      @deleteProject="$emit('deleteProject', $event)"
+    />
 
-        <!-- 项目列表组件 -->
-        <ProjectList
-            v-if="!sidebarCollapsed || isMobile"
-            :projects="projects"
-            @selectProject="$emit('selectProject', $event)"
-            @createProject="$emit('createProject')"
-            @editProject="$emit('editProject', $event)"
-            @deleteProject="$emit('deleteProject', $event)"
-        />
+    <div
+      v-if="!sidebarCollapsed || isMobile"
+      style="overflow-y: auto; flex-grow: 1; overscroll-behavior-y: contain;"
+    >
+      <v-card
+        v-if="sessions.length > 0"
+        flat
+        style="background-color: transparent;"
+      >
+        <v-list
+          density="compact"
+          nav
+          class="conversation-list"
+          style="background-color: transparent;"
+          :selected="batchMode ? [] : selectedSessions"
+          @update:selected="handleListSelect"
+        >
+          <v-list-item
+            v-for="item in sessions"
+            :key="item.session_id"
+            :value="item.session_id"
+            rounded="lg"
+            class="conversation-item"
+            active-color="secondary"
+            @click="batchMode ? toggleBatchItem(item.session_id) : undefined"
+          >
+            <template #prepend>
+              <div
+                class="batch-checkbox-slot"
+                :class="{ 'batch-checkbox-slot--active': batchMode }"
+              >
+                <v-checkbox-btn
+                  :model-value="batchSelected.includes(item.session_id)"
+                  density="compact"
+                  hide-details
+                  class="batch-checkbox"
+                  @update:model-value="toggleBatchItem(item.session_id)"
+                  @click.stop
+                />
+              </div>
+            </template>
 
-        <div style="overflow-y: auto; flex-grow: 1; overscroll-behavior-y: contain;"
-            v-if="!sidebarCollapsed || isMobile">
-            <v-card v-if="sessions.length > 0" flat style="background-color: transparent;">
-                <v-list density="compact" nav class="conversation-list"
-                    style="background-color: transparent;" :selected="batchMode ? [] : selectedSessions"
-                    @update:selected="handleListSelect">
-                    <v-list-item v-for="item in sessions" :key="item.session_id" :value="item.session_id"
-                        rounded="lg" class="conversation-item" active-color="secondary"
-                        @click="batchMode ? toggleBatchItem(item.session_id) : undefined">
-
-                        <template v-slot:prepend>
-                            <div class="batch-checkbox-slot" :class="{ 'batch-checkbox-slot--active': batchMode }">
-                                <v-checkbox-btn
-                                    :model-value="batchSelected.includes(item.session_id)"
-                                    @update:model-value="toggleBatchItem(item.session_id)"
-                                    @click.stop
-                                    density="compact"
-                                    hide-details
-                                    class="batch-checkbox"
-                                />
-                            </div>
-                        </template>
-
-                        <v-list-item-title v-if="!sidebarCollapsed || isMobile" class="conversation-title"
-                            :style="{ color: 'rgb(var(--v-theme-primaryText))' }">
-                            {{ item.display_name || tm('conversation.newConversation') }}
-                        </v-list-item-title>
-                        <!-- <v-list-item-subtitle v-if="!sidebarCollapsed || isMobile" class="timestamp">
+            <v-list-item-title
+              v-if="!sidebarCollapsed || isMobile"
+              class="conversation-title"
+              :style="{ color: 'rgb(var(--v-theme-primaryText))' }"
+            >
+              {{ item.display_name || tm('conversation.newConversation') }}
+            </v-list-item-title>
+            <!-- <v-list-item-subtitle v-if="!sidebarCollapsed || isMobile" class="timestamp">
                             {{ new Date(item.updated_at).toLocaleString() }}
                         </v-list-item-subtitle> -->
 
-                        <template v-if="!batchMode && (!sidebarCollapsed || isMobile)" v-slot:append>
-                            <div class="conversation-actions">
-                                <v-btn icon="mdi-pencil" size="x-small" variant="text"
-                                    class="edit-title-btn"
-                                    @click.stop="$emit('editTitle', item.session_id, item.display_name ?? '')" />
-                                <v-btn icon="mdi-delete" size="x-small" variant="text"
-                                    class="delete-conversation-btn" color="error"
-                                    @click.stop="handleDeleteConversation(item)" />
-                            </div>
-                        </template>
-                    </v-list-item>
-                </v-list>
-            </v-card>
+            <template
+              v-if="!batchMode && (!sidebarCollapsed || isMobile)"
+              #append
+            >
+              <div class="conversation-actions">
+                <v-btn
+                  icon="mdi-pencil"
+                  size="x-small"
+                  variant="text"
+                  class="edit-title-btn"
+                  @click.stop="$emit('editTitle', item.session_id, item.display_name ?? '')"
+                />
+                <v-btn
+                  icon="mdi-delete"
+                  size="x-small"
+                  variant="text"
+                  class="delete-conversation-btn"
+                  color="error"
+                  @click.stop="handleDeleteConversation(item)"
+                />
+              </div>
+            </template>
+          </v-list-item>
+        </v-list>
+      </v-card>
 
-            <v-fade-transition>
-                <div class="no-conversations" v-if="sessions.length === 0">
-                    <v-icon icon="mdi-message-text-outline" size="large" color="grey-lighten-1"></v-icon>
-                    <div class="no-conversations-text" v-if="!sidebarCollapsed || isMobile">
-                        {{ tm('conversation.noHistory') }}
-                    </div>
-                </div>
-            </v-fade-transition>
+      <v-fade-transition>
+        <div
+          v-if="sessions.length === 0"
+          class="no-conversations"
+        >
+          <v-icon
+            icon="mdi-message-text-outline"
+            size="large"
+            color="grey-lighten-1"
+          />
+          <div
+            v-if="!sidebarCollapsed || isMobile"
+            class="no-conversations-text"
+          >
+            {{ tm('conversation.noHistory') }}
+          </div>
         </div>
-
-        <!-- 收起时的占位元素 -->
-        <div class="sidebar-spacer" v-if="sidebarCollapsed && !isMobile"></div>
-
-        <!-- 底部设置按钮 -->
-        <div class="sidebar-footer">
-            <StyledMenu location="top" :close-on-content-click="false">
-                <template v-slot:activator="{ props: menuProps }">
-                    <v-btn 
-                        v-bind="menuProps"
-                        :icon="sidebarCollapsed && !isMobile"
-                        :block="!sidebarCollapsed || isMobile"
-                        variant="text" 
-                        class="settings-btn"
-                        :class="{ 'settings-btn-collapsed': sidebarCollapsed && !isMobile }"
-                        :prepend-icon="(!sidebarCollapsed || isMobile) ? 'mdi-cog-outline' : undefined"
-                    >
-                        <v-icon v-if="sidebarCollapsed && !isMobile">mdi-cog-outline</v-icon>
-                        <template v-if="!sidebarCollapsed || isMobile">{{ t('core.common.settings') }}</template>
-                    </v-btn>
-                </template>
-                
-                <!-- 语言切换（分组） -->
-                <v-menu
-                    :open-on-hover="!isMobile"
-                    :open-on-click="isMobile"
-                    :open-delay="!isMobile ? 60 : 0"
-                    :close-delay="!isMobile ? 120 : 0"
-                    :location="isMobile ? 'bottom' : 'end center'"
-                    offset="8"
-                    close-on-content-click
-                >
-                    <template v-slot:activator="{ props: languageMenuProps }">
-                        <v-list-item
-                            v-bind="languageMenuProps"
-                            class="styled-menu-item chat-settings-group-trigger"
-                            rounded="md"
-                        >
-                            <template v-slot:prepend>
-                                <v-icon>mdi-translate</v-icon>
-                            </template>
-                            <v-list-item-title>{{ t('core.common.language') }}</v-list-item-title>
-                            <template v-slot:append>
-                                <span class="chat-settings-group-current">{{ currentLanguage?.flag }}</span>
-                                <v-icon size="18" class="chat-settings-group-arrow">mdi-chevron-right</v-icon>
-                            </template>
-                        </v-list-item>
-                    </template>
-
-                    <v-card class="styled-menu-card" style="min-width: 180px;" elevation="8" rounded="lg">
-                        <v-list density="compact" class="styled-menu-list pa-1">
-                            <v-list-item
-                                v-for="lang in languages"
-                                :key="lang.code"
-                                :value="lang.code"
-                                @click="changeLanguage(lang.code)"
-                                :class="{ 'styled-menu-item-active': currentLocale === lang.code }"
-                                class="styled-menu-item"
-                                rounded="md"
-                            >
-                                <template v-slot:prepend>
-                                    <span class="language-flag">{{ lang.flag }}</span>
-                                </template>
-                                <v-list-item-title>{{ lang.name }}</v-list-item-title>
-                            </v-list-item>
-                        </v-list>
-                    </v-card>
-                </v-menu>
-                
-                <!-- 主题切换 -->
-                <v-list-item class="styled-menu-item" @click="$emit('toggleTheme')">
-                    <template v-slot:prepend>
-                        <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
-                    </template>
-                    <v-list-item-title>{{ isDark ? tm('modes.lightMode') : tm('modes.darkMode') }}</v-list-item-title>
-                </v-list-item>
-
-                <!-- 通信传输模式（分组） -->
-                <v-menu
-                    :open-on-hover="!isMobile"
-                    :open-on-click="isMobile"
-                    :open-delay="!isMobile ? 60 : 0"
-                    :close-delay="!isMobile ? 120 : 0"
-                    :location="isMobile ? 'bottom' : 'end center'"
-                    offset="8"
-                    close-on-content-click
-                >
-                    <template v-slot:activator="{ props: transportMenuProps }">
-                        <v-list-item
-                            v-bind="transportMenuProps"
-                            class="styled-menu-item chat-settings-group-trigger"
-                            rounded="md"
-                        >
-                            <template v-slot:prepend>
-                                <v-icon>mdi-lan-connect</v-icon>
-                            </template>
-                            <v-list-item-title>{{ tm('transport.title') }}</v-list-item-title>
-                            <template v-slot:append>
-                                <span class="chat-settings-group-current chat-settings-transport-current">{{ currentTransportLabel }}</span>
-                                <v-icon size="18" class="chat-settings-group-arrow">mdi-chevron-right</v-icon>
-                            </template>
-                        </v-list-item>
-                    </template>
-
-                    <v-card class="styled-menu-card" style="min-width: 220px;" elevation="8" rounded="lg">
-                        <v-list density="compact" class="styled-menu-list pa-1">
-                            <v-list-item
-                                v-for="opt in transportOptions"
-                                :key="opt.value"
-                                :value="opt.value"
-                                @click="handleTransportModeChange(opt.value)"
-                                :class="{ 'styled-menu-item-active': transportMode === opt.value }"
-                                class="styled-menu-item"
-                                rounded="md"
-                            >
-                                <v-list-item-title>{{ opt.label }}</v-list-item-title>
-                            </v-list-item>
-                        </v-list>
-                    </v-card>
-                </v-menu>
-
-                <!-- 发送快捷键（分组） -->
-                <v-menu
-                    :open-on-hover="!isMobile"
-                    :open-on-click="isMobile"
-                    :open-delay="!isMobile ? 60 : 0"
-                    :close-delay="!isMobile ? 120 : 0"
-                    :location="isMobile ? 'bottom' : 'end center'"
-                    offset="8"
-                    close-on-content-click
-                >
-                    <template v-slot:activator="{ props: sendShortcutMenuProps }">
-                        <v-list-item
-                            v-bind="sendShortcutMenuProps"
-                            class="styled-menu-item chat-settings-group-trigger"
-                            rounded="md"
-                        >
-                            <template v-slot:prepend>
-                                <v-icon>mdi-keyboard-outline</v-icon>
-                            </template>
-                            <v-list-item-title>{{ tm('shortcuts.sendKey.title') }}</v-list-item-title>
-                            <template v-slot:append>
-                                <span class="chat-settings-group-current chat-settings-transport-current">{{ currentSendShortcutLabel }}</span>
-                                <v-icon size="18" class="chat-settings-group-arrow">mdi-chevron-right</v-icon>
-                            </template>
-                        </v-list-item>
-                    </template>
-
-                    <v-card class="styled-menu-card" style="min-width: 220px;" elevation="8" rounded="lg">
-                        <v-list density="compact" class="styled-menu-list pa-1">
-                            <v-list-item
-                                v-for="opt in sendShortcutOptions"
-                                :key="opt.value"
-                                :value="opt.value"
-                                @click="handleSendShortcutChange(opt.value)"
-                                :class="{ 'styled-menu-item-active': props.sendShortcut === opt.value }"
-                                class="styled-menu-item"
-                                rounded="md"
-                            >
-                                <v-list-item-title>{{ opt.label }}</v-list-item-title>
-                            </v-list-item>
-                        </v-list>
-                    </v-card>
-                </v-menu>
-
-                <!-- 全屏/退出全屏 -->
-                <v-list-item class="styled-menu-item" @click="$emit('toggleFullscreen')">
-                    <template v-slot:prepend>
-                        <v-icon>{{ chatboxMode ? 'mdi-fullscreen-exit' : 'mdi-fullscreen' }}</v-icon>
-                    </template>
-                    <v-list-item-title>{{ chatboxMode ? tm('actions.exitFullscreen') : tm('actions.fullscreen') }}</v-list-item-title>
-                </v-list-item>
-
-                <!-- 提供商配置 -->
-                <v-list-item class="styled-menu-item" @click="showProviderConfigDialog = true">
-                    <template v-slot:prepend>
-                        <v-icon>mdi-creation</v-icon>
-                    </template>
-                    <v-list-item-title>{{ tm('actions.providerConfig') }}</v-list-item-title>
-                </v-list-item>
-            </StyledMenu>
-        </div>
-
-        <!-- 提供商配置对话框 -->
-        <ProviderConfigDialog v-model="showProviderConfigDialog" />
+      </v-fade-transition>
     </div>
+
+    <!-- 收起时的占位元素 -->
+    <div
+      v-if="sidebarCollapsed && !isMobile"
+      class="sidebar-spacer"
+    />
+
+    <!-- 底部设置按钮 -->
+    <div class="sidebar-footer">
+      <StyledMenu
+        location="top"
+        :close-on-content-click="false"
+      >
+        <template #activator="{ props: menuProps }">
+          <v-btn 
+            v-bind="menuProps"
+            :icon="sidebarCollapsed && !isMobile"
+            :block="!sidebarCollapsed || isMobile"
+            variant="text" 
+            class="settings-btn"
+            :class="{ 'settings-btn-collapsed': sidebarCollapsed && !isMobile }"
+            :prepend-icon="(!sidebarCollapsed || isMobile) ? 'mdi-cog-outline' : undefined"
+          >
+            <v-icon v-if="sidebarCollapsed && !isMobile">
+              mdi-cog-outline
+            </v-icon>
+            <template v-if="!sidebarCollapsed || isMobile">
+              {{ t('core.common.settings') }}
+            </template>
+          </v-btn>
+        </template>
+                
+        <!-- 语言切换（分组） -->
+        <v-menu
+          :open-on-hover="!isMobile"
+          :open-on-click="isMobile"
+          :open-delay="!isMobile ? 60 : 0"
+          :close-delay="!isMobile ? 120 : 0"
+          :location="isMobile ? 'bottom' : 'end center'"
+          offset="8"
+          close-on-content-click
+        >
+          <template #activator="{ props: languageMenuProps }">
+            <v-list-item
+              v-bind="languageMenuProps"
+              class="styled-menu-item chat-settings-group-trigger"
+              rounded="md"
+            >
+              <template #prepend>
+                <v-icon>mdi-translate</v-icon>
+              </template>
+              <v-list-item-title>{{ t('core.common.language') }}</v-list-item-title>
+              <template #append>
+                <span class="chat-settings-group-current">{{ currentLanguage?.flag }}</span>
+                <v-icon
+                  size="18"
+                  class="chat-settings-group-arrow"
+                >
+                  mdi-chevron-right
+                </v-icon>
+              </template>
+            </v-list-item>
+          </template>
+
+          <v-card
+            class="styled-menu-card"
+            style="min-width: 180px;"
+            elevation="8"
+            rounded="lg"
+          >
+            <v-list
+              density="compact"
+              class="styled-menu-list pa-1"
+            >
+              <v-list-item
+                v-for="lang in languages"
+                :key="lang.code"
+                :value="lang.code"
+                :class="{ 'styled-menu-item-active': currentLocale === lang.code }"
+                class="styled-menu-item"
+                rounded="md"
+                @click="changeLanguage(lang.code)"
+              >
+                <template #prepend>
+                  <span class="language-flag">{{ lang.flag }}</span>
+                </template>
+                <v-list-item-title>{{ lang.name }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-card>
+        </v-menu>
+                
+        <!-- 主题切换 -->
+        <v-list-item
+          class="styled-menu-item"
+          @click="$emit('toggleTheme')"
+        >
+          <template #prepend>
+            <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
+          </template>
+          <v-list-item-title>{{ isDark ? tm('modes.lightMode') : tm('modes.darkMode') }}</v-list-item-title>
+        </v-list-item>
+
+        <!-- 通信传输模式（分组） -->
+        <v-menu
+          :open-on-hover="!isMobile"
+          :open-on-click="isMobile"
+          :open-delay="!isMobile ? 60 : 0"
+          :close-delay="!isMobile ? 120 : 0"
+          :location="isMobile ? 'bottom' : 'end center'"
+          offset="8"
+          close-on-content-click
+        >
+          <template #activator="{ props: transportMenuProps }">
+            <v-list-item
+              v-bind="transportMenuProps"
+              class="styled-menu-item chat-settings-group-trigger"
+              rounded="md"
+            >
+              <template #prepend>
+                <v-icon>mdi-lan-connect</v-icon>
+              </template>
+              <v-list-item-title>{{ tm('transport.title') }}</v-list-item-title>
+              <template #append>
+                <span class="chat-settings-group-current chat-settings-transport-current">{{ currentTransportLabel }}</span>
+                <v-icon
+                  size="18"
+                  class="chat-settings-group-arrow"
+                >
+                  mdi-chevron-right
+                </v-icon>
+              </template>
+            </v-list-item>
+          </template>
+
+          <v-card
+            class="styled-menu-card"
+            style="min-width: 220px;"
+            elevation="8"
+            rounded="lg"
+          >
+            <v-list
+              density="compact"
+              class="styled-menu-list pa-1"
+            >
+              <v-list-item
+                v-for="opt in transportOptions"
+                :key="opt.value"
+                :value="opt.value"
+                :class="{ 'styled-menu-item-active': transportMode === opt.value }"
+                class="styled-menu-item"
+                rounded="md"
+                @click="handleTransportModeChange(opt.value)"
+              >
+                <v-list-item-title>{{ opt.label }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-card>
+        </v-menu>
+
+        <!-- 发送快捷键（分组） -->
+        <v-menu
+          :open-on-hover="!isMobile"
+          :open-on-click="isMobile"
+          :open-delay="!isMobile ? 60 : 0"
+          :close-delay="!isMobile ? 120 : 0"
+          :location="isMobile ? 'bottom' : 'end center'"
+          offset="8"
+          close-on-content-click
+        >
+          <template #activator="{ props: sendShortcutMenuProps }">
+            <v-list-item
+              v-bind="sendShortcutMenuProps"
+              class="styled-menu-item chat-settings-group-trigger"
+              rounded="md"
+            >
+              <template #prepend>
+                <v-icon>mdi-keyboard-outline</v-icon>
+              </template>
+              <v-list-item-title>{{ tm('shortcuts.sendKey.title') }}</v-list-item-title>
+              <template #append>
+                <span class="chat-settings-group-current chat-settings-transport-current">{{ currentSendShortcutLabel }}</span>
+                <v-icon
+                  size="18"
+                  class="chat-settings-group-arrow"
+                >
+                  mdi-chevron-right
+                </v-icon>
+              </template>
+            </v-list-item>
+          </template>
+
+          <v-card
+            class="styled-menu-card"
+            style="min-width: 220px;"
+            elevation="8"
+            rounded="lg"
+          >
+            <v-list
+              density="compact"
+              class="styled-menu-list pa-1"
+            >
+              <v-list-item
+                v-for="opt in sendShortcutOptions"
+                :key="opt.value"
+                :value="opt.value"
+                :class="{ 'styled-menu-item-active': props.sendShortcut === opt.value }"
+                class="styled-menu-item"
+                rounded="md"
+                @click="handleSendShortcutChange(opt.value)"
+              >
+                <v-list-item-title>{{ opt.label }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-card>
+        </v-menu>
+
+        <!-- 全屏/退出全屏 -->
+        <v-list-item
+          class="styled-menu-item"
+          @click="$emit('toggleFullscreen')"
+        >
+          <template #prepend>
+            <v-icon>{{ chatboxMode ? 'mdi-fullscreen-exit' : 'mdi-fullscreen' }}</v-icon>
+          </template>
+          <v-list-item-title>{{ chatboxMode ? tm('actions.exitFullscreen') : tm('actions.fullscreen') }}</v-list-item-title>
+        </v-list-item>
+
+        <!-- 提供商配置 -->
+        <v-list-item
+          class="styled-menu-item"
+          @click="showProviderConfigDialog = true"
+        >
+          <template #prepend>
+            <v-icon>mdi-creation</v-icon>
+          </template>
+          <v-list-item-title>{{ tm('actions.providerConfig') }}</v-list-item-title>
+        </v-list-item>
+      </StyledMenu>
+    </div>
+
+    <!-- 提供商配置对话框 -->
+    <ProviderConfigDialog v-model="showProviderConfigDialog" />
+  </div>
 </template>
 
 <script setup lang="ts">

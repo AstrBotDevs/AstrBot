@@ -5,4 +5,4 @@ from .cmd_plug import plug
 from .cmd_run import run
 from .cmd_uninstall import uninstall
 
-__all__ = ["conf", "init", "plug", "run", "uninstall", "bk"]
+__all__ = ["bk", "conf", "init", "plug", "run", "uninstall"]

@@ -1,12 +1,27 @@
 <template>
-  <v-dialog v-model="isOpen" max-width="400">
+  <v-dialog
+    v-model="isOpen"
+    max-width="400"
+  >
     <v-card>
-      <v-card-title class="text-h6">{{ title }}</v-card-title>
+      <v-card-title class="text-h6">
+        {{ title }}
+      </v-card-title>
       <v-card-text>{{ message }}</v-card-text>
       <v-card-actions>
-        <v-spacer></v-spacer>
-        <v-btn color="gray" @click="handleCancel">{{ t('core.common.dialog.cancelButton') }}</v-btn>
-        <v-btn color="red" @click="handleConfirm">{{ t('core.common.dialog.confirmButton') }}</v-btn>
+        <v-spacer />
+        <v-btn
+          color="gray"
+          @click="handleCancel"
+        >
+          {{ t('core.common.dialog.cancelButton') }}
+        </v-btn>
+        <v-btn
+          color="red"
+          @click="handleConfirm"
+        >
+          {{ t('core.common.dialog.confirmButton') }}
+        </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

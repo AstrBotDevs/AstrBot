@@ -22,11 +22,29 @@ from astrbot.core.utils.requirements_utils import (
 from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
 
-from .log import LogBroker, LogManager  # noqa
-from .utils.astrbot_path import get_astrbot_data_path
+from .log import LogBroker, LogManager
+from .utils.astrbot_path import (
+    get_astrbot_config_path,
+    get_astrbot_data_path,
+    get_astrbot_knowledge_base_path,
+    get_astrbot_plugin_path,
+    get_astrbot_site_packages_path,
+    get_astrbot_skills_path,
+    get_astrbot_temp_path,
+)
 
-# 初始化数据存储文件夹
-os.makedirs(get_astrbot_data_path(), exist_ok=True)
+# Initialize required data directories eagerly so later agent/tool flows do not
+# fail on missing paths when the runtime root resolves to a fresh location.
+for required_dir in (
+    get_astrbot_data_path(),
+    get_astrbot_config_path(),
+    get_astrbot_plugin_path(),
+    get_astrbot_temp_path(),
+    get_astrbot_knowledge_base_path(),
+    get_astrbot_skills_path(),
+    get_astrbot_site_packages_path(),
+):
+    os.makedirs(required_dir, exist_ok=True)
 
 DEMO_MODE = os.getenv("DEMO_MODE", "False").strip().lower() in ("true", "1", "t")
 
@@ -47,3 +65,17 @@ pip_installer = PipInstaller(
     astrbot_config.get("pip_install_arg", ""),
     astrbot_config.get("pypi_index_url", None),
 )
+__all__ = [
+    "DEMO_MODE",
+    "AstrBotConfig",
+    "LogBroker",
+    "LogManager",
+    "astrbot_config",
+    "db_helper",
+    "file_token_service",
+    "html_renderer",
+    "logger",
+    "pip_installer",
+    "sp",
+    "t2i_base_url",
+]

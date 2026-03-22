@@ -63,7 +63,7 @@
                       class="mb-2"
                       variant="outlined"
                       bg-color="white"
-                    ></v-text-field>
+                    />
                     <v-text-field
                       v-model="newPresetUrl"
                       :label="tm('network.server.preset.url')"
@@ -72,15 +72,16 @@
                       class="mb-2"
                       variant="outlined"
                       bg-color="white"
-                    ></v-text-field>
+                    />
                     <v-btn
                       size="small"
                       block
                       color="primary"
                       variant="flat"
                       @click="savePreset"
-                      >{{ tm("network.server.preset.add") }}</v-btn
                     >
+                      {{ tm("network.server.preset.add") }}
+                    </v-btn>
                   </div>
                 </v-expand-transition>
 
@@ -89,10 +90,10 @@
                     v-for="preset in apiStore.presets"
                     :key="preset.name"
                     size="small"
-                    @click="apiBaseUrl = preset.url"
                     :variant="apiBaseUrl === preset.url ? 'flat' : 'tonal'"
                     :color="apiBaseUrl === preset.url ? 'primary' : undefined"
                     :closable="isCustomPreset(preset.name)"
+                    @click="apiBaseUrl = preset.url"
                     @click:close="apiStore.removePreset(preset.name)"
                   >
                     {{ preset.name }}
@@ -109,7 +110,7 @@
                 variant="outlined"
                 density="compact"
               >
-                <template v-slot:append>
+                <template #append>
                   <v-btn
                     size="small"
                     color="primary"
@@ -144,7 +145,7 @@
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <v-icon size="18">mdi-help-circle-outline</v-icon>
+                  <v-icon size="18"> mdi-help-circle-outline </v-icon>
                 </v-btn>
               </template>
               <span>{{ tm("apiKey.docsLink") }}</span>
@@ -182,7 +183,7 @@
               :loading="apiKeyCreating"
               @click="createApiKey"
             >
-              <v-icon class="mr-2">mdi-key-plus</v-icon>
+              <v-icon class="mr-2"> mdi-key-plus </v-icon>
               {{ tm("apiKey.create") }}
             </v-btn>
           </v-col>
@@ -218,7 +219,7 @@
                   color="primary"
                   @click="copyCreatedApiKey"
                 >
-                  <v-icon class="mr-1">mdi-content-copy</v-icon
+                  <v-icon class="mr-1"> mdi-content-copy </v-icon
                   >{{ tm("apiKey.copy") }}
                 </v-btn>
               </div>
@@ -301,12 +302,9 @@
         :subtitle="tm('system.migration.subtitle')"
         :title="tm('system.migration.title')"
       >
-        <v-btn
-          style="margin-top: 16px"
-          color="primary"
-          @click="startMigration"
-          >{{ tm("system.migration.button") }}</v-btn
-        >
+        <v-btn style="margin-top: 16px" color="primary" @click="startMigration">
+          {{ tm("system.migration.button") }}
+        </v-btn>
       </v-list-item>
 
       <v-list-subheader>{{ tm("sidebar.title") }}</v-list-subheader>
@@ -315,7 +313,7 @@
         :subtitle="tm('sidebar.customize.subtitle')"
         :title="tm('sidebar.customize.title')"
       >
-        <SidebarCustomizer></SidebarCustomizer>
+        <SidebarCustomizer />
       </v-list-item>
 
       <v-list-subheader>{{ tm("style.title") }}</v-list-subheader>
@@ -324,7 +322,7 @@
         :subtitle="tm('style.color.subtitle')"
         :title="tm('style.color.title')"
       >
-        <template #append> </template>
+        <template #append />
 
         <v-row class="mt-2" dense>
           <v-col cols="12" md="4">
@@ -335,7 +333,7 @@
               density="compact"
               hide-details
             >
-              <template v-slot:append-inner>
+              <template #append-inner>
                 <div
                   :style="{
                     backgroundColor: primaryColor,
@@ -345,7 +343,7 @@
                     border: '1px solid #ccc',
                   }"
                   class="mr-2"
-                ></div>
+                />
               </template>
             </v-text-field>
           </v-col>
@@ -357,7 +355,7 @@
               density="compact"
               hide-details
             >
-              <template v-slot:append-inner>
+              <template #append-inner>
                 <div
                   :style="{
                     backgroundColor: secondaryColor,
@@ -367,22 +365,30 @@
                     border: '1px solid #ccc',
                   }"
                   class="mr-2"
-                ></div>
+                />
               </template>
             </v-text-field>
           </v-col>
           <v-col cols="12" md="4">
             <v-btn color="primary" block @click="applyThemeColors">
-              <v-icon start>mdi-palette</v-icon>
+              <v-icon start> mdi-pencil-ruler </v-icon>
               {{ t("core.common.save") }}
             </v-btn>
           </v-col>
         </v-row>
       </v-list-item>
 
-      <v-list-item :subtitle="tm('style.autoSync.subtitle')" :title="tm('style.autoSync.title')">
-        <v-switch v-model="autoThemeSwitcher" :label="tm('style.autoSync.label')" color="primary" hide-details
-          class="ml-3" />
+      <v-list-item
+        :subtitle="tm('style.autoSync.subtitle')"
+        :title="tm('style.autoSync.title')"
+      >
+        <v-switch
+          v-model="autoThemeSwitcher"
+          :label="tm('style.autoSync.label')"
+          color="primary"
+          hide-details
+          class="ml-3"
+        />
       </v-list-item>
 
       <v-list-subheader>{{ tm("backup.title") }}</v-list-subheader>
@@ -439,7 +445,7 @@
           <v-btn
             color="error"
             variant="tonal"
-            prepend-icon="mdi-logout"
+            prepend-icon="mdi-export"
             @click="logout"
           >
             {{ tm("system.logout.button") }}
@@ -466,7 +472,7 @@ import SidebarCustomizer from "@/components/shared/SidebarCustomizer.vue";
 import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
 import MigrationDialog from "@/components/shared/MigrationDialog.vue";
 import BackupDialog from "@/components/shared/BackupDialog.vue";
-import axios from "axios";
+import axios, { getApiBaseUrlValidationError } from "@/utils/request";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useToast } from "@/utils/toast";
 
@@ -521,6 +527,12 @@ const isCustomPreset = (name) => {
 };
 
 const saveApiUrl = () => {
+  const validationError = getApiBaseUrlValidationError(apiBaseUrl.value);
+  if (validationError) {
+    toastStore.error(validationError);
+    return;
+  }
+
   apiStore.setApiBaseUrl(apiBaseUrl.value);
   window.location.reload();
 };
@@ -577,8 +589,10 @@ const autoThemeSwitcher = computed({
   get: () => customizer.autoSwitchTheme,
   set: (value) => {
     customizer.SET_AUTO_SYNC(value);
-    if (value) { customizer.APPLY_SYSTEM_THEME() };
-  }
+    if (value) {
+      customizer.APPLY_SYSTEM_THEME();
+    }
+  },
 });
 
 const wfr = ref(null);

@@ -1,5 +1,6 @@
 import { ref, reactive, type Ref } from 'vue';
-import axios from 'axios';
+import axios from '@/utils/request';
+import { resolveWebSocketUrl } from '@/utils/request';
 import { useToast } from '@/utils/toast';
 
 // 工具调用信息
@@ -139,6 +140,15 @@ type WsStreamContext = {
 
 const STREAMING_STORAGE_KEY = 'enableStreaming';
 const TRANSPORT_MODE_STORAGE_KEY = 'chatTransportMode';
+const HIDDEN_TOOL_CALL_NAMES = new Set(['send_message_to_user']);
+
+function isHiddenToolCall(toolCall: ToolCall | { name?: unknown } | null | undefined): boolean {
+    if (!toolCall || typeof toolCall !== 'object') {
+        return false;
+    }
+    const name = toolCall.name;
+    return typeof name === 'string' && HIDDEN_TOOL_CALL_NAMES.has(name);
+}
 
 export function useMessages(
     currSessionId: Ref<string>,
@@ -210,11 +220,7 @@ export function useMessages(
         if (!token) {
             throw new Error('Missing authentication token');
         }
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = new URL('/api/unified_chat/ws', window.location.href);
-        wsUrl.protocol = protocol;
-        wsUrl.searchParams.set('token', token);
-        return wsUrl.toString();
+        return resolveWebSocketUrl('/api/unified_chat/ws', { token });
     }
 
     function closeChatWebSocket() {
@@ -573,6 +579,9 @@ export function useMessages(
                     } catch {
                         return;
                     }
+                    if (isHiddenToolCall(toolCallData)) {
+                        return;
+                    }
 
                     const toolCall: ToolCall = {
                         id: toolCallData.id,
@@ -610,6 +619,9 @@ export function useMessages(
                     try {
                         resultData = JSON.parse(String(chunkJson.data || '{}'));
                     } catch {
+                        return;
+                    }
+                    if (isHiddenToolCall(resultData)) {
                         return;
                     }
 
@@ -712,7 +724,7 @@ export function useMessages(
         // 如果 message 是字符串 (旧格式)，转换为数组格式
         if (typeof message === 'string') {
             const parts: MessagePart[] = [];
-            let text = message;
+            const text = message;
 
             // 处理旧格式的特殊标记
             if (text.startsWith('[IMAGE]')) {
@@ -742,7 +754,18 @@ export function useMessages(
 
         // 如果 message 是数组 (新格式)，遍历并填充 embedded 字段
         if (Array.isArray(message)) {
+            const filteredMessage: MessagePart[] = [];
             for (const part of message as MessagePart[]) {
+                if (part.type === 'tool_call' && Array.isArray(part.tool_calls)) {
+                    const visibleToolCalls = part.tool_calls.filter(
+                        (toolCall) => !isHiddenToolCall(toolCall),
+                    );
+                    if (!visibleToolCalls.length) {
+                        continue;
+                    }
+                    part.tool_calls = visibleToolCalls;
+                }
+
                 if (part.type === 'image' && part.attachment_id) {
                     part.embedded_url = await getAttachment(part.attachment_id);
                 } else if (part.type === 'record' && part.attachment_id) {
@@ -758,7 +781,9 @@ export function useMessages(
                 if (part.type === 'elicitation') {
                     part.payload = normalizeElicitationPayload(part.payload) || undefined;
                 }
+                filteredMessage.push(part);
             }
+            content.message = filteredMessage;
         }
 
         // 处理 agent_stats (snake_case -> camelCase)
@@ -782,7 +807,7 @@ export function useMessages(
 
             const response = await axios.get('/api/chat/get_session?session_id=' + sessionId);
             isConvRunning.value = response.data.data.is_running || false;
-            let history = response.data.data.history;
+            const history = response.data.data.history;
 
             // 保存项目信息（如果存在）
             currentSessionProject.value = response.data.data.project || null;
@@ -801,7 +826,7 @@ export function useMessages(
 
             // 处理历史消息
             for (let i = 0; i < history.length; i++) {
-                let content = history[i].content;
+                const content = history[i].content;
                 await parseMessageContent(content);
             }
 
@@ -837,7 +862,7 @@ export function useMessages(
             const partType = f.type === 'image' ? 'image' :
                 f.type === 'record' ? 'record' : 'file';
             parts.push({
-                type: partType as 'image' | 'record' | 'file',
+                type: partType ,
                 attachment_id: f.attachment_id
             });
         }
@@ -880,7 +905,7 @@ export function useMessages(
 
         isStreaming.value = true;
 
-        while (true) {
+        for (;;) {
             try {
                 const { done, value } = await reader.read();
                 if (done) {
@@ -894,7 +919,7 @@ export function useMessages(
                 const lines = chunk.split('\n\n');
 
                 for (let i = 0; i < lines.length; i++) {
-                    let line = lines[i].trim();
+                    const line = lines[i].trim();
                     if (!line) continue;
 
                     let chunkJson: StreamChunk;
@@ -1004,7 +1029,7 @@ export function useMessages(
             const embeddedUrl = await getAttachment(f.attachment_id);
 
             userMessageParts.push({
-                type: partType as 'image' | 'record' | 'file',
+                type: partType ,
                 attachment_id: f.attachment_id,
                 filename: f.original_name,
                 embedded_url: partType !== 'file' ? embeddedUrl : undefined,

@@ -13,7 +13,7 @@ logger = logging.getLogger("astrbot")
 
 
 class Star(CommandParserMixin, PluginKVStoreMixin):
-    """所有插件（Star）的父类，所有插件都应该继承于这个类"""
+    """所有插件(Star)的父类,所有插件都应该继承于这个类"""
 
     author: str
     name: str
@@ -81,7 +81,7 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
         """当插件被激活时会调用这个方法"""
 
     async def terminate(self) -> None:
-        """当插件被禁用、重载插件时会调用这个方法"""
+        """当插件被禁用､重载插件时会调用这个方法"""
 
     def __del__(self) -> None:
-        """[Deprecated] 当插件被禁用、重载插件时会调用这个方法"""
+        """[Deprecated] 当插件被禁用､重载插件时会调用这个方法"""

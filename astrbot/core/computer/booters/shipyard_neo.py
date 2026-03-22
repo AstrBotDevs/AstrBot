@@ -5,18 +5,20 @@ import os
 import shlex
 from typing import TYPE_CHECKING, Any, cast
 
+import anyio
+
 from astrbot.api import logger
 
 if TYPE_CHECKING:
     from astrbot.core.agent.tool import FunctionTool
 
-from ..olayer import (
+from astrbot.core.computer.booters.base import ComputerBooter
+from astrbot.core.computer.olayer import (
     BrowserComponent,
     FileSystemComponent,
     PythonComponent,
     ShellComponent,
 )
-from .base import ComputerBooter
 
 
 def _maybe_model_dump(value: Any) -> dict[str, Any]:
@@ -37,7 +39,7 @@ class NeoPythonComponent(PythonComponent):
         self,
         code: str,
         kernel_id: str | None = None,
-        timeout: int = 30,
+        timeout: int = 30,  # noqa: ASYNC109
         silent: bool = False,
     ) -> dict[str, Any]:
         _ = kernel_id  # Bay runtime does not expose kernel_id in current SDK.
@@ -47,7 +49,7 @@ class NeoPythonComponent(PythonComponent):
         output_text = payload.get("output", "") or ""
         error_text = payload.get("error", "") or ""
         data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
-        rich_output = data.get("output") if isinstance(data.get("output"), dict) else {}
+        rich_output = (data.get("output") or {}) if isinstance(data, dict) else {}
         if not isinstance(rich_output.get("images"), list):
             rich_output["images"] = []
         if "text" not in rich_output:
@@ -79,7 +81,7 @@ class NeoShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = 30,
+        timeout: int | None = 30,  # noqa: ASYNC109
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
@@ -196,7 +198,7 @@ class NeoBrowserComponent(BrowserComponent):
     async def exec(
         self,
         cmd: str,
-        timeout: int = 30,
+        timeout: int = 30,  # noqa: ASYNC109
         description: str | None = None,
         tags: str | None = None,
         learn: bool = False,
@@ -215,7 +217,7 @@ class NeoBrowserComponent(BrowserComponent):
     async def exec_batch(
         self,
         commands: list[str],
-        timeout: int = 60,
+        timeout: int = 60,  # noqa: ASYNC109
         stop_on_error: bool = True,
         description: str | None = None,
         tags: str | None = None,
@@ -236,7 +238,7 @@ class NeoBrowserComponent(BrowserComponent):
     async def run_skill(
         self,
         skill_key: str,
-        timeout: int = 60,
+        timeout: int = 60,  # noqa: ASYNC109
         stop_on_error: bool = True,
         include_trace: bool = False,
         description: str | None = None,
@@ -380,7 +382,7 @@ class ShipyardNeoBooter(ComputerBooter):
         """Pick the best profile for this session.
 
         Resolution order:
-        1. User-specified profile (non-empty, non-default) → use as-is.
+        1. User-specified profile (non-empty, non-default) ￫ use as-is.
         2. Query ``GET /v1/profiles`` and pick the profile with the most
            capabilities, preferring profiles that include ``"browser"``.
         3. Fall back to :attr:`DEFAULT_PROFILE`.
@@ -389,7 +391,7 @@ class ShipyardNeoBooter(ComputerBooter):
         misconfigured token, and silently falling back would just delay the
         real failure to ``create_sandbox``.
         """
-        # User explicitly set a profile → honour it
+        # User explicitly set a profile ￫ honour it
         if self._profile and self._profile != self.DEFAULT_PROFILE:
             logger.info(
                 "[Computer] profile_selected mode=user profile=%s",
@@ -480,8 +482,8 @@ class ShipyardNeoBooter(ComputerBooter):
     async def upload_file(self, path: str, file_name: str) -> dict:
         if self._sandbox is None:
             raise RuntimeError("ShipyardNeoBooter is not initialized.")
-        with open(path, "rb") as f:
-            content = f.read()
+        async with await anyio.open_file(path, "rb") as f:
+            content = await f.read()
         remote_path = file_name.lstrip("/")
         await self._sandbox.filesystem.upload(remote_path, content)
         logger.info(
@@ -500,9 +502,9 @@ class ShipyardNeoBooter(ComputerBooter):
         content = await self._sandbox.filesystem.download(remote_path.lstrip("/"))
         local_dir = os.path.dirname(local_path)
         if local_dir:
-            os.makedirs(local_dir, exist_ok=True)
-        with open(local_path, "wb") as f:
-            f.write(cast(bytes, content))
+            await anyio.Path(local_dir).mkdir(parents=True, exist_ok=True)
+        async with await anyio.open_file(local_path, "wb") as f:
+            await f.write(cast(bytes, content))
         logger.info(
             "[Computer] file_download booter=shipyard_neo remote_path=%s local_path=%s",
             remote_path,

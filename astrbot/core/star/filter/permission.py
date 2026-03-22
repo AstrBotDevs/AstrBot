@@ -7,7 +7,7 @@ from . import HandlerFilter
 
 
 class PermissionType(enum.Flag):
-    """权限类型。当选择 MEMBER，ADMIN 也可以通过。"""
+    """权限类型｡当选择 MEMBER,ADMIN 也可以通过｡"""
 
     ADMIN = enum.auto()
     MEMBER = enum.auto()
@@ -25,7 +25,7 @@ class PermissionTypeFilter(HandlerFilter):
         if self.permission_type == PermissionType.ADMIN:
             if not event.is_admin():
                 # event.stop_event()
-                # raise ValueError(f"您 (ID: {event.get_sender_id()}) 没有权限操作管理员指令。")
+                # raise ValueError(f"您 (ID: {event.get_sender_id()}) 没有权限操作管理员指令｡")
                 return False
 
         return True

@@ -6,8 +6,9 @@ import datetime
 import json
 import os
 import zoneinfo
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Mapping
 from dataclasses import dataclass, field
+from typing import Any, cast
 
 from astrbot.core import logger, sp
 from astrbot.core.agent.handoff import HandoffTool
@@ -43,13 +44,18 @@ from astrbot.core.tools.prompts import (
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
     TOOL_CALL_PROMPT,
-    TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
+    TOOL_CALL_PROMPT_LAZY_LOAD_MODE,
     WEBCHAT_TITLE_GENERATOR_SYSTEM_PROMPT,
     WEBCHAT_TITLE_GENERATOR_USER_PROMPT,
 )
 from astrbot.core.tools.send_message import SEND_MESSAGE_TO_USER_TOOL
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
+from astrbot.core.utils.media_utils import (
+    IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
+    IMAGE_COMPRESS_DEFAULT_QUALITY,
+    compress_image,
+)
 from astrbot.core.utils.quoted_message.settings import (
     SETTINGS as DEFAULT_QUOTED_MESSAGE_SETTINGS,
 )
@@ -74,7 +80,7 @@ class MainAgentBuildConfig:
     a timeout error as a tool result will be returned.
     """
     tool_schema_mode: str = "full"
-    """The tool schema mode, can be 'full' or 'skills-like'."""
+    """The tool schema mode, can be 'full' or 'lazy_load'."""
     provider_wake_prefix: str = ""
     """The wake prefix for the provider. If the user message does not start with this prefix,
     the main agent will not be triggered."""
@@ -140,11 +146,9 @@ def _select_provider(
     if sel_provider and isinstance(sel_provider, str):
         provider = plugin_context.get_provider_by_id(sel_provider)
         if not provider:
-            logger.error("未找到指定的提供商: %s。", sel_provider)
+            logger.error("未找到指定的提供商: %s｡", sel_provider)
         if not isinstance(provider, Provider):
-            logger.error(
-                "选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider)
-            )
+            logger.error("选择的提供商类型无效(%s),跳过 LLM 请求处理｡", type(provider))
             return None
         return provider
     try:
@@ -167,7 +171,7 @@ async def _get_session_conv(
         cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
         conversation = await conv_mgr.get_conversation(umo, cid)
     if not conversation:
-        raise RuntimeError("无法创建新的对话。")
+        raise RuntimeError("无法创建新的对话｡")
     return conversation
 
 
@@ -192,7 +196,7 @@ async def _apply_kb(
                 req.system_prompt += (
                     f"\n\n[Related Knowledge Base Results]:\n{kb_result}"
                 )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error("Error occurred while retrieving knowledge base: %s", exc)
     else:
         if req.func_tool is None:
@@ -219,7 +223,7 @@ async def _apply_file_extract(
     if not file_paths:
         return
     if not req.prompt:
-        req.prompt = "总结一下文件里面讲了什么？"
+        req.prompt = "总结一下文件里面讲了什么?"
     if config.file_extract_prov == "moonshotai":
         if not config.file_extract_msh_api_key:
             logger.error("Moonshot AI API key for file extract is not set")
@@ -434,16 +438,23 @@ async def _request_img_caption(
 
 
 async def _ensure_img_caption(
+    event: AstrMessageEvent,
     req: ProviderRequest,
     cfg: dict,
     plugin_context: Context,
     image_caption_provider: str,
 ) -> None:
     try:
+        compressed_urls = []
+        for url in req.image_urls:
+            compressed_url = await _compress_image_for_provider(url, cfg)
+            compressed_urls.append(compressed_url)
+            if _is_generated_compressed_image_path(url, compressed_url):
+                event.track_temporary_local_file(compressed_url)
         caption = await _request_img_caption(
             image_caption_provider,
             cfg,
-            req.image_urls,
+            compressed_urls,
             plugin_context,
         )
         if caption:
@@ -451,8 +462,11 @@ async def _ensure_img_caption(
                 TextPart(text=f"<image_caption>{caption}</image_caption>")
             )
             req.image_urls = []
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("处理图片描述失败: %s", exc)
+        req.extra_user_content_parts.append(TextPart(text="[Image Captioning Failed]"))
+    finally:
+        req.image_urls = []
 
 
 def _append_quoted_image_attachment(req: ProviderRequest, image_path: str) -> None:
@@ -467,9 +481,154 @@ def _get_quoted_message_parser_settings(
     if not isinstance(provider_settings, dict):
         return DEFAULT_QUOTED_MESSAGE_SETTINGS
     overrides = provider_settings.get("quoted_message_parser")
-    if not isinstance(overrides, dict):
+    # Narrow to a Mapping so the typed .with_overrides() accepts it.
+    if not isinstance(overrides, Mapping):
         return DEFAULT_QUOTED_MESSAGE_SETTINGS
-    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)
+    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(
+        cast(Mapping[str, Any], overrides)
+    )
+
+
+def _get_image_compress_args(
+    provider_settings: dict[str, object] | None,
+) -> tuple[bool, int, int]:
+    if not isinstance(provider_settings, dict):
+        return True, IMAGE_COMPRESS_DEFAULT_MAX_SIZE, IMAGE_COMPRESS_DEFAULT_QUALITY
+
+    enabled = provider_settings.get("image_compress_enabled", True)
+    if not isinstance(enabled, bool):
+        enabled = True
+
+    raw_options = provider_settings.get("image_compress_options", {})
+    options = raw_options if isinstance(raw_options, dict) else {}
+
+    max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
+    if not isinstance(max_size, int):
+        max_size = IMAGE_COMPRESS_DEFAULT_MAX_SIZE
+    max_size = max(max_size, 1)
+
+    quality = options.get("quality", IMAGE_COMPRESS_DEFAULT_QUALITY)
+    if not isinstance(quality, int):
+        quality = IMAGE_COMPRESS_DEFAULT_QUALITY
+    quality = min(max(quality, 1), 100)
+
+    return enabled, max_size, quality
+
+
+async def _compress_image_for_provider(
+    url_or_path: str,
+    provider_settings: dict[str, object] | None,
+) -> str:
+    try:
+        enabled, max_size, quality = _get_image_compress_args(provider_settings)
+        if not enabled:
+            return url_or_path
+        return await compress_image(url_or_path, max_size=max_size, quality=quality)
+    except Exception as exc:
+        logger.error("Image compression failed: %s", exc)
+        return url_or_path
+
+
+def _get_image_compress_args(
+    provider_settings: dict[str, object] | None,
+) -> tuple[bool, int, int]:
+    if not isinstance(provider_settings, dict):
+        return True, IMAGE_COMPRESS_DEFAULT_MAX_SIZE, IMAGE_COMPRESS_DEFAULT_QUALITY
+
+    enabled = provider_settings.get("image_compress_enabled", True)
+    if not isinstance(enabled, bool):
+        enabled = True
+
+    raw_options = provider_settings.get("image_compress_options", {})
+    options = raw_options if isinstance(raw_options, dict) else {}
+
+    max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
+    if not isinstance(max_size, int):
+        max_size = IMAGE_COMPRESS_DEFAULT_MAX_SIZE
+    max_size = max(max_size, 1)
+
+    quality = options.get("quality", IMAGE_COMPRESS_DEFAULT_QUALITY)
+    if not isinstance(quality, int):
+        quality = IMAGE_COMPRESS_DEFAULT_QUALITY
+    quality = min(max(quality, 1), 100)
+
+    return enabled, max_size, quality
+
+
+async def _compress_image_for_provider(
+    url_or_path: str,
+    provider_settings: dict[str, object] | None,
+) -> str:
+    try:
+        enabled, max_size, quality = _get_image_compress_args(provider_settings)
+        if not enabled:
+            return url_or_path
+        return await compress_image(url_or_path, max_size=max_size, quality=quality)
+    except Exception as exc:
+        logger.error("Image compression failed: %s", exc)
+        return url_or_path
+
+
+def _is_generated_compressed_image_path(
+    original_path: str,
+    compressed_path: str | None,
+) -> bool:
+    if not compressed_path or compressed_path == original_path:
+        return False
+    if compressed_path.startswith("http") or compressed_path.startswith("data:image"):
+        return False
+    return os.path.exists(compressed_path)
+
+
+def _get_image_compress_args(
+    provider_settings: dict[str, object] | None,
+) -> tuple[bool, int, int]:
+    if not isinstance(provider_settings, dict):
+        return True, IMAGE_COMPRESS_DEFAULT_MAX_SIZE, IMAGE_COMPRESS_DEFAULT_QUALITY
+
+    enabled = provider_settings.get("image_compress_enabled", True)
+    if not isinstance(enabled, bool):
+        enabled = True
+
+    raw_options = provider_settings.get("image_compress_options", {})
+    options = raw_options if isinstance(raw_options, dict) else {}
+
+    max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
+    if not isinstance(max_size, int):
+        max_size = IMAGE_COMPRESS_DEFAULT_MAX_SIZE
+    max_size = max(max_size, 1)
+
+    quality = options.get("quality", IMAGE_COMPRESS_DEFAULT_QUALITY)
+    if not isinstance(quality, int):
+        quality = IMAGE_COMPRESS_DEFAULT_QUALITY
+    quality = min(max(quality, 1), 100)
+
+    return enabled, max_size, quality
+
+
+async def _compress_image_for_provider(
+    url_or_path: str,
+    provider_settings: dict[str, object] | None,
+) -> str:
+    try:
+        enabled, max_size, quality = _get_image_compress_args(provider_settings)
+        if not enabled:
+            return url_or_path
+        return await compress_image(url_or_path, max_size=max_size, quality=quality)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Image compression failed: %s", exc)
+        return url_or_path
+
+
+def _is_generated_compressed_image_path(
+    original_path: str,
+    compressed_path: str | None,
+) -> bool:
+    if not compressed_path or compressed_path == original_path:
+        return False
+    if compressed_path.startswith("http") or compressed_path.startswith("data:image"):
+        return False
+    return os.path.exists(compressed_path)
 
 
 async def _process_quote_message(
@@ -478,6 +637,7 @@ async def _process_quote_message(
     img_cap_prov_id: str,
     plugin_context: Context,
     quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
+    config: MainAgentBuildConfig | None = None,
 ) -> None:
     quote = None
     for comp in event.message_obj.message:
@@ -510,15 +670,24 @@ async def _process_quote_message(
     if image_seg:
         try:
             prov = None
+            path = None
+            compress_path = None
             if img_cap_prov_id:
                 prov = plugin_context.get_provider_by_id(img_cap_prov_id)
             if prov is None:
                 prov = plugin_context.get_using_provider(event.unified_msg_origin)
 
             if prov and isinstance(prov, Provider):
+                path = await image_seg.convert_to_file_path()
+                compress_path = await _compress_image_for_provider(
+                    path,
+                    config.provider_settings if config else None,
+                )
+                if path and _is_generated_compressed_image_path(path, compress_path):
+                    event.track_temporary_local_file(compress_path)
                 llm_resp = await prov.text_chat(
-                    prompt=IMAGE_CAPTION_DEFAULT_PROMPT,
-                    image_urls=[await image_seg.convert_to_file_path()],
+                    prompt="Please describe the image content.",
+                    image_urls=[compress_path],
                 )
                 if llm_resp.completion_text:
                     content_parts.append(
@@ -528,6 +697,16 @@ async def _process_quote_message(
                 logger.warning("No provider found for image captioning in quote.")
         except BaseException as exc:
             logger.error("处理引用图片失败: %s", exc)
+        finally:
+            if (
+                compress_path
+                and compress_path != path
+                and os.path.exists(compress_path)
+            ):
+                try:
+                    os.remove(compress_path)
+                except Exception as exc:
+                    logger.warning("Fail to remove temporary compressed image: %s", exc)
 
     quoted_content = "\n".join(content_parts)
     quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
@@ -563,7 +742,7 @@ def _append_system_reminders(
             try:
                 now = datetime.datetime.now(zoneinfo.ZoneInfo(timezone))
                 current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.error("时区设置错误: %s, 使用本地时区", exc)
         if not current_time:
             current_time = (
@@ -596,6 +775,7 @@ async def _decorate_llm_request(
         img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
         if img_cap_prov_id and req.image_urls:
             await _ensure_img_caption(
+                event,
                 req,
                 cfg,
                 plugin_context,
@@ -610,6 +790,7 @@ async def _decorate_llm_request(
         img_cap_prov_id,
         plugin_context,
         quoted_message_settings,
+        config,
     )
 
     tz = config.timezone
@@ -752,10 +933,10 @@ def _should_disable_streaming_for_webchat_output(
 
 
 def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
-    """根据事件中的插件设置，过滤请求中的工具列表。
+    """根据事件中的插件设置,过滤请求中的工具列表｡
 
-    注意：没有 handler_module_path 的工具（如 MCP 工具）会被保留，
-    因为它们不属于任何插件，不应被插件过滤逻辑影响。
+    注意:没有 handler_module_path 的工具(如 MCP 工具)会被保留,
+    因为它们不属于任何插件,不应被插件过滤逻辑影响｡
     """
     if event.plugins_name is not None and req.func_tool:
         new_tool_set = ToolSet()
@@ -766,13 +947,13 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
                 continue
             mp = tool.handler_module_path
             if not mp:
-                # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
-                # 不应受到会话插件过滤影响。
+                # 没有 plugin 归属信息的工具(如 subagent transfer_to_*)
+                # 不应受到会话插件过滤影响｡
                 new_tool_set.add_tool(tool)
                 continue
             plugin = star_map.get(mp)
             if not plugin:
-                # 无法解析插件归属时，保守保留工具，避免误过滤。
+                # 无法解析插件归属时,保守保留工具,避免误过滤｡
                 new_tool_set.add_tool(tool)
                 continue
             if plugin.name in event.plugins_name or plugin.reserved:
@@ -841,13 +1022,13 @@ def _get_compress_provider(
     provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
     if provider is None:
         logger.warning(
-            "未找到指定的上下文压缩模型 %s，将跳过压缩。",
+            "未找到指定的上下文压缩模型 %s,将跳过压缩｡",
             config.llm_compress_provider_id,
         )
         return None
     if not isinstance(provider, Provider):
         logger.warning(
-            "指定的上下文压缩模型 %s 不是对话模型，将跳过压缩。",
+            "指定的上下文压缩模型 %s 不是对话模型,将跳过压缩｡",
             config.llm_compress_provider_id,
         )
         return None
@@ -898,20 +1079,20 @@ async def build_main_agent(
     req: ProviderRequest | None = None,
     apply_reset: bool = True,
 ) -> MainAgentBuildResult | None:
-    """构建主对话代理（Main Agent），并且自动 reset。
+    """构建主对话代理(Main Agent),并且自动 reset｡
 
     If apply_reset is False, will not call reset on the agent runner.
     """
     provider = provider or _select_provider(event, plugin_context)
     if provider is None:
-        logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
+        logger.info("未找到任何对话模型(提供商),跳过 LLM 请求处理｡")
         return None
 
     if req is None:
         if event.get_extra("provider_request"):
             req = event.get_extra("provider_request")
             assert isinstance(req, ProviderRequest), (
-                "provider_request 必须是 ProviderRequest 类型。"
+                "provider_request 必须是 ProviderRequest 类型｡"
             )
             if req.conversation:
                 req.contexts = json.loads(req.conversation.history)
@@ -931,7 +1112,13 @@ async def build_main_agent(
             # media files attachments
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
-                    image_path = await comp.convert_to_file_path()
+                    path = await comp.convert_to_file_path()
+                    image_path = await _compress_image_for_provider(
+                        path,
+                        config.provider_settings,
+                    )
+                    if _is_generated_compressed_image_path(path, image_path):
+                        event.track_temporary_local_file(image_path)
                     req.image_urls.append(image_path)
                     req.extra_user_content_parts.append(
                         TextPart(text=f"[Image Attachment: path {image_path}]")
@@ -958,7 +1145,13 @@ async def build_main_agent(
                     for reply_comp in comp.chain:
                         if isinstance(reply_comp, Image):
                             has_embedded_image = True
-                            image_path = await reply_comp.convert_to_file_path()
+                            path = await reply_comp.convert_to_file_path()
+                            image_path = await _compress_image_for_provider(
+                                path,
+                                config.provider_settings,
+                            )
+                            if _is_generated_compressed_image_path(path, image_path):
+                                event.track_temporary_local_file(image_path)
                             req.image_urls.append(image_path)
                             _append_quoted_image_attachment(req, image_path)
                         elif isinstance(reply_comp, File):
@@ -1011,7 +1204,7 @@ async def build_main_agent(
                             req.image_urls.append(image_ref)
                             fallback_quoted_image_count += 1
                             _append_quoted_image_attachment(req, image_ref)
-                    except Exception as exc:  # noqa: BLE001
+                    except Exception as exc:
                         logger.warning(
                             "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
                             event.unified_msg_origin,
@@ -1032,7 +1225,7 @@ async def build_main_agent(
     if config.file_extract_enabled:
         try:
             await _apply_file_extract(event, req, config)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error("Error occurred while applying file extract: %s", exc)
 
     if not req.prompt and not req.image_urls:
@@ -1100,7 +1293,7 @@ async def build_main_agent(
             ]
 
     if event.get_platform_name() == "webchat":
-        asyncio.create_task(_handle_webchat(event, req, provider))
+        asyncio.create_task(_handle_webchat(event, req, provider))  # noqa: RUF006
 
     if req.func_tool and req.func_tool.tools:
         # Sort tools by name for deterministic serialization so that
@@ -1110,7 +1303,7 @@ async def build_main_agent(
         tool_prompt = (
             TOOL_CALL_PROMPT
             if config.tool_schema_mode == "full"
-            else TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
+            else TOOL_CALL_PROMPT_LAZY_LOAD_MODE
         )
         req.system_prompt += f"\n{tool_prompt}\n"
 

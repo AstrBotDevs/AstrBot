@@ -63,7 +63,7 @@ class WecomAIBotServer:
         return await self.handle_verify(quart.request)
 
     async def handle_verify(self, request):
-        """处理 URL 验证请求，可被统一 webhook 入口复用
+        """处理 URL 验证请求,可被统一 webhook 入口复用
 
         Args:
             request: Quart 请求对象
@@ -87,7 +87,7 @@ class WecomAIBotServer:
         assert nonce is not None
         assert echostr is not None
 
-        logger.info("收到企业微信智能机器人 WebHook URL 验证请求。")
+        logger.info("收到企业微信智能机器人 WebHook URL 验证请求｡")
         result = self.api_client.verify_url(msg_signature, timestamp, nonce, echostr)
         return result, 200, {"Content-Type": "text/plain"}
 
@@ -96,7 +96,7 @@ class WecomAIBotServer:
         return await self.handle_callback(quart.request)
 
     async def handle_callback(self, request):
-        """处理消息回调，可被统一 webhook 入口复用
+        """处理消息回调,可被统一 webhook 入口复用
 
         Args:
             request: Quart 请求对象
@@ -119,7 +119,7 @@ class WecomAIBotServer:
         assert nonce is not None
 
         logger.debug(
-            f"收到消息回调，msg_signature={msg_signature}, timestamp={timestamp}, nonce={nonce}",
+            f"收到消息回调,msg_signature={msg_signature}, timestamp={timestamp}, nonce={nonce}",
         )
 
         try:
@@ -139,7 +139,7 @@ class WecomAIBotServer:
             )
 
             if ret_code != WecomAIBotConstants.SUCCESS or not message_data:
-                logger.error("消息解密失败，错误码: %d", ret_code)
+                logger.error("消息解密失败,错误码: %d", ret_code)
                 return "消息解密失败", 400
 
             # 调用消息处理器
@@ -164,7 +164,7 @@ class WecomAIBotServer:
 
     async def start_server(self) -> None:
         """启动服务器"""
-        logger.info("启动企业微信智能机器人服务器，监听 %s:%d", self.host, self.port)
+        logger.info("启动企业微信智能机器人服务器,监听 %s:%d", self.host, self.port)
 
         try:
             await self.app.run_task(

@@ -1,82 +1,166 @@
 <template>
-    <div class="input-area fade-in" @dragover.prevent="handleDragOver" @dragleave.prevent="handleDragLeave"
-        @drop.prevent="handleDrop">
-        <div class="input-container" :style="{
-            width: '85%',
-            maxWidth: '900px',
-            margin: '0 auto',
-            border: isDark ? 'none' : '1px solid #e0e0e0',
-            borderRadius: '24px',
-            boxShadow: isDark ? 'none' : '0px 2px 2px rgba(0, 0, 0, 0.1)',
-            backgroundColor: isDark ? '#2d2d2d' : 'transparent',
-            position: 'relative'
-        }">
-            <!-- 拖拽上传遮罩 -->
-            <transition name="fade">
-                <div v-if="isDragging" class="drop-overlay">
-                    <div class="drop-overlay-content">
-                        <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
-                        <span class="drop-text">{{ tm('input.dropToUpload') }}</span>
-                    </div>
-                </div>
-            </transition>
-            <!-- 引用预览区 -->
-            <transition name="slideReply" @after-leave="handleReplyAfterLeave">
-                <div class="reply-preview" v-if="props.replyTo && !isReplyClosing">
-                    <div class="reply-content">
-                        <v-icon size="small" class="reply-icon">mdi-reply</v-icon>
-                        "<span class="reply-text">{{ props.replyTo.selectedText }}</span>"
-                    </div>
-                    <v-btn @click="handleClearReply" class="remove-reply-btn" icon="mdi-close" size="x-small"
-                        color="grey" variant="text" />
-                </div>
-            </transition>
-            <textarea ref="inputField" v-model="localPrompt" @keydown="handleKeyDown" :disabled="disabled"
-                placeholder="Ask AstrBot..." class="chat-textarea"
-                autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false"
-                style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 16px 20px; min-height: 40px; max-height: 200px; overflow-y: auto; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 14px;">
-                <div
-                    style="display: flex; justify-content: flex-start; margin-top: 4px; align-items: center; gap: 8px; min-width: 0; flex: 1; overflow: hidden;">
-                    <!-- Settings Menu -->
-                    <StyledMenu offset="8" location="top start" :close-on-content-click="false">
-                        <template v-slot:activator="{ props: activatorProps }">
-                            <v-btn v-bind="activatorProps" icon="mdi-plus" variant="text" color="primary" />
-                        </template>
+  <div
+    class="input-area fade-in"
+    @dragover.prevent="handleDragOver"
+    @dragleave.prevent="handleDragLeave"
+    @drop.prevent="handleDrop"
+  >
+    <div
+      class="input-container"
+      :style="{
+        width: '85%',
+        maxWidth: '900px',
+        margin: '0 auto',
+        border: isDark ? 'none' : '1px solid #e0e0e0',
+        borderRadius: '24px',
+        boxShadow: isDark ? 'none' : '0px 2px 2px rgba(0, 0, 0, 0.1)',
+        backgroundColor: isDark ? '#2d2d2d' : 'transparent',
+        position: 'relative'
+      }"
+    >
+      <!-- 拖拽上传遮罩 -->
+      <transition name="fade">
+        <div
+          v-if="isDragging"
+          class="drop-overlay"
+        >
+          <div class="drop-overlay-content">
+            <v-icon
+              size="48"
+              color="primary"
+            >
+              mdi-cloud-upload
+            </v-icon>
+            <span class="drop-text">{{ tm('input.dropToUpload') }}</span>
+          </div>
+        </div>
+      </transition>
+      <!-- 引用预览区 -->
+      <transition
+        name="slideReply"
+        @after-leave="handleReplyAfterLeave"
+      >
+        <div
+          v-if="props.replyTo && !isReplyClosing"
+          class="reply-preview"
+        >
+          <div class="reply-content">
+            <v-icon
+              size="small"
+              class="reply-icon"
+            >
+              mdi-reply
+            </v-icon>
+            "<span class="reply-text">{{ props.replyTo.selectedText }}</span>"
+          </div>
+          <v-btn
+            class="remove-reply-btn"
+            icon="mdi-close"
+            size="x-small"
+            color="grey"
+            variant="text"
+            @click="handleClearReply"
+          />
+        </div>
+      </transition>
+      <textarea
+        ref="inputField"
+        v-model="localPrompt"
+        :disabled="disabled"
+        placeholder="Ask AstrBot..."
+        class="chat-textarea"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="sentences"
+        spellcheck="false"
+        style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 16px 20px; min-height: 40px; max-height: 200px; overflow-y: auto; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"
+        @keydown="handleKeyDown"
+      />
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 14px;">
+        <div
+          style="display: flex; justify-content: flex-start; margin-top: 4px; align-items: center; gap: 8px; min-width: 0; flex: 1; overflow: hidden;"
+        >
+          <!-- Settings Menu -->
+          <StyledMenu
+            offset="8"
+            location="top start"
+            :close-on-content-click="false"
+          >
+            <template #activator="{ props: activatorProps }">
+              <v-btn
+                v-bind="activatorProps"
+                icon="mdi-plus"
+                variant="text"
+                color="primary"
+              />
+            </template>
 
-                        <!-- Upload Files -->
-                        <v-list-item class="styled-menu-item" rounded="md" @click="triggerImageInput">
-                            <template v-slot:prepend>
-                                <v-icon icon="mdi-file-upload-outline" size="small"></v-icon>
-                            </template>
-                            <v-list-item-title>
-                                {{ tm('input.upload') }}
-                            </v-list-item-title>
-                        </v-list-item>
+            <!-- Upload Files -->
+            <v-list-item
+              class="styled-menu-item"
+              rounded="md"
+              @click="triggerImageInput"
+            >
+              <template #prepend>
+                <v-icon
+                  icon="mdi-file-upload-outline"
+                  size="small"
+                />
+              </template>
+              <v-list-item-title>
+                {{ tm('input.upload') }}
+              </v-list-item-title>
+            </v-list-item>
 
-                        <!-- Config Selector in Menu -->
-                        <ConfigSelector :session-id="sessionId || null" :platform-id="sessionPlatformId"
-                            :is-group="sessionIsGroup" :initial-config-id="props.configId"
-                            @config-changed="handleConfigChange" />
+            <!-- Config Selector in Menu -->
+            <ConfigSelector
+              :session-id="sessionId || null"
+              :platform-id="sessionPlatformId"
+              :is-group="sessionIsGroup"
+              :initial-config-id="props.configId"
+              @config-changed="handleConfigChange"
+            />
 
-                        <!-- Streaming Toggle in Menu -->
-                        <v-list-item class="styled-menu-item" rounded="md" @click="$emit('toggleStreaming')">
-                            <template v-slot:prepend>
-                                <v-icon :icon="enableStreaming ? 'mdi-flash' : 'mdi-flash-off'" size="small"></v-icon>
-                            </template>
-                            <v-list-item-title>
-                                {{ enableStreaming ? tm('streaming.enabled') : tm('streaming.disabled') }}
-                            </v-list-item-title>
-                        </v-list-item>
-                    </StyledMenu>
+            <!-- Streaming Toggle in Menu -->
+            <v-list-item
+              class="styled-menu-item"
+              rounded="md"
+              @click="$emit('toggleStreaming')"
+            >
+              <template #prepend>
+                <v-icon
+                  :icon="enableStreaming ? 'mdi-flash' : 'mdi-flash-off'"
+                  size="small"
+                />
+              </template>
+              <v-list-item-title>
+                {{ enableStreaming ? tm('streaming.enabled') : tm('streaming.disabled') }}
+              </v-list-item-title>
+            </v-list-item>
+          </StyledMenu>
 
-                    <!-- Provider/Model Selector Menu -->
-                    <ProviderModelMenu v-if="showProviderSelector" ref="providerModelMenuRef" />
-                </div>
-                <div style="display: flex; justify-content: flex-end; margin-top: 8px; align-items: center; flex-shrink: 0;">
-                    <input type="file" ref="imageInputRef" @change="handleFileSelect" style="display: none" multiple />
-                    <v-progress-circular v-if="disabled && !mobile" indeterminate size="16" class="mr-1" width="1.5" />
-                    <!-- <v-btn @click="$emit('openLiveMode')"
+          <!-- Provider/Model Selector Menu -->
+          <ProviderModelMenu
+            v-if="showProviderSelector"
+            ref="providerModelMenuRef"
+          />
+        </div>
+        <div style="display: flex; justify-content: flex-end; margin-top: 8px; align-items: center; flex-shrink: 0;">
+          <input
+            ref="imageInputRef"
+            type="file"
+            style="display: none"
+            multiple
+            @change="handleFileSelect"
+          >
+          <v-progress-circular
+            v-if="disabled && !mobile"
+            indeterminate
+            size="16"
+            class="mr-1"
+            width="1.5"
+          />
+          <!-- <v-btn @click="$emit('openLiveMode')"
                         icon
                         variant="text"
                         color="purple" 
@@ -87,54 +171,136 @@
                             {{ tm('voice.liveMode') }}
                         </v-tooltip>
                     </v-btn> -->
-                    <v-btn @click="handleRecordClick" icon variant="text" :color="isRecording ? 'error' : 'primary'"
-                        class="record-btn">
-                        <v-icon :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
-                            plain></v-icon>
-                        <v-tooltip activator="parent" location="top">
-                            {{ isRecording ? tm('voice.speaking') : tm('voice.startRecording') }}
-                        </v-tooltip>
-                    </v-btn>
-                    <v-btn icon v-if="isRunning && !canSend" @click="$emit('stop')" variant="tonal" color="primary" class="send-btn">
-                        <v-icon icon="mdi-stop" variant="text" plain></v-icon>
-                        <v-tooltip activator="parent" location="top">
-                            {{ tm('input.stopGenerating') }}
-                        </v-tooltip>
-                    </v-btn>
-                    <v-btn v-else @click="$emit('send')" icon="mdi-send" variant="tonal" color="primary"
-                        :disabled="!canSend" class="send-btn" />
-                </div>
-            </div>
+          <v-btn
+            icon
+            variant="text"
+            :color="isRecording ? 'error' : 'primary'"
+            class="record-btn"
+            @click="handleRecordClick"
+          >
+            <v-icon
+              :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'"
+              variant="text"
+              plain
+            />
+            <v-tooltip
+              activator="parent"
+              location="top"
+            >
+              {{ isRecording ? tm('voice.speaking') : tm('voice.startRecording') }}
+            </v-tooltip>
+          </v-btn>
+          <v-btn
+            v-if="isRunning && !canSend"
+            icon
+            variant="tonal"
+            color="primary"
+            class="send-btn"
+            @click="$emit('stop')"
+          >
+            <v-icon
+              icon="mdi-stop"
+              variant="text"
+              plain
+            />
+            <v-tooltip
+              activator="parent"
+              location="top"
+            >
+              {{ tm('input.stopGenerating') }}
+            </v-tooltip>
+          </v-btn>
+          <v-btn
+            v-else
+            icon="mdi-send"
+            variant="tonal"
+            color="primary"
+            :disabled="!canSend"
+            class="send-btn"
+            @click="$emit('send')"
+          />
         </div>
-
-        <!-- 附件预览区 -->
-        <div class="attachments-preview"
-            v-if="stagedImagesUrl.length > 0 || stagedAudioUrl || (stagedFiles && stagedFiles.length > 0)">
-            <div v-for="(img, index) in stagedImagesUrl" :key="'img-' + index" class="image-preview">
-                <img :src="img" class="preview-image" />
-                <v-btn @click="$emit('removeImage', index)" class="remove-attachment-btn" icon="mdi-close" size="small"
-                    color="error" variant="text" />
-            </div>
-
-            <div v-if="stagedAudioUrl" class="audio-preview">
-                <v-chip color="primary" variant="tonal" class="audio-chip">
-                    <v-icon start icon="mdi-microphone" size="small"></v-icon>
-                    {{ tm('voice.recording') }}
-                </v-chip>
-                <v-btn @click="$emit('removeAudio')" class="remove-attachment-btn" icon="mdi-close" size="small"
-                    color="error" variant="text" />
-            </div>
-
-            <div v-for="(file, index) in stagedFiles" :key="'file-' + index" class="file-preview">
-                <v-chip color="primary" variant="tonal" class="file-chip">
-                    <v-icon start icon="mdi-file-document-outline" size="small"></v-icon>
-                    <span class="file-name-preview">{{ file.original_name }}</span>
-                </v-chip>
-                <v-btn @click="$emit('removeFile', index)" class="remove-attachment-btn" icon="mdi-close" size="small"
-                    color="error" variant="text" />
-            </div>
-        </div>
+      </div>
     </div>
+
+    <!-- 附件预览区 -->
+    <div
+      v-if="stagedImagesUrl.length > 0 || stagedAudioUrl || (stagedFiles && stagedFiles.length > 0)"
+      class="attachments-preview"
+    >
+      <div
+        v-for="(img, index) in stagedImagesUrl"
+        :key="'img-' + index"
+        class="image-preview"
+      >
+        <img
+          :src="img"
+          class="preview-image"
+        >
+        <v-btn
+          class="remove-attachment-btn"
+          icon="mdi-close"
+          size="small"
+          color="error"
+          variant="text"
+          @click="$emit('removeImage', index)"
+        />
+      </div>
+
+      <div
+        v-if="stagedAudioUrl"
+        class="audio-preview"
+      >
+        <v-chip
+          color="primary"
+          variant="tonal"
+          class="audio-chip"
+        >
+          <v-icon
+            start
+            icon="mdi-microphone"
+            size="small"
+          />
+          {{ tm('voice.recording') }}
+        </v-chip>
+        <v-btn
+          class="remove-attachment-btn"
+          icon="mdi-close"
+          size="small"
+          color="error"
+          variant="text"
+          @click="$emit('removeAudio')"
+        />
+      </div>
+
+      <div
+        v-for="(file, index) in stagedFiles"
+        :key="'file-' + index"
+        class="file-preview"
+      >
+        <v-chip
+          color="primary"
+          variant="tonal"
+          class="file-chip"
+        >
+          <v-icon
+            start
+            icon="mdi-file-document-outline"
+            size="small"
+          />
+          <span class="file-name-preview">{{ file.original_name }}</span>
+        </v-chip>
+        <v-btn
+          class="remove-attachment-btn"
+          icon="mdi-close"
+          size="small"
+          color="error"
+          variant="text"
+          @click="$emit('removeFile', index)"
+        />
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">

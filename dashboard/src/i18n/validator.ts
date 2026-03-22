@@ -6,7 +6,7 @@
 import type { ValidationResult, ValidationError, UsageReport, TranslationStats } from './types';
 
 export class I18nValidator {
-  private baseLocale: string = 'zh-CN';
+  private baseLocale = 'zh-CN';
   private supportedLocales: string[] = ['zh-CN', 'en-US'];
 
   /**
@@ -232,7 +232,7 @@ export class I18nValidator {
   /**
    * 获取对象的所有键路径
    */
-  private getAllKeys(obj: any, prefix: string = ''): string[] {
+  private getAllKeys(obj: any, prefix = ''): string[] {
     const keys: string[] = [];
 
     for (const [key, value] of Object.entries(obj)) {

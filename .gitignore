@@ -63,3 +63,7 @@ GenieData/
 .kilocode/
 .serena
 .worktrees/
+
+.env
+dashboard/warker.js
+dashboard/bun.lock

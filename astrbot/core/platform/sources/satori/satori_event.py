@@ -261,7 +261,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             elif isinstance(component, Forward):
                 return f'<message id="{component.id}" forward/>'
 
-            # 对于其他未处理的组件类型，返回空字符串
+            # 对于其他未处理的组件类型,返回空字符串
             return ""
 
         except Exception as e:
@@ -282,7 +282,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             content = "".join(content_parts)
 
-            # 如果内容为空，添加默认内容
+            # 如果内容为空,添加默认内容
             if not content.strip():
                 content = "[转发消息]"
 
@@ -354,7 +354,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             elif isinstance(component, Forward):
                 return f'<message id="{component.id}" forward/>'
 
-            # 对于其他未处理的组件类型，返回空字符串
+            # 对于其他未处理的组件类型,返回空字符串
             return ""
 
         except Exception as e:
@@ -376,7 +376,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             content = "".join(content_parts)
 
-            # 如果内容为空，添加默认内容
+            # 如果内容为空,添加默认内容
             if not content.strip():
                 content = "[转发消息]"
 

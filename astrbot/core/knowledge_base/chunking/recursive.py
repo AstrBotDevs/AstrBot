@@ -19,7 +19,7 @@ class RecursiveCharacterChunker(BaseChunker):
             chunk_overlap: 每个文本块之间的重叠部分大小
             length_function: 计算文本长度的函数
             is_separator_regex: 分隔符是否为正则表达式
-            separators: 用于分割文本的分隔符列表，按优先级排序
+            separators: 用于分割文本的分隔符列表,按优先级排序
 
         """
         self.chunk_size = chunk_size
@@ -27,12 +27,12 @@ class RecursiveCharacterChunker(BaseChunker):
         self.length_function = length_function
         self.is_separator_regex = is_separator_regex
 
-        # 默认分隔符列表，按优先级从高到低
+        # 默认分隔符列表,按优先级从高到低
         self.separators = separators or [
             "\n\n",  # 段落
             "\n",  # 换行
-            "。",  # 中文句子
-            "，",  # 中文逗号
+            "｡",  # 中文句子
+            ",",  # 中文逗号
             ". ",  # 句子
             ", ",  # 逗号分隔
             " ",  # 单词
@@ -67,7 +67,7 @@ class RecursiveCharacterChunker(BaseChunker):
 
             if separator in text:
                 splits = text.split(separator)
-                # 重新添加分隔符（除了最后一个片段）
+                # 重新添加分隔符(除了最后一个片段)
                 splits = [s + separator for s in splits[:-1]] + [splits[-1]]
                 splits = [s for s in splits if s]
                 if len(splits) == 1:
@@ -81,7 +81,7 @@ class RecursiveCharacterChunker(BaseChunker):
                 for split in splits:
                     split_length = self.length_function(split)
 
-                    # 如果单个分割部分已经超过了chunk_size，需要递归分割
+                    # 如果单个分割部分已经超过了chunk_size,需要递归分割
                     if split_length > chunk_size:
                         # 先处理当前积累的块
                         if current_chunk:

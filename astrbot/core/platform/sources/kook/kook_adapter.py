@@ -114,7 +114,7 @@ class KookPlatformAdapter(Platform):
             await self._cleanup()
 
     async def _main_loop(self):
-        """主循环，处理连接和重连"""
+        """主循环,处理连接和重连"""
         consecutive_failures = 0
         max_consecutive_failures = self.kook_config.max_consecutive_failures
         max_retry_delay = self.kook_config.max_retry_delay
@@ -127,32 +127,32 @@ class KookPlatformAdapter(Platform):
                 success = await self.client.connect()
 
                 if success:
-                    logger.info("[KOOK] 连接成功，开始监听消息")
+                    logger.info("[KOOK] 连接成功,开始监听消息")
                     consecutive_failures = 0  # 重置失败计数
 
-                    # 等待连接结束（可能是正常关闭或异常）
+                    # 等待连接结束(可能是正常关闭或异常)
                     while self.client.running and self.running:
                         try:
-                            # 等待 client 内部触发 _stop_event，或者超时 1 秒后重试
+                            # 等待 client 内部触发 _stop_event,或者超时 1 秒后重试
                             # 使用 wait_for 配合 timeout 是为了防止极端情况下 self.running 变化没被察觉
                             await asyncio.wait_for(
                                 self.client.wait_until_closed(), timeout=1.0
                             )
                         except asyncio.TimeoutError:
-                            # 正常超时，继续下一轮 while 检查
+                            # 正常超时,继续下一轮 while 检查
                             continue
 
                     if self.running:
-                        logger.warning("[KOOK] 连接断开，准备重连")
+                        logger.warning("[KOOK] 连接断开,准备重连")
 
                 else:
                     consecutive_failures += 1
                     logger.error(
-                        f"[KOOK] 连接失败，连续失败次数: {consecutive_failures}"
+                        f"[KOOK] 连接失败,连续失败次数: {consecutive_failures}"
                     )
 
                     if consecutive_failures >= max_consecutive_failures:
-                        logger.error("[KOOK] 连续失败次数过多，停止重连")
+                        logger.error("[KOOK] 连续失败次数过多,停止重连")
                         break
 
                     # 等待一段时间后重试
@@ -167,7 +167,7 @@ class KookPlatformAdapter(Platform):
                 logger.error(f"[KOOK] 主循环异常: {e}")
 
                 if consecutive_failures >= max_consecutive_failures:
-                    logger.error("[KOOK] 连续异常次数过多，停止重连")
+                    logger.error("[KOOK] 连续异常次数过多,停止重连")
                     break
 
                 await asyncio.sleep(5)

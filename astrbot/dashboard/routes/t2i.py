@@ -19,7 +19,7 @@ class T2iRoute(Route):
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
         self.manager = TemplateManager()
-        # 使用列表保证路由注册顺序，避免 /<name> 路由优先匹配 /reset_default
+        # 使用列表保证路由注册顺序,避免 /<name> 路由优先匹配 /reset_default
         self.routes = [
             ("/t2i/templates", ("GET", self.list_templates)),
             ("/t2i/templates/active", ("GET", self.get_active_template)),
@@ -130,13 +130,13 @@ class T2iRoute(Route):
 
             self.manager.update_template(name, content)
 
-            # 检查更新的是否为当前激活的模板，如果是，则热重载
+            # 检查更新的是否为当前激活的模板,如果是,则热重载
             active_template = self.config.get("t2i_active_template", "base")
             if name == active_template:
                 await self.core_lifecycle.reload_pipeline_scheduler("default")
-                message = f"模板 '{name}' 已更新并重新加载。"
+                message = f"模板 '{name}' 已更新并重新加载｡"
             else:
-                message = f"模板 '{name}' 已更新。"
+                message = f"模板 '{name}' 已更新｡"
 
             return jsonify(asdict(Response().ok(data={"name": name}, message=message)))
         except ValueError as e:
@@ -175,7 +175,7 @@ class T2iRoute(Route):
             data = await request.json
             name = data.get("name")
             if not name:
-                response = jsonify(asdict(Response().error("模板名称(name)不能为空。")))
+                response = jsonify(asdict(Response().error("模板名称(name)不能为空｡")))
                 response.status_code = 400
                 return response
 
@@ -190,11 +190,11 @@ class T2iRoute(Route):
             # 热重载以应用更改
             await self.core_lifecycle.reload_pipeline_scheduler("default")
 
-            return jsonify(asdict(Response().ok(message=f"模板 '{name}' 已成功应用。")))
+            return jsonify(asdict(Response().ok(message=f"模板 '{name}' 已成功应用｡")))
 
         except FileNotFoundError:
             response = jsonify(
-                asdict(Response().error(f"模板 '{name}' 不存在，无法应用。")),
+                asdict(Response().error(f"模板 '{name}' 不存在,无法应用｡")),
             )
             response.status_code = 404
             return response
@@ -209,7 +209,7 @@ class T2iRoute(Route):
         try:
             self.manager.reset_default_template()
 
-            # 更新配置，将激活模板也重置为'base'
+            # 更新配置,将激活模板也重置为'base'
             config = self.config
             config["t2i_active_template"] = "base"
             config.save_config(config)

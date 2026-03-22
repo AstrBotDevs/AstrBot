@@ -2,7 +2,10 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator
-from typing import TypeAlias, Union
+from typing import TypeAlias, Union, cast
+
+import aiofiles
+import anyio
 
 from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.tool import ToolSet
@@ -106,21 +109,21 @@ class Provider(AbstractProvider):
         extra_user_content_parts: list[ContentPart] | None = None,
         **kwargs,
     ) -> LLMResponse:
-        """获得 LLM 的文本对话结果。会使用当前的模型进行对话。
+        """获得 LLM 的文本对话结果｡会使用当前的模型进行对话｡
 
         Args:
-            prompt: 提示词，和 contexts 二选一使用，如果都指定，则会将 prompt（以及可能的 image_urls） 作为最新的一条记录添加到 contexts 中
+            prompt: 提示词,和 contexts 二选一使用,如果都指定,则会将 prompt(以及可能的 image_urls) 作为最新的一条记录添加到 contexts 中
             session_id: 会话 ID(此属性已经被废弃)
             image_urls: 图片 URL 列表
             tools: tool set
-            contexts: 上下文，和 prompt 二选一使用
-            tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
-            extra_user_content_parts: 额外的内容块列表，用于在用户消息后添加额外的文本块（如系统提醒、指令等）
+            contexts: 上下文,和 prompt 二选一使用
+            tool_calls_result: 回传给 LLM 的工具调用结果｡参考: https://platform.openai.com/docs/guides/function-calling
+            extra_user_content_parts: 额外的内容块列表,用于在用户消息后添加额外的文本块(如系统提醒､指令等)
             kwargs: 其他参数
 
         Notes:
-            - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
-            - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
+            - 如果传入了 image_urls,将会在对话时附上图片｡如果模型不支持图片输入,将会抛出错误｡
+            - 如果传入了 tools,将会使用 tools 进行 Function-calling｡如果模型不支持 Function-calling,将会抛出错误｡
 
         """
         ...
@@ -137,24 +140,24 @@ class Provider(AbstractProvider):
         model: str | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
-        """获得 LLM 的流式文本对话结果。会使用当前的模型进行对话。在生成的最后会返回一次完整的结果。
+        """获得 LLM 的流式文本对话结果｡会使用当前的模型进行对话｡在生成的最后会返回一次完整的结果｡
 
         Args:
-            prompt: 提示词，和 contexts 二选一使用，如果都指定，则会将 prompt（以及可能的 image_urls） 作为最新的一条记录添加到 contexts 中
+            prompt: 提示词,和 contexts 二选一使用,如果都指定,则会将 prompt(以及可能的 image_urls) 作为最新的一条记录添加到 contexts 中
             session_id: 会话 ID(此属性已经被废弃)
             image_urls: 图片 URL 列表
             tools: tool set
-            contexts: 上下文，和 prompt 二选一使用
-            tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
+            contexts: 上下文,和 prompt 二选一使用
+            tool_calls_result: 回传给 LLM 的工具调用结果｡参考: https://platform.openai.com/docs/guides/function-calling
             kwargs: 其他参数
 
         Notes:
-            - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
-            - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
+            - 如果传入了 image_urls,将会在对话时附上图片｡如果模型不支持图片输入,将会抛出错误｡
+            - 如果传入了 tools,将会使用 tools 进行 Function-calling｡如果模型不支持 Function-calling,将会抛出错误｡
 
         """
         if False:  # pragma: no cover - make this an async generator for typing
-            yield None  # type: ignore
+            yield cast(LLMResponse, None)
         raise NotImplementedError()
 
     async def pop_record(self, context: list) -> None:
@@ -188,11 +191,11 @@ class Provider(AbstractProvider):
 
         return dicts
 
-    async def test(self, timeout: float = 45.0) -> None:
-        await asyncio.wait_for(
-            self.text_chat(prompt="REPLY `PONG` ONLY"),
-            timeout=timeout,
-        )
+    async def test(self, test_timeout: float = 45.0) -> None:
+        # Use anyio.fail_after to enforce timeout in async context.
+        # This avoids direct asyncio.wait_for usage inside async functions.
+        with anyio.fail_after(test_timeout):
+            await self.text_chat(prompt="REPLY `PONG` ONLY")
 
 
 class STTProvider(AbstractProvider):
@@ -225,7 +228,7 @@ class TTSProvider(AbstractProvider):
         """是否支持流式 TTS
 
         Returns:
-            bool: True 表示支持流式处理，False 表示不支持（默认）
+            bool: True 表示支持流式处理,False 表示不支持(默认)
 
         Notes:
             子类可以重写此方法返回 True 来启用流式 TTS 支持
@@ -234,7 +237,7 @@ class TTSProvider(AbstractProvider):
 
     @abc.abstractmethod
     async def get_audio(self, text: str) -> str:
-        """获取文本的音频，返回音频文件路径"""
+        """获取文本的音频,返回音频文件路径"""
         raise NotImplementedError
 
     async def get_audio_stream(
@@ -242,14 +245,14 @@ class TTSProvider(AbstractProvider):
         text_queue: asyncio.Queue[str | None],
         audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
     ) -> None:
-        """流式 TTS 处理方法。
+        """流式 TTS 处理方法｡
 
-        从 text_queue 中读取文本片段，将生成的音频数据（WAV 格式的 in-memory bytes）放入 audio_queue。
-        当 text_queue 收到 None 时，表示文本输入结束，此时应该处理完所有剩余文本并向 audio_queue 发送 None 表示结束。
+        从 text_queue 中读取文本片段,将生成的音频数据(WAV 格式的 in-memory bytes)放入 audio_queue｡
+        当 text_queue 收到 None 时,表示文本输入结束,此时应该处理完所有剩余文本并向 audio_queue 发送 None 表示结束｡
 
         Args:
-            text_queue: 输入文本队列，None 表示输入结束
-            audio_queue: 输出音频队列（bytes 或 (text, bytes)），None 表示输出结束
+            text_queue: 输入文本队列,None 表示输入结束
+            audio_queue: 输出音频队列(bytes 或 (text, bytes)),None 表示输出结束
 
         Notes:
             - 默认实现会将文本累积后一次性调用 get_audio 生成完整音频
@@ -262,14 +265,14 @@ class TTSProvider(AbstractProvider):
             text_part = await text_queue.get()
 
             if text_part is None:
-                # 输入结束，处理累积的文本
+                # 输入结束,处理累积的文本
                 if accumulated_text:
                     try:
                         # 调用原有的 get_audio 方法获取音频文件路径
                         audio_path = await self.get_audio(accumulated_text)
                         # 读取音频文件内容
-                        with open(audio_path, "rb") as f:
-                            audio_data = f.read()
+                        async with aiofiles.open(audio_path, "rb") as f:
+                            audio_data = await f.read()
                         await audio_queue.put((accumulated_text, audio_data))
                     except Exception:
                         # 出错时也要发送 None 结束标记
@@ -284,10 +287,11 @@ class TTSProvider(AbstractProvider):
         audio_path = await self.get_audio("hi")
 
         # 检查生成的音频文件是否有效
-        if not os.path.exists(audio_path):
+        audio_path_obj = anyio.Path(audio_path)
+        if not await audio_path_obj.exists():
             raise Exception("TTS test failed: audio file was not created")
 
-        file_size = os.path.getsize(audio_path)
+        file_size = (await audio_path_obj.stat()).st_size
         if file_size == 0:
             raise Exception(
                 "TTS test failed: generated audio file is empty (0 bytes). "
@@ -333,14 +337,14 @@ class EmbeddingProvider(AbstractProvider):
         max_retries: int = 3,
         progress_callback=None,
     ) -> list[list[float]]:
-        """批量获取文本的向量，分批处理以节省内存
+        """批量获取文本的向量,分批处理以节省内存
 
         Args:
             texts: 文本列表
             batch_size: 每批处理的文本数量
             tasks_limit: 并发任务数量限制
             max_retries: 失败时的最大重试次数
-            progress_callback: 进度回调函数，接收参数 (current, total)
+            progress_callback: 进度回调函数,接收参数 (current, total)
 
         Returns:
             向量列表
@@ -365,12 +369,12 @@ class EmbeddingProvider(AbstractProvider):
                         return
                     except Exception as e:
                         if attempt == max_retries - 1:
-                            # 最后一次重试失败，记录失败的批次
+                            # 最后一次重试失败,记录失败的批次
                             failed_batches.append((batch_idx, batch_texts))
                             raise Exception(
-                                f"批次 {batch_idx} 处理失败，已重试 {max_retries} 次: {e!s}",
+                                f"批次 {batch_idx} 处理失败,已重试 {max_retries} 次: {e!s}",
                             )
-                        # 等待一段时间后重试，使用指数退避
+                        # 等待一段时间后重试,使用指数退避
                         await asyncio.sleep(2**attempt)
 
         tasks = []
@@ -379,7 +383,7 @@ class EmbeddingProvider(AbstractProvider):
             batch_idx = i // batch_size
             tasks.append(process_batch(batch_idx, batch_texts))
 
-        # 收集所有任务的结果，包括失败的任务
+        # 收集所有任务的结果,包括失败的任务
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # 检查是否有失败的任务

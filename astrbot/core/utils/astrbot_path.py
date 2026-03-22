@@ -1,40 +1,198 @@
 """Astrbot统一路径获取
 
-项目路径：固定为源码所在路径
-根目录路径：默认为当前工作目录，可通过环境变量 ASTRBOT_ROOT 指定
-数据目录路径：固定为根目录下的 data 目录
-配置文件路径：固定为数据目录下的 config 目录
-插件目录路径：固定为数据目录下的 plugins 目录
-插件数据目录路径：固定为数据目录下的 plugin_data 目录
-T2I 模板目录路径：固定为数据目录下的 t2i_templates 目录
-WebChat 数据目录路径：固定为数据目录下的 webchat 目录
-临时文件目录路径：固定为数据目录下的 temp 目录
-Skills 目录路径：固定为数据目录下的 skills 目录
-第三方依赖目录路径：固定为数据目录下的 site-packages 目录
+项目路径:固定为源码所在路径
+根目录路径:默认为当前工作目录,可通过环境变量 ASTRBOT_ROOT 指定
+数据目录路径:固定为根目录下的 data 目录
+配置文件路径:固定为数据目录下的 config 目录
+插件目录路径:固定为数据目录下的 plugins 目录
+插件数据目录路径:固定为数据目录下的 plugin_data 目录
+T2I 模板目录路径:固定为数据目录下的 t2i_templates 目录
+WebChat 数据目录路径:固定为数据目录下的 webchat 目录
+临时文件目录路径:固定为数据目录下的 temp 目录
+Skills 目录路径:固定为数据目录下的 skills 目录
+第三方依赖目录路径:固定为数据目录下的 site-packages 目录
 """
 
 import os
 from importlib import resources
 from pathlib import Path
 
+import anyio
+
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
+
+
+class AstrbotPaths:
+    """Astrbot 项目路径管理类"""
+
+    def __init__(self) -> None:
+        self._root_override: Path | None = None
+        from dotenv import load_dotenv
+
+        env_candidates = []
+
+        # 1) current working directory .env
+        env_candidates.append(Path.cwd() / ".env")
+
+        # 2) ASTRBOT_ROOT/.env if ASTRBOT_ROOT already set in the environment
+        root_env = os.environ.get("ASTRBOT_ROOT")
+        if root_env:
+            env_candidates.append(Path(root_env) / ".env")
+        for p in env_candidates:
+            if p.exists():
+                load_dotenv(dotenv_path=str(p), override=False)
+
+    def _resolve_root(self) -> Path:
+        if path := os.environ.get("ASTRBOT_ROOT"):
+            return Path(path)
+        if is_packaged_desktop_runtime():
+            return Path().home() / ".astrbot"
+
+        return Path(os.getcwd())
+
+    @property
+    def root(self) -> Path:
+        if self._root_override is not None:
+            return self._root_override
+        return self._resolve_root()
+
+    @root.setter
+    def root(self, value: Path) -> None:
+        self._root_override = value
+
+    @property
+    def is_root(self) -> bool:
+        """Check if the path is an AstrBot root directory"""
+
+        if not self.root.exists() or not self.root.is_dir():
+            return False
+        if not (self.root / ".astrbot").exists():
+            return False
+        return True
+
+    @property
+    def has_dashboard(self) -> bool:
+        """Check if the dashboard is installed"""
+        if self.bundled_dist.is_dir():
+            return True
+        dashboard_version = self.dashboard_version
+        match dashboard_version:
+            case None:
+                return False
+            case str():
+                return True
+            case _:
+                return False
+
+    async def async_has_dashboard(self) -> bool:
+        """Check if the dashboard is installed (async)"""
+        if self.bundled_dist.is_dir():
+            return True
+        dashboard_version = await self.async_dashboard_version()
+        match dashboard_version:
+            case None:
+                return False
+            case str():
+                return True
+            case _:
+                return False
+
+    @property
+    def dashboard_version(self) -> str | None:
+        try:
+            with open(self.dist / "assets" / "version") as f:
+                return f.read().strip()
+        except FileNotFoundError:
+            return None
+
+    @property
+    def bundled_dist(self) -> Path:
+        return self.project_root / "dashboard" / "dist"
+
+    async def async_dashboard_version(self) -> str | None:
+        try:
+            # anyio.open_file returns a coroutine that yields an async file object.
+            # Await it to get the file object, then use it and close it explicitly.
+            f = await anyio.open_file(self.dist / "assets" / "version", mode="r")
+            try:
+                data = await f.read()
+                if data is None:
+                    return None
+                return data.strip()
+            finally:
+                # Ensure we close the async file handle; ignore close errors defensively.
+                try:
+                    await f.aclose()
+                except Exception:
+                    pass
+        except (FileNotFoundError, OSError):
+            return None
+        except Exception:
+            # Be defensive: any unexpected error should not raise during path utils
+            return None
+
+    @property
+    def project_root(self) -> Path:
+        """获取项目根目录路径 (package root)"""
+        with resources.as_file(resources.files("astrbot")) as path:
+            return Path(path)
+
+    @property
+    def data(self) -> Path:
+        return self.root / "data"
+
+    @property
+    def dist(self) -> Path:
+        return self.data / "dist"
+
+    @property
+    def config(self) -> Path:
+        return self.data / "config"
+
+    @property
+    def plugins(self) -> Path:
+        return self.data / "plugins"
+
+    @property
+    def temp(self) -> Path:
+        return self.data / "temp"
+
+    @property
+    def skills(self) -> Path:
+        return self.data / "skills"
+
+    @property
+    def site_packages(self) -> Path:
+        return self.data / "site-packages"
+
+    @property
+    def knowledge_base(self) -> Path:
+        return self.data / "knowledge_base"
+
+    @property
+    def backups(self) -> Path:
+        return self.data / "backups"
+
+    @property
+    def t2i_templates(self) -> Path:
+        return self.data / "t2i_templates"
+
+    @property
+    def webchat(self) -> Path:
+        return self.data / "webchat"
+
+
+astrbot_paths = AstrbotPaths()
 
 
 def get_astrbot_path() -> str:
     """获取Astrbot项目路径"""
-    return os.path.realpath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../"),
-    )
+    return str(astrbot_paths.project_root)
 
 
 def get_astrbot_root() -> str:
     """获取Astrbot根目录路径"""
-    if path := os.environ.get("ASTRBOT_ROOT"):
-        return os.path.realpath(path)
-    if is_packaged_desktop_runtime():
-        return os.path.realpath(os.path.join(os.path.expanduser("~"), ".astrbot"))
-
-    return os.path.realpath(os.getcwd())
+    return str(astrbot_paths.root)
 
 
 def get_astrbot_data_path() -> str:
@@ -90,67 +248,3 @@ def get_astrbot_knowledge_base_path() -> str:
 def get_astrbot_backups_path() -> str:
     """获取Astrbot备份目录路径"""
     return os.path.realpath(os.path.join(get_astrbot_data_path(), "backups"))
-
-
-class AstrbotPaths:
-    """Astrbot 项目路径管理类"""
-
-    def __init__(self) -> None:
-        self._root = self._resolve_root()
-
-    def _resolve_root(self) -> Path:
-        if path := os.environ.get("ASTRBOT_ROOT"):
-            return Path(path)
-        if is_packaged_desktop_runtime():
-            return Path().home() / ".astrbot"
-
-        return Path(os.getcwd())
-
-    @property
-    def root(self) -> Path:
-        return self._root
-
-    @root.setter
-    def root(self, value: Path) -> None:
-        self._root = value
-
-    @property
-    def project_root(self) -> Path:
-        """获取项目根目录路径 (package root)"""
-        with resources.as_file(resources.files("astrbot")) as path:
-            return path
-
-    @property
-    def data(self) -> Path:
-        return self.root / "data"
-
-    @property
-    def config(self) -> Path:
-        return self.data / "config"
-
-    @property
-    def plugins(self) -> Path:
-        return self.data / "plugins"
-
-    @property
-    def temp(self) -> Path:
-        return self.data / "temp"
-
-    @property
-    def skills(self) -> Path:
-        return self.data / "skills"
-
-    @property
-    def site_packages(self) -> Path:
-        return self.data / "site-packages"
-
-    @property
-    def knowledge_base(self) -> Path:
-        return self.data / "knowledge_base"
-
-    @property
-    def backups(self) -> Path:
-        return self.data / "backups"
-
-
-astrbot_paths = AstrbotPaths()

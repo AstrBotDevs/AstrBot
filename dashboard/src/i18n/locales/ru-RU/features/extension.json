@@ -96,6 +96,15 @@
     "market": {
         "recommended": "🥳 Рекомендуем",
         "allPlugins": "📦 Все плагины",
+        "categories": {
+            "all": "Все",
+            "ai_tools": "AI Tools",
+            "entertainment": "Развлечения",
+            "productivity": "Продуктивность",
+            "integrations": "Интеграции",
+            "utilities": "Утилиты",
+            "other": "Другое"
+        },
         "showFullName": "Полное имя",
         "devDocs": "Документация для разработчиков",
         "submitRepo": "Добавить репозиторий",

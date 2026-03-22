@@ -503,7 +503,7 @@ class TestExecutorCapabilityGuard:
 
         with patch(
             "astrbot.core.computer.computer_client.session_booter",
-            {},  # no booter registered → caps=None → allow through
+            {},  # no booter registered ￫ caps=None ￫ allow through
         ):
             result = FunctionToolExecutor._check_sandbox_capability(tool, run_context)
 

@@ -44,7 +44,7 @@ class RespondStage(Stage):
             comp.lat is not None and comp.lon is not None
         ),  # 位置
         Comp.Contact: lambda comp: bool(comp._type and comp.id),  # 推荐好友 or 群
-        Comp.Shake: lambda _: True,  # 窗口抖动（戳一戳）
+        Comp.Shake: lambda _: True,  # 窗口抖动(戳一戳)
         Comp.Dice: lambda _: True,  # 掷骰子魔法表情
         Comp.RPS: lambda _: True,  # 猜拳魔法表情
         Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),
@@ -85,8 +85,8 @@ class RespondStage(Stage):
             try:
                 self.interval = [float(t) for t in interval_str_ls]
             except BaseException as e:
-                logger.error(f"解析分段回复的间隔时间失败。{e}")
-            logger.info(f"分段回复间隔时间：{self.interval}")
+                logger.error(f"解析分段回复的间隔时间失败｡{e}")
+            logger.info(f"分段回复间隔时间:{self.interval}")
 
     async def _word_cnt(self, text: str) -> int:
         """分段回复 统计字数"""
@@ -187,7 +187,7 @@ class RespondStage(Stage):
 
         if result.result_content_type == ResultContentType.STREAMING_RESULT:
             if result.async_stream is None:
-                logger.warning("async_stream 为空，跳过发送。")
+                logger.warning("async_stream 为空,跳过发送｡")
                 return
             # 流式结果直接交付平台适配器处理
             realtime_segmenting = (
@@ -205,14 +205,14 @@ class RespondStage(Stage):
             if mappings := self.platform_settings.get("path_mapping", []):
                 for idx, component in enumerate(result.chain):
                     if isinstance(component, Comp.File) and component.file:
-                        # 支持 File 消息段的路径映射。
+                        # 支持 File 消息段的路径映射｡
                         component.file = path_Mapping(mappings, component.file)
                         result.chain[idx] = component
 
             # 检查消息链是否为空
             try:
                 if await self._is_empty_message_chain(result.chain):
-                    logger.info("消息为空，跳过发送阶段")
+                    logger.info("消息为空,跳过发送阶段")
                     return
             except Exception as e:
                 logger.warning(f"空内容检查异常: {e}")
@@ -239,7 +239,7 @@ class RespondStage(Stage):
                 if not result.chain or len(result.chain) == 0:
                     # may fix #2670
                     logger.warning(
-                        f"实际消息链为空, 跳过发送阶段。header_chain: {header_comps}, actual_chain: {result.chain}",
+                        f"实际消息链为空, 跳过发送阶段｡header_chain: {header_comps}, actual_chain: {result.chain}",
                     )
                     return
                 for comp in result.chain:
@@ -263,7 +263,7 @@ class RespondStage(Stage):
                 ):
                     # may fix #2670
                     logger.warning(
-                        f"消息链全为 Reply 和 At 消息段, 跳过发送阶段。chain: {result.chain}",
+                        f"消息链全为 Reply 和 At 消息段, 跳过发送阶段｡chain: {result.chain}",
                     )
                     return
                 sep_comps = self._extract_comp(

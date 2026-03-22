@@ -37,7 +37,7 @@ class WhitelistCheckStage(Stage):
             return
 
         if len(self.whitelist) == 0:
-            # 白名单为空，不检查
+            # 白名单为空,不检查
             return
 
         if event.get_platform_name() == "webchat":
@@ -63,6 +63,6 @@ class WhitelistCheckStage(Stage):
         ):
             if self.wl_log:
                 logger.info(
-                    f"会话 ID {event.unified_msg_origin} 不在会话白名单中，已终止事件传播。请在配置文件中添加该会话 ID 到白名单。",
+                    f"会话 ID {event.unified_msg_origin} 不在会话白名单中,已终止事件传播｡请在配置文件中添加该会话 ID 到白名单｡",
                 )
             event.stop_event()

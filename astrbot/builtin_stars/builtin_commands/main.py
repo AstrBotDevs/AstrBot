@@ -51,7 +51,7 @@ class Main(star.Star):
 
     @plugin.command("ls")
     async def plugin_ls(self, event: AstrMessageEvent) -> None:
-        """获取已经安装的插件列表。"""
+        """获取已经安装的插件列表｡"""
         await self.plugin_c.plugin_ls(event)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
@@ -84,7 +84,7 @@ class Main(star.Star):
 
     @filter.command("tts")
     async def tts(self, event: AstrMessageEvent) -> None:
-        """开关文本转语音（会话级别）"""
+        """开关文本转语音(会话级别)"""
         await self.tts_c.tts(event)
 
     @filter.command("sid")
@@ -95,25 +95,25 @@ class Main(star.Star):
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("op")
     async def op(self, event: AstrMessageEvent, admin_id: str = "") -> None:
-        """授权管理员。op <admin_id>"""
+        """授权管理员｡op <admin_id>"""
         await self.admin_c.op(event, admin_id)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("deop")
     async def deop(self, event: AstrMessageEvent, admin_id: str) -> None:
-        """取消授权管理员。deop <admin_id>"""
+        """取消授权管理员｡deop <admin_id>"""
         await self.admin_c.deop(event, admin_id)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("wl")
     async def wl(self, event: AstrMessageEvent, sid: str = "") -> None:
-        """添加白名单。wl <sid>"""
+        """添加白名单｡wl <sid>"""
         await self.admin_c.wl(event, sid)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dwl")
     async def dwl(self, event: AstrMessageEvent, sid: str) -> None:
-        """删除白名单。dwl <sid>"""
+        """删除白名单｡dwl <sid>"""
         await self.admin_c.dwl(event, sid)
 
     @filter.permission_type(filter.PermissionType.ADMIN)

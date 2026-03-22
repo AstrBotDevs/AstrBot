@@ -1,8 +1,14 @@
 <template>
   <div class="kb-container">
     <router-view v-slot="{ Component }">
-      <transition name="kb-fade" mode="out-in">
-        <component :is="Component" :key="$route.fullPath" />
+      <transition
+        name="kb-fade"
+        mode="out-in"
+      >
+        <component
+          :is="Component"
+          :key="$route.fullPath"
+        />
       </transition>
     </router-view>
   </div>

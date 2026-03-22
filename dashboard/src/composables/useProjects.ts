@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import axios from 'axios';
+import axios from '@/utils/request';
 import type { Project } from '@/components/chat/ProjectList.vue';
 
 export function useProjects() {

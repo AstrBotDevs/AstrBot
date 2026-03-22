@@ -19,7 +19,7 @@ class SessionPluginManager:
             plugin_name: 插件名称
 
         Returns:
-            bool: True表示启用，False表示禁用
+            bool: True表示启用,False表示禁用
 
         """
         # 获取会话插件配置
@@ -34,15 +34,15 @@ class SessionPluginManager:
         enabled_plugins = session_config.get("enabled_plugins", [])
         disabled_plugins = session_config.get("disabled_plugins", [])
 
-        # 如果插件在禁用列表中，返回False
+        # 如果插件在禁用列表中,返回False
         if plugin_name in disabled_plugins:
             return False
 
-        # 如果插件在启用列表中，返回True
+        # 如果插件在启用列表中,返回True
         if plugin_name in enabled_plugins:
             return True
 
-        # 如果都没有配置，默认为启用（兼容性考虑）
+        # 如果都没有配置,默认为启用(兼容性考虑)
         return True
 
     @staticmethod
@@ -78,11 +78,11 @@ class SessionPluginManager:
             # 获取处理器对应的插件
             plugin = star_map.get(handler.handler_module_path)
             if not plugin:
-                # 如果找不到插件元数据，允许执行（可能是系统插件）
+                # 如果找不到插件元数据,允许执行(可能是系统插件)
                 filtered_handlers.append(handler)
                 continue
 
-            # 跳过保留插件（系统插件）
+            # 跳过保留插件(系统插件)
             if plugin.reserved:
                 filtered_handlers.append(handler)
                 continue
@@ -93,7 +93,7 @@ class SessionPluginManager:
             # 检查插件是否在当前会话中启用
             if plugin.name in disabled_plugins:
                 logger.debug(
-                    f"插件 {plugin.name} 在会话 {session_id} 中被禁用，跳过处理器 {handler.handler_name}",
+                    f"插件 {plugin.name} 在会话 {session_id} 中被禁用,跳过处理器 {handler.handler_name}",
                 )
             else:
                 filtered_handlers.append(handler)

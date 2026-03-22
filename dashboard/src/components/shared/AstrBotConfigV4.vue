@@ -206,28 +206,51 @@ function getSpecialSubtype(value) {
 </script>
 
 <template>
-
-
-  <v-card v-if="shouldShowSection()" style="margin-bottom: 16px; padding-bottom: 8px; background-color: rgb(var(--v-theme-background));"
-    rounded="md" variant="outlined">
-    <v-card-text class="config-section" v-if="metadata[metadataKey]?.type === 'object'" style="padding-bottom: 8px;">
+  <v-card
+    v-if="shouldShowSection()"
+    style="margin-bottom: 16px; padding-bottom: 8px; background-color: rgb(var(--v-theme-background));"
+    rounded="md"
+    variant="outlined"
+  >
+    <v-card-text
+      v-if="metadata[metadataKey]?.type === 'object'"
+      class="config-section"
+      style="padding-bottom: 8px;"
+    >
       <v-list-item-title class="config-title">
         {{ translateIfKey(metadata[metadataKey]?.description) }}
       </v-list-item-title>
       <v-list-item-subtitle class="config-hint">
-        <span v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint" class="important-hint">‼️</span>
-        <span v-html="renderHint(metadata[metadataKey]?.hint)"></span>
+        <span
+          v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint"
+          class="important-hint"
+        >‼️</span>
+        <span v-html="renderHint(metadata[metadataKey]?.hint)" />
       </v-list-item-subtitle>
     </v-card-text>
 
     <!-- Object Type Configuration with JSON Selector Support -->
-    <div v-if="metadata[metadataKey]?.type === 'object'" class="object-config">
-      <div v-for="(itemMeta, itemKey, index) in metadata[metadataKey].items" :key="itemKey" class="config-item">
+    <div
+      v-if="metadata[metadataKey]?.type === 'object'"
+      class="object-config"
+    >
+      <div
+        v-for="(itemMeta, itemKey, index) in metadata[metadataKey].items"
+        :key="itemKey"
+        class="config-item"
+      >
         <!-- Check if itemKey is a JSON selector -->
         <template v-if="shouldShowItem(itemMeta, itemKey)">
           <!-- JSON Selector Property -->
-          <v-row v-if="!itemMeta?.invisible" class="config-row">
-            <v-col cols="12" sm="6" class="property-info">
+          <v-row
+            v-if="!itemMeta?.invisible"
+            class="config-row"
+          >
+            <v-col
+              cols="12"
+              sm="6"
+              class="property-info"
+            >
               <v-list-item density="compact">
                 <v-list-item-title class="property-name">
                   {{ translateIfKey(itemMeta?.description) || itemKey }}
@@ -235,12 +258,19 @@ function getSpecialSubtype(value) {
                 </v-list-item-title>
 
                 <v-list-item-subtitle class="property-hint">
-                  <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">‼️</span>
-                  <span v-html="renderHint(itemMeta?.hint)"></span>
+                  <span
+                    v-if="itemMeta?.obvious_hint && itemMeta?.hint"
+                    class="important-hint"
+                  >‼️</span>
+                  <span v-html="renderHint(itemMeta?.hint)" />
                 </v-list-item-subtitle>
               </v-list-item>
             </v-col>
-            <v-col cols="12" sm="6" class="config-input">
+            <v-col
+              cols="12"
+              sm="6"
+              class="config-input"
+            >
               <TemplateListEditor
                 v-if="itemMeta?.type === 'template_list'"
                 v-model="createSelectorModel(itemKey).value"
@@ -258,17 +288,30 @@ function getSpecialSubtype(value) {
           </v-row>
 
           <!-- Plugin Set Selector 全宽显示区域 -->
-          <v-row v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'"
-            class="plugin-set-display-row">
-            <v-col cols="12" class="plugin-set-display">
-              <div v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
-                class="selected-plugins-full-width">
+          <v-row
+            v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'"
+            class="plugin-set-display-row"
+          >
+            <v-col
+              cols="12"
+              class="plugin-set-display"
+            >
+              <div
+                v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
+                class="selected-plugins-full-width"
+              >
                 <div class="plugins-header">
                   <small class="text-grey">{{ t('core.shared.pluginSetSelector.selectedPluginsLabel') }}</small>
                 </div>
                 <div class="d-flex flex-wrap ga-2 mt-2">
-                  <v-chip v-for="plugin in (createSelectorModel(itemKey).value || [])" :key="plugin" size="small" label
-                    color="primary" variant="outlined">
+                  <v-chip
+                    v-for="plugin in (createSelectorModel(itemKey).value || [])"
+                    :key="plugin"
+                    size="small"
+                    label
+                    color="primary"
+                    variant="outlined"
+                  >
                     {{ plugin === '*' ? t('core.shared.pluginSetSelector.allPluginsLabel') : plugin }}
                   </v-chip>
                 </div>
@@ -281,35 +324,58 @@ function getSpecialSubtype(value) {
             v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona' && itemKey === 'provider_settings.default_personality'"
             class="persona-preview-row"
           >
-            <v-col cols="12" class="persona-preview-display">
+            <v-col
+              cols="12"
+              class="persona-preview-display"
+            >
               <PersonaQuickPreview :model-value="createSelectorModel(itemKey).value" />
             </v-col>
           </v-row>
         </template>
-        <v-divider class="config-divider"
-          v-if="shouldShowItem(itemMeta, itemKey) && hasVisibleItemsAfter(metadata[metadataKey].items, index)"></v-divider>
+        <v-divider
+          v-if="shouldShowItem(itemMeta, itemKey) && hasVisibleItemsAfter(metadata[metadataKey].items, index)"
+          class="config-divider"
+        />
       </div>
-
     </div>
   </v-card>
 
   <!-- Full Screen Editor Dialog -->
-  <v-dialog v-model="dialog" fullscreen transition="dialog-bottom-transition" scrollable>
+  <v-dialog
+    v-model="dialog"
+    fullscreen
+    transition="dialog-bottom-transition"
+    scrollable
+  >
     <v-card>
-      <v-toolbar color="primary" dark>
-        <v-btn icon @click="dialog = false">
+      <v-toolbar
+        color="primary"
+        dark
+      >
+        <v-btn
+          icon
+          @click="dialog = false"
+        >
           <v-icon>mdi-close</v-icon>
         </v-btn>
         <v-toolbar-title>{{ t('core.common.editor.editingTitle') }} - {{ currentEditingKey }}</v-toolbar-title>
-        <v-spacer></v-spacer>
+        <v-spacer />
         <v-toolbar-items>
-          <v-btn variant="text" @click="saveEditedContent">{{ t('core.common.save') }}</v-btn>
+          <v-btn
+            variant="text"
+            @click="saveEditedContent"
+          >
+            {{ t('core.common.save') }}
+          </v-btn>
         </v-toolbar-items>
       </v-toolbar>
       <v-card-text class="pa-0">
-        <VueMonacoEditor :theme="currentEditingTheme" :language="currentEditingLanguage"
-          style="height: calc(100vh - 64px);" v-model:value="currentEditingKeyIterable[currentEditingKey]">
-        </VueMonacoEditor>
+        <VueMonacoEditor
+          v-model:value="currentEditingKeyIterable[currentEditingKey]"
+          :theme="currentEditingTheme"
+          :language="currentEditingLanguage"
+          style="height: calc(100vh - 64px);"
+        />
       </v-card-text>
     </v-card>
   </v-dialog>

@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+import sys
 from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import Generic
@@ -53,6 +55,22 @@ def _prepare_config(config: dict) -> dict:
     config.pop("client_capabilities", None)
     config.pop("provider", None)
     return config
+
+
+def _prepare_stdio_env(config: dict) -> dict:
+    """Preserve Windows executable resolution for stdio subprocesses."""
+    if sys.platform != "win32":
+        return config
+
+    pathext = os.environ.get("PATHEXT")
+    if not pathext:
+        return config
+
+    prepared = config.copy()
+    env = dict(prepared.get("env") or {})
+    env.setdefault("PATHEXT", pathext)
+    prepared["env"] = env
+    return prepared
 
 
 async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
@@ -182,7 +200,7 @@ class MCPClient(Generic[TContext]):
             # Handle MCP service error logs
             if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
                 if msg.level in ("warning", "error", "critical", "alert", "emergency"):
-                    log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
+                    log_msg = f"[{msg.level.upper()}] {msg.data!s}"
                     self.server_errlogs.append(log_msg)
 
         if "url" in cfg:
@@ -278,6 +296,7 @@ class MCPClient(Generic[TContext]):
                 )
 
         else:
+            cfg = _prepare_stdio_env(cfg)
             server_params = mcp.StdioServerParameters(
                 **cfg,
             )
@@ -292,7 +311,7 @@ class MCPClient(Generic[TContext]):
                         "alert",
                         "emergency",
                     ):
-                        log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
+                        log_msg = f"[{msg.level.upper()}] {msg.data!s}"
                         self.server_errlogs.append(log_msg)
 
             stdio_transport = await self.exit_stack.enter_async_context(

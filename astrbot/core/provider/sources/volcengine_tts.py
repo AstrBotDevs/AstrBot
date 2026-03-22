@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import json
 import os
@@ -6,6 +5,7 @@ import traceback
 import uuid
 
 import aiohttp
+import anyio
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -100,11 +100,8 @@ class ProviderVolcengineTTS(TTSProvider):
                             f"volcengine_tts_{uuid.uuid4()}.mp3",
                         )
 
-                        loop = asyncio.get_running_loop()
-                        await loop.run_in_executor(
-                            None,
-                            lambda: open(file_path, "wb").write(audio_data),
-                        )
+                        async with await anyio.open_file(file_path, "wb") as audio_file:
+                            await audio_file.write(audio_data)
 
                         return file_path
                     error_msg = resp_data.get("message", "未知错误")

@@ -1,6 +1,7 @@
 import base64
 import traceback
 from io import BytesIO
+from typing import cast
 
 from astrbot.api import logger
 from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
@@ -34,7 +35,7 @@ async def generate_tsne_visualization(
         from sklearn.manifold import TSNE
     except ImportError as e:
         raise Exception(
-            "缺少必要的库以生成 t-SNE 可视化。请安装 matplotlib 和 scikit-learn: {e}",
+            "缺少必要的库以生成 t-SNE 可视化｡请安装 matplotlib 和 scikit-learn: {e}",
         ) from e
 
     try:
@@ -81,7 +82,7 @@ async def generate_tsne_visualization(
                 index.reconstruct(i, vectors[i])
 
         # 获取查询向量
-        vec_db: FaissVecDB = kb_helper.vec_db  # type: ignore
+        vec_db = cast(FaissVecDB, kb_helper.vec_db)
         embedding_provider = vec_db.embedding_provider
         query_embedding = await embedding_provider.get_embedding(query)
         query_vector = np.array([query_embedding], dtype=np.float32)
@@ -114,7 +115,7 @@ async def generate_tsne_visualization(
             label="Knowledge Base Vectors",
         )
 
-        # 绘制查询向量（红色 X）
+        # 绘制查询向量 红色 X
         plt.scatter(
             query_vector_2d[0],
             query_vector_2d[1],

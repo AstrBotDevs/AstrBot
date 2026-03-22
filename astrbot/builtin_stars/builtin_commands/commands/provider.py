@@ -127,7 +127,7 @@ class ProviderCommands:
             return self.context.get_config(umo).get("provider_settings", {}) or {}
         except Exception as e:
             logger.debug(
-                "读取 provider_settings 失败，使用默认值: %s",
+                "读取 provider_settings 失败,使用默认值: %s",
                 safe_error("", e),
             )
             return {}
@@ -142,7 +142,7 @@ class ProviderCommands:
             return max(float(raw), 0.0)
         except Exception as e:
             logger.debug(
-                "读取 %s 失败，回退默认值 %r: %s",
+                "读取 %s 失败,回退默认值 %r: %s",
                 MODEL_LIST_CACHE_TTL_KEY,
                 MODEL_LIST_CACHE_TTL_SECONDS_DEFAULT,
                 safe_error("", e),
@@ -159,7 +159,7 @@ class ProviderCommands:
             value = int(raw)
         except Exception as e:
             logger.debug(
-                "读取 %s 失败，回退默认值 %r: %s",
+                "读取 %s 失败,回退默认值 %r: %s",
                 MODEL_LOOKUP_MAX_CONCURRENCY_KEY,
                 MODEL_LOOKUP_MAX_CONCURRENCY_DEFAULT,
                 safe_error("", e),
@@ -209,7 +209,7 @@ class ProviderCommands:
     ) -> str:
         prov.set_model(model_name)
         self.invalidate_provider_models_cache(prov.meta().id, umo=umo)
-        return f"切换模型成功。当前提供商: [{prov.meta().id}] 当前模型: [{prov.get_model()}]"
+        return f"切换模型成功｡当前提供商: [{prov.meta().id}] 当前模型: [{prov.get_model()}]"
 
     async def _get_provider_models(
         self,
@@ -265,7 +265,7 @@ class ProviderCommands:
         err_code: str,
         err_reason: str,
     ) -> None:
-        """记录不可达原因到日志。"""
+        """记录不可达原因到日志｡"""
         meta = provider.meta()
         logger.warning(
             "Provider reachability check failed: id=%s type=%s code=%s reason=%s",
@@ -358,7 +358,7 @@ class ProviderCommands:
                 provider_id for provider_id, _ in failed_provider_errors
             )
             logger.error(
-                "跨提供商查找模型 %s 时，所有 %d 个提供商的 get_models() 均失败: %s。请检查配置或网络",
+                "跨提供商查找模型 %s 时,所有 %d 个提供商的 get_models() 均失败: %s｡请检查配置或网络",
                 model_name,
                 len(all_providers),
                 failed_ids,
@@ -405,7 +405,7 @@ class ProviderCommands:
                 if all_providers:
                     await event.send(
                         MessageEventResult().message(
-                            "正在进行提供商可达性测试，请稍候..."
+                            "正在进行提供商可达性测试,请稍候..."
                         )
                     )
                 check_results = await asyncio.gather(
@@ -426,7 +426,7 @@ class ProviderCommands:
                 if isinstance(reachable, asyncio.CancelledError):
                     raise reachable
                 if isinstance(reachable, Exception):
-                    # 异常情况下兜底处理，避免单个 provider 导致列表失败
+                    # 异常情况下兜底处理,避免单个 provider 导致列表失败
                     self._log_reachability_failure(
                         p,
                         None,
@@ -501,23 +501,23 @@ class ProviderCommands:
                         line += " (当前使用)"
                     parts.append(line + "\n")
 
-            parts.append("\n使用 /provider <序号> 切换 LLM 提供商。")
+            parts.append("\n使用 /provider <序号> 切换 LLM 提供商｡")
             ret = "".join(parts)
 
             if ttss:
-                ret += "\n使用 /provider tts <序号> 切换 TTS 提供商。"
+                ret += "\n使用 /provider tts <序号> 切换 TTS 提供商｡"
             if stts:
-                ret += "\n使用 /provider stt <序号> 切换 STT 提供商。"
+                ret += "\n使用 /provider stt <序号> 切换 STT 提供商｡"
             if not reachability_check_enabled:
-                ret += "\n已跳过提供商可达性检测，如需检测请在配置文件中开启。"
+                ret += "\n已跳过提供商可达性检测,如需检测请在配置文件中开启｡"
 
             event.set_result(MessageEventResult().message(ret))
         elif idx == "tts":
             if idx2 is None:
-                event.set_result(MessageEventResult().message("请输入序号。"))
+                event.set_result(MessageEventResult().message("请输入序号｡"))
                 return
             if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
-                event.set_result(MessageEventResult().message("无效的提供商序号。"))
+                event.set_result(MessageEventResult().message("无效的提供商序号｡"))
                 return
             provider = self.context.get_all_tts_providers()[idx2 - 1]
             id_ = provider.meta().id
@@ -526,13 +526,13 @@ class ProviderCommands:
                 provider_type=ProviderType.TEXT_TO_SPEECH,
                 umo=umo,
             )
-            event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
+            event.set_result(MessageEventResult().message(f"成功切换到 {id_}｡"))
         elif idx == "stt":
             if idx2 is None:
-                event.set_result(MessageEventResult().message("请输入序号。"))
+                event.set_result(MessageEventResult().message("请输入序号｡"))
                 return
             if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
-                event.set_result(MessageEventResult().message("无效的提供商序号。"))
+                event.set_result(MessageEventResult().message("无效的提供商序号｡"))
                 return
             provider = self.context.get_all_stt_providers()[idx2 - 1]
             id_ = provider.meta().id
@@ -541,10 +541,10 @@ class ProviderCommands:
                 provider_type=ProviderType.SPEECH_TO_TEXT,
                 umo=umo,
             )
-            event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
+            event.set_result(MessageEventResult().message(f"成功切换到 {id_}｡"))
         elif isinstance(idx, int):
             if idx > len(self.context.get_all_providers()) or idx < 1:
-                event.set_result(MessageEventResult().message("无效的提供商序号。"))
+                event.set_result(MessageEventResult().message("无效的提供商序号｡"))
                 return
             provider = self.context.get_all_providers()[idx - 1]
             id_ = provider.meta().id
@@ -553,16 +553,16 @@ class ProviderCommands:
                 provider_type=ProviderType.CHAT_COMPLETION,
                 umo=umo,
             )
-            event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
+            event.set_result(MessageEventResult().message(f"成功切换到 {id_}｡"))
         else:
-            event.set_result(MessageEventResult().message("无效的参数。"))
+            event.set_result(MessageEventResult().message("无效的参数｡"))
 
     async def _switch_model_by_name(
         self, message: AstrMessageEvent, model_name: str, prov: Provider
     ) -> None:
         model_name = model_name.strip()
         if not model_name:
-            message.set_result(MessageEventResult().message("模型名不能为空。"))
+            message.set_result(MessageEventResult().message("模型名不能为空｡"))
             return
 
         umo = message.unified_msg_origin
@@ -574,7 +574,7 @@ class ProviderCommands:
             prov,
             config,
             error_prefix="获取当前提供商模型列表失败: ",
-            warning_log="获取当前提供商 %s 模型列表失败，停止跨提供商查找: %s",
+            warning_log="获取当前提供商 %s 模型列表失败,停止跨提供商查找: %s",
         )
         if models is None:
             return
@@ -597,7 +597,7 @@ class ProviderCommands:
         if target_prov is None or matched_target_model_name is None:
             message.set_result(
                 MessageEventResult().message(
-                    f"模型 [{model_name}] 未在任何已配置的提供商中找到，或所有提供商模型列表获取失败，请检查配置或网络后重试。",
+                    f"模型 [{model_name}] 未在任何已配置的提供商中找到,或所有提供商模型列表获取失败,请检查配置或网络后重试｡",
                 ),
             )
             return
@@ -612,7 +612,7 @@ class ProviderCommands:
             self._apply_model(target_prov, matched_target_model_name, umo=umo)
             message.set_result(
                 MessageEventResult().message(
-                    f"检测到模型 [{matched_target_model_name}] 属于提供商 [{target_id}]，已自动切换提供商并设置模型。",
+                    f"检测到模型 [{matched_target_model_name}] 属于提供商 [{target_id}],已自动切换提供商并设置模型｡",
                 ),
             )
         except asyncio.CancelledError:
@@ -633,7 +633,7 @@ class ProviderCommands:
         prov = self.context.get_using_provider(message.unified_msg_origin)
         if not prov:
             message.set_result(
-                MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
+                MessageEventResult().message("未找到任何 LLM 提供商｡请先配置｡"),
             )
             return
         config = self._get_model_lookup_config(message.unified_msg_origin)
@@ -655,7 +655,7 @@ class ProviderCommands:
             curr_model = prov.get_model() or "无"
             parts.append(f"\n当前模型: [{curr_model}]")
             parts.append(
-                "\nTips: 使用 /model <模型名/编号> 切换模型。输入模型名时可自动跨提供商查找并切换；跨提供商也可使用 /provider 切换。"
+                "\nTips: 使用 /model <模型名/编号> 切换模型｡输入模型名时可自动跨提供商查找并切换;跨提供商也可使用 /provider 切换｡"
             )
 
             ret = "".join(parts)
@@ -670,7 +670,7 @@ class ProviderCommands:
             if models is None:
                 return
             if idx_or_name > len(models) or idx_or_name < 1:
-                message.set_result(MessageEventResult().message("模型序号错误。"))
+                message.set_result(MessageEventResult().message("模型序号错误｡"))
             else:
                 try:
                     new_model = models[idx_or_name - 1]
@@ -697,7 +697,7 @@ class ProviderCommands:
         prov = self.context.get_using_provider(message.unified_msg_origin)
         if not prov:
             message.set_result(
-                MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
+                MessageEventResult().message("未找到任何 LLM 提供商｡请先配置｡"),
             )
             return
 
@@ -710,14 +710,14 @@ class ProviderCommands:
 
             parts.append(f"\n当前 Key: {curr_key[:8]}")
             parts.append("\n当前模型: " + prov.get_model())
-            parts.append("\n使用 /key <idx> 切换 Key。")
+            parts.append("\n使用 /key <idx> 切换 Key｡")
 
             ret = "".join(parts)
             message.set_result(MessageEventResult().message(ret).use_t2i(False))
         else:
             keys_data = prov.get_keys()
             if index > len(keys_data) or index < 1:
-                message.set_result(MessageEventResult().message("Key 序号错误。"))
+                message.set_result(MessageEventResult().message("Key 序号错误｡"))
             else:
                 try:
                     new_key = keys_data[index - 1]
@@ -726,7 +726,7 @@ class ProviderCommands:
                         prov.meta().id,
                         umo=message.unified_msg_origin,
                     )
-                    message.set_result(MessageEventResult().message("切换 Key 成功。"))
+                    message.set_result(MessageEventResult().message("切换 Key 成功｡"))
                 except Exception as e:
                     message.set_result(
                         MessageEventResult().message(

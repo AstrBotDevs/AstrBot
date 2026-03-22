@@ -6,6 +6,7 @@ import random
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
+import anyio
 import boxlite
 from shipyard.filesystem import FileSystemComponent as ShipyardFileSystemComponent
 from shipyard.python import PythonComponent as ShipyardPythonComponent
@@ -52,8 +53,8 @@ class MockShipyardSandboxClient:
 
         try:
             # Read file content
-            with open(path, "rb") as f:
-                file_content = f.read()
+            async with await anyio.open_file(path, "rb") as f:
+                file_content = await f.read()
 
             # Create multipart form data
             data = aiohttp.FormData()
@@ -96,7 +97,7 @@ class MockShipyardSandboxClient:
             logger.error("[Computer] file_upload_failed booter=boxlite error=%s", e)
             return {
                 "success": False,
-                "error": f"Connection error: {str(e)}",
+                "error": f"Connection error: {e!s}",
                 "message": "File upload failed",
             }
         except asyncio.TimeoutError:
@@ -125,7 +126,7 @@ class MockShipyardSandboxClient:
             )
             return {
                 "success": False,
-                "error": f"Internal error: {str(exc)}",
+                "error": f"Internal error: {exc!s}",
                 "message": "File upload failed",
             }
 

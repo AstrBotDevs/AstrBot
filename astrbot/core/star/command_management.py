@@ -46,7 +46,7 @@ class CommandDescriptor:
 
 
 async def sync_command_configs() -> None:
-    """同步指令配置，清理过期配置。"""
+    """同步指令配置,清理过期配置｡"""
     descriptors = _collect_descriptors(include_sub_commands=False)
     config_records = await db_helper.get_command_configs()
     config_map = _bind_configs_to_descriptors(descriptors, config_records)
@@ -60,7 +60,7 @@ async def sync_command_configs() -> None:
 async def toggle_command(handler_full_name: str, enabled: bool) -> CommandDescriptor:
     descriptor = _build_descriptor_by_full_name(handler_full_name)
     if not descriptor:
-        raise ValueError("指定的处理函数不存在或不是指令。")
+        raise ValueError("指定的处理函数不存在或不是指令｡")
 
     existing_cfg = await db_helper.get_command_config(handler_full_name)
     config = await db_helper.upsert_command_config(
@@ -95,16 +95,16 @@ async def rename_command(
 ) -> CommandDescriptor:
     descriptor = _build_descriptor_by_full_name(handler_full_name)
     if not descriptor:
-        raise ValueError("指定的处理函数不存在或不是指令。")
+        raise ValueError("指定的处理函数不存在或不是指令｡")
 
     new_fragment = new_fragment.strip()
     if not new_fragment:
-        raise ValueError("指令名不能为空。")
+        raise ValueError("指令名不能为空｡")
 
     # 校验主指令名
     candidate_full = _compose_command(descriptor.parent_signature, new_fragment)
     if _is_command_in_use(handler_full_name, candidate_full):
-        raise ValueError(f"指令名 '{candidate_full}' 已被其他指令占用。")
+        raise ValueError(f"指令名 '{candidate_full}' 已被其他指令占用｡")
 
     # 校验别名
     if aliases:
@@ -114,7 +114,7 @@ async def rename_command(
                 continue
             alias_full = _compose_command(descriptor.parent_signature, alias)
             if _is_command_in_use(handler_full_name, alias_full):
-                raise ValueError(f"别名 '{alias_full}' 已被其他指令占用。")
+                raise ValueError(f"别名 '{alias_full}' 已被其他指令占用｡")
 
     existing_cfg = await db_helper.get_command_config(handler_full_name)
     merged_extra = dict(existing_cfg.extra_data or {}) if existing_cfg else {}
@@ -146,10 +146,10 @@ async def update_command_permission(
 ) -> CommandDescriptor:
     descriptor = _build_descriptor_by_full_name(handler_full_name)
     if not descriptor:
-        raise ValueError("指定的处理函数不存在或不是指令。")
+        raise ValueError("指定的处理函数不存在或不是指令｡")
 
     if permission_type not in ["admin", "member"]:
-        raise ValueError("权限类型必须为 admin 或 member。")
+        raise ValueError("权限类型必须为 admin 或 member｡")
 
     handler = descriptor.handler
     found_plugin = star_map.get(handler.handler_module_path)
@@ -195,7 +195,7 @@ async def list_commands() -> list[dict[str, Any]]:
         d.handler_full_name for group in conflict_groups.values() for d in group
     }
 
-    # 分类，设置冲突标志，将子指令挂载到父指令组
+    # 分类,设置冲突标志,将子指令挂载到父指令组
     group_map: dict[str, CommandDescriptor] = {}
     sub_commands: list[CommandDescriptor] = []
     root_commands: list[CommandDescriptor] = []
@@ -215,7 +215,7 @@ async def list_commands() -> list[dict[str, Any]]:
         else:
             root_commands.append(sub)
 
-    # 指令组 + 普通指令，按 effective_command 字母排序
+    # 指令组 + 普通指令,按 effective_command 字母排序
     all_commands = list(group_map.values()) + root_commands
     all_commands.sort(key=lambda d: (d.effective_command or "").lower())
 
@@ -224,7 +224,7 @@ async def list_commands() -> list[dict[str, Any]]:
 
 
 async def list_command_conflicts() -> list[dict[str, Any]]:
-    """列出所有冲突的指令组。"""
+    """列出所有冲突的指令组｡"""
     descriptors = _collect_descriptors(include_sub_commands=False)
     config_records = await db_helper.get_command_configs()
     _bind_configs_to_descriptors(descriptors, config_records)
@@ -251,7 +251,7 @@ async def list_command_conflicts() -> list[dict[str, Any]]:
 
 
 def _collect_descriptors(include_sub_commands: bool) -> list[CommandDescriptor]:
-    """收集指令，按需包含子指令。"""
+    """收集指令,按需包含子指令｡"""
     descriptors: list[CommandDescriptor] = []
     for handler in star_handlers_registry:
         try:
@@ -263,7 +263,7 @@ def _collect_descriptors(include_sub_commands: bool) -> list[CommandDescriptor]:
             descriptors.append(desc)
         except Exception as e:
             logger.warning(
-                f"解析指令处理函数 {handler.handler_full_name} 失败，跳过该指令。原因: {e!s}"
+                f"解析指令处理函数 {handler.handler_full_name} 失败,跳过该指令｡原因: {e!s}"
             )
             continue
     return descriptors
@@ -289,7 +289,7 @@ def _build_descriptor(handler: StarHandlerMetadata) -> CommandDescriptor | None:
         )
         current_fragment = filter_ref.command_name
         parent_signature = (filter_ref.parent_command_names or [""])[0].strip()
-        # 如果是子指令，尝试找到父指令组的 handler_full_name
+        # 如果是子指令,尝试找到父指令组的 handler_full_name
         if is_sub_command and parent_signature:
             parent_group_handler = _find_parent_group_handler(
                 handler.handler_module_path, parent_signature
@@ -375,7 +375,7 @@ def _resolve_group_parent_signature(group_filter: CommandGroupFilter) -> str:
 
 
 def _find_parent_group_handler(module_path: str, parent_signature: str) -> str:
-    """根据模块路径和父级签名，找到对应的指令组 handler_full_name。"""
+    """根据模块路径和父级签名,找到对应的指令组 handler_full_name｡"""
     parent_sig_normalized = parent_signature.strip()
     for handler in star_handlers_registry:
         if handler.handler_module_path != module_path:
@@ -534,7 +534,7 @@ def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
         "has_conflict": desc.has_conflict,
         "reserved": desc.reserved,
     }
-    # 如果是指令组，包含子指令列表
+    # 如果是指令组,包含子指令列表
     if desc.is_group and desc.sub_commands:
         result["sub_commands"] = [_descriptor_to_dict(sub) for sub in desc.sub_commands]
     else:

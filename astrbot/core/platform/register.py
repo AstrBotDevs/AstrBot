@@ -18,17 +18,17 @@ def register_platform_adapter(
     i18n_resources: dict[str, dict] | None = None,
     config_metadata: dict | None = None,
 ):
-    """用于注册平台适配器的带参装饰器。
+    """用于注册平台适配器的带参装饰器｡
 
-    default_config_tmpl 指定了平台适配器的默认配置模板。用户填写好后将会作为 platform_config 传入你的 Platform 类的实现类。
-    logo_path 指定了平台适配器的 logo 文件路径，是相对于插件目录的路径。
-    config_metadata 指定了配置项的元数据，用于 WebUI 生成表单。如果不指定，WebUI 将会把配置项渲染为原始的键值对编辑框。
+    default_config_tmpl 指定了平台适配器的默认配置模板｡用户填写好后将会作为 platform_config 传入你的 Platform 类的实现类｡
+    logo_path 指定了平台适配器的 logo 文件路径,是相对于插件目录的路径｡
+    config_metadata 指定了配置项的元数据,用于 WebUI 生成表单｡如果不指定,WebUI 将会把配置项渲染为原始的键值对编辑框｡
     """
 
     def decorator(cls):
         if adapter_name in platform_cls_map:
             raise ValueError(
-                f"平台适配器 {adapter_name} 已经注册过了，可能发生了适配器命名冲突。",
+                f"平台适配器 {adapter_name} 已经注册过了,可能发生了适配器命名冲突｡",
             )
 
         # 添加必备选项
@@ -64,12 +64,12 @@ def register_platform_adapter(
 
 
 def unregister_platform_adapters_by_module(module_path_prefix: str) -> list[str]:
-    """根据模块路径前缀注销平台适配器。
+    """根据模块路径前缀注销平台适配器｡
 
-    在插件热重载时调用，用于清理该插件注册的所有平台适配器。
+    在插件热重载时调用,用于清理该插件注册的所有平台适配器｡
 
     Args:
-        module_path_prefix: 模块路径前缀，如 "data.plugins.my_plugin"
+        module_path_prefix: 模块路径前缀,如 "data.plugins.my_plugin"
 
     Returns:
         被注销的平台适配器名称列表
