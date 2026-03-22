@@ -26,10 +26,9 @@ jobs:
         run: pyclean .
 
       - name: 2. Ruff format
-        run: ruff format .
+        run: ruff format --check .
 
-      - name: 3. Ruff check and fix
-        run: ruff check . --fix
-        continue-on-error: true
+      - name: 3. Ruff check
+        run: ruff check .
         env:
           PYTHONIOENCODING: utf-8

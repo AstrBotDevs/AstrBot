@@ -292,6 +292,7 @@ async def test_with_mock_time():
 
 ```python
 import aiohttp
+# 需要额外安装: pip install aioresponses
 from aioresponses import aioresponses
 
 @pytest.mark.asyncio
