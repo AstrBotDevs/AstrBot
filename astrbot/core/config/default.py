@@ -3460,7 +3460,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.image_compress_enabled": {
                         "description": "启用图片压缩",
                         "type": "bool",
-                        "hint": "启用后，发送给多模态模型前会先压缩本地大图片。仅对 chat_completion 提供商生效。",
+                        "hint": "启用后，发送给多模态模型前会先压缩本地大图片。",
                     },
                     "provider_settings.image_compress_options.max_size": {
                         "description": "最大边长",

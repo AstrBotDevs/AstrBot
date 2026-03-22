@@ -337,7 +337,7 @@
         },
         "image_compress_enabled": {
           "description": "Enable image compression",
-          "hint": "When enabled, large local images are compressed before being sent to multimodal models. Applies only to chat_completion providers."
+          "hint": "When enabled, large local images are compressed before being sent to multimodal models."
         },
         "image_compress_options": {
           "description": "Image compression settings",
