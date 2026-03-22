@@ -161,9 +161,8 @@ def _validate_schema_config(
             validated[field_name] = value
             continue
         expected_type = field_schema.get("type")
-        if (
-            expected_type is not None
-            and not _is_valid_schema_expected_type(expected_type)
+        if expected_type is not None and not _is_valid_schema_expected_type(
+            expected_type
         ):
             errors.append(
                 f"{field_name}: invalid schema 'type' entry {expected_type!r}; "
