@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import io
 import json
 import random
 import time
@@ -13,6 +14,7 @@ from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote
 
 import aiohttp
+import qrcode as qrcode_lib
 from Crypto.Cipher import AES
 
 from astrbot import logger
@@ -26,8 +28,9 @@ from astrbot.api.platform import (
     PlatformMetadata,
     register_platform_adapter,
 )
+from astrbot.core import astrbot_config
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from .weixin_oc_event import WeixinOCMessageEvent
 
@@ -109,58 +112,53 @@ class WeixinOCAdapter(Platform):
         self._last_inbound_error = ""
 
         self.token = str(platform_config.get("weixin_oc_token", "")).strip() or None
-        self.account_id = str(platform_config.get("account_id", "")).strip() or None
-        self._account_file_path = self._resolve_account_file_path()
+        self.account_id = (
+            str(platform_config.get("weixin_oc_account_id", "")).strip() or None
+        )
         self._load_account_state()
 
         if self.token:
             logger.info(
-                "weixin_oc adapter %s loaded with token from config/credential.",
+                "weixin_oc adapter %s loaded with token from config.",
                 self.meta().id,
             )
 
-    def _resolve_account_file_path(self) -> Path:
-        root = Path(get_astrbot_data_path()) / "platform" / "weixin_oc"
-        root.mkdir(parents=True, exist_ok=True)
-        return root / f"{cast(str, self.config.get('id', 'weixin_oc'))}.json"
-
     def _load_account_state(self) -> None:
-        path = self._account_file_path
-        if not path.exists():
-            return
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(raw, dict):
-                if not self.token:
-                    token = str(raw.get("token", "")).strip()
-                    if token:
-                        self.token = token
-                if not self.account_id:
-                    account_id = str(raw.get("account_id", "")).strip()
-                    if account_id:
-                        self.account_id = account_id
-                sync_buf = str(raw.get("sync_buf", "")).strip()
-                if sync_buf:
-                    self._sync_buf = sync_buf
-                saved_base = str(raw.get("base_url", "")).strip()
-                if saved_base:
-                    self.base_url = saved_base.rstrip("/")
-        except Exception as e:
-            logger.warning("weixin_oc: load credential failed: %s", e)
+        if not self.token:
+            token = str(self.config.get("weixin_oc_token", "")).strip()
+            if token:
+                self.token = token
+        if not self.account_id:
+            account_id = str(self.config.get("weixin_oc_account_id", "")).strip()
+            if account_id:
+                self.account_id = account_id
+        sync_buf = str(self.config.get("weixin_oc_sync_buf", "")).strip()
+        if sync_buf:
+            self._sync_buf = sync_buf
+        saved_base = str(self.config.get("weixin_oc_base_url", "")).strip()
+        if saved_base:
+            self.base_url = saved_base.rstrip("/")
 
     async def _save_account_state(self) -> None:
-        payload = {
-            "token": self.token,
-            "account_id": self.account_id,
-            "sync_buf": self._sync_buf,
-            "base_url": self.base_url,
-            "updated_at": int(time.time()),
-        }
-        tmp = self._account_file_path.with_suffix(".tmp")
-        tmp.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        tmp.replace(self._account_file_path)
+        self.config["weixin_oc_token"] = self.token or ""
+        self.config["weixin_oc_account_id"] = self.account_id or ""
+        self.config["weixin_oc_sync_buf"] = self._sync_buf
+        self.config["weixin_oc_base_url"] = self.base_url
+
+        for platform in astrbot_config.get("platform", []):
+            if not isinstance(platform, dict):
+                continue
+            if platform.get("id") != self.config.get("id"):
+                continue
+            if platform.get("type") != self.config.get("type"):
+                continue
+            platform["weixin_oc_token"] = self.token or ""
+            platform["weixin_oc_account_id"] = self.account_id or ""
+            platform["weixin_oc_sync_buf"] = self._sync_buf
+            platform["weixin_oc_base_url"] = self.base_url
+            break
+
+        astrbot_config.save_config()
 
     async def _ensure_http_session(self) -> None:
         if self._http_session is None or self._http_session.closed:
@@ -739,10 +737,27 @@ class WeixinOCAdapter(Platform):
             f"{quote(qrcode_url)}"
         )
         logger.info(
-            "weixin_oc(%s): QR session started, qr_link=%s",
+            "weixin_oc(%s): QR session started, qr_link=%s 请使用手机微信扫码登录，二维码有效期 5 分钟，过期后会自动刷新。",
             self.meta().id,
             qr_console_url,
         )
+        try:
+            qr = qrcode_lib.QRCode(border=1)
+            qr.add_data(qrcode_url)
+            qr.make(fit=True)
+            qr_buffer = io.StringIO()
+            qr.print_ascii(out=qr_buffer, tty=False)
+            logger.info(
+                "weixin_oc(%s): terminal QR code:\n%s",
+                self.meta().id,
+                qr_buffer.getvalue(),
+            )
+        except Exception as e:
+            logger.warning(
+                "weixin_oc(%s): failed to render terminal QR code: %s",
+                self.meta().id,
+                e,
+            )
         login_session = OpenClawLoginSession(
             session_key=str(uuid.uuid4()),
             qrcode=qrcode,
