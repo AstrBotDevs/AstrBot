@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from astrbot_sdk._internal.invocation_context import caller_plugin_scope
+from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.runtime.capability_router import CapabilityRouter
 
 
@@ -93,3 +94,26 @@ async def test_http_unregister_subset_preserves_other_methods(
             }
         ]
     }
+
+
+@pytest.mark.asyncio
+async def test_http_register_rejects_routes_with_empty_segments(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    router = CapabilityRouter()
+
+    with pytest.raises(AstrBotError) as exc_info:
+        await _call(
+            router,
+            "http.register_api",
+            {
+                "route": "/foo//bar",
+                "methods": ["GET"],
+                "handler_capability": "demo.handler",
+                "description": "demo",
+            },
+        )
+
+    assert exc_info.value.code == "invalid_input"
