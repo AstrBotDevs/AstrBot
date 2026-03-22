@@ -403,6 +403,10 @@ class ProviderManager:
                 from .sources.xinference_stt_provider import (
                     ProviderXinferenceSTT as ProviderXinferenceSTT,
                 )
+            case "qwen_asr_flash":
+                from .sources.qwen_asr_flash_source import (
+                    ProviderQwenASRFlash as ProviderQwenASRFlash,
+                )
             case "openai_tts_api":
                 from .sources.openai_tts_api_source import (
                     ProviderOpenAITTSAPI as ProviderOpenAITTSAPI,
