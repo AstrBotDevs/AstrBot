@@ -176,7 +176,7 @@ class CronJobManager:
                 replace_existing=True,
                 misfire_grace_time=30,
             )
-            asyncio.create_task(
+            asyncio.create_task(  # noqa: RUF006
                 self.db.update_cron_job(
                     job.job_id, next_run_time=self._get_next_run_time(job.job_id)
                 )
