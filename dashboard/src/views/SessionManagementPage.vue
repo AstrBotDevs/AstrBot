@@ -1375,23 +1375,42 @@ export default {
         }
 
         if (this.batchChatProvider !== null) {
-          tasks.push(axios.post('/api/session/batch-update-provider', {
-            scope,
-            umos,
-            group_id: groupId,
-            provider_type: 'chat_completion',
-            provider_id: this.batchChatProvider === 'follow' ? null : this.batchChatProvider
-          }))
+          if (this.batchChatProvider === 'follow') {
+            console.log(umos)
+            tasks.push(axios.post('/api/session/batch-delete-rule', {
+              scope,
+              umos,
+              group_id: groupId,
+              rule_key: 'provider_perf_chat_completion'
+            }))
+          } else {
+            tasks.push(axios.post('/api/session/batch-update-provider', {
+              scope,
+              umos,
+              group_id: groupId,
+              provider_type: 'chat_completion',
+              provider_id: this.batchChatProvider
+            }))
+          }
         }
 
         if (this.batchTtsProvider !== null) {
-          tasks.push(axios.post('/api/session/batch-update-provider', {
-            scope,
-            umos,
-            group_id: groupId,
-            provider_type: 'text_to_speech',
-            provider_id: this.batchTtsProvider === 'follow' ? null : this.batchTtsProvider
-          }))
+          if (this.batchTtsProvider === 'follow') {
+            tasks.push(axios.post('/api/session/batch-delete-rule', {
+              scope,
+              umos,
+              group_id: groupId,
+              rule_key: 'provider_perf_text_to_speech'
+            }))
+          } else {
+            tasks.push(axios.post('/api/session/batch-update-provider', {
+              scope,
+              umos,
+              group_id: groupId,
+              provider_type: 'text_to_speech',
+              provider_id: this.batchTtsProvider
+            }))
+          }
         }
 
         if (tasks.length === 0) {
