@@ -172,6 +172,32 @@ class ValidateConfigMeta:
     schema: dict[str, Any] | None = None
 
 
+def _is_valid_validate_config_expected_type(value: Any) -> bool:
+    if isinstance(value, type):
+        return True
+    return (
+        isinstance(value, tuple)
+        and len(value) > 0
+        and all(isinstance(item, type) for item in value)
+    )
+
+
+def _validate_validate_config_schema(schema: dict[str, Any]) -> None:
+    for field_name, field_schema in schema.items():
+        if not isinstance(field_schema, dict):
+            raise TypeError(f"validate_config schema field {field_name!r} must be a dict")
+        expected_type = field_schema.get("type")
+        if (
+            expected_type is not None
+            and not _is_valid_validate_config_expected_type(expected_type)
+        ):
+            raise TypeError(
+                "validate_config schema field "
+                f"{field_name!r} has invalid 'type' entry {expected_type!r}; "
+                "expected a type or tuple of types"
+            )
+
+
 @dataclass(slots=True)
 class ProviderChangeMeta:
     provider_types: list[str] = field(default_factory=list)
@@ -668,6 +694,8 @@ def validate_config(
         raise TypeError("validate_config model must be a pydantic BaseModel subclass")
     if schema is not None and not isinstance(schema, dict):
         raise TypeError("validate_config schema must be a dict")
+    if isinstance(schema, dict):
+        _validate_validate_config_schema(schema)
 
     def decorator(func: HandlerCallable) -> HandlerCallable:
         setattr(
