@@ -692,6 +692,90 @@ CONVERSATION_UNSET_PERSONA_INPUT_SCHEMA = _object_schema(
     conversation_id=_nullable({"type": "string"}),
 )
 CONVERSATION_UNSET_PERSONA_OUTPUT_SCHEMA = _object_schema()
+MESSAGE_HISTORY_SESSION_SCHEMA = _object_schema(
+    required=("platform_id", "message_type", "session_id"),
+    platform_id={"type": "string"},
+    message_type={"type": "string", "enum": ["group", "private", "other"]},
+    session_id={"type": "string"},
+)
+MESSAGE_HISTORY_SENDER_SCHEMA = _object_schema(
+    sender_id=_nullable({"type": "string"}),
+    sender_name=_nullable({"type": "string"}),
+)
+MESSAGE_HISTORY_RECORD_SCHEMA = _object_schema(
+    required=("id", "session", "sender", "parts", "metadata"),
+    id={"type": "integer"},
+    session=MESSAGE_HISTORY_SESSION_SCHEMA,
+    sender=MESSAGE_HISTORY_SENDER_SCHEMA,
+    parts={"type": "array", "items": {"type": "object"}},
+    metadata={"type": "object"},
+    created_at=_nullable({"type": "string"}),
+    updated_at=_nullable({"type": "string"}),
+    idempotency_key=_nullable({"type": "string"}),
+)
+MESSAGE_HISTORY_PAGE_SCHEMA = _object_schema(
+    required=("records",),
+    records={"type": "array", "items": MESSAGE_HISTORY_RECORD_SCHEMA},
+    next_cursor=_nullable({"type": "string"}),
+    total=_nullable({"type": "integer"}),
+)
+MESSAGE_HISTORY_LIST_INPUT_SCHEMA = _object_schema(
+    required=("session",),
+    session=MESSAGE_HISTORY_SESSION_SCHEMA,
+    cursor=_nullable({"type": "string"}),
+    limit={"type": "integer", "minimum": 1},
+)
+MESSAGE_HISTORY_LIST_OUTPUT_SCHEMA = _object_schema(
+    required=("page",),
+    page=MESSAGE_HISTORY_PAGE_SCHEMA,
+)
+MESSAGE_HISTORY_GET_BY_ID_INPUT_SCHEMA = _object_schema(
+    required=("session", "record_id"),
+    session=MESSAGE_HISTORY_SESSION_SCHEMA,
+    record_id={"type": "integer", "minimum": 1},
+)
+MESSAGE_HISTORY_GET_BY_ID_OUTPUT_SCHEMA = _object_schema(
+    required=("record",),
+    record=_nullable(MESSAGE_HISTORY_RECORD_SCHEMA),
+)
+MESSAGE_HISTORY_APPEND_INPUT_SCHEMA = _object_schema(
+    required=("session", "sender", "parts"),
+    session=MESSAGE_HISTORY_SESSION_SCHEMA,
+    sender=MESSAGE_HISTORY_SENDER_SCHEMA,
+    parts={"type": "array", "items": {"type": "object"}},
+    metadata=_nullable({"type": "object"}),
+    idempotency_key=_nullable({"type": "string"}),
+)
+MESSAGE_HISTORY_APPEND_OUTPUT_SCHEMA = _object_schema(
+    required=("record",),
+    record=MESSAGE_HISTORY_RECORD_SCHEMA,
+)
+MESSAGE_HISTORY_DELETE_BEFORE_INPUT_SCHEMA = _object_schema(
+    required=("session", "before"),
+    session=MESSAGE_HISTORY_SESSION_SCHEMA,
+    before={"type": "string"},
+)
+MESSAGE_HISTORY_DELETE_BEFORE_OUTPUT_SCHEMA = _object_schema(
+    required=("deleted_count",),
+    deleted_count={"type": "integer"},
+)
+MESSAGE_HISTORY_DELETE_AFTER_INPUT_SCHEMA = _object_schema(
+    required=("session", "after"),
+    session=MESSAGE_HISTORY_SESSION_SCHEMA,
+    after={"type": "string"},
+)
+MESSAGE_HISTORY_DELETE_AFTER_OUTPUT_SCHEMA = _object_schema(
+    required=("deleted_count",),
+    deleted_count={"type": "integer"},
+)
+MESSAGE_HISTORY_DELETE_ALL_INPUT_SCHEMA = _object_schema(
+    required=("session",),
+    session=MESSAGE_HISTORY_SESSION_SCHEMA,
+)
+MESSAGE_HISTORY_DELETE_ALL_OUTPUT_SCHEMA = _object_schema(
+    required=("deleted_count",),
+    deleted_count={"type": "integer"},
+)
 KNOWLEDGE_BASE_RECORD_SCHEMA = _object_schema(
     required=("kb_id", "kb_name", "embedding_provider_id", "doc_count", "chunk_count"),
     kb_id={"type": "string"},
@@ -1445,6 +1529,30 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": CONVERSATION_UNSET_PERSONA_INPUT_SCHEMA,
         "output": CONVERSATION_UNSET_PERSONA_OUTPUT_SCHEMA,
     },
+    "message_history.list": {
+        "input": MESSAGE_HISTORY_LIST_INPUT_SCHEMA,
+        "output": MESSAGE_HISTORY_LIST_OUTPUT_SCHEMA,
+    },
+    "message_history.get_by_id": {
+        "input": MESSAGE_HISTORY_GET_BY_ID_INPUT_SCHEMA,
+        "output": MESSAGE_HISTORY_GET_BY_ID_OUTPUT_SCHEMA,
+    },
+    "message_history.append": {
+        "input": MESSAGE_HISTORY_APPEND_INPUT_SCHEMA,
+        "output": MESSAGE_HISTORY_APPEND_OUTPUT_SCHEMA,
+    },
+    "message_history.delete_before": {
+        "input": MESSAGE_HISTORY_DELETE_BEFORE_INPUT_SCHEMA,
+        "output": MESSAGE_HISTORY_DELETE_BEFORE_OUTPUT_SCHEMA,
+    },
+    "message_history.delete_after": {
+        "input": MESSAGE_HISTORY_DELETE_AFTER_INPUT_SCHEMA,
+        "output": MESSAGE_HISTORY_DELETE_AFTER_OUTPUT_SCHEMA,
+    },
+    "message_history.delete_all": {
+        "input": MESSAGE_HISTORY_DELETE_ALL_INPUT_SCHEMA,
+        "output": MESSAGE_HISTORY_DELETE_ALL_OUTPUT_SCHEMA,
+    },
     "kb.list": {"input": KB_LIST_INPUT_SCHEMA, "output": KB_LIST_OUTPUT_SCHEMA},
     "kb.get": {"input": KB_GET_INPUT_SCHEMA, "output": KB_GET_OUTPUT_SCHEMA},
     "kb.create": {
@@ -1946,6 +2054,22 @@ __all__ = [
     "CONVERSATION_UPDATE_INPUT_SCHEMA",
     "CONVERSATION_UPDATE_OUTPUT_SCHEMA",
     "CONVERSATION_UPDATE_SCHEMA",
+    "MESSAGE_HISTORY_APPEND_INPUT_SCHEMA",
+    "MESSAGE_HISTORY_APPEND_OUTPUT_SCHEMA",
+    "MESSAGE_HISTORY_DELETE_AFTER_INPUT_SCHEMA",
+    "MESSAGE_HISTORY_DELETE_AFTER_OUTPUT_SCHEMA",
+    "MESSAGE_HISTORY_DELETE_ALL_INPUT_SCHEMA",
+    "MESSAGE_HISTORY_DELETE_ALL_OUTPUT_SCHEMA",
+    "MESSAGE_HISTORY_DELETE_BEFORE_INPUT_SCHEMA",
+    "MESSAGE_HISTORY_DELETE_BEFORE_OUTPUT_SCHEMA",
+    "MESSAGE_HISTORY_GET_BY_ID_INPUT_SCHEMA",
+    "MESSAGE_HISTORY_GET_BY_ID_OUTPUT_SCHEMA",
+    "MESSAGE_HISTORY_LIST_INPUT_SCHEMA",
+    "MESSAGE_HISTORY_LIST_OUTPUT_SCHEMA",
+    "MESSAGE_HISTORY_PAGE_SCHEMA",
+    "MESSAGE_HISTORY_RECORD_SCHEMA",
+    "MESSAGE_HISTORY_SENDER_SCHEMA",
+    "MESSAGE_HISTORY_SESSION_SCHEMA",
     "KB_CREATE_INPUT_SCHEMA",
     "KB_CREATE_OUTPUT_SCHEMA",
     "KB_DOCUMENT_DELETE_INPUT_SCHEMA",

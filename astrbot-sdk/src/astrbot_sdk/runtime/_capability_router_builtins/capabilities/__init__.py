@@ -4,6 +4,7 @@ from .http import HttpCapabilityMixin
 from .kb import KnowledgeBaseCapabilityMixin
 from .llm import LLMCapabilityMixin
 from .memory import MemoryCapabilityMixin
+from .message_history import MessageHistoryCapabilityMixin
 from .metadata import MetadataCapabilityMixin
 from .persona import PersonaCapabilityMixin
 from .platform import PlatformCapabilityMixin
@@ -19,6 +20,7 @@ __all__ = [
     "KnowledgeBaseCapabilityMixin",
     "LLMCapabilityMixin",
     "MemoryCapabilityMixin",
+    "MessageHistoryCapabilityMixin",
     "MetadataCapabilityMixin",
     "PersonaCapabilityMixin",
     "PlatformCapabilityMixin",
