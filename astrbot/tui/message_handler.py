@@ -165,9 +165,7 @@ class SSEMessageParser:
         except ValueError:
             return MessageType.PLAIN
 
-    def process_message(
-        self, msg: ParsedMessage
-    ) -> tuple[ChatResponse, bool]:
+    def process_message(self, msg: ParsedMessage) -> tuple[ChatResponse, bool]:
         """Process a parsed message and update accumulated response.
 
         Args:
@@ -220,7 +218,10 @@ class SSEMessageParser:
                     self._tool_calls[tc_id].result = tcr.get("result")
                     self._tool_calls[tc_id].finished_ts = tcr.get("ts")
                     self._accumulated_parts.append(
-                        {"type": "tool_call", "tool_calls": [self._tool_calls[tc_id].__dict__]}
+                        {
+                            "type": "tool_call",
+                            "tool_calls": [self._tool_calls[tc_id].__dict__],
+                        }
                     )
                     self._tool_calls.pop(tc_id, None)
             except json.JSONDecodeError:

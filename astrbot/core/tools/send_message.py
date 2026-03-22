@@ -49,33 +49,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     "description": "An ordered list of message components to send. `mention_user` type can be used to mention the user.",
                     "items": {
                         "type": "object",
-                        "additionalProperties": {},
-                        "properties": {
-                            "type": {
-                                "type": "string",
-                                "description": (
-                                    "Component type. One of: "
-                                    "plain, image, record, video, file, mention_user. Record is voice message."
-                                ),
-                            },
-                            "text": {
-                                "type": "string",
-                                "description": "Text content for `plain` type.",
-                            },
-                            "path": {
-                                "type": "string",
-                                "description": "File path for `image`, `record`, or `file` types. Both local path and sandbox path are supported.",
-                            },
-                            "url": {
-                                "type": "string",
-                                "description": "URL for `image`, `record`, or `file` types.",
-                            },
-                            "mention_user_id": {
-                                "type": "string",
-                                "description": "User ID to mention for `mention_user` type.",
-                            },
-                        },
-                        "required": ["type"],
+                        "additionalProperties": {"type": "string"},
                     },
                 },
             },

@@ -89,7 +89,10 @@ def test_expand_env_placeholders_resolves_env_and_default(
     assert _expand_env_placeholders("${MISSING:-3002}", "port") == "3002"
 
 
-def test_expand_env_placeholders_raises_for_unresolved_variable():
+def test_expand_env_placeholders_raises_for_unresolved_variable(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.delenv("HOST", raising=False)
     with pytest.raises(ValueError, match="dashboard host: HOST"):
         _expand_env_placeholders("${HOST}", "host")
 

@@ -11,7 +11,6 @@ import curses
 import json
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
 
 import httpx
 
@@ -75,6 +74,7 @@ class TUIClient:
         self._history_index: int = -1
         self._max_history: int = 100
         self._max_messages: int = 1000
+        self._pending_tasks: list[asyncio.Task[None]] = []
 
         # Connection settings
         self.host = host.rstrip("/")
@@ -181,15 +181,13 @@ class TUIClient:
                 if msg_type == "user":
                     for part in message_parts:
                         if part.get("type") == "plain":
-                            self.add_message(
-                                MessageSender.USER, part.get("text", "")
-                            )
+                            self.add_message(MessageSender.USER, part.get("text", ""))
                 elif msg_type == "bot":
                     for part in message_parts:
                         if part.get("type") == "plain":
                             self.add_message(MessageSender.BOT, part.get("text", ""))
 
-        except Exception as e:
+        except Exception:
             if self.debug:
                 import traceback
 
@@ -248,7 +246,8 @@ class TUIClient:
         # Handle Enter/Return - submit message
         elif key in (curses.KEY_ENTER, 10, 13):
             if self.state.input_buffer.strip():
-                asyncio.create_task(self._submit_message())
+                task = asyncio.create_task(self._submit_message())
+                self._pending_tasks.append(task)
             return True
 
         # Handle history navigation (up/down arrows)
@@ -319,13 +318,12 @@ class TUIClient:
 
         try:
             # Format umo for webchat
-            umo = f"webchat:FriendMessage:webchat!{self.username}!{self.conversation_id}"
+            umo = (
+                f"webchat:FriendMessage:webchat!{self.username}!{self.conversation_id}"
+            )
 
             # Reset parser for new stream
             self._parser.reset()
-
-            # Create a placeholder bot message that we'll update
-            placeholder = self.add_message(MessageSender.BOT, "...")
 
             # Send message and stream response using proper SSE
             async with self._client.stream(
@@ -376,7 +374,9 @@ class TUIClient:
                         )
                         self.state.status = "Thinking..."
                     elif parsed.type == MessageType.AGENT_STATS:
-                        self.state.status = f"Tokens: {update.agent_stats.get('total_tokens', 0)}"
+                        self.state.status = (
+                            f"Tokens: {update.agent_stats.get('total_tokens', 0)}"
+                        )
                     elif update.text:
                         self._update_last_bot_message(update.text)
 
@@ -385,7 +385,9 @@ class TUIClient:
 
             # Final status
             if update.reasoning:
-                self.add_message(MessageSender.REASONING, f"[Reasoning]\n{update.reasoning}")
+                self.add_message(
+                    MessageSender.REASONING, f"[Reasoning]\n{update.reasoning}"
+                )
 
             for tool_display in update.get_tool_calls_display():
                 self.add_message(MessageSender.TOOL, tool_display)
@@ -405,9 +407,7 @@ class TUIClient:
 
                 traceback.print_exc()
 
-    def _process_parsed_message(
-        self, msg: ParsedMessage
-    ) -> tuple[ChatResponse, bool]:
+    def _process_parsed_message(self, msg: ParsedMessage) -> tuple[ChatResponse, bool]:
         """Process a parsed message and return updated response state."""
         return self._parser.process_message(msg)
 

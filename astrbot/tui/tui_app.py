@@ -1,4 +1,8 @@
-"""AstrBot TUI Application - Main chat interface."""
+"""AstrBot TUI Application - Main chat interface (sync version for testing).
+
+This module provides a basic TUI application without network connectivity,
+useful for testing the UI components and as a reference implementation.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +17,8 @@ class MessageSender(Enum):
     USER = "user"
     BOT = "bot"
     SYSTEM = "system"
+    TOOL = "tool"
+    REASONING = "reasoning"
 
 
 @dataclass
@@ -33,7 +39,7 @@ class TUIState:
 
 
 class AstrBotTUI:
-    """Main TUI application for AstrBot."""
+    """Main TUI application for AstrBot (local/testing version)."""
 
     def __init__(self, screen: Screen):
         self.screen = screen
@@ -45,7 +51,6 @@ class AstrBotTUI:
     def add_message(self, sender: MessageSender, text: str) -> None:
         """Add a message to the chat log."""
         self.state.messages.append(Message(sender=sender, text=text))
-        # Keep only last 1000 messages to prevent memory issues
         if len(self.state.messages) > 1000:
             self.state.messages = self.state.messages[-1000:]
 
@@ -152,18 +157,15 @@ class AstrBotTUI:
         self.state.input_buffer = ""
         self.state.cursor_x = 0
 
-        # Process the message (placeholder for actual bot interaction)
+        # Process the message (echo back for testing)
         self._process_user_message(text)
 
     def _process_user_message(self, text: str) -> None:
-        """Process user message and generate bot response."""
-        # This is a placeholder - actual implementation would connect to the bot
-        self.add_system_message(f"Message sent: {text}")
-        self.state.status = "Message sent, awaiting response..."
+        """Process user message and generate bot response (echo for testing)."""
+        self.add_message(MessageSender.BOT, f"Echo: {text}")
 
     def render(self) -> None:
         """Render the current state to the screen."""
-        # Convert messages to the format expected by screen
         lines = [(msg.sender.value, msg.text) for msg in self.state.messages]
 
         self.screen.draw_all(
@@ -180,7 +182,7 @@ class AstrBotTUI:
         self.screen.layout_windows()
 
         # Welcome message
-        self.add_system_message("Welcome to AstrBot TUI!")
+        self.add_system_message("Welcome to AstrBot TUI (local mode)!")
         self.add_system_message("Type your message and press Enter to send.")
         self.add_system_message("Press ESC or Ctrl+C to exit.")
 
