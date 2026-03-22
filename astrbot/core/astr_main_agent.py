@@ -478,6 +478,7 @@ async def _request_img_caption(
 
 
 async def _ensure_img_caption(
+    event: AstrMessageEvent,
     req: ProviderRequest,
     cfg: dict,
     plugin_context: Context,
@@ -488,6 +489,8 @@ async def _ensure_img_caption(
         for url in req.image_urls:
             compressed_url = await _compress_image_for_provider(url, cfg)
             compressed_urls.append(compressed_url)
+            if _is_generated_compressed_image_path(url, compressed_url):
+                event.track_temporary_local_file(compressed_url)
         caption = await _request_img_caption(
             image_caption_provider,
             cfg,
@@ -563,6 +566,17 @@ async def _compress_image_for_provider(
         return url_or_path
 
 
+def _is_generated_compressed_image_path(
+    original_path: str,
+    compressed_path: str | None,
+) -> bool:
+    if not compressed_path or compressed_path == original_path:
+        return False
+    if compressed_path.startswith("http") or compressed_path.startswith("data:image"):
+        return False
+    return os.path.exists(compressed_path)
+
+
 async def _process_quote_message(
     event: AstrMessageEvent,
     req: ProviderRequest,
@@ -602,6 +616,7 @@ async def _process_quote_message(
     if image_seg:
         try:
             prov = None
+            path = None
             compress_path = None
             if img_cap_prov_id:
                 prov = plugin_context.get_provider_by_id(img_cap_prov_id)
@@ -614,6 +629,8 @@ async def _process_quote_message(
                     path,
                     config.provider_settings if config else None,
                 )
+                if path and _is_generated_compressed_image_path(path, compress_path):
+                    event.track_temporary_local_file(compress_path)
                 llm_resp = await prov.text_chat(
                     prompt="Please describe the image content.",
                     image_urls=[compress_path],
@@ -627,7 +644,11 @@ async def _process_quote_message(
         except BaseException as exc:
             logger.error("处理引用图片失败: %s", exc)
         finally:
-            if compress_path and compress_path != path and os.path.exists(compress_path):
+            if (
+                compress_path
+                and compress_path != path
+                and os.path.exists(compress_path)
+            ):
                 try:
                     os.remove(compress_path)
                 except Exception as exc:  # noqa: BLE001
@@ -700,6 +721,7 @@ async def _decorate_llm_request(
         img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
         if img_cap_prov_id and req.image_urls:
             await _ensure_img_caption(
+                event,
                 req,
                 cfg,
                 plugin_context,
@@ -1096,6 +1118,8 @@ async def build_main_agent(
                         path,
                         config.provider_settings,
                     )
+                    if _is_generated_compressed_image_path(path, image_path):
+                        event.track_temporary_local_file(image_path)
                     req.image_urls.append(image_path)
                     req.extra_user_content_parts.append(
                         TextPart(text=f"[Image Attachment: path {image_path}]")
@@ -1127,6 +1151,8 @@ async def build_main_agent(
                                 path,
                                 config.provider_settings,
                             )
+                            if _is_generated_compressed_image_path(path, image_path):
+                                event.track_temporary_local_file(image_path)
                             req.image_urls.append(image_path)
                             _append_quoted_image_attachment(req, image_path)
                         elif isinstance(reply_comp, File):
