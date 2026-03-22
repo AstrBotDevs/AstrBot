@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from ....errors import AstrBotError
@@ -17,6 +17,16 @@ def _session_payload(session: MessageSession) -> dict[str, str]:
 
 
 class MessageHistoryCapabilityMixin(CapabilityRouterBridgeBase):
+    @staticmethod
+    def _normalize_timestamp(raw_value: Any) -> datetime:
+        normalized = str(raw_value or "").strip()
+        if normalized.endswith("Z"):
+            normalized = f"{normalized[:-1]}+00:00"
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+
     @staticmethod
     def _typed_session_from_payload(payload: Any) -> MessageSession:
         if not isinstance(payload, dict):
@@ -133,7 +143,7 @@ class MessageHistoryCapabilityMixin(CapabilityRouterBridgeBase):
                 f"message_history.{field_name} requires {field_name}"
             )
         try:
-            return datetime.fromisoformat(text)
+            return MessageHistoryCapabilityMixin._normalize_timestamp(text)
         except ValueError as exc:
             raise AstrBotError.invalid_input(
                 f"message_history.{field_name} requires an ISO datetime string"
@@ -147,8 +157,14 @@ class MessageHistoryCapabilityMixin(CapabilityRouterBridgeBase):
         limit = 50 if raw_limit is None else raw_limit
         if limit < 1:
             raise AstrBotError.invalid_input("message_history.list requires limit >= 1")
-        cursor = payload.get("cursor")
-        cursor_id = int(str(cursor)) if cursor not in (None, "") else None
+        raw_cursor = payload.get("cursor")
+        cursor_id = (
+            self._optional_int(raw_cursor) if raw_cursor not in (None, "") else None
+        )
+        if raw_cursor not in (None, "") and (cursor_id is None or cursor_id < 1):
+            raise AstrBotError.invalid_input(
+                "message_history.list requires cursor to be a positive integer string"
+            )
         records = list(reversed(self._message_history_records(session)))
         total = len(records)
         if cursor_id is not None:
@@ -247,7 +263,7 @@ class MessageHistoryCapabilityMixin(CapabilityRouterBridgeBase):
         retained: list[dict[str, Any]] = []
         deleted_count = 0
         for record in records:
-            created_at = datetime.fromisoformat(str(record.get("created_at")))
+            created_at = self._normalize_timestamp(record.get("created_at"))
             if created_at < before:
                 deleted_count += 1
                 continue
@@ -264,7 +280,7 @@ class MessageHistoryCapabilityMixin(CapabilityRouterBridgeBase):
         retained: list[dict[str, Any]] = []
         deleted_count = 0
         for record in records:
-            created_at = datetime.fromisoformat(str(record.get("created_at")))
+            created_at = self._normalize_timestamp(record.get("created_at"))
             if created_at > after:
                 deleted_count += 1
                 continue
