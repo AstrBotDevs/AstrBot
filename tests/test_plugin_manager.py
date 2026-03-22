@@ -2,6 +2,8 @@ import asyncio
 import os
 from pathlib import Path
 
+from typing import Any, cast
+
 import pytest
 import yaml
 
@@ -35,7 +37,7 @@ def _write_local_test_plugin(plugin_path: Path, repo_url: str):
         "author": "AstrBot Team",
         "desc": "Local test plugin",
     }
-    with open(plugin_path / "info.yaml", "w", encoding="utf-8") as f:
+    with open(plugin_path / "metadata.yaml", "w", encoding="utf-8") as f:
         yaml.dump(metadata, f)
     with open(plugin_path / "main.py", "w", encoding="utf-8") as f:
         f.write("from astrbot.api.star import Star, Context, StarManager\n")
@@ -181,7 +183,7 @@ def plugin_manager_pm(tmp_path, monkeypatch):
 
     mock_context = MockContext()
     mock_config = {}
-    pm = PluginManager(mock_context, mock_config)
+    pm = PluginManager(cast(Any, mock_context), cast(Any, mock_config))
 
     # Patch paths to use tmp_path
     monkeypatch.setattr(pm, "plugin_store_path", str(plugin_dir))
@@ -226,7 +228,7 @@ async def test_install_plugin_dependency_install_flow(
     )
 
     def mock_load_and_register(*args, **kwargs):
-        plugin_manager_pm.context.stars.append(MockStar())
+        cast(Any, plugin_manager_pm.context).stars.append(MockStar())
         return _build_load_mock(events)(*args, **kwargs)
 
     monkeypatch.setattr(plugin_manager_pm, "load", mock_load_and_register)
@@ -277,7 +279,7 @@ async def test_install_plugin_from_file_dependency_install_flow(
     )
 
     def mock_load_and_register(*args, **kwargs):
-        plugin_manager_pm.context.stars.append(MockStar())
+        cast(Any, plugin_manager_pm.context).stars.append(MockStar())
         return _build_load_mock(events)(*args, **kwargs)
 
     monkeypatch.setattr(plugin_manager_pm, "load", mock_load_and_register)
@@ -311,7 +313,7 @@ async def test_reload_failed_plugin_dependency_install_flow(
     )
 
     def mock_load_and_register(*args, **kwargs):
-        plugin_manager_pm.context.stars.append(MockStar())
+        cast(Any, plugin_manager_pm.context).stars.append(MockStar())
         return _build_load_mock(events)(*args, **kwargs)
 
     monkeypatch.setattr(plugin_manager_pm, "load", mock_load_and_register)
@@ -447,7 +449,7 @@ async def test_update_plugin_dependency_install_flow(
     dependency_install_fails: bool,
 ):
     mock_star = MockStar()
-    plugin_manager_pm.context.stars.append(mock_star)
+    cast(Any, plugin_manager_pm.context).stars.append(mock_star)
 
     _write_requirements(local_updator)
     events = []
@@ -504,7 +506,7 @@ async def test_install_plugin_skips_dependency_install_when_no_requirements_miss
     )
 
     def mock_load_and_register(*args, **kwargs):
-        plugin_manager_pm.context.stars.append(MockStar())
+        cast(Any, plugin_manager_pm.context).stars.append(MockStar())
         return _build_load_mock(events)(*args, **kwargs)
 
     monkeypatch.setattr(plugin_manager_pm, "load", mock_load_and_register)
@@ -535,7 +537,7 @@ async def test_install_plugin_runs_dependency_install_when_precheck_fails(
     )
 
     def mock_load_and_register(*args, **kwargs):
-        plugin_manager_pm.context.stars.append(MockStar())
+        cast(Any, plugin_manager_pm.context).stars.append(MockStar())
         return _build_load_mock(events)(*args, **kwargs)
 
     monkeypatch.setattr(plugin_manager_pm, "load", mock_load_and_register)

@@ -214,7 +214,7 @@ def parse_description(text: str) -> str:
     if end_idx is None:
         return ""
 
-    frontmatter = "\n".join(lines[1:end_idx])
+    frontmatter = "\\n".join(lines[1:end_idx])
     try:
         import yaml
     except ImportError:
