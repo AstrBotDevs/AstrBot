@@ -1,10 +1,9 @@
 import { defineStore } from 'pinia';
-import axios from 'axios';
+import axios from '@/utils/request';
 
 export const useCommonStore = defineStore({
   id: 'common',
   state: () => ({
-    // @ts-ignore
     eventSource: null,
     log_cache: [],
     sse_connected: false,
@@ -141,7 +140,7 @@ export const useCommonStore = defineStore({
       if (this.startTime !== -1) {
         return this.startTime
       }
-      this.fetchStartTime().catch(() => {});
+      this.fetchStartTime().catch(() => undefined);
       return this.startTime
     },
     async getPluginCollections(force = false, customSource = null) {
@@ -178,6 +177,7 @@ export const useCommonStore = defineStore({
                 "updated_at": pluginData?.updated_at ? pluginData.updated_at : "",
                 "display_name": pluginData?.display_name ? pluginData.display_name : "",
                 "astrbot_version": pluginData?.astrbot_version ? pluginData.astrbot_version : "",
+                "category": pluginData?.category ? pluginData.category : "",
                 "support_platforms": Array.isArray(pluginData?.support_platforms)
                   ? pluginData.support_platforms
                   : Array.isArray(pluginData?.support_platform)

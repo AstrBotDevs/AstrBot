@@ -87,7 +87,7 @@ class TestApplySandboxToolsConditional:
         return {t.name for t in req.func_tool.tools}
 
     def test_no_session_registers_all(self):
-        """First request (no booted session) → all tools including browser."""
+        """First request (no booted session) ￫ all tools including browser."""
         fn = _import_apply_sandbox_tools()
         config = _make_config("shipyard_neo")
         req = _make_req()
@@ -125,7 +125,7 @@ class TestApplySandboxToolsConditional:
         return booter
 
     def test_with_browser_capability(self):
-        """Booted session with browser capability → browser tools registered."""
+        """Booted session with browser capability ￫ browser tools registered."""
         fn = _import_apply_sandbox_tools()
         config = _make_config("shipyard_neo")
         req = _make_req()
@@ -153,7 +153,7 @@ class TestApplySandboxToolsConditional:
         assert "astrbot_execute_browser" in names
 
     def test_without_browser_capability(self):
-        """Booted session WITHOUT browser capability → browser tools NOT registered."""
+        """Booted session WITHOUT browser capability ￫ browser tools NOT registered."""
         fn = _import_apply_sandbox_tools()
         config = _make_config("shipyard_neo")
         req = _make_req()
@@ -229,7 +229,7 @@ class TestResolveProfile:
 
     @pytest.mark.asyncio
     async def test_user_specified_profile_honoured(self):
-        """User explicitly sets a non-default profile → use it directly."""
+        """User explicitly sets a non-default profile ￫ use it directly."""
         booter = self._make_booter(profile="browser-python")
         client = SimpleNamespace()  # list_profiles should NOT be called
         result = await booter._resolve_profile(client)
@@ -260,7 +260,7 @@ class TestResolveProfile:
 
     @pytest.mark.asyncio
     async def test_falls_back_to_default_on_api_error(self):
-        """API error → graceful fallback to python-default."""
+        """API error ￫ graceful fallback to python-default."""
 
         async def _failing_list_profiles():
             raise ConnectionError("Bay unreachable")
@@ -272,7 +272,7 @@ class TestResolveProfile:
 
     @pytest.mark.asyncio
     async def test_falls_back_on_empty_profiles(self):
-        """Empty profile list → python-default."""
+        """Empty profile list ￫ python-default."""
 
         async def _empty_list_profiles():
             return SimpleNamespace(items=[])
@@ -284,7 +284,7 @@ class TestResolveProfile:
 
     @pytest.mark.asyncio
     async def test_single_profile_selected(self):
-        """Only one profile available → use it."""
+        """Only one profile available ￫ use it."""
 
         async def _single_profile():
             return SimpleNamespace(

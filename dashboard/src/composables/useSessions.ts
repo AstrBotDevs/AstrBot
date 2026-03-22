@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import axios from 'axios';
+import axios from '@/utils/request';
 import { useRouter } from 'vue-router';
 import { buildWebchatUmoDetails, getStoredSelectedChatConfigId } from '@/utils/chatConfigBinding';
 
@@ -13,7 +13,7 @@ export interface Session {
     created_at: string;
 }
 
-export function useSessions(chatboxMode: boolean = false) {
+export function useSessions(chatboxMode = false) {
     const router = useRouter();
     const sessions = ref<Session[]>([]);
     const selectedSessions = ref<string[]>([]);

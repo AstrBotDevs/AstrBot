@@ -26,7 +26,7 @@ class PreProcessStage(Stage):
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         """在处理事件之前的预处理"""
-        # 平台特异配置：platform_specific.<platform>.pre_ack_emoji
+        # 平台特异配置:platform_specific.<platform>.pre_ack_emoji
         supported = {"telegram", "lark", "discord"}
         platform = event.get_platform_name()
         cfg = (
@@ -48,7 +48,7 @@ class PreProcessStage(Stage):
 
         # 路径映射
         if mappings := self.platform_settings.get("path_mapping", []):
-            # 支持 Record，Image 消息段的路径映射。
+            # 支持 Record,Image 消息段的路径映射｡
             message_chain = event.get_messages()
 
             for idx, component in enumerate(message_chain):
@@ -71,7 +71,7 @@ class PreProcessStage(Stage):
             stt_provider = ctx.get_using_stt_provider(event.unified_msg_origin)
             if not stt_provider:
                 logger.warning(
-                    f"会话 {event.unified_msg_origin} 未配置语音转文本模型。",
+                    f"会话 {event.unified_msg_origin} 未配置语音转文本模型｡",
                 )
                 return
             message_chain = event.get_messages()

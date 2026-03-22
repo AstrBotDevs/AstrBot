@@ -220,7 +220,7 @@ class AzureTTSProvider(TTSProvider):
             try:
                 match = re.match(r"other\[(.*)\]", key_value, re.DOTALL)
                 if not match:
-                    raise ValueError("无效的other[...]格式，应形如 other[{...}]")
+                    raise ValueError("无效的other[...]格式,应形如 other[{...}]")
                 json_str = match.group(1).strip()
                 otts_config = json.loads(json_str)
                 required = {"OTTS_SKEY", "OTTS_URL", "OTTS_AUTH_TIME"}
@@ -229,7 +229,7 @@ class AzureTTSProvider(TTSProvider):
                 return OTTSProvider(otts_config)
             except json.JSONDecodeError as e:
                 error_msg = (
-                    f"JSON解析失败，请检查格式（错误位置：行 {e.lineno} 列 {e.colno}）\n"
+                    f"JSON解析失败,请检查格式(错误位置:行 {e.lineno} 列 {e.colno})\n"
                     f"错误详情: {e.msg}\n"
                     f"错误上下文: {json_str[max(0, e.pos - 30) : e.pos + 30]}"
                 )
@@ -238,7 +238,7 @@ class AzureTTSProvider(TTSProvider):
                 raise ValueError(f"配置错误: 缺少必要参数 {e}") from e
         if re.fullmatch(AZURE_TTS_SUBSCRIPTION_KEY_PATTERN, key_value):
             return AzureNativeProvider(config, self.provider_settings)
-        raise ValueError("订阅密钥格式无效，应为32位或84位字母数字或other[...]格式")
+        raise ValueError("订阅密钥格式无效,应为32位或84位字母数字或other[...]格式")
 
     async def get_audio(self, text: str) -> str:
         if isinstance(self.provider, OTTSProvider):

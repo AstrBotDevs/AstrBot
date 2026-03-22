@@ -15,7 +15,6 @@ class HandoffTool(FunctionTool, Generic[TContext]):
         tool_description: str | None = None,
         **kwargs,
     ) -> None:
-
         # Avoid passing duplicate `description` to the FunctionTool dataclass.
         # Some call sites (e.g. SubAgentOrchestrator) pass `description` via kwargs
         # to override what the main agent sees, while we also compute a default
@@ -62,4 +61,4 @@ class HandoffTool(FunctionTool, Generic[TContext]):
 
     def default_description(self, agent_name: str | None) -> str:
         agent_name = agent_name or "another"
-        return f"Delegate tasks to {self.name} agent to handle the request."
+        return f"Delegate tasks to {agent_name} agent to handle the request."

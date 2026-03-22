@@ -9,6 +9,7 @@ import json
 import os
 import uuid
 
+import anyio
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
@@ -79,7 +80,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
         bool: indicates whether the file was downloaded from sandbox.
         """
-        if os.path.exists(path):
+        if await anyio.Path(path).exists():
             return path, False
 
         # Try to check if the file exists in the sandbox
@@ -96,7 +97,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             )
             if "_&exists_" in json.dumps(result):
                 # Download the file from sandbox
-                name = os.path.basename(path)
+                name = anyio.Path(path).name
                 local_path = os.path.join(
                     get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
                 )
@@ -128,7 +129,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             if not msg_type:
                 return f"error: messages[{idx}].type is required."
 
-            file_from_sandbox = False
+            _file_from_sandbox = False
 
             try:
                 if msg_type == "plain":
@@ -142,7 +143,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if path:
                         (
                             local_path,
-                            file_from_sandbox,
+                            _file_from_sandbox,
                         ) = await self._resolve_path_from_sandbox(context, path)
                         components.append(Comp.Image.fromFileSystem(path=local_path))
                     elif url:
@@ -155,7 +156,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if path:
                         (
                             local_path,
-                            file_from_sandbox,
+                            _file_from_sandbox,
                         ) = await self._resolve_path_from_sandbox(context, path)
                         components.append(Comp.Record.fromFileSystem(path=local_path))
                     elif url:
@@ -168,7 +169,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if path:
                         (
                             local_path,
-                            file_from_sandbox,
+                            _file_from_sandbox,
                         ) = await self._resolve_path_from_sandbox(context, path)
                         components.append(Comp.Video.fromFileSystem(path=local_path))
                     elif url:
@@ -187,7 +188,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if path:
                         (
                             local_path,
-                            file_from_sandbox,
+                            _file_from_sandbox,
                         ) = await self._resolve_path_from_sandbox(context, path)
                         components.append(Comp.File(name=name, file=local_path))
                     elif url:

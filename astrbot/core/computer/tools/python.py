@@ -80,7 +80,7 @@ class PythonTool(FunctionTool):
             result = await sb.python.exec(code, silent=silent)
             return await handle_result(result, context.context.event)
         except Exception as e:
-            return f"Error executing code: {str(e)}"
+            return f"Error executing code: {e!s}"
 
 
 @dataclass
@@ -103,4 +103,4 @@ class LocalPythonTool(FunctionTool):
             result = await sb.python.exec(code, silent=silent)
             return await handle_result(result, context.context.event)
         except Exception as e:
-            return f"Error executing code: {str(e)}"
+            return f"Error executing code: {e!s}"

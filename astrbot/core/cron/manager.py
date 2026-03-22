@@ -176,7 +176,7 @@ class CronJobManager:
                 replace_existing=True,
                 misfire_grace_time=30,
             )
-            asyncio.create_task(
+            asyncio.create_task(  # noqa: RUF006
                 self.db.update_cron_job(
                     job.job_id, next_run_time=self._get_next_run_time(job.job_id)
                 )
@@ -205,7 +205,7 @@ class CronJobManager:
                 await self._run_active_agent_job(job, start_time=start_time)
             else:
                 raise ValueError(f"Unknown cron job type: {job.job_type}")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             status = "failed"
             last_error = str(e)
             logger.error(f"Cron job {job_id} failed: {e!s}", exc_info=True)
@@ -286,7 +286,7 @@ class CronJobManager:
                 if isinstance(session_str, MessageSession)
                 else MessageSession.from_str(session_str)
             )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(f"Invalid session for cron job: {e}")
             return
 
@@ -311,8 +311,11 @@ class CronJobManager:
 
         from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
 
+        tool_call_timeout = cfg.get("provider_settings", {}).get(
+            "tool_call_timeout", 120
+        )
         config = MainAgentBuildConfig(
-            tool_call_timeout=3600,
+            tool_call_timeout=tool_call_timeout,
             llm_safety_mode=False,
             streaming_response=False,
             tool_providers=[ComputerToolProvider()],

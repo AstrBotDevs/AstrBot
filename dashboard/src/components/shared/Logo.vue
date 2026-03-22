@@ -2,16 +2,24 @@
   <div class="logo-container">
     <div class="logo-content">
       <div class="logo-image">
-        <img width="110" src="@/assets/images/astrbot_logo_mini.webp" alt="AstrBot Logo">
+        <img
+          width="110"
+          src="@/assets/images/astrbot_logo_mini.webp"
+          alt="AstrBot Logo"
+        >
       </div>
       <div class="logo-text">
         <h2 
           :style="{ color: 'rgb(var(--v-theme-primary))' }"
           v-html="formatTitle(title || t('core.header.logoTitle'))"
-        ></h2>
+        />
         <!-- 父子组件传递css变量可能会出错，暂时使用十六进制颜色值 -->
-        <h4 :style="{ color: 'rgba(var(--v-theme-on-surface), 0.72)' }"
-            class="hint-text">{{ subtitle || t('core.header.accountDialog.title') }}</h4>
+        <h4
+          :style="{ color: 'rgba(var(--v-theme-on-surface), 0.72)' }"
+          class="hint-text"
+        >
+          {{ subtitle || t('core.header.accountDialog.title') }}
+        </h4>
       </div>
     </div>
   </div>

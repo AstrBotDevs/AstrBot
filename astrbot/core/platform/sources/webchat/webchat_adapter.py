@@ -1,10 +1,9 @@
 import asyncio
 import os
 import time
-import uuid
 from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from astrbot import logger
 from astrbot.core import db_helper
@@ -92,32 +91,37 @@ class WebChatAdapter(Platform):
         active_request_ids = self._webchat_queue_mgr.list_back_request_ids(
             conversation_id
         )
-        subscription_request_ids = [
-            req_id for req_id in active_request_ids if req_id.startswith("ws_sub_")
+        stream_request_ids = [
+            req_id for req_id in active_request_ids if not req_id.startswith("ws_sub_")
         ]
-        target_request_ids = subscription_request_ids or active_request_ids
+        target_request_ids = stream_request_ids or active_request_ids
 
-        if target_request_ids:
-            for request_id in target_request_ids:
-                await WebChatMessageEvent._send(
-                    request_id,
-                    message_chain,
-                    session.session_id,
+        if not target_request_ids:
+            # No active streams to consume this proactive message.
+            # Persist directly and return to avoid creating an unused queue.
+            try:
+                await self._save_proactive_message(conversation_id, message_chain)
+            except Exception as e:
+                logger.error(
+                    f"[WebChatAdapter] Failed to save proactive message: {e}",
+                    exc_info=True,
                 )
-        else:
-            message_id = f"active_{uuid.uuid4()!s}"
+            await super().send_by_session(session, message_chain)
+            return
+
+        for request_id in target_request_ids:
             await WebChatMessageEvent._send(
-                message_id,
+                request_id,
                 message_chain,
                 session.session_id,
+                streaming=True,
+                emit_complete=True,
             )
 
-        should_persist = (
-            bool(subscription_request_ids)
-            or not active_request_ids
-            or all(req_id.startswith("active_") for req_id in active_request_ids)
-        )
-        if should_persist:
+        # If only passive subscription queues exist for this conversation,
+        # keep a proactive save as a fallback since they are not tied to
+        # the normal streaming persistence path.
+        if not stream_request_ids:
             try:
                 await self._save_proactive_message(conversation_id, message_chain)
             except Exception as e:
@@ -160,12 +164,12 @@ class WebChatAdapter(Platform):
         depth: int = 0,
         max_depth: int = 1,
     ) -> tuple[list, list[str]]:
-        """解析消息段列表，返回消息组件列表和纯文本列表
+        """解析消息段列表,返回消息组件列表和纯文本列表
 
         Args:
             message_parts: 消息段列表
             depth: 当前递归深度
-            max_depth: 最大递归深度（用于处理 reply）
+            max_depth: 最大递归深度(用于处理 reply)
 
         Returns:
             tuple[list, list[str]]: (消息组件列表, 纯文本列表)
@@ -239,7 +243,7 @@ class WebChatAdapter(Platform):
             session_id=message.session_id,
         )
 
-        _, _, payload = message.raw_message  # type: ignore
+        _, _, payload = cast(tuple[Any, Any, dict[str, Any]], message.raw_message)
         message_event.set_extra("selected_provider", payload.get("selected_provider"))
         message_event.set_extra("selected_model", payload.get("selected_model"))
         message_event.set_extra(

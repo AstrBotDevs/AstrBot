@@ -81,7 +81,7 @@ class SearchEngine:
                 return ret
 
     def tidy_text(self, text: str) -> str:
-        """清理文本，去除空格、换行符等"""
+        """清理文本,去除空格､换行符等"""
         return text.strip().replace("\n", " ").replace("\r", " ").replace("  ", " ")
 
     def _get_url(self, tag: Tag) -> str:

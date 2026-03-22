@@ -1,16 +1,30 @@
 <template>
-  <v-card elevation="1" class="stat-card memory-card">
+  <v-card
+    elevation="1"
+    class="stat-card memory-card"
+  >
     <v-card-text>
       <div class="d-flex align-start">
         <div class="icon-wrapper">
-          <v-icon icon="mdi-memory" size="24"></v-icon>
+          <v-icon
+            icon="mdi-memory"
+            size="24"
+          />
         </div>
         
         <div class="stat-content">
-          <div class="stat-title">{{ t('stats.memoryUsage.title') }}</div>
+          <div class="stat-title">
+            {{ t('stats.memoryUsage.title') }}
+          </div>
           <div class="stat-value-wrapper">
-            <h2 class="stat-value">{{ stat.memory?.process || 0 }} <span class="memory-unit">MiB / {{ stat.memory?.system || 0 }} MiB</span></h2>
-            <v-chip :color="memoryStatus.color" size="x-small" class="status-chip">
+            <h2 class="stat-value">
+              {{ stat.memory?.process || 0 }} <span class="memory-unit">MiB / {{ stat.memory?.system || 0 }} MiB</span>
+            </h2>
+            <v-chip
+              :color="memoryStatus.color"
+              size="x-small"
+              class="status-chip"
+            >
               {{ memoryStatus.label }}
             </v-chip>
           </div>
@@ -19,8 +33,12 @@
       
       <div class="metrics-container">
         <div class="metric-item">
-          <div class="metric-label">{{ t('stats.memoryUsage.cpuLoad') }}</div>
-          <div class="metric-value">{{ stat.cpu_percent || '0' }}%</div>
+          <div class="metric-label">
+            {{ t('stats.memoryUsage.cpuLoad') }}
+          </div>
+          <div class="metric-value">
+            {{ stat.cpu_percent || '0' }}%
+          </div>
         </div>
       </div>
     </v-card-text>

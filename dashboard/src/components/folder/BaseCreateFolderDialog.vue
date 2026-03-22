@@ -1,31 +1,60 @@
 <template>
-    <v-dialog v-model="showDialog" max-width="450px">
-        <v-card>
-            <v-card-title>
-                <v-icon class="mr-2">mdi-folder-plus</v-icon>
-                {{ labels.title }}
-            </v-card-title>
-            <v-card-text>
-                <v-form ref="form" v-model="formValid">
-                    <v-text-field v-model="formData.name" :label="mergedLabels.nameLabel"
-                        :rules="[(v: any) => !!v || mergedLabels.nameRequired]" variant="outlined"
-                        density="comfortable" autofocus class="mb-3" />
+  <v-dialog
+    v-model="showDialog"
+    max-width="450px"
+  >
+    <v-card>
+      <v-card-title>
+        <v-icon class="mr-2">
+          mdi-folder-plus
+        </v-icon>
+        {{ labels.title }}
+      </v-card-title>
+      <v-card-text>
+        <v-form
+          ref="form"
+          v-model="formValid"
+        >
+          <v-text-field
+            v-model="formData.name"
+            :label="mergedLabels.nameLabel"
+            :rules="[(v: any) => !!v || mergedLabels.nameRequired]"
+            variant="outlined"
+            density="comfortable"
+            autofocus
+            class="mb-3"
+          />
 
-                    <v-textarea v-model="formData.description" :label="labels.descriptionLabel" variant="outlined"
-                        rows="3" density="comfortable" hide-details />
-                </v-form>
-            </v-card-text>
-            <v-card-actions>
-                <v-spacer />
-                <v-btn variant="text" @click="closeDialog">
-                    {{ labels.cancelButton }}
-                </v-btn>
-                <v-btn color="primary" variant="flat" @click="submitForm" :loading="loading" :disabled="!formValid">
-                    {{ labels.createButton }}
-                </v-btn>
-            </v-card-actions>
-        </v-card>
-    </v-dialog>
+          <v-textarea
+            v-model="formData.description"
+            :label="labels.descriptionLabel"
+            variant="outlined"
+            rows="3"
+            density="comfortable"
+            hide-details
+          />
+        </v-form>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn
+          variant="text"
+          @click="closeDialog"
+        >
+          {{ labels.cancelButton }}
+        </v-btn>
+        <v-btn
+          color="primary"
+          variant="flat"
+          :loading="loading"
+          :disabled="!formValid"
+          @click="submitForm"
+        >
+          {{ labels.createButton }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script lang="ts">

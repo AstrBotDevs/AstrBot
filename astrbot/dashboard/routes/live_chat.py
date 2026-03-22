@@ -7,6 +7,7 @@ import uuid
 import wave
 from typing import Any
 
+import anyio
 import jwt
 from quart import websocket
 
@@ -56,7 +57,7 @@ class LiveChatSession:
             self.audio_frames.append(data)
 
     async def end_speaking(self, stamp: str) -> tuple[str | None, float]:
-        """结束说话，返回组装的 WAV 文件路径和耗时"""
+        """结束说话,返回组装的 WAV 文件路径和耗时"""
         start_time = time.time()
         if not self.is_speaking or stamp != self.current_stamp:
             logger.warning(
@@ -76,7 +77,7 @@ class LiveChatSession:
             os.makedirs(temp_dir, exist_ok=True)
             audio_path = os.path.join(temp_dir, f"live_audio_{uuid.uuid4()}.wav")
 
-            # 假设前端发送的是 PCM 数据，采样率 16000Hz，单声道，16位
+            # 假设前端发送的是 PCM 数据,采样率 16000Hz,单声道,16位
             with wave.open(audio_path, "wb") as wav_file:
                 wav_file.setnchannels(1)  # 单声道
                 wav_file.setsampwidth(2)  # 16位 = 2字节
@@ -86,7 +87,7 @@ class LiveChatSession:
 
             self.temp_audio_path = audio_path
             logger.info(
-                f"[Live Chat] 音频文件已保存: {audio_path}, 大小: {os.path.getsize(audio_path)} bytes"
+                f"[Live Chat] 音频文件已保存: {audio_path}, 大小: {(await anyio.Path(audio_path).stat()).st_size} bytes"
             )
             return audio_path, time.time() - start_time
 
@@ -94,11 +95,11 @@ class LiveChatSession:
             logger.error(f"[Live Chat] 组装 WAV 文件失败: {e}", exc_info=True)
             return None, 0.0
 
-    def cleanup(self) -> None:
+    async def cleanup(self) -> None:
         """清理临时文件"""
-        if self.temp_audio_path and os.path.exists(self.temp_audio_path):
+        if self.temp_audio_path and await anyio.Path(self.temp_audio_path).exists():
             try:
-                os.remove(self.temp_audio_path)
+                await anyio.Path(self.temp_audio_path).unlink()
                 logger.debug(f"[Live Chat] 已删除临时文件: {self.temp_audio_path}")
             except Exception as e:
                 logger.warning(f"[Live Chat] 删除临时文件失败: {e}")
@@ -129,17 +130,17 @@ class LiveChatRoute(Route):
         self.app.websocket("/api/unified_chat/ws")(self.unified_chat_ws)
 
     async def live_chat_ws(self) -> None:
-        """Legacy Live Chat WebSocket 处理器（默认 ct=live）"""
+        """Legacy Live Chat WebSocket 处理器(默认 ct=live)"""
         await self._unified_ws_loop(force_ct="live")
 
     async def unified_chat_ws(self) -> None:
-        """Unified Chat WebSocket 处理器（支持 ct=live/chat）"""
+        """Unified Chat WebSocket 处理器(支持 ct=live/chat)"""
         await self._unified_ws_loop(force_ct=None)
 
     async def _unified_ws_loop(self, force_ct: str | None = None) -> None:
         """统一 WebSocket 循环"""
-        # WebSocket 不能通过 header 传递 token，需要从 query 参数获取
-        # 注意：WebSocket 上下文使用 websocket.args 而不是 request.args
+        # WebSocket 不能通过 header 传递 token,需要从 query 参数获取
+        # 注意:WebSocket 上下文使用 websocket.args 而不是 request.args
         token = websocket.args.get("token")
         if not token:
             await websocket.close(1008, "Missing authentication token")
@@ -178,14 +179,14 @@ class LiveChatRoute(Route):
             # 清理会话
             if session_id in self.sessions:
                 await self._cleanup_chat_subscriptions(live_session)
-                live_session.cleanup()
+                await live_session.cleanup()
                 del self.sessions[session_id]
             logger.info(f"[Live Chat] WebSocket 连接关闭: {username}")
 
     async def _create_attachment_from_file(
         self, filename: str, attach_type: str
     ) -> dict | None:
-        """从本地文件创建 attachment 并返回消息部分。"""
+        """从本地文件创建 attachment 并返回消息部分｡"""
         return await create_attachment_part_from_existing_file(
             filename,
             attach_type=attach_type,
@@ -197,7 +198,7 @@ class LiveChatRoute(Route):
     def _extract_web_search_refs(
         self, accumulated_text: str, accumulated_parts: list
     ) -> dict:
-        """从消息中提取 web_search 引用。"""
+        """从消息中提取 web_search 引用｡"""
         supported = ["web_search_tavily", "web_search_bocha"]
         web_search_results = {}
         tool_call_parts = [
@@ -251,7 +252,7 @@ class LiveChatRoute(Route):
         agent_stats: dict,
         refs: dict,
     ):
-        """保存 bot 消息到历史记录。"""
+        """保存 bot 消息到历史记录｡"""
         bot_message_parts = []
         bot_message_parts.extend(media_parts)
         if text:
@@ -339,7 +340,7 @@ class LiveChatRoute(Route):
     async def _handle_chat_message(
         self, session: LiveChatSession, message: dict
     ) -> None:
-        """处理 Chat Mode 消息（ct=chat）"""
+        """处理 Chat Mode 消息(ct=chat)"""
         msg_type = message.get("t")
 
         if msg_type == "bind":
@@ -645,7 +646,7 @@ class LiveChatRoute(Route):
                 {
                     "ct": "chat",
                     "t": "error",
-                    "data": f"处理失败: {str(e)}",
+                    "data": f"处理失败: {e!s}",
                     "code": "PROCESSING_ERROR",
                 },
             )
@@ -654,7 +655,7 @@ class LiveChatRoute(Route):
             webchat_queue_mgr.remove_back_queue(message_id)
 
     async def _build_chat_message_parts(self, message: list[dict]) -> list[dict]:
-        """构建 chat websocket 用户消息段（复用 webchat 逻辑）"""
+        """构建 chat websocket 用户消息段(复用 webchat 逻辑)"""
         return await build_webchat_message_parts(
             message,
             get_attachment_by_id=self.db.get_attachment_by_id,
@@ -700,7 +701,7 @@ class LiveChatRoute(Route):
                 await websocket.send_json({"t": "error", "data": "音频组装失败"})
                 return
 
-            # 处理音频：STT -> LLM -> TTS
+            # 处理音频:STT -> LLM -> TTS
             await self._process_audio(session, audio_path, assemble_duration)
 
         elif msg_type == "interrupt":
@@ -711,7 +712,7 @@ class LiveChatRoute(Route):
     async def _process_audio(
         self, session: LiveChatSession, audio_path: str, assemble_duration: float
     ) -> None:
-        """处理音频：STT -> LLM -> 流式 TTS"""
+        """处理音频:STT -> LLM -> 流式 TTS"""
         try:
             # 发送 WAV 组装耗时
             await websocket.send_json(
@@ -773,7 +774,7 @@ class LiveChatRoute(Route):
             try:
                 while True:
                     if session.should_interrupt:
-                        # 用户打断，停止处理
+                        # 用户打断,停止处理
                         logger.info("[Live Chat] 检测到用户打断")
                         await websocket.send_json({"t": "stop_play"})
                         # 保存消息并标记为被打断
@@ -881,7 +882,7 @@ class LiveChatRoute(Route):
                         # 处理完成
                         logger.info(f"[Live Chat] Bot 回复完成: {bot_text}")
 
-                        # 如果没有音频流，发送 bot 消息文本
+                        # 如果没有音频流,发送 bot 消息文本
                         if not audio_playing:
                             await websocket.send_json(
                                 {
@@ -910,7 +911,7 @@ class LiveChatRoute(Route):
 
         except Exception as e:
             logger.error(f"[Live Chat] 处理音频失败: {e}", exc_info=True)
-            await websocket.send_json({"t": "error", "data": f"处理失败: {str(e)}"})
+            await websocket.send_json({"t": "error", "data": f"处理失败: {e!s}"})
 
         finally:
             session.is_processing = False
@@ -923,7 +924,7 @@ class LiveChatRoute(Route):
         interrupted_text = bot_text + " [用户打断]"
         logger.info(f"[Live Chat] 保存打断消息: {interrupted_text}")
 
-        # 简单记录到日志，实际保存逻辑可以后续完善
+        # 简单记录到日志,实际保存逻辑可以后续完善
         try:
             timestamp = int(time.time() * 1000)
             logger.info(
@@ -931,7 +932,7 @@ class LiveChatRoute(Route):
             )
             if bot_text:
                 logger.info(
-                    f"[Live Chat] Bot 消息（打断）: {interrupted_text} (session: {session.session_id}, ts: {timestamp})"
+                    f"[Live Chat] Bot 消息(打断): {interrupted_text} (session: {session.session_id}, ts: {timestamp})"
                 )
         except Exception as e:
             logger.error(f"[Live Chat] 记录消息失败: {e}", exc_info=True)

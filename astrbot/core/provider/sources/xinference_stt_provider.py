@@ -1,21 +1,21 @@
-import os
 import uuid
 
+import aiofiles
 import aiohttp
+import anyio
+from astrbot.core.entities import ProviderType
+from astrbot.core.register import register_provider_adapter
 from xinference_client.client.restful.async_restful_client import (
     AsyncClient as Client,
 )
 
 from astrbot.core import logger
+from astrbot.core.provider import STTProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.tencent_record_helper import (
     convert_to_pcm_wav,
     tencent_silk_to_wav,
 )
-
-from ..entities import ProviderType
-from ..provider import STTProvider
-from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -102,9 +102,9 @@ class ProviderXinferenceSTT(STTProvider):
                                 f"Failed to download audio from {audio_url}, status: {resp.status}",
                             )
                             return ""
-            elif os.path.exists(audio_url):
-                with open(audio_url, "rb") as f:
-                    audio_bytes = f.read()
+            elif await anyio.Path(audio_url).exists():
+                async with aiofiles.open(audio_url, "rb") as f:
+                    audio_bytes = await f.read()
             else:
                 logger.error(f"File not found: {audio_url}")
                 return ""
@@ -130,21 +130,19 @@ class ProviderXinferenceSTT(STTProvider):
                 logger.info(
                     f"Audio requires conversion ({conversion_type}), using temporary files..."
                 )
-                temp_dir = get_astrbot_temp_path()
-                os.makedirs(temp_dir, exist_ok=True)
+                temp_dir = anyio.Path(get_astrbot_temp_path())
+                await temp_dir.mkdir(parents=True, exist_ok=True)
 
-                input_path = os.path.join(
-                    temp_dir,
-                    f"xinference_stt_{uuid.uuid4().hex[:8]}.input",
+                input_path = str(
+                    temp_dir / f"xinference_stt_{uuid.uuid4().hex[:8]}.input"
                 )
-                output_path = os.path.join(
-                    temp_dir,
-                    f"xinference_stt_{uuid.uuid4().hex[:8]}.wav",
+                output_path = str(
+                    temp_dir / f"xinference_stt_{uuid.uuid4().hex[:8]}.wav"
                 )
                 temp_files.extend([input_path, output_path])
 
-                with open(input_path, "wb") as f:
-                    f.write(audio_bytes)
+                async with aiofiles.open(input_path, "wb") as f:
+                    await f.write(audio_bytes)
 
                 if conversion_type == "silk":
                     logger.info("Converting silk to wav ...")
@@ -153,11 +151,11 @@ class ProviderXinferenceSTT(STTProvider):
                     logger.info("Converting amr to wav ...")
                     await convert_to_pcm_wav(input_path, output_path)
 
-                with open(output_path, "rb") as f:
-                    audio_bytes = f.read()
+                async with aiofiles.open(output_path, "rb") as f:
+                    audio_bytes = await f.read()
 
             # 4. Transcribe
-            # 官方asyncCLient的客户端似乎实现有点问题，这里直接用aiohttp实现openai标准兼容请求，提交issue等待官方修复后再改回来
+            # 官方asyncCLient的客户端似乎实现有点问题,这里直接用aiohttp实现openai标准兼容请求,提交issue等待官方修复后再改回来
             url = f"{self.base_url}/v1/audio/transcriptions"
             headers = {
                 "accept": "application/json",
@@ -199,8 +197,9 @@ class ProviderXinferenceSTT(STTProvider):
             # 5. Cleanup
             for temp_file in temp_files:
                 try:
-                    if os.path.exists(temp_file):
-                        os.remove(temp_file)
+                    temp_path = anyio.Path(temp_file)
+                    if await temp_path.exists():
+                        await temp_path.unlink()
                         logger.debug(f"Removed temporary file: {temp_file}")
                 except Exception as e:
                     logger.error(f"Failed to remove temporary file {temp_file}: {e}")

@@ -7,6 +7,7 @@ from functools import cmp_to_key
 from pathlib import Path
 
 import aiohttp
+import anyio
 import psutil
 from quart import request
 
@@ -20,6 +21,10 @@ from astrbot.core.utils.io import get_dashboard_version
 from astrbot.core.utils.version_comparator import VersionComparator
 
 from .route import Response, Route, RouteContext
+
+
+def _resolve_path(path: str | Path) -> Path:
+    return Path(path).resolve(strict=False)
 
 
 class StatRoute(Route):
@@ -62,13 +67,7 @@ class StatRoute(Route):
         return {"hours": hours, "minutes": minutes, "seconds": seconds}
 
     def is_default_cred(self):
-        username = self.config["dashboard"]["username"]
-        password = self.config["dashboard"]["password"]
-        return (
-            username == "astrbot"
-            and password == "77b90590a8945a7d36c963981a307dc9"
-            and not DEMO_MODE
-        )
+        return False
 
     async def get_version(self):
         need_migration = await check_migration_needed_v4(self.core_lifecycle.db)
@@ -159,7 +158,7 @@ class StatRoute(Route):
             return Response().error(e.__str__()).__dict__
 
     async def test_ghproxy_connection(self):
-        """测试 GitHub 代理连接是否可用。"""
+        """测试 GitHub 代理连接是否可用｡"""
         try:
             data = await request.get_json()
             proxy_url: str = data.get("proxy_url")
@@ -210,41 +209,33 @@ class StatRoute(Route):
 
             filename = f"v{version}.md"
             project_path = get_astrbot_path()
-            changelogs_dir = os.path.join(project_path, "changelogs")
-            changelog_path = os.path.join(changelogs_dir, filename)
+            changelogs_dir = _resolve_path(Path(project_path) / "changelogs")
+            changelog_path = _resolve_path(changelogs_dir / filename)
 
-            # 规范化路径，防止符号链接攻击
-            changelog_path = os.path.realpath(changelog_path)
-            changelogs_dir = os.path.realpath(changelogs_dir)
-
-            # 验证最终路径在预期的 changelogs 目录内（防止路径遍历）
-            # 确保规范化后的路径以 changelogs_dir 开头，且是目录内的文件
-            changelog_path_normalized = os.path.normpath(changelog_path)
-            changelogs_dir_normalized = os.path.normpath(changelogs_dir)
-
-            # 检查路径是否在预期目录内（必须是目录的子文件，不能是目录本身）
-            expected_prefix = changelogs_dir_normalized + os.sep
-            if not changelog_path_normalized.startswith(expected_prefix):
+            # 验证最终路径在预期的 changelogs 目录内(防止路径遍历)
+            try:
+                changelog_path.relative_to(changelogs_dir)
+            except ValueError:
                 logger.warning(
                     f"Path traversal attempt detected: {version} -> {changelog_path}",
                 )
                 return Response().error("Invalid version format").__dict__
 
-            if not os.path.exists(changelog_path):
+            if not await anyio.Path(changelog_path).exists():
                 return (
                     Response()
                     .error(f"Changelog for version {version} not found")
                     .__dict__
                 )
-            if not os.path.isfile(changelog_path):
+            if not await anyio.Path(changelog_path).is_file():
                 return (
                     Response()
                     .error(f"Changelog for version {version} not found")
                     .__dict__
                 )
 
-            with open(changelog_path, encoding="utf-8") as f:
-                content = f.read()
+            async with await anyio.open_file(changelog_path, encoding="utf-8") as f:
+                content = await f.read()
 
             return Response().ok({"content": content, "version": version}).__dict__
         except Exception as e:
@@ -257,19 +248,19 @@ class StatRoute(Route):
             project_path = get_astrbot_path()
             changelogs_dir = os.path.join(project_path, "changelogs")
 
-            if not os.path.exists(changelogs_dir):
+            if not await anyio.Path(changelogs_dir).exists():
                 return Response().ok({"versions": []}).__dict__
 
             versions = []
             for filename in os.listdir(changelogs_dir):
                 if filename.endswith(".md") and filename.startswith("v"):
-                    # 提取版本号（去除 v 前缀和 .md 后缀）
+                    # 提取版本号(去除 v 前缀和 .md 后缀)
                     version = filename[1:-3]  # 去掉 "v" 和 ".md"
                     # 验证版本号格式
                     if re.match(r"^[a-zA-Z0-9._-]+$", version):
                         versions.append(version)
 
-            # 按版本号排序（降序，最新的在前）
+            # 按版本号排序(降序,最新的在前)
             # 使用项目中的 VersionComparator 进行语义化版本号排序
             versions.sort(
                 key=cmp_to_key(
@@ -283,7 +274,7 @@ class StatRoute(Route):
             return Response().error(f"Error: {e!s}").__dict__
 
     async def get_first_notice(self):
-        """读取项目根目录 FIRST_NOTICE.md 内容。"""
+        """读取项目根目录 FIRST_NOTICE.md 内容｡"""
         try:
             locale = (request.args.get("locale") or "").strip()
             if not re.match(r"^[A-Za-z0-9_-]*$", locale):

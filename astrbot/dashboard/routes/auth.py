@@ -4,7 +4,10 @@ import datetime
 import jwt
 from quart import request
 
-from astrbot import logger
+from astrbot.cli.commands.cmd_conf import (
+    hash_dashboard_password_secure,
+    verify_dashboard_password,
+)
 from astrbot.core import DEMO_MODE
 
 from .route import Response, Route, RouteContext
@@ -21,17 +24,13 @@ class AuthRoute(Route):
 
     async def login(self):
         username = self.config["dashboard"]["username"]
-        password = self.config["dashboard"]["password"]
+        stored_password_hash = self.config["dashboard"]["password"]
         post_data = await request.json
-        if post_data["username"] == username and post_data["password"] == password:
+        if post_data["username"] == username and self._matches_dashboard_password(
+            stored_password_hash,
+            post_data,
+        ):
             change_pwd_hint = False
-            if (
-                username == "astrbot"
-                and password == "77b90590a8945a7d36c963981a307dc9"
-                and not DEMO_MODE
-            ):
-                change_pwd_hint = True
-                logger.warning("为了保证安全，请尽快修改默认密码。")
 
             return (
                 Response()
@@ -55,10 +54,10 @@ class AuthRoute(Route):
                 .__dict__
             )
 
-        password = self.config["dashboard"]["password"]
+        stored_password_hash = self.config["dashboard"]["password"]
         post_data = await request.json
 
-        if post_data["password"] != password:
+        if not self._matches_dashboard_password(stored_password_hash, post_data):
             return Response().error("原密码错误").__dict__
 
         new_pwd = post_data.get("new_password", None)
@@ -71,7 +70,12 @@ class AuthRoute(Route):
             confirm_pwd = post_data.get("confirm_password", None)
             if confirm_pwd != new_pwd:
                 return Response().error("两次输入的新密码不一致").__dict__
-            self.config["dashboard"]["password"] = new_pwd
+            # Hash the new password before storing to ensure backend and CLI use the same format
+            try:
+                new_hash = hash_dashboard_password_secure(new_pwd)
+            except Exception as e:
+                return Response().error(f"Failed to hash new password: {e}").__dict__
+            self.config["dashboard"]["password"] = new_hash
         if new_username:
             self.config["dashboard"]["username"] = new_username
 
@@ -90,3 +94,31 @@ class AuthRoute(Route):
             raise ValueError("JWT secret is not set in the cmd_config.")
         token = jwt.encode(payload, jwt_token, algorithm="HS256")
         return token
+
+    @staticmethod
+    def _matches_dashboard_password(
+        stored_password_hash: str,
+        post_data: dict | None,
+    ) -> bool:
+        """
+        Verify posted credentials against stored hash.
+
+        Behavior:
+        - If client provided plaintext `password`, use `verify_dashboard_password`
+          which only supports Argon2 encoded hashes.
+        """
+        if not isinstance(post_data, dict):
+            return False
+
+        # The dashboard only accepts plaintext credentials over the transport
+        # layer; the server is responsible for secure password verification.
+        pwd_plain = str(post_data.get("password", "") or "")
+
+        if pwd_plain:
+            try:
+                return verify_dashboard_password(pwd_plain, stored_password_hash)
+            except Exception:
+                # Do not crash authentication on unexpected verifier errors; treat as mismatch.
+                return False
+
+        return False

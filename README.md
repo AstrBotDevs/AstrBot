@@ -31,9 +31,8 @@
 <a href="https://astrbot.app/">Docs</a> ｜
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">Roadmap</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issues</a>
-<a href="mailto:community@astrbot.app">Email</a>
-
+<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue Tracker</a> ｜
+<a href="mailto:community@astrbot.app">Email Support</a>
 </div>
 
 AstrBot is an open-source, all-in-one Agentic personal and group chat assistant that can be deployed on dozens of mainstream instant messaging platforms such as QQ, Telegram, WeCom, Lark, DingTalk, Slack, and more. It also features a built-in lightweight ChatUI similar to OpenWebUI, creating a reliable and scalable conversational AI infrastructure for individuals, developers, and teams. Whether it's a personal AI companion, smart customer service, automated assistant, or enterprise knowledge base, AstrBot enables you to quickly build AI applications within the workflow of your instant messaging platforms.

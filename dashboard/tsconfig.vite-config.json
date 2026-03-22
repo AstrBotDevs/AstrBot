@@ -7,5 +7,5 @@
     "allowJs": true,
     "types": ["node"]
   },
-  "include": ["vite.config.*"]
+  "include": ["vite.config.*", "scripts/**/*"]
 }

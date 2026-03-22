@@ -53,29 +53,43 @@ def _ensure_safe_path(path: str) -> str:
     return abs_path
 
 
-def _decode_shell_output(output: bytes | None) -> str:
+def _decode_bytes_with_fallback(
+    output: bytes | None,
+    *,
+    preferred_encoding: str | None = None,
+) -> str:
     if output is None:
         return ""
 
     preferred = locale.getpreferredencoding(False) or "utf-8"
-    try:
-        return output.decode("utf-8")
-    except (LookupError, UnicodeDecodeError):
-        pass
+    attempted_encodings: list[str] = []
+
+    def _try_decode(encoding: str) -> str | None:
+        normalized = encoding.lower()
+        if normalized in attempted_encodings:
+            return None
+        attempted_encodings.append(normalized)
+        try:
+            return output.decode(encoding)
+        except (LookupError, UnicodeDecodeError):
+            return None
+
+    for encoding in filter(None, [preferred_encoding, "utf-8", "utf-8-sig"]):
+        if decoded := _try_decode(encoding):
+            return decoded
 
     if os.name == "nt":
-        for encoding in ("mbcs", "cp936", "gbk", "gb18030"):
-            try:
-                return output.decode(encoding)
-            except (LookupError, UnicodeDecodeError):
-                continue
-
-    try:
-        return output.decode(preferred)
-    except (LookupError, UnicodeDecodeError):
-        pass
+        for encoding in ("mbcs", "cp936", "gbk", "gb18030", preferred):
+            if decoded := _try_decode(encoding):
+                return decoded
+    elif decoded := _try_decode(preferred):
+        return decoded
 
     return output.decode("utf-8", errors="replace")
+
+
+def _decode_shell_output(output: bytes | None) -> str:
+    return _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
 
 
 @dataclass
@@ -101,7 +115,7 @@ class LocalShellComponent(ShellComponent):
                 # `command` is intentionally executed through the current shell so
                 # local computer-use behavior matches existing tool semantics.
                 # Safety relies on `_is_safe_command()` and the allowed-root checks.
-                proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+                proc = subprocess.Popen(  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                     command,
                     shell=shell,
                     cwd=working_dir,
@@ -113,7 +127,7 @@ class LocalShellComponent(ShellComponent):
             # `command` is intentionally executed through the current shell so
             # local computer-use behavior matches existing tool semantics.
             # Safety relies on `_is_safe_command()` and the allowed-root checks.
-            result = subprocess.run(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+            result = subprocess.run(  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                 command,
                 shell=shell,
                 cwd=working_dir,
@@ -184,8 +198,12 @@ class LocalFileSystemComponent(FileSystemComponent):
     async def read_file(self, path: str, encoding: str = "utf-8") -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = _ensure_safe_path(path)
-            with open(abs_path, encoding=encoding) as f:
-                content = f.read()
+            with open(abs_path, "rb") as f:
+                raw_content = f.read()
+            content = _decode_bytes_with_fallback(
+                raw_content,
+                preferred_encoding=encoding,
+            )
             return {"success": True, "content": content}
 
         return await asyncio.to_thread(_run)

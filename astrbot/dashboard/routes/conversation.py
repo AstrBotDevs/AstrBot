@@ -40,7 +40,7 @@ class ConversationRoute(Route):
         self.register_routes()
 
     async def list_conversations(self):
-        """获取对话列表，支持分页、排序和筛选"""
+        """获取对话列表,支持分页､排序和筛选"""
         try:
             # 获取分页参数
             page = request.args.get("page", 1, type=int)
@@ -105,7 +105,7 @@ class ConversationRoute(Route):
             return Response().error(f"获取对话列表失败: {e!s}").__dict__
 
     async def get_conv_detail(self):
-        """获取指定对话详情（通过POST请求）"""
+        """获取指定对话详情(通过POST请求)"""
         try:
             data = await request.get_json()
             user_id = data.get("user_id")
@@ -211,7 +211,7 @@ class ConversationRoute(Route):
 
                 message = f"成功删除 {deleted_count} 个对话"
                 if failed_items:
-                    message += f"，失败 {len(failed_items)} 个"
+                    message += f",失败 {len(failed_items)} 个"
 
                 return (
                     Response()

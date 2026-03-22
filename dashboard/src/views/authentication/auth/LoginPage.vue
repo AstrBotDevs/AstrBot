@@ -7,7 +7,8 @@ import { useApiStore } from "@/stores/api";
 import { useRouter } from "vue-router";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
-import { useTheme } from "vuetify";
+import { useToast } from "@/utils/toast";
+import { getApiBaseUrlValidationError } from "@/utils/request";
 
 const cardVisible = ref(false);
 const router = useRouter();
@@ -15,7 +16,7 @@ const authStore = useAuthStore();
 const apiStore = useApiStore();
 const customizer = useCustomizerStore();
 const { tm: t } = useModuleI18n("features/auth");
-const theme = useTheme();
+const toast = useToast();
 
 const serverConfigDialog = ref(false);
 const apiUrl = ref(apiStore.apiBaseUrl);
@@ -25,6 +26,12 @@ const newPresetName = ref("");
 const newPresetUrl = ref("");
 
 function saveApiUrl() {
+  const validationError = getApiBaseUrlValidationError(apiUrl.value);
+  if (validationError) {
+    toast.error(validationError);
+    return;
+  }
+
   apiStore.setApiBaseUrl(apiUrl.value);
   serverConfigDialog.value = false;
   window.location.reload();
@@ -47,12 +54,7 @@ function isCustomPreset(name: string) {
 
 // 主题切换函数
 function toggleTheme() {
-  const newTheme =
-    customizer.uiTheme === "PurpleThemeDark"
-      ? "PurpleTheme"
-      : "PurpleThemeDark";
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
+  customizer.TOGGLE_DARK_MODE();
 }
 
 onMounted(() => {
@@ -90,13 +92,13 @@ onMounted(() => {
                 align-self: center !important;
                 border-color: rgba(var(--v-theme-primary), 0.45) !important;
               "
-            ></v-divider>
+            />
 
             <v-btn
-              @click="serverConfigDialog = true"
               icon
               variant="text"
               size="small"
+              @click="serverConfigDialog = true"
             >
               <v-icon size="18" :color="'rgb(var(--v-theme-primary))'">
                 mdi-server
@@ -107,22 +109,32 @@ onMounted(() => {
             </v-btn>
 
             <v-btn
-              @click="toggleTheme"
               class="theme-toggle-btn"
               icon
               variant="text"
               size="small"
+              @click="toggleTheme"
             >
               <v-icon size="18" :color="'rgb(var(--v-theme-primary))'">
-                mdi-white-balance-sunny
+                {{
+                  customizer.isDarkTheme
+                    ? "mdi-weather-night"
+                    : "mdi-white-balance-sunny"
+                }}
               </v-icon>
               <v-tooltip activator="parent" location="top">
-                {{ t("theme.switchToLight") }}
+                {{
+                  customizer.isDarkTheme
+                    ? t("theme.switchToLight")
+                    : t("theme.switchToDark")
+                }}
               </v-tooltip>
             </v-btn>
           </div>
         </div>
-        <div class="ml-2" style="font-size: 26px">{{ t("logo.title") }}</div>
+        <div class="ml-2" style="font-size: 26px">
+          {{ t("logo.title") }}
+        </div>
         <div class="mt-2 ml-2" style="font-size: 14px; color: grey">
           {{ t("logo.subtitle") }}
         </div>
@@ -174,7 +186,7 @@ onMounted(() => {
                   class="mb-2"
                   variant="outlined"
                   bg-color="white"
-                ></v-text-field>
+                />
                 <v-text-field
                   v-model="newPresetUrl"
                   label="URL"
@@ -183,15 +195,16 @@ onMounted(() => {
                   class="mb-2"
                   variant="outlined"
                   bg-color="white"
-                ></v-text-field>
+                />
                 <v-btn
                   size="small"
                   block
                   color="primary"
                   variant="flat"
                   @click="savePreset"
-                  >Add Preset</v-btn
                 >
+                  Add Preset
+                </v-btn>
               </div>
             </v-expand-transition>
 
@@ -200,10 +213,10 @@ onMounted(() => {
                 v-for="preset in apiStore.presets"
                 :key="preset.name"
                 size="small"
-                @click="apiUrl = preset.url"
                 :variant="apiUrl === preset.url ? 'flat' : 'tonal'"
                 :color="apiUrl === preset.url ? 'primary' : undefined"
                 :closable="isCustomPreset(preset.name)"
+                @click="apiUrl = preset.url"
                 @click:close="apiStore.removePreset(preset.name)"
               >
                 {{ preset.name }}
@@ -219,16 +232,16 @@ onMounted(() => {
             persistent-hint
             variant="outlined"
             density="compact"
-          ></v-text-field>
+          />
         </v-card-text>
         <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="serverConfigDialog = false">{{
-            t("serverConfig.cancel")
-          }}</v-btn>
-          <v-btn color="primary" variant="flat" @click="saveApiUrl">{{
-            t("serverConfig.save")
-          }}</v-btn>
+          <v-spacer />
+          <v-btn variant="text" @click="serverConfigDialog = false">
+            {{ t("serverConfig.cancel") }}
+          </v-btn>
+          <v-btn color="primary" variant="flat" @click="saveApiUrl">
+            {{ t("serverConfig.save") }}
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

@@ -13,9 +13,9 @@ from .zip_updator import ReleaseInfo, RepoZipUpdator
 
 
 class AstrBotUpdator(RepoZipUpdator):
-    """AstrBot 更新器，继承自 RepoZipUpdator 类
+    """AstrBot 更新器,继承自 RepoZipUpdator 类
     该类用于处理 AstrBot 的更新操作
-    功能包括检查更新、下载更新文件、解压缩更新文件等
+    功能包括检查更新､下载更新文件､解压缩更新文件等
     """
 
     def __init__(self, repo_mirror: str = "") -> None:
@@ -25,12 +25,12 @@ class AstrBotUpdator(RepoZipUpdator):
 
     def terminate_child_processes(self) -> None:
         """终止当前进程的所有子进程
-        使用 psutil 库获取当前进程的所有子进程，并尝试终止它们
+        使用 psutil 库获取当前进程的所有子进程,并尝试终止它们
         """
         try:
             parent = psutil.Process(os.getpid())
             children = parent.children(recursive=True)
-            logger.info(f"正在终止 {len(children)} 个子进程。")
+            logger.info(f"正在终止 {len(children)} 个子进程｡")
             for child in children:
                 logger.info(f"正在终止子进程 {child.pid}")
                 child.terminate()
@@ -39,7 +39,7 @@ class AstrBotUpdator(RepoZipUpdator):
                 except psutil.NoSuchProcess:
                     continue
                 except psutil.TimeoutExpired:
-                    logger.info(f"子进程 {child.pid} 没有被正常终止, 正在强行杀死。")
+                    logger.info(f"子进程 {child.pid} 没有被正常终止, 正在强行杀死｡")
                     child.kill()
         except psutil.NoSuchProcess:
             pass
@@ -113,7 +113,7 @@ class AstrBotUpdator(RepoZipUpdator):
 
     def _reboot(self, delay: int = 3) -> None:
         """重启当前程序
-        在指定的延迟后，终止所有子进程并重新启动程序
+        在指定的延迟后,终止所有子进程并重新启动程序
         这里只能使用 os.exec* 来重启程序
         """
         time.sleep(delay)
@@ -125,7 +125,7 @@ class AstrBotUpdator(RepoZipUpdator):
             reboot_argv = self._build_reboot_argv(executable)
             self._exec_reboot(executable, reboot_argv)
         except Exception as e:
-            logger.error(f"重启失败（{executable}, {e}），请尝试手动重启。")
+            logger.error(f"重启失败({executable}, {e}),请尝试手动重启｡")
             raise e
 
     async def check_update(
@@ -156,7 +156,7 @@ class AstrBotUpdator(RepoZipUpdator):
         if latest:
             latest_version = update_data[0]["tag_name"]
             if self.compare_version(VERSION, latest_version) >= 0:
-                raise Exception("当前已经是最新版本。")
+                raise Exception("当前已经是最新版本｡")
             file_url = update_data[0]["zipball_url"]
         elif str(version).startswith("v"):
             # 更新到指定版本
@@ -164,10 +164,10 @@ class AstrBotUpdator(RepoZipUpdator):
                 if data["tag_name"] == version:
                     file_url = data["zipball_url"]
             if not file_url:
-                raise Exception(f"未找到版本号为 {version} 的更新文件。")
+                raise Exception(f"未找到版本号为 {version} 的更新文件｡")
         else:
             if len(str(version)) != 40:
-                raise Exception("commit hash 长度不正确，应为 40")
+                raise Exception("commit hash 长度不正确,应为 40")
             file_url = f"https://github.com/AstrBotDevs/AstrBot/archive/{version}.zip"
         logger.info(f"准备更新至指定版本的 AstrBot Core: {version}")
 
@@ -177,7 +177,7 @@ class AstrBotUpdator(RepoZipUpdator):
 
         try:
             await download_file(file_url, "temp.zip")
-            logger.info("下载 AstrBot Core 更新文件完成，正在执行解压...")
+            logger.info("下载 AstrBot Core 更新文件完成,正在执行解压...")
             self.unzip_file("temp.zip", self.MAIN_PATH)
         except BaseException as e:
             raise e

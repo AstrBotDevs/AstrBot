@@ -4,8 +4,8 @@ from .python import PythonComponent
 from .shell import ShellComponent
 
 __all__ = [
+    "BrowserComponent",
+    "FileSystemComponent",
     "PythonComponent",
     "ShellComponent",
-    "FileSystemComponent",
-    "BrowserComponent",
 ]

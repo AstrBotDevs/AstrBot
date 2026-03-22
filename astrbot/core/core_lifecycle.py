@@ -1,7 +1,7 @@
-"""Astrbot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、重启等操作.
+"""Astrbot 核心生命周期管理类, 负责管理 AstrBot 的启动､停止､重启等操作.
 
-该类负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus等。
-该类还负责加载和执行插件, 以及处理事件总线的分发。
+该类负责初始化各个组件, 包括 ProviderManager､PlatformManager､ConversationManager､PluginManager､PipelineScheduler､EventBus等｡
+该类还负责加载和执行插件, 以及处理事件总线的分发｡
 
 工作流程:
 1. 初始化所有组件
@@ -44,11 +44,11 @@ from .event_bus import EventBus
 
 
 class AstrBotCoreLifecycle:
-    """AstrBot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、重启等操作.
+    """AstrBot 核心生命周期管理类, 负责管理 AstrBot 的启动､停止､重启等操作.
 
-    该类负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、
-    EventBus 等。
-    该类还负责加载和执行插件, 以及处理事件总线的分发。
+    该类负责初始化各个组件, 包括 ProviderManager､PlatformManager､ConversationManager､PluginManager､PipelineScheduler､
+    EventBus 等｡
+    该类还负责加载和执行插件, 以及处理事件总线的分发｡
     """
 
     def __init__(self, log_broker: LogBroker, db: BaseDatabase) -> None:
@@ -100,7 +100,7 @@ class AstrBotCoreLifecycle:
     async def initialize(self) -> None:
         """初始化 AstrBot 核心生命周期管理类.
 
-        负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
+        负责初始化各个组件, 包括 ProviderManager､PlatformManager､ConversationManager､PluginManager､PipelineScheduler､EventBus､AstrBotUpdator等｡
         """
         # 初始化日志代理
         logger.info("AstrBot v" + VERSION)
@@ -197,7 +197,7 @@ class AstrBotCoreLifecycle:
         # 初始化插件管理器
         self.plugin_manager = PluginManager(self.star_context, self.astrbot_config)
 
-        # 扫描、注册插件、实例化插件类
+        # 扫描､注册插件､实例化插件类
         await self.plugin_manager.reload()
 
         # 根据配置实例化各个 Provider
@@ -230,7 +230,7 @@ class AstrBotCoreLifecycle:
         # 初始化关闭控制面板的事件
         self.dashboard_shutdown_event = asyncio.Event()
 
-        asyncio.create_task(update_llm_metadata())
+        asyncio.create_task(update_llm_metadata())  # noqa: RUF006
 
     def _load(self) -> None:
         """加载事件总线和任务并初始化."""
@@ -255,8 +255,10 @@ class AstrBotCoreLifecycle:
 
         # 把插件中注册的所有协程函数注册到事件总线中并执行
         extra_tasks = []
-        for task in self.star_context._register_tasks:
-            extra_tasks.append(asyncio.create_task(task, name=task.__name__))  # type: ignore
+        if self.star_context._register_tasks is not None:
+            for task in self.star_context._register_tasks:
+                task_name = getattr(task, "__name__", task.__class__.__name__)
+                extra_tasks.append(asyncio.create_task(task, name=task_name))
 
         tasks_ = [event_bus_task, *(extra_tasks if extra_tasks else [])]
         if cron_task:
@@ -294,7 +296,7 @@ class AstrBotCoreLifecycle:
         用load加载事件总线和任务并初始化, 执行启动完成事件钩子
         """
         self._load()
-        logger.info("AstrBot 启动完成。")
+        logger.info("AstrBot 启动完成｡")
 
         # 执行启动完成事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(
@@ -330,7 +332,7 @@ class AstrBotCoreLifecycle:
             except Exception as e:
                 logger.warning(traceback.format_exc())
                 logger.warning(
-                    f"插件 {plugin.name} 未被正常终止 {e!s}, 可能会导致资源泄露等问题。",
+                    f"插件 {plugin.name} 未被正常终止 {e!s}, 可能会导致资源泄露等问题｡",
                 )
 
         await self.provider_manager.terminate()

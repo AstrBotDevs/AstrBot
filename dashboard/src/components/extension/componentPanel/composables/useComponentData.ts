@@ -2,7 +2,7 @@
  * 指令数据管理 Composable
  */
 import { ref, reactive } from 'vue';
-import axios from 'axios';
+import axios from '@/utils/request';
 import type { CommandItem, CommandSummary, SnackbarState, ToolItem } from '../types';
 
 export function useComponentData() {
@@ -24,7 +24,7 @@ export function useComponentData() {
   /**
    * 显示 Toast 消息
    */
-  const toast = (message: string, color: string = 'success') => {
+  const toast = (message: string, color = 'success') => {
     snackbar.message = message;
     snackbar.color = color;
     snackbar.show = true;

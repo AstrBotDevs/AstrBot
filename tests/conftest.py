@@ -1,7 +1,7 @@
 """
 AstrBot 测试配置
 
-提供共享的 pytest fixtures 和测试工具。
+提供共享的 pytest fixtures 和测试工具｡
 """
 
 import json
@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 
-# 使用 tests/fixtures/helpers.py 中的共享工具函数，避免重复定义
+# 使用 tests/fixtures/helpers.py 中的共享工具函数,避免重复定义
 from tests.fixtures.helpers import create_mock_llm_response, create_mock_message_component
 
 # 将项目根目录添加到 sys.path
@@ -34,7 +34,7 @@ os.environ.setdefault("ASTRBOT_TEST_MODE", "true")
 
 
 def pytest_collection_modifyitems(session, config, items):  # noqa: ARG001
-    """重新排序测试：单元测试优先，集成测试在后。"""
+    """重新排序测试:单元测试优先,集成测试在后｡"""
     unit_tests = []
     integration_tests = []
     deselected = []
@@ -79,7 +79,7 @@ def pytest_collection_modifyitems(session, config, items):  # noqa: ARG001
 
 
 def pytest_addoption(parser):
-    """增加测试执行档位选择。"""
+    """增加测试执行档位选择｡"""
     parser.addoption(
         "--test-profile",
         action="store",
@@ -90,7 +90,7 @@ def pytest_addoption(parser):
 
 
 def pytest_configure(config):
-    """注册自定义标记。"""
+    """注册自定义标记｡"""
     config.addinivalue_line("markers", "unit: 单元测试")
     config.addinivalue_line("markers", "integration: 集成测试")
     config.addinivalue_line("markers", "slow: 慢速测试")
@@ -108,7 +108,7 @@ def pytest_configure(config):
 
 @pytest.fixture
 def temp_dir(tmp_path: Path) -> Path:
-    """创建临时目录用于测试。"""
+    """创建临时目录用于测试｡"""
     return tmp_path
 
 
@@ -126,7 +126,7 @@ def platform_settings() -> dict:
 
 @pytest.fixture
 def temp_data_dir(temp_dir: Path) -> Path:
-    """创建模拟的 data 目录结构。"""
+    """创建模拟的 data 目录结构｡"""
     data_dir = temp_dir / "data"
     data_dir.mkdir()
 
@@ -141,7 +141,7 @@ def temp_data_dir(temp_dir: Path) -> Path:
 
 @pytest.fixture
 def temp_config_file(temp_data_dir: Path) -> Path:
-    """创建临时配置文件。"""
+    """创建临时配置文件｡"""
     config_path = temp_data_dir / "config" / "cmd_config.json"
     default_config = {
         "provider": [],
@@ -156,7 +156,7 @@ def temp_config_file(temp_data_dir: Path) -> Path:
 
 @pytest.fixture
 def temp_db_file(temp_data_dir: Path) -> Path:
-    """创建临时数据库文件路径。"""
+    """创建临时数据库文件路径｡"""
     return temp_data_dir / "test.db"
 
 
@@ -167,7 +167,7 @@ def temp_db_file(temp_data_dir: Path) -> Path:
 
 @pytest.fixture
 def mock_provider():
-    """创建模拟的 Provider。"""
+    """创建模拟的 Provider｡"""
     provider = MagicMock()
     provider.provider_config = {
         "id": "test-provider",
@@ -183,7 +183,7 @@ def mock_provider():
 
 @pytest.fixture
 def mock_platform():
-    """创建模拟的 Platform。"""
+    """创建模拟的 Platform｡"""
     platform = MagicMock()
     platform.platform_name = "test_platform"
     platform.platform_meta = MagicMock()
@@ -195,7 +195,7 @@ def mock_platform():
 
 @pytest.fixture
 def mock_conversation():
-    """创建模拟的 Conversation。"""
+    """创建模拟的 Conversation｡"""
     from astrbot.core.db.po import ConversationV2
 
     return ConversationV2(
@@ -209,7 +209,7 @@ def mock_conversation():
 
 @pytest.fixture
 def mock_event():
-    """创建模拟的 AstrMessageEvent。"""
+    """创建模拟的 AstrMessageEvent｡"""
     event = MagicMock()
     event.unified_msg_origin = "test_umo"
     event.session_id = "test_session"
@@ -239,7 +239,7 @@ def mock_event():
 
 @pytest.fixture
 def astrbot_config(temp_config_file: Path):
-    """创建 AstrBotConfig 实例。"""
+    """创建 AstrBotConfig 实例｡"""
     from astrbot.core.config.astrbot_config import AstrBotConfig
 
     config = AstrBotConfig()
@@ -249,7 +249,7 @@ def astrbot_config(temp_config_file: Path):
 
 @pytest.fixture
 def main_agent_build_config():
-    """创建 MainAgentBuildConfig 实例。"""
+    """创建 MainAgentBuildConfig 实例｡"""
     from astrbot.core.astr_main_agent import MainAgentBuildConfig
 
     return MainAgentBuildConfig(
@@ -274,7 +274,7 @@ def main_agent_build_config():
 
 @pytest_asyncio.fixture
 async def temp_db(temp_db_file: Path):
-    """创建临时数据库实例。"""
+    """创建临时数据库实例｡"""
     from astrbot.core.db.sqlite import SQLiteDatabase
 
     db = SQLiteDatabase(str(temp_db_file))
@@ -298,7 +298,7 @@ async def mock_context(
     mock_provider,
     mock_platform,
 ):
-    """创建模拟的插件上下文。"""
+    """创建模拟的插件上下文｡"""
     from asyncio import Queue
 
     from astrbot.core.star.context import Context
@@ -344,7 +344,7 @@ async def mock_context(
 
 @pytest.fixture
 def provider_request():
-    """创建 ProviderRequest 实例。"""
+    """创建 ProviderRequest 实例｡"""
     from astrbot.core.provider.entities import ProviderRequest
 
     return ProviderRequest(
@@ -362,7 +362,7 @@ def provider_request():
 
 
 def pytest_runtest_setup(item):
-    """在测试运行前检查跳过条件。"""
+    """在测试运行前检查跳过条件｡"""
     # 跳过需要 API Key 但未设置的 Provider 测试
     if item.get_closest_marker("provider"):
         if not os.environ.get("TEST_PROVIDER_API_KEY"):

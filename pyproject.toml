@@ -1,9 +1,9 @@
 [project]
 name = "AstrBot"
-version = "4.21.0"
+version = "4.23.0"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 
 keywords = ["Astrbot", "Astrbot Module", "Astrbot Plugin"]
 
@@ -39,6 +39,7 @@ dependencies = [
   "pydantic>=2.12.5",
   "pydub>=0.25.1",
   "pyjwt>=2.10.1",
+  "qrcode>=8.2",
   "python-telegram-bot>=22.6",
   "qq-botpy>=1.2.1",
   "quart>=0.20.0",
@@ -65,15 +66,21 @@ dependencies = [
   "python-socks>=2.8.0",
   "packaging>=24.2",
   "quart-cors>=0.8.0",
+  "anyio>=4.12.1",
+  "argon2-cffi>=23.1.0",
+  "plumbum>=1.10.0",
+  "textual>=8.1.1",
 ]
 
 [dependency-groups]
 dev = [
   "commitizen>=4.9.1",
+  "mypy>=1.19.1",
   "pytest>=8.4.1",
   "pytest-asyncio>=1.1.0",
   "pytest-cov>=6.2.1",
   "ruff>=0.15.0",
+  "textual-dev>=1.8.0",
 ]
 
 [project.scripts]
@@ -89,19 +96,20 @@ select = [
   "F",     # Pyflakes
   "W",     # pycodestyle warnings
   "E",     # pycodestyle errors
+  "I",     # isort
+  "UP",    # pyupgrade
   "ASYNC", # flake8-async
   "C4",    # flake8-comprehensions
+  "T10",   # flake8-debugger
+  "T20",   # flake8-print
+  "PYI",   # flake8-pyi
+  "PT",    # flake8-pytest-style
   "Q",     # flake8-quotes
-  "I",     # import-order
-  "UP",    # pyupgrade
-  # "SIM", # flake8-simplify
+  "TID",   # flake8-tidy-imports
+  "RUF",   # Ruff-specific rules
 ]
 ignore = [
-  "F403",
-  "F405",
   "E501",
-  "ASYNC230", # TODO: handle ASYNC230 in AstrBot
-  "ASYNC240", # TODO: handle ASYNC240 in AstrBot
 ]
 
 [tool.pyright]

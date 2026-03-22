@@ -8,7 +8,7 @@ from .command import CommandFilter
 from .custom_filter import CustomFilter
 
 
-# 指令组受到 wake_prefix 的制约。
+# 指令组受到 wake_prefix 的制约｡
 class CommandGroupFilter(HandlerFilter):
     def __init__(
         self,
@@ -36,9 +36,9 @@ class CommandGroupFilter(HandlerFilter):
         self.custom_filter_list.append(custom_filter)
 
     def get_complete_command_names(self) -> list[str]:
-        """遍历父节点获取完整的指令名。
+        """遍历父节点获取完整的指令名｡
 
-        新版本 v3.4.29 采用预编译指令，不再从指令组递归遍历子指令，因此这个方法是返回包括别名在内的整个指令名列表。
+        新版本 v3.4.29 采用预编译指令,不再从指令组递归遍历子指令,因此这个方法是返回包括别名在内的整个指令名列表｡
         """
         if self._cmpl_cmd_names is not None:
             return self._cmpl_cmd_names
@@ -49,10 +49,10 @@ class CommandGroupFilter(HandlerFilter):
 
         if not parent_cmd_names:
             # 根节点
-            return [self.group_name] + list(self.alias)
+            return [self.group_name, *list(self.alias)]
 
         result = []
-        candidates = [self.group_name] + list(self.alias)
+        candidates = [self.group_name, *list(self.alias)]
         for parent_cmd_name in parent_cmd_names:
             for candidate in candidates:
                 result.append(parent_cmd_name + " " + candidate)
@@ -94,7 +94,7 @@ class CommandGroupFilter(HandlerFilter):
                     parts.append(
                         sub_filter.print_cmd_tree(
                             sub_filter.sub_command_filters,
-                            prefix + "│   ",
+                            prefix + "|   ",
                             event=event,
                             cfg=cfg,
                         )
@@ -129,7 +129,7 @@ class CommandGroupFilter(HandlerFilter):
                 + self.print_cmd_tree(self.sub_command_filters, event=event, cfg=cfg)
             )
             raise ValueError(
-                f"参数不足。{self.group_name} 指令组下有如下指令，请参考：\n" + tree,
+                f"参数不足｡{self.group_name} 指令组下有如下指令,请参考:\n" + tree,
             )
 
         return self.startswith(event.message_str)

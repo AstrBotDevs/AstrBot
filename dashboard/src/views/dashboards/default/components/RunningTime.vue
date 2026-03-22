@@ -1,17 +1,29 @@
 <template>
-  <v-card elevation="1" class="stat-card uptime-card">
+  <v-card
+    elevation="1"
+    class="stat-card uptime-card"
+  >
     <v-card-text>
       <div class="d-flex align-start">
         <div class="icon-wrapper">
-          <v-icon icon="mdi-clock-outline" size="24"></v-icon>
+          <v-icon
+            icon="mdi-clock-outline"
+            size="24"
+          />
         </div>
         
         <div class="stat-content">
-          <div class="stat-title">{{ t('stats.runningTime.title') }}</div>
-          <div class="stat-value-wrapper">
-            <h2 class="stat-value">{{ formattedTime }}</h2>
+          <div class="stat-title">
+            {{ t('stats.runningTime.title') }}
           </div>
-          <div class="stat-subtitle">{{ t('stats.runningTime.subtitle') }}</div>
+          <div class="stat-value-wrapper">
+            <h2 class="stat-value">
+              {{ formattedTime }}
+            </h2>
+          </div>
+          <div class="stat-subtitle">
+            {{ t('stats.runningTime.subtitle') }}
+          </div>
         </div>
       </div>
     </v-card-text>
