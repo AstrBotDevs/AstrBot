@@ -117,8 +117,8 @@ class TUIClient:
 
             # Create new session for TUI
             new_session_resp = await self._client.get(
-                "/api/chat/new_session",
-                params={"platform_id": "webchat"},
+                "/api/tui/new_session",
+                params={"platform_id": "tui"},
                 headers=self._headers,
             )
             if new_session_resp.status_code != 200:
@@ -163,7 +163,7 @@ class TUIClient:
 
         try:
             resp = await self._client.get(
-                "/api/chat/get_session",
+                "/api/tui/get_session",
                 params={"session_id": self.conversation_id},
                 headers=self._headers,
             )
@@ -317,9 +317,9 @@ class TUIClient:
         self.state.status = "Waiting for response..."
 
         try:
-            # Format umo for webchat
+            # Format umo for tui
             umo = (
-                f"webchat:FriendMessage:webchat!{self.username}!{self.conversation_id}"
+                f"tui:FriendMessage:tui!{self.username}!{self.conversation_id}"
             )
 
             # Reset parser for new stream
@@ -328,7 +328,7 @@ class TUIClient:
             # Send message and stream response using proper SSE
             async with self._client.stream(
                 "POST",
-                "/api/chat/chat",
+                "/api/tui/chat",
                 headers=self._headers,
                 json={
                     "umo": umo,

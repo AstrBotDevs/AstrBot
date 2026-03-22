@@ -57,6 +57,7 @@ from .routes import (
     SubAgentRoute,
     T2iRoute,
     ToolsRoute,
+    TUIChatRoute,
     UpdateRoute,
 )
 from .routes.api_key import ALL_OPEN_API_SCOPES
@@ -299,6 +300,7 @@ class AstrBotDashboard:
         self.platform_route = PlatformRoute(self.context, self.core_lifecycle)
         self.backup_route = BackupRoute(self.context, db, self.core_lifecycle)
         self.live_chat_route = LiveChatRoute(self.context, db, self.core_lifecycle)
+        self.tui_chat_route = TUIChatRoute(self.context, db, self.core_lifecycle)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",

@@ -1,6 +1,7 @@
 import base64
 import uuid
 from pathlib import Path
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import httpx
@@ -60,7 +61,7 @@ def create_http_client(timeout: int | None, proxy: str) -> httpx.AsyncClient:
     if proxy:
         logger.info("[MiMo API] Using proxy: %s", proxy)
         client_kwargs["proxy"] = proxy
-    return httpx.AsyncClient(**client_kwargs)
+    return httpx.AsyncClient(**cast(dict[str, Any], client_kwargs))
 
 
 def build_api_url(api_base: str) -> str:

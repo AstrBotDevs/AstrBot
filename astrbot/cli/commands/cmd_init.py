@@ -112,7 +112,7 @@ async def initialize_astrbot(
     effective_admin_username = (
         admin_username.strip()
         if admin_username
-        else str(DEFAULT_CONFIG["dashboard"]["username"])
+        else str(DEFAULT_CONFIG["dashboard"]["username"])  # type: ignore[index]
     )
     if admin_username:
         config = ensure_config_file()

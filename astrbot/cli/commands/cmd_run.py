@@ -332,12 +332,29 @@ def run(
         lock_file = astrbot_root / "astrbot.lock"
         lock = FileLock(lock_file, timeout=5)
         with lock.acquire():
-            click.echo("AstrBot is running...")
-            if backend_only:
-                click.echo("Visit the dashboard at : https://dash.astrbot.men/")
-                click.echo("Backend Requests : localhost or based on https")
+            # Use TUI if in interactive TTY mode
+            if sys.stdin.isatty() and sys.stdout.isatty():
+                from astrbot.cli.commands.cmd_run_tui import run_tui
 
-            asyncio.run(run_astrbot(astrbot_root))
+                async def wrapped_startup() -> None:
+                    await run_astrbot(astrbot_root)
+
+                asyncio.run(
+                    run_tui(
+                        startup_coro=wrapped_startup,
+                        astrbot_root=astrbot_root,
+                        backend_only=backend_only,
+                        host=os.environ.get("ASTRBOT_HOST"),
+                        port=os.environ.get("ASTRBOT_PORT"),
+                    )
+                )
+            else:
+                click.echo("AstrBot is running...")
+                if backend_only:
+                    click.echo("Visit the dashboard at : https://dash.astrbot.men/")
+                    click.echo("Backend Requests : localhost or based on https")
+
+                asyncio.run(run_astrbot(astrbot_root))
     except KeyboardInterrupt:
         click.echo("AstrBot has been shut down.")
     except Timeout:

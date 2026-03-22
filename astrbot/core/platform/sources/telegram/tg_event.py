@@ -307,7 +307,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 else:
                     send_coro = client.send_photo
                     media_kwarg = {"photo": image_path}
-                await send_coro(**media_kwarg, **cast(Any, payload))
+                await send_coro(**cast(Any, media_kwarg), **cast(Any, payload))
             elif isinstance(i, File):
                 path = await i.get_file()
                 name = i.name or os.path.basename(path)

@@ -10,6 +10,7 @@ from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
 from .platform import Platform, PlatformStatus
 from .register import platform_cls_map
+from .sources.tui.tui_adapter import TUIAdapter
 from .sources.webchat.webchat_adapter import WebChatAdapter
 
 PLATFORM_ADAPTER_MODULES: dict[str, str] = {
@@ -116,6 +117,11 @@ class PlatformManager:
         webchat_inst = WebChatAdapter({}, self.settings, self.event_queue)
         self.platform_insts.append(webchat_inst)
         self._start_platform_task("webchat", webchat_inst)
+
+        # TUI
+        tui_inst = TUIAdapter({}, self.settings, self.event_queue)
+        self.platform_insts.append(tui_inst)
+        self._start_platform_task("tui", tui_inst)
 
     async def load_platform(self, platform_config: dict) -> None:
         """实例化一个平台"""

@@ -13,7 +13,7 @@ from astrbot.core.utils.shared_preferences import SharedPreferences
 _VT = TypeVar("_VT")
 
 
-class ConfInfo(TypedDict):
+class ConfInfo(TypedDict, total=False):
     """Configuration information for a specific session or platform."""
 
     id: str  # UUID of the configuration or "default"
