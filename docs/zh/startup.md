@@ -46,7 +46,7 @@ git clone https://github.com/AstrBotDevs/AstrBot
 cd AstrBot
 
 # 创建虚拟环境
-uv venv
+uv venv --seed
 source .venv/bin/activate  # Linux/macOS
 # 或: .venv\Scripts\activate  # Windows
 
