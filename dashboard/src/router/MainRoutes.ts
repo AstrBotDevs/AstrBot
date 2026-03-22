@@ -67,6 +67,11 @@ const MainRoutes = {
       component: () => import('@/views/SessionManagementPage.vue')
     },
     {
+      name: 'GroupSettings',
+      path: '/group-settings',
+      component: () => import('@/views/GroupSettingsPage.vue')
+    },
+    {
       name: 'Persona',
       path: '/persona',
       component: () => import('@/views/PersonaPage.vue')

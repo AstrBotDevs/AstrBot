@@ -37,6 +37,7 @@ import zhCNMigration from './locales/zh-CN/features/migration.json';
 import zhCNCommand from './locales/zh-CN/features/command.json';
 import zhCNSubagent from './locales/zh-CN/features/subagent.json';
 import zhCNWelcome from './locales/zh-CN/features/welcome.json';
+import zhCNGroupSettings from './locales/zh-CN/features/group-settings.json';
 
 import zhCNErrors from './locales/zh-CN/messages/errors.json';
 import zhCNSuccess from './locales/zh-CN/messages/success.json';
@@ -78,6 +79,7 @@ import enUSMigration from './locales/en-US/features/migration.json';
 import enUSCommand from './locales/en-US/features/command.json';
 import enUSSubagent from './locales/en-US/features/subagent.json';
 import enUSWelcome from './locales/en-US/features/welcome.json';
+import enUSGroupSettings from './locales/en-US/features/group-settings.json';
 
 import enUSErrors from './locales/en-US/messages/errors.json';
 import enUSSuccess from './locales/en-US/messages/success.json';
@@ -119,6 +121,7 @@ import ruRUMigration from './locales/ru-RU/features/migration.json';
 import ruRUCommand from './locales/ru-RU/features/command.json';
 import ruRUSubagent from './locales/ru-RU/features/subagent.json';
 import ruRUWelcome from './locales/ru-RU/features/welcome.json';
+import ruRUGroupSettings from './locales/ru-RU/features/group-settings.json';
 
 import ruRUErrors from './locales/ru-RU/messages/errors.json';
 import ruRUSuccess from './locales/ru-RU/messages/success.json';
@@ -167,7 +170,8 @@ export const translations = {
       migration: zhCNMigration,
       command: zhCNCommand,
       subagent: zhCNSubagent,
-      welcome: zhCNWelcome
+      welcome: zhCNWelcome,
+      'groupSettings': zhCNGroupSettings
     },
     messages: {
       errors: zhCNErrors,
@@ -216,7 +220,8 @@ export const translations = {
       migration: enUSMigration,
       command: enUSCommand,
       subagent: enUSSubagent,
-      welcome: enUSWelcome
+      welcome: enUSWelcome,
+      'groupSettings': enUSGroupSettings
     },
     messages: {
       errors: enUSErrors,
@@ -265,7 +270,8 @@ export const translations = {
       migration: ruRUMigration,
       command: ruRUCommand,
       subagent: ruRUSubagent,
-      welcome: ruRUWelcome
+      welcome: ruRUWelcome,
+      'groupSettings': ruRUGroupSettings
     },
     messages: {
       errors: ruRUErrors,

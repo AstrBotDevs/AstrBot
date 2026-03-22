@@ -1,0 +1,74 @@
+{
+  "title": "群聊设置",
+  "settingsCount": "条设置",
+  "buttons": {
+    "refresh": "刷新",
+    "add": "添加设置",
+    "edit": "编辑",
+    "delete": "删除",
+    "batchDelete": "批量删除",
+    "save": "保存",
+    "cancel": "取消",
+    "clear": "清除"
+  },
+  "search": {
+    "placeholder": "搜索群聊..."
+  },
+  "table": {
+    "umo": "群聊来源",
+    "platform": "平台",
+    "messageType": "消息类型",
+    "groupId": "群ID",
+    "provider": "模型提供商",
+    "persona": "人格设定",
+    "model": "模型",
+    "setBy": "设置者",
+    "setAt": "设置时间",
+    "actions": "操作"
+  },
+  "dialog": {
+    "addTitle": "添加群聊设置",
+    "editTitle": "编辑群聊设置",
+    "umoLabel": "UMO (统一消息来源标识)",
+    "umoHint": "格式：平台:消息类型:群ID，如 qq:group:123456",
+    "providerLabel": "模型提供商",
+    "providerHint": "选择该群聊要使用的模型提供商",
+    "personaLabel": "人格设定",
+    "personaHint": "选择该群聊要使用的人格设定",
+    "save": "保存",
+    "cancel": "取消"
+  },
+  "deleteDialog": {
+    "title": "确认删除",
+    "message": "确定要删除该群聊的设置吗？删除后将恢复使用全局配置。",
+    "confirm": "删除",
+    "cancel": "取消"
+  },
+  "batchDeleteDialog": {
+    "title": "确认批量删除",
+    "message": "确定要删除选中的 {count} 条群聊设置吗？删除后将恢复使用全局配置。",
+    "confirm": "删除",
+    "cancel": "取消"
+  },
+  "empty": {
+    "title": "暂无群聊设置",
+    "description": "点击「添加设置」为特定群聊配置自定义的模型提供商和人格设定"
+  },
+  "validation": {
+    "umoRequired": "UMO 不能为空",
+    "umoFormat": "UMO 格式不正确，应为: 平台:消息类型:群ID"
+  },
+  "messages": {
+    "loadFailed": "加载群聊设置失败",
+    "saveFailed": "保存设置失败",
+    "updateSuccess": "设置已更新",
+    "addSuccess": "设置已添加",
+    "deleteSuccess": "设置已删除",
+    "deleteFailed": "删除设置失败",
+    "batchDeleteSuccess": "已成功删除 {count} 条设置",
+    "batchDeletePartial": "删除完成：成功 {success} 条，失败 {fail} 条",
+    "batchDeleteFailed": "批量删除失败",
+    "nothingToSave": "请至少选择一项要保存的设置",
+    "partialSuccess": "部分操作失败"
+  }
+}
