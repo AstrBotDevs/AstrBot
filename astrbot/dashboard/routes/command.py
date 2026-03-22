@@ -54,7 +54,7 @@ class CommandRoute(Route):
         enabled = data.get("enabled")
 
         if command_key is None or enabled is None:
-            return Response().error("command_key 与 enabled 均为必填。").__dict__
+            return Response().error("command_key 与 enabled 均为必填。").to_json()
 
         if isinstance(enabled, str):
             enabled = enabled.lower() in ("1", "true", "yes", "on")
@@ -89,7 +89,7 @@ class CommandRoute(Route):
             return (
                 Response()
                 .error("SDK commands are read-only in the dashboard.")
-                .__dict__
+                .to_json()
             )
 
         try:
@@ -113,7 +113,7 @@ class CommandRoute(Route):
             return (
                 Response()
                 .error("SDK commands are read-only in the dashboard.")
-                .__dict__
+                .to_json()
             )
 
         try:

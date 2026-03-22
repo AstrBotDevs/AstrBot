@@ -1,11 +1,11 @@
-"""会话服务管理器 - 负责管理每个会话的LLM、TTS等服务的启停状态"""
+"""会话服务管理器 - 负责管理每个会话的LLM､TTS等服务的启停状态"""
 
 from astrbot.core import logger, sp
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 
 class SessionServiceManager:
-    """管理会话级别的服务启停状态，包括LLM和TTS"""
+    """管理会话级别的服务启停状态,包括LLM和TTS"""
 
     # =============================================================================
     # LLM 相关方法
@@ -19,7 +19,7 @@ class SessionServiceManager:
             session_id: 会话ID (unified_msg_origin)
 
         Returns:
-            bool: True表示启用，False表示禁用
+            bool: True表示启用,False表示禁用
 
         """
         # 获取会话服务配置
@@ -30,12 +30,12 @@ class SessionServiceManager:
             default={},
         )
 
-        # 如果配置了该会话的LLM状态，返回该状态
+        # 如果配置了该会话的LLM状态,返回该状态
         llm_enabled = session_services.get("llm_enabled")
         if llm_enabled is not None:
             return llm_enabled
 
-        # 如果没有配置，默认为启用（兼容性考虑）
+        # 如果没有配置,默认为启用(兼容性考虑)
         return True
 
     @staticmethod
@@ -44,7 +44,7 @@ class SessionServiceManager:
 
         Args:
             session_id: 会话ID (unified_msg_origin)
-            enabled: True表示启用，False表示禁用
+            enabled: True表示启用,False表示禁用
 
         """
         session_config = (
@@ -72,7 +72,7 @@ class SessionServiceManager:
             event: 消息事件
 
         Returns:
-            bool: True表示应该处理，False表示跳过
+            bool: True表示应该处理,False表示跳过
 
         """
         session_id = event.unified_msg_origin
@@ -90,7 +90,7 @@ class SessionServiceManager:
             session_id: 会话ID (unified_msg_origin)
 
         Returns:
-            bool: True表示启用，False表示禁用
+            bool: True表示启用,False表示禁用
 
         """
         # 获取会话服务配置
@@ -101,12 +101,12 @@ class SessionServiceManager:
             default={},
         )
 
-        # 如果配置了该会话的TTS状态，返回该状态
+        # 如果配置了该会话的TTS状态,返回该状态
         tts_enabled = session_services.get("tts_enabled")
         if tts_enabled is not None:
             return tts_enabled
 
-        # 如果没有配置，默认为启用（兼容性考虑）
+        # 如果没有配置,默认为启用(兼容性考虑)
         return True
 
     @staticmethod
@@ -115,7 +115,7 @@ class SessionServiceManager:
 
         Args:
             session_id: 会话ID (unified_msg_origin)
-            enabled: True表示启用，False表示禁用
+            enabled: True表示启用,False表示禁用
 
         """
         session_config = (
@@ -147,7 +147,7 @@ class SessionServiceManager:
             event: 消息事件
 
         Returns:
-            bool: True表示应该处理，False表示跳过
+            bool: True表示应该处理,False表示跳过
 
         """
         session_id = event.unified_msg_origin
@@ -165,7 +165,7 @@ class SessionServiceManager:
             session_id: 会话ID (unified_msg_origin)
 
         Returns:
-            bool: True表示启用，False表示禁用
+            bool: True表示启用,False表示禁用
 
         """
         # 获取会话服务配置
@@ -176,10 +176,10 @@ class SessionServiceManager:
             default={},
         )
 
-        # 如果配置了该会话的整体状态，返回该状态
+        # 如果配置了该会话的整体状态,返回该状态
         session_enabled = session_services.get("session_enabled")
         if session_enabled is not None:
             return session_enabled
 
-        # 如果没有配置，默认为启用（兼容性考虑）
+        # 如果没有配置,默认为启用(兼容性考虑)
         return True

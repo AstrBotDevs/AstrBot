@@ -28,12 +28,12 @@ LINE_CONFIG_METADATA = {
     "channel_access_token": {
         "description": "LINE Channel Access Token",
         "type": "string",
-        "hint": "LINE Messaging API 的 channel access token。",
+        "hint": "LINE Messaging API 的 channel access token｡",
     },
     "channel_secret": {
         "description": "LINE Channel Secret",
         "type": "string",
-        "hint": "用于校验 LINE Webhook 签名。",
+        "hint": "用于校验 LINE Webhook 签名｡",
     },
 }
 
@@ -41,11 +41,11 @@ LINE_I18N_RESOURCES = {
     "zh-CN": {
         "channel_access_token": {
             "description": "LINE Channel Access Token",
-            "hint": "LINE Messaging API 的 channel access token。",
+            "hint": "LINE Messaging API 的 channel access token｡",
         },
         "channel_secret": {
             "description": "LINE Channel Secret",
-            "hint": "用于校验 LINE Webhook 签名。",
+            "hint": "用于校验 LINE Webhook 签名｡",
         },
     },
     "en-US": {
@@ -86,7 +86,7 @@ class LinePlatformAdapter(Platform):
         channel_secret = str(platform_config.get("channel_secret", ""))
         if not channel_access_token or not channel_secret:
             raise ValueError(
-                "LINE 适配器需要 channel_access_token 和 channel_secret。",
+                "LINE 适配器需要 channel_access_token 和 channel_secret｡",
             )
 
         self.line_api = LineAPIClient(
@@ -117,7 +117,7 @@ class LinePlatformAdapter(Platform):
         if webhook_uuid:
             log_webhook_info(f"{self.meta().id}(LINE)", webhook_uuid)
         else:
-            logger.warning("[LINE] webhook_uuid 为空，统一 Webhook 可能无法接收消息。")
+            logger.warning("[LINE] webhook_uuid 为空,统一 Webhook 可能无法接收消息｡")
         await self.shutdown_event.wait()
 
     async def terminate(self) -> None:

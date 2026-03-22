@@ -73,9 +73,9 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
 
 
 class PersonaFolder(TimestampMixin, SQLModel, table=True):
-    """Persona 文件夹，支持递归层级结构。
+    """Persona 文件夹,支持递归层级结构｡
 
-    用于组织和管理多个 Persona，类似于文件系统的目录结构。
+    用于组织和管理多个 Persona,类似于文件系统的目录结构｡
     """
 
     __tablename__: str = "persona_folders"
@@ -93,7 +93,7 @@ class PersonaFolder(TimestampMixin, SQLModel, table=True):
     )
     name: str = Field(max_length=255, nullable=False)
     parent_id: str | None = Field(default=None, max_length=36)
-    """父文件夹ID，NULL表示根目录"""
+    """父文件夹ID,NULL表示根目录"""
     description: str | None = Field(default=None, sa_type=Text)
     sort_order: int = Field(default=0)
 
@@ -129,7 +129,7 @@ class Persona(TimestampMixin, SQLModel, table=True):
     custom_error_message: str | None = Field(default=None, sa_type=Text)
     """Optional custom error message sent to end users when the agent request fails."""
     folder_id: str | None = Field(default=None, max_length=36)
-    """所属文件夹ID，NULL 表示在根目录"""
+    """所属文件夹ID,NULL 表示在根目录"""
     sort_order: int = Field(default=0)
     """排序顺序"""
 
@@ -439,10 +439,10 @@ class CommandConflict(TimestampMixin, SQLModel, table=True):
 class Conversation:
     """LLM 对话类
 
-    对于 WebChat，history 存储了包括指令、回复、图片等在内的所有消息。
-    对于其他平台的聊天，不存储非 LLM 的回复（因为考虑到已经存储在各自的平台上）。
+    对于 WebChat,history 存储了包括指令､回复､图片等在内的所有消息｡
+    对于其他平台的聊天,不存储非 LLM 的回复(因为考虑到已经存储在各自的平台上)｡
 
-    在 v4.0.0 版本及之后，WebChat 的历史记录被迁移至 `PlatformMessageHistory` 表中，
+    在 v4.0.0 版本及之后,WebChat 的历史记录被迁移至 `PlatformMessageHistory` 表中,
     """
 
     platform_id: str
@@ -450,32 +450,32 @@ class Conversation:
     cid: str
     """对话 ID, 是 uuid 格式的字符串"""
     history: str = ""
-    """字符串格式的对话列表。"""
+    """字符串格式的对话列表｡"""
     title: str | None = ""
     persona_id: str | None = ""
     created_at: int = 0
     updated_at: int = 0
     token_usage: int = 0
-    """对话的总 token 数量。AstrBot 会保留最近一次 LLM 请求返回的总 token 数，方便统计。token_usage 可能为 0，表示未知。"""
+    """对话的总 token 数量｡AstrBot 会保留最近一次 LLM 请求返回的总 token 数,方便统计｡token_usage 可能为 0,表示未知｡"""
 
 
 class Personality(TypedDict):
-    """LLM 人格类。
+    """LLM 人格类｡
 
-    在 v4.0.0 版本及之后，推荐使用上面的 Persona 类。并且， mood_imitation_dialogs 字段已被废弃。
+    在 v4.0.0 版本及之后,推荐使用上面的 Persona 类｡并且, mood_imitation_dialogs 字段已被废弃｡
     """
 
     prompt: str
     name: str
     begin_dialogs: list[str]
     mood_imitation_dialogs: list[str]
-    """情感模拟对话预设。在 v4.0.0 版本及之后，已被废弃。"""
+    """情感模拟对话预设｡在 v4.0.0 版本及之后,已被废弃｡"""
     tools: list[str] | None
-    """工具列表。None 表示使用所有工具，空列表表示不使用任何工具"""
+    """工具列表｡None 表示使用所有工具,空列表表示不使用任何工具"""
     skills: list[str] | None
-    """Skills 列表。None 表示使用所有 Skills，空列表表示不使用任何 Skills"""
+    """Skills 列表｡None 表示使用所有 Skills,空列表表示不使用任何 Skills"""
     custom_error_message: str | None
-    """可选的人格自定义报错回复信息。配置后将优先发送给最终用户。"""
+    """可选的人格自定义报错回复信息｡配置后将优先发送给最终用户｡"""
 
     # cache
     _begin_dialogs_processed: list[dict]

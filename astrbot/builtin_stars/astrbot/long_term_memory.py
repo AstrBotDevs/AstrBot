@@ -76,7 +76,7 @@ class LongTermMemory:
             if not provider:
                 raise Exception(f"没有找到 ID 为 {image_caption_provider_id} 的提供商")
         if not isinstance(provider, Provider):
-            raise Exception(f"提供商类型错误({type(provider)})，无法获取图片描述")
+            raise Exception(f"提供商类型错误({type(provider)}),无法获取图片描述")
         response = await provider.text_chat(
             prompt=image_caption_prompt,
             session_id=uuid.uuid4().hex,
@@ -149,7 +149,7 @@ class LongTermMemory:
                 self.session_chats[event.unified_msg_origin].pop(0)
 
     async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
-        """当触发 LLM 请求前，调用此方法修改 req"""
+        """当触发 LLM 请求前,调用此方法修改 req"""
         if event.unified_msg_origin not in self.session_chats:
             return
 
@@ -164,7 +164,7 @@ class LongTermMemory:
                 "Please react to it. Only output your response and do not output any other information. "
                 "You MUST use the SAME language as the chatroom is using."
             )
-            req.contexts = []  # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
+            req.contexts = []  # 清空上下文,当使用了主动回复,所有聊天记录都在一个prompt中｡
         else:
             req.system_prompt += (
                 "You are now in a chatroom. The chat history is as follows: \n"

@@ -1,45 +1,75 @@
 <template>
-    <div :class="$vuetify.display.mobile ? '' : 'd-flex'">
-        <v-tabs v-model="tab" :direction="$vuetify.display.mobile ? 'horizontal' : 'vertical'"
-            :align-tabs="$vuetify.display.mobile ? 'left' : 'start'" color="deep-purple-accent-4" class="config-tabs">
-            <v-tab v-for="section in visibleSections" :key="section.key" :value="section.key"
-                style="font-weight: 1000; font-size: 15px">
-                {{ tm(section.value['name']) }}
-            </v-tab>
-        </v-tabs>
-        <v-tabs-window v-model="tab" class="config-tabs-window" :style="readonly ? 'pointer-events: none; opacity: 0.6;' : ''">
-            <v-tabs-window-item v-for="section in visibleSections" :key="section.key" :value="section.key">
-                <v-container fluid>
-                    <div v-for="(val2, key2, index2) in section.value['metadata']" :key="key2">
-                        <!-- Support both traditional and JSON selector metadata -->
-                        <AstrBotConfigV4
-                            :metadata="{ [key2]: section.value['metadata'][key2] }"
-                            :iterable="config_data"
-                            :metadataKey="key2"
-                            :search-keyword="searchKeyword"
-                        >
-                        </AstrBotConfigV4>
-                    </div>
-                </v-container>
-            </v-tabs-window-item>
+  <div :class="$vuetify.display.mobile ? '' : 'd-flex'">
+    <v-tabs
+      v-model="tab"
+      :direction="$vuetify.display.mobile ? 'horizontal' : 'vertical'"
+      :align-tabs="$vuetify.display.mobile ? 'left' : 'start'"
+      color="deep-purple-accent-4"
+      class="config-tabs"
+    >
+      <v-tab
+        v-for="section in visibleSections"
+        :key="section.key"
+        :value="section.key"
+        style="font-weight: 1000; font-size: 15px"
+      >
+        {{ tm(section.value['name']) }}
+      </v-tab>
+    </v-tabs>
+    <v-tabs-window
+      v-model="tab"
+      class="config-tabs-window"
+      :style="readonly ? 'pointer-events: none; opacity: 0.6;' : ''"
+    >
+      <v-tabs-window-item
+        v-for="section in visibleSections"
+        :key="section.key"
+        :value="section.key"
+      >
+        <v-container fluid>
+          <div
+            v-for="(val2, key2, index2) in section.value['metadata']"
+            :key="key2"
+          >
+            <!-- Support both traditional and JSON selector metadata -->
+            <AstrBotConfigV4
+              :metadata="{ [key2]: section.value['metadata'][key2] }"
+              :iterable="config_data"
+              :metadata-key="key2"
+              :search-keyword="searchKeyword"
+            />
+          </div>
+        </v-container>
+      </v-tabs-window-item>
 
 
-            <div style="margin-left: 16px; padding-bottom: 16px">
-                <small>{{ tm('help.helpPrefix') }}
-                    <a href="https://astrbot.app/" target="_blank">{{ tm('help.documentation') }}</a>
-                    {{ tm('help.helpMiddle') }}
-                    <a href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft"
-                        target="_blank">{{ tm('help.support') }}</a>{{ tm('help.helpSuffix') }}
-                </small>
-            </div>
-
-        </v-tabs-window>
-    </div>
-    <v-container v-if="visibleSections.length === 0" fluid class="px-0">
-        <v-alert type="info" variant="tonal">
-            {{ tm('search.noResult') }}
-        </v-alert>
-    </v-container>
+      <div style="margin-left: 16px; padding-bottom: 16px">
+        <small>{{ tm('help.helpPrefix') }}
+          <a
+            href="https://astrbot.app/"
+            target="_blank"
+          >{{ tm('help.documentation') }}</a>
+          {{ tm('help.helpMiddle') }}
+          <a
+            href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft"
+            target="_blank"
+          >{{ tm('help.support') }}</a>{{ tm('help.helpSuffix') }}
+        </small>
+      </div>
+    </v-tabs-window>
+  </div>
+  <v-container
+    v-if="visibleSections.length === 0"
+    fluid
+    class="px-0"
+  >
+    <v-alert
+      type="info"
+      variant="tonal"
+    >
+      {{ tm('search.noResult') }}
+    </v-alert>
+  </v-container>
 </template>
 
 <script>

@@ -2,6 +2,7 @@ import os
 import urllib.parse
 import uuid
 
+import aiofiles
 import aiohttp
 
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -48,12 +49,12 @@ class ProviderGSVITTS(TTSProvider):
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 if response.status == 200:
-                    with open(path, "wb") as f:
-                        f.write(await response.read())
+                    async with aiofiles.open(path, "wb") as f:
+                        await f.write(await response.read())
                 else:
                     error_text = await response.text()
                     raise Exception(
-                        f"GSVI TTS API 请求失败，状态码: {response.status}，错误: {error_text}",
+                        f"GSVI TTS API 请求失败,状态码: {response.status},错误: {error_text}",
                     )
 
         return path

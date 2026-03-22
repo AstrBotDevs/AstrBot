@@ -1,5 +1,7 @@
 import asyncio
 import copy
+import errno
+import hashlib
 import io
 import os
 import sys
@@ -12,6 +14,7 @@ import pytest_asyncio
 from quart import Quart
 from werkzeug.datastructures import FileStorage
 
+from astrbot.cli.commands.cmd_conf import hash_dashboard_password_secure
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
@@ -19,12 +22,76 @@ from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.dashboard.routes.plugin import PluginRoute
-from astrbot.dashboard.server import AstrBotDashboard
+from astrbot.dashboard.server import AstrBotDashboard, _expand_env_placeholders
 from tests.fixtures.helpers import (
     MockPluginBuilder,
     create_mock_updater_install,
     create_mock_updater_update,
 )
+
+TEST_DASHBOARD_PASSWORD = "astrbot-test-password"
+
+
+def test_check_port_in_use_only_treats_eaddrinuse_as_occupied(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    server = AstrBotDashboard.__new__(AstrBotDashboard)
+
+    class _Socket:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def setsockopt(self, *args, **kwargs):
+            return None
+
+        def bind(self, address):
+            raise OSError(errno.EADDRINUSE, "Address already in use")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.socket.socket", lambda *args, **kwargs: _Socket()
+    )
+
+    assert server.check_port_in_use("127.0.0.1", 3002) is True
+
+
+def test_check_port_in_use_ignores_permission_errors(monkeypatch: pytest.MonkeyPatch):
+    server = AstrBotDashboard.__new__(AstrBotDashboard)
+
+    class _Socket:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def setsockopt(self, *args, **kwargs):
+            return None
+
+        def bind(self, address):
+            raise PermissionError(errno.EPERM, "Operation not permitted")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.socket.socket", lambda *args, **kwargs: _Socket()
+    )
+
+    assert server.check_port_in_use("127.0.0.1", 3002) is False
+
+
+def test_expand_env_placeholders_resolves_env_and_default(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("HOST", "0.0.0.0")
+
+    assert _expand_env_placeholders("${HOST}", "host") == "0.0.0.0"
+    assert _expand_env_placeholders("${MISSING:-3002}", "port") == "3002"
+
+
+def test_expand_env_placeholders_raises_for_unresolved_variable():
+    with pytest.raises(ValueError, match="dashboard host: HOST"):
+        _expand_env_placeholders("${HOST}", "host")
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -35,16 +102,20 @@ async def core_lifecycle_td(tmp_path_factory):
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
+    core_lifecycle.astrbot_config["dashboard"]["username"] = "astrbot"
+    core_lifecycle.astrbot_config["dashboard"]["password"] = (
+        hash_dashboard_password_secure(TEST_DASHBOARD_PASSWORD)
+    )
     try:
         yield core_lifecycle
     finally:
-        # 优先停止核心生命周期以释放资源（包括关闭 MCP 等后台任务）
+        # 优先停止核心生命周期以释放资源(包括关闭 MCP 等后台任务)
         try:
             _stop_res = core_lifecycle.stop()
             if asyncio.iscoroutine(_stop_res):
                 await _stop_res
         except Exception:
-            # 停止过程中如有异常，不影响后续清理
+            # 停止过程中如有异常,不影响后续清理
             pass
 
 
@@ -65,7 +136,7 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": core_lifecycle_td.astrbot_config["dashboard"]["password"],
+            "password": TEST_DASHBOARD_PASSWORD,
         },
     )
     data = await response.get_json()
@@ -89,11 +160,32 @@ async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": core_lifecycle_td.astrbot_config["dashboard"]["password"],
+            "password": TEST_DASHBOARD_PASSWORD,
         },
     )
     data = await response.get_json()
-    assert data["status"] == "ok" and "token" in data["data"]
+    assert data["status"] == "ok"
+    assert "token" in data["data"]
+
+
+@pytest.mark.asyncio
+async def test_auth_login_rejects_legacy_md5_password(
+    app: Quart, core_lifecycle_td: AstrBotCoreLifecycle
+):
+    test_client = app.test_client()
+    username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
+    legacy_md5 = hashlib.md5(TEST_DASHBOARD_PASSWORD.encode("utf-8")).hexdigest()
+
+    response = await test_client.post(
+        "/api/auth/login",
+        json={
+            "username": username,
+            "password": "",
+            "password_md5": legacy_md5,
+        },
+    )
+    data = await response.get_json()
+    assert data["status"] == "error"
 
 
 @pytest.mark.asyncio
@@ -104,7 +196,8 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
     response = await test_client.get("/api/stat/get", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
-    assert data["status"] == "ok" and "platform" in data["data"]
+    assert data["status"] == "ok"
+    assert "platform" in data["data"]
 
 
 @pytest.mark.asyncio
@@ -155,7 +248,7 @@ async def test_subagent_config_accepts_default_persona(
             headers=authenticated_header,
         )
 
-
+@pytest.mark.asyncio
 @pytest.mark.parametrize("payload", [[], "x"])
 async def test_batch_delete_sessions_rejects_non_object_payload(
     app: Quart, authenticated_header: dict, payload
@@ -265,7 +358,7 @@ async def test_plugins(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
-    """测试插件 API 端点，使用 Mock 避免真实网络调用。"""
+    """测试插件 API 端点,使用 Mock 避免真实网络调用｡"""
     test_client = app.test_client()
 
     # 已经安装的插件
@@ -564,16 +657,16 @@ async def test_check_update(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
-    """测试检查更新 API，使用 Mock 避免真实网络调用。"""
+    """测试检查更新 API,使用 Mock 避免真实网络调用｡"""
     test_client = app.test_client()
 
     # Mock 更新检查和网络请求
     async def mock_check_update(*args, **kwargs):
-        """Mock 更新检查，返回无新版本。"""
+        """Mock 更新检查,返回无新版本｡"""
         return None  # None 表示没有新版本
 
     async def mock_get_dashboard_version(*args, **kwargs):
-        """Mock Dashboard 版本获取。"""
+        """Mock Dashboard 版本获取｡"""
         from astrbot.core.config.default import VERSION
 
         return f"v{VERSION}"  # 返回当前版本

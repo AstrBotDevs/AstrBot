@@ -2,7 +2,7 @@
  * Persona 文件夹管理 Store
  */
 import { defineStore } from 'pinia';
-import axios from 'axios';
+import axios from '@/utils/request';
 
 // 类型定义
 export interface PersonaFolder {
@@ -297,6 +297,25 @@ export const usePersonaStore = defineStore({
 
       // 刷新当前文件夹内容
       await this.refreshCurrentFolder();
+    },
+
+    /**
+     * 克隆 Persona
+     */
+    async clonePersona(sourcePersonaId: string, newPersonaId: string): Promise<Persona> {
+      const response = await axios.post('/api/persona/clone', {
+        source_persona_id: sourcePersonaId,
+        new_persona_id: newPersonaId
+      });
+
+      if (response.data.status !== 'ok') {
+        throw new Error(response.data.message || '克隆人格失败');
+      }
+
+      // 刷新当前文件夹内容
+      await this.refreshCurrentFolder();
+
+      return response.data.data.persona;
     },
 
     /**

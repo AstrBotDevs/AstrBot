@@ -1,40 +1,67 @@
 <template>
   <div class="stats-container">
-    <v-card elevation="1" class="stat-card uptime-card mb-4">
+    <v-card
+      elevation="1"
+      class="stat-card uptime-card mb-4"
+    >
       <v-card-text>
         <div class="d-flex align-center">
           <div class="icon-wrapper">
-            <v-icon icon="mdi-clock-outline" size="24"></v-icon>
+            <v-icon
+              icon="mdi-clock-outline"
+              size="24"
+            />
           </div>
           
           <div class="stat-content">
-            <div class="stat-title">{{ tm('features.dashboard.status.uptime') }}</div>
-            <h3 class="uptime-value">{{ stat.running || tm('features.dashboard.status.loading') }}</h3>
+            <div class="stat-title">
+              {{ tm('features.dashboard.status.uptime') }}
+            </div>
+            <h3 class="uptime-value">
+              {{ stat.running || tm('features.dashboard.status.loading') }}
+            </h3>
           </div>
           
-          <v-spacer></v-spacer>
+          <v-spacer />
           
           <div class="uptime-status">
-            <v-icon icon="mdi-circle" size="10" color="success" class="blink-animation"></v-icon>
+            <v-icon
+              icon="mdi-circle"
+              size="10"
+              color="success"
+              class="blink-animation"
+            />
             <span class="status-text">{{ tm('features.dashboard.status.online') }}</span>
           </div>
         </div>
       </v-card-text>
     </v-card>
 
-    <v-card elevation="1" class="stat-card memory-card">
+    <v-card
+      elevation="1"
+      class="stat-card memory-card"
+    >
       <v-card-text>
         <div class="d-flex align-center">
           <div class="icon-wrapper">
-            <v-icon icon="mdi-memory" size="24"></v-icon>
+            <v-icon
+              icon="mdi-memory"
+              size="24"
+            />
           </div>
           
           <div class="stat-content">
-            <div class="stat-title">{{ tm('features.dashboard.status.memoryUsage') }}</div>
+            <div class="stat-title">
+              {{ tm('features.dashboard.status.memoryUsage') }}
+            </div>
             <div class="memory-values">
-              <h3 class="memory-value">{{ stat.memory?.process || 0 }} <span class="memory-unit">MiB</span></h3>
+              <h3 class="memory-value">
+                {{ stat.memory?.process || 0 }} <span class="memory-unit">MiB</span>
+              </h3>
               <span class="memory-separator">/</span>
-              <h4 class="memory-total">{{ stat.memory?.system || 0 }} <span class="memory-unit">MiB</span></h4>
+              <h4 class="memory-total">
+                {{ stat.memory?.system || 0 }} <span class="memory-unit">MiB</span>
+              </h4>
             </div>
             
             <v-progress-linear
@@ -42,9 +69,11 @@
               color="warning"
               height="4"
               class="mt-2"
-            ></v-progress-linear>
+            />
             
-            <div class="memory-percentage">{{ memoryPercentage }}%</div>
+            <div class="memory-percentage">
+              {{ memoryPercentage }}%
+            </div>
           </div>
         </div>
       </v-card-text>
@@ -57,17 +86,11 @@ import { useModuleI18n } from '@/i18n/composables';
 
 export default {
   name: 'OnlineTime',
+  props: ['stat'],
   setup() {
     const { tm } = useModuleI18n('features/dashboard');
     return { tm };
   },
-  props: ['stat'],
-  data: () => ({
-    stat: {
-      memory: { process: 0, system: 0 },
-      running: "",
-    },
-  }),
   computed: {
     memoryPercentage() {
       if (!this.stat.memory || !this.stat.memory.process || !this.stat.memory.system) return 0;

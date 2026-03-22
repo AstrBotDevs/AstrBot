@@ -107,5 +107,6 @@ export interface ToolItem {
   origin_name?: string;
   runtime_kind?: 'legacy' | 'sdk';
   plugin_id?: string | null;
+  source?: string;
 }
 

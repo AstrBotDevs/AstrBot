@@ -47,7 +47,7 @@ class EventBus:
                     f"PipelineScheduler not found for id: {conf_id}, event ignored."
                 )
                 continue
-            asyncio.create_task(scheduler.execute(event))
+            asyncio.create_task(scheduler.execute(event))  # noqa: RUF006
 
     def _print_event(self, event: AstrMessageEvent, conf_name: str) -> None:
         """用于记录事件信息

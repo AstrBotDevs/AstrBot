@@ -3,10 +3,10 @@ import copy
 import sys
 import time
 import traceback
-import typing as T
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field
+from typing import Any, Literal, TypeVar
 
 from mcp.types import (
     BlobResourceContents,
@@ -18,8 +18,24 @@ from mcp.types import (
 )
 
 from astrbot import logger
-from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
+from astrbot.core.agent.context.compressor import ContextCompressor
+from astrbot.core.agent.context.config import ContextConfig
+from astrbot.core.agent.context.manager import ContextManager
+from astrbot.core.agent.context.token_counter import TokenCounter
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.message import (
+    AssistantMessageSegment,
+    ImageURLPart,
+    Message,
+    TextPart,
+    ThinkPart,
+    ToolCallMessageSegment,
+)
+from astrbot.core.agent.response import AgentResponseData, AgentStats
+from astrbot.core.agent.run_context import ContextWrapper, TContext
+from astrbot.core.agent.runners.base import AgentResponse, AgentState, BaseAgentRunner
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
@@ -35,17 +51,6 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.provider.provider import Provider
 
-from ..context.compressor import ContextCompressor
-from ..context.config import ContextConfig
-from ..context.manager import ContextManager
-from ..context.token_counter import TokenCounter
-from ..hooks import BaseAgentRunHooks
-from ..message import AssistantMessageSegment, Message, ToolCallMessageSegment
-from ..response import AgentResponseData, AgentStats
-from ..run_context import ContextWrapper, TContext
-from ..tool_executor import BaseFunctionToolExecutor
-from .base import AgentResponse, AgentState, BaseAgentRunner
-
 if sys.version_info >= (3, 12):
     from typing import override
 else:
@@ -54,10 +59,10 @@ else:
 
 @dataclass(slots=True)
 class _HandleFunctionToolsResult:
-    kind: T.Literal["message_chain", "tool_call_result_blocks", "cached_image"]
+    kind: Literal["message_chain", "tool_call_result_blocks", "cached_image"]
     message_chain: MessageChain | None = None
     tool_call_result_blocks: list[ToolCallMessageSegment] | None = None
-    cached_image: T.Any = None
+    cached_image: Any = None
 
     @classmethod
     def from_message_chain(cls, chain: MessageChain) -> "_HandleFunctionToolsResult":
@@ -70,7 +75,7 @@ class _HandleFunctionToolsResult:
         return cls(kind="tool_call_result_blocks", tool_call_result_blocks=blocks)
 
     @classmethod
-    def from_cached_image(cls, image: T.Any) -> "_HandleFunctionToolsResult":
+    def from_cached_image(cls, image: Any) -> "_HandleFunctionToolsResult":
         return cls(kind="cached_image", cached_image=image)
 
 
@@ -86,7 +91,7 @@ class _ToolExecutionInterrupted(Exception):
     """Raised when a running tool call is interrupted by a stop request."""
 
 
-ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
+ToolExecutorResultT = TypeVar("ToolExecutorResultT")
 
 USER_INTERRUPTION_MESSAGE = (
     "[SYSTEM: User actively interrupted the response generation. "
@@ -123,7 +128,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
         fallback_providers: list[Provider] | None = None,
-        **kwargs: T.Any,
+        **kwargs: Any,
     ) -> None:
         self.req = request
         self.streaming = streaming
@@ -139,9 +144,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # TODO: 2. after LLM output a tool call
         self.context_config = ContextConfig(
             # <=0 will never do compress
-            max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
+            max_context_tokens=provider.provider_config.get("max_context_tokens", 4096),
             # enforce max turns before compression
-            enforce_max_turns=self.enforce_max_turns,
+            enforce_max_turns=self.enforce_max_turns
+            if self.enforce_max_turns != -1
+            else 15,
             truncate_turns=self.truncate_turns,
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent=self.llm_compress_keep_recent,
@@ -176,18 +183,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # These two are used for tool schema mode handling
         # We now have two modes:
         # - "full": use full tool schema for LLM calls, default.
-        # - "skills_like": use light tool schema for LLM calls, and re-query with param-only schema when needed.
+        # - "lazy_load": use light tool schema for LLM calls, and re-query with param-only schema when needed.
         #   Light tool schema does not include tool parameters.
         #   This can reduce token usage when tools have large descriptions.
         # See #4681
         self.tool_schema_mode = tool_schema_mode
         self._tool_schema_param_set = None
-        self._skill_like_raw_tool_set = None
-        if tool_schema_mode == "skills_like":
+        self._lazy_load_raw_tool_set = None
+        if tool_schema_mode == "lazy_load":
             tool_set = self.req.func_tool
             if not tool_set:
                 return
-            self._skill_like_raw_tool_set = tool_set
+            self._lazy_load_raw_tool_set = tool_set
             light_set = tool_set.get_light_tool_set()
             self._tool_schema_param_set = tool_set.get_param_only_tool_set()
             # MODIFIE the req.func_tool to use light tool schemas
@@ -215,7 +222,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     async def _iter_llm_responses(
         self, *, include_model: bool = True
-    ) -> T.AsyncGenerator[LLMResponse, None]:
+    ) -> AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
         payload = {
             "contexts": self.run_context.messages,  # list[Message]
@@ -236,7 +243,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     async def _iter_llm_responses_with_fallback(
         self,
-    ) -> T.AsyncGenerator[LLMResponse, None]:
+    ) -> AsyncGenerator[LLMResponse, None]:
         """Wrap _iter_llm_responses with provider fallback handling."""
         candidates = [self.provider, *self.fallback_providers]
         total_candidates = len(candidates)
@@ -278,7 +285,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                 if has_stream_output:
                     return
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 last_exception = exc
                 logger.warning(
                     "Chat Model %s request error: %s",
@@ -374,7 +381,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             except Exception as e:
                 logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
 
-        # 开始处理，转换到运行状态
+        # 开始处理,转换到运行状态
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
 
@@ -445,7 +452,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_resp = llm_resp_result
 
         if llm_resp.role == "err":
-            # 如果 LLM 响应错误，转换到错误状态
+            # 如果 LLM 响应错误,转换到错误状态
             self.final_llm_resp = llm_resp
             self.stats.end_time = time.time()
             self._transition_state(AgentState.ERROR)
@@ -463,7 +470,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return
 
         if not llm_resp.tools_call_name:
-            # 如果没有工具调用，转换到完成状态
+            # 如果没有工具调用,转换到完成状态
             self.final_llm_resp = llm_resp
             self._transition_state(AgentState.DONE)
             self.stats.end_time = time.time()
@@ -506,9 +513,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
 
-        # 如果有工具调用，还需处理工具调用
+        # 如果有工具调用,还需处理工具调用
         if llm_resp.tools_call_name:
-            if self.tool_schema_mode == "skills_like":
+            if self.tool_schema_mode == "lazy_load":
                 llm_resp, _ = await self._resolve_tool_exec(llm_resp)
 
             tool_call_result_blocks = []
@@ -603,15 +610,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     async def step_until_done(
         self, max_step: int
-    ) -> T.AsyncGenerator[AgentResponse, None]:
+    ) -> AsyncGenerator[AgentResponse, None]:
         """Process steps until the agent is done."""
         step_count = 0
+        max_step = min(max_step, 3)
         while not self.done() and step_count < max_step:
             step_count += 1
             async for resp in self.step():
                 yield resp
 
-        #  如果循环结束了但是 agent 还没有完成，说明是达到了 max_step
+        #  如果循环结束了但是 agent 还没有完成,说明是达到了 max_step
         if not self.done():
             logger.warning(
                 f"Agent reached max steps ({max_step}), forcing a final response."
@@ -623,7 +631,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.run_context.messages.append(
                 Message(
                     role="user",
-                    content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
+                    content="工具调用次数已达到上限,请停止使用工具,并根据已经收集到的信息,对你的任务和发现进行总结,然后直接回复用户｡",
                 )
             )
             # 再执行最后一步
@@ -634,8 +642,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         req: ProviderRequest,
         llm_response: LLMResponse,
-    ) -> T.AsyncGenerator[_HandleFunctionToolsResult, None]:
-        """处理函数工具调用。"""
+    ) -> AsyncGenerator[_HandleFunctionToolsResult, None]:
+        """处理函数工具调用｡"""
         tool_call_result_blocks: list[ToolCallMessageSegment] = []
         logger.info(f"Agent 使用工具: {llm_response.tools_call_name}")
 
@@ -647,6 +655,31 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     content=self._merge_follow_up_notice(content),
                 ),
             )
+
+        def _handle_image_content(
+            base64_data: str,
+            mime_type: str,
+            tool_call_id: str,
+            tool_name: str,
+            content_index: int,
+        ) -> _HandleFunctionToolsResult:
+            """Helper to cache image and return result for LLM visibility."""
+            cached_img = tool_image_cache.save_image(
+                base64_data=base64_data,
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                index=content_index,
+                mime_type=mime_type,
+            )
+            _append_tool_call_result(
+                tool_call_id,
+                (
+                    f"Image returned and cached at path='{cached_img.file_path}'. "
+                    f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
+                    f"with type='image' and path='{cached_img.file_path}'."
+                ),
+            )
+            return _HandleFunctionToolsResult.from_cached_image(cached_img)
 
         # 执行函数调用
         for func_tool_name, func_tool_args, func_tool_id in zip(
@@ -674,26 +707,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     return
 
                 if (
-                    self.tool_schema_mode == "skills_like"
-                    and self._skill_like_raw_tool_set
+                    self.tool_schema_mode == "lazy_load"
+                    and self._lazy_load_raw_tool_set
                 ):
-                    # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
+                    # in 'lazy_load' mode, raw.func_tool is light schema, does not have handler
                     # so we need to get the tool from the raw tool set
-                    func_tool = self._skill_like_raw_tool_set.get_tool(func_tool_name)
+                    func_tool = self._lazy_load_raw_tool_set.get_tool(func_tool_name)
                 else:
                     func_tool = req.func_tool.get_tool(func_tool_name)
 
-                logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
+                logger.info(f"使用工具:{func_tool_name},参数:{func_tool_args}")
 
                 if not func_tool:
-                    logger.warning(f"未找到指定的工具: {func_tool_name}，将跳过。")
+                    logger.warning(f"未找到指定的工具: {func_tool_name},将跳过｡")
                     _append_tool_call_result(
                         func_tool_id,
                         f"error: Tool {func_tool_name} not found.",
                     )
                     continue
 
-                valid_params = {}  # 参数过滤：只传递函数实际需要的参数
+                valid_params = {}  # 参数过滤:只传递函数实际需要的参数
 
                 # 获取实际的 handler 函数
                 if func_tool.handler:
@@ -718,7 +751,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             f"工具 {func_tool_name} 忽略非期望参数: {ignored_params}",
                         )
                 else:
-                    # 如果没有 handler（如 MCP 工具），使用所有参数
+                    # 如果没有 handler(如 MCP 工具),使用所有参数
                     valid_params = func_tool_args
 
                 try:
@@ -741,76 +774,77 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     if isinstance(resp, CallToolResult):
                         res = resp
                         _final_resp = resp
-                        if isinstance(res.content[0], TextContent):
+                        if not res.content:
                             _append_tool_call_result(
                                 func_tool_id,
-                                res.content[0].text,
+                                "The tool returned no content.",
                             )
-                        elif isinstance(res.content[0], ImageContent):
-                            # Cache the image instead of sending directly
-                            cached_img = tool_image_cache.save_image(
-                                base64_data=res.content[0].data,
-                                tool_call_id=func_tool_id,
-                                tool_name=func_tool_name,
-                                index=0,
-                                mime_type=res.content[0].mimeType or "image/png",
-                            )
-                            _append_tool_call_result(
-                                func_tool_id,
-                                (
+                            continue
+
+                        result_parts: list[str] = []
+                        for index, content_item in enumerate(res.content):
+                            if isinstance(content_item, TextContent):
+                                result_parts.append(content_item.text)
+                            elif isinstance(content_item, ImageContent):
+                                # Cache the image instead of sending directly
+                                cached_img = tool_image_cache.save_image(
+                                    base64_data=content_item.data,
+                                    tool_call_id=func_tool_id,
+                                    tool_name=func_tool_name,
+                                    index=index,
+                                    mime_type=content_item.mimeType or "image/png",
+                                )
+                                result_parts.append(
                                     f"Image returned and cached at path='{cached_img.file_path}'. "
                                     f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
                                     f"with type='image' and path='{cached_img.file_path}'."
-                                ),
-                            )
-                            # Yield image info for LLM visibility (will be handled in step())
-                            yield _HandleFunctionToolsResult.from_cached_image(
-                                cached_img
-                            )
-                        elif isinstance(res.content[0], EmbeddedResource):
-                            resource = res.content[0].resource
-                            if isinstance(resource, TextResourceContents):
-                                _append_tool_call_result(
-                                    func_tool_id,
-                                    resource.text,
                                 )
-                            elif (
-                                isinstance(resource, BlobResourceContents)
-                                and resource.mimeType
-                                and resource.mimeType.startswith("image/")
-                            ):
-                                # Cache the image instead of sending directly
-                                cached_img = tool_image_cache.save_image(
-                                    base64_data=resource.blob,
-                                    tool_call_id=func_tool_id,
-                                    tool_name=func_tool_name,
-                                    index=0,
-                                    mime_type=resource.mimeType,
-                                )
-                                _append_tool_call_result(
-                                    func_tool_id,
-                                    (
-                                        f"Image returned and cached at path='{cached_img.file_path}'. "
-                                        f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
-                                        f"with type='image' and path='{cached_img.file_path}'."
-                                    ),
-                                )
-                                # Yield image info for LLM visibility
+                                # Yield image info for LLM visibility (will be handled in step())
                                 yield _HandleFunctionToolsResult.from_cached_image(
                                     cached_img
                                 )
-                            else:
-                                _append_tool_call_result(
-                                    func_tool_id,
-                                    "The tool has returned a data type that is not supported.",
-                                )
+                            elif isinstance(content_item, EmbeddedResource):
+                                resource = content_item.resource
+                                if isinstance(resource, TextResourceContents):
+                                    result_parts.append(resource.text)
+                                elif (
+                                    isinstance(resource, BlobResourceContents)
+                                    and resource.mimeType
+                                    and resource.mimeType.startswith("image/")
+                                ):
+                                    # Cache the image instead of sending directly
+                                    cached_img = tool_image_cache.save_image(
+                                        base64_data=resource.blob,
+                                        tool_call_id=func_tool_id,
+                                        tool_name=func_tool_name,
+                                        index=index,
+                                        mime_type=resource.mimeType,
+                                    )
+                                    result_parts.append(
+                                        f"Image returned and cached at path='{cached_img.file_path}'. "
+                                        f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
+                                        f"with type='image' and path='{cached_img.file_path}'."
+                                    )
+                                    # Yield image info for LLM visibility
+                                    yield _HandleFunctionToolsResult.from_cached_image(
+                                        cached_img
+                                    )
+                                else:
+                                    result_parts.append(
+                                        "The tool has returned a data type that is not supported."
+                                    )
+                        if result_parts:
+                            _append_tool_call_result(
+                                func_tool_id,
+                                "\n\n".join(result_parts),
+                            )
 
                     elif resp is None:
                         # Tool 直接请求发送消息给用户
                         # 这里我们将直接结束 Agent Loop
                         # 发送消息逻辑在 ToolExecutor 中处理了
                         logger.warning(
-                            f"{func_tool_name} 没有返回值，或者已将结果直接发送给用户。"
+                            f"{func_tool_name} 没有返回值,或者已将结果直接发送给用户｡"
                         )
                         self._transition_state(AgentState.DONE)
                         self.stats.end_time = time.time()
@@ -821,7 +855,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     else:
                         # 不应该出现其他类型
                         logger.warning(
-                            f"Tool 返回了不支持的类型: {type(resp)}。",
+                            f"Tool 返回了不支持的类型: {type(resp)}｡",
                         )
                         _append_tool_call_result(
                             func_tool_id,
@@ -873,9 +907,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     def _build_tool_requery_context(
         self, tool_names: list[str]
-    ) -> list[dict[str, T.Any]]:
+    ) -> list[dict[str, Any]]:
         """Build contexts for re-querying LLM with param-only tool schemas."""
-        contexts: list[dict[str, T.Any]] = []
+        contexts: list[dict[str, Any]] = []
         for msg in self.run_context.messages:
             if hasattr(msg, "model_dump"):
                 contexts.append(msg.model_dump())  # type: ignore[call-arg]
@@ -907,7 +941,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         llm_resp: LLMResponse,
     ) -> tuple[LLMResponse, ToolSet | None]:
-        """Used in 'skills_like' tool schema mode to re-query LLM with param-only tool schemas."""
+        """Used in 'lazy_load' tool schema mode to re-query LLM with param-only tool schemas."""
         tool_names = llm_resp.tools_call_name
         if not tool_names:
             return llm_resp, self.req.func_tool
@@ -995,7 +1029,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             data=AgentResponseData(chain=MessageChain(type="aborted")),
         )
 
-    async def _close_executor(self, executor: T.Any) -> None:
+    async def _close_executor(self, executor: Any) -> None:
         close_executor = getattr(executor, "aclose", None)
         if close_executor is None:
             return
@@ -1005,7 +1039,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _iter_tool_executor_results(
         self,
         executor: AsyncIterator[ToolExecutorResultT],
-    ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
+    ) -> AsyncGenerator[ToolExecutorResultT, None]:
         while True:
             if self._is_stop_requested():
                 await self._close_executor(executor)
@@ -1015,6 +1049,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             next_result_task = asyncio.create_task(anext(executor))
             abort_task = asyncio.create_task(self._abort_signal.wait())
+            self.tasks.add(next_result_task)
+            self.tasks.add(abort_task)
+            next_result_task.add_done_callback(self.tasks.discard)
+            abort_task.add_done_callback(self.tasks.discard)
             try:
                 done, _ = await asyncio.wait(
                     {next_result_task, abort_task},

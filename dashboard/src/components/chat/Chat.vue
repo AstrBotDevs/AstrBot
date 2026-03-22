@@ -1,208 +1,279 @@
 <template>
-    <v-card class="chat-page-card" elevation="0" rounded="0">
-        <v-card-text class="chat-page-container">
-            <!-- 遮罩层 (手机端) -->
-            <div class="mobile-overlay" v-if="isMobile && mobileMenuOpen" @click="closeMobileSidebar"></div>
+  <v-card
+    class="chat-page-card"
+    elevation="0"
+    rounded="0"
+  >
+    <v-card-text class="chat-page-container">
+      <!-- 遮罩层 (手机端) -->
+      <div
+        v-if="isMobile && mobileMenuOpen"
+        class="mobile-overlay"
+        @click="closeMobileSidebar"
+      />
 
-            <div class="chat-layout">
-                <ConversationSidebar
-                    :sessions="sessions"
-                    :selectedSessions="selectedSessions"
-                    :currSessionId="currSessionId"
-                    :selectedProjectId="selectedProjectId"
-                    :transportMode="transportMode"
-                    :sendShortcut="sendShortcut"
-                    :isDark="isDark"
-                    :chatboxMode="chatboxMode"
-                    :isMobile="isMobile"
-                    :mobileMenuOpen="mobileMenuOpen"
-                    :projects="projects"
-                    @newChat="handleNewChat"
-                    @selectConversation="handleSelectConversation"
-                    @editTitle="showEditTitleDialog"
-                    @deleteConversation="handleDeleteConversation"
-                    @batchDeleteConversations="handleBatchDeleteConversations"
-                    @closeMobileSidebar="closeMobileSidebar"
-                    @toggleTheme="toggleTheme"
-                    @toggleFullscreen="toggleFullscreen"
-                    @selectProject="handleSelectProject"
-                    @createProject="showCreateProjectDialog"
-                    @editProject="showEditProjectDialog"
-                    @deleteProject="handleDeleteProject"
-                    @updateTransportMode="setTransportMode"
-                    @updateSendShortcut="setSendShortcut"
-                />
+      <div class="chat-layout">
+        <ConversationSidebar
+          :sessions="sessions"
+          :selected-sessions="selectedSessions"
+          :curr-session-id="currSessionId"
+          :selected-project-id="selectedProjectId"
+          :transport-mode="transportMode"
+          :send-shortcut="sendShortcut"
+          :is-dark="isDark"
+          :chatbox-mode="chatboxMode"
+          :is-mobile="isMobile"
+          :mobile-menu-open="mobileMenuOpen"
+          :projects="projects"
+          @newChat="handleNewChat"
+          @selectConversation="handleSelectConversation"
+          @editTitle="showEditTitleDialog"
+          @deleteConversation="handleDeleteConversation"
+          @batchDeleteConversations="handleBatchDeleteConversations"
+          @closeMobileSidebar="closeMobileSidebar"
+          @toggleTheme="toggleTheme"
+          @toggleFullscreen="toggleFullscreen"
+          @selectProject="handleSelectProject"
+          @createProject="showCreateProjectDialog"
+          @editProject="showEditProjectDialog"
+          @deleteProject="handleDeleteProject"
+          @updateTransportMode="setTransportMode"
+          @updateSendShortcut="setSendShortcut"
+        />
 
-                <!-- 右侧聊天内容区域 -->
-                <div class="chat-content-panel">
-                    <!-- Live Mode -->
-                    <LiveMode v-if="liveModeOpen" @close="closeLiveMode" />
+        <!-- 右侧聊天内容区域 -->
+        <div class="chat-content-panel">
+          <!-- Live Mode -->
+          <LiveMode
+            v-if="liveModeOpen"
+            @close="closeLiveMode"
+          />
 
-                    <!-- 正常聊天界面 -->
-                    <template v-else>
-
-                        <div v-if="currentSessionProject && messages && messages.length > 0" class="breadcrumb-container">
-                            <div class="breadcrumb-content">
-                                <span class="breadcrumb-emoji">{{ currentSessionProject.emoji || '📁' }}</span>
-                                <span class="breadcrumb-project" @click="handleSelectProject(currentSessionProject.project_id)">{{ currentSessionProject.title }}</span>
-                                <v-icon size="small" class="breadcrumb-separator">mdi-chevron-right</v-icon>
-                                <span class="breadcrumb-session">{{ getCurrentSession?.display_name || tm('conversation.newConversation') }}</span>
-                            </div>
-                        </div>
-
-                        <div class="message-list-wrapper" v-if="currSessionId && !selectedProjectId">
-                            <MessageList :messages="messages" :isDark="isDark"
-                                :isStreaming="isStreaming || isConvRunning" 
-                                :isLoadingMessages="isLoadingMessages"
-                                @openImagePreview="openImagePreview"
-                                @replyMessage="handleReplyMessage"
-                                @replyWithText="handleReplyWithText"
-                                @openRefs="handleOpenRefs"
-                                ref="messageList" />
-                            <div class="message-list-fade" :class="{ 'fade-dark': isDark }"></div>
-                        </div>
-                        <ProjectView 
-                            v-else-if="selectedProjectId"
-                            :project="currentProject"
-                            :sessions="projectSessions"
-                            @selectSession="(sessionId) => handleSelectConversation([sessionId])"
-                            @editSessionTitle="showEditTitleDialog"
-                            @deleteSession="handleDeleteConversation"
-                        >
-                            <ChatInput
-                                v-model:prompt="prompt"
-                                :stagedImagesUrl="stagedImagesUrl"
-                                :stagedAudioUrl="stagedAudioUrl"
-                                :stagedFiles="stagedNonImageFiles"
-                                :disabled="false"
-                                :is-running="isStreaming || isConvRunning"
-                                :enableStreaming="enableStreaming"
-                                :isRecording="isRecording"
-                                :session-id="currSessionId || null"
-                                :current-session="getCurrentSession"
-                                :replyTo="replyTo"
-                                :send-shortcut="sendShortcut"
-                                @send="handleSendMessage"
-                                @stop="handleStopMessage"
-                                @toggleStreaming="toggleStreaming"
-                                @removeImage="removeImage"
-                                @removeAudio="removeAudio"
-                                @removeFile="removeFile"
-                                @startRecording="handleStartRecording"
-                                @stopRecording="handleStopRecording"
-                            @pasteImage="handlePaste"
-                            @fileSelect="handleFileSelect"
-                            @clearReply="clearReply"
-                            @openLiveMode="openLiveMode"
-                            ref="chatInputRef"
-                        />
-                        </ProjectView>
-                        <WelcomeView 
-                            v-else
-                            :isLoading="isLoadingMessages"
-                        >
-                            <ChatInput
-                                v-model:prompt="prompt"
-                                :stagedImagesUrl="stagedImagesUrl"
-                                :stagedAudioUrl="stagedAudioUrl"
-                                :stagedFiles="stagedNonImageFiles"
-                                :disabled="false"
-                                :is-running="isStreaming || isConvRunning"
-                                :enableStreaming="enableStreaming"
-                                :isRecording="isRecording"
-                                :session-id="currSessionId || null"
-                                :current-session="getCurrentSession"
-                                :replyTo="replyTo"
-                                :send-shortcut="sendShortcut"
-                                @send="handleSendMessage"
-                                @stop="handleStopMessage"
-                                @toggleStreaming="toggleStreaming"
-                                @removeImage="removeImage"
-                                @removeAudio="removeAudio"
-                                @removeFile="removeFile"
-                                @startRecording="handleStartRecording"
-                                @stopRecording="handleStopRecording"
-                                @pasteImage="handlePaste"
-                                @fileSelect="handleFileSelect"
-                                @clearReply="clearReply"
-                                @openLiveMode="openLiveMode"
-                                ref="chatInputRef"
-                            />
-                        </WelcomeView>
-
-                        <!-- 输入区域 -->
-                        <ChatInput
-                            v-if="currSessionId && !selectedProjectId"
-                            v-model:prompt="prompt"
-                            :stagedImagesUrl="stagedImagesUrl"
-                            :stagedAudioUrl="stagedAudioUrl"
-                            :stagedFiles="stagedNonImageFiles"
-                            :disabled="false"
-                            :is-running="isStreaming || isConvRunning"
-                            :enableStreaming="enableStreaming"
-                            :isRecording="isRecording"
-                            :session-id="currSessionId || null"
-                            :current-session="getCurrentSession"
-                            :replyTo="replyTo"
-                            :send-shortcut="sendShortcut"
-                            @send="handleSendMessage"
-                            @stop="handleStopMessage"
-                            @toggleStreaming="toggleStreaming"
-                            @removeImage="removeImage"
-                            @removeAudio="removeAudio"
-                            @removeFile="removeFile"
-                            @startRecording="handleStartRecording"
-                            @stopRecording="handleStopRecording"
-                            @pasteImage="handlePaste"
-                            @fileSelect="handleFileSelect"
-                            @clearReply="clearReply"
-                            @openLiveMode="openLiveMode"
-                            ref="chatInputRef"
-                        />
-                    </template>
-                </div>
-
-                <!-- Refs Sidebar -->
-                <RefsSidebar v-model="refsSidebarOpen" :refs="refsSidebarRefs" />
+          <!-- 正常聊天界面 -->
+          <template v-else>
+            <div
+              v-if="currentSessionProject && messages && messages.length > 0"
+              class="breadcrumb-container"
+            >
+              <div class="breadcrumb-content">
+                <span class="breadcrumb-emoji">{{ currentSessionProject.emoji || '📁' }}</span>
+                <span
+                  class="breadcrumb-project"
+                  @click="handleSelectProject(currentSessionProject.project_id)"
+                >{{ currentSessionProject.title }}</span>
+                <v-icon
+                  size="small"
+                  class="breadcrumb-separator"
+                >
+                  mdi-chevron-right
+                </v-icon>
+                <span class="breadcrumb-session">{{ getCurrentSession?.display_name || tm('conversation.newConversation') }}</span>
+              </div>
             </div>
-        </v-card-text>
-    </v-card>
+
+            <div
+              v-if="currSessionId && !selectedProjectId"
+              class="message-list-wrapper"
+            >
+              <MessageList
+                ref="messageList"
+                :messages="messages"
+                :is-dark="isDark" 
+                :is-streaming="isStreaming || isConvRunning"
+                :is-loading-messages="isLoadingMessages"
+                @openImagePreview="openImagePreview"
+                @replyMessage="handleReplyMessage"
+                @replyWithText="handleReplyWithText"
+                @openRefs="handleOpenRefs"
+              />
+              <div
+                class="message-list-fade"
+                :class="{ 'fade-dark': isDark }"
+              />
+            </div>
+            <ProjectView 
+              v-else-if="selectedProjectId"
+              :project="currentProject"
+              :sessions="projectSessions"
+              @selectSession="(sessionId) => handleSelectConversation([sessionId])"
+              @editSessionTitle="showEditTitleDialog"
+              @deleteSession="handleDeleteConversation"
+            >
+              <ChatInput
+                ref="chatInputRef"
+                v-model:prompt="prompt"
+                :staged-images-url="stagedImagesUrl"
+                :staged-audio-url="stagedAudioUrl"
+                :staged-files="stagedNonImageFiles"
+                :disabled="false"
+                :is-running="isStreaming || isConvRunning"
+                :enable-streaming="enableStreaming"
+                :is-recording="isRecording"
+                :session-id="currSessionId || null"
+                :current-session="getCurrentSession"
+                :reply-to="replyTo"
+                :send-shortcut="sendShortcut"
+                @send="handleSendMessage"
+                @stop="handleStopMessage"
+                @toggleStreaming="toggleStreaming"
+                @removeImage="removeImage"
+                @removeAudio="removeAudio"
+                @removeFile="removeFile"
+                @startRecording="handleStartRecording"
+                @stopRecording="handleStopRecording"
+                @pasteImage="handlePaste"
+                @fileSelect="handleFileSelect"
+                @clearReply="clearReply"
+                @openLiveMode="openLiveMode"
+              />
+            </ProjectView>
+            <WelcomeView 
+              v-else
+              :is-loading="isLoadingMessages"
+            >
+              <ChatInput
+                ref="chatInputRef"
+                v-model:prompt="prompt"
+                :staged-images-url="stagedImagesUrl"
+                :staged-audio-url="stagedAudioUrl"
+                :staged-files="stagedNonImageFiles"
+                :disabled="false"
+                :is-running="isStreaming || isConvRunning"
+                :enable-streaming="enableStreaming"
+                :is-recording="isRecording"
+                :session-id="currSessionId || null"
+                :current-session="getCurrentSession"
+                :reply-to="replyTo"
+                :send-shortcut="sendShortcut"
+                @send="handleSendMessage"
+                @stop="handleStopMessage"
+                @toggleStreaming="toggleStreaming"
+                @removeImage="removeImage"
+                @removeAudio="removeAudio"
+                @removeFile="removeFile"
+                @startRecording="handleStartRecording"
+                @stopRecording="handleStopRecording"
+                @pasteImage="handlePaste"
+                @fileSelect="handleFileSelect"
+                @clearReply="clearReply"
+                @openLiveMode="openLiveMode"
+              />
+            </WelcomeView>
+
+            <!-- 输入区域 -->
+            <ChatInput
+              v-if="currSessionId && !selectedProjectId"
+              ref="chatInputRef"
+              v-model:prompt="prompt"
+              :staged-images-url="stagedImagesUrl"
+              :staged-audio-url="stagedAudioUrl"
+              :staged-files="stagedNonImageFiles"
+              :disabled="false"
+              :is-running="isStreaming || isConvRunning"
+              :enable-streaming="enableStreaming"
+              :is-recording="isRecording"
+              :session-id="currSessionId || null"
+              :current-session="getCurrentSession"
+              :reply-to="replyTo"
+              :send-shortcut="sendShortcut"
+              @send="handleSendMessage"
+              @stop="handleStopMessage"
+              @toggleStreaming="toggleStreaming"
+              @removeImage="removeImage"
+              @removeAudio="removeAudio"
+              @removeFile="removeFile"
+              @startRecording="handleStartRecording"
+              @stopRecording="handleStopRecording"
+              @pasteImage="handlePaste"
+              @fileSelect="handleFileSelect"
+              @clearReply="clearReply"
+              @openLiveMode="openLiveMode"
+            />
+          </template>
+        </div>
+
+        <!-- Refs Sidebar -->
+        <RefsSidebar
+          v-model="refsSidebarOpen"
+          :refs="refsSidebarRefs"
+        />
+      </div>
+    </v-card-text>
+  </v-card>
     
-    <!-- 编辑对话标题对话框 -->
-    <v-dialog v-model="editTitleDialog" max-width="400">
-        <v-card>
-            <v-card-title class="dialog-title">{{ tm('actions.editTitle') }}</v-card-title>
-            <v-card-text>
-                <v-text-field v-model="editingTitle" :label="tm('conversation.newConversation')" variant="outlined"
-                    hide-details class="mt-2" @keyup.enter="handleSaveTitle" autofocus />
-            </v-card-text>
-            <v-card-actions>
-                <v-spacer></v-spacer>
-                <v-btn variant="text" @click="editTitleDialog = false" color="grey-darken-1">{{ t('core.common.cancel') }}</v-btn>
-                <v-btn variant="text" @click="handleSaveTitle" color="primary">{{ t('core.common.save') }}</v-btn>
-            </v-card-actions>
-        </v-card>
-    </v-dialog>
+  <!-- 编辑对话标题对话框 -->
+  <v-dialog
+    v-model="editTitleDialog"
+    max-width="400"
+  >
+    <v-card>
+      <v-card-title class="dialog-title">
+        {{ tm('actions.editTitle') }}
+      </v-card-title>
+      <v-card-text>
+        <v-text-field
+          v-model="editingTitle"
+          :label="tm('conversation.newConversation')"
+          variant="outlined"
+          hide-details
+          class="mt-2"
+          autofocus
+          @keyup.enter="handleSaveTitle"
+        />
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn
+          variant="text"
+          color="grey-darken-1"
+          @click="editTitleDialog = false"
+        >
+          {{ t('core.common.cancel') }}
+        </v-btn>
+        <v-btn
+          variant="text"
+          color="primary"
+          @click="handleSaveTitle"
+        >
+          {{ t('core.common.save') }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 
-    <!-- 图片预览对话框 -->
-    <v-dialog v-model="imagePreviewDialog" max-width="90vw" max-height="90vh">
-        <v-card class="image-preview-card" elevation="8">
-            <v-card-title class="d-flex justify-space-between align-center pa-4">
-                <span>{{ t('core.common.imagePreview') }}</span>
-                <v-btn icon="mdi-close" variant="text" @click="imagePreviewDialog = false" />
-            </v-card-title>
-            <v-card-text class="text-center pa-4">
-                <img :src="previewImageUrl" class="preview-image-large" />
-            </v-card-text>
-        </v-card>
-    </v-dialog>
+  <!-- 图片预览对话框 -->
+  <v-dialog
+    v-model="imagePreviewDialog"
+    max-width="90vw"
+    max-height="90vh"
+  >
+    <v-card
+      class="image-preview-card"
+      elevation="8"
+    >
+      <v-card-title class="d-flex justify-space-between align-center pa-4">
+        <span>{{ t('core.common.imagePreview') }}</span>
+        <v-btn
+          icon="mdi-close"
+          variant="text"
+          @click="imagePreviewDialog = false"
+        />
+      </v-card-title>
+      <v-card-text class="text-center pa-4">
+        <img
+          :src="previewImageUrl"
+          class="preview-image-large"
+        >
+      </v-card-text>
+    </v-card>
+  </v-dialog>
 
-    <!-- 创建/编辑项目对话框 -->
-    <ProjectDialog
-        v-model="projectDialog"
-        :project="editingProject"
-        @save="handleSaveProject"
-    />
+  <!-- 创建/编辑项目对话框 -->
+  <ProjectDialog
+    v-model="projectDialog"
+    :project="editingProject"
+    @save="handleSaveProject"
+  />
 </template>
 
 <script setup lang="ts">
@@ -210,7 +281,6 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { useTheme } from 'vuetify';
 import MessageList from '@/components/chat/MessageList.vue';
 import ConversationSidebar from '@/components/chat/ConversationSidebar.vue';
 import ChatInput from '@/components/chat/ChatInput.vue';
@@ -243,7 +313,6 @@ const route = useRoute();
 const { t } = useI18n();
 const { tm } = useModuleI18n('features/chat');
 const { warning: toastWarning } = useToast();
-const theme = useTheme();
 const customizer = useCustomizerStore();
 
 // UI 状态
@@ -340,7 +409,7 @@ interface ReplyInfo {
 }
 const replyTo = ref<ReplyInfo | null>(null);
 
-const isDark = computed(() => useCustomizerStore().uiTheme === 'PurpleThemeDark');
+const isDark = computed(() => customizer.isDarkTheme);
 const sendShortcut = ref<SendShortcut>('shift_enter');
 
 function setSendShortcut(mode: SendShortcut) {
@@ -380,10 +449,9 @@ watch(() => customizer.chatSidebarOpen, (val) => {
     }
 });
 
+// 使用新的逻辑切换主题
 function toggleTheme() {
-    const newTheme = customizer.uiTheme === 'PurpleTheme' ? 'PurpleThemeDark' : 'PurpleTheme';
-    customizer.SET_UI_THEME(newTheme);
-    theme.global.name.value = newTheme;
+    customizer.TOGGLE_DARK_MODE();
 }
 
 function toggleFullscreen() {

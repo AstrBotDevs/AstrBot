@@ -61,6 +61,10 @@ GenieData/
 .codex/
 .opencode/
 .kilocode/
+.serena
 .worktrees/
 
 .astrbot_sdk_testing/
+.env
+dashboard/warker.js
+dashboard/bun.lock

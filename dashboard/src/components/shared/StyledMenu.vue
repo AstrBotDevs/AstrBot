@@ -1,12 +1,25 @@
 <template>
-  <v-menu v-bind="$attrs" :close-on-content-click="closeOnContentClick">
-    <template v-slot:activator="{ props: activatorProps }">
-      <slot name="activator" :props="activatorProps"></slot>
+  <v-menu
+    v-bind="$attrs"
+    :close-on-content-click="closeOnContentClick"
+  >
+    <template #activator="{ props: activatorProps }">
+      <slot
+        name="activator"
+        :props="activatorProps"
+      />
     </template>
     
-    <v-card class="styled-menu-card" elevation="8" rounded="lg">
-      <v-list density="compact" class="styled-menu-list pa-1">
-        <slot></slot>
+    <v-card
+      class="styled-menu-card"
+      elevation="8"
+      rounded="lg"
+    >
+      <v-list
+        density="compact"
+        class="styled-menu-list pa-1"
+      >
+        <slot />
       </v-list>
     </v-card>
   </v-menu>

@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios from '@/utils/request'
 import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime'
 
 type WaitingForRestartRef = {

@@ -272,7 +272,7 @@ class TestAstrBotImporter:
             importer._validate_version(manifest)
 
     def test_validate_version_minor_diff_allowed(self):
-        """测试小版本不同被允许（仅警告）"""
+        """测试小版本不同被允许(仅警告)"""
         importer = AstrBotImporter(main_db=MagicMock())
 
         # 获取当前主版本
@@ -295,7 +295,7 @@ class TestAstrBotImporter:
         """测试 datetime 字段转换"""
         importer = AstrBotImporter(main_db=MagicMock())
 
-        # 使用 ConversationV2 作为测试模型（它有 created_at 和 updated_at 字段）
+        # 使用 ConversationV2 作为测试模型(它有 created_at 和 updated_at 字段)
         row = {
             "conversation_id": "test-123",
             "platform_id": "test",
@@ -403,7 +403,7 @@ class TestAstrBotImporter:
         assert by_platform["telegram"]["timestamp"] == "2025-12-13T22:00:00+00:00"
 
     def test_merge_platform_stats_rows_warns_on_invalid_count(self):
-        """测试 platform_stats count 非法时会告警并按 0 处理（含上限）"""
+        """测试 platform_stats count 非法时会告警并按 0 处理(含上限)"""
         importer = AstrBotImporter(main_db=MagicMock())
         with patch("astrbot.core.backup.importer.logger.warning") as warning_mock:
             rows = [
@@ -496,7 +496,7 @@ class TestAstrBotImporter:
             assert warning_mock.call_count == 1
 
     def test_merge_platform_stats_rows_keeps_invalid_timestamps_distinct(self):
-        """测试空/非法 timestamp 不参与聚合，避免误合并"""
+        """测试空/非法 timestamp 不参与聚合,避免误合并"""
         importer = AstrBotImporter(main_db=MagicMock())
         rows = [
             {
@@ -563,7 +563,7 @@ class TestAstrBotImporter:
         assert len(merged_rows) == 4
 
     def test_merge_platform_stats_rows_preserves_input_order(self):
-        """测试 platform_stats 聚合后仍保持输入顺序（按首次出现位置）"""
+        """测试 platform_stats 聚合后仍保持输入顺序(按首次出现位置)"""
         importer = AstrBotImporter(main_db=MagicMock())
         rows = [
             {
@@ -724,7 +724,7 @@ class TestSecureFilename:
         assert "*" not in result
 
     def test_secure_filename_hidden_file(self):
-        """测试隐藏文件（前导点）"""
+        """测试隐藏文件(前导点)"""
         result = secure_filename(".hidden_backup.zip")
         assert not result.startswith(".")
 
@@ -790,7 +790,7 @@ class TestVersionComparison:
         assert VersionComparator.compare_version("1.0", "1.1") == -1
         assert (
             VersionComparator.compare_version("1.9", "1.10") == -1
-        )  # 关键测试：多位数版本比较
+        )  # 关键测试:多位数版本比较
         assert VersionComparator.compare_version("1.2", "1.10") == -1
         assert VersionComparator.compare_version("1.0", "2.0") == -1
 
@@ -799,7 +799,7 @@ class TestVersionComparison:
         assert VersionComparator.compare_version("1.1", "1.0") == 1
         assert (
             VersionComparator.compare_version("1.10", "1.9") == 1
-        )  # 关键测试：多位数版本比较
+        )  # 关键测试:多位数版本比较
         assert VersionComparator.compare_version("1.10", "1.2") == 1
         assert VersionComparator.compare_version("2.0", "1.0") == 1
 
@@ -841,7 +841,7 @@ class TestImportPreCheckResult:
             can_import=True,
             version_status="match",
             backup_version="4.9.0",
-            confirm_message="确认导入？",
+            confirm_message="确认导入?",
             warnings=["警告1"],
             backup_summary={"tables": ["table1"]},
         )
@@ -851,7 +851,7 @@ class TestImportPreCheckResult:
         assert d["can_import"] is True
         assert d["version_status"] == "match"
         assert d["backup_version"] == "4.9.0"
-        assert d["confirm_message"] == "确认导入？"
+        assert d["confirm_message"] == "确认导入?"
         assert "警告1" in d["warnings"]
         assert d["backup_summary"]["tables"] == ["table1"]
 
@@ -913,7 +913,7 @@ class TestPreCheck:
         assert result.can_import is True
         assert result.version_status == "match"
         assert result.backup_version == VERSION
-        # confirm_message 现在由前端生成，后端不再生成
+        # confirm_message 现在由前端生成,后端不再生成
         assert result.backup_summary["has_knowledge_bases"] is True
 
     def test_pre_check_minor_version_diff(self, mock_main_db, tmp_path):
@@ -939,7 +939,7 @@ class TestPreCheck:
         assert result.valid is True
         assert result.can_import is True
         assert result.version_status == "minor_diff"
-        # 版本消息由前端 i18n 生成，后端 warnings 列表不再包含版本相关消息
+        # 版本消息由前端 i18n 生成,后端 warnings 列表不再包含版本相关消息
         # warnings 列表保留用于其他非版本相关的警告
 
     def test_pre_check_major_version_diff(self, mock_main_db, tmp_path):
@@ -961,7 +961,7 @@ class TestPreCheck:
         assert result.valid is True  # 文件有效
         assert result.can_import is False  # 但不能导入
         assert result.version_status == "major_diff"
-        # 版本消息由前端 i18n 生成，后端 warnings 列表不再包含版本相关消息
+        # 版本消息由前端 i18n 生成,后端 warnings 列表不再包含版本相关消息
 
 
 class TestVersionCompatibility:

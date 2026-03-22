@@ -20,13 +20,13 @@ SOURCE_ALIASES = {
 LANG_CONFIG = {
     "zh": {
         "index_title": "# AstrBot 中文文档",
-        "index_intro": "该页面由 `AstrBot-docs` 自动同步到 GitHub Wiki。",
+        "index_intro": "该页面由 `AstrBot-docs` 自动同步到 GitHub Wiki｡",
         "index_links": [
             ("关于 AstrBot", "zh-what-is-astrbot"),
             ("社区", "zh-community"),
             ("常见问题", "zh-faq"),
         ],
-        "home_intro": "该 Wiki 由 `AstrBot-docs` 自动同步生成。",
+        "home_intro": "该 Wiki 由 `AstrBot-docs` 自动同步生成｡",
         "home_links": [
             ("中文文档入口", "zh-index"),
             ("English Docs", "Home-en"),

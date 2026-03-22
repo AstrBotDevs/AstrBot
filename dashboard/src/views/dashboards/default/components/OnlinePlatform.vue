@@ -1,17 +1,29 @@
 <template>
-  <v-card elevation="1" class="stat-card platform-card">
+  <v-card
+    elevation="1"
+    class="stat-card platform-card"
+  >
     <v-card-text>
       <div class="d-flex align-start">
         <div class="icon-wrapper">
-          <v-icon icon="mdi-server-network" size="24"></v-icon>
+          <v-icon
+            icon="mdi-server-network"
+            size="24"
+          />
         </div>
         
         <div class="stat-content">
-          <div class="stat-title">{{ t('stats.onlinePlatform.title') }}</div>
-          <div class="stat-value-wrapper">
-            <h2 class="stat-value">{{ stat.platform_count || 0 }}</h2>
+          <div class="stat-title">
+            {{ t('stats.onlinePlatform.title') }}
           </div>
-          <div class="stat-subtitle">{{ t('stats.onlinePlatform.subtitle') }}</div>
+          <div class="stat-value-wrapper">
+            <h2 class="stat-value">
+              {{ stat.platform_count || 0 }}
+            </h2>
+          </div>
+          <div class="stat-subtitle">
+            {{ t('stats.onlinePlatform.subtitle') }}
+          </div>
         </div>
       </div>
     </v-card-text>

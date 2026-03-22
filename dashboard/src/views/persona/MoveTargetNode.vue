@@ -1,6 +1,11 @@
 <template>
-    <BaseMoveTargetNode :folder="folder" :depth="depth" :selected-folder-id="selectedFolderId"
-        :disabled-folder-ids="disabledFolderIds" @select="$emit('select', $event)" />
+  <BaseMoveTargetNode
+    :folder="folder"
+    :depth="depth"
+    :selected-folder-id="selectedFolderId"
+    :disabled-folder-ids="disabledFolderIds"
+    @select="$emit('select', $event)"
+  />
 </template>
 
 <script lang="ts">

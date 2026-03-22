@@ -199,7 +199,7 @@ class CronJobManager:
                 replace_existing=True,
                 misfire_grace_time=30,
             )
-            asyncio.create_task(
+            asyncio.create_task(  # noqa: RUF006
                 self.db.update_cron_job(
                     job.job_id, next_run_time=self._get_next_run_time(job.job_id)
                 )
@@ -228,7 +228,7 @@ class CronJobManager:
                 await self._run_active_agent_job(job, start_time=start_time)
             else:
                 raise ValueError(f"Unknown cron job type: {job.job_type}")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             status = "failed"
             last_error = str(e)
             logger.error(f"Cron job {job_id} failed: {e!s}", exc_info=True)
@@ -296,10 +296,12 @@ class CronJobManager:
             _get_session_conv,
             build_main_agent,
         )
-        from astrbot.core.astr_main_agent_resources import (
+        from astrbot.core.tools.prompts import (
+            CONVERSATION_HISTORY_INJECT_PREFIX,
+            CRON_TASK_WOKE_USER_PROMPT,
             PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
-            SEND_MESSAGE_TO_USER_TOOL,
         )
+        from astrbot.core.tools.send_message import SEND_MESSAGE_TO_USER_TOOL
 
         try:
             session = (
@@ -307,7 +309,7 @@ class CronJobManager:
                 if isinstance(session_str, MessageSession)
                 else MessageSession.from_str(session_str)
             )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(f"Invalid session for cron job: {e}")
             return
 
@@ -330,6 +332,8 @@ class CronJobManager:
         if cron_payload.get("origin", "tool") == "api":
             cron_event.role = "admin"
 
+        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
+
         tool_call_timeout = cfg.get("provider_settings", {}).get(
             "tool_call_timeout", 120
         )
@@ -337,6 +341,7 @@ class CronJobManager:
             tool_call_timeout=tool_call_timeout,
             llm_safety_mode=False,
             streaming_response=False,
+            tool_providers=[ComputerToolProvider()],
         )
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
@@ -348,21 +353,13 @@ class CronJobManager:
             context_dump = req._print_friendly_context()
             req.contexts = []
             req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"---\n"
-                f"{context_dump}\n"
-                f"---\n"
+                CONVERSATION_HISTORY_INJECT_PREFIX + f"---\n{context_dump}\n---\n"
             )
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
         req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
             cron_job=cron_job_str
         )
-        req.prompt = (
-            "You are now responding to a scheduled task. "
-            "Proceed according to your system instructions. "
-            "Output using same language as previous conversation. "
-            "After completing your task, summarize and output your actions and results."
-        )
+        req.prompt = CRON_TASK_WOKE_USER_PROMPT
         if not req.func_tool:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)

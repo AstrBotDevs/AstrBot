@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
+import anyio
 from quart import request, send_file
 
 from astrbot.core import DEMO_MODE, logger
@@ -184,9 +185,9 @@ class SkillsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
         finally:
-            if temp_path and os.path.exists(temp_path):
+            if temp_path and await anyio.Path(temp_path).exists():
                 try:
-                    os.remove(temp_path)
+                    await anyio.Path(temp_path).unlink()
                 except Exception:
                     logger.warning(f"Failed to remove temp skill file: {temp_path}")
 
@@ -239,9 +240,9 @@ class SkillsRoute(Route):
                 except Exception as e:
                     failed.append({"filename": filename, "error": str(e)})
                 finally:
-                    if temp_path and os.path.exists(temp_path):
+                    if temp_path and await anyio.Path(temp_path).exists():
                         try:
-                            os.remove(temp_path)
+                            await anyio.Path(temp_path).unlink()
                         except Exception:
                             pass
 

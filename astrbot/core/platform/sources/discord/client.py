@@ -19,7 +19,7 @@ class DiscordBotClient(discord.Bot):
         self.token = token
         self.proxy = proxy
 
-        # 设置Intent权限，遵循权限最小化原则
+        # 设置Intent权限,遵循权限最小化原则
         intents = discord.Intents.default()
         intents.message_content = True  # 订阅消息内容事件 (Privileged)
         intents.members = True  # 订阅成员事件 (Privileged)
@@ -39,7 +39,7 @@ class DiscordBotClient(discord.Bot):
             return
 
         logger.info(f"[Discord] 已作为 {self.user} (ID: {self.user.id}) 登录")
-        logger.info("[Discord] 客户端已准备就绪。")
+        logger.info("[Discord] 客户端已准备就绪｡")
 
         if self.on_ready_once_callback and not self._ready_once_fired:
             self._ready_once_fired = True
@@ -131,7 +131,7 @@ class DiscordBotClient(discord.Bot):
         return str(interaction_data)
 
     async def start_polling(self) -> None:
-        """开始轮询消息，这是个阻塞方法"""
+        """开始轮询消息,这是个阻塞方法"""
         await self.start(self.token)
 
     @override

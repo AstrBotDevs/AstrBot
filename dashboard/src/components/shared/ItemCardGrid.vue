@@ -1,20 +1,47 @@
 <template>
   <div>
     <v-row v-if="items.length === 0">
-      <v-col cols="12" class="text-center pa-8">
-        <v-icon size="64" color="grey-lighten-1">{{ emptyIcon }}</v-icon>
-        <p class="text-grey mt-4">{{ displayEmptyText }}</p>
+      <v-col
+        cols="12"
+        class="text-center pa-8"
+      >
+        <v-icon
+          size="64"
+          color="grey-lighten-1"
+        >
+          {{ emptyIcon }}
+        </v-icon>
+        <p class="text-grey mt-4">
+          {{ displayEmptyText }}
+        </p>
       </v-col>
     </v-row>
 
     <v-row v-else>
-      <v-col v-for="(item, index) in items" :key="index" cols="12" md="6" lg="4" xl="3">
-        <v-card class="item-card hover-elevation" style="padding: 4px;" elevation="0">
-          <div class="item-status-indicator" :class="{'active': getItemEnabled(item)}"></div>
+      <v-col
+        v-for="(item, index) in items"
+        :key="index"
+        cols="12"
+        md="6"
+        lg="4"
+        xl="3"
+      >
+        <v-card
+          class="item-card hover-elevation"
+          style="padding: 4px;"
+          elevation="0"
+        >
+          <div
+            class="item-status-indicator"
+            :class="{'active': getItemEnabled(item)}"
+          />
           <v-card-title class="d-flex justify-space-between align-center pb-1 pt-3">
-            <span class="text-h2 text-truncate" :title="getItemTitle(item)">{{ getItemTitle(item) }}</span>
+            <span
+              class="text-h2 text-truncate"
+              :title="getItemTitle(item)"
+            >{{ getItemTitle(item) }}</span>
             <v-tooltip location="top">
-              <template v-slot:activator="{ props }">
+              <template #activator="{ props }">
                 <v-switch 
                   color="primary" 
                   hide-details 
@@ -22,14 +49,17 @@
                   :model-value="getItemEnabled(item)"
                   v-bind="props" 
                   @update:model-value="toggleEnabled(item)"
-                ></v-switch>
+                />
               </template>
               <span>{{ getItemEnabled(item) ? t('core.common.itemCard.enabled') : t('core.common.itemCard.disabled') }}</span>
             </v-tooltip>
           </v-card-title>
           
           <v-card-text>
-            <slot name="item-details" :item="item"></slot>
+            <slot
+              name="item-details"
+              :item="item"
+            />
           </v-card-text>
           
           <v-card-actions style="margin: 8px;">
@@ -49,19 +79,22 @@
             >
               {{ t('core.common.itemCard.edit') }}
             </v-btn>
-            <v-spacer></v-spacer>
+            <v-spacer />
           </v-card-actions>
 
-          <div class="d-flex justify-end align-center" style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2;" v-if="bglogo">
+          <div
+            v-if="bglogo"
+            class="d-flex justify-end align-center"
+            style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2;"
+          >
             <v-img
               :src="bglogo"
               contain
               width="120"
               height="120"
               class="rounded-circle"
-            ></v-img>
+            />
           </div>
-
         </v-card>
       </v-col>
     </v-row>
@@ -73,10 +106,6 @@ import { useI18n } from '@/i18n/composables';
 
 export default {
   name: 'ItemCardGrid',
-  setup() {
-    const { t } = useI18n();
-    return { t };
-  },
   props: {
     items: {
       type: Array,
@@ -104,6 +133,10 @@ export default {
     }
   },
   emits: ['toggle-enabled', 'delete', 'edit'],
+  setup() {
+    const { t } = useI18n();
+    return { t };
+  },
   computed: {
     displayEmptyText() {
       return this.emptyText || this.t('core.common.itemCard.noData');

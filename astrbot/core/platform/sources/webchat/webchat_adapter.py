@@ -3,7 +3,7 @@ import os
 import time
 from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from astrbot import logger
 from astrbot.core import db_helper
@@ -17,9 +17,9 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-from ...register import register_platform_adapter
 from .message_parts_helper import (
     message_chain_to_storage_message_parts,
     parse_webchat_message_parts,
@@ -164,12 +164,12 @@ class WebChatAdapter(Platform):
         depth: int = 0,
         max_depth: int = 1,
     ) -> tuple[list, list[str]]:
-        """解析消息段列表，返回消息组件列表和纯文本列表
+        """解析消息段列表,返回消息组件列表和纯文本列表
 
         Args:
             message_parts: 消息段列表
             depth: 当前递归深度
-            max_depth: 最大递归深度（用于处理 reply）
+            max_depth: 最大递归深度(用于处理 reply)
 
         Returns:
             tuple[list, list[str]]: (消息组件列表, 纯文本列表)
@@ -243,7 +243,7 @@ class WebChatAdapter(Platform):
             session_id=message.session_id,
         )
 
-        _, _, payload = message.raw_message  # type: ignore
+        _, _, payload = cast(tuple[Any, Any, dict[str, Any]], message.raw_message)
         message_event.set_extra("selected_provider", payload.get("selected_provider"))
         message_event.set_extra("selected_model", payload.get("selected_model"))
         message_event.set_extra(

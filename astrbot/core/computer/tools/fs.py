@@ -2,6 +2,8 @@ import os
 import uuid
 from dataclasses import dataclass, field
 
+import anyio
+
 from astrbot.api import FunctionTool, logger
 from astrbot.api.event import MessageChain
 from astrbot.core.agent.run_context import ContextWrapper
@@ -116,10 +118,11 @@ class FileUploadTool(FunctionTool):
         )
         try:
             # Check if file exists
-            if not os.path.exists(local_path):
+            local_path_obj = anyio.Path(local_path)
+            if not await local_path_obj.exists():
                 return f"Error: File does not exist: {local_path}"
 
-            if not os.path.isfile(local_path):
+            if not await local_path_obj.is_file():
                 return f"Error: Path is not a file: {local_path}"
 
             # Use basename if sandbox_filename is not provided
@@ -139,7 +142,7 @@ class FileUploadTool(FunctionTool):
             return f"File uploaded successfully to {file_path}"
         except Exception as e:
             logger.error(f"Error uploading file {local_path}: {e}")
-            return f"Error uploading file: {str(e)}"
+            return f"Error uploading file: {e!s}"
 
 
 @dataclass
@@ -210,4 +213,4 @@ class FileDownloadTool(FunctionTool):
             return f"File downloaded successfully to {local_path}"
         except Exception as e:
             logger.error(f"Error downloading file {remote_path}: {e}")
-            return f"Error downloading file: {str(e)}"
+            return f"Error downloading file: {e!s}"

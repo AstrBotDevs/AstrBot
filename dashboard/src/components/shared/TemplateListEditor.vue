@@ -20,7 +20,9 @@
             @click="addEntry(option.value)"
           >
             <v-list-item-title>{{ translateIfKey(option.label) }}</v-list-item-title>
-            <v-list-item-subtitle v-if="option.hint">{{ translateIfKey(option.hint) }}</v-list-item-subtitle>
+            <v-list-item-subtitle v-if="option.hint">
+              {{ translateIfKey(option.hint) }}
+            </v-list-item-subtitle>
           </v-list-item>
         </v-list>
       </v-menu>
@@ -56,25 +58,54 @@
             <v-icon>{{ expandedEntries[entryIndex] ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
           </v-btn>
           <div class="d-flex flex-column">
-            <v-list-item-title class="property-name">{{ templateLabel(entry.__template_key) }}</v-list-item-title>
-            <v-list-item-subtitle class="property-hint" v-if="getTemplate(entry)?.hint || getTemplate(entry)?.description">
+            <v-list-item-title class="property-name">
+              {{ templateLabel(entry.__template_key) }}
+            </v-list-item-title>
+            <v-list-item-subtitle
+              v-if="getTemplate(entry)?.hint || getTemplate(entry)?.description"
+              class="property-hint"
+            >
               {{ translateIfKey(getTemplate(entry)?.hint || getTemplate(entry)?.description) }}
             </v-list-item-subtitle>
           </div>
         </div>
         <div class="d-flex align-center ga-1">
-          <v-btn icon size="small" variant="text" color="error" @click.stop="removeEntry(entryIndex)">
+          <v-btn
+            icon
+            size="small"
+            variant="text"
+            color="error"
+            @click.stop="removeEntry(entryIndex)"
+          >
             <v-icon>mdi-delete</v-icon>
           </v-btn>
         </div>
       </v-card-title>
       <v-expand-transition>
-        <v-card-text v-show="expandedEntries[entryIndex]" class="px-0 py-1">
-          <div v-if="!getTemplate(entry)" class="px-4 py-2">
-            <v-alert type="error" variant="tonal" density="compact">{{ t('core.common.templateList.missingTemplate') || '找不到对应模板，请删除后重新添加。' }}</v-alert>
+        <v-card-text
+          v-show="expandedEntries[entryIndex]"
+          class="px-0 py-1"
+        >
+          <div
+            v-if="!getTemplate(entry)"
+            class="px-4 py-2"
+          >
+            <v-alert
+              type="error"
+              variant="tonal"
+              density="compact"
+            >
+              {{ t('core.common.templateList.missingTemplate') || '找不到对应模板，请删除后重新添加。' }}
+            </v-alert>
           </div>
-          <div v-else class="template-entry-body">
-            <template v-for="(itemMeta, itemKey, metaIndex) in getTemplate(entry).items" :key="itemKey">
+          <div
+            v-else
+            class="template-entry-body"
+          >
+            <template
+              v-for="(itemMeta, itemKey, metaIndex) in getTemplate(entry).items"
+              :key="itemKey"
+            >
               <!-- Nested Object -->
               <div
                 v-if="itemMeta?.type === 'object' && !itemMeta?.invisible && shouldShowItem(itemMeta, entry)"
@@ -84,14 +115,24 @@
                   <v-list-item-title class="config-title">
                     {{ translateIfKey(itemMeta?.description) || itemKey }}
                   </v-list-item-title>
-                  <v-list-item-subtitle class="config-hint" v-if="itemMeta?.hint">
+                  <v-list-item-subtitle
+                    v-if="itemMeta?.hint"
+                    class="config-hint"
+                  >
                     {{ translateIfKey(itemMeta.hint) }}
                   </v-list-item-subtitle>
                 </div>
-                <div v-for="(childMeta, childKey, childIndex) in itemMeta.items" :key="childKey">
+                <div
+                  v-for="(childMeta, childKey, childIndex) in itemMeta.items"
+                  :key="childKey"
+                >
                   <template v-if="!childMeta?.invisible && shouldShowItem(childMeta, entry)">
                     <v-row class="config-row">
-                      <v-col cols="12" sm="6" class="property-info">
+                      <v-col
+                        cols="12"
+                        sm="6"
+                        class="property-info"
+                      >
                         <v-list-item density="compact">
                           <v-list-item-title class="property-name">
                             {{ translateIfKey(childMeta?.description) || childKey }}
@@ -101,7 +142,11 @@
                           </v-list-item-subtitle>
                         </v-list-item>
                       </v-col>
-                      <v-col cols="12" sm="6" class="config-input">
+                      <v-col
+                        cols="12"
+                        sm="6"
+                        class="config-input"
+                      >
                         <ConfigItemRenderer
                           v-model="entry[itemKey][childKey]"
                           :item-meta="childMeta"
@@ -111,7 +156,7 @@
                     <v-divider
                       v-if="hasVisibleItemsAfter(Object.entries(itemMeta.items), childIndex, entry)"
                       class="config-divider"
-                    ></v-divider>
+                    />
                   </template>
                 </div>
               </div>
@@ -119,7 +164,11 @@
               <!-- Regular Property -->
               <template v-else-if="!itemMeta?.invisible && shouldShowItem(itemMeta, entry)">
                 <v-row class="config-row">
-                  <v-col cols="12" sm="6" class="property-info">
+                  <v-col
+                    cols="12"
+                    sm="6"
+                    class="property-info"
+                  >
                     <v-list-item density="compact">
                       <v-list-item-title class="property-name">
                         <span v-if="itemMeta?.description">{{ translateIfKey(itemMeta?.description) }} <span class="property-key">({{ itemKey }})</span></span>
@@ -130,7 +179,11 @@
                       </v-list-item-subtitle>
                     </v-list-item>
                   </v-col>
-                  <v-col cols="12" sm="6" class="config-input">
+                  <v-col
+                    cols="12"
+                    sm="6"
+                    class="config-input"
+                  >
                     <ConfigItemRenderer
                       v-model="entry[itemKey]"
                       :item-meta="itemMeta"
@@ -140,7 +193,7 @@
                 <v-divider
                   v-if="hasVisibleItemsAfter(Object.entries(getTemplate(entry).items), metaIndex, entry)"
                   class="config-divider"
-                ></v-divider>
+                />
               </template>
             </template>
           </div>

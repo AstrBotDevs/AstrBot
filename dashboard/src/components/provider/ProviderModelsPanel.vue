@@ -1,8 +1,13 @@
 <template>
   <div class="mt-4">
     <div class="d-flex align-center ga-2 mb-2">
-      <h3 class="text-h5 font-weight-bold mb-0">{{ tm('models.configured') }}</h3>
-      <small style="color: grey;" v-if="availableCount">{{ tm('models.available') }} {{ availableCount }}</small>
+      <h3 class="text-h5 font-weight-bold mb-0">
+        {{ tm('models.configured') }}
+      </h3>
+      <small
+        v-if="availableCount"
+        style="color: grey;"
+      >{{ tm('models.available') }} {{ availableCount }}</small>
       <v-text-field
         v-model="modelSearchProxy"
         density="compact"
@@ -15,14 +20,14 @@
         style="max-width: 240px;"
         :placeholder="tm('models.searchPlaceholder')"
       />
-      <v-spacer></v-spacer>
+      <v-spacer />
       <v-btn
         color="primary"
         prepend-icon="mdi-download"
         :loading="loadingModels"
-        @click="emit('fetch-models')"
         variant="tonal"
         size="small"
+        @click="emit('fetch-models')"
       >
         {{ isSourceModified ? tm('providerSources.saveAndFetchModels') : tm('providerSources.fetchModels') }}
       </v-btn>
@@ -44,8 +49,15 @@
       style="max-height: 520px; overflow-y: auto; font-family:system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;"
     >
       <template v-if="entries.length > 0">
-        <template v-for="entry in entries" :key="entry.type === 'configured' ? `provider-${entry.provider.id}` : `model-${entry.model}`">
-          <v-tooltip location="top" max-width="400" v-if="entry.type === 'configured'">
+        <template
+          v-for="entry in entries"
+          :key="entry.type === 'configured' ? `provider-${entry.provider.id}` : `model-${entry.model}`"
+        >
+          <v-tooltip
+            v-if="entry.type === 'configured'"
+            location="top"
+            max-width="400"
+          >
             <template #activator="{ props }">
               <v-list-item
                 v-bind="props"
@@ -55,63 +67,93 @@
                 <v-list-item-title class="font-weight-medium text-truncate">
                   {{ entry.provider.id }}
                 </v-list-item-title>
-            <v-list-item-subtitle class="text-caption text-grey d-flex align-center ga-1" style="font-family: monospace;">
-              <span>{{ entry.provider.model }}</span>
-              <v-icon v-if="supportsImageInput(entry.metadata)" size="14" color="grey">
-                mdi-eye-outline
-              </v-icon>
-              <v-icon v-if="supportsToolCall(entry.metadata)" size="14" color="grey">
-                mdi-wrench
-              </v-icon>
-              <v-icon v-if="supportsReasoning(entry.metadata)" size="14" color="grey">
-                mdi-brain
-              </v-icon>
-              <span v-if="formatContextLimit(entry.metadata)">
-                {{ formatContextLimit(entry.metadata) }}
-              </span>
-            </v-list-item-subtitle>
-            <template #append>
-              <div class="d-flex align-center ga-1" @click.stop>
-                <v-switch
-                  v-model="entry.provider.enable"
-                  density="compact"
-                  inset
-                  hide-details
-                  color="primary"
-                  class="mr-1"
-                  @update:modelValue="emit('toggle-provider-enable', entry.provider, $event)"
-                ></v-switch>
-                <v-tooltip location="top" max-width="300">
-                  {{ tm('availability.test') }}
-                  <template #activator="{ props }">
+                <v-list-item-subtitle
+                  class="text-caption text-grey d-flex align-center ga-1"
+                  style="font-family: monospace;"
+                >
+                  <span>{{ entry.provider.model }}</span>
+                  <v-icon
+                    v-if="supportsImageInput(entry.metadata)"
+                    size="14"
+                    color="grey"
+                  >
+                    mdi-eye-outline
+                  </v-icon>
+                  <v-icon
+                    v-if="supportsToolCall(entry.metadata)"
+                    size="14"
+                    color="grey"
+                  >
+                    mdi-wrench
+                  </v-icon>
+                  <v-icon
+                    v-if="supportsReasoning(entry.metadata)"
+                    size="14"
+                    color="grey"
+                  >
+                    mdi-brain
+                  </v-icon>
+                  <span v-if="formatContextLimit(entry.metadata)">
+                    {{ formatContextLimit(entry.metadata) }}
+                  </span>
+                </v-list-item-subtitle>
+                <template #append>
+                  <div
+                    class="d-flex align-center ga-1"
+                    @click.stop
+                  >
+                    <v-switch
+                      v-model="entry.provider.enable"
+                      density="compact"
+                      inset
+                      hide-details
+                      color="primary"
+                      class="mr-1"
+                      @update:modelValue="emit('toggle-provider-enable', entry.provider, $event)"
+                    />
+                    <v-tooltip
+                      location="top"
+                      max-width="300"
+                    >
+                      {{ tm('availability.test') }}
+                      <template #activator="{ props }">
+                        <v-btn
+                          icon="mdi-connection"
+                          size="small"
+                          variant="text"
+                          :disabled="!entry.provider.enable"
+                          :loading="isProviderTesting(entry.provider.id)"
+                          v-bind="props"
+                          @click.stop="emit('test-provider', entry.provider)"
+                        />
+                      </template>
+                    </v-tooltip>
+
+                    <v-tooltip
+                      location="top"
+                      max-width="300"
+                    >
+                      {{ tm('models.configure') }}
+                      <template #activator="{ props }">
+                        <v-btn
+                          icon="mdi-cog"
+                          size="small"
+                          variant="text"
+                          v-bind="props"
+                          @click.stop="emit('open-provider-edit', entry.provider)"
+                        />
+                      </template>
+                    </v-tooltip>
+
                     <v-btn
-                      icon="mdi-connection"
+                      icon="mdi-delete"
                       size="small"
                       variant="text"
-                      :disabled="!entry.provider.enable"
-                      :loading="isProviderTesting(entry.provider.id)"
-                      v-bind="props"
-                      @click.stop="emit('test-provider', entry.provider)"
-                    ></v-btn>
-                  </template>
-                </v-tooltip>
-
-                <v-tooltip location="top" max-width="300">
-                  {{ tm('models.configure') }}
-                  <template #activator="{ props }">
-                    <v-btn
-                      icon="mdi-cog"
-                      size="small"
-                      variant="text"
-                      v-bind="props"
-                      @click.stop="emit('open-provider-edit', entry.provider)"
-                    ></v-btn>
-                  </template>
-                </v-tooltip>
-
-                <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click.stop="emit('delete-provider', entry.provider)"></v-btn>
-              </div>
-            </template>
+                      color="error"
+                      @click.stop="emit('delete-provider', entry.provider)"
+                    />
+                  </div>
+                </template>
               </v-list-item>
             </template>
             <div>
@@ -120,27 +162,52 @@
             </div>
           </v-tooltip>
 
-          <v-tooltip location="top" max-width="400" v-else>
+          <v-tooltip
+            v-else
+            location="top"
+            max-width="400"
+          >
             <template #activator="{ props }">
-              <v-list-item v-bind="props" class="cursor-pointer" @click="emit('add-model-provider', entry.model)">
+              <v-list-item
+                v-bind="props"
+                class="cursor-pointer"
+                @click="emit('add-model-provider', entry.model)"
+              >
                 <v-list-item-title>{{ entry.model }}</v-list-item-title>
-            <v-list-item-subtitle class="text-caption text-grey d-flex align-center ga-1">
-              <span>{{ entry.model }}</span>
-              <v-icon v-if="supportsImageInput(entry.metadata)" size="14" color="grey">
-                mdi-eye-outline
-              </v-icon>
-              <v-icon v-if="supportsToolCall(entry.metadata)" size="14" color="grey">
-                mdi-wrench
-              </v-icon>
-              <v-icon v-if="supportsReasoning(entry.metadata)" size="14" color="grey">
-                mdi-brain
-              </v-icon>
-              <span v-if="formatContextLimit(entry.metadata)">
-                {{ formatContextLimit(entry.metadata) }}
-              </span>
-            </v-list-item-subtitle>
+                <v-list-item-subtitle class="text-caption text-grey d-flex align-center ga-1">
+                  <span>{{ entry.model }}</span>
+                  <v-icon
+                    v-if="supportsImageInput(entry.metadata)"
+                    size="14"
+                    color="grey"
+                  >
+                    mdi-eye-outline
+                  </v-icon>
+                  <v-icon
+                    v-if="supportsToolCall(entry.metadata)"
+                    size="14"
+                    color="grey"
+                  >
+                    mdi-wrench
+                  </v-icon>
+                  <v-icon
+                    v-if="supportsReasoning(entry.metadata)"
+                    size="14"
+                    color="grey"
+                  >
+                    mdi-brain
+                  </v-icon>
+                  <span v-if="formatContextLimit(entry.metadata)">
+                    {{ formatContextLimit(entry.metadata) }}
+                  </span>
+                </v-list-item-subtitle>
                 <template #append>
-                  <v-btn icon="mdi-plus" size="small" variant="text" color="primary"></v-btn>
+                  <v-btn
+                    icon="mdi-plus"
+                    size="small"
+                    variant="text"
+                    color="primary"
+                  />
                 </template>
               </v-list-item>
             </template>
@@ -152,8 +219,15 @@
       </template>
       <template v-else>
         <div class="text-center pa-4 text-medium-emphasis">
-          <v-icon size="48" color="grey-lighten-1">mdi-package-variant</v-icon>
-          <p class="text-grey mt-2">{{ tm('models.empty') }}</p>
+          <v-icon
+            size="48"
+            color="grey-lighten-1"
+          >
+            mdi-package-variant
+          </v-icon>
+          <p class="text-grey mt-2">
+            {{ tm('models.empty') }}
+          </p>
         </div>
       </template>
     </v-list>

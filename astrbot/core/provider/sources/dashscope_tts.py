@@ -4,6 +4,7 @@ import logging
 import os
 import uuid
 
+import aiofiles
 import aiohttp
 import dashscope
 from dashscope.audio.tts_v2 import AudioFormat, SpeechSynthesizer
@@ -59,8 +60,8 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             )
 
         path = os.path.join(temp_dir, f"dashscope_tts_{uuid.uuid4()}{ext}")
-        with open(path, "wb") as f:
-            f.write(audio_bytes)
+        async with aiofiles.open(path, "wb") as f:
+            await f.write(audio_bytes)
         return path
 
     def _call_qwen_tts(self, model: str, text: str):

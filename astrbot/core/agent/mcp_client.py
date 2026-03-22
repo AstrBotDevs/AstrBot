@@ -188,7 +188,7 @@ class MCPClient:
             # Handle MCP service error logs
             if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
                 if msg.level in ("warning", "error", "critical", "alert", "emergency"):
-                    log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
+                    log_msg = f"[{msg.level.upper()}] {msg.data!s}"
                     self.server_errlogs.append(log_msg)
 
         if "url" in cfg:
@@ -267,7 +267,7 @@ class MCPClient:
                         "alert",
                         "emergency",
                     ):
-                        log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
+                        log_msg = f"[{msg.level.upper()}] {msg.data!s}"
                         self.server_errlogs.append(log_msg)
 
             stdio_transport = await self.exit_stack.enter_async_context(
@@ -428,6 +428,7 @@ class MCPTool(FunctionTool, Generic[TContext]):
         self.mcp_tool = mcp_tool
         self.mcp_client = mcp_client
         self.mcp_server_name = mcp_server_name
+        self.source = "mcp"
 
     async def call(
         self, context: ContextWrapper[TContext], **kwargs

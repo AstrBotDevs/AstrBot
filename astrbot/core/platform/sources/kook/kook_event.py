@@ -164,7 +164,7 @@ class KookEvent(AstrMessageEvent):
         for index, result in enumerate(tasks_result):
             if isinstance(result, BaseException):
                 logger.error(f"[Kook] {result}")
-                # 构造一个虚假的 OrderMessage，让用户知道这里本来有张图但坏了
+                # 构造一个虚假的 OrderMessage,让用户知道这里本来有张图但坏了
                 # 这样后面的 for 循环就能把它当成普通文本发出去
                 err_node = OrderMessage(
                     index=index,

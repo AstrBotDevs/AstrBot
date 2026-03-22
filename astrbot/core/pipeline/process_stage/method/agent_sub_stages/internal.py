@@ -8,6 +8,7 @@ from dataclasses import replace
 from astrbot.core import logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
     MainAgentBuildResult,
@@ -22,19 +23,8 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
-from astrbot.core.pipeline.stage import Stage
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.provider.entities import (
-    LLMResponse,
-    ProviderRequest,
-)
-from astrbot.core.star.star_handler import EventType
-from astrbot.core.utils.metrics import Metric
-from astrbot.core.utils.session_lock import session_lock_manager
-
-from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
-from ....context import PipelineContext, call_event_hook
-from ...follow_up import (
+from astrbot.core.pipeline.context import PipelineContext, call_event_hook
+from astrbot.core.pipeline.process_stage.follow_up import (
     FollowUpCapture,
     finalize_follow_up_capture,
     prepare_follow_up_capture,
@@ -42,11 +32,25 @@ from ...follow_up import (
     try_capture_follow_up,
     unregister_active_runner,
 )
+from astrbot.core.pipeline.stage import Stage
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.provider.entities import (
+    LLMResponse,
+    ProviderRequest,
+)
+from astrbot.core.star.star_handler import EventType
+from astrbot.core.tool_provider import ToolProvider
+from astrbot.core.utils.astrbot_path import get_astrbot_root, get_astrbot_skills_path
+from astrbot.core.utils.metrics import Metric
+from astrbot.core.utils.session_lock import session_lock_manager
 
 
 class InternalAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
+        self.provider_wake_prefix: str = ctx.astrbot_config["provider_settings"][
+            "wake_prefix"
+        ]
         conf = ctx.astrbot_config
         settings = conf["provider_settings"]
         self.streaming_response: bool = settings["streaming_response"]
@@ -56,9 +60,9 @@ class InternalAgentSubStage(Stage):
         self.max_step: int = settings.get("max_agent_step", 30)
         self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
         self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
-        if self.tool_schema_mode not in ("skills_like", "full"):
+        if self.tool_schema_mode not in ("lazy_load", "full"):
             logger.warning(
-                "Unsupported tool_schema_mode: %s, fallback to skills_like",
+                "Unsupported tool_schema_mode: %s, fallback to lazy_load",
                 self.tool_schema_mode,
             )
             self.tool_schema_mode = "full"
@@ -113,6 +117,14 @@ class InternalAgentSubStage(Stage):
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
+        # Build decoupled tool providers
+        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
+        from astrbot.core.cron.cron_tool_provider import CronToolProvider
+
+        _tool_providers: list[ToolProvider] = [ComputerToolProvider()]
+        if self.add_cron_tools:
+            _tool_providers.append(CronToolProvider())
+
         self.main_agent_cfg = MainAgentBuildConfig(
             tool_call_timeout=self.tool_call_timeout,
             tool_schema_mode=self.tool_schema_mode,
@@ -131,6 +143,7 @@ class InternalAgentSubStage(Stage):
             safety_mode_strategy=self.safety_mode_strategy,
             computer_use_runtime=self.computer_use_runtime,
             sandbox_cfg=self.sandbox_cfg,
+            tool_providers=_tool_providers,
             add_cron_tools=self.add_cron_tools,
             provider_settings=settings,
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
@@ -139,8 +152,9 @@ class InternalAgentSubStage(Stage):
         )
 
     async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str
-    ) -> AsyncGenerator[None, None]:
+        self,
+        event: AstrMessageEvent,
+    ) -> None | AsyncGenerator[None, None]:
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False
         follow_up_activated = False
@@ -202,7 +216,7 @@ class InternalAgentSubStage(Stage):
                 try:
                     build_cfg = replace(
                         self.main_agent_cfg,
-                        provider_wake_prefix=provider_wake_prefix,
+                        provider_wake_prefix=self.provider_wake_prefix,
                         streaming_response=streaming_response,
                     )
 
@@ -257,6 +271,8 @@ class InternalAgentSubStage(Stage):
                     if reset_coro:
                         await reset_coro
 
+                    effective_streaming_response = bool(agent_runner.streaming)
+
                     register_active_runner(event.unified_msg_origin, agent_runner)
                     runner_registered = True
                     action_type = event.get_extra("action_type")
@@ -265,7 +281,7 @@ class InternalAgentSubStage(Stage):
                         "astr_agent_prepare",
                         system_prompt=req.system_prompt,
                         tools=req.func_tool.names() if req.func_tool else [],
-                        stream=streaming_response,
+                        stream=effective_streaming_response,
                         chat_provider={
                             "id": provider.provider_config.get("id", ""),
                             "model": provider.get_model(),
@@ -275,7 +291,7 @@ class InternalAgentSubStage(Stage):
                     # 检测 Live Mode
                     if action_type == "live":
                         # Live Mode: 使用 run_live_agent
-                        logger.info("[Internal Agent] 检测到 Live Mode，启用 TTS 处理")
+                        logger.info("[Internal Agent] 检测到 Live Mode,启用 TTS 处理")
 
                         # 获取 TTS Provider
                         tts_provider = (
@@ -286,10 +302,10 @@ class InternalAgentSubStage(Stage):
 
                         if not tts_provider:
                             logger.warning(
-                                "[Live Mode] TTS Provider 未配置，将使用普通流式模式"
+                                "[Live Mode] TTS Provider 未配置,将使用普通流式模式"
                             )
 
-                        # 使用 run_live_agent，总是使用流式响应
+                        # 使用 run_live_agent,总是使用流式响应
                         event.set_result(
                             MessageEventResult()
                             .set_result_content_type(ResultContentType.STREAMING_RESULT)
@@ -319,7 +335,7 @@ class InternalAgentSubStage(Stage):
                                 user_aborted=agent_runner.was_aborted(),
                             )
 
-                    elif streaming_response and not stream_to_general:
+                    elif effective_streaming_response and not stream_to_general:
                         # 流式响应
                         event.set_result(
                             MessageEventResult()
@@ -372,7 +388,7 @@ class InternalAgentSubStage(Stage):
                         resp=final_resp.completion_text if final_resp else None,
                     )
 
-                    # 检查事件是否被停止，如果被停止则不保存历史记录
+                    # 检查事件是否被停止,如果被停止则不保存历史记录
                     if not event.is_stopped() or agent_runner.was_aborted():
                         await self._save_to_history(
                             event,
@@ -383,7 +399,7 @@ class InternalAgentSubStage(Stage):
                             user_aborted=agent_runner.was_aborted(),
                         )
 
-                    asyncio.create_task(
+                    asyncio.create_task(  # noqa: RUF006
                         Metric.upload(
                             llm_tick=1,
                             model_name=agent_runner.provider.get_model(),
@@ -395,7 +411,11 @@ class InternalAgentSubStage(Stage):
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
         except Exception as e:
-            logger.error(f"Error occurred while processing agent: {e}")
+            logger.exception(
+                "Error occurred while processing agent. root=%s skills=%s",
+                get_astrbot_root(),
+                get_astrbot_skills_path(),
+            )
             custom_error_message = extract_persona_custom_error_message_from_event(
                 event
             )
@@ -441,7 +461,7 @@ class InternalAgentSubStage(Stage):
             and not req.tool_calls_result
             and not user_aborted
         ):
-            logger.debug("LLM 响应为空，不保存记录。")
+            logger.debug("LLM 响应为空,不保存记录｡")
             return
 
         message_to_save = []

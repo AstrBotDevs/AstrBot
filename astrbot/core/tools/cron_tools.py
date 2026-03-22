@@ -184,6 +184,12 @@ CREATE_CRON_JOB_TOOL = CreateActiveCronTool()
 DELETE_CRON_JOB_TOOL = DeleteCronJobTool()
 LIST_CRON_JOBS_TOOL = ListCronJobsTool()
 
+
+def get_all_tools() -> list[FunctionTool]:
+    """Return all cron-related tools for registration."""
+    return [CREATE_CRON_JOB_TOOL, DELETE_CRON_JOB_TOOL, LIST_CRON_JOBS_TOOL]
+
+
 __all__ = [
     "CREATE_CRON_JOB_TOOL",
     "DELETE_CRON_JOB_TOOL",
@@ -191,4 +197,5 @@ __all__ = [
     "CreateActiveCronTool",
     "DeleteCronJobTool",
     "ListCronJobsTool",
+    "get_all_tools",
 ]

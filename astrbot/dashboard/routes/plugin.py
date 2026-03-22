@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import aiohttp
+import anyio
 import certifi
 from quart import request
 
@@ -128,17 +129,17 @@ class PluginRoute(Route):
             )
         try:
             data = await request.get_json()
-            dir_name = data.get("dir_name")  # 这里拿的是目录名，不是插件名
+            dir_name = data.get("dir_name")  # 这里拿的是目录名,不是插件名
 
             if not dir_name:
                 return Response().error("缺少插件目录名").__dict__
 
             # 调用 star_manager.py 中的函数
-            # 注意：传入的是目录名
+            # 注意:传入的是目录名
             success, err = await self.plugin_manager.reload_failed_plugin(dir_name)
 
             if success:
-                return Response().ok(None, f"插件 {dir_name} 重载成功。").__dict__
+                return Response().ok(None, f"插件 {dir_name} 重载成功｡").__dict__
             else:
                 return Response().error(f"重载失败: {err}").__dict__
 
@@ -182,14 +183,14 @@ class PluginRoute(Route):
         # 构建注册表源信息
         source = self._build_registry_source(custom)
 
-        # 如果不是强制刷新，先检查缓存是否有效
+        # 如果不是强制刷新,先检查缓存是否有效
         cached_data = None
         if not force_refresh:
-            # 先检查MD5是否匹配，如果匹配则使用缓存
+            # 先检查MD5是否匹配,如果匹配则使用缓存
             if await self._is_cache_valid(source):
-                cached_data = self._load_plugin_cache(source.cache_file)
+                cached_data = await self._load_plugin_cache(source.cache_file)
                 if cached_data:
-                    logger.debug("缓存MD5匹配，使用缓存的插件市场数据")
+                    logger.debug("缓存MD5匹配,使用缓存的插件市场数据")
                     return Response().ok(cached_data).__dict__
 
         # 尝试获取远程数据
@@ -221,29 +222,29 @@ class PluginRoute(Route):
                             continue  # 继续尝试其他URL或使用缓存
 
                         logger.info(
-                            f"成功获取远程插件市场数据，包含 {len(remote_data)} 个插件"
+                            f"成功获取远程插件市场数据,包含 {len(remote_data)} 个插件"
                         )
                         # 获取最新的MD5并保存到缓存
                         current_md5 = await self._fetch_remote_md5(source.md5_url)
-                        self._save_plugin_cache(
+                        await self._save_plugin_cache(
                             source.cache_file,
                             remote_data,
                             current_md5,
                         )
                         return Response().ok(remote_data).__dict__
-                    logger.error(f"请求 {url} 失败，状态码：{response.status}")
+                    logger.error(f"请求 {url} 失败,状态码:{response.status}")
             except Exception as e:
-                logger.error(f"请求 {url} 失败，错误：{e}")
+                logger.error(f"请求 {url} 失败,错误:{e}")
 
-        # 如果远程获取失败，尝试使用缓存数据
+        # 如果远程获取失败,尝试使用缓存数据
         if not cached_data:
-            cached_data = self._load_plugin_cache(source.cache_file)
+            cached_data = await self._load_plugin_cache(source.cache_file)
 
         if cached_data:
-            logger.warning("远程插件市场数据获取失败，使用缓存数据")
-            return Response().ok(cached_data, "使用缓存数据，可能不是最新版本").__dict__
+            logger.warning("远程插件市场数据获取失败,使用缓存数据")
+            return Response().ok(cached_data, "使用缓存数据,可能不是最新版本").__dict__
 
-        return Response().error("获取插件列表失败，且没有可用的缓存数据").__dict__
+        return Response().error("获取插件列表失败,且没有可用的缓存数据").__dict__
 
     def _build_registry_source(self, custom_url: str | None) -> RegistrySource:
         """构建注册表源信息"""
@@ -269,14 +270,14 @@ class PluginRoute(Route):
             ]
         return RegistrySource(urls=urls, cache_file=cache_file, md5_url=md5_url)
 
-    def _load_cached_md5(self, cache_file: str) -> str | None:
+    async def _load_cached_md5(self, cache_file: str) -> str | None:
         """从缓存文件中加载MD5"""
-        if not os.path.exists(cache_file):
+        if not await anyio.Path(cache_file).exists():
             return None
 
         try:
-            with open(cache_file, encoding="utf-8") as f:
-                cache_data = json.load(f)
+            async with await anyio.open_file(cache_file, encoding="utf-8") as f:
+                cache_data = json.loads(await f.read())
             return cache_data.get("md5")
         except Exception as e:
             logger.warning(f"加载缓存MD5失败: {e}")
@@ -306,17 +307,17 @@ class PluginRoute(Route):
         return None
 
     async def _is_cache_valid(self, source: RegistrySource) -> bool:
-        """检查缓存是否有效（基于MD5）"""
+        """检查缓存是否有效(基于MD5)"""
         try:
-            cached_md5 = self._load_cached_md5(source.cache_file)
+            cached_md5 = await self._load_cached_md5(source.cache_file)
             if not cached_md5:
                 logger.debug("缓存文件中没有MD5信息")
                 return False
 
             remote_md5 = await self._fetch_remote_md5(source.md5_url)
             if remote_md5 is None:
-                logger.warning("无法获取远程MD5，将使用缓存")
-                return True  # 如果无法获取远程MD5，认为缓存有效
+                logger.warning("无法获取远程MD5,将使用缓存")
+                return True  # 如果无法获取远程MD5,认为缓存有效
 
             is_valid = cached_md5 == remote_md5
             logger.debug(
@@ -328,12 +329,12 @@ class PluginRoute(Route):
             logger.warning(f"检查缓存有效性失败: {e}")
             return False
 
-    def _load_plugin_cache(self, cache_file: str):
+    async def _load_plugin_cache(self, cache_file: str):
         """加载本地缓存的插件市场数据"""
         try:
-            if os.path.exists(cache_file):
-                with open(cache_file, encoding="utf-8") as f:
-                    cache_data = json.load(f)
+            if await anyio.Path(cache_file).exists():
+                async with await anyio.open_file(cache_file, encoding="utf-8") as f:
+                    cache_data = json.loads(await f.read())
                     # 检查缓存是否有效
                     if "data" in cache_data and "timestamp" in cache_data:
                         logger.debug(
@@ -344,7 +345,9 @@ class PluginRoute(Route):
             logger.warning(f"加载插件市场缓存失败: {e}")
         return None
 
-    def _save_plugin_cache(self, cache_file: str, data, md5: str | None = None) -> None:
+    async def _save_plugin_cache(
+        self, cache_file: str, data, md5: str | None = None
+    ) -> None:
         """保存插件市场数据到本地缓存"""
         try:
             # 确保目录存在
@@ -356,8 +359,10 @@ class PluginRoute(Route):
                 "md5": md5 or "",
             }
 
-            with open(cache_file, "w", encoding="utf-8") as f:
-                json.dump(cache_data, f, ensure_ascii=False, indent=2)
+            async with await anyio.open_file(cache_file, "w", encoding="utf-8") as f:
+                await f.write(
+                    json.dumps(cache_data, ensure_ascii=False, indent=2),
+                )
             logger.debug(f"插件市场数据已缓存到: {cache_file}, MD5: {md5}")
         except Exception as e:
             logger.warning(f"保存插件市场缓存失败: {e}")
@@ -367,7 +372,9 @@ class PluginRoute(Route):
             if token := self._logo_cache.get(logo_path):
                 if not await file_token_service.check_token_expired(token):
                     return self._logo_cache[logo_path]
-            token = await file_token_service.register_file(logo_path, timeout=300)
+            token = await file_token_service.register_file(
+                logo_path, expire_seconds=300
+            )
             self._logo_cache[logo_path] = token
             return token
         except Exception as e:
@@ -483,7 +490,7 @@ class PluginRoute(Route):
                 has_admin = False
                 for filter in (
                     handler.event_filters
-                ):  # 正常handler就只有 1~2 个 filter，因此这里时间复杂度不会太高
+                ):  # 正常handler就只有 1~2 个 filter,因此这里时间复杂度不会太高
                     if isinstance(filter, CommandFilter):
                         info["type"] = "指令"
                         info["cmd"] = (
@@ -542,8 +549,8 @@ class PluginRoute(Route):
                 ignore_version_check=ignore_version_check,
             )
             # self.core_lifecycle.restart()
-            logger.info(f"安装插件 {repo_url} 成功。")
-            return Response().ok(plugin_info, "安装成功。").__dict__
+            logger.info(f"安装插件 {repo_url} 成功｡")
+            return Response().ok(plugin_info, "安装成功｡").__dict__
         except PluginVersionIncompatibleError as e:
             return {
                 "status": "warning",
@@ -584,7 +591,7 @@ class PluginRoute(Route):
             )
             # self.core_lifecycle.restart()
             logger.info(f"安装插件 {file.filename} 成功")
-            return Response().ok(plugin_info, "安装成功。").__dict__
+            return Response().ok(plugin_info, "安装成功｡").__dict__
         except PluginVersionIncompatibleError as e:
             return {
                 "status": "warning",
@@ -673,8 +680,8 @@ class PluginRoute(Route):
             await self.plugin_manager.update_plugin(plugin_name, proxy)
             # self.core_lifecycle.restart()
             await self.plugin_manager.reload(plugin_name)
-            logger.info(f"更新插件 {plugin_name} 成功。")
-            return Response().ok(None, "更新成功。").__dict__
+            logger.info(f"更新插件 {plugin_name} 成功｡")
+            return Response().ok(None, "更新成功｡").__dict__
         except Exception as e:
             logger.error(f"/api/plugin/update: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
@@ -725,9 +732,9 @@ class PluginRoute(Route):
 
         failed = [r for r in results if r["status"] == "error"]
         message = (
-            "批量更新完成，全部成功。"
+            "批量更新完成,全部成功｡"
             if not failed
-            else f"批量更新完成，其中 {len(failed)}/{len(results)} 个插件失败。"
+            else f"批量更新完成,其中 {len(failed)}/{len(results)} 个插件失败｡"
         )
 
         return Response().ok({"results": results}, message).__dict__
@@ -754,8 +761,8 @@ class PluginRoute(Route):
             return Response().ok(None, "停用成功。").__dict__
         try:
             await self.plugin_manager.turn_off_plugin(plugin_name)
-            logger.info(f"停用插件 {plugin_name} 。")
-            return Response().ok(None, "停用成功。").__dict__
+            logger.info(f"停用插件 {plugin_name} ｡")
+            return Response().ok(None, "停用成功｡").__dict__
         except Exception as e:
             logger.error(f"/api/plugin/off: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
@@ -782,8 +789,8 @@ class PluginRoute(Route):
             return Response().ok(None, "启用成功。").__dict__
         try:
             await self.plugin_manager.turn_on_plugin(plugin_name)
-            logger.info(f"启用插件 {plugin_name} 。")
-            return Response().ok(None, "启用成功。").__dict__
+            logger.info(f"启用插件 {plugin_name} ｡")
+            return Response().ok(None, "启用成功｡").__dict__
         except Exception as e:
             logger.error(f"/api/plugin/on: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
@@ -821,19 +828,19 @@ class PluginRoute(Route):
                 plugin_obj.root_dir_name,
             )
 
-        if not os.path.isdir(plugin_dir):
+        if not await anyio.Path(plugin_dir).is_dir():
             logger.warning(f"无法找到插件目录: {plugin_dir}")
             return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
 
         readme_path = os.path.join(plugin_dir, "README.md")
 
-        if not os.path.isfile(readme_path):
+        if not await anyio.Path(readme_path).is_file():
             logger.warning(f"插件 {plugin_name} 没有README文件")
             return Response().error(f"插件 {plugin_name} 没有README文件").__dict__
 
         try:
-            with open(readme_path, encoding="utf-8") as f:
-                readme_content = f.read()
+            async with await anyio.open_file(readme_path, encoding="utf-8") as f:
+                readme_content = await f.read()
 
             return (
                 Response()
@@ -847,7 +854,7 @@ class PluginRoute(Route):
     async def get_plugin_changelog(self):
         """获取插件更新日志
 
-        读取插件目录下的 CHANGELOG.md 文件内容。
+        读取插件目录下的 CHANGELOG.md 文件内容｡
         """
         plugin_name = request.args.get("name")
         logger.debug(f"正在获取插件 {plugin_name} 的更新日志")
@@ -882,7 +889,7 @@ class PluginRoute(Route):
                 plugin_obj.root_dir_name,
             )
 
-        if not os.path.isdir(plugin_dir):
+        if not await anyio.Path(plugin_dir).is_dir():
             logger.warning(f"无法找到插件目录: {plugin_dir}")
             return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
 
@@ -890,10 +897,12 @@ class PluginRoute(Route):
         changelog_names = ["CHANGELOG.md", "changelog.md", "CHANGELOG", "changelog"]
         for name in changelog_names:
             changelog_path = os.path.join(plugin_dir, name)
-            if os.path.isfile(changelog_path):
+            if await anyio.Path(changelog_path).is_file():
                 try:
-                    with open(changelog_path, encoding="utf-8") as f:
-                        changelog_content = f.read()
+                    async with await anyio.open_file(
+                        changelog_path, encoding="utf-8"
+                    ) as f:
+                        changelog_content = await f.read()
                     return (
                         Response()
                         .ok({"content": changelog_content}, "成功获取更新日志")
@@ -903,7 +912,7 @@ class PluginRoute(Route):
                     logger.error(f"/api/plugin/changelog: {traceback.format_exc()}")
                     return Response().error(f"读取更新日志失败: {e!s}").__dict__
 
-        # 没有找到 changelog 文件，返回 ok 但 content 为 null
+        # 没有找到 changelog 文件,返回 ok 但 content 为 null
         logger.warning(f"插件 {plugin_name} 没有更新日志文件")
         return Response().ok({"content": None}, "该插件没有更新日志文件").__dict__
 

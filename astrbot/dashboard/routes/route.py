@@ -57,3 +57,25 @@ class Response:
         self.data = data
         self.message = message
         return self
+
+    def _serialize_value(self, value):
+        # 将 AstrBotConfig dict 子类 转成 plain dict , 递归处理 dict/list
+        from astrbot.core.config.astrbot_config import AstrBotConfig
+
+        if isinstance(value, AstrBotConfig):
+            # 明确构造 plain dict, 避免触发 AstrBotConfig.__init__
+            return dict(value)
+        if isinstance(value, dict):
+            return {k: self._serialize_value(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._serialize_value(v) for v in value]
+        # 如果还有其他自定义对象需要序列化, 可以在此扩展或抛出 TypeError
+        return value
+
+    def to_json(self):
+        data = self.data if self.data is not None else {}
+        return {
+            "status": self.status,
+            "message": self.message,
+            "data": self._serialize_value(data),
+        }

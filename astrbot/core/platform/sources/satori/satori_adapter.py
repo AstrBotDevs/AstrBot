@@ -121,7 +121,7 @@ class SatoriPlatformAdapter(Platform):
                 break
 
             if retry_count >= max_retries:
-                logger.error(f"达到最大重试次数 ({max_retries})，停止重试")
+                logger.error(f"达到最大重试次数 ({max_retries}),停止重试")
                 break
 
             if not self.auto_reconnect:
@@ -520,7 +520,7 @@ class SatoriPlatformAdapter(Platform):
 
             return None
         except ET.ParseError as e:
-            logger.warning(f"XML解析失败，使用正则提取: {e}")
+            logger.warning(f"XML解析失败,使用正则提取: {e}")
             return await self._extract_quote_with_regex(content)
         except Exception as e:
             logger.error(f"提取<quote>标签时发生错误: {e}")
@@ -563,7 +563,7 @@ class SatoriPlatformAdapter(Platform):
                     nickname=quote_author.get("nick", quote_author.get("name", "")),
                 )
             else:
-                # 如果没有作者信息，使用默认值
+                # 如果没有作者信息,使用默认值
                 quote_abm.sender = MessageMember(
                     user_id=quote.get("user_id", ""),
                     nickname="内容",
@@ -580,7 +580,7 @@ class SatoriPlatformAdapter(Platform):
 
             quote_abm.timestamp = int(quote.get("timestamp", time.time()))
 
-            # 如果没有任何内容，使用默认文本
+            # 如果没有任何内容,使用默认文本
             if not quote_abm.message_str.strip():
                 quote_abm.message_str = "[引用消息]"
 
@@ -621,14 +621,14 @@ class SatoriPlatformAdapter(Platform):
             await self._parse_xml_node(root, elements)
         except ET.ParseError as e:
             logger.warning(f"解析 Satori 元素时发生解析错误: {e}, 错误内容: {content}")
-            # 如果解析失败，将整个内容当作纯文本
+            # 如果解析失败,将整个内容当作纯文本
             if content.strip():
                 elements.append(Plain(text=content))
         except Exception as e:
             logger.error(f"解析 Satori 元素时发生未知错误: {e}")
             raise e
 
-        # 如果没有解析到任何元素，将整个内容当作纯文本
+        # 如果没有解析到任何元素,将整个内容当作纯文本
         if not elements and content.strip():
             elements.append(Plain(text=content))
 
@@ -640,7 +640,7 @@ class SatoriPlatformAdapter(Platform):
             elements.append(Plain(text=node.text))
 
         for child in node:
-            # 获取标签名，去除命名空间前缀
+            # 获取标签名,去除命名空间前缀
             tag_name = child.tag
             if "}" in tag_name:
                 tag_name = tag_name.split("}")[1]
@@ -711,7 +711,7 @@ class SatoriPlatformAdapter(Platform):
                     elements.append(Plain(text="[JSON卡片]"))
 
             else:
-                # 未知标签，递归处理其内容
+                # 未知标签,递归处理其内容
                 if child.text and child.text.strip():
                     elements.append(Plain(text=child.text))
                 await self._parse_xml_node(child, elements)

@@ -2,7 +2,7 @@
  * 指令操作方法 Composable
  */
 import { reactive } from 'vue';
-import axios from 'axios';
+import axios from '@/utils/request';
 import type { CommandItem, RenameDialogState, DetailsDialogState, TypeInfo, StatusInfo } from '../types';
 
 export function useCommandActions(

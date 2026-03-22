@@ -14,18 +14,24 @@ from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.provider.func_tool_manager import PY_TO_JSON_TYPE, SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
-
-from ..filter.command import CommandFilter
-from ..filter.command_group import CommandGroupFilter
-from ..filter.custom_filter import CustomFilterAnd, CustomFilterOr
-from ..filter.event_message_type import EventMessageType, EventMessageTypeFilter
-from ..filter.permission import PermissionType, PermissionTypeFilter
-from ..filter.platform_adapter_type import (
+from astrbot.core.star.filter.command import CommandFilter
+from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.filter.custom_filter import CustomFilterAnd, CustomFilterOr
+from astrbot.core.star.filter.event_message_type import (
+    EventMessageType,
+    EventMessageTypeFilter,
+)
+from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
+from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
     PlatformAdapterTypeFilter,
 )
-from ..filter.regex import RegexFilter
-from ..star_handler import EventType, StarHandlerMetadata, star_handlers_registry
+from astrbot.core.star.filter.regex import RegexFilter
+from astrbot.core.star.star_handler import (
+    EventType,
+    StarHandlerMetadata,
+    star_handlers_registry,
+)
 
 
 def get_handler_full_name(
@@ -96,11 +102,11 @@ def register_command(
             command_name.parent_group.add_sub_command_filter(new_command)
         else:
             logger.warning(
-                f"注册指令{command_name} 的子指令时未提供 sub_command 参数。",
+                f"注册指令{command_name} 的子指令时未提供 sub_command 参数｡",
             )
     # 裸指令
     elif command_name is None:
-        logger.warning("注册裸指令时未提供 command_name 参数。")
+        logger.warning("注册裸指令时未提供 command_name 参数｡")
     else:
         new_command = CommandFilter(command_name, alias, None)
         add_to_event_filters = True
@@ -108,7 +114,7 @@ def register_command(
     def decorator(awaitable):
         if not add_to_event_filters:
             kwargs["sub_command"] = (
-                True  # 打一个标记，表示这是一个子指令，再 wakingstage 阶段这个 handler 将会直接被跳过（其父指令会接管）
+                True  # 打一个标记,表示这是一个子指令,再 wakingstage 阶段这个 handler 将会直接被跳过(其父指令会接管)
             )
         handler_md = get_handler_or_create(
             awaitable,
@@ -128,16 +134,16 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
 
     Args:
         custom_type_filter: 在裸指令时为CustomFilter对象
-                                        在指令组时为父指令的RegisteringCommandable对象，即self或者command_group的返回
-        raise_error: 如果没有权限，是否抛出错误到消息平台，并且停止事件传播。默认为 True
+                                        在指令组时为父指令的RegisteringCommandable对象,即self或者command_group的返回
+        raise_error: 如果没有权限,是否抛出错误到消息平台,并且停止事件传播｡默认为 True
 
     """
     add_to_event_filters = False
     raise_error = True
 
-    # 判断是否是指令组，指令组则添加到指令组的CommandGroupFilter对象中在waking_check的时候一起判断
+    # 判断是否是指令组,指令组则添加到指令组的CommandGroupFilter对象中在waking_check的时候一起判断
     if isinstance(custom_type_filter, RegisteringCommandable):
-        # 子指令, 此时函数为RegisteringCommandable对象的方法，首位参数为RegisteringCommandable对象的self。
+        # 子指令, 此时函数为RegisteringCommandable对象的方法,首位参数为RegisteringCommandable对象的self｡
         parent_register_commandable = custom_type_filter
         custom_filter = args[0]
         if len(args) > 1:
@@ -153,11 +159,11 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
         custom_filter = custom_filter(raise_error)
 
     def decorator(awaitable):
-        # 裸指令，子指令与指令组的区分，指令组会因为标记跳过wake。
+        # 裸指令,子指令与指令组的区分,指令组会因为标记跳过wake｡
         if (
             not add_to_event_filters and isinstance(awaitable, RegisteringCommandable)
         ) or (add_to_event_filters and isinstance(awaitable, RegisteringCommandable)):
-            # 指令组 与 根指令组，添加到本层的grouphandle中一起判断
+            # 指令组 与 根指令组,添加到本层的grouphandle中一起判断
             awaitable.parent_group.add_custom_filter(custom_filter)
         else:
             handler_md = get_handler_or_create(
@@ -177,8 +183,8 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
                 ) in parent_register_commandable.parent_group.sub_command_filters:
                     if isinstance(sub_handle, CommandGroupFilter):
                         continue
-                    # 所有符合fullname一致的子指令handle添加自定义过滤器。
-                    # 不确定是否会有多个子指令有一样的fullname，比如一个方法添加多个command装饰器？
+                    # 所有符合fullname一致的子指令handle添加自定义过滤器｡
+                    # 不确定是否会有多个子指令有一样的fullname,比如一个方法添加多个command装饰器?
                     sub_handle_md = sub_handle.get_handler_md()
                     if (
                         sub_handle_md
@@ -188,7 +194,7 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
 
             else:
                 # 裸指令
-                # 确保运行时是可调用的 handler，针对类型检查器添加忽略
+                # 确保运行时是可调用的 handler,针对类型检查器添加忽略
                 assert isinstance(awaitable, Callable)
                 handler_md = get_handler_or_create(
                     awaitable,
@@ -237,7 +243,7 @@ def register_command_group(
             handler_md.event_filters.append(new_group)
 
             return RegisteringCommandable(new_group)
-        raise ValueError("注册指令组失败。")
+        raise ValueError("注册指令组失败｡")
 
     return decorator
 
@@ -304,7 +310,7 @@ def register_permission_type(permission_type: PermissionType, raise_error: bool 
 
     Args:
         permission_type: PermissionType
-        raise_error: 如果没有权限，是否抛出错误到消息平台，并且停止事件传播。默认为 True
+        raise_error: 如果没有权限,是否抛出错误到消息平台,并且停止事件传播｡默认为 True
 
     """
 
@@ -339,14 +345,14 @@ def register_on_platform_loaded(**kwargs):
 
 
 def register_on_plugin_error(**kwargs):
-    """当插件处理消息异常时触发。
+    """当插件处理消息异常时触发｡
 
     Hook 参数:
         event, plugin_name, handler_name, error, traceback_text
 
     说明:
-        在 hook 中调用 `event.stop_event()` 可屏蔽默认报错回显，
-        并由插件自行决定是否转发到其他会话。
+        在 hook 中调用 `event.stop_event()` 可屏蔽默认报错回显,
+        并由插件自行决定是否转发到其他会话｡
     """
 
     def decorator(awaitable):
@@ -363,7 +369,7 @@ def register_on_plugin_loaded(**kwargs):
         metadata
 
     说明:
-        当有插件加载完成时，触发该事件并获取到该插件的元数据
+        当有插件加载完成时,触发该事件并获取到该插件的元数据
     """
 
     def decorator(awaitable):
@@ -380,7 +386,7 @@ def register_on_plugin_unloaded(**kwargs):
         metadata
 
     说明:
-        当有插件卸载完成时，触发该事件并获取到该插件的元数据
+        当有插件卸载完成时,触发该事件并获取到该插件的元数据
     """
 
     def decorator(awaitable):
@@ -391,10 +397,10 @@ def register_on_plugin_unloaded(**kwargs):
 
 
 def register_on_waiting_llm_request(**kwargs):
-    """当等待调用 LLM 时的通知事件（在获取锁之前）
+    """当等待调用 LLM 时的通知事件(在获取锁之前)
 
-    此钩子在消息确定要调用 LLM 但还未开始排队等锁时触发，
-    适合用于发送"正在思考中..."等用户反馈提示。
+    此钩子在消息确定要调用 LLM 但还未开始排队等锁时触发,
+    适合用于发送"正在思考中..."等用户反馈提示｡
 
     Examples:
     ```py
@@ -426,7 +432,7 @@ def register_on_llm_request(**kwargs):
         request.system_prompt += "你是一个猫娘..."
     ```
 
-    请务必接收两个参数：event, request
+    请务必接收两个参数:event, request
 
     """
 
@@ -449,7 +455,7 @@ def register_on_llm_response(**kwargs):
         ...
     ```
 
-    请务必接收两个参数：event, request
+    请务必接收两个参数:event, request
 
     """
 
@@ -461,8 +467,8 @@ def register_on_llm_response(**kwargs):
 
 
 def register_on_using_llm_tool(**kwargs):
-    """当调用函数工具前的事件。
-    会传入 tool 和 tool_args 参数。
+    """当调用函数工具前的事件｡
+    会传入 tool 和 tool_args 参数｡
 
     Examples:
     ```py
@@ -473,7 +479,7 @@ def register_on_using_llm_tool(**kwargs):
         ...
     ```
 
-    请务必接收三个参数：event, tool, tool_args
+    请务必接收三个参数:event, tool, tool_args
 
     """
 
@@ -485,8 +491,8 @@ def register_on_using_llm_tool(**kwargs):
 
 
 def register_on_llm_tool_respond(**kwargs):
-    """当调用函数工具后的事件。
-    会传入 tool、tool_args 和 tool 的调用结果 tool_result 参数。
+    """当调用函数工具后的事件｡
+    会传入 tool､tool_args 和 tool 的调用结果 tool_result 参数｡
 
     Examples:
     ```py
@@ -498,7 +504,7 @@ def register_on_llm_tool_respond(**kwargs):
         ...
     ```
 
-    请务必接收四个参数：event, tool, tool_args, tool_result
+    请务必接收四个参数:event, tool, tool_args, tool_result
 
     """
 
@@ -510,14 +516,14 @@ def register_on_llm_tool_respond(**kwargs):
 
 
 def register_llm_tool(name: str | None = None, **kwargs):
-    """为函数调用（function-calling / tools-use）添加工具。
+    """为函数调用(function-calling / tools-use)添加工具｡
 
-    请务必按照以下格式编写一个工具（包括函数注释，AstrBot 会尝试解析该函数注释）
+    请务必按照以下格式编写一个工具(包括函数注释,AstrBot 会尝试解析该函数注释)
 
     ```
-    @llm_tool(name="get_weather") # 如果 name 不填，将使用函数名
+    @llm_tool(name="get_weather") # 如果 name 不填,将使用函数名
     async def get_weather(event: AstrMessageEvent, location: str):
-        \'\'\'获取天气信息。
+        \'\'\'获取天气信息｡
 
     Args:
             location(string): 地点
@@ -525,17 +531,17 @@ def register_llm_tool(name: str | None = None, **kwargs):
         # 处理逻辑
     ```
 
-    可接受的参数类型有：string, number, object, array, boolean。
+    可接受的参数类型有:string, number, object, array, boolean｡
 
-    返回值：
-        - 返回 str：结果会被加入下一次 LLM 请求的 prompt 中，用于让 LLM 总结工具返回的结果
-        - 返回 None：结果不会被加入下一次 LLM 请求的 prompt 中。
+    返回值:
+        - 返回 str:结果会被加入下一次 LLM 请求的 prompt 中,用于让 LLM 总结工具返回的结果
+        - 返回 None:结果不会被加入下一次 LLM 请求的 prompt 中｡
 
-    可以使用 yield 发送消息、终止事件。
+    可以使用 yield 发送消息､终止事件｡
 
-    发送消息：请参考文档。
+    发送消息:请参考文档｡
 
-    终止事件：
+    终止事件:
     ```
     event.stop_event()
     yield
@@ -563,7 +569,7 @@ def register_llm_tool(name: str | None = None, **kwargs):
             type_name = arg.type_name
             if not type_name:
                 raise ValueError(
-                    f"LLM 函数工具 {awaitable.__module__}_{llm_tool_name} 的参数 {arg.arg_name} 缺少类型注释。",
+                    f"LLM 函数工具 {awaitable.__module__}_{llm_tool_name} 的参数 {arg.arg_name} 缺少类型注释｡",
                 )
             # parse type_name to handle cases like "list[string]"
             match = re.match(r"(\w+)\[(\w+)\]", type_name)
@@ -577,7 +583,7 @@ def register_llm_tool(name: str | None = None, **kwargs):
                 sub_type_name and sub_type_name not in SUPPORTED_TYPES
             ):
                 raise ValueError(
-                    f"LLM 函数工具 {awaitable.__module__}_{llm_tool_name} 不支持的参数类型：{arg.type_name}",
+                    f"LLM 函数工具 {awaitable.__module__}_{llm_tool_name} 不支持的参数类型:{arg.type_name}",
                 )
 
             arg_json_schema = {

@@ -28,9 +28,9 @@ class TokenCounter(Protocol):
         ...
 
 
-# 图片/音频 token 开销估算值，参考 OpenAI vision pricing:
-# low-res ~85 tokens, high-res ~170 per 512px tile, 通常几百到上千。
-# 这里取一个保守中位数，宁可偏高触发压缩也不要偏低导致 API 报错。
+# 图片/音频 token 开销估算值,参考 OpenAI vision pricing:
+# low-res ~85 tokens, high-res ~170 per 512px tile, 通常几百到上千｡
+# 这里取一个保守中位数,宁可偏高触发压缩也不要偏低导致 API 报错｡
 IMAGE_TOKEN_ESTIMATE = 765
 AUDIO_TOKEN_ESTIMATE = 500
 

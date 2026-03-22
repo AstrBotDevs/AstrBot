@@ -3,9 +3,21 @@ from __future__ import annotations
 import asyncio
 import zipfile
 from pathlib import Path
+from typing import cast
 
 from astrbot.core.computer import computer_client
-from astrbot.core.skills.skill_manager import SkillManager
+from astrbot.core.computer.booters.base import ComputerBooter
+
+
+def _extract_embedded_python(command: str) -> str:
+    start_marker = "$PYBIN - <<'PY'\n"
+    end_marker = "\nPY"
+    start = command.find(start_marker)
+    assert start != -1
+    start += len(start_marker)
+    end = command.rfind(end_marker)
+    assert end != -1
+    return command[start:end]
 
 
 class _FakeShell:
@@ -87,7 +99,7 @@ def test_sync_skills_keeps_builtin_skills_when_local_is_empty(monkeypatch, tmp_p
     booter = _FakeBooter(
         '{"skills":[{"name":"python-sandbox","description":"ship","path":"skills/python-sandbox/SKILL.md"}]}'
     )
-    asyncio.run(computer_client._sync_skills_to_sandbox(booter))
+    asyncio.run(computer_client._sync_skills_to_sandbox(cast(ComputerBooter, booter)))
 
     assert booter.uploads == []
     assert any(cmd == "rm -f skills/skills.zip" for cmd in booter.shell.commands)
@@ -142,7 +154,7 @@ def test_sync_skills_uses_managed_strategy_instead_of_wiping_all(
     booter = _FakeBooter(
         '{"skills":[{"name":"custom-agent-skill","description":"","path":"skills/custom-agent-skill/SKILL.md"}]}'
     )
-    asyncio.run(computer_client._sync_skills_to_sandbox(booter))
+    asyncio.run(computer_client._sync_skills_to_sandbox(cast(ComputerBooter, booter)))
 
     assert len(booter.uploads) == 1
     assert booter.uploads[0][1].replace("\\", "/") == "skills/skills.zip"
