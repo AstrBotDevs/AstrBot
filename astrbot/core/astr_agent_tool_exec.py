@@ -158,7 +158,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         exc_info=True,
                     )
 
-            asyncio.create_task(_run_in_background())
+            asyncio.create_task(_run_in_background())  # noqa: RUF006
             text_content = mcp.types.TextContent(
                 type="text",
                 text=f"Background task submitted. task_id={task_id}",
@@ -406,7 +406,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     exc_info=True,
                 )
 
-        asyncio.create_task(_run_handoff_in_background())
+        asyncio.create_task(_run_handoff_in_background())  # noqa: RUF006
 
         text_content = mcp.types.TextContent(
             type="text",
