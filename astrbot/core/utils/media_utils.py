@@ -16,6 +16,11 @@ from PIL import Image as PILImage
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
+IMAGE_COMPRESS_DEFAULT_MAX_SIZE = 1280
+IMAGE_COMPRESS_DEFAULT_QUALITY = 95
+IMAGE_COMPRESS_DEFAULT_OPTIMIZE = True
+IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
+
 
 async def get_media_duration(file_path: str) -> int | None:
     """使用ffprobe获取媒体文件时长
@@ -322,66 +327,86 @@ async def extract_video_cover(
         raise Exception("ffmpeg not found")
 
 
-def _compress_image_sync(data: bytes, temp_dir: Path) -> str:
-    """同步执行图片压缩逻辑，由 asyncio.to_thread 调用"""
-    img = PILImage.open(io.BytesIO(data))
-    if img.mode in ("RGBA", "P"):
-        img = img.convert("RGB")
-    max_size = 1280
-    if max(img.size) > max_size:
-        img.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
+def _compress_image_sync(
+    data: bytes,
+    temp_dir: Path,
+    max_size: int,
+    quality: int,
+    optimize: bool,
+) -> str:
+    """Run image compression synchronously via ``asyncio.to_thread``."""
+    with PILImage.open(io.BytesIO(data)) as opened_img:
+        img = opened_img
+        converted_img: PILImage.Image | None = None
 
-    new_uuid = uuid.uuid4().hex
-    save_path = temp_dir / f"compressed_{new_uuid}.jpg"
-    img.save(save_path, "JPEG", quality=85, optimize=True)
-    logger.info(f"图片压缩成功:{save_path}")
-    return str(save_path)
+        try:
+            if img.mode != "RGB":
+                converted_img = img.convert("RGB")
+                img = converted_img
+
+            if max(img.size) > max_size:
+                img.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
+
+            new_uuid = uuid.uuid4().hex
+            save_path = temp_dir / f"compressed_{new_uuid}.jpg"
+            img.save(save_path, "JPEG", quality=quality, optimize=optimize)
+            logger.debug(f"Image compressed successfully: {save_path}")
+            return str(save_path)
+        finally:
+            if converted_img is not None:
+                converted_img.close()
 
 
 async def compress_image(
-    url_or_path: str, provider_settings: dict | None = None
+    url_or_path: str,
+    max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
+    quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
 ) -> str:
-    """压缩用户上传的大体积图片
+    """Compress large user-uploaded images.
 
     Args:
-        url_or_path: 图片路径或URL
-        provider_settings: 提供商设置字典，用于获取 image_compress_enabled 配置
+        url_or_path: Image path or URL.
+        max_size: Longest edge of the compressed image in pixels.
+        quality: JPEG output quality in the range 1-100.
 
     Returns:
-        压缩后的图片路径，如果未启用压缩或压缩失败则返回原路径
+        The compressed image path. Returns the original path if compression
+        fails or the source does not need compression.
     """
-    # 从 provider_settings 获取 image_compress_enabled，默认为 True
-    # 未来视需求 可在前端增加独立配置项 此处配置读取的作用是预留功能
-    enabled = True
-    if provider_settings:
-        enabled = provider_settings.get("image_compress_enabled", True)
-    if not enabled:
-        logger.info("未启用图像压缩 跳过压缩阶段")
+    max_size = max(int(max_size), 1)
+    quality = min(max(int(quality), 1), 100)
+    optimize = IMAGE_COMPRESS_DEFAULT_OPTIMIZE
+    min_file_size_bytes = int(IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB * 1024 * 1024)
+    data = None
+    # Skip compression for remote images and return the original value.
+    if url_or_path.startswith("http"):
         return url_or_path
-    logger.info("已启用图像压缩")
-    try:
-        data = None
-        # 若为远程图片则直接返回原值 无需压缩
-        if url_or_path.startswith("http"):
+    elif url_or_path.startswith("data:image"):
+        _header, encoded = url_or_path.split(",", 1)
+        data = base64.b64decode(encoded)
+        if len(data) < min_file_size_bytes:
             return url_or_path
-        elif url_or_path.startswith("data:image"):
-            _header, encoded = url_or_path.split(",", 1)
-            data = base64.b64decode(encoded)
-        elif os.path.exists(url_or_path):
-            if os.path.getsize(url_or_path) < 1024 * 1024:
-                return url_or_path
-            with open(url_or_path, "rb") as f:
-                data = f.read()
-
-        if not data:
+    else:
+        local_path = Path(url_or_path)
+        if not local_path.exists():
             return url_or_path
+        if local_path.stat().st_size < min_file_size_bytes:
+            return url_or_path
+        with local_path.open("rb") as f:
+            data = f.read()
 
-        temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
-
-        # 使用 asyncio.to_thread 将同步阻塞的图片处理任务交给线程池
-        return await asyncio.to_thread(_compress_image_sync, data, temp_dir)
-
-    except Exception as e:
-        logger.error("图片压缩失败: %s", e)
+    if not data:
         return url_or_path
+
+    temp_dir = Path(get_astrbot_temp_path())
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    # Offload the blocking image processing task to a thread.
+    return await asyncio.to_thread(
+        _compress_image_sync,
+        data,
+        temp_dir,
+        max_size,
+        quality,
+        optimize,
+    )

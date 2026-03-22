@@ -50,7 +50,11 @@ from astrbot.core.tools.prompts import (
 from astrbot.core.tools.send_message import SEND_MESSAGE_TO_USER_TOOL
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
-from astrbot.core.utils.media_utils import compress_image
+from astrbot.core.utils.media_utils import (
+    IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
+    IMAGE_COMPRESS_DEFAULT_QUALITY,
+    compress_image,
+)
 from astrbot.core.utils.quoted_message.settings import (
     SETTINGS as DEFAULT_QUOTED_MESSAGE_SETTINGS,
 )
@@ -446,10 +450,9 @@ async def _ensure_img_caption(
     image_caption_provider: str,
 ) -> None:
     try:
-        # 同步处理以避免高额cpu开销
         compressed_urls = []
         for url in req.image_urls:
-            compressed_url = await compress_image(url, cfg)
+            compressed_url = await _compress_image_for_provider(url, cfg)
             compressed_urls.append(compressed_url)
         caption = await _request_img_caption(
             image_caption_provider,
@@ -464,7 +467,7 @@ async def _ensure_img_caption(
             req.image_urls = []
     except Exception as exc:  # noqa: BLE001
         logger.error("处理图片描述失败: %s", exc)
-        req.extra_user_content_parts.append(TextPart(text="图片解析失败"))
+        req.extra_user_content_parts.append(TextPart(text="[Image Captioning Failed]"))
     finally:
         req.image_urls = []
 
@@ -484,6 +487,46 @@ def _get_quoted_message_parser_settings(
     if not isinstance(overrides, dict):
         return DEFAULT_QUOTED_MESSAGE_SETTINGS
     return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)
+
+
+def _get_image_compress_args(
+    provider_settings: dict[str, object] | None,
+) -> tuple[bool, int, int]:
+    if not isinstance(provider_settings, dict):
+        return True, IMAGE_COMPRESS_DEFAULT_MAX_SIZE, IMAGE_COMPRESS_DEFAULT_QUALITY
+
+    enabled = provider_settings.get("image_compress_enabled", True)
+    if not isinstance(enabled, bool):
+        enabled = True
+
+    raw_options = provider_settings.get("image_compress_options", {})
+    options = raw_options if isinstance(raw_options, dict) else {}
+
+    max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
+    if not isinstance(max_size, int):
+        max_size = IMAGE_COMPRESS_DEFAULT_MAX_SIZE
+    max_size = max(max_size, 1)
+
+    quality = options.get("quality", IMAGE_COMPRESS_DEFAULT_QUALITY)
+    if not isinstance(quality, int):
+        quality = IMAGE_COMPRESS_DEFAULT_QUALITY
+    quality = min(max(quality, 1), 100)
+
+    return enabled, max_size, quality
+
+
+async def _compress_image_for_provider(
+    url_or_path: str,
+    provider_settings: dict[str, object] | None,
+) -> str:
+    try:
+        enabled, max_size, quality = _get_image_compress_args(provider_settings)
+        if not enabled:
+            return url_or_path
+        return await compress_image(url_or_path, max_size=max_size, quality=quality)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Image compression failed: %s", exc)
+        return url_or_path
 
 
 async def _process_quote_message(
@@ -532,8 +575,9 @@ async def _process_quote_message(
 
             if prov and isinstance(prov, Provider):
                 path = await image_seg.convert_to_file_path()
-                image_path = await compress_image(
-                    path, config.provider_settings if config else None
+                image_path = await _compress_image_for_provider(
+                    path,
+                    config.provider_settings if config else None,
                 )
                 llm_resp = await prov.text_chat(
                     prompt=IMAGE_CAPTION_DEFAULT_PROMPT,
@@ -952,7 +996,10 @@ async def build_main_agent(
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
                     path = await comp.convert_to_file_path()
-                    image_path = await compress_image(path, config.provider_settings)
+                    image_path = await _compress_image_for_provider(
+                        path,
+                        config.provider_settings,
+                    )
                     req.image_urls.append(image_path)
                     req.extra_user_content_parts.append(
                         TextPart(text=f"[Image Attachment: path {image_path}]")
@@ -980,8 +1027,9 @@ async def build_main_agent(
                         if isinstance(reply_comp, Image):
                             has_embedded_image = True
                             path = await reply_comp.convert_to_file_path()
-                            image_path = await compress_image(
-                                path, config.provider_settings
+                            image_path = await _compress_image_for_provider(
+                                path,
+                                config.provider_settings,
                             )
                             req.image_urls.append(image_path)
                             _append_quoted_image_attachment(req, image_path)
