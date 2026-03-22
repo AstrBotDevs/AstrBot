@@ -48,6 +48,7 @@ let version = ref('');
 let releases = ref([]);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
+let commitHashInput = ref('');
 const isDesktopReleaseMode = ref(
   typeof window !== 'undefined' && !!window.astrbotDesktop?.isDesktop
 );
@@ -92,6 +93,10 @@ const releasesHeader = computed(() => [
   { title: t('core.header.updateDialog.table.content'), key: 'body' },
   { title: t('core.header.updateDialog.table.sourceUrl'), key: 'zipball_url' },
   { title: t('core.header.updateDialog.table.actions'), key: 'switch' }
+]);
+
+const commitHashRules = computed(() => [
+  (v: string) => !v || /^[0-9a-f]{40}$/i.test(v) || t('core.header.updateDialog.commitHash.invalidFormat')
 ]);
 // Form validation
 const formValid = ref(true);
@@ -727,6 +732,33 @@ onMounted(async () => {
                     </v-btn>
                   </template>
                 </v-data-table>
+            </div>
+
+            <v-divider class="mt-4 mb-4"></v-divider>
+            <div style="margin-top: 16px; margin-bottom: 16px;">
+              <h3 class="mb-2">{{ t('core.header.updateDialog.commitHash.title') }}</h3>
+              <small class="mb-3 d-block">{{ t('core.header.updateDialog.commitHash.description') }}</small>
+              <div class="d-flex align-center ga-3">
+                <v-text-field
+                  v-model="commitHashInput"
+                  :placeholder="t('core.header.updateDialog.commitHash.placeholder')"
+                  :rules="commitHashRules"
+                  density="compact"
+                  variant="outlined"
+                  hide-details="auto"
+                  maxlength="40"
+                  style="max-width: 420px; font-family: monospace;"
+                />
+                <v-btn
+                  color="primary"
+                  style="border-radius: 10px;"
+                  :disabled="!commitHashInput || !/^[0-9a-f]{40}$/i.test(commitHashInput)"
+                  :loading="installLoading"
+                  @click="switchVersion(commitHashInput)"
+                >
+                  {{ t('core.header.updateDialog.commitHash.install') }}
+                </v-btn>
+              </div>
             </div>
 
             <v-divider class="mt-4 mb-4"></v-divider>
