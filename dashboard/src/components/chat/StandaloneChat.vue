@@ -22,7 +22,7 @@
                         v-model:prompt="prompt"
                         :stagedImagesUrl="stagedImagesUrl"
                         :stagedAudioUrl="stagedAudioUrl"
-                        :disabled="isStreaming"
+                        :disabled="false"
                         :is-running="isStreaming || isConvRunning"
                         :enableStreaming="enableStreaming"
                         :isRecording="isRecording"

@@ -32,7 +32,7 @@
 <a href="https://astrbot.app/">Documentation</a> ｜
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">Roadmap</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue Tracker</a>
+<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue Tracker</a> ｜
 <a href="mailto:community@astrbot.app">Email Support</a>
 </div>
 
@@ -78,7 +78,7 @@ For users who want to quickly experience AstrBot, are familiar with command-line
 ```bash
 uv tool install astrbot
 astrbot init # Only execute this command for the first time to initialize the environment
-astrbot
+astrbot run
 ```
 
 > Requires [uv](https://docs.astral.sh/uv/) to be installed.
