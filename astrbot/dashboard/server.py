@@ -267,7 +267,7 @@ class AstrBotDashboard:
             self.context, self.core_lifecycle, self.core_lifecycle.plugin_manager
         )
 
-        self.command_route = CommandRoute(self.context, self.core_lifecycle)
+        self.command_route = CommandRoute(self.context)
         self.cr = ConfigRoute(self.context, self.core_lifecycle)
         self.lr = LogRoute(self.context, self.core_lifecycle.log_broker)
         self.sfr = StaticFileRoute(self.context)
@@ -306,6 +306,8 @@ class AstrBotDashboard:
             view_func=self.srv_plug_route,
             methods=["GET", "POST"],
         )
+
+        self.shutdown_event = shutdown_event
 
         self._init_jwt_secret()
 

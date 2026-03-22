@@ -79,7 +79,7 @@ class SubAgentOrchestrator:
                     # This preserves the case where persona has no tools
                     tools = None
                 else:
-                    tools = []
+                    tools = None
                 if public_description == "" and prompt:
                     public_description = prompt[:120]
             if tools is None:

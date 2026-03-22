@@ -7,7 +7,6 @@ from typing import cast
 
 from astrbot.core.computer import computer_client
 from astrbot.core.computer.booters.base import ComputerBooter
-from astrbot.core.skills.skill_manager import SkillManager
 
 
 def _extract_embedded_python(command: str) -> str:
@@ -219,14 +218,6 @@ def test_sync_skills_includes_sdk_registered_skills(monkeypatch, tmp_path: Path)
         ],
     )
 
-    # Copy SDK registered skill to skills_root so _sync_skills_to_sandbox can find it
-    import shutil
-    sdk_skill_src = registered_root / "browser-helper"
-    sdk_skill_dst = skills_root / "sdk-demo.browser-helper"
-    if sdk_skill_dst.exists():
-        shutil.rmtree(sdk_skill_dst)
-    shutil.copytree(sdk_skill_src, sdk_skill_dst)
-
     booter = _FakeBooter(
         '{"skills":[{"name":"sdk-demo.browser-helper","description":"","path":"skills/sdk-demo.browser-helper/SKILL.md"}]}'
     )
@@ -242,3 +233,4 @@ def test_sync_skills_includes_sdk_registered_skills(monkeypatch, tmp_path: Path)
             "path": "skills/sdk-demo.browser-helper/SKILL.md",
         }
     ]
+

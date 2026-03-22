@@ -174,6 +174,7 @@ class Context:
         contexts: list[Message | dict[str, Any]] | None = None,
         max_steps: int = 30,
         tool_call_timeout: int = 120,
+        stream: bool = False,
         **kwargs: Any,
     ) -> LLMResponse:
         """Run an agent loop that allows the LLM to call tools iteratively until a final answer is produced.
@@ -352,7 +353,7 @@ class Context:
         return self.provider_manager.embedding_provider_insts
 
     def get_all_rerank_providers(self) -> list[RerankProvider]:
-        """获取所有用于 Rerank 任务的 Provider｡"""
+        """获取所有用于 Rerank 任务的 Provider。"""
         return self.provider_manager.rerank_provider_insts
 
     def get_using_provider(self, umo: str | None = None) -> Provider | None:

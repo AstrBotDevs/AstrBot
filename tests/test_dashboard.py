@@ -89,11 +89,8 @@ def test_expand_env_placeholders_resolves_env_and_default(
     assert _expand_env_placeholders("${MISSING:-3002}", "port") == "3002"
 
 
-def test_expand_env_placeholders_raises_for_unresolved_variable(monkeypatch: pytest.MonkeyPatch):
-    # HOST is loaded from .env via load_dotenv() during module import,
-    # so we need to explicitly remove it to test the unresolved case
-    monkeypatch.delenv("HOST", raising=False)
-    with pytest.raises(ValueError, match="Unresolved environment variable.*dashboard host.*HOST"):
+def test_expand_env_placeholders_raises_for_unresolved_variable():
+    with pytest.raises(ValueError, match="dashboard host: HOST"):
         _expand_env_placeholders("${HOST}", "host")
 
 
@@ -1047,7 +1044,22 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
         "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
-    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
+        lambda: str(skills_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
 
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:

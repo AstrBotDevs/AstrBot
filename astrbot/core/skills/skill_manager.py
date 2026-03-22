@@ -14,13 +14,7 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from astrbot.core.utils.astrbot_path import (
-    AstrbotPaths,
-    astrbot_paths,
-    get_astrbot_data_path,
-    get_astrbot_skills_path,
-    get_astrbot_temp_path,
-)
+from astrbot.core.utils.astrbot_path import AstrbotPaths, astrbot_paths
 
 SKILLS_CONFIG_FILENAME = "skills.json"
 SANDBOX_SKILLS_CACHE_FILENAME = "sandbox_skills_cache.json"
@@ -110,8 +104,8 @@ class LocalSkillSource:
     plugin_id: str | None = None
 
 
-def _parse_frontmatter(text: str) -> dict:
-    """Parse YAML frontmatter from SKILL.md content.
+def _parse_frontmatter_description(text: str) -> str:
+    """Extract the ``description`` value from YAML frontmatter.
 
     Expects the standard SKILL.md format used by OpenAI Codex CLI and
     Anthropic Claude Skills::
@@ -145,13 +139,6 @@ def _parse_frontmatter(text: str) -> dict:
         return {}
 
     return payload
-
-
-def _parse_frontmatter_description(text: str) -> str:
-    """Extract the ``description`` value from YAML frontmatter."""
-    payload = _parse_frontmatter(text)
-    description = payload.get("description", "") if isinstance(payload, dict) else ""
-    return description if isinstance(description, str) else ""
 
 
 # Regex for sanitizing paths used in prompt examples — only allow
@@ -303,10 +290,7 @@ class SkillManager:
         self.skills_root = skills_root or str(self.astrbot_paths.skills)
         self.config_path = str(self.astrbot_paths.config / SKILLS_CONFIG_FILENAME)
         self.sandbox_skills_cache_path = str(
-            Path(get_astrbot_data_path()) / SANDBOX_SKILLS_CACHE_FILENAME
-        )
-        self.sdk_plugin_skills_path = str(
-            Path(get_astrbot_data_path()) / SDK_PLUGIN_SKILLS_FILENAME
+            self.astrbot_paths.data / SANDBOX_SKILLS_CACHE_FILENAME
         )
         os.makedirs(self.skills_root, exist_ok=True)
 
@@ -668,7 +652,7 @@ class SkillManager:
                     skill_name
                 ) or _default_sandbox_skill_path(skill_name)
             else:
-                path_str = str(skill_md)
+                path_str = str(source.skill_md_path)
             path_str = path_str.replace("\\", "/")
             skills_by_name[skill_name] = SkillInfo(
                 name=skill_name,
@@ -726,7 +710,6 @@ class SkillManager:
         return [skills_by_name[name] for name in sorted(skills_by_name)]
 
     def is_sandbox_only_skill(self, name: str) -> bool:
-        skill_md_exists = False
         if self.get_local_skill_source(name) is not None:
             skill_dir = Path(self.skills_root) / name
             skill_md_exists = _normalize_skill_markdown_path(skill_dir) is not None

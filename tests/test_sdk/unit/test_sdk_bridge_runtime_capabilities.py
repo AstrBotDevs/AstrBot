@@ -80,8 +80,6 @@ from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
 from astrbot.core.provider.entities import ProviderRequest as CoreProviderRequest
 from astrbot.core.sdk_bridge.event_converter import EventConverter
 from astrbot.core.sdk_bridge.plugin_bridge import SdkPluginBridge
-from unittest.mock import MagicMock
-
 from astrbot.core.star.context import Context as StarContext
 
 
@@ -1153,7 +1151,7 @@ async def test_core_context_send_message_populates_proactive_sent_fields() -> No
         event_queue=Queue(),
         config={},
         db=object(),
-        provider_manager=MagicMock(),
+        provider_manager=object(),
         platform_manager=types.SimpleNamespace(platform_insts=[platform]),
         conversation_manager=object(),
         message_history_manager=object(),
@@ -1240,7 +1238,7 @@ async def test_third_party_runner_dispatches_live_provider_request_to_sdk_hooks(
     event = _ThirdPartyFakeEvent()
 
     with pytest.raises(ValueError, match="Unsupported third party agent runner type"):
-        async for _ in stage.process(event):
+        async for _ in stage.process(event, ""):
             pass
 
     assert len(bridge.calls) == 1

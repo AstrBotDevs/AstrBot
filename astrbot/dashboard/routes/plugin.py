@@ -171,7 +171,7 @@ class PluginRoute(Route):
                 sdk_bridge = self._sdk_bridge()
                 if sdk_bridge is not None:
                     await sdk_bridge.reload_all(reset_restart_budget=True)
-            return Response().ok(None, "重载成功｡").__dict__
+            return Response().ok(None, "重载成功。").__dict__
         except Exception as e:
             logger.error(f"/api/plugin/reload: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
@@ -619,7 +619,7 @@ class PluginRoute(Route):
         delete_data = post_data.get("delete_data", False)
         if self._is_sdk_plugin(plugin_name):
             return Response().error(
-                "SDK 插件在 MVP 中不支持卸载,请手动移除目录"
+                "SDK 插件在 MVP 中不支持卸载，请手动移除目录"
             ).__dict__, 400
         try:
             logger.info(f"正在卸载插件 {plugin_name}")
@@ -757,8 +757,8 @@ class PluginRoute(Route):
                 await sdk_bridge.turn_off_plugin(plugin_name)
             except ValueError as exc:
                 return Response().error(str(exc)).__dict__, 404
-            logger.info(f"停用 SDK 插件 {plugin_name} ｡")
-            return Response().ok(None, "停用成功｡").__dict__
+            logger.info(f"停用 SDK 插件 {plugin_name} 。")
+            return Response().ok(None, "停用成功。").__dict__
         try:
             await self.plugin_manager.turn_off_plugin(plugin_name)
             logger.info(f"停用插件 {plugin_name} ｡")
@@ -785,8 +785,8 @@ class PluginRoute(Route):
                 await sdk_bridge.turn_on_plugin(plugin_name)
             except ValueError as exc:
                 return Response().error(str(exc)).__dict__, 404
-            logger.info(f"启用 SDK 插件 {plugin_name} ｡")
-            return Response().ok(None, "启用成功｡").__dict__
+            logger.info(f"启用 SDK 插件 {plugin_name} 。")
+            return Response().ok(None, "启用成功。").__dict__
         try:
             await self.plugin_manager.turn_on_plugin(plugin_name)
             logger.info(f"启用插件 {plugin_name} ｡")

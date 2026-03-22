@@ -738,7 +738,6 @@ def test_group_worker_metadata_serializes_issues() -> None:
                 capabilities=[],
                 llm_tools=[],
                 agents=[],
-                instances=[],
             ),
         )
     ]
