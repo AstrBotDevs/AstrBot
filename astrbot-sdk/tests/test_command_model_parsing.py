@@ -108,7 +108,7 @@ def test_duplicate_named_flag_raises() -> None:
             model_param=_param(SimpleModel),
             command_name="cmd",
         )
-    assert "Duplicate field" in str(exc_info.value)
+    assert "Duplicate option" in str(exc_info.value)
 
 
 def test_duplicate_bool_flag_raises() -> None:
@@ -118,7 +118,7 @@ def test_duplicate_bool_flag_raises() -> None:
             model_param=_param(SimpleModel),
             command_name="cmd",
         )
-    assert "Duplicate field" in str(exc_info.value)
+    assert "Duplicate option" in str(exc_info.value)
 
 
 # ── 连字符映射下划线 ───────────────────────────────────────────────
@@ -179,7 +179,7 @@ def test_unknown_flag_raises() -> None:
             model_param=_param(SimpleModel),
             command_name="cmd",
         )
-    assert "Unknown field" in str(exc_info.value)
+    assert "Unknown option" in str(exc_info.value)
 
 
 # ── resolve_command_model_param ───────────────────────────────────

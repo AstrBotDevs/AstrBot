@@ -38,7 +38,12 @@ def validate_plugin_id(plugin_id: str) -> str:
         raise ValueError(
             "plugin_id must use only letters, digits, dots, underscores, or hyphens"
         )
-    if normalized.upper() in _WINDOWS_RESERVED_PLUGIN_IDS:
+    upper_normalized = normalized.upper()
+    base_name = upper_normalized.split(".", 1)[0]
+    if (
+        upper_normalized in _WINDOWS_RESERVED_PLUGIN_IDS
+        or base_name in _WINDOWS_RESERVED_PLUGIN_IDS
+    ):
         raise ValueError("plugin_id must not use a reserved Windows device name")
     return normalized
 
