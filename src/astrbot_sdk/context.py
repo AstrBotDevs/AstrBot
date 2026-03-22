@@ -17,6 +17,7 @@ Attributes:
     personas: 人格管理客户端
     conversations: 对话管理客户端
     kbs: 知识库管理客户端
+    message_history: 消息历史管理客户端
     http: HTTP 客户端，用于注册 API 端点
     metadata: 元数据客户端，用于查询插件信息
     skills: Skill 客户端，用于向 AstrBot 注册插件技能
@@ -56,6 +57,7 @@ from .clients.llm import LLMResponse
 from .clients.managers import (
     ConversationManagerClient,
     KnowledgeBaseManagerClient,
+    MessageHistoryManagerClient,
     PersonaManagerClient,
 )
 from .clients.provider import ProviderClient, ProviderManagerClient
@@ -235,6 +237,7 @@ class Context:
         personas: 人格管理客户端
         conversations: 对话管理客户端
         kbs: 知识库管理客户端
+        message_history: 消息历史管理客户端
         http: HTTP 客户端
         metadata: 元数据客户端
         plugin_id: 当前插件 ID
@@ -285,6 +288,7 @@ class Context:
         self.personas = PersonaManagerClient(proxy)
         self.conversations = ConversationManagerClient(proxy)
         self.kbs = KnowledgeBaseManagerClient(proxy)
+        self.message_history = MessageHistoryManagerClient(proxy)
         self.http = HTTPClient(proxy)
         self.metadata = MetadataClient(proxy, plugin_id)
         self.registry = RegistryClient(proxy)
@@ -294,6 +298,7 @@ class Context:
         self.persona_manager = self.personas
         self.conversation_manager = self.conversations
         self.kb_manager = self.kbs
+        self.message_history_manager = self.message_history
         self._llm_tool_manager = LLMToolManager(proxy)
         self.plugin_id = plugin_id
         self.logger: PluginLogger = (

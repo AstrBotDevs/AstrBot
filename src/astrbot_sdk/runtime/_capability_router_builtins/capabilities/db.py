@@ -17,7 +17,9 @@ class DBCapabilityMixin(CapabilityRouterBridgeBase):
     def _db_strip_scope(self, plugin_id: str, scoped_key: str) -> str:
         """去掉命名空间前缀，返回插件视角的原始 key。"""
         prefix = f"{plugin_id}:"
-        return scoped_key[len(prefix):] if scoped_key.startswith(prefix) else scoped_key
+        return (
+            scoped_key[len(prefix) :] if scoped_key.startswith(prefix) else scoped_key
+        )
 
     def _db_public_event(
         self, plugin_id: str, raw_event: dict[str, Any]

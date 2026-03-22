@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..errors import AstrBotError, ErrorCodes
+from ..message.components import (
+    BaseMessageComponent,
+    component_to_payload_sync,
+    payload_to_component,
+)
 from ..message.session import MessageSession
 from ._proxy import CapabilityProxy
 
 
 class _ManagerModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     def to_payload(self) -> dict[str, Any]:
         return self.model_dump(exclude_none=True)
@@ -25,6 +31,33 @@ def _normalize_session(session: str | MessageSession) -> str:
     if isinstance(session, MessageSession):
         return str(session)
     return str(session)
+
+
+def _require_message_history_session(
+    session: MessageSession,
+) -> dict[str, str]:
+    if not isinstance(session, MessageSession):
+        raise TypeError(
+            "message_history requires astrbot_sdk.message.session.MessageSession"
+        )
+    return {
+        "platform_id": str(session.platform_id),
+        "message_type": str(session.message_type),
+        "session_id": str(session.session_id),
+    }
+
+
+def _normalize_message_history_parts(
+    parts: list[BaseMessageComponent],
+) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for part in parts:
+        if not isinstance(part, BaseMessageComponent):
+            raise TypeError(
+                "message_history.append requires BaseMessageComponent items in parts"
+            )
+        normalized.append(component_to_payload_sync(part))
+    return normalized
 
 
 class PersonaRecord(_ManagerModel):
@@ -95,6 +128,110 @@ class ConversationUpdateParams(_ManagerModel):
     title: str | None = None
     persona_id: str | None = None
     token_usage: int | None = None
+
+
+class MessageHistorySender(_ManagerModel):
+    sender_id: str | None = None
+    sender_name: str | None = None
+
+    @classmethod
+    def from_payload(
+        cls,
+        payload: dict[str, Any] | None,
+    ) -> MessageHistorySender | None:
+        if not isinstance(payload, dict):
+            return None
+        return cls.model_validate(payload)
+
+
+class MessageHistoryRecord(_ManagerModel):
+    id: int
+    session: MessageSession
+    sender: MessageHistorySender = Field(default_factory=MessageHistorySender)
+    parts: list[BaseMessageComponent] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    idempotency_key: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_payload(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        normalized = dict(value)
+
+        session_payload = normalized.get("session")
+        if isinstance(session_payload, dict):
+            normalized["session"] = MessageSession(
+                platform_id=str(session_payload.get("platform_id", "")),
+                message_type=str(session_payload.get("message_type", "")),
+                session_id=str(session_payload.get("session_id", "")),
+            )
+
+        sender_payload = normalized.get("sender")
+        if isinstance(sender_payload, dict):
+            normalized["sender"] = MessageHistorySender.model_validate(sender_payload)
+        elif sender_payload is None:
+            normalized["sender"] = MessageHistorySender()
+
+        parts_payload = normalized.get("parts")
+        if isinstance(parts_payload, list):
+            normalized["parts"] = [
+                payload_to_component(item)
+                for item in parts_payload
+                if isinstance(item, dict)
+            ]
+
+        metadata_payload = normalized.get("metadata")
+        if not isinstance(metadata_payload, dict):
+            normalized["metadata"] = {}
+
+        return normalized
+
+    @classmethod
+    def from_payload(
+        cls,
+        payload: dict[str, Any] | None,
+    ) -> MessageHistoryRecord | None:
+        if not isinstance(payload, dict):
+            return None
+        return cls.model_validate(payload)
+
+
+class MessageHistoryPage(_ManagerModel):
+    records: list[MessageHistoryRecord] = Field(default_factory=list)
+    next_cursor: str | None = None
+    total: int | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_payload(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        normalized = dict(value)
+        records_payload = normalized.get("records")
+        if isinstance(records_payload, list):
+            normalized["records"] = [
+                record
+                for record in (
+                    MessageHistoryRecord.from_payload(item)
+                    if isinstance(item, dict)
+                    else None
+                    for item in records_payload
+                )
+                if record is not None
+            ]
+        return normalized
+
+    @classmethod
+    def from_payload(
+        cls,
+        payload: dict[str, Any] | None,
+    ) -> MessageHistoryPage | None:
+        if not isinstance(payload, dict):
+            return None
+        return cls.model_validate(payload)
 
 
 class KnowledgeBaseRecord(_ManagerModel):
@@ -451,6 +588,123 @@ class ConversationManagerClient:
         )
 
 
+class MessageHistoryManagerClient:
+    def __init__(self, proxy: CapabilityProxy) -> None:
+        self._proxy = proxy
+
+    async def list(
+        self,
+        session: MessageSession,
+        *,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> MessageHistoryPage:
+        output = await self._proxy.call(
+            "message_history.list",
+            {
+                "session": _require_message_history_session(session),
+                "cursor": str(cursor) if cursor is not None else None,
+                "limit": int(limit),
+            },
+        )
+        page = MessageHistoryPage.from_payload(output.get("page"))
+        if page is None:
+            raise ValueError("message_history.list returned no page")
+        return page
+
+    async def get(
+        self,
+        session: MessageSession,
+        record_id: int,
+    ) -> MessageHistoryRecord | None:
+        output = await self._proxy.call(
+            "message_history.get_by_id",
+            {
+                "session": _require_message_history_session(session),
+                "record_id": int(record_id),
+            },
+        )
+        return MessageHistoryRecord.from_payload(output.get("record"))
+
+    async def get_by_id(
+        self,
+        session: MessageSession,
+        record_id: int,
+    ) -> MessageHistoryRecord | None:
+        return await self.get(session, record_id)
+
+    async def append(
+        self,
+        session: MessageSession,
+        *,
+        parts: list[BaseMessageComponent],
+        sender: MessageHistorySender,
+        metadata: dict[str, Any] | None = None,
+        idempotency_key: str | None = None,
+    ) -> MessageHistoryRecord:
+        if isinstance(sender, MessageHistorySender):
+            sender_payload = sender.to_payload()
+        elif isinstance(sender, dict):
+            sender_payload = MessageHistorySender.model_validate(sender).to_payload()
+        else:
+            raise TypeError(
+                "message_history.append requires MessageHistorySender for sender"
+            )
+        output = await self._proxy.call(
+            "message_history.append",
+            {
+                "session": _require_message_history_session(session),
+                "sender": sender_payload,
+                "parts": _normalize_message_history_parts(parts),
+                "metadata": dict(metadata or {}),
+                "idempotency_key": (
+                    str(idempotency_key) if idempotency_key is not None else None
+                ),
+            },
+        )
+        record = MessageHistoryRecord.from_payload(output.get("record"))
+        if record is None:
+            raise ValueError("message_history.append returned no record")
+        return record
+
+    async def delete_before(
+        self,
+        session: MessageSession,
+        *,
+        before: datetime,
+    ) -> int:
+        output = await self._proxy.call(
+            "message_history.delete_before",
+            {
+                "session": _require_message_history_session(session),
+                "before": before.isoformat(),
+            },
+        )
+        return int(output.get("deleted_count", 0) or 0)
+
+    async def delete_after(
+        self,
+        session: MessageSession,
+        *,
+        after: datetime,
+    ) -> int:
+        output = await self._proxy.call(
+            "message_history.delete_after",
+            {
+                "session": _require_message_history_session(session),
+                "after": after.isoformat(),
+            },
+        )
+        return int(output.get("deleted_count", 0) or 0)
+
+    async def delete_all(self, session: MessageSession) -> int:
+        output = await self._proxy.call(
+            "message_history.delete_all",
+            {"session": _require_message_history_session(session)},
+        )
+        return int(output.get("deleted_count", 0) or 0)
+
+
 class KnowledgeBaseManagerClient:
     def __init__(self, proxy: CapabilityProxy) -> None:
         self._proxy = proxy
@@ -610,6 +864,10 @@ __all__ = [
     "KnowledgeBaseRetrieveResult",
     "KnowledgeBaseRetrieveResultItem",
     "KnowledgeBaseUpdateParams",
+    "MessageHistoryManagerClient",
+    "MessageHistoryPage",
+    "MessageHistoryRecord",
+    "MessageHistorySender",
     "PersonaCreateParams",
     "PersonaManagerClient",
     "PersonaRecord",

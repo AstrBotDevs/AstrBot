@@ -14,9 +14,7 @@ _ROUTE_SAFE_RE = re.compile(r"^(/[\w\-._{}]*)+$")
 def _validate_route(route: str, capability_name: str) -> None:
     """校验 HTTP 路由路径格式，阻止路径遍历和非法字符。"""
     if ".." in route:
-        raise AstrBotError.invalid_input(
-            f"{capability_name}: 路由路径不允许包含 '..'"
-        )
+        raise AstrBotError.invalid_input(f"{capability_name}: 路由路径不允许包含 '..'")
     if not _ROUTE_SAFE_RE.match(route):
         raise AstrBotError.invalid_input(
             f"{capability_name}: 路由路径格式非法，只允许字母/数字/-/_/./{{param}} 段，"

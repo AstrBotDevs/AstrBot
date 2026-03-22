@@ -296,6 +296,8 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         self._persona_store: dict[str, dict[str, Any]] = {}
         self._conversation_store: dict[str, dict[str, Any]] = {}
         self._session_current_conversation_ids: dict[str, str] = {}
+        self._message_history_store: dict[str, list[dict[str, Any]]] = {}
+        self._message_history_next_id = 1
         self._kb_store: dict[str, dict[str, Any]] = {}
         self._kb_document_store: dict[str, dict[str, dict[str, Any]]] = {}
         self._kb_document_content_store: dict[str, str] = {}
