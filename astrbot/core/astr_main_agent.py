@@ -6,8 +6,9 @@ import datetime
 import json
 import os
 import zoneinfo
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Mapping
 from dataclasses import dataclass, field
+from typing import Any, cast
 
 from astrbot.core import logger, sp
 from astrbot.core.agent.handoff import HandoffTool
@@ -477,9 +478,12 @@ def _get_quoted_message_parser_settings(
     if not isinstance(provider_settings, dict):
         return DEFAULT_QUOTED_MESSAGE_SETTINGS
     overrides = provider_settings.get("quoted_message_parser")
-    if not isinstance(overrides, dict):
+    # Narrow to a Mapping so the typed .with_overrides() accepts it.
+    if not isinstance(overrides, Mapping):
         return DEFAULT_QUOTED_MESSAGE_SETTINGS
-    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)
+    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(
+        cast(Mapping[str, Any], overrides)
+    )
 
 
 def _get_image_compress_args(
@@ -1165,7 +1169,7 @@ async def build_main_agent(
             ]
 
     if event.get_platform_name() == "webchat":
-        asyncio.create_task(_handle_webchat(event, req, provider))
+        asyncio.create_task(_handle_webchat(event, req, provider))  # noqa: RUF006
 
     if req.func_tool and req.func_tool.tools:
         # Sort tools by name for deterministic serialization so that
