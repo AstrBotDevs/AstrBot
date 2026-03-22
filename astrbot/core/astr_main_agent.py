@@ -627,7 +627,7 @@ async def _process_quote_message(
         except BaseException as exc:
             logger.error("处理引用图片失败: %s", exc)
         finally:
-            if compress_path and os.path.exists(compress_path):
+            if compress_path and compress_path != path and os.path.exists(compress_path):
                 try:
                     os.remove(compress_path)
                 except Exception as exc:  # noqa: BLE001
