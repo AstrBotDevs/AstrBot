@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
+import os
 import re
+import signal
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +38,7 @@ from astrbot_sdk.runtime.supervisor import WorkerSession
 from quart import request as quart_request
 
 from astrbot.core import logger
+from astrbot.core.agent.mcp_client import MCPClient
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import LLMResponse as CoreLLMResponse
@@ -43,7 +47,10 @@ from astrbot.core.skills.skill_manager import (
     SkillManager,
     _parse_frontmatter_description,
 )
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_data_path,
+    get_astrbot_plugin_data_path,
+)
 
 from .bridge_base import _build_message_chain_from_payload
 from .capability_bridge import CoreCapabilityBridge
@@ -140,6 +147,30 @@ class _InFlightRequest:
 
 
 @dataclass(slots=True)
+class _LocalMCPServerRuntime:
+    name: str
+    config: dict[str, Any]
+    active: bool
+    running: bool = False
+    client: MCPClient | None = None
+    tools: list[str] = field(default_factory=list)
+    tool_specs: list[LLMToolSpec] = field(default_factory=list)
+    errlogs: list[str] = field(default_factory=list)
+    last_error: str | None = None
+    ready_event: asyncio.Event = field(default_factory=asyncio.Event)
+    connect_task: asyncio.Task[None] | None = None
+    lease_path: Path | None = None
+
+
+@dataclass(slots=True)
+class _TemporaryMCPSessionRuntime:
+    plugin_id: str
+    name: str
+    client: MCPClient
+    tools: list[str]
+
+
+@dataclass(slots=True)
 class _RequestOverlayState:
     dispatch_token: str
     should_call_llm: bool
@@ -172,6 +203,8 @@ class SdkPluginRecord:
     restart_attempted: bool = False
     failure_reason: str = ""
     issues: list[dict[str, Any]] = field(default_factory=list)
+    local_mcp_servers: dict[str, _LocalMCPServerRuntime] = field(default_factory=dict)
+    acknowledge_global_mcp_risk: bool = False
 
     @property
     def plugin_id(self) -> str:
@@ -239,10 +272,12 @@ class SdkPluginBridge:
         self._session_waiters: dict[str, set[str]] = {}
         self._schedule_job_ids: dict[str, set[str]] = {}
         self._discovery_issues: dict[str, list[dict[str, Any]]] = {}
+        self._temporary_mcp_sessions: dict[str, _TemporaryMCPSessionRuntime] = {}
 
     async def start(self) -> None:
         if self._started:
             return
+        self._sweep_stale_mcp_leases()
         await self.reload_all(reset_restart_budget=True)
         self._started = True
 
@@ -252,7 +287,9 @@ class SdkPluginBridge:
         self._stopping = True
         for plugin_id in list(self._records.keys()):
             await self._cancel_plugin_requests(plugin_id)
+            await self._close_temporary_mcp_sessions(plugin_id)
         for record in list(self._records.values()):
+            await self._shutdown_local_mcp_servers(record)
             if record.session is not None:
                 await record.session.stop()
                 record.session = None
@@ -268,6 +305,7 @@ class SdkPluginBridge:
         self._http_routes.clear()
         self._session_waiters.clear()
         self._schedule_job_ids.clear()
+        self._temporary_mcp_sessions.clear()
         self._started = False
         self._stopping = False
 
@@ -518,6 +556,70 @@ class SdkPluginBridge:
         spec.active = False
         record.active_llm_tools.discard(name)
         return True
+
+    def _local_mcp_record(
+        self, plugin_id: str, name: str
+    ) -> _LocalMCPServerRuntime | None:
+        record = self._records.get(plugin_id)
+        if record is None:
+            return None
+        return record.local_mcp_servers.get(name)
+
+    @staticmethod
+    def _serialize_local_mcp_server(
+        runtime: _LocalMCPServerRuntime,
+    ) -> dict[str, Any]:
+        errlogs = list(runtime.errlogs)
+        if runtime.client is not None:
+            errlogs.extend(str(item) for item in runtime.client.server_errlogs)
+        return {
+            "name": runtime.name,
+            "scope": "local",
+            "active": runtime.active,
+            "running": runtime.running,
+            "config": dict(runtime.config),
+            "tools": list(runtime.tools),
+            "errlogs": errlogs,
+            "last_error": runtime.last_error,
+        }
+
+    def get_local_mcp_server(
+        self,
+        plugin_id: str,
+        name: str,
+    ) -> dict[str, Any] | None:
+        runtime = self._local_mcp_record(plugin_id, name)
+        if runtime is None:
+            return None
+        return self._serialize_local_mcp_server(runtime)
+
+    def list_local_mcp_servers(self, plugin_id: str) -> list[dict[str, Any]]:
+        record = self._records.get(plugin_id)
+        if record is None:
+            return []
+        return [
+            self._serialize_local_mcp_server(runtime)
+            for runtime in sorted(
+                record.local_mcp_servers.values(),
+                key=lambda item: item.name,
+            )
+        ]
+
+    def get_request_tool_specs(self, plugin_id: str) -> list[LLMToolSpec]:
+        record = self._records.get(plugin_id)
+        if record is None:
+            return []
+        specs: dict[str, LLMToolSpec] = {
+            item.name: item.model_copy(deep=True)
+            for name, item in record.llm_tools.items()
+            if name in record.active_llm_tools
+        }
+        for runtime in record.local_mcp_servers.values():
+            if not runtime.active or not runtime.running:
+                continue
+            for spec in runtime.tool_specs:
+                specs.setdefault(spec.name, spec.model_copy(deep=True))
+        return list(specs.values())
 
     def get_registered_agents(self, plugin_id: str) -> list[AgentSpec]:
         record = self._records.get(plugin_id)
@@ -2181,6 +2283,440 @@ class SdkPluginBridge:
             return True
         return platform_name in normalized
 
+    @staticmethod
+    def _local_mcp_tool_name(server_name: str, tool_name: str) -> str:
+        return f"mcp.{server_name}.{tool_name}"
+
+    @staticmethod
+    def _local_mcp_tool_ref(server_name: str, tool_name: str) -> str:
+        return json.dumps(
+            {"server_name": server_name, "tool_name": tool_name},
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+
+    @staticmethod
+    def _plugin_data_dir(plugin_id: str) -> Path:
+        return Path(get_astrbot_plugin_data_path()) / plugin_id
+
+    @classmethod
+    def _plugin_mcp_lease_dir(cls, plugin_id: str) -> Path:
+        return cls._plugin_data_dir(plugin_id) / ".mcp_leases"
+
+    def acknowledges_global_mcp_risk(self, plugin_id: str) -> bool:
+        record = self._records.get(plugin_id)
+        return bool(record and record.acknowledge_global_mcp_risk)
+
+    def _load_local_mcp_configs(self, plugin: PluginSpec) -> dict[str, dict[str, Any]]:
+        config_path = plugin.plugin_dir / "mcp.json"
+        if not config_path.exists():
+            return {}
+        try:
+            payload = json.loads(config_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning(
+                "Failed to read SDK plugin mcp.json %s: %s", config_path, exc
+            )
+            return {}
+        if not isinstance(payload, dict):
+            logger.warning("Ignoring invalid SDK plugin mcp.json root: %s", config_path)
+            return {}
+        servers = payload.get("mcpServers")
+        if not isinstance(servers, dict):
+            logger.warning(
+                "Ignoring SDK plugin mcp.json without mcpServers: %s", config_path
+            )
+            return {}
+        return {
+            str(name): dict(config)
+            for name, config in servers.items()
+            if str(name).strip() and isinstance(config, dict)
+        }
+
+    @classmethod
+    def _build_local_mcp_tool_specs(
+        cls,
+        server_name: str,
+        client: MCPClient,
+    ) -> list[LLMToolSpec]:
+        specs: list[LLMToolSpec] = []
+        for tool in client.tools:
+            raw_tool_name = str(getattr(tool, "name", "")).strip()
+            if not raw_tool_name:
+                continue
+            parameters_schema = getattr(tool, "inputSchema", None)
+            if not isinstance(parameters_schema, dict):
+                parameters_schema = {"type": "object", "properties": {}}
+            specs.append(
+                LLMToolSpec.create(
+                    name=cls._local_mcp_tool_name(server_name, raw_tool_name),
+                    description=str(getattr(tool, "description", "") or ""),
+                    parameters_schema=dict(parameters_schema),
+                    handler_ref=cls._local_mcp_tool_ref(server_name, raw_tool_name),
+                    handler_capability="internal.mcp.local.execute",
+                    active=True,
+                )
+            )
+        return specs
+
+    @staticmethod
+    def _mcp_call_result_to_text(result: Any) -> str | None:
+        content_items = getattr(result, "content", None)
+        if not isinstance(content_items, list):
+            return None
+        chunks: list[str] = []
+        for item in content_items:
+            text = getattr(item, "text", None)
+            if isinstance(text, str):
+                chunks.append(text)
+                continue
+            model_dump = getattr(item, "model_dump", None)
+            if callable(model_dump):
+                chunks.append(json.dumps(model_dump(), ensure_ascii=False))
+                continue
+            if item is not None:
+                chunks.append(str(item))
+        return "\n".join(part for part in chunks if part).strip() or None
+
+    async def _cleanup_mcp_client(self, client: MCPClient | None) -> None:
+        if client is None:
+            return
+        with contextlib.suppress(Exception):
+            await client.cleanup()
+
+    def _write_local_mcp_lease(
+        self,
+        *,
+        plugin_id: str,
+        server_name: str,
+        pid: int,
+    ) -> Path:
+        lease_dir = self._plugin_mcp_lease_dir(plugin_id)
+        lease_dir.mkdir(parents=True, exist_ok=True)
+        lease_path = lease_dir / f"{server_name}.json"
+        lease_path.write_text(
+            json.dumps(
+                {
+                    "pid": int(pid),
+                    "plugin_id": plugin_id,
+                    "server_name": server_name,
+                },
+                ensure_ascii=True,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return lease_path
+
+    @staticmethod
+    def _remove_local_mcp_lease(runtime: _LocalMCPServerRuntime) -> None:
+        lease_path = runtime.lease_path
+        runtime.lease_path = None
+        if lease_path is None:
+            return
+        with contextlib.suppress(OSError):
+            lease_path.unlink()
+
+    def _terminate_stale_mcp_pid(self, pid: int) -> None:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        except PermissionError:
+            logger.warning("Permission denied while terminating stale MCP pid %s", pid)
+            return
+        except OSError as exc:
+            logger.warning("Failed to terminate stale MCP pid %s: %s", pid, exc)
+
+    def _sweep_stale_mcp_leases(self) -> None:
+        plugin_data_root = Path(get_astrbot_plugin_data_path())
+        if not plugin_data_root.exists():
+            return
+        for lease_path in plugin_data_root.glob("*/.mcp_leases/*.json"):
+            try:
+                payload = json.loads(lease_path.read_text(encoding="utf-8"))
+            except Exception:
+                payload = {}
+            pid = payload.get("pid")
+            if pid is not None:
+                with contextlib.suppress(TypeError, ValueError):
+                    self._terminate_stale_mcp_pid(int(pid))
+            with contextlib.suppress(OSError):
+                lease_path.unlink()
+
+    async def _connect_local_mcp_server(
+        self,
+        *,
+        plugin_id: str,
+        runtime: _LocalMCPServerRuntime,
+        timeout: float,
+    ) -> None:
+        runtime.ready_event.clear()
+        runtime.running = False
+        runtime.last_error = None
+        runtime.errlogs = []
+        runtime.tools = []
+        runtime.tool_specs = []
+        self._remove_local_mcp_lease(runtime)
+        await self._cleanup_mcp_client(runtime.client)
+        runtime.client = None
+
+        client = MCPClient()
+        client.name = runtime.name
+        try:
+            await asyncio.wait_for(
+                client.connect_to_server(dict(runtime.config), runtime.name),
+                timeout=timeout,
+            )
+            await asyncio.wait_for(client.list_tools_and_save(), timeout=timeout)
+        except asyncio.CancelledError:
+            await self._cleanup_mcp_client(client)
+            raise
+        except TimeoutError:
+            runtime.last_error = (
+                f"Local MCP server '{runtime.name}' did not become ready within "
+                f"{timeout:g} seconds"
+            )
+            runtime.errlogs = [runtime.last_error]
+            await self._cleanup_mcp_client(client)
+        except Exception as exc:
+            runtime.last_error = str(exc)
+            runtime.errlogs = [runtime.last_error]
+            await self._cleanup_mcp_client(client)
+        else:
+            runtime.client = client
+            runtime.running = True
+            runtime.tools = [
+                str(tool.name) for tool in client.tools if getattr(tool, "name", None)
+            ]
+            runtime.tool_specs = self._build_local_mcp_tool_specs(runtime.name, client)
+            runtime.errlogs = list(client.server_errlogs)
+            if client.process_pid is not None:
+                runtime.lease_path = self._write_local_mcp_lease(
+                    plugin_id=plugin_id,
+                    server_name=runtime.name,
+                    pid=client.process_pid,
+                )
+        finally:
+            runtime.ready_event.set()
+            runtime.connect_task = None
+
+    async def _initialize_local_mcp_servers(self, record: SdkPluginRecord) -> None:
+        tasks: list[asyncio.Task[None]] = []
+        for runtime in record.local_mcp_servers.values():
+            if not runtime.active:
+                runtime.ready_event.set()
+                continue
+            task = asyncio.create_task(
+                self._connect_local_mcp_server(
+                    plugin_id=record.plugin_id,
+                    runtime=runtime,
+                    timeout=30.0,
+                )
+            )
+            runtime.connect_task = task
+            tasks.append(task)
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _shutdown_local_mcp_runtime(
+        self,
+        runtime: _LocalMCPServerRuntime,
+    ) -> None:
+        connect_task = runtime.connect_task
+        runtime.connect_task = None
+        if connect_task is not None and not connect_task.done():
+            connect_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await connect_task
+        self._remove_local_mcp_lease(runtime)
+        await self._cleanup_mcp_client(runtime.client)
+        runtime.client = None
+        runtime.running = False
+        runtime.tools = []
+        runtime.tool_specs = []
+        runtime.ready_event.clear()
+
+    async def _shutdown_local_mcp_servers(self, record: SdkPluginRecord) -> None:
+        for runtime in record.local_mcp_servers.values():
+            await self._shutdown_local_mcp_runtime(runtime)
+
+    async def enable_local_mcp_server(
+        self,
+        plugin_id: str,
+        name: str,
+        *,
+        timeout: float = 30.0,
+    ) -> dict[str, Any]:
+        runtime = self._local_mcp_record(plugin_id, name)
+        if runtime is None:
+            raise AstrBotError.invalid_input(f"Unknown local MCP server: {name}")
+        if runtime.active and runtime.running and runtime.connect_task is None:
+            return self._serialize_local_mcp_server(runtime)
+        if runtime.connect_task is not None and not runtime.connect_task.done():
+            runtime.active = True
+            await runtime.connect_task
+            return self._serialize_local_mcp_server(runtime)
+        runtime.active = True
+        task = asyncio.create_task(
+            self._connect_local_mcp_server(
+                plugin_id=plugin_id,
+                runtime=runtime,
+                timeout=timeout,
+            )
+        )
+        runtime.connect_task = task
+        await task
+        return self._serialize_local_mcp_server(runtime)
+
+    async def disable_local_mcp_server(
+        self,
+        plugin_id: str,
+        name: str,
+    ) -> dict[str, Any]:
+        runtime = self._local_mcp_record(plugin_id, name)
+        if runtime is None:
+            raise AstrBotError.invalid_input(f"Unknown local MCP server: {name}")
+        if not runtime.active and not runtime.running and runtime.connect_task is None:
+            return self._serialize_local_mcp_server(runtime)
+        runtime.active = False
+        await self._shutdown_local_mcp_runtime(runtime)
+        return self._serialize_local_mcp_server(runtime)
+
+    async def wait_for_local_mcp_server(
+        self,
+        plugin_id: str,
+        name: str,
+        *,
+        timeout: float,
+    ) -> dict[str, Any]:
+        runtime = self._local_mcp_record(plugin_id, name)
+        if runtime is None:
+            raise AstrBotError.invalid_input(f"Unknown local MCP server: {name}")
+        await asyncio.wait_for(runtime.ready_event.wait(), timeout=timeout)
+        if not runtime.running:
+            raise TimeoutError(
+                f"Local MCP server '{name}' did not become ready in time"
+            )
+        return self._serialize_local_mcp_server(runtime)
+
+    async def open_temporary_mcp_session(
+        self,
+        plugin_id: str,
+        *,
+        name: str,
+        config: dict[str, Any],
+        timeout: float,
+    ) -> tuple[str, list[str]]:
+        client = MCPClient()
+        client.name = name
+        try:
+            await asyncio.wait_for(
+                client.connect_to_server(dict(config), name),
+                timeout=timeout,
+            )
+            await asyncio.wait_for(client.list_tools_and_save(), timeout=timeout)
+        except Exception:
+            await self._cleanup_mcp_client(client)
+            raise
+        session_id = f"{plugin_id}:{uuid.uuid4().hex}"
+        tools = [str(tool.name) for tool in client.tools if getattr(tool, "name", None)]
+        self._temporary_mcp_sessions[session_id] = _TemporaryMCPSessionRuntime(
+            plugin_id=plugin_id,
+            name=name,
+            client=client,
+            tools=tools,
+        )
+        return session_id, tools
+
+    async def close_temporary_mcp_session(
+        self,
+        plugin_id: str,
+        session_id: str,
+    ) -> None:
+        runtime = self._temporary_mcp_sessions.get(session_id)
+        if runtime is None or runtime.plugin_id != plugin_id:
+            return
+        self._temporary_mcp_sessions.pop(session_id, None)
+        await self._cleanup_mcp_client(runtime.client)
+
+    async def _close_temporary_mcp_sessions(self, plugin_id: str) -> None:
+        session_ids = [
+            session_id
+            for session_id, runtime in self._temporary_mcp_sessions.items()
+            if runtime.plugin_id == plugin_id
+        ]
+        for session_id in session_ids:
+            await self.close_temporary_mcp_session(plugin_id, session_id)
+
+    def get_temporary_mcp_session_tools(
+        self,
+        plugin_id: str,
+        session_id: str,
+    ) -> list[str]:
+        runtime = self._temporary_mcp_sessions.get(session_id)
+        if runtime is None or runtime.plugin_id != plugin_id:
+            raise AstrBotError.invalid_input("Unknown MCP session")
+        return list(runtime.tools)
+
+    async def call_temporary_mcp_tool(
+        self,
+        plugin_id: str,
+        *,
+        session_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        runtime = self._temporary_mcp_sessions.get(session_id)
+        if runtime is None or runtime.plugin_id != plugin_id:
+            raise AstrBotError.invalid_input("Unknown MCP session")
+        result = await runtime.client.call_tool_with_reconnect(
+            tool_name=tool_name,
+            arguments=arguments,
+            read_timeout_seconds=timedelta(seconds=60),
+        )
+        text = self._mcp_call_result_to_text(result)
+        return {"content": text, "is_error": bool(getattr(result, "isError", False))}
+
+    async def execute_local_mcp_tool(
+        self,
+        plugin_id: str,
+        *,
+        server_name: str,
+        tool_name: str,
+        tool_args: dict[str, Any],
+        timeout_seconds: int = 60,
+    ) -> dict[str, Any]:
+        runtime = self._local_mcp_record(plugin_id, server_name)
+        if (
+            runtime is None
+            or not runtime.active
+            or not runtime.running
+            or runtime.client is None
+        ):
+            return {
+                "content": f"Local MCP server unavailable: {server_name}",
+                "success": False,
+            }
+        if tool_name not in runtime.tools:
+            return {
+                "content": f"Local MCP tool not found: {server_name}.{tool_name}",
+                "success": False,
+            }
+        try:
+            result = await runtime.client.call_tool_with_reconnect(
+                tool_name=tool_name,
+                arguments=tool_args,
+                read_timeout_seconds=timedelta(seconds=timeout_seconds),
+            )
+        except Exception as exc:
+            return {"content": f"Tool execution failed: {exc}", "success": False}
+        text = self._mcp_call_result_to_text(result)
+        return {
+            "content": text,
+            "success": not bool(getattr(result, "isError", False)),
+        }
+
     @classmethod
     def _descriptor_native_command_candidates(
         cls,
@@ -2308,6 +2844,7 @@ class SdkPluginBridge:
             self._state_overrides.get(plugin.name, {}).get("disabled", False)
         )
         config_schema = load_plugin_config_schema(plugin)
+        local_mcp_configs = self._load_local_mcp_configs(plugin)
         record = SdkPluginRecord(
             plugin=plugin,
             load_order=load_order,
@@ -2323,6 +2860,14 @@ class SdkPluginBridge:
             if reset_restart_budget
             else (current.restart_attempted if current is not None else False),
             issues=[dict(item) for item in self._discovery_issues.get(plugin.name, [])],
+            local_mcp_servers={
+                name: _LocalMCPServerRuntime(
+                    name=name,
+                    config=dict(config),
+                    active=bool(config.get("active", True)),
+                )
+                for name, config in local_mcp_configs.items()
+            },
         )
         self._records[plugin.name] = record
         self._publish_plugin_skills(plugin.name)
@@ -2345,6 +2890,15 @@ class SdkPluginBridge:
             await session.start()
             session.start_close_watch()
             record.session = session
+            remote_metadata = (
+                dict(session.peer.remote_metadata)
+                if session.peer is not None
+                and isinstance(session.peer.remote_metadata, dict)
+                else {}
+            )
+            record.acknowledge_global_mcp_risk = bool(
+                remote_metadata.get("acknowledge_global_mcp_risk", False)
+            )
             unsupported_features: set[str] = set()
             for index, descriptor in enumerate(session.handlers):
                 if (
@@ -2381,6 +2935,7 @@ class SdkPluginBridge:
                 spec = AgentSpec.from_payload(normalized)
                 record.agents[spec.name] = spec
             await self._register_schedule_handlers(record)
+            await self._initialize_local_mcp_servers(record)
             record.issues.extend(issue.to_payload() for issue in session.issues)
             record.unsupported_features = sorted(unsupported_features)
             record.state = (
@@ -2411,6 +2966,7 @@ class SdkPluginBridge:
         self._http_routes.pop(plugin_id, None)
         self._session_waiters.pop(plugin_id, None)
         await self._unregister_schedule_jobs(plugin_id)
+        await self._close_temporary_mcp_sessions(plugin_id)
         skills_changed = False
         if record is not None and record.skills:
             record.skills.clear()
@@ -2430,8 +2986,11 @@ class SdkPluginBridge:
                     exc,
                 )
         if record is None or record.session is None:
+            if record is not None:
+                await self._shutdown_local_mcp_servers(record)
             return
         try:
+            await self._shutdown_local_mcp_servers(record)
             await record.session.stop()
         finally:
             record.session = None
@@ -2600,9 +3159,11 @@ class SdkPluginBridge:
         if self._stopping:
             return
         await self._cancel_plugin_requests(plugin_id)
+        await self._close_temporary_mcp_sessions(plugin_id)
         record = self._records.get(plugin_id)
         if record is None:
             return
+        await self._shutdown_local_mcp_servers(record)
         record.session = None
         if record.state in {SDK_STATE_RELOADING, SDK_STATE_DISABLED}:
             return

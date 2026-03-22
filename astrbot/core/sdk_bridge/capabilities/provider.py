@@ -1119,7 +1119,7 @@ class ProviderCapabilityMixin(CapabilityMixinHost):
     ) -> list[LLMToolSpec]:
         active_specs = {
             item.name: item
-            for item in self._plugin_bridge.get_active_llm_tools(plugin_id)
+            for item in self._plugin_bridge.get_request_tool_specs(plugin_id)
         }
         requested = payload.get("tool_names")
         if not isinstance(requested, list) or not requested:
@@ -1165,7 +1165,28 @@ class ProviderCapabilityMixin(CapabilityMixinHost):
                 "event": event_payload,
             }
             try:
-                if tool_spec.handler_capability:
+                if tool_spec.handler_capability == "internal.mcp.local.execute":
+                    handler_ref = json.loads(tool_spec.handler_ref or "{}")
+                    output = await asyncio.wait_for(
+                        self.execute(
+                            "internal.mcp.local.execute",
+                            {
+                                "plugin_id": plugin_id,
+                                "server_name": str(
+                                    handler_ref.get("server_name", "")
+                                ).strip(),
+                                "tool_name": str(
+                                    handler_ref.get("tool_name", "")
+                                ).strip(),
+                                "tool_args": call_payload["tool_args"],
+                            },
+                            stream=False,
+                            cancel_token=None,
+                            request_id=request_id,
+                        ),
+                        timeout=tool_call_timeout,
+                    )
+                elif tool_spec.handler_capability:
                     output = await asyncio.wait_for(
                         record.session.invoke_capability(
                             tool_spec.handler_capability,

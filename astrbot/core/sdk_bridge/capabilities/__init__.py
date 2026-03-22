@@ -2,6 +2,7 @@ from .basic import BasicCapabilityMixin
 from .conversation import ConversationCapabilityMixin
 from .kb import KnowledgeBaseCapabilityMixin
 from .llm import LLMCapabilityMixin
+from .mcp import MCPCapabilityMixin
 from .message_history import MessageHistoryCapabilityMixin
 from .persona import PersonaCapabilityMixin
 from .platform import PlatformCapabilityMixin
@@ -15,6 +16,7 @@ __all__ = [
     "ConversationCapabilityMixin",
     "KnowledgeBaseCapabilityMixin",
     "LLMCapabilityMixin",
+    "MCPCapabilityMixin",
     "MessageHistoryCapabilityMixin",
     "PersonaCapabilityMixin",
     "PlatformCapabilityMixin",

@@ -8,6 +8,7 @@ from .capabilities import (
     ConversationCapabilityMixin,
     KnowledgeBaseCapabilityMixin,
     LLMCapabilityMixin,
+    MCPCapabilityMixin,
     MessageHistoryCapabilityMixin,
     PersonaCapabilityMixin,
     PlatformCapabilityMixin,
@@ -27,6 +28,7 @@ __all__ = ["CoreCapabilityBridge", "EventConverter"]
 class CoreCapabilityBridge(
     SystemCapabilityMixin,
     ProviderCapabilityMixin,
+    MCPCapabilityMixin,
     PlatformCapabilityMixin,
     KnowledgeBaseCapabilityMixin,
     MessageHistoryCapabilityMixin,
@@ -51,6 +53,7 @@ class CoreCapabilityBridge(
         super().__init__()
         self._register_provider_capabilities()
         self._register_provider_manager_capabilities()
+        self._register_mcp_capabilities()
         self._register_platform_manager_capabilities()
         self._register_persona_capabilities()
         self._register_conversation_capabilities()

@@ -137,12 +137,31 @@ class MCPClient:
         self.tools: list[mcp.Tool] = []
         self.server_errlogs: list[str] = []
         self.running_event = asyncio.Event()
+        self.process_pid: int | None = None
 
         # Store connection config for reconnection
         self._mcp_server_config: dict | None = None
         self._server_name: str | None = None
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False  # For logging and debugging
+
+    @staticmethod
+    def _extract_stdio_process_pid(streams_context: object) -> int | None:
+        """Best-effort extraction for stdio subprocess PID used by lease cleanup.
+
+        TODO(refactor): replace this async-generator frame introspection with a
+        stable MCP library hook once the upstream transport exposes process PID.
+        """
+        generator = getattr(streams_context, "gen", None)
+        frame = getattr(generator, "ag_frame", None)
+        if frame is None:
+            return None
+        process = frame.f_locals.get("process")
+        pid = getattr(process, "pid", None)
+        try:
+            return int(pid) if pid is not None else None
+        except (TypeError, ValueError):
+            return None
 
     async def connect_to_server(self, mcp_server_config: dict, name: str) -> None:
         """Connect to MCP server
@@ -159,6 +178,7 @@ class MCPClient:
         # Store config for reconnection
         self._mcp_server_config = mcp_server_config
         self._server_name = name
+        self.process_pid = None
 
         cfg = _prepare_config(mcp_server_config.copy())
 
@@ -261,6 +281,7 @@ class MCPClient:
                     ),  # type: ignore
                 ),
             )
+            self.process_pid = self._extract_stdio_process_pid(self._streams_context)
 
             # Create a new client session
             self.session = await self.exit_stack.enter_async_context(
@@ -390,6 +411,7 @@ class MCPClient:
 
         # Set running_event first to unblock any waiting tasks
         self.running_event.set()
+        self.process_pid = None
 
 
 class MCPTool(FunctionTool, Generic[TContext]):
