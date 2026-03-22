@@ -11,6 +11,7 @@ from astrbot_sdk._command_model import (
     parse_command_model_remainder,
     resolve_command_model_param,
 )
+from astrbot_sdk._internal.decorator_lifecycle import _validate_schema_config
 from astrbot_sdk.cli import EXIT_RUNTIME, _run_sync_entrypoint
 from astrbot_sdk.context import CancelToken, Context
 from astrbot_sdk.conversation import (
@@ -36,6 +37,7 @@ from astrbot_sdk.decorators import (
     priority,
     private_only,
     rate_limit,
+    validate_config,
 )
 from astrbot_sdk.errors import AstrBotError, ErrorCodes
 from astrbot_sdk.events import MessageEvent
@@ -747,6 +749,23 @@ def test_group_worker_metadata_serializes_issues() -> None:
     assert metadata["issues"] == [runtime.issues[0].to_payload()]
     assert metadata["skipped_plugins"] == {"sdk-broken": "boom"}
     assert metadata["acknowledge_global_mcp_risk"] is False
+
+
+@pytest.mark.unit
+def test_validate_config_rejects_invalid_schema_type_entry() -> None:
+    with pytest.raises(TypeError, match="invalid 'type' entry"):
+
+        @validate_config(schema={"name": {"type": "string"}})
+        async def _broken_schema(ctx: Context) -> None: ...
+
+
+@pytest.mark.unit
+def test_validate_schema_config_reports_invalid_type_entry() -> None:
+    with pytest.raises(ValueError, match="invalid schema 'type' entry 'string'"):
+        _validate_schema_config(
+            {"name": {"type": "string"}},
+            {"name": "demo"},
+        )
 
 
 @pytest.mark.unit
