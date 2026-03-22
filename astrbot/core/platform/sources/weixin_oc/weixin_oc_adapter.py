@@ -412,20 +412,18 @@ class WeixinOCAdapter(Platform):
             len(encrypted_query_param),
         )
 
-        aes_key_b64 = base64.b64encode(bytes.fromhex(aes_key_hex)).decode("utf-8")
+        aes_key_b64 = base64.b64encode(aes_key_hex.encode("utf-8")).decode("utf-8")
         media_payload = {
-            "media": {
-                "encrypt_query_param": encrypted_query_param,
-                "aes_key": aes_key_b64,
-                "encrypt_type": 1,
-            }
+            "encrypt_query_param": encrypted_query_param,
+            "aes_key": aes_key_b64,
+            "encrypt_type": 1,
         }
 
         if item_type == self.IMAGE_ITEM_TYPE:
             return {
                 "type": self.IMAGE_ITEM_TYPE,
                 "image_item": {
-                    **{"media": media_payload},
+                    "media": media_payload,
                     "mid_size": ciphertext_size,
                 },
             }
@@ -433,7 +431,7 @@ class WeixinOCAdapter(Platform):
             return {
                 "type": self.VIDEO_ITEM_TYPE,
                 "video_item": {
-                    **{"media": media_payload},
+                    "media": media_payload,
                     "video_size": ciphertext_size,
                 },
             }
