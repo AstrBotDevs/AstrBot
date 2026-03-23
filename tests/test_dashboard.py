@@ -8,6 +8,7 @@ import sys
 import zipfile
 from datetime import datetime
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -1622,3 +1623,232 @@ async def test_tui_batch_delete_sessions_missing_params(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "error"
+
+
+# ═══════════════════════ Tools Route Tests ═══════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_tools_get_tool_list(app: Quart, authenticated_header: dict):
+    """Test getting the list of all tools."""
+    test_client = app.test_client()
+    response = await test_client.get(
+        "/api/tools/list",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert isinstance(data["data"], list)
+
+
+@pytest.mark.asyncio
+async def test_tools_toggle_tool_missing_params(
+    app: Quart, authenticated_header: dict
+):
+    """Test toggle_tool returns error when params are missing."""
+    test_client = app.test_client()
+
+    # Missing name
+    response = await test_client.post(
+        "/api/tools/toggle-tool",
+        headers=authenticated_header,
+        json={"activate": True},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+    # Missing activate
+    response = await test_client.post(
+        "/api/tools/toggle-tool",
+        headers=authenticated_header,
+        json={"name": "some_tool"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_tools_toggle_tool_not_found(app: Quart, authenticated_header: dict):
+    """Test toggle_tool returns error when tool doesn't exist."""
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/tools/toggle-tool",
+        headers=authenticated_header,
+        json={"name": "nonexistent_tool_xyz", "activate": True},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_tools_get_mcp_servers(app: Quart, authenticated_header: dict):
+    """Test getting MCP server list."""
+    test_client = app.test_client()
+    response = await test_client.get(
+        "/api/tools/mcp/servers",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert isinstance(data["data"], list)
+
+
+@pytest.mark.asyncio
+async def test_tools_add_mcp_server_empty_name(
+    app: Quart, authenticated_header: dict
+):
+    """Test add_mcp_server returns error when name is empty."""
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/tools/mcp/add",
+        headers=authenticated_header,
+        json={"name": "", "active": True},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_tools_add_mcp_server_no_valid_config(
+    app: Quart, authenticated_header: dict
+):
+    """Test add_mcp_server returns error when no valid config is provided."""
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/tools/mcp/add",
+        headers=authenticated_header,
+        json={"name": "test-server", "active": True},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_tools_add_mcp_server_connection_failure(
+    app: Quart, authenticated_header: dict
+):
+    """Test add_mcp_server returns error when connection test fails."""
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/tools/mcp/add",
+        headers=authenticated_header,
+        json={
+            "name": "test-server",
+            "active": True,
+            "url": "http://localhost:9999/nonexistent",
+        },
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    # Should get a connection error
+    assert "error" in data["status"].lower() or "failed" in data["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_tools_update_mcp_server_empty_name(
+    app: Quart, authenticated_header: dict
+):
+    """Test update_mcp_server returns error when name is empty."""
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/tools/mcp/update",
+        headers=authenticated_header,
+        json={"name": "", "active": True},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_tools_update_mcp_server_not_found(app: Quart, authenticated_header: dict):
+    """Test update_mcp_server returns error when server doesn't exist."""
+    test_client = app.test_client()
+
+    # When the server doesn't exist, the response will be an error
+    # The actual behavior depends on the config state
+    response = await test_client.post(
+        "/api/tools/mcp/update",
+        headers=authenticated_header,
+        json={"name": "nonexistent-server-xyz", "active": True},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    # This should return an error because the server doesn't exist
+    assert data["status"] == "error"
+    assert "does not exist" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_tools_delete_mcp_server_empty_name(
+    app: Quart, authenticated_header: dict
+):
+    """Test delete_mcp_server returns error when name is empty."""
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/tools/mcp/delete",
+        headers=authenticated_header,
+        json={"name": ""},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_tools_delete_mcp_server_not_found(app: Quart, authenticated_header: dict):
+    """Test delete_mcp_server returns error when server doesn't exist."""
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/tools/mcp/delete",
+        headers=authenticated_header,
+        json={"name": "nonexistent-server-xyz"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "does not exist" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_tools_test_mcp_connection_invalid_config(
+    app: Quart, authenticated_header: dict
+):
+    """Test test_mcp_connection returns error for invalid config."""
+    test_client = app.test_client()
+
+    # Empty config
+    response = await test_client.post(
+        "/api/tools/mcp/test",
+        headers=authenticated_header,
+        json={"mcp_server_config": {}},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_tools_sync_provider_unknown_provider(
+    app: Quart, authenticated_header: dict
+):
+    """Test sync_provider returns error for unknown provider."""
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/tools/mcp/sync-provider",
+        headers=authenticated_header,
+        json={"name": "unknown_provider"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "Unknown provider" in data["message"]
