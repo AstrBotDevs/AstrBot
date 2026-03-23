@@ -176,14 +176,21 @@ class ProviderOpenAIResponses(Provider):
     async def test(self, timeout: float = 45.0) -> None:
         """Respect streaming_response when checking provider availability."""
         use_stream = bool(self.provider_settings.get("streaming_response", False))
+        logger.info(
+            "[openai_responses.test] streaming_response=%s timeout=%s",
+            use_stream,
+            timeout,
+        )
         if use_stream:
             async def _consume() -> None:
+                logger.info("[openai_responses.test] using text_chat_stream")
                 async for _ in self.text_chat_stream(
                     prompt="REPLY `PONG` ONLY",
                 ):
                     break
             await asyncio.wait_for(_consume(), timeout=timeout)
         else:
+            logger.info("[openai_responses.test] using text_chat")
             await asyncio.wait_for(
                 self.text_chat(prompt="REPLY `PONG` ONLY"),
                 timeout=timeout,
