@@ -42,11 +42,27 @@ class Permissions(_DescriptorBase):
 
     Attributes:
         require_admin: 是否需要管理员权限
+        required_role: 处理器要求的最小角色，v1 支持 member/admin
         level: 权限等级，数值越高权限越大
     """
 
     require_admin: bool = False
+    required_role: Literal["member", "admin"] | None = None
     level: int = 0
+
+    @model_validator(mode="after")
+    def normalize_required_role(self) -> Permissions:
+        if self.require_admin:
+            if self.required_role not in {None, "admin"}:
+                raise ValueError(
+                    "permissions.require_admin=True conflicts with required_role="
+                    f"{self.required_role!r}"
+                )
+            self.required_role = "admin"
+            return self
+        if self.required_role == "admin":
+            self.require_admin = True
+        return self
 
 
 class SessionRef(_DescriptorBase):

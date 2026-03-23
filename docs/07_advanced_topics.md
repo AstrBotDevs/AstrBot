@@ -305,19 +305,22 @@ class MyPlugin(Star):
 ### 4. 权限检查
 
 ```python
-from astrbot_sdk.decorators import require_admin
+from astrbot_sdk.decorators import require_admin, require_permission
 
 class MyPlugin(Star):
     @on_command("admin_only")
     @require_admin
     async def admin_only(self, event: MessageEvent, ctx: Context):
         await event.reply("管理员命令执行成功")
-    
-    async def check_permission(self, event, required_role):
-        # 自定义权限检查
-        if not event.is_admin() and required_role == "admin":
-            raise AstrBotError.invalid_input("需要管理员权限")
+
+    @on_command("panel")
+    @require_permission("admin")
+    async def panel(self, event: MessageEvent, ctx: Context):
+        admins = await ctx.permission.get_admins()
+        await event.reply(f"当前管理员数量: {len(admins)}")
 ```
+
+`@require_permission(...)` 的 v1 正式角色只支持 `member` 和 `admin`，并与 Core 当前权限模型保持一致。`@require_admin` 仍然可用，内部会归一化为 `required_role="admin"`。
 
 ### 5. 速率限制
 

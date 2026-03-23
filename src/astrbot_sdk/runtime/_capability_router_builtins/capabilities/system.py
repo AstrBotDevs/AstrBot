@@ -357,6 +357,7 @@ class SystemCapabilityMixin(CapabilityRouterBridgeBase):
                             "priority": int(route.get("priority", 0) or 0),
                             "kind": "handler",
                             "require_admin": False,
+                            "required_role": None,
                         }
                     )
         return {"handlers": handlers}

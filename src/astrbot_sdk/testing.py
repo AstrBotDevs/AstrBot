@@ -122,6 +122,8 @@ def _handler_metadata_from_loaded(
             if loaded.descriptor.command_route is not None
             else []
         ),
+        "require_admin": loaded.descriptor.permissions.require_admin,
+        "required_role": loaded.descriptor.permissions.required_role,
     }
 
 
@@ -577,6 +579,8 @@ class PluginHarness:
         loaded: LoadedHandler,
         event_payload: dict[str, Any],
     ) -> dict[str, Any] | None:
+        if not self._passes_permissions(loaded, event_payload):
+            return None
         trigger = loaded.descriptor.trigger
         if isinstance(trigger, CommandTrigger):
             return self._match_command_trigger(loaded, trigger, event_payload)
@@ -637,6 +641,19 @@ class PluginHarness:
         ):
             return None
         return {}
+
+    @staticmethod
+    def _passes_permissions(
+        loaded: LoadedHandler,
+        event_payload: dict[str, Any],
+    ) -> bool:
+        permissions = loaded.descriptor.permissions
+        required_role = permissions.required_role
+        if required_role is None and permissions.require_admin:
+            required_role = "admin"
+        if required_role == "admin":
+            return bool(event_payload.get("is_admin", False))
+        return True
 
     def _passes_filters(
         self,

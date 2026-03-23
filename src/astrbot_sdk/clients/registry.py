@@ -27,6 +27,7 @@ class HandlerMetadata:
     priority: int = 0
     kind: str = "handler"
     require_admin: bool = False
+    required_role: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> HandlerMetadata:
@@ -53,6 +54,11 @@ class HandlerMetadata:
             priority=_coerce_int(data.get("priority", 0), 0),
             kind=str(data.get("kind", "handler") or "handler"),
             require_admin=bool(data.get("require_admin", False)),
+            required_role=(
+                None
+                if data.get("required_role") is None
+                else str(data.get("required_role", "")).strip() or None
+            ),
         )
 
 

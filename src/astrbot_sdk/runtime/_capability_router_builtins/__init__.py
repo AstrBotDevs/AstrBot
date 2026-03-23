@@ -11,6 +11,7 @@ from .capabilities import (
     MemoryCapabilityMixin,
     MessageHistoryCapabilityMixin,
     MetadataCapabilityMixin,
+    PermissionCapabilityMixin,
     PersonaCapabilityMixin,
     PlatformCapabilityMixin,
     ProviderCapabilityMixin,
@@ -27,6 +28,7 @@ class BuiltinCapabilityRouterMixin(
     PlatformCapabilityMixin,
     HttpCapabilityMixin,
     MetadataCapabilityMixin,
+    PermissionCapabilityMixin,
     ProviderCapabilityMixin,
     McpCapabilityMixin,
     SessionCapabilityMixin,
@@ -45,6 +47,7 @@ class BuiltinCapabilityRouterMixin(
         self._register_platform_capabilities()
         self._register_http_capabilities()
         self._register_metadata_capabilities()
+        self._register_permission_capabilities()
         self._register_provider_capabilities()
         self._register_agent_tool_capabilities()
         self._register_mcp_capabilities()

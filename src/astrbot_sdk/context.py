@@ -12,8 +12,10 @@ Attributes:
     db: 数据库客户端，用于 KV 持久化
     files: 文件服务客户端，用于文件令牌注册与解析
     platform: 平台客户端，用于发送消息
+    permission: 权限客户端，用于查询用户角色
     providers: Provider 客户端，用于查询和调用专用 Provider
     provider_manager: Provider 管理客户端，用于 reserved/system 级操作
+    permission_manager: 权限管理客户端，用于 reserved/system 级管理员维护
     personas: 人格管理客户端
     conversations: 对话管理客户端
     kbs: 知识库管理客户端
@@ -46,6 +48,8 @@ from .clients import (
     MCPManagerClient,
     MemoryClient,
     MetadataClient,
+    PermissionClient,
+    PermissionManagerClient,
     PlatformClient,
     PlatformError,
     PlatformStats,
@@ -235,8 +239,10 @@ class Context:
         db: 数据库客户端
         files: 文件服务客户端
         platform: 平台客户端
+        permission: 权限客户端
         providers: Provider 客户端
         provider_manager: Provider 管理客户端
+        permission_manager: 权限管理客户端
         personas: 人格管理客户端
         conversations: 对话管理客户端
         kbs: 知识库管理客户端
@@ -287,11 +293,16 @@ class Context:
         self.db = DBClient(proxy)
         self.files = FileServiceClient(proxy)
         self.platform = PlatformClient(proxy)
+        self.permission = PermissionClient(proxy)
         self.providers = ProviderClient(proxy)
         self.provider_manager = ProviderManagerClient(
             proxy,
             plugin_id=plugin_id,
             logger=bound_logger,
+        )
+        self.permission_manager = PermissionManagerClient(
+            proxy,
+            source_event_payload=source_event_payload,
         )
         self.personas = PersonaManagerClient(proxy)
         self.conversations = ConversationManagerClient(proxy)

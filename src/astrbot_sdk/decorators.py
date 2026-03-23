@@ -12,6 +12,7 @@
 
 权限与过滤装饰器：
     - @require_admin / @admin_only: 管理员权限标记
+    - @require_permission: 通用角色权限标记
     - @platforms: 限定平台
     - @group_only / @private_only: 群聊/私聊限定
     - @message_types: 消息类型过滤
@@ -372,6 +373,19 @@ def _validate_message_trigger_compatibility(meta: HandlerMeta) -> None:
         raise ValueError(
             "rate_limit(...) 和 cooldown(...) 只适用于 on_command/on_message"
         )
+
+
+def _set_required_role(
+    meta: HandlerMeta,
+    role: Literal["member", "admin"],
+) -> None:
+    current = meta.permissions.required_role
+    if current is not None and current != role:
+        raise ValueError(
+            f"require_permission({role!r}) 与已有权限要求 {current!r} 冲突"
+        )
+    meta.permissions.required_role = role
+    meta.permissions.require_admin = role == "admin"
 
 
 def _normalize_description(description: str | None) -> str | None:
@@ -834,12 +848,30 @@ def require_admin(func: HandlerCallable) -> HandlerCallable:
             await event.reply("管理员命令执行成功")
     """
     meta = _get_or_create_meta(func)
-    meta.permissions.require_admin = True
+    _set_required_role(meta, "admin")
     return func
 
 
 def admin_only(func: HandlerCallable) -> HandlerCallable:
     return require_admin(func)
+
+
+def require_permission(
+    role: Literal["member", "admin"],
+) -> Callable[[HandlerCallable], HandlerCallable]:
+    normalized_role = str(role).strip().lower()
+    if normalized_role not in {"member", "admin"}:
+        raise ValueError("require_permission(...) 只支持 'member' 或 'admin'")
+
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        meta = _get_or_create_meta(func)
+        _set_required_role(
+            meta,
+            cast(Literal["member", "admin"], normalized_role),
+        )
+        return func
+
+    return decorator
 
 
 def platforms(*names: str) -> Callable[[HandlerCallable], HandlerCallable]:
