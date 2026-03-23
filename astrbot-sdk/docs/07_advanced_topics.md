@@ -474,6 +474,10 @@ class MyPlugin(Star):
 ```python
 @on_command("platform_info")
 async def platform_info(self, event: MessageEvent, ctx: Context):
+    # 列出所有平台实例
+    for platform in await ctx.list_platforms():
+        ctx.logger.info(f"平台实例: {platform.id} ({platform.status})")
+
     # 获取平台实例
     platform = await ctx.get_platform_inst("qq:instance1")
     
