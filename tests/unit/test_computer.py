@@ -626,6 +626,7 @@ class TestComputerClient:
         mock_config = MagicMock()
         mock_config.get = lambda key, default=None: {
             "provider_settings": {
+                "computer_use_runtime": "sandbox",
                 "sandbox": {
                     "booter": "shipyard",
                     "shipyard_endpoint": "http://localhost:8080",
@@ -677,6 +678,7 @@ class TestComputerClient:
         mock_config = MagicMock()
         mock_config.get = lambda key, default=None: {
             "provider_settings": {
+                "computer_use_runtime": "sandbox",
                 "sandbox": {
                     "booter": "unknown_type",
                 }
@@ -700,6 +702,7 @@ class TestComputerClient:
         mock_config = MagicMock()
         mock_config.get = lambda key, default=None: {
             "provider_settings": {
+                "computer_use_runtime": "sandbox",
                 "sandbox": {
                     "booter": "shipyard",
                     "shipyard_endpoint": "http://localhost:8080",
@@ -832,6 +835,7 @@ class TestComputerClient:
         mock_config = MagicMock()
         mock_config.get = lambda key, default=None: {
             "provider_settings": {
+                "computer_use_runtime": "sandbox",
                 "sandbox": {
                     "booter": "shipyard",
                     "shipyard_endpoint": "http://localhost:8080",

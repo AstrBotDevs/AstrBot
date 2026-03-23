@@ -337,6 +337,22 @@
           "description": "用户提示词",
           "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。"
         },
+        "image_compress_enabled": {
+          "description": "启用图片压缩",
+          "hint": "启用后，发送给多模态模型前会先压缩本地大图片。"
+        },
+        "image_compress_options": {
+          "description": "图片压缩配置",
+          "hint": "用于控制图片压缩的尺寸、质量和触发阈值。",
+          "max_size": {
+            "description": "最大边长",
+            "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。"
+          },
+          "quality": {
+            "description": "JPEG 质量",
+            "hint": "JPEG 输出质量，范围为 1-100。值越高，画质越好，文件也越大。"
+          }
+        },
         "reachability_check": {
           "description": "提供商可达性检测",
           "hint": "/provider 命令列出模型时并发检测连通性。开启后会主动调用模型测试连通性,可能产生额外 token 消耗。"
@@ -534,6 +550,10 @@
         "description": "Telegram 命令自动刷新间隔",
         "hint": "Telegram 命令自动刷新间隔，单位为秒。"
       },
+      "telegram_polling_restart_delay": {
+        "description": "Telegram 轮询重启延迟",
+        "hint": "当轮询意外结束尝试自动重启时的延迟时间，单位为秒。默认为 5s。"
+      },
       "telegram_token": {
         "description": "Bot Token",
         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。"
@@ -616,15 +636,34 @@
         "description": "仅使用 Webhook 发送消息",
         "hint": "可选。启用后，企业微信智能机器人的所有回复都改为通过消息推送 Webhook 发送。消息推送 Webhook 支持更多的消息类型（如图片、文件等）。如果不需要打字机效果，强烈建议使用此选项。"
       },
+      "weixin_oc_base_url": {
+        "description": "Base URL 地址",
+        "hint": "默认值: https://ilinkai.weixin.qq.com"
+      },
+      "weixin_oc_bot_type": {
+        "description": "扫码参数 bot_type",
+        "hint": "默认值: 3"
+      },
+      "weixin_oc_qr_poll_interval": {
+        "description": "二维码状态轮询间隔（秒）",
+        "hint": "每隔多少秒轮询一次二维码状态。"
+      },
+      "weixin_oc_long_poll_timeout_ms": {
+        "description": "getUpdates 长轮询超时时间（毫秒）",
+        "hint": "会话消息拉取接口超时参数。"
+      },
+      "weixin_oc_api_timeout_ms": {
+        "description": "HTTP 请求超时（毫秒）",
+        "hint": "通用 API 请求超时参数。"
+      },
+      "weixin_oc_token": {
+        "description": "登录后 token（可留空）",
+        "hint": "扫码登录成功后会自动写入；高级场景可手动填写。"
+      },
       "kook_bot_token": {
         "description": "机器人 Token",
         "type": "string",
         "hint": "必填项。从 KOOK 开发者平台获取的机器人 Token"
-      },
-      "kook_bot_nickname": {
-        "description": "Bot Nickname",
-        "type": "string",
-        "hint": "可选项。若发送者昵称与此值一致，将忽略该消息。"
       },
       "kook_reconnect_delay": {
         "description": "重连延迟",
@@ -704,11 +743,11 @@
       "platform_settings": {
         "enable_id_white_list": {
           "description": "启用白名单",
-          "hint": "启用后,只有在白名单内的会话会被响应。"
+          "hint": "启用后,只有在白名单内的会话会被响应，白名单列表为空时代表不启用白名单（所有 ID 都会被放行）。"
         },
         "id_whitelist": {
           "description": "白名单 ID 列表",
-          "hint": "使用 /sid 获取 ID。"
+          "hint": "使用 /sid 获取 ID。列表为空时表示该白名单不启用（即所有 ID 都在白名单内）。"
         },
         "id_whitelist_log": {
           "description": "输出日志",
@@ -1072,6 +1111,10 @@
         "description": "自定义添加请求头",
         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"
       },
+      "ollama_disable_thinking": {
+        "description": "关闭思考模式",
+        "hint": "关闭 Ollama 思考模式。"
+      },
       "custom_extra_body": {
         "description": "自定义请求体参数",
         "hint": "用于在请求时添加额外的参数，如 temperature、top_p、max_tokens 等。",
@@ -1394,9 +1437,37 @@
         "description": "超时时间",
         "hint": "超时时间，单位为秒。"
       },
+      "mimo-stt-system-prompt": {
+        "description": "系统提示词",
+        "hint": "用于指导 MiMo STT 转录行为的 system prompt。"
+      },
+      "mimo-stt-user-prompt": {
+        "description": "用户提示词",
+        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。"
+      },
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
+      },
+      "mimo-tts-voice": {
+        "description": "音色",
+        "hint": "MiMo TTS 的音色名称。可选值包括 'mimo_default'、'default_en'、'default_zh'。"
+      },
+      "mimo-tts-format": {
+        "description": "输出格式",
+        "hint": "MiMo TTS 生成音频的格式。支持 'wav'、'mp3'、'pcm'。"
+      },
+      "mimo-tts-style-prompt": {
+        "description": "风格提示词",
+        "hint": "会以 <style>...</style> 标签形式添加到待合成文本开头，用于控制语速、情绪、角色或风格，例如 开心、变快、孙悟空、悄悄话。可留空。"
+      },
+      "mimo-tts-dialect": {
+        "description": "方言",
+        "hint": "会与风格提示词一起写入开头的 <style>...</style> 标签中，例如 东北话、四川话、河南话、粤语。可留空。"
+      },
+      "mimo-tts-seed-text": {
+        "description": "种子文本",
+        "hint": "作为可选的 user 消息发送，用于辅助调节语气和风格，不会拼接到待合成文本中。"
       },
       "fishaudio-tts-character": {
         "description": "character",

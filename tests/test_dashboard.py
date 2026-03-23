@@ -1,7 +1,9 @@
 import asyncio
+import copy
 import io
 import os
 import sys
+import uuid
 import zipfile
 from datetime import datetime
 from types import SimpleNamespace
@@ -104,6 +106,158 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok" and "platform" in data["data"]
+
+
+@pytest.mark.asyncio
+async def test_subagent_config_accepts_default_persona(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    old_cfg = copy.deepcopy(
+        core_lifecycle_td.astrbot_config.get("subagent_orchestrator", {})
+    )
+    payload = {
+        "main_enable": True,
+        "remove_main_duplicate_tools": True,
+        "agents": [
+            {
+                "name": "planner",
+                "persona_id": "default",
+                "public_description": "planner",
+                "system_prompt": "",
+                "enabled": True,
+            }
+        ],
+    }
+
+    try:
+        response = await test_client.post(
+            "/api/subagent/config",
+            json=payload,
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        get_response = await test_client.get(
+            "/api/subagent/config", headers=authenticated_header
+        )
+        assert get_response.status_code == 200
+        get_data = await get_response.get_json()
+        assert get_data["status"] == "ok"
+        assert get_data["data"]["agents"][0]["persona_id"] == "default"
+    finally:
+        await test_client.post(
+            "/api/subagent/config",
+            json=old_cfg,
+            headers=authenticated_header,
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [[], "x"])
+async def test_batch_delete_sessions_rejects_non_object_payload(
+    app: Quart, authenticated_header: dict, payload
+):
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/chat/batch_delete_sessions",
+        json=payload,
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "Invalid JSON body: expected object"
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_sessions_masks_internal_error(
+    app: Quart, authenticated_header: dict, monkeypatch
+):
+    test_client = app.test_client()
+
+    create_session_response = await test_client.get(
+        "/api/chat/new_session", headers=authenticated_header
+    )
+    assert create_session_response.status_code == 200
+    create_session_data = await create_session_response.get_json()
+    session_id = create_session_data["data"]["session_id"]
+
+    async def _raise_error(*args, **kwargs):
+        raise RuntimeError("secret-internal-error")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.chat.ChatRoute._delete_session_internal",
+        _raise_error,
+    )
+
+    response = await test_client.post(
+        "/api/chat/batch_delete_sessions",
+        json={"session_ids": [session_id]},
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["deleted_count"] == 0
+    assert data["data"]["failed_count"] == 1
+    assert data["data"]["failed_items"][0]["session_id"] == session_id
+    assert data["data"]["failed_items"][0]["reason"] == "internal_error"
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_sessions_uses_batch_lookup(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    db = core_lifecycle_td.db
+
+    create_session_response = await test_client.get(
+        "/api/chat/new_session", headers=authenticated_header
+    )
+    assert create_session_response.status_code == 200
+    create_session_data = await create_session_response.get_json()
+    session_id = create_session_data["data"]["session_id"]
+
+    original_batch_lookup = db.get_platform_sessions_by_ids
+    called = {"batch_lookup_count": 0}
+
+    async def _wrapped_batch_lookup(session_ids: list[str]):
+        called["batch_lookup_count"] += 1
+        return await original_batch_lookup(session_ids)
+
+    # 不应单个查询
+    async def _should_not_call_single_lookup(session_id: str):
+        raise AssertionError(
+            f"single-session lookup should not be called: {session_id}"
+        )
+
+    monkeypatch.setattr(db, "get_platform_sessions_by_ids", _wrapped_batch_lookup)
+    monkeypatch.setattr(
+        db, "get_platform_session_by_id", _should_not_call_single_lookup
+    )
+
+    response = await test_client.post(
+        "/api/chat/batch_delete_sessions",
+        json={"session_ids": [session_id]},
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["deleted_count"] == 1
+    assert data["data"]["failed_count"] == 0
+    assert called["batch_lookup_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -273,6 +427,224 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
     assert data["status"] == "ok"
     # conflicts is a list
     assert isinstance(data["data"], list)
+
+
+@pytest.mark.asyncio
+async def test_t2i_set_active_template_syncs_all_configs(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    template_name = f"sync_tpl_{uuid.uuid4().hex[:8]}"
+    created_conf_ids: list[str] = []
+
+    try:
+        for name in ("sync-a", "sync-b"):
+            response = await test_client.post(
+                "/api/config/abconf/new",
+                json={"name": name},
+                headers=authenticated_header,
+            )
+            assert response.status_code == 200
+            data = await response.get_json()
+            assert data["status"] == "ok"
+            created_conf_ids.append(data["data"]["conf_id"])
+
+        response = await test_client.post(
+            "/api/t2i/templates/create",
+            json={
+                "name": template_name,
+                "content": "<html><body>{{ content }}</body></html>",
+            },
+            headers=authenticated_header,
+        )
+        assert response.status_code == 201
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        response = await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": template_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        conf_ids = set(core_lifecycle_td.astrbot_config_mgr.confs.keys())
+        assert "default" in conf_ids
+        for conf_id in conf_ids:
+            conf = core_lifecycle_td.astrbot_config_mgr.confs[conf_id]
+            assert conf.get("t2i_active_template") == template_name
+            assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
+    finally:
+        await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": "base"},
+            headers=authenticated_header,
+        )
+        await test_client.delete(
+            f"/api/t2i/templates/{template_name}",
+            headers=authenticated_header,
+        )
+        for conf_id in created_conf_ids:
+            await test_client.post(
+                "/api/config/abconf/delete",
+                json={"id": conf_id},
+                headers=authenticated_header,
+            )
+
+
+@pytest.mark.asyncio
+async def test_t2i_reset_default_template_syncs_all_configs(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    template_name = f"reset_tpl_{uuid.uuid4().hex[:8]}"
+    created_conf_ids: list[str] = []
+
+    try:
+        for name in ("reset-a", "reset-b"):
+            response = await test_client.post(
+                "/api/config/abconf/new",
+                json={"name": name},
+                headers=authenticated_header,
+            )
+            assert response.status_code == 200
+            data = await response.get_json()
+            assert data["status"] == "ok"
+            created_conf_ids.append(data["data"]["conf_id"])
+
+        response = await test_client.post(
+            "/api/t2i/templates/create",
+            json={
+                "name": template_name,
+                "content": "<html><body>{{ content }} reset</body></html>",
+            },
+            headers=authenticated_header,
+        )
+        assert response.status_code == 201
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        response = await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": template_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+
+        response = await test_client.post(
+            "/api/t2i/templates/reset_default",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        conf_ids = set(core_lifecycle_td.astrbot_config_mgr.confs.keys())
+        assert "default" in conf_ids
+        for conf_id in conf_ids:
+            conf = core_lifecycle_td.astrbot_config_mgr.confs[conf_id]
+            assert conf.get("t2i_active_template") == "base"
+            assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
+    finally:
+        await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": "base"},
+            headers=authenticated_header,
+        )
+        await test_client.delete(
+            f"/api/t2i/templates/{template_name}",
+            headers=authenticated_header,
+        )
+        for conf_id in created_conf_ids:
+            await test_client.post(
+                "/api/config/abconf/delete",
+                json={"id": conf_id},
+                headers=authenticated_header,
+            )
+
+
+@pytest.mark.asyncio
+async def test_t2i_update_active_template_reloads_all_schedulers(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    template_name = f"update_tpl_{uuid.uuid4().hex[:8]}"
+    created_conf_ids: list[str] = []
+
+    try:
+        for name in ("update-a", "update-b"):
+            response = await test_client.post(
+                "/api/config/abconf/new",
+                json={"name": name},
+                headers=authenticated_header,
+            )
+            assert response.status_code == 200
+            data = await response.get_json()
+            assert data["status"] == "ok"
+            created_conf_ids.append(data["data"]["conf_id"])
+
+        response = await test_client.post(
+            "/api/t2i/templates/create",
+            json={
+                "name": template_name,
+                "content": "<html><body>{{ content }} v1</body></html>",
+            },
+            headers=authenticated_header,
+        )
+        assert response.status_code == 201
+
+        response = await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": template_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+
+        conf_ids = list(core_lifecycle_td.astrbot_config_mgr.confs.keys())
+        old_schedulers = {
+            conf_id: core_lifecycle_td.pipeline_scheduler_mapping[conf_id]
+            for conf_id in conf_ids
+        }
+
+        response = await test_client.put(
+            f"/api/t2i/templates/{template_name}",
+            json={"content": "<html><body>{{ content }} v2</body></html>"},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        for conf_id in conf_ids:
+            assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
+            assert (
+                core_lifecycle_td.pipeline_scheduler_mapping[conf_id]
+                is not old_schedulers[conf_id]
+            )
+    finally:
+        await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": "base"},
+            headers=authenticated_header,
+        )
+        await test_client.delete(
+            f"/api/t2i/templates/{template_name}",
+            headers=authenticated_header,
+        )
+        for conf_id in created_conf_ids:
+            await test_client.post(
+                "/api/config/abconf/delete",
+                json={"id": conf_id},
+                headers=authenticated_header,
+            )
 
 
 @pytest.mark.asyncio
