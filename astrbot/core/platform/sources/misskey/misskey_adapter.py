@@ -543,7 +543,7 @@ class MisskeyPlatformAdapter(Platform):
                 for r in results:
                     if not r:
                         continue
-                    if isinstance(r, dict) and r.get("fallback_url"):  # type: ignore[assignment]
+                    if isinstance(r, dict):
                         url = r.get("fallback_url")
                         if url:
                             fallback_urls.append(str(url))
