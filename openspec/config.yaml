@@ -1,20 +1,39 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+# Project context
+context: |
+  Tech stack: Python 3.12, anyio (async), FastAPI, pytest, ruff, uv
+  Domain: Multi-platform LLM chatbot framework (QQ, Telegram, Discord, etc.)
+  Architecture: Protocol-based system (LSP, MCP, ACP, ABP)
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+# Per-artifact rules
+rules:
+  tasks:
+    - Break tasks into chunks of max 2 hours
+    - Always write tests for new functionality
+    - Run ruff and pytest before committing
+  code:
+    - Use absolute imports via `astrbot.` prefix
+    - Type hints required (no Any when possible)
+    - Comments in English
+  commits:
+    - Use conventional commits (feat:, fix:, docs:, refactor:, test:, chore:)
+
+# Project directives (最高旨意)
+directives:
+  architecture: |
+    New architecture goes in _internal package to avoid branch conflicts.
+    Protocol system: LSP (client), MCP (client+server), ACP (client+server), ABP (client+server).
+    Runtime coordinates protocols, Gateway provides FastAPI backend.
+    Stars are plugins - Galaxy is the collection of stars.
+  async_library: |
+    Use anyio as the async library (not asyncio).
+  coverage: |
+    Coverage testing must be improved.
+  type_checking: |
+    Code must pass `uvx ty check` (astral's pyright).
+    Avoid using Any and cast.
+  code_style: |
+    Code must pass `ruff check .` and `ruff format .`.
+  execution: |
+    Always use `uv run` for running Python scripts, not bare `python`.
