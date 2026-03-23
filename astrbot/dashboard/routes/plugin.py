@@ -542,6 +542,8 @@ class PluginRoute(Route):
                 ignore_version_check=ignore_version_check,
             )
             # self.core_lifecycle.restart()
+            if plugin_info and plugin_info.get("type") == "sdk":
+                logger.info("SDK 插件 %s 安装成功", plugin_info.get("name"))
             logger.info(f"安装插件 {repo_url} 成功。")
             return Response().ok(plugin_info, "安装成功。").__dict__
         except PluginVersionIncompatibleError as e:
@@ -583,6 +585,8 @@ class PluginRoute(Route):
                 ignore_version_check=ignore_version_check,
             )
             # self.core_lifecycle.restart()
+            if plugin_info and plugin_info.get("type") == "sdk":
+                logger.info("SDK 插件 %s 上传安装成功", plugin_info.get("name"))
             logger.info(f"安装插件 {file.filename} 成功")
             return Response().ok(plugin_info, "安装成功。").__dict__
         except PluginVersionIncompatibleError as e:

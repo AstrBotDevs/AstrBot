@@ -156,6 +156,7 @@ async def test_subagent_config_accepts_default_persona(
             headers=authenticated_header,
         )
 
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("payload", [[], "x"])
 async def test_batch_delete_sessions_rejects_non_object_payload(
@@ -376,6 +377,111 @@ async def test_plugins(
     finally:
         # 清理测试插件
         builder.cleanup(test_plugin_name)
+
+
+@pytest.mark.asyncio
+async def test_plugin_install_api_returns_sdk_type(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    sdk_repo_url = "https://github.com/test/sdk-demo"
+
+    async def _mock_install_plugin(
+        repo_url: str,
+        proxy: str = "",
+        ignore_version_check: bool = False,
+    ):
+        assert repo_url == sdk_repo_url
+        assert proxy is None
+        assert ignore_version_check is False
+        return {
+            "repo": repo_url,
+            "readme": "# SDK Demo\n",
+            "name": "sdk_demo",
+            "type": "sdk",
+        }
+
+    monkeypatch.setattr(
+        core_lifecycle_td.plugin_manager,
+        "install_plugin",
+        _mock_install_plugin,
+    )
+
+    response = await test_client.post(
+        "/api/plugin/install",
+        json={"url": sdk_repo_url},
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"] == {
+        "repo": sdk_repo_url,
+        "readme": "# SDK Demo\n",
+        "name": "sdk_demo",
+        "type": "sdk",
+    }
+
+
+@pytest.mark.asyncio
+async def test_plugin_install_upload_api_returns_sdk_type(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    captured = {}
+
+    async def _mock_install_plugin_from_file(
+        zip_file_path: str,
+        ignore_version_check: bool = False,
+    ):
+        captured["zip_file_path"] = zip_file_path
+        captured["ignore_version_check"] = ignore_version_check
+        if os.path.exists(zip_file_path):
+            os.remove(zip_file_path)
+        return {
+            "repo": None,
+            "readme": "# SDK Demo\n",
+            "name": "sdk_demo",
+            "type": "sdk",
+        }
+
+    monkeypatch.setattr(
+        core_lifecycle_td.plugin_manager,
+        "install_plugin_from_file",
+        _mock_install_plugin_from_file,
+    )
+
+    response = await test_client.post(
+        "/api/plugin/install-upload",
+        headers=authenticated_header,
+        files={
+            "file": FileStorage(
+                stream=io.BytesIO(b"fake-sdk-zip"),
+                filename="sdk_demo.zip",
+                content_type="application/zip",
+            ),
+        },
+        form={"ignore_version_check": "false"},
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"] == {
+        "repo": None,
+        "readme": "# SDK Demo\n",
+        "name": "sdk_demo",
+        "type": "sdk",
+    }
+    assert captured["ignore_version_check"] is False
+    assert captured["zip_file_path"].endswith("plugin_upload_sdk_demo.zip")
 
 
 @pytest.mark.asyncio

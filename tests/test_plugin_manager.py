@@ -1,7 +1,6 @@
 import asyncio
 import os
 from pathlib import Path
-
 from typing import Any, cast
 
 import pytest
@@ -16,6 +15,8 @@ from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
 TEST_PLUGIN_NAME = "helloworld"
 TEST_PLUGIN_REPO = "https://github.com/AstrBotDevs/astrbot_plugin_helloworld"
 TEST_PLUGIN_DIR = "helloworld"
+TEST_SDK_PLUGIN_NAME = "sdk_demo"
+TEST_SDK_PLUGIN_REPO = "https://github.com/AstrBotDevs/astrbot_plugin_sdk_demo"
 
 
 class MockStar:
@@ -44,6 +45,43 @@ def _write_local_test_plugin(plugin_path: Path, repo_url: str):
         f.write("@StarManager.register\n")
         f.write("class HelloWorld(Star):\n")
         f.write("    def __init__(self, context: Context): ...\n")
+
+
+def _write_local_sdk_plugin(
+    plugin_path: Path,
+    *,
+    plugin_name: str = TEST_SDK_PLUGIN_NAME,
+):
+    """Creates a minimal valid SDK plugin structure."""
+    plugin_path.mkdir(parents=True, exist_ok=True)
+    (plugin_path / "plugin.yaml").write_text(
+        "\n".join(
+            [
+                f"name: {plugin_name}",
+                "version: 1.0.0",
+                "author: AstrBot Team",
+                'description: "Local SDK test plugin"',
+                "runtime:",
+                '  python: "3.11"',
+                "components:",
+                "  - class: main:DemoPlugin",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (plugin_path / "main.py").write_text(
+        "\n".join(
+            [
+                "class DemoPlugin:",
+                "    pass",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (plugin_path / "README.md").write_text(
+        "# SDK Demo\n",
+        encoding="utf-8",
+    )
 
 
 def _write_requirements(plugin_path: Path):
@@ -166,11 +204,13 @@ def plugin_manager_pm(tmp_path, monkeypatch):
     _clear_module_cache()
 
     plugin_dir = tmp_path / "astrbot_root" / "data" / "plugins"
+    data_dir = plugin_dir.parent
     plugin_dir.mkdir(parents=True, exist_ok=True)
 
     class MockContext:
         def __init__(self):
             self.stars = []
+            self.sdk_plugin_bridge = None
 
         def get_all_stars(self):
             return self.stars
@@ -190,6 +230,21 @@ def plugin_manager_pm(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.get_astrbot_plugin_path",
         lambda: str(plugin_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    sdk_plugins_dir = data_dir / "sdk_plugins"
+    sdk_plugins_dir.mkdir(parents=True, exist_ok=True)
+
+    async def _noop_metric_upload(**kwargs):
+        del kwargs
+        return None
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.Metric.upload",
+        _noop_metric_upload,
     )
 
     return pm
@@ -550,6 +605,156 @@ async def test_install_plugin_runs_dependency_install_when_precheck_fails(
         expected_original_path=plugin_path / "requirements.txt",
     )
     assert ("load", TEST_PLUGIN_DIR) in events
+
+
+def test_detect_plugin_type_identifies_sdk_plugin(
+    plugin_manager_pm: PluginManager, tmp_path
+):
+    plugin_path = tmp_path / "sdk_plugin"
+    _write_local_sdk_plugin(plugin_path)
+
+    plugin_type, plugin_name = plugin_manager_pm._detect_plugin_type(str(plugin_path))
+
+    assert plugin_type == "sdk"
+    assert plugin_name == TEST_SDK_PLUGIN_NAME
+
+
+def test_detect_plugin_type_identifies_legacy_plugin(
+    plugin_manager_pm: PluginManager, tmp_path
+):
+    plugin_path = tmp_path / "legacy_plugin"
+    _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+
+    plugin_type, plugin_name = plugin_manager_pm._detect_plugin_type(str(plugin_path))
+
+    assert plugin_type == "legacy"
+    assert plugin_name == TEST_PLUGIN_NAME
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_routes_sdk_plugin_to_sdk_plugins_directory(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    download_path = Path(plugin_manager_pm.plugin_store_path) / "sdk_download_dir"
+    events = []
+
+    class MockSdkBridge:
+        async def reload_all(self, *, reset_restart_budget: bool = False) -> None:
+            events.append(("sdk_reload_all", reset_restart_budget))
+
+    cast(Any, plugin_manager_pm.context).sdk_plugin_bridge = MockSdkBridge()
+
+    async def mock_install(repo_url: str, proxy=""):
+        assert repo_url == TEST_SDK_PLUGIN_REPO
+        del proxy
+        _write_local_sdk_plugin(download_path)
+        return str(download_path)
+
+    async def fail_if_called(*args, **kwargs):
+        raise AssertionError("legacy loader path should not be used for SDK plugins")
+
+    monkeypatch.setattr(plugin_manager_pm.updator, "install", mock_install)
+    monkeypatch.setattr(plugin_manager_pm, "load", fail_if_called)
+    monkeypatch.setattr(
+        plugin_manager_pm, "_ensure_plugin_requirements", fail_if_called
+    )
+
+    plugin_info = await plugin_manager_pm.install_plugin(TEST_SDK_PLUGIN_REPO)
+
+    sdk_plugin_dir = Path(plugin_manager_pm.plugin_store_path).parent / "sdk_plugins"
+    assert not download_path.exists()
+    assert (sdk_plugin_dir / TEST_SDK_PLUGIN_NAME / "plugin.yaml").exists()
+    assert events == [("sdk_reload_all", True)]
+    assert plugin_info == {
+        "repo": TEST_SDK_PLUGIN_REPO,
+        "readme": "# SDK Demo\n",
+        "name": TEST_SDK_PLUGIN_NAME,
+        "type": "sdk",
+    }
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_routes_legacy_plugin_to_plugins_directory(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    download_path = Path(plugin_manager_pm.plugin_store_path) / "legacy_repo_dir"
+    events = []
+
+    async def mock_install(repo_url: str, proxy=""):
+        assert repo_url == TEST_PLUGIN_REPO
+        del proxy
+        _write_local_test_plugin(download_path, repo_url)
+        return str(download_path)
+
+    async def mock_ensure_requirements(plugin_path: str, plugin_label: str) -> None:
+        events.append(("deps", plugin_label, plugin_path))
+
+    def mock_load_and_register(*args, **kwargs):
+        cast(Any, plugin_manager_pm.context).stars.append(MockStar())
+        return _build_load_mock(events)(*args, **kwargs)
+
+    monkeypatch.setattr(plugin_manager_pm.updator, "install", mock_install)
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_ensure_plugin_requirements",
+        mock_ensure_requirements,
+    )
+    monkeypatch.setattr(plugin_manager_pm, "load", mock_load_and_register)
+
+    plugin_info = await plugin_manager_pm.install_plugin(TEST_PLUGIN_REPO)
+
+    target_path = Path(plugin_manager_pm.plugin_store_path) / TEST_PLUGIN_DIR
+    assert not download_path.exists()
+    assert target_path.exists()
+    assert ("load", TEST_PLUGIN_DIR) in events
+    assert any(event[0] == "deps" for event in events)
+    assert plugin_info == {
+        "repo": TEST_PLUGIN_REPO,
+        "readme": None,
+        "name": TEST_PLUGIN_NAME,
+        "type": "legacy",
+    }
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_from_file_routes_sdk_plugin_to_sdk_plugins_directory(
+    plugin_manager_pm: PluginManager, monkeypatch, tmp_path
+):
+    zip_file_path = tmp_path / "sdk_demo.zip"
+    zip_file_path.write_text("placeholder", encoding="utf-8")
+    events = []
+
+    class MockSdkBridge:
+        async def reload_all(self, *, reset_restart_budget: bool = False) -> None:
+            events.append(("sdk_reload_all", reset_restart_budget))
+
+    cast(Any, plugin_manager_pm.context).sdk_plugin_bridge = MockSdkBridge()
+
+    def mock_unzip_file(zip_path: str, target_dir: str) -> None:
+        assert zip_path == str(zip_file_path)
+        _write_local_sdk_plugin(Path(target_dir))
+
+    async def fail_if_called(*args, **kwargs):
+        raise AssertionError("legacy loader path should not be used for SDK plugins")
+
+    monkeypatch.setattr(plugin_manager_pm.updator, "unzip_file", mock_unzip_file)
+    monkeypatch.setattr(plugin_manager_pm, "load", fail_if_called)
+    monkeypatch.setattr(
+        plugin_manager_pm, "_ensure_plugin_requirements", fail_if_called
+    )
+
+    plugin_info = await plugin_manager_pm.install_plugin_from_file(str(zip_file_path))
+
+    sdk_plugin_dir = Path(plugin_manager_pm.plugin_store_path).parent / "sdk_plugins"
+    assert not zip_file_path.exists()
+    assert (sdk_plugin_dir / TEST_SDK_PLUGIN_NAME / "plugin.yaml").exists()
+    assert events == [("sdk_reload_all", True)]
+    assert plugin_info == {
+        "repo": None,
+        "readme": "# SDK Demo\n",
+        "name": TEST_SDK_PLUGIN_NAME,
+        "type": "sdk",
+    }
 
 
 @pytest.mark.asyncio

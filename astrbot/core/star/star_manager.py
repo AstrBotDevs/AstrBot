@@ -11,9 +11,11 @@ import os
 import sys
 import tempfile
 import traceback
+from pathlib import Path
 from types import ModuleType
 
 import yaml
+from astrbot_sdk.runtime.loader import load_plugin_spec, validate_plugin_spec
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
@@ -30,6 +32,7 @@ from astrbot.core.platform.register import unregister_platform_adapters_by_modul
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
+    get_astrbot_data_path,
     get_astrbot_path,
     get_astrbot_plugin_path,
     get_astrbot_temp_path,
@@ -458,6 +461,104 @@ class PluginManager:
             raise Exception("metadata.yaml 中 name 字段内容非法。")
         PluginManager._validate_importable_name(plugin_dir_name)
         return plugin_dir_name
+
+    @staticmethod
+    def _detect_plugin_type(plugin_path: str) -> tuple[str, str]:
+        """根据插件清单文件识别安装目标。
+
+        Why:
+            旧版插件和 SDK 插件分别由不同加载器管理，安装阶段必须先按
+            `metadata.yaml` / `plugin.yaml` 分流，否则 SDK 插件会被误送到
+            `data/plugins`，后续无法被 SDK 桥接层发现。
+        """
+        plugin_dir = Path(plugin_path)
+        plugin_manifest_path = plugin_dir / "plugin.yaml"
+        legacy_metadata_path = plugin_dir / "metadata.yaml"
+
+        if plugin_manifest_path.exists():
+            plugin_spec = load_plugin_spec(plugin_dir)
+            validate_plugin_spec(plugin_spec)
+            return "sdk", plugin_spec.name
+
+        if legacy_metadata_path.exists():
+            return "legacy", PluginManager._get_plugin_dir_name_from_metadata(
+                plugin_path
+            )
+
+        raise Exception(
+            "无法识别插件类型：插件目录中既没有 plugin.yaml，也没有 metadata.yaml。"
+        )
+
+    @staticmethod
+    def _read_plugin_readme(plugin_path: str, plugin_label: str) -> str | None:
+        plugin_dir = Path(plugin_path)
+
+        for readme_name in ("README.md", "readme.md"):
+            readme_path = plugin_dir / readme_name
+            if not readme_path.exists():
+                continue
+            try:
+                return readme_path.read_text(encoding="utf-8")
+            except Exception as exc:
+                logger.warning(
+                    "读取插件 %s 的 %s 文件失败: %s",
+                    plugin_label,
+                    readme_name,
+                    exc,
+                )
+                return None
+
+        return None
+
+    @staticmethod
+    def _build_plugin_install_result(
+        *,
+        name: str,
+        repo: str | None,
+        readme: str | None,
+        plugin_type: str,
+    ) -> dict[str, str | None]:
+        return {
+            "repo": repo,
+            "readme": readme,
+            "name": name,
+            "type": plugin_type,
+        }
+
+    async def _install_sdk_plugin(
+        self,
+        *,
+        temp_plugin_path: str,
+        plugin_name: str,
+        repo_url: str | None,
+    ) -> dict[str, str | None]:
+        """安装 SDK 插件到 data/sdk_plugins 并触发桥接层重新发现。"""
+        sdk_plugins_dir = Path(get_astrbot_data_path()) / "sdk_plugins"
+        target_plugin_path = sdk_plugins_dir / plugin_name
+
+        if target_plugin_path.exists():
+            raise Exception(f"安装失败：SDK 插件 {plugin_name} 已存在。")
+
+        sdk_plugins_dir.mkdir(parents=True, exist_ok=True)
+        Path(temp_plugin_path).rename(target_plugin_path)
+
+        sdk_plugin_bridge = getattr(self.context, "sdk_plugin_bridge", None)
+        if sdk_plugin_bridge is not None:
+            await sdk_plugin_bridge.reload_all(reset_restart_budget=True)
+        else:
+            logger.warning(
+                "SDK 插件 %s 已写入 %s，但当前未找到 sdk_plugin_bridge，"
+                "需等待后续生命周期重载。",
+                plugin_name,
+                target_plugin_path,
+            )
+
+        return self._build_plugin_install_result(
+            name=plugin_name,
+            repo=repo_url,
+            readme=self._read_plugin_readme(str(target_plugin_path), plugin_name),
+            plugin_type="sdk",
+        )
 
     @staticmethod
     def _validate_astrbot_version_specifier(
@@ -1251,6 +1352,7 @@ class PluginManager:
         async with self._pm_lock:
             plugin_path = ""
             dir_name = ""
+            should_track_failed_install_dir = True
             try:
                 _, repo_name, _ = self.updator.parse_github_url(repo_url)
                 repo_name = self.updator.format_name(repo_name)
@@ -1261,21 +1363,36 @@ class PluginManager:
                     )
                 plugin_path = await self.updator.install(repo_url, proxy)
 
-                # reload the plugin
-                dir_name = os.path.basename(plugin_path)
-                metadata_dir_name = self._get_plugin_dir_name_from_metadata(plugin_path)
+                plugin_type, plugin_name = self._detect_plugin_type(plugin_path)
+                logger.info(
+                    "插件安装类型识别完成：repo=%s, type=%s, name=%s",
+                    repo_url,
+                    plugin_type,
+                    plugin_name,
+                )
+                dir_name = plugin_name
+                if plugin_type == "sdk":
+                    should_track_failed_install_dir = False
+                    return await self._install_sdk_plugin(
+                        temp_plugin_path=plugin_path,
+                        plugin_name=plugin_name,
+                        repo_url=repo_url,
+                    )
+
+                # Why:
+                # 旧版插件的导入路径依赖目录名与 metadata.yaml 中的 name 一致，
+                # 因此在加载前必须完成重命名；SDK 插件则已在前面的分支单独处理。
                 target_plugin_path = os.path.join(
                     self.plugin_store_path,
-                    metadata_dir_name,
+                    plugin_name,
                 )
                 if target_plugin_path != plugin_path and os.path.exists(
                     target_plugin_path
                 ):
-                    raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
+                    raise Exception(f"安装失败：目录 {plugin_name} 已存在。")
                 if target_plugin_path != plugin_path:
                     os.rename(plugin_path, target_plugin_path)
                     plugin_path = target_plugin_path
-                    dir_name = metadata_dir_name
                 await self._ensure_plugin_requirements(
                     plugin_path,
                     dir_name,
@@ -1299,36 +1416,25 @@ class PluginManager:
                             plugin = star
                             break
 
-                # Extract README.md content if exists
-                readme_content = None
-                readme_path = os.path.join(plugin_path, "README.md")
-                if not os.path.exists(readme_path):
-                    readme_path = os.path.join(plugin_path, "readme.md")
-
-                if os.path.exists(readme_path):
-                    try:
-                        with open(readme_path, encoding="utf-8") as f:
-                            readme_content = f.read()
-                    except Exception as e:
-                        logger.warning(
-                            f"读取插件 {dir_name} 的 README.md 文件失败: {e!s}",
-                        )
+                readme_content = self._read_plugin_readme(plugin_path, dir_name)
 
                 plugin_info = None
                 if plugin:
-                    plugin_info = {
-                        "repo": plugin.repo,
-                        "readme": readme_content,
-                        "name": plugin.name,
-                    }
+                    plugin_info = self._build_plugin_install_result(
+                        name=plugin.name,
+                        repo=plugin.repo,
+                        readme=readme_content,
+                        plugin_type="legacy",
+                    )
 
                 return plugin_info
             except Exception as e:
-                self._track_failed_install_dir(
-                    dir_name=dir_name,
-                    plugin_path=plugin_path,
-                    error=e,
-                )
+                if should_track_failed_install_dir:
+                    self._track_failed_install_dir(
+                        dir_name=dir_name,
+                        plugin_path=plugin_path,
+                        error=e,
+                    )
                 if dir_name and plugin_path:
                     logger.warning(
                         f"安装插件 {dir_name} 失败，插件安装目录：{plugin_path}",
@@ -1667,26 +1773,41 @@ class PluginManager:
             dir=self.plugin_store_path, prefix="plugin_upload_"
         )
         temp_desti_dir = desti_dir
+        should_track_failed_install_dir = True
 
         try:
             self.updator.unzip_file(zip_file_path, desti_dir)
-            metadata_dir_name = self._get_plugin_dir_name_from_metadata(desti_dir)
-            target_plugin_path = os.path.join(
-                self.plugin_store_path,
-                metadata_dir_name,
-            )
-            if target_plugin_path != desti_dir and os.path.exists(target_plugin_path):
-                raise Exception(f"安装失败：目录 {metadata_dir_name} 已存在。")
-            if target_plugin_path != desti_dir:
-                os.rename(desti_dir, target_plugin_path)
-                dir_name = metadata_dir_name
-                desti_dir = target_plugin_path
-
-            # remove the zip
             try:
                 os.remove(zip_file_path)
             except BaseException as e:
                 logger.warning(f"删除插件压缩包失败: {e!s}")
+
+            plugin_type, plugin_name = self._detect_plugin_type(desti_dir)
+            logger.info(
+                "上传插件安装类型识别完成：type=%s, name=%s, file=%s",
+                plugin_type,
+                plugin_name,
+                zip_file_path,
+            )
+            dir_name = plugin_name
+            if plugin_type == "sdk":
+                should_track_failed_install_dir = False
+                return await self._install_sdk_plugin(
+                    temp_plugin_path=desti_dir,
+                    plugin_name=plugin_name,
+                    repo_url=None,
+                )
+
+            target_plugin_path = os.path.join(
+                self.plugin_store_path,
+                plugin_name,
+            )
+            if target_plugin_path != desti_dir and os.path.exists(target_plugin_path):
+                raise Exception(f"安装失败：目录 {plugin_name} 已存在。")
+            if target_plugin_path != desti_dir:
+                os.rename(desti_dir, target_plugin_path)
+                desti_dir = target_plugin_path
+
             await self._ensure_plugin_requirements(desti_dir, dir_name)
             # await self.reload()
             success, error_message = await self.load(
@@ -1708,26 +1829,16 @@ class PluginManager:
                         plugin = star
                         break
 
-            # Extract README.md content if exists
-            readme_content = None
-            readme_path = os.path.join(desti_dir, "README.md")
-            if not os.path.exists(readme_path):
-                readme_path = os.path.join(desti_dir, "readme.md")
-
-            if os.path.exists(readme_path):
-                try:
-                    with open(readme_path, encoding="utf-8") as f:
-                        readme_content = f.read()
-                except Exception as e:
-                    logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {e!s}")
+            readme_content = self._read_plugin_readme(desti_dir, dir_name)
 
             plugin_info = None
             if plugin:
-                plugin_info = {
-                    "repo": plugin.repo,
-                    "readme": readme_content,
-                    "name": plugin.name,
-                }
+                plugin_info = self._build_plugin_install_result(
+                    name=plugin.name,
+                    repo=plugin.repo,
+                    readme=readme_content,
+                    plugin_type="legacy",
+                )
 
                 if plugin.repo:
                     asyncio.create_task(
@@ -1739,14 +1850,13 @@ class PluginManager:
 
             return plugin_info
         except Exception as e:
-            self._track_failed_install_dir(
-                dir_name=dir_name,
-                plugin_path=desti_dir,
-                error=e,
-            )
-            logger.warning(
-                f"安装插件 {dir_name} 失败，插件安装目录：{desti_dir}",
-            )
+            if should_track_failed_install_dir:
+                self._track_failed_install_dir(
+                    dir_name=dir_name,
+                    plugin_path=desti_dir,
+                    error=e,
+                )
+            logger.warning(f"安装插件 {dir_name} 失败，插件安装目录：{desti_dir}")
             raise
         finally:
             if temp_desti_dir != desti_dir and os.path.isdir(temp_desti_dir):
