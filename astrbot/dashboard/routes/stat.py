@@ -113,7 +113,7 @@ class StatRoute(Route):
             return Response().ok(result).__dict__
         except ValueError as e:
             return Response().error(str(e)).__dict__
-                except Exception:
+        except Exception:
             logger.error("清理存储失败", exc_info=True)
             return Response().error("清理存储失败，请查看后端日志了解详情。").__dict__
 
