@@ -50,11 +50,16 @@ def _compute_local_skills_revision(skills_root: Path) -> str:
     for skill_dir in local_skill_dirs:
         for path in sorted(skill_dir.rglob("*")):
             relative = path.relative_to(skills_root).as_posix()
-            digest.update(relative.encode("utf-8"))
             stat = path.stat()
+            # Use explicit null-byte separators to avoid ambiguous concatenation,
+            # e.g. ("foo", "12345") vs ("foo1", "2345").
+            digest.update(relative.encode("utf-8"))
+            digest.update(b"\0")
             digest.update(str(stat.st_mtime_ns).encode("utf-8"))
+            digest.update(b"\0")
             if path.is_file():
                 digest.update(str(stat.st_size).encode("utf-8"))
+            digest.update(b"\0")
     return digest.hexdigest()
 
 
