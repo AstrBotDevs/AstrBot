@@ -584,9 +584,9 @@ export default {
 
       // Provider 配置
       providerConfig: {
-        chat_completion: 'follow',
-        speech_to_text: 'follow',
-        text_to_speech: 'follow',
+        chat_completion: '__astrbot_follow_config__',
+        speech_to_text: '__astrbot_follow_config__',
+        text_to_speech: '__astrbot_follow_config__',
       },
 
       // 插件配置
@@ -671,7 +671,7 @@ export default {
 
     chatProviderOptions() {
       return [
-        { label: this.tm('provider.followConfig'), value: 'follow' },
+        { label: this.tm('provider.followConfig'), value: '__astrbot_follow_config__' },
         ...this.availableChatProviders.map(p => ({
           label: `${p.name} (${p.model})`,
           value: p.id
@@ -681,7 +681,7 @@ export default {
 
     sttProviderOptions() {
       return [
-        { label: this.tm('provider.followConfig'), value: 'follow' },
+        { label: this.tm('provider.followConfig'), value: '__astrbot_follow_config__' },
         ...this.availableSttProviders.map(p => ({
           label: `${p.name} (${p.model})`,
           value: p.id
@@ -691,7 +691,7 @@ export default {
 
     ttsProviderOptions() {
       return [
-        { label: this.tm('provider.followConfig'), value: 'follow' },
+        { label: this.tm('provider.followConfig'), value: '__astrbot_follow_config__' },
         ...this.availableTtsProviders.map(p => ({
           label: `${p.name} (${p.model})`,
           value: p.id
@@ -701,7 +701,7 @@ export default {
 
     batchChatProviderOptions() {
       return [
-        { label: this.tm('provider.followConfig'), value: 'follow' },
+        { label: this.tm('provider.followConfig'), value: '__astrbot_follow_config__' },
         ...this.availableChatProviders.map(p => ({
           label: `${p.name} (${p.model})`,
           value: p.id
@@ -711,7 +711,7 @@ export default {
 
     batchTtsProviderOptions() {
       return [
-        { label: this.tm('provider.followConfig'), value: 'follow' },
+        { label: this.tm('provider.followConfig'), value: '__astrbot_follow_config__' },
         ...this.availableTtsProviders.map(p => ({
           label: `${p.name} (${p.model})`,
           value: p.id
@@ -934,9 +934,9 @@ export default {
 
       // 初始化 Provider 配置
       this.providerConfig = {
-        chat_completion: this.editingRules['provider_perf_chat_completion'] || 'follow',
-        speech_to_text: this.editingRules['provider_perf_speech_to_text'] || 'follow',
-        text_to_speech: this.editingRules['provider_perf_text_to_speech'] || 'follow',
+        chat_completion: this.editingRules['provider_perf_chat_completion'] || '__astrbot_follow_config__',
+        speech_to_text: this.editingRules['provider_perf_speech_to_text'] || '__astrbot_follow_config__',
+        text_to_speech: this.editingRules['provider_perf_text_to_speech'] || '__astrbot_follow_config__',
       }
 
       // 初始化插件配置
@@ -1017,7 +1017,7 @@ export default {
 
         for (const type of providerTypes) {
           const value = this.providerConfig[type]
-          if (value && value !== 'follow') {
+          if (value && value !== '__astrbot_follow_config__') {
             // 有值时更新
             updateTasks.push(
               axios.post('/api/session/update-rule', {
@@ -1027,7 +1027,7 @@ export default {
               })
             )
           } else if (this.editingRules[`provider_perf_${type}`]) {
-            // 选择了"跟随配置文件" (follow) 且之前有配置，则删除
+            // 选择了"跟随配置文件" (__astrbot_follow_config__) 且之前有配置，则删除
             deleteTasks.push(
               axios.post('/api/session/delete-rule', {
                 umo: this.selectedUmo.umo,
@@ -1056,7 +1056,7 @@ export default {
           }
           for (const type of providerTypes) {
             const val = this.providerConfig[type]
-            if (val && val !== 'follow') {
+            if (val && val !== '__astrbot_follow_config__') {
               item.rules[`provider_perf_${type}`] = val
               this.editingRules[`provider_perf_${type}`] = val
             } else {
@@ -1375,8 +1375,7 @@ export default {
         }
 
         if (this.batchChatProvider !== null) {
-          if (this.batchChatProvider === 'follow') {
-            console.log(umos)
+          if (this.batchChatProvider === '__astrbot_follow_config__') {
             tasks.push(axios.post('/api/session/batch-delete-rule', {
               scope,
               umos,
@@ -1395,7 +1394,7 @@ export default {
         }
 
         if (this.batchTtsProvider !== null) {
-          if (this.batchTtsProvider === 'follow') {
+          if (this.batchTtsProvider === '__astrbot_follow_config__') {
             tasks.push(axios.post('/api/session/batch-delete-rule', {
               scope,
               umos,
