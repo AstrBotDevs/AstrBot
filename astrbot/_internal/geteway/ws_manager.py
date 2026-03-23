@@ -4,17 +4,20 @@ WebSocket connection manager for the AstrBot gateway.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import anyio
 
 from astrbot import logger
 
-try:
+if TYPE_CHECKING:
     from fastapi import WebSocket
-except ImportError:
-    logger.warning("FastAPI not installed, WebSocketManager unavailable.")
-    WebSocket = None  # type: ignore
+else:
+    try:
+        from fastapi import WebSocket
+    except ImportError:
+        logger.warning("FastAPI not installed, WebSocketManager unavailable.")
+        WebSocket = cast(Any, None)
 
 log = logger
 

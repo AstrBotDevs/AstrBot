@@ -4,13 +4,13 @@ import aiofiles
 import aiohttp
 import anyio
 from astrbot.core.entities import ProviderType
-from astrbot.core.provider.register import register_provider_adapter
 from xinference_client.client.restful.async_restful_client import (
     AsyncClient as Client,
 )
 
 from astrbot.core import logger
 from astrbot.core.provider import STTProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.tencent_record_helper import (
     convert_to_pcm_wav,

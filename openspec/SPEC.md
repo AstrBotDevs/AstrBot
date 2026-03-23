@@ -152,3 +152,21 @@ async def call_star_tool(
 ) -> Any:  # Any 是允许的因为返回类型可变
     ...
 ```
+
+## 实践验证记录
+
+### 验证方法
+- 集成测试: `test_bootstrap.py` - 验证组件可正常创建和交互
+- 单元测试: `pytest tests/unit/test_internal/` - 验证架构合规性
+- 协议测试: 针对各协议客户端的实际连接测试
+
+### 已知问题
+1. **LSP Client**: 当前使用 `asyncio` 而非 `anyio`，需要重构
+2. **ty LSP**: ty server 不支持标准 LSP 协议，不适合作为 LSP 测试目标
+3. **ACP Client**: 尚未进行实际连接测试
+
+### 端口配置
+| 服务 | 默认端口 | 说明 |
+|------|---------|------|
+| Gateway | 8765 | FastAPI + WebSocket |
+| Dashboard | 6185 | Vue.js 前端 (推测) |

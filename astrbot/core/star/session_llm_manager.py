@@ -28,7 +28,7 @@ class SessionServiceManager:
             scope_id=session_id,
             key="session_service_config",
             default={},
-        )
+        ) or {}
 
         # 如果配置了该会话的LLM状态,返回该状态
         llm_enabled = session_services.get("llm_enabled")
@@ -99,7 +99,7 @@ class SessionServiceManager:
             scope_id=session_id,
             key="session_service_config",
             default={},
-        )
+        ) or {}
 
         # 如果配置了该会话的TTS状态,返回该状态
         tts_enabled = session_services.get("tts_enabled")
@@ -174,7 +174,7 @@ class SessionServiceManager:
             scope_id=session_id,
             key="session_service_config",
             default={},
-        )
+        ) or {}
 
         # 如果配置了该会话的整体状态,返回该状态
         session_enabled = session_services.get("session_enabled")

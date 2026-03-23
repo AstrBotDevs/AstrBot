@@ -156,7 +156,7 @@ async def update_command_permission(
         raise ValueError("未找到指令所属插件")
 
     # 1. Update Persistent Config (alter_cmd)
-    alter_cmd_cfg = await sp.global_get("alter_cmd", {})
+    alter_cmd_cfg = await sp.global_get("alter_cmd", {}) or {}
     plugin_ = alter_cmd_cfg.get(found_plugin.name, {})
     cfg = plugin_.get(handler.handler_name, {})
     cfg["permission"] = permission_type

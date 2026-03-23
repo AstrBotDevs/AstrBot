@@ -28,7 +28,7 @@ class SessionPluginManager:
             scope_id=session_id,
             key="session_plugin_config",
             default={},
-        )
+        ) or {}
         session_config = session_plugin_config.get(session_id, {})
 
         enabled_plugins = session_config.get("enabled_plugins", [])
@@ -70,7 +70,7 @@ class SessionPluginManager:
             scope_id=session_id,
             key="session_plugin_config",
             default={},
-        )
+        ) or {}
         session_config = session_plugin_config.get(session_id, {})
         disabled_plugins = session_config.get("disabled_plugins", [])
 

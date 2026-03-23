@@ -15,10 +15,8 @@ async def test_bootstrap_components():
     # Test 1: Import all components
     print("\n[1] Testing imports...")
     try:
-        from astrbot._internal.runtime.orchestrator import AstrbotOrchestrator
         from astrbot._internal.geteway.server import AstrbotGateway
-        from astrbot._internal.abc.base_astrbot_gateway import BaseAstrbotGateway
-        from astrbot._internal.abc.base_astrbot_orchestrator import BaseAstrbotOrchestrator
+        from astrbot._internal.runtime.orchestrator import AstrbotOrchestrator
         print("    ✓ All imports successful")
     except Exception as e:
         print(f"    ✗ Import failed: {e}")
@@ -28,7 +26,7 @@ async def test_bootstrap_components():
     print("\n[2] Testing orchestrator creation...")
     try:
         orchestrator = AstrbotOrchestrator()
-        print(f"    ✓ Orchestrator created")
+        print("    ✓ Orchestrator created")
         print(f"      - LSP client: {type(orchestrator.lsp).__name__}")
         print(f"      - MCP client: {type(orchestrator.mcp).__name__}")
         print(f"      - ACP client: {type(orchestrator.acp).__name__}")
@@ -73,7 +71,7 @@ async def test_bootstrap_components():
     print("\n[4] Testing gateway creation...")
     try:
         gateway = AstrbotGateway(orchestrator)
-        print(f"    ✓ Gateway created")
+        print("    ✓ Gateway created")
         print(f"      - Host: {gateway._host}")
         print(f"      - Port: {gateway._port}")
         print(f"      - WebSocket manager: {type(gateway.ws_manager).__name__}")

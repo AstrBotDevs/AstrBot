@@ -9,19 +9,25 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from astrbot import logger
 from astrbot._internal.abc.base_astrbot_gateway import BaseAstrbotGateway
 from astrbot._internal.abc.base_astrbot_orchestrator import BaseAstrbotOrchestrator
 from astrbot._internal.geteway.ws_manager import WebSocketManager
 
-try:
+if TYPE_CHECKING:
     from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-    from fastapi.middleware.cors import CORSMiddleware
-except ImportError:
-    logger.warning("FastAPI not installed, gateway unavailable.")
-    FastAPI = None  # type: ignore
+else:
+    try:
+        from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+        from fastapi.middleware.cors import CORSMiddleware
+    except ImportError:
+        logger.warning("FastAPI not installed, gateway unavailable.")
+        FastAPI = cast(Any, None)
+        WebSocket = cast(Any, None)
+        WebSocketDisconnect = cast(Any, None)
+        CORSMiddleware = cast(Any, None)
 
 log = logger
 
@@ -72,7 +78,7 @@ class AstrbotGateway(BaseAstrbotGateway):
 
         # CORS middleware
         self._app.add_middleware(
-            CORSMiddleware,  # type: ignore[misc]
+            cast(Any, CORSMiddleware),
             allow_origins=["*"],
             allow_credentials=True,
             allow_methods=["*"],

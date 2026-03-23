@@ -355,7 +355,6 @@ def run(
                     # Start a task to stream logs to stdout
                     async def stream_logs() -> None:
                         """Stream logs from LogBroker to stdout."""
-                        import logging
                         while True:
                             try:
                                 log_entry = await asyncio.wait_for(log_queue.get(), timeout=0.5)

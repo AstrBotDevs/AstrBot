@@ -761,9 +761,9 @@ class PluginManager:
                 - error_message (str|None): 错误信息,成功时为 None
 
         """
-        inactivated_plugins = await sp.global_get("inactivated_plugins", [])
-        inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
-        alter_cmd = await sp.global_get("alter_cmd", {})
+        inactivated_plugins = await sp.global_get("inactivated_plugins", []) or []
+        inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", []) or []
+        alter_cmd = await sp.global_get("alter_cmd", {}) or {}
 
         plugin_modules = self._get_plugin_modules()
         if plugin_modules is None:

@@ -52,7 +52,7 @@ __all__ = [
     "StaticFileRoute",
     "SubAgentRoute",
     "T2iRoute",
-    "ToolsRoute",
     "TUIChatRoute",
+    "ToolsRoute",
     "UpdateRoute",
 ]

@@ -330,7 +330,7 @@ class McpClient(BaseAstrbotMcpClient):
                     ),  # type: ignore
                 ),
             )
-            self.process_pid = self._extract_stdio_process_pid(self._streams_context)
+            self.process_pid = self._extract_stdio_process_pid(stdio_transport)
 
             # Create a new client session
             self.session = await self.exit_stack.enter_async_context(

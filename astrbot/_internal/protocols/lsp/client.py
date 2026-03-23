@@ -7,12 +7,17 @@ that provide language intelligence features (completions, diagnostics, etc.).
 
 from __future__ import annotations
 
-import asyncio
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+import anyio
+from anyio.abc import ByteReceiveStream, ByteSendStream, Process
 
 from astrbot import logger
 from astrbot._internal.abc.lsp.base_astrbot_lsp_client import BaseAstrbotLspClient
+
+if TYPE_CHECKING:
+    from anyio.abc import TaskGroup
 
 log = logger
 
@@ -27,13 +32,13 @@ class AstrbotLspClient(BaseAstrbotLspClient):
 
     def __init__(self) -> None:
         self._connected = False
-        self._reader: asyncio.StreamReader | None = None
-        self._writer: asyncio.StreamWriter | None = None
-        self._server_process: asyncio.subprocess.Process | None = None
-        self._pending_requests: dict[int, asyncio.Future[dict[str, Any]]] = {}
+        self._reader: ByteReceiveStream | None = None
+        self._writer: ByteSendStream | None = None
+        self._server_process: Process | None = None
+        self._pending_requests: dict[int, Any] = {}
         self._request_id = 0
         self._server_command: list[str] | None = None
-        self._read_task: asyncio.Task[None] | None = None
+        self._task_group: TaskGroup | None = None
 
     @property
     def connected(self) -> bool:
@@ -63,11 +68,11 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         """
         log.debug(f"Starting LSP server: {' '.join(command)}")
 
-        self._server_process = await asyncio.create_subprocess_exec(
-            *command,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        self._server_process = await anyio.open_process(
+            command,
+            stdin=-1,
+            stdout=-1,
+            stderr=-1,
         )
         self._reader = self._server_process.stdout
         self._writer = self._server_process.stdin
@@ -75,20 +80,23 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         self._connected = True
 
         # Start reading responses in background
-        self._read_task = asyncio.create_task(self._read_responses())
+        # anyio.TaskGroup requires async with to properly start tasks
+        async with anyio.create_task_group() as tg:
+            self._task_group = tg
+            tg.start_soon(self._read_responses)
 
-        # Send initialize request
-        await self.send_request(
-            "initialize",
-            {
-                "processId": None,
-                "rootUri": workspace_uri,
-                "capabilities": {},
-            },
-        )
+            # Send initialize request
+            await self.send_request(
+                "initialize",
+                {
+                    "processId": None,
+                    "rootUri": workspace_uri,
+                    "capabilities": {},
+                },
+            )
 
-        # Send initialized notification
-        await self.send_notification("initialized", {})
+            # Send initialized notification
+            await self.send_notification("initialized", {})
 
         log.info(f"LSP client connected to server: {command[0]}")
 
@@ -109,15 +117,27 @@ class AstrbotLspClient(BaseAstrbotLspClient):
             "params": params or {},
         }
 
-        future: asyncio.Future[dict[str, Any]] = asyncio.Future()
-        self._pending_requests[request_id] = future
+        # Use anyio.Event for request/response matching
+        response_event: anyio.Event = anyio.Event()
+        response_holder: dict[str, Any] = {}
+
+        async def set_response(response: dict[str, Any]) -> None:
+            response_holder["response"] = response
+            response_event.set()
+
+        self._pending_requests[request_id] = set_response
 
         content = json.dumps(message)
         headers = f"Content-Length: {len(content)}\r\n\r\n"
-        self._writer.write((headers + content).encode())
-        await self._writer.drain()
+        await self._writer.send((headers + content).encode())
 
-        return await future
+        # Wait for response with timeout
+        with anyio.move_on_after(30):
+            await response_event.wait()
+
+        if "response" in response_holder:
+            return response_holder["response"]
+        raise TimeoutError(f"LSP request {method} timed out")
 
     async def send_notification(
         self, method: str, params: dict[str, Any] | None = None
@@ -134,8 +154,7 @@ class AstrbotLspClient(BaseAstrbotLspClient):
 
         content = json.dumps(message)
         headers = f"Content-Length: {len(content)}\r\n\r\n"
-        self._writer.write((headers + content).encode())
-        await self._writer.drain()
+        await self._writer.send((headers + content).encode())
 
     async def _read_responses(self) -> None:
         """Background task to read LSP responses."""
@@ -143,54 +162,52 @@ class AstrbotLspClient(BaseAstrbotLspClient):
             return
 
         buffer = b""
-        while self._connected:
-            try:
-                data = await self._reader.read(4096)
-                if not data:
+        try:
+            while self._connected:
+                try:
+                    data = await self._reader.receive()
+                    if not data:
+                        break
+                    buffer += data
+
+                    while True:
+                        # Parse Content-Length header
+                        header_end = buffer.find(b"\r\n\r\n")
+                        if header_end == -1:
+                            break
+
+                        header = buffer[:header_end].decode("utf-8")
+                        content_length = 0
+                        for line in header.split("\r\n"):
+                            if line.startswith("Content-Length:"):
+                                content_length = int(line.split(":")[1].strip())
+
+                        if content_length == 0:
+                            break
+
+                        total_length = header_end + 4 + content_length
+                        if len(buffer) < total_length:
+                            break
+
+                        content = buffer[header_end + 4 : total_length]
+                        buffer = buffer[total_length:]
+
+                        response = json.loads(content.decode("utf-8"))
+
+                        # Handle response vs notification
+                        if "id" in response:
+                            request_id = response["id"]
+                            handler = self._pending_requests.pop(request_id, None)
+                            if handler:
+                                await handler(response)
+                        else:
+                            # Notification (e.g., window/logMessage)
+                            await self._handle_notification(response)
+
+                except anyio.EndOfStream:
                     break
-                buffer += data
-
-                while True:
-                    # Parse Content-Length header
-                    header_end = buffer.find(b"\r\n\r\n")
-                    if header_end == -1:
-                        break
-
-                    header = buffer[:header_end].decode("utf-8")
-                    content_length = 0
-                    for line in header.split("\r\n"):
-                        if line.startswith("Content-Length:"):
-                            content_length = int(line.split(":")[1].strip())
-
-                    if content_length == 0:
-                        break
-
-                    total_length = header_end + 4 + content_length
-                    if len(buffer) < total_length:
-                        break
-
-                    content = buffer[header_end + 4 : total_length]
-                    buffer = buffer[total_length:]
-
-                    response = json.loads(content.decode("utf-8"))
-
-                    # Handle response vs notification
-                    if "id" in response:
-                        request_id = response["id"]
-                        future = self._pending_requests.pop(request_id, None)
-                        if future and not future.done():
-                            if "error" in response:
-                                future.set_exception(Exception(response["error"]))
-                            else:
-                                future.set_result(response.get("result", {}))
-                    else:
-                        # Notification (e.g., window/logMessage)
-                        await self._handle_notification(response)
-
-            except Exception as e:
-                if self._connected:
-                    log.error(f"LSP read error: {e}")
-                break
+        except anyio.CancelledError:
+            pass
 
     async def _handle_notification(self, notification: dict[str, Any]) -> None:
         """Handle incoming LSP notifications."""
@@ -199,23 +216,25 @@ class AstrbotLspClient(BaseAstrbotLspClient):
 
     async def shutdown(self) -> None:
         """Shutdown the LSP client."""
-        if self._connected:
+        self._connected = False
+
+        if self._task_group:
+            self._task_group.cancel_scope.cancel()
+            self._task_group = None
+
+        if self._server_process:
             try:
                 await self.send_notification("shutdown", {})
             except Exception:
                 pass
 
-        if self._server_process:
             self._server_process.terminate()
             try:
-                await asyncio.wait_for(self._server_process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
+                with anyio.move_on_after(5):
+                    await self._server_process.wait()
+            except Exception:
                 self._server_process.kill()
             self._server_process = None
 
-        self._connected = False
-        for future in self._pending_requests.values():
-            if not future.done():
-                future.cancel()
         self._pending_requests.clear()
         log.info("LSP client shut down.")

@@ -104,6 +104,21 @@ def is_dashboard_password_hash(value: str) -> bool:
     return value.startswith("$argon2") or value.startswith("pbkdf2_sha256$")
 
 
+def is_legacy_dashboard_password_hash(value: str) -> bool:
+    """
+    Heuristic: return True if `value` looks like a legacy password hash format.
+    Legacy formats are plain SHA-256 (64 hex chars) or MD5 (32 hex chars) digests.
+    """
+    if not isinstance(value, str) or not value:
+        return False
+    # Legacy plain hex digests: SHA-256 (64 hex chars) or MD5 (32 hex chars)
+    if len(value) == 64 and all(ch in "0123456789abcdef" for ch in value.lower()):
+        return True
+    if len(value) == 32 and all(ch in "0123456789abcdef" for ch in value.lower()):
+        return True
+    return False
+
+
 # --- Validators for CLI configuration items ---
 
 
