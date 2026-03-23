@@ -5,6 +5,10 @@ inputs:
     description: Python version to install.
     required: false
     default: "3.12"
+  uv-version:
+    description: uv version to install.
+    required: false
+    default: "0.10.12"
   sync-deps:
     description: Whether to run dependency sync via uv.
     required: false
@@ -26,7 +30,7 @@ runs:
       run: |
         set -euo pipefail
         python -m pip install --upgrade pip
-        python -m pip install uv
+        python -m pip install "uv==${{ inputs.uv-version }}"
 
     - name: Sync dependencies
       if: ${{ inputs.sync-deps == 'true' }}

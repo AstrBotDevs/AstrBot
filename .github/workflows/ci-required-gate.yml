@@ -189,13 +189,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
-            echo "One or more required jobs failed or were cancelled"
+          declare -A results=(
+            [changes]="${{ needs.changes.result }}"
+            [lint]="${{ needs.lint.result }}"
+            [test]="${{ needs.test.result }}"
+            [smoke]="${{ needs.smoke.result }}"
+            [dashboard]="${{ needs.dashboard.result }}"
+          )
+
+          has_blocking=false
+          for job in "${!results[@]}"; do
+            case "${results[$job]}" in
+              failure|cancelled)
+                echo "::error::${job}=${results[$job]} (blocking)"
+                has_blocking=true
+                ;;
+              skipped)
+                echo "::notice::${job}=skipped (expected for conditional paths)"
+                ;;
+            esac
+          done
+
+          if [[ "$has_blocking" == "true" ]]; then
+            echo "One or more required jobs failed or were cancelled."
             exit 1
           fi
 
       - name: Print job summary
         run: |
+          echo "skipped results are expected for docs-only/dashboard-unchanged paths."
           echo "changes=${{ needs.changes.result }}"
           echo "lint=${{ needs.lint.result }}"
           echo "test=${{ needs.test.result }}"
