@@ -13,6 +13,8 @@
 - [Database 客户端 (ctx.db)](#database-客户端)
 - [Files 客户端 (ctx.files)](#files-客户端)
 - [Platform 客户端 (ctx.platform)](#platform-客户端)
+- [Permission 客户端 (ctx.permission)](#permission-客户端)
+- [Permission 管理客户端 (ctx.permission_manager)](#permission-管理客户端)
 - [Provider 客户端 (ctx.providers)](#provider-客户端)
 - [Provider 管理客户端 (ctx.provider_manager)](#provider-管理客户端)
 - [Personas 客户端 (ctx.personas / ctx.persona_manager)](#personas-客户端)
@@ -50,8 +52,10 @@ ctx.memory: MemoryClient              # 记忆能力客户端
 ctx.db: DBClient                      # 数据库客户端
 ctx.files: FileServiceClient          # 文件服务客户端
 ctx.platform: PlatformClient          # 平台客户端
+ctx.permission: PermissionClient      # 权限只读客户端
 ctx.providers: ProviderClient         # Provider 客户端
 ctx.provider_manager: ProviderManagerClient  # Provider 管理客户端
+ctx.permission_manager: PermissionManagerClient  # 权限管理客户端
 ctx.personas: PersonaManagerClient    # 人格管理客户端
 ctx.conversations: ConversationManagerClient  # 对话管理客户端
 ctx.kbs: KnowledgeBaseManagerClient   # 知识库管理客户端
@@ -421,6 +425,54 @@ await ctx.platform.send_by_id(
 members = await ctx.platform.get_members("qq:group:123456")
 for member in members:
     print(f"{member['nickname']} ({member['user_id']})")
+```
+
+---
+
+## Permission 客户端
+
+`ctx.permission` 提供与 Core 当前权限模型对齐的只读能力。v1 正式角色只有 `member` 和 `admin` 两级；`session_id` 参数当前仅保留给未来扩展，不会改变判定结果。
+
+### check()
+
+查询某个用户当前会被视为 `admin` 还是 `member`。
+
+```python
+result = await ctx.permission.check("user-123")
+print(result.is_admin, result.role)
+
+# session_id 在 v1 中只作为保留参数
+same_result = await ctx.permission.check(
+    "user-123",
+    session_id=event.session_id,
+)
+```
+
+### get_admins()
+
+读取当前 `admins_id` 配置中的管理员列表。
+
+```python
+admins = await ctx.permission.get_admins()
+print(admins)
+```
+
+---
+
+## Permission 管理客户端
+
+`ctx.permission_manager` 仅 `reserved/system` 插件可用，并且要求当前调用绑定到一个真实消息事件，且该事件发送者本身是 admin。普通插件会收到 `permission.manager.* is restricted to reserved/system plugins` 错误；非管理员事件会收到显式权限错误。
+
+### add_admin() / remove_admin()
+
+返回值表示本次调用是否真的修改了管理员列表：
+- 已存在再 `add_admin()` 返回 `False`
+- 不存在再 `remove_admin()` 返回 `False`
+
+```python
+changed = await ctx.permission_manager.add_admin("user-456")
+removed = await ctx.permission_manager.remove_admin("user-456")
+print(changed, removed)
 ```
 
 ---

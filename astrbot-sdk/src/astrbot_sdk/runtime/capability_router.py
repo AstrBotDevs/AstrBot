@@ -42,6 +42,11 @@
         platform.send_by_session: 主动按会话发送消息链
         platform.get_group: 获取当前群信息
         platform.get_members: 获取群成员
+    Permission:
+        permission.check: 查询用户权限角色
+        permission.get_admins: 列出管理员 ID
+        permission.manager.add_admin: 添加管理员 ID
+        permission.manager.remove_admin: 移除管理员 ID
     HTTP:
         http.register_api: 注册 HTTP 路由到插件 capability
         http.unregister_api: 注销 HTTP 路由
@@ -128,7 +133,7 @@
 
 能力命名规范：
     - 格式: {namespace}.{action} 或 {namespace}.{sub_namespace}.{action}
-    - 内置能力命名空间: llm, memory, db, platform, http, metadata, provider, llm_tool, agent, registry
+    - 内置能力命名空间: llm, memory, db, platform, permission, http, metadata, provider, llm_tool, agent, registry
     - 保留命名空间前缀: handler., system., internal.
 
 使用示例：
@@ -317,6 +322,7 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
                 "status": "running",
             }
         ]
+        self._permission_admin_ids: list[str] = ["astrbot"]
         self._register_builtin_capabilities()
 
     def upsert_plugin(
@@ -469,6 +475,11 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
 
     def get_platform_instances(self) -> list[dict[str, Any]]:
         return [dict(item) for item in self._platform_instances]
+
+    def set_admin_ids(self, admin_ids: list[str]) -> None:
+        self._permission_admin_ids = [
+            user_id for user_id in (str(item).strip() for item in admin_ids) if user_id
+        ]
 
     def _plugin_has_handler(self, plugin_id: str, handler_full_name: str) -> bool:
         plugin = self._plugins.get(plugin_id)

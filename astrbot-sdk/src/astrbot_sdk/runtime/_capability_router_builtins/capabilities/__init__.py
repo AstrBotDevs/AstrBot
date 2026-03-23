@@ -7,6 +7,7 @@ from .mcp import McpCapabilityMixin
 from .memory import MemoryCapabilityMixin
 from .message_history import MessageHistoryCapabilityMixin
 from .metadata import MetadataCapabilityMixin
+from .permission import PermissionCapabilityMixin
 from .persona import PersonaCapabilityMixin
 from .platform import PlatformCapabilityMixin
 from .provider import ProviderCapabilityMixin
@@ -24,6 +25,7 @@ __all__ = [
     "MemoryCapabilityMixin",
     "MessageHistoryCapabilityMixin",
     "MetadataCapabilityMixin",
+    "PermissionCapabilityMixin",
     "PersonaCapabilityMixin",
     "PlatformCapabilityMixin",
     "ProviderCapabilityMixin",

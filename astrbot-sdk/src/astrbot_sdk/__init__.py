@@ -33,6 +33,11 @@ from .clients.managers import (
 )
 from .clients.mcp import MCPManagerClient, MCPServerRecord, MCPServerScope, MCPSession
 from .clients.metadata import PluginMetadata, StarMetadata
+from .clients.permission import (
+    PermissionCheckResult,
+    PermissionClient,
+    PermissionManagerClient,
+)
 from .clients.platform import PlatformError, PlatformStats, PlatformStatus
 from .clients.provider import (
     ManagedProviderRecord,
@@ -70,6 +75,7 @@ from .decorators import (
     rate_limit,
     register_skill,
     require_admin,
+    require_permission,
     validate_config,
 )
 from .errors import AstrBotError
@@ -159,6 +165,9 @@ __all__ = [
     "Plain",
     "PluginKVStoreMixin",
     "PluginMetadata",
+    "PermissionCheckResult",
+    "PermissionClient",
+    "PermissionManagerClient",
     "PlatformFilter",
     "PlatformError",
     "PlatformStats",
@@ -206,6 +215,7 @@ __all__ = [
     "private_only",
     "rate_limit",
     "require_admin",
+    "require_permission",
     "register_skill",
     "session_waiter",
     "validate_config",

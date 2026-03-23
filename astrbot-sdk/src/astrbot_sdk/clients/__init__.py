@@ -46,6 +46,7 @@ from .managers import (
 from .mcp import MCPManagerClient, MCPServerRecord, MCPServerScope, MCPSession
 from .memory import MemoryClient
 from .metadata import MetadataClient, PluginMetadata, StarMetadata
+from .permission import PermissionCheckResult, PermissionClient, PermissionManagerClient
 from .platform import PlatformClient, PlatformError, PlatformStats, PlatformStatus
 from .provider import (
     ManagedProviderRecord,
@@ -83,6 +84,9 @@ __all__ = [
     "MemoryClient",
     "ManagedProviderRecord",
     "MetadataClient",
+    "PermissionCheckResult",
+    "PermissionClient",
+    "PermissionManagerClient",
     "PlatformClient",
     "PlatformError",
     "PlatformStats",

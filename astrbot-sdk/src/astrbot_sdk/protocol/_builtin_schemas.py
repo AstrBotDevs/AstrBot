@@ -525,6 +525,39 @@ PLATFORM_MANAGER_GET_STATS_OUTPUT_SCHEMA = _object_schema(
     required=("stats",),
     stats=_nullable(PLATFORM_STATS_SCHEMA),
 )
+PERMISSION_ROLE_SCHEMA = {"type": "string", "enum": ["member", "admin"]}
+PERMISSION_CHECK_INPUT_SCHEMA = _object_schema(
+    required=("user_id",),
+    user_id={"type": "string"},
+    session_id=_nullable({"type": "string"}),
+)
+PERMISSION_CHECK_RESULT_SCHEMA = _object_schema(
+    required=("is_admin", "role"),
+    is_admin={"type": "boolean"},
+    role=PERMISSION_ROLE_SCHEMA,
+)
+PERMISSION_CHECK_OUTPUT_SCHEMA = PERMISSION_CHECK_RESULT_SCHEMA
+PERMISSION_GET_ADMINS_INPUT_SCHEMA = _object_schema()
+PERMISSION_GET_ADMINS_OUTPUT_SCHEMA = _object_schema(
+    required=("admins",),
+    admins={"type": "array", "items": {"type": "string"}},
+)
+PERMISSION_MANAGER_ADD_ADMIN_INPUT_SCHEMA = _object_schema(
+    required=("user_id",),
+    user_id={"type": "string"},
+)
+PERMISSION_MANAGER_ADD_ADMIN_OUTPUT_SCHEMA = _object_schema(
+    required=("changed",),
+    changed={"type": "boolean"},
+)
+PERMISSION_MANAGER_REMOVE_ADMIN_INPUT_SCHEMA = _object_schema(
+    required=("user_id",),
+    user_id={"type": "string"},
+)
+PERMISSION_MANAGER_REMOVE_ADMIN_OUTPUT_SCHEMA = _object_schema(
+    required=("changed",),
+    changed={"type": "boolean"},
+)
 SESSION_PLUGIN_IS_ENABLED_INPUT_SCHEMA = _object_schema(
     required=("session", "plugin_name"),
     session={"type": "string"},
@@ -2016,6 +2049,22 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": PLATFORM_MANAGER_GET_STATS_INPUT_SCHEMA,
         "output": PLATFORM_MANAGER_GET_STATS_OUTPUT_SCHEMA,
     },
+    "permission.check": {
+        "input": PERMISSION_CHECK_INPUT_SCHEMA,
+        "output": PERMISSION_CHECK_OUTPUT_SCHEMA,
+    },
+    "permission.get_admins": {
+        "input": PERMISSION_GET_ADMINS_INPUT_SCHEMA,
+        "output": PERMISSION_GET_ADMINS_OUTPUT_SCHEMA,
+    },
+    "permission.manager.add_admin": {
+        "input": PERMISSION_MANAGER_ADD_ADMIN_INPUT_SCHEMA,
+        "output": PERMISSION_MANAGER_ADD_ADMIN_OUTPUT_SCHEMA,
+    },
+    "permission.manager.remove_admin": {
+        "input": PERMISSION_MANAGER_REMOVE_ADMIN_INPUT_SCHEMA,
+        "output": PERMISSION_MANAGER_REMOVE_ADMIN_OUTPUT_SCHEMA,
+    },
     "llm_tool.manager.get": {
         "input": LLM_TOOL_MANAGER_GET_INPUT_SCHEMA,
         "output": LLM_TOOL_MANAGER_GET_OUTPUT_SCHEMA,
@@ -2270,6 +2319,16 @@ __all__ = [
     "PLATFORM_MANAGER_GET_STATS_INPUT_SCHEMA",
     "PLATFORM_MANAGER_GET_STATS_OUTPUT_SCHEMA",
     "PLATFORM_MANAGER_STATE_SCHEMA",
+    "PERMISSION_CHECK_INPUT_SCHEMA",
+    "PERMISSION_CHECK_OUTPUT_SCHEMA",
+    "PERMISSION_CHECK_RESULT_SCHEMA",
+    "PERMISSION_GET_ADMINS_INPUT_SCHEMA",
+    "PERMISSION_GET_ADMINS_OUTPUT_SCHEMA",
+    "PERMISSION_MANAGER_ADD_ADMIN_INPUT_SCHEMA",
+    "PERMISSION_MANAGER_ADD_ADMIN_OUTPUT_SCHEMA",
+    "PERMISSION_MANAGER_REMOVE_ADMIN_INPUT_SCHEMA",
+    "PERMISSION_MANAGER_REMOVE_ADMIN_OUTPUT_SCHEMA",
+    "PERMISSION_ROLE_SCHEMA",
     "PLATFORM_SEND_CHAIN_INPUT_SCHEMA",
     "PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA",
     "PLATFORM_SEND_BY_SESSION_INPUT_SCHEMA",
