@@ -371,7 +371,6 @@ class AstrBotDashboard:
 
         # 配置 Hypercorn
         config = HyperConfig()
-        config.use_reloader = True
         config.bind = [f"{host}:{port}"]
         if ssl_enable:
             cert_file = (
