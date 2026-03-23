@@ -323,12 +323,69 @@ def run(
                     )
                 )
             else:
-                click.echo("AstrBot is running...")
-                if backend_only:
-                    click.echo("Visit the dashboard at : https://dash.astrbot.men/")
-                    click.echo("Backend Requests : localhost or based on https")
+                # Non-interactive mode: run with stdout log streaming
+                async def run_with_logging() -> None:
+                    from astrbot.core import LogBroker, LogManager, db_helper, logger
+                    from astrbot.core.initial_loader import InitialLoader
 
-                asyncio.run(run_astrbot(astrbot_root))
+                    if (
+                        os.environ.get("ASTRBOT_DASHBOARD_ENABLE", os.environ.get("DASHBOARD_ENABLE"))
+                        == "True"
+                    ):
+                        await DashboardManager().ensure_installed(astrbot_root)
+
+                    log_broker = LogBroker()
+                    LogManager.set_queue_handler(logger, log_broker)
+
+                    # Register a stdout subscriber for real-time log streaming
+                    log_queue = log_broker.register()
+
+                    db = db_helper
+                    initial_loader = InitialLoader(db, log_broker)
+
+                    # Start a task to stream logs to stdout
+                    async def stream_logs() -> None:
+                        """Stream logs from LogBroker to stdout."""
+                        import logging
+                        while True:
+                            try:
+                                log_entry = await asyncio.wait_for(log_queue.get(), timeout=0.5)
+                                # Format: [LEVEL] message
+                                level = log_entry.get("level_name", "INFO")
+                                message = log_entry.get("message", "")
+                                if message:
+                                    level_color = {
+                                        "DEBUG": "cyan",
+                                        "INFO": "green",
+                                        "WARNING": "yellow",
+                                        "ERROR": "red",
+                                        "CRITICAL": "red",
+                                    }.get(level, "white")
+                                    click.secho(f"[{level}]", fg=level_color, bold=False, nl=False)
+                                    click.echo(f" {message}")
+                            except asyncio.TimeoutError:
+                                continue
+                            except asyncio.CancelledError:
+                                break
+
+                    # Start streaming task
+                    stream_task = asyncio.create_task(stream_logs())
+
+                    try:
+                        await initial_loader.start()
+                    finally:
+                        stream_task.cancel()
+                        try:
+                            await stream_task
+                        except asyncio.CancelledError:
+                            pass
+
+                click.echo("AstrBot is running... (streaming logs)")
+                if backend_only:
+                    click.echo("Dashboard: https://dash.astrbot.men/")
+                    click.echo("Backend: localhost or based on https")
+
+                asyncio.run(run_with_logging())
     except KeyboardInterrupt:
         click.echo("AstrBot has been shut down.")
     except Timeout:

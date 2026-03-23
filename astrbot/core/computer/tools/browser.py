@@ -70,7 +70,7 @@ class BrowserExecTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        cmd: str,
+        cmd: str = "",
         timeout: int = 30,
         description: str | None = None,
         tags: str | None = None,
@@ -133,7 +133,7 @@ class BrowserBatchExecTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        commands: list[str],
+        commands: list[str] | None = None,
         timeout: int = 60,
         stop_on_error: bool = True,
         description: str | None = None,
@@ -182,7 +182,7 @@ class RunBrowserSkillTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        skill_key: str,
+        skill_key: str = "",
         timeout: int = 60,
         stop_on_error: bool = True,
         include_trace: bool = False,

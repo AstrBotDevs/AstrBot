@@ -86,7 +86,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         self.file_id_cache: dict[str, dict[str, str]] = {}
 
     @override
-    async def step(self):
+    async def step(self) -> AsyncGenerator[AgentResponse, None]:
         """
         执行 Coze Agent 的一个步骤
         """
