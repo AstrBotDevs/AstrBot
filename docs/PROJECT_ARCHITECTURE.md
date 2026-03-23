@@ -65,7 +65,9 @@ AstrBot SDK 是一个基于 Python 3.12+ 的机器人插件开发框架，采用
 ├─────────────────────────────────────────────────────────────────┤
 │  能力客户端 (通过 CapabilityProxy 调用):                       │
 │    - LLMClient        (llm.chat, llm.chat_raw, llm.stream_chat)│
-│    - MemoryClient     (memory.search, memory.save, memory.stats)│
+│    - MemoryClient     (memory.search, memory.save, memory.stats, │
+│                        memory.list_keys, memory.exists,         │
+│                        memory.clear_namespace, memory.count)    │
 │    - DBClient         (db.get, db.set, db.watch, db.list)      │
 │    - PlatformClient   (platform.send, platform.send_image, ...)│
 │    - HTTPClient       (http.register_api, http.list_apis)      │
@@ -208,7 +210,9 @@ Worker (Plugin)                 Supervisor (Core)
 | `memory.save` | 保存记忆 |
 | `memory.save_with_ttl` | 保存带过期时间的记忆 |
 | `memory.get` / `get_many` | 读取记忆 |
+| `memory.list_keys` / `memory.exists` | 枚举与检查记忆键 |
 | `memory.delete` / `delete_many` | 删除记忆 |
+| `memory.clear_namespace` / `memory.count` | 管理 namespace 中的记忆 |
 | `memory.stats` | 获取统计信息 |
 
 #### DB 命名空间
@@ -354,7 +358,7 @@ HandlerDispatcher 支持参数注入，优先级为：
 | 客户端 | 主要方法 | 对应 Capability |
 |--------|---------|-----------------|
 | `LLMClient` | `chat()`, `chat_raw()`, `stream_chat()` | `llm.*` |
-| `MemoryClient` | `search()`, `save()`, `save_with_ttl()`, `get()`, `get_many()`, `delete()`, `delete_many()`, `stats()` | `memory.*` |
+| `MemoryClient` | `search()`, `save()`, `save_with_ttl()`, `get()`, `list_keys()`, `exists()`, `get_many()`, `delete()`, `clear_namespace()`, `delete_many()`, `count()`, `stats()` | `memory.*` |
 | `DBClient` | `get()`, `set()`, `get_many()`, `set_many()`, `delete()`, `list()`, `watch()` | `db.*` |
 | `MessageHistoryManagerClient` | `list()`, `get()`, `append()`, `delete_before()`, `delete_after()`, `delete_all()` | `message_history.*` |
 | `PlatformClient` | `send()`, `send_image()`, `send_chain()`, `get_members()` | `platform.*` |

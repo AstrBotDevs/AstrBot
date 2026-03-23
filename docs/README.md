@@ -203,6 +203,9 @@ data = await ctx.db.get("user:123")
 # Memory 客户端（语义搜索）
 await ctx.memory.save("user_pref", {"theme": "dark"})
 results = await ctx.memory.search("用户喜欢什么颜色")
+keys = await ctx.memory.list_keys()
+exists = await ctx.memory.exists("user_pref")
+count = await ctx.memory.count()
 
 # Message History（保存原始消息链和发送者）
 from astrbot_sdk import MessageHistorySender, MessageSession, Plain

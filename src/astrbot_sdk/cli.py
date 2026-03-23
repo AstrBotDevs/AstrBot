@@ -24,8 +24,8 @@ import typing
 import zipfile
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
-from pathlib import Path
 from importlib.resources.abc import Traversable
+from pathlib import Path
 from textwrap import dedent
 from typing import Any
 

@@ -209,6 +209,24 @@ if pref:
     print(f"用户偏好主题: {pref.get('theme')}")
 ```
 
+### list_keys()
+
+列出某个精确 namespace 下的 key。返回顺序按大小写不敏感排序，若大小写折叠后相同则再按原始 key 排序。
+
+```python
+keys = await ctx.memory.list_keys(namespace="users/alice")
+print(keys)  # ["Alpha", "apple", "beta"]
+```
+
+### exists()
+
+检查某个 key 是否存在于精确 namespace 中。
+
+```python
+exists = await ctx.memory.exists("user_pref", namespace="users/alice")
+print(exists)  # True / False
+```
+
 ### save_with_ttl()
 
 保存带过期时间的记忆项。
@@ -220,6 +238,32 @@ await ctx.memory.save_with_ttl(
     {"state": "waiting"},
     ttl_seconds=3600
 )
+```
+
+### clear_namespace()
+
+清理某个 namespace 下的记忆。默认只清理当前 namespace；传 `include_descendants=True` 时会递归清理子 namespace，返回值包含整个作用域内被删除的记录总数。
+
+```python
+deleted = await ctx.memory.clear_namespace(namespace="users/alice")
+deleted_recursive = await ctx.memory.clear_namespace(
+    namespace="users/alice",
+    include_descendants=True,
+)
+print(deleted, deleted_recursive)
+```
+
+### count()
+
+统计某个 namespace 下的记忆数量。默认只统计当前 namespace；传 `include_descendants=True` 时会包含子 namespace。
+
+```python
+count = await ctx.memory.count(namespace="users/alice")
+recursive_count = await ctx.memory.count(
+    namespace="users/alice",
+    include_descendants=True,
+)
+print(count, recursive_count)
 ```
 
 ### stats()

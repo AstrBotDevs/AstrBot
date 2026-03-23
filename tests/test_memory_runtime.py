@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -413,3 +414,230 @@ async def test_memory_namespace_scope_escapes_like_wildcards(
         ("team_1/room", "safe")
     ]
     assert stats["total_items"] == 1
+
+
+@pytest.mark.asyncio
+async def test_memory_management_capabilities_cover_exact_and_recursive_scope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    router = CapabilityRouter()
+
+    await _call(
+        router,
+        "memory.save",
+        {
+            "key": "beta",
+            "namespace": "users/alice",
+            "value": {"content": "beta note"},
+        },
+    )
+    await _call(
+        router,
+        "memory.save",
+        {
+            "key": "Alpha",
+            "namespace": "users/alice",
+            "value": {"content": "alpha note"},
+        },
+    )
+    await _call(
+        router,
+        "memory.save",
+        {
+            "key": "apple",
+            "namespace": "users/alice",
+            "value": {"content": "apple note"},
+        },
+    )
+    await _call(
+        router,
+        "memory.save",
+        {
+            "key": "child-note",
+            "namespace": "users/alice/sessions/1",
+            "value": {"content": "child note"},
+        },
+    )
+
+    keys = await _call(
+        router,
+        "memory.list_keys",
+        {"namespace": "users/alice"},
+    )
+    exact_count = await _call(
+        router,
+        "memory.count",
+        {"namespace": "users/alice"},
+    )
+    recursive_count = await _call(
+        router,
+        "memory.count",
+        {"namespace": "users/alice", "include_descendants": True},
+    )
+    exists = await _call(
+        router,
+        "memory.exists",
+        {"key": "child-note", "namespace": "users/alice/sessions/1"},
+    )
+    missing = await _call(
+        router,
+        "memory.exists",
+        {"key": "child-note", "namespace": "users/alice"},
+    )
+    cleared_exact = await _call(
+        router,
+        "memory.clear_namespace",
+        {"namespace": "users/alice"},
+    )
+    remaining_recursive = await _call(
+        router,
+        "memory.count",
+        {"namespace": "users/alice", "include_descendants": True},
+    )
+    cleared_recursive = await _call(
+        router,
+        "memory.clear_namespace",
+        {"namespace": "users/alice", "include_descendants": True},
+    )
+    final_count = await _call(
+        router,
+        "memory.count",
+        {"namespace": "users/alice", "include_descendants": True},
+    )
+
+    assert keys == {"keys": ["Alpha", "apple", "beta"]}
+    assert exact_count == {"count": 3}
+    assert recursive_count == {"count": 4}
+    assert exists == {"exists": True}
+    assert missing == {"exists": False}
+    assert cleared_exact == {"deleted_count": 3}
+    assert remaining_recursive == {"count": 1}
+    assert cleared_recursive == {"deleted_count": 1}
+    assert final_count == {"count": 0}
+
+
+@pytest.mark.asyncio
+async def test_memory_management_capabilities_ignore_expired_ttl_entries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    base_now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(memory_backend_module, "_utcnow", lambda: base_now)
+    router = CapabilityRouter()
+
+    await _call(
+        router,
+        "memory.save_with_ttl",
+        {
+            "key": "temp",
+            "namespace": "users/alice",
+            "value": {"content": "temporary"},
+            "ttl_seconds": 60,
+        },
+    )
+
+    monkeypatch.setattr(
+        memory_backend_module,
+        "_utcnow",
+        lambda: base_now + timedelta(seconds=61),
+    )
+    restarted = CapabilityRouter()
+
+    keys = await _call(
+        restarted,
+        "memory.list_keys",
+        {"namespace": "users/alice"},
+    )
+    count = await _call(
+        restarted,
+        "memory.count",
+        {"namespace": "users/alice"},
+    )
+    exists = await _call(
+        restarted,
+        "memory.exists",
+        {"key": "temp", "namespace": "users/alice"},
+    )
+
+    assert keys == {"keys": []}
+    assert count == {"count": 0}
+    assert exists == {"exists": False}
+
+
+@pytest.mark.asyncio
+async def test_memory_management_capabilities_remain_plugin_scoped_under_overlap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    router = CapabilityRouter()
+
+    await _call(
+        router,
+        "memory.save",
+        {
+            "key": "profile",
+            "namespace": "users/alice",
+            "value": {"content": "plugin a"},
+        },
+        plugin_id="plugin-a",
+    )
+    await _call(
+        router,
+        "memory.save",
+        {
+            "key": "session",
+            "namespace": "users/alice/sessions/1",
+            "value": {"content": "plugin a child"},
+        },
+        plugin_id="plugin-a",
+    )
+    await _call(
+        router,
+        "memory.save",
+        {
+            "key": "profile",
+            "namespace": "users/alice",
+            "value": {"content": "plugin b"},
+        },
+        plugin_id="plugin-b",
+    )
+
+    clear_task = _call(
+        router,
+        "memory.clear_namespace",
+        {"namespace": "users/alice", "include_descendants": True},
+        plugin_id="plugin-a",
+    )
+    count_task = _call(
+        router,
+        "memory.count",
+        {"namespace": "users/alice", "include_descendants": True},
+        plugin_id="plugin-b",
+    )
+    exists_task = _call(
+        router,
+        "memory.exists",
+        {"key": "profile", "namespace": "users/alice"},
+        plugin_id="plugin-b",
+    )
+    cleared, plugin_b_count, plugin_b_exists = await asyncio.gather(
+        clear_task,
+        count_task,
+        exists_task,
+    )
+
+    plugin_a_after = await _call(
+        router,
+        "memory.count",
+        {"namespace": "users/alice", "include_descendants": True},
+        plugin_id="plugin-a",
+    )
+
+    assert cleared == {"deleted_count": 2}
+    assert plugin_b_count == {"count": 1}
+    assert plugin_b_exists == {"exists": True}
+    assert plugin_a_after == {"count": 0}

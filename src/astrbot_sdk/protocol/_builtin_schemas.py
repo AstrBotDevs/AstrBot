@@ -117,12 +117,34 @@ MEMORY_GET_OUTPUT_SCHEMA = _object_schema(
     required=("value",),
     value=_nullable({"type": "object"}),
 )
+MEMORY_LIST_KEYS_INPUT_SCHEMA = _object_schema(namespace={"type": "string"})
+MEMORY_LIST_KEYS_OUTPUT_SCHEMA = _object_schema(
+    required=("keys",),
+    keys={"type": "array", "items": {"type": "string"}},
+)
+MEMORY_EXISTS_INPUT_SCHEMA = _object_schema(
+    required=("key",),
+    key={"type": "string"},
+    namespace={"type": "string"},
+)
+MEMORY_EXISTS_OUTPUT_SCHEMA = _object_schema(
+    required=("exists",),
+    exists={"type": "boolean"},
+)
 MEMORY_DELETE_INPUT_SCHEMA = _object_schema(
     required=("key",),
     key={"type": "string"},
     namespace={"type": "string"},
 )
 MEMORY_DELETE_OUTPUT_SCHEMA = _object_schema()
+MEMORY_CLEAR_NAMESPACE_INPUT_SCHEMA = _object_schema(
+    namespace={"type": "string"},
+    include_descendants={"type": "boolean"},
+)
+MEMORY_CLEAR_NAMESPACE_OUTPUT_SCHEMA = _object_schema(
+    required=("deleted_count",),
+    deleted_count={"type": "integer"},
+)
 MEMORY_SAVE_WITH_TTL_INPUT_SCHEMA = _object_schema(
     required=("key", "value", "ttl_seconds"),
     key={"type": "string"},
@@ -155,6 +177,14 @@ MEMORY_DELETE_MANY_INPUT_SCHEMA = _object_schema(
 MEMORY_DELETE_MANY_OUTPUT_SCHEMA = _object_schema(
     required=("deleted_count",),
     deleted_count={"type": "integer"},
+)
+MEMORY_COUNT_INPUT_SCHEMA = _object_schema(
+    namespace={"type": "string"},
+    include_descendants={"type": "boolean"},
+)
+MEMORY_COUNT_OUTPUT_SCHEMA = _object_schema(
+    required=("count",),
+    count={"type": "integer"},
 )
 MEMORY_STATS_INPUT_SCHEMA = _object_schema(
     namespace={"type": "string"},
@@ -1531,9 +1561,21 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": MEMORY_GET_INPUT_SCHEMA,
         "output": MEMORY_GET_OUTPUT_SCHEMA,
     },
+    "memory.list_keys": {
+        "input": MEMORY_LIST_KEYS_INPUT_SCHEMA,
+        "output": MEMORY_LIST_KEYS_OUTPUT_SCHEMA,
+    },
+    "memory.exists": {
+        "input": MEMORY_EXISTS_INPUT_SCHEMA,
+        "output": MEMORY_EXISTS_OUTPUT_SCHEMA,
+    },
     "memory.delete": {
         "input": MEMORY_DELETE_INPUT_SCHEMA,
         "output": MEMORY_DELETE_OUTPUT_SCHEMA,
+    },
+    "memory.clear_namespace": {
+        "input": MEMORY_CLEAR_NAMESPACE_INPUT_SCHEMA,
+        "output": MEMORY_CLEAR_NAMESPACE_OUTPUT_SCHEMA,
     },
     "memory.save_with_ttl": {
         "input": MEMORY_SAVE_WITH_TTL_INPUT_SCHEMA,
@@ -1546,6 +1588,10 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
     "memory.delete_many": {
         "input": MEMORY_DELETE_MANY_INPUT_SCHEMA,
         "output": MEMORY_DELETE_MANY_OUTPUT_SCHEMA,
+    },
+    "memory.count": {
+        "input": MEMORY_COUNT_INPUT_SCHEMA,
+        "output": MEMORY_COUNT_OUTPUT_SCHEMA,
     },
     "memory.stats": {
         "input": MEMORY_STATS_INPUT_SCHEMA,
@@ -2110,14 +2156,22 @@ __all__ = [
     "LLM_CHAT_RAW_OUTPUT_SCHEMA",
     "LLM_STREAM_CHAT_INPUT_SCHEMA",
     "LLM_STREAM_CHAT_OUTPUT_SCHEMA",
+    "MEMORY_CLEAR_NAMESPACE_INPUT_SCHEMA",
+    "MEMORY_CLEAR_NAMESPACE_OUTPUT_SCHEMA",
+    "MEMORY_COUNT_INPUT_SCHEMA",
+    "MEMORY_COUNT_OUTPUT_SCHEMA",
     "MEMORY_DELETE_INPUT_SCHEMA",
     "MEMORY_DELETE_MANY_INPUT_SCHEMA",
     "MEMORY_DELETE_MANY_OUTPUT_SCHEMA",
     "MEMORY_DELETE_OUTPUT_SCHEMA",
+    "MEMORY_EXISTS_INPUT_SCHEMA",
+    "MEMORY_EXISTS_OUTPUT_SCHEMA",
     "MEMORY_GET_INPUT_SCHEMA",
     "MEMORY_GET_MANY_INPUT_SCHEMA",
     "MEMORY_GET_MANY_OUTPUT_SCHEMA",
     "MEMORY_GET_OUTPUT_SCHEMA",
+    "MEMORY_LIST_KEYS_INPUT_SCHEMA",
+    "MEMORY_LIST_KEYS_OUTPUT_SCHEMA",
     "MEMORY_SAVE_INPUT_SCHEMA",
     "MEMORY_SAVE_OUTPUT_SCHEMA",
     "MEMORY_SAVE_WITH_TTL_INPUT_SCHEMA",

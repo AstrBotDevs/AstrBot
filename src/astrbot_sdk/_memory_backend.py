@@ -151,6 +151,28 @@ class PluginMemoryBackend:
             normalize_memory_namespace(namespace),
         )
 
+    async def list_keys(
+        self,
+        *,
+        namespace: str | None = None,
+    ) -> list[str]:
+        return await asyncio.to_thread(
+            self._list_keys_sync,
+            normalize_memory_namespace(namespace),
+        )
+
+    async def exists(
+        self,
+        key: str,
+        *,
+        namespace: str | None = None,
+    ) -> bool:
+        return await asyncio.to_thread(
+            self._exists_sync,
+            str(key),
+            normalize_memory_namespace(namespace),
+        )
+
     async def get_many(
         self,
         keys: list[str],
@@ -176,6 +198,19 @@ class PluginMemoryBackend:
             normalize_memory_namespace(namespace),
         )
 
+    async def clear_namespace(
+        self,
+        *,
+        namespace: str | None = None,
+        include_descendants: bool = False,
+    ) -> int:
+        normalized_namespace = _normalize_scope_namespace(namespace)
+        return await asyncio.to_thread(
+            self._clear_namespace_sync,
+            normalized_namespace,
+            bool(include_descendants),
+        )
+
     async def delete_many(
         self,
         keys: list[str],
@@ -187,6 +222,19 @@ class PluginMemoryBackend:
             self._delete_many_sync,
             [str(item) for item in keys],
             normalized_namespace,
+        )
+
+    async def count(
+        self,
+        *,
+        namespace: str | None = None,
+        include_descendants: bool = False,
+    ) -> int:
+        normalized_namespace = _normalize_scope_namespace(namespace)
+        return await asyncio.to_thread(
+            self._count_sync,
+            normalized_namespace,
+            bool(include_descendants),
         )
 
     async def stats(
@@ -453,6 +501,42 @@ class PluginMemoryBackend:
             finally:
                 conn.close()
 
+    def _list_keys_sync(self, namespace: str) -> list[str]:
+        with self._lock:
+            conn = self._connect()
+            try:
+                self._purge_expired_locked(conn)
+                rows = conn.execute(
+                    """
+                    SELECT key
+                    FROM memory_records
+                    WHERE namespace = ?
+                    ORDER BY key COLLATE NOCASE ASC, key ASC
+                    """,
+                    (namespace,),
+                ).fetchall()
+                return [str(row[0]) for row in rows]
+            finally:
+                conn.close()
+
+    def _exists_sync(self, key: str, namespace: str) -> bool:
+        with self._lock:
+            conn = self._connect()
+            try:
+                self._purge_expired_locked(conn)
+                row = conn.execute(
+                    """
+                    SELECT 1
+                    FROM memory_records
+                    WHERE namespace = ? AND key = ?
+                    LIMIT 1
+                    """,
+                    (namespace, key),
+                ).fetchone()
+                return row is not None
+            finally:
+                conn.close()
+
     def _get_many_sync(self, keys: list[str], namespace: str) -> list[dict[str, Any]]:
         with self._lock:
             conn = self._connect()
@@ -489,6 +573,25 @@ class PluginMemoryBackend:
             try:
                 self._purge_expired_locked(conn)
                 deleted = self._delete_record_locked(conn, namespace=namespace, key=key)
+                conn.commit()
+                return deleted
+            finally:
+                conn.close()
+
+    def _clear_namespace_sync(
+        self,
+        namespace: str | None,
+        include_descendants: bool,
+    ) -> int:
+        with self._lock:
+            conn = self._connect()
+            try:
+                self._purge_expired_locked(conn)
+                deleted = self._delete_scope_locked(
+                    conn,
+                    namespace=namespace,
+                    include_descendants=include_descendants,
+                )
                 conn.commit()
                 return deleted
             finally:
@@ -531,6 +634,28 @@ class PluginMemoryBackend:
                         self._mark_vector_dirty_locked(conn, provider_id)
                 conn.commit()
                 return deleted
+            finally:
+                conn.close()
+
+    def _count_sync(
+        self,
+        namespace: str | None,
+        include_descendants: bool,
+    ) -> int:
+        with self._lock:
+            conn = self._connect()
+            try:
+                self._purge_expired_locked(conn)
+                where_sql, params = self._namespace_where(
+                    namespace,
+                    include_descendants=include_descendants,
+                )
+                return int(
+                    conn.execute(
+                        f"SELECT COUNT(*) FROM memory_records WHERE {where_sql}",
+                        params,
+                    ).fetchone()[0]
+                )
             finally:
                 conn.close()
 
@@ -1067,6 +1192,71 @@ class PluginMemoryBackend:
                 "DELETE FROM memory_records_fts WHERE namespace = ? AND key = ?",
                 (namespace, key),
             )
+        for row in provider_rows:
+            provider_id = str(row[0]).strip()
+            if provider_id:
+                self._mark_vector_dirty_locked(conn, provider_id)
+        return deleted
+
+    def _delete_scope_locked(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        namespace: str | None,
+        include_descendants: bool,
+    ) -> int:
+        where_sql, params = self._namespace_where(
+            namespace,
+            include_descendants=include_descendants,
+        )
+        affected_rows = conn.execute(
+            f"""
+            SELECT namespace, key
+            FROM memory_records
+            WHERE {where_sql}
+            """,
+            params,
+        ).fetchall()
+        if not affected_rows:
+            return 0
+
+        pair_placeholders = ", ".join("(?, ?)" for _ in affected_rows)
+        pair_params = tuple(
+            value
+            for raw_namespace, raw_key in affected_rows
+            for value in (normalize_memory_namespace(raw_namespace), str(raw_key))
+        )
+
+        provider_rows = conn.execute(
+            f"""
+            SELECT DISTINCT provider_id
+            FROM memory_embeddings
+            WHERE (namespace, key) IN ({pair_placeholders})
+            """,
+            pair_params,
+        ).fetchall()
+        conn.execute(
+            f"""
+            DELETE FROM memory_embeddings
+            WHERE (namespace, key) IN ({pair_placeholders})
+            """,
+            pair_params,
+        )
+        if self._fts_enabled:
+            conn.execute(
+                f"""
+                DELETE FROM memory_records_fts
+                WHERE (namespace, key) IN ({pair_placeholders})
+                """,
+                pair_params,
+            )
+        deleted = conn.execute(
+            f"""
+            DELETE FROM memory_records
+            WHERE (namespace, key) IN ({pair_placeholders})
+            """,
+            pair_params,
+        ).rowcount
         for row in provider_rows:
             provider_id = str(row[0]).strip()
             if provider_id:
