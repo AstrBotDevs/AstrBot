@@ -1,11 +1,14 @@
 import asyncio
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 import yaml
+from astrbot_sdk.runtime.loader import load_plugin
 
+from astrbot.core.sdk_bridge.plugin_bridge import SdkPluginBridge
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
@@ -17,6 +20,10 @@ TEST_PLUGIN_REPO = "https://github.com/AstrBotDevs/astrbot_plugin_helloworld"
 TEST_PLUGIN_DIR = "helloworld"
 TEST_SDK_PLUGIN_NAME = "sdk_demo"
 TEST_SDK_PLUGIN_REPO = "https://github.com/AstrBotDevs/astrbot_plugin_sdk_demo"
+TEST_SDK_TOOL_PLUGIN_NAME = "sdk_tool_demo"
+TEST_SDK_TOOL_PLUGIN_REPO = (
+    "https://github.com/AstrBotDevs/astrbot_plugin_sdk_tool_demo"
+)
 
 
 class MockStar:
@@ -80,6 +87,51 @@ def _write_local_sdk_plugin(
     )
     (plugin_path / "README.md").write_text(
         "# SDK Demo\n",
+        encoding="utf-8",
+    )
+
+
+def _write_local_sdk_tool_plugin(
+    plugin_path: Path,
+    *,
+    plugin_name: str = TEST_SDK_TOOL_PLUGIN_NAME,
+    tool_name: str = "sdk_lookup_note",
+):
+    """Creates a minimal SDK plugin that registers one LLM tool."""
+    plugin_path.mkdir(parents=True, exist_ok=True)
+    (plugin_path / "plugin.yaml").write_text(
+        "\n".join(
+            [
+                f"name: {plugin_name}",
+                "display_name: SDK Tool Demo",
+                "version: 1.0.0",
+                "author: AstrBot Team",
+                'desc: "SDK tool demo plugin"',
+                "runtime:",
+                '  python: "3.11"',
+                "components:",
+                "  - class: main:DemoToolPlugin",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (plugin_path / "main.py").write_text(
+        "\n".join(
+            [
+                "from astrbot_sdk import Star",
+                "from astrbot_sdk.decorators import register_llm_tool",
+                "",
+                "class DemoToolPlugin(Star):",
+                f'    @register_llm_tool("{tool_name}", description="Lookup demo note")',
+                "    async def lookup(self, keyword: str) -> str:",
+                '        """Return a deterministic note lookup result."""',
+                '        return f"note:{keyword}"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (plugin_path / "README.md").write_text(
+        "# SDK Tool Demo\n",
         encoding="utf-8",
     )
 
@@ -754,6 +806,104 @@ async def test_install_plugin_from_file_routes_sdk_plugin_to_sdk_plugins_directo
         "readme": "# SDK Demo\n",
         "name": TEST_SDK_PLUGIN_NAME,
         "type": "sdk",
+    }
+
+
+@pytest.mark.asyncio
+async def test_install_sdk_plugin_registers_sdk_tool_in_bridge_dashboard_view(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    download_path = Path(plugin_manager_pm.plugin_store_path) / "sdk_tool_download_dir"
+    data_root = Path(plugin_manager_pm.plugin_store_path).parent
+
+    class _LoadingWorkerSession:
+        def __init__(self, *, plugin, on_closed=None, **_kwargs) -> None:
+            self.plugin = plugin
+            self.on_closed = on_closed
+            self.handlers = []
+            self.llm_tools = []
+            self.agents = []
+            self.issues = []
+            self.peer = None
+
+        async def start(self) -> None:
+            loaded_plugin = load_plugin(self.plugin)
+            self.handlers = [
+                item.descriptor.model_copy(deep=True) for item in loaded_plugin.handlers
+            ]
+            self.llm_tools = [
+                item.spec.to_payload() for item in loaded_plugin.llm_tools
+            ]
+            self.agents = [item.spec.to_payload() for item in loaded_plugin.agents]
+            self.peer = SimpleNamespace(remote_metadata={})
+
+        def start_close_watch(self) -> None:
+            return None
+
+        async def stop(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.get_astrbot_data_path",
+        lambda: str(data_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.get_astrbot_plugin_data_path",
+        lambda: str(data_root / "plugin_data"),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.WorkerSession",
+        _LoadingWorkerSession,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.SkillManager.prune_sdk_plugin_skills",
+        lambda self, known: None,
+    )
+
+    sdk_bridge = SdkPluginBridge(cast(Any, plugin_manager_pm.context))
+    sdk_bridge._publish_plugin_skills = lambda _plugin_id: None
+    sdk_bridge._persist_state_overrides = lambda: None
+    sdk_bridge.env_manager.plan = lambda _plugins: None
+
+    async def _noop_register_schedule(_record) -> None:
+        return None
+
+    sdk_bridge._register_schedule_handlers = _noop_register_schedule
+    cast(Any, plugin_manager_pm.context).sdk_plugin_bridge = sdk_bridge
+
+    async def mock_install(repo_url: str, proxy=""):
+        assert repo_url == TEST_SDK_TOOL_PLUGIN_REPO
+        del proxy
+        _write_local_sdk_tool_plugin(download_path)
+        return str(download_path)
+
+    monkeypatch.setattr(plugin_manager_pm.updator, "install", mock_install)
+
+    plugin_info = await plugin_manager_pm.install_plugin(TEST_SDK_TOOL_PLUGIN_REPO)
+
+    dashboard_tools = sdk_bridge.list_dashboard_tools()
+    assert plugin_info == {
+        "repo": TEST_SDK_TOOL_PLUGIN_REPO,
+        "readme": "# SDK Tool Demo\n",
+        "name": TEST_SDK_TOOL_PLUGIN_NAME,
+        "type": "sdk",
+    }
+    assert len(dashboard_tools) == 1
+    assert dashboard_tools[0] == {
+        "tool_key": f"sdk:{TEST_SDK_TOOL_PLUGIN_NAME}:sdk_lookup_note",
+        "name": "sdk_lookup_note",
+        "description": "Lookup demo note",
+        "parameters": {
+            "type": "object",
+            "properties": {"keyword": {"type": "string"}},
+            "required": ["keyword"],
+        },
+        "active": True,
+        "origin": "sdk_plugin",
+        "origin_name": "SDK Tool Demo",
+        "runtime_kind": "sdk",
+        "plugin_id": TEST_SDK_TOOL_PLUGIN_NAME,
     }
 
 
