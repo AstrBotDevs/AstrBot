@@ -726,6 +726,21 @@ class Context:
             status=PlatformStatus.from_value(platform_payload.get("status")),
         )
 
+    async def list_platforms(self) -> list[PlatformCompatFacade]:
+        """获取所有平台实例的兼容层列表。
+
+        Returns:
+            所有可见平台实例的兼容层对象列表
+
+        Example:
+            for platform in await ctx.list_platforms():
+                print(platform.id, platform.status)
+        """
+        return [
+            self._build_platform_facade(item)
+            for item in await self._list_platform_instances()
+        ]
+
     async def get_platform(self, platform_type: str) -> PlatformCompatFacade | None:
         target_type = str(platform_type).strip().lower()
         if not target_type:

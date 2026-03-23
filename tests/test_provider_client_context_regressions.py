@@ -350,6 +350,47 @@ async def test_platform_compat_clear_errors_waits_for_inflight_refresh() -> None
 
 
 @pytest.mark.asyncio
+async def test_mock_context_list_platforms_returns_facades_for_valid_instances() -> (
+    None
+):
+    ctx = MockContext(plugin_id="plain-plugin")
+    ctx.router.set_platform_instances(
+        [
+            {
+                "id": "mock-platform",
+                "name": "Mock Platform",
+                "type": "mock",
+                "status": "running",
+            },
+            {
+                "id": "mock-platform-2",
+                "name": "Mock Platform 2",
+                "type": "mock",
+                "status": "stopped",
+            },
+            {
+                "id": "",
+                "name": "Broken Platform",
+                "type": "broken",
+                "status": "running",
+            },
+        ]
+    )
+
+    platforms = await ctx.list_platforms()
+
+    assert [platform.id for platform in platforms] == [
+        "mock-platform",
+        "mock-platform-2",
+    ]
+    assert all(isinstance(platform, PlatformCompatFacade) for platform in platforms)
+    assert [platform.status for platform in platforms] == [
+        PlatformStatus.RUNNING,
+        PlatformStatus.STOPPED,
+    ]
+
+
+@pytest.mark.asyncio
 async def test_provider_manager_methods_copy_caller_supplied_config_dicts() -> None:
     peer = _ProviderMutationPeer()
     manager = ProviderManagerClient(

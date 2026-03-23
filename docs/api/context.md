@@ -1406,6 +1406,26 @@ async def on_load(self, event, ctx: Context):
 
 ---
 
+### `list_platforms()`
+
+列出所有可见的平台兼容层实例。
+
+**签名**:
+```python
+async def list_platforms(self) -> list[PlatformCompatFacade]
+```
+
+**返回**: `list[PlatformCompatFacade]` - 平台兼容层实例列表
+
+**示例**:
+
+```python
+for platform in await ctx.list_platforms():
+    print(platform.id, platform.status)
+```
+
+---
+
 ### `get_platform()`
 
 获取指定类型的平台兼容层实例。

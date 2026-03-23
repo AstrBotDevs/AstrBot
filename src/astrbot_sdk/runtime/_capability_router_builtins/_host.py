@@ -80,6 +80,30 @@ class CapabilityRouterHost:
     def get_platform_instances(self) -> list[dict[str, Any]]:
         raise NotImplementedError
 
+    @staticmethod
+    def _normalize_platform_name(value: Any) -> str:
+        raise NotImplementedError
+
+    @classmethod
+    def _normalized_platform_names(cls, values: Any) -> set[str]:
+        raise NotImplementedError
+
+    def _plugin_supports_platform(self, plugin_id: str, platform_name: str) -> bool:
+        raise NotImplementedError
+
+    def _platform_name_from_id(self, platform_id: str) -> str:
+        raise NotImplementedError
+
+    def _session_platform_name(self, session: str) -> str:
+        raise NotImplementedError
+
+    def _require_platform_support_for_session(
+        self,
+        capability_name: str,
+        session: str,
+    ) -> str:
+        raise NotImplementedError
+
     def _register_agent_tool_capabilities(self) -> None:
         raise NotImplementedError
 
