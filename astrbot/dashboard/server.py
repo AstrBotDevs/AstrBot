@@ -142,6 +142,7 @@ class AstrBotDashboard:
         self.shutdown_event = shutdown_event
 
         self.enable_webui = self._check_webui_enabled()
+        self._webui_fallback = False  # True if frontend was enabled but files missing
 
         self._init_paths(webui_dir)
         self._init_app()
@@ -177,10 +178,11 @@ class AstrBotDashboard:
 
         if self.enable_webui and not (Path(self.data_path) / "index.html").exists():
             logger.warning(
-                f"找不到内置前端 (index.html missing in {self.data_path})，"
-                "但你可以通过在线面板访问：dash.astrbot.men"
+                f"前端未内置或未初始化 (index.html missing in {self.data_path})，"
+                "回退到仅启动后端。请访问在线面板：dash.astrbot.men"
             )
             self.enable_webui = False
+            self._webui_fallback = True
 
     def _init_app(self):
         """初始化 Quart 应用"""
@@ -227,7 +229,7 @@ class AstrBotDashboard:
         @self.app.route("/")
         async def index():
             if not self.enable_webui:
-                return "Buildin WebUI is disabled."
+                return "前端未启用，请访问在线面板：dash.astrbot.men"
             try:
                 return await self.app.send_static_file("index.html")
             except werkzeug.exceptions.NotFound:
@@ -237,7 +239,7 @@ class AstrBotDashboard:
         @self.app.errorhandler(404)
         async def not_found(e):
             if not self.enable_webui:
-                return "Buildin WebUI is disabled."
+                return "前端未启用，请访问在线面板：dash.astrbot.men"
             if request.path.startswith("/api/"):
                 return jsonify(Response().error("Not Found").to_json()), 404
             try:
@@ -473,8 +475,10 @@ class AstrBotDashboard:
 
     async def run(self) -> None:
         """Run dashboard server (blocking)"""
-        if not self.enable_webui:
-            logger.warning("内置前端已禁用，请访问在线前端面板：dash.astrbot.men")
+        if self._webui_fallback:
+            logger.warning("前端未内置或未初始化，回退到仅启动后端。请访问在线面板：dash.astrbot.men")
+        elif not self.enable_webui:
+            logger.warning("前端已禁用，请访问在线面板：dash.astrbot.men")
 
         dashboard_config = self.config.get("dashboard", {})
         host_value = (
@@ -519,7 +523,7 @@ class AstrBotDashboard:
             )
         else:
             logger.info(
-                "正在启动 API Server (WebUI 已分离), 监听: %s",
+                "正在启动 API Server, 监听: %s",
                 ", ".join(f"{scheme}://{bind}" for bind in binds),
             )
 

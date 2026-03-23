@@ -38,7 +38,7 @@ def coerce_int_config(
             parsed = default
     else:
         try:
-            parsed = int(value)  # type: ignore[arg-type]
+            parsed = int(value)
         except (TypeError, ValueError):
             if warn:
                 logger.warning(
