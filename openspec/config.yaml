@@ -1,39 +1,44 @@
 schema: spec-driven
 
-# Project context
+# 项目上下文
 context: |
-  Tech stack: Python 3.12, anyio (async), FastAPI, pytest, ruff, uv
-  Domain: Multi-platform LLM chatbot framework (QQ, Telegram, Discord, etc.)
-  Architecture: Protocol-based system (LSP, MCP, ACP, ABP)
+  技术栈: Python 3.12, anyio (异步), FastAPI, pytest, ruff, uv
+  领域: 多平台 LLM 聊天机器人框架 (QQ, Telegram, Discord 等)
+  架构: 基于协议的系统 (LSP, MCP, ACP, ABP)
 
-# Per-artifact rules
+# artifact 规则
 rules:
   tasks:
-    - Break tasks into chunks of max 2 hours
-    - Always write tests for new functionality
-    - Run ruff and pytest before committing
+    - 任务拆分为最大2小时块
+    - 新功能必须编写测试
+    - 提交前运行 ruff 和 pytest
   code:
-    - Use absolute imports via `astrbot.` prefix
-    - Type hints required (no Any when possible)
-    - Comments in English
+    - 使用绝对导入，前缀 `astrbot.`
+    - 必须有类型标注（尽量避免 Any）
+    - 注释使用英文
   commits:
-    - Use conventional commits (feat:, fix:, docs:, refactor:, test:, chore:)
+    - 使用 conventional commits (feat:, fix:, docs:, refactor:, test:, chore:)
 
-# Project directives (最高旨意)
+# 项目最高旨意
 directives:
   architecture: |
-    New architecture goes in _internal package to avoid branch conflicts.
-    Protocol system: LSP (client), MCP (client+server), ACP (client+server), ABP (client+server).
-    Runtime coordinates protocols, Gateway provides FastAPI backend.
-    Stars are plugins - Galaxy is the collection of stars.
+    新架构放在 _internal 包中，避免分支冲突。
+    协议系统: LSP (客户端), MCP (客户端+服务端), ACP (客户端+服务端), ABP (客户端+服务端)。
+    Runtime 协调协议，Gateway 提供 FastAPI 后端。
+    Stars 是插件 - Galaxy 是星星的集合。
   async_library: |
-    Use anyio as the async library (not asyncio).
+    使用 anyio 作为异步库（不是 asyncio）。
   coverage: |
-    Coverage testing must be improved.
+    必须提高覆盖率测试。
   type_checking: |
-    Code must pass `uvx ty check` (astral's pyright).
-    Avoid using Any and cast.
+    代码必须通过 `uvx ty check` (astral 的 pyright)。
+    避免使用 Any 和 cast。
   code_style: |
-    Code must pass `ruff check .` and `ruff format .`.
+    代码必须通过 `ruff check .` 和 `ruff format .`。
   execution: |
-    Always use `uv run` for running Python scripts, not bare `python`.
+    运行 Python 脚本必须使用 `uv run`，不要用裸 python。
+  goal: |
+    最终目标：实现 ABP 协议
+    代码美观
+    类型标注完美
+    将现有功能迁移到新架构
