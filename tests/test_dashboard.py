@@ -204,6 +204,166 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
+async def test_apikey_create_with_invalid_scopes(
+    app: Quart,
+    authenticated_header: dict,
+):
+    """Test that create_api_key returns error for invalid scopes."""
+    test_client = app.test_client()
+
+    # Invalid scopes type
+    response = await test_client.post(
+        "/api/apikey/create",
+        headers=authenticated_header,
+        json={"scopes": "not-a-list"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "Invalid scopes" in data["message"]
+
+    # Empty scopes list
+    response = await test_client.post(
+        "/api/apikey/create",
+        headers=authenticated_header,
+        json={"scopes": []},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+    # Invalid expires_in_days
+    response = await test_client.post(
+        "/api/apikey/create",
+        headers=authenticated_header,
+        json={"expires_in_days": "not-a-number"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+    # expires_in_days <= 0
+    response = await test_client.post(
+        "/api/apikey/create",
+        headers=authenticated_header,
+        json={"expires_in_days": 0},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_apikey_create_success(
+    app: Quart,
+    authenticated_header: dict,
+):
+    """Test successful api key creation."""
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/apikey/create",
+        headers=authenticated_header,
+        json={"name": "Test Key", "scopes": ["chat"]},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert "api_key" in data["data"]
+    assert data["data"]["name"] == "Test Key"
+    assert data["data"]["scopes"] == ["chat"]
+
+
+@pytest.mark.asyncio
+async def test_apikey_list(
+    app: Quart,
+    authenticated_header: dict,
+):
+    """Test listing api keys."""
+    test_client = app.test_client()
+
+    response = await test_client.get("/api/apikey/list", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert isinstance(data["data"], list)
+
+
+@pytest.mark.asyncio
+async def test_apikey_revoke_missing_key_id(
+    app: Quart,
+    authenticated_header: dict,
+):
+    """Test that revoke_api_key returns error when key_id is missing."""
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/apikey/revoke",
+        headers=authenticated_header,
+        json={},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "key_id" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_apikey_delete_missing_key_id(
+    app: Quart,
+    authenticated_header: dict,
+):
+    """Test that delete_api_key returns error when key_id is missing."""
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/apikey/delete",
+        headers=authenticated_header,
+        json={},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "key_id" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_apikey_revoke_not_found(
+    app: Quart,
+    authenticated_header: dict,
+):
+    """Test that revoke_api_key returns error when key is not found."""
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/apikey/revoke",
+        headers=authenticated_header,
+        json={"key_id": "nonexistent-key"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_apikey_delete_not_found(
+    app: Quart,
+    authenticated_header: dict,
+):
+    """Test that delete_api_key returns error when key is not found."""
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/apikey/delete",
+        headers=authenticated_header,
+        json={"key_id": "nonexistent-key"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
 async def test_subagent_config_accepts_default_persona(
     app: Quart,
     authenticated_header: dict,
@@ -521,6 +681,123 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
     assert data["status"] == "ok"
     # conflicts is a list
     assert isinstance(data["data"], list)
+
+
+@pytest.mark.asyncio
+async def test_commands_toggle_missing_params(
+    app: Quart,
+    authenticated_header: dict,
+):
+    """Test that toggle_command returns error when params are missing."""
+    test_client = app.test_client()
+
+    # Missing both params
+    response = await test_client.post(
+        "/api/commands/toggle",
+        headers=authenticated_header,
+        json={},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+    # Missing enabled
+    response = await test_client.post(
+        "/api/commands/toggle",
+        headers=authenticated_header,
+        json={"handler_full_name": "test_command"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+    # Missing handler_full_name
+    response = await test_client.post(
+        "/api/commands/toggle",
+        headers=authenticated_header,
+        json={"enabled": True},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_commands_rename_missing_params(
+    app: Quart,
+    authenticated_header: dict,
+):
+    """Test that rename_command returns error when params are missing."""
+    test_client = app.test_client()
+
+    # Missing both params
+    response = await test_client.post(
+        "/api/commands/rename",
+        headers=authenticated_header,
+        json={},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+    # Missing new_name
+    response = await test_client.post(
+        "/api/commands/rename",
+        headers=authenticated_header,
+        json={"handler_full_name": "test_command"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+    # Missing handler_full_name
+    response = await test_client.post(
+        "/api/commands/rename",
+        headers=authenticated_header,
+        json={"new_name": "new_test_command"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_commands_permission_missing_params(
+    app: Quart,
+    authenticated_header: dict,
+):
+    """Test that update_permission returns error when params are missing."""
+    test_client = app.test_client()
+
+    # Missing both params
+    response = await test_client.post(
+        "/api/commands/permission",
+        headers=authenticated_header,
+        json={},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+    # Missing permission
+    response = await test_client.post(
+        "/api/commands/permission",
+        headers=authenticated_header,
+        json={"handler_full_name": "test_command"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+    # Missing handler_full_name
+    response = await test_client.post(
+        "/api/commands/permission",
+        headers=authenticated_header,
+        json={"permission": "all"},
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
 
 
 @pytest.mark.asyncio
