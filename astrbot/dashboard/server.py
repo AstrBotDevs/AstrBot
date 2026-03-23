@@ -487,10 +487,18 @@ class AstrBotDashboard:
         if not isinstance(host, str) or not host:
             raise ValueError("Dashboard host must be a non-empty string")
 
-        port_value = (
-            os.environ.get("ASTRBOT_PORT")
-            or dashboard_config.get("port", 6185)
-        )
+        # Port priority: ASTRBOT_PORT env var > cmd_config.json dashboard.port > default 6185
+        env_port = os.environ.get("ASTRBOT_PORT")
+        json_port = dashboard_config.get("port")
+        if env_port is not None:
+            port_value = env_port
+            logger.info("[Dashboard] Using port from ASTRBOT_PORT environment variable: %s", env_port)
+        elif json_port is not None:
+            port_value = json_port
+            logger.info("[Dashboard] Using port from cmd_config.json: %s", json_port)
+        else:
+            port_value = 6185
+            logger.info("[Dashboard] Using default port: 6185")
         resolved_port = _resolve_dashboard_value(port_value, field_name="port")
         if resolved_port is None:
             raise ValueError("Port configuration is missing")
