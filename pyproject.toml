@@ -37,6 +37,13 @@ markers = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+astrbot_sdk = [
+    "templates/skills/*/SKILL.md",
+    "templates/skills/*/agents/*.yaml",
+    "templates/skills/*/references/*.md",
+]
+
 # ============================================================
 # Optional Dependencies
 # ============================================================

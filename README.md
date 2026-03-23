@@ -18,6 +18,21 @@ pip install -e .
 uv sync
 ```
 
+## 初始化插件
+
+```bash
+astr init demo-plugin
+astr init demo-plugin --agents claude,codex,opencode
+```
+
+`astr init <name>` 会继续按原样生成插件骨架。传入 `--agents` 时，会在新插件目录下额外生成对应的项目级 agent 目录：
+
+- Claude Code: `.claude/skills/astrbot-plugin-dev/`
+- Codex: `.agents/skills/astrbot-plugin-dev/`
+- OpenCode: `.opencode/skills/astrbot-plugin-dev/`
+
+`--agents` 仅支持 `claude`、`codex`、`opencode`，使用逗号分隔；重复值会去重，非法值会直接报错。
+
 ## 目录结构
 
 ```
