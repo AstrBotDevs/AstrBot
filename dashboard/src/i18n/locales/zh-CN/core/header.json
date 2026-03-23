@@ -81,7 +81,7 @@
   },
   "accountDialog": {
     "title": "修改账户",
-    "securityWarning": "安全提醒: 请修改默认密码以确保账户安全",
+    "securityWarning": "安全提醒: 请通过 `astrbot conf admin` 命令修改密码以确保账户安全",
     "form": {
       "currentPassword": "当前密码",
       "newPassword": "新密码",
@@ -90,7 +90,7 @@
       "passwordHint": "密码长度至少 8 位",
       "confirmPasswordHint": "请再次输入新密码以确认",
       "usernameHint": "留空表示不修改用户名",
-      "defaultCredentials": "默认用户名和密码均为 astrbot"
+      "defaultCredentials": "初始用户名：astrbot，请使用 `astrbot conf admin` 设置密码"
     },
     "validation": {
       "passwordRequired": "请输入密码",

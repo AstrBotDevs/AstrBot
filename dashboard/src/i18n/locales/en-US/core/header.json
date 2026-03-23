@@ -81,7 +81,7 @@
   },
   "accountDialog": {
     "title": "Modify Account",
-    "securityWarning": "Security Reminder: Please change the default password to ensure account security",
+    "securityWarning": "Security Reminder: Use `astrbot conf admin` to change your password for account security",
     "form": {
       "currentPassword": "Current Password",
       "newPassword": "New Password",
@@ -90,7 +90,7 @@
       "passwordHint": "Password must be at least 8 characters",
       "confirmPasswordHint": "Please enter new password again to confirm",
       "usernameHint": "Leave blank to keep current username",
-      "defaultCredentials": "Default username and password are both astrbot"
+      "defaultCredentials": "Default username: astrbot. Use `astrbot conf admin` to set your password"
     },
     "validation": {
       "passwordRequired": "Please enter password",
