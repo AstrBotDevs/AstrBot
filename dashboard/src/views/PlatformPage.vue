@@ -258,32 +258,7 @@
           />
         </v-card-text>
         <v-card-actions class="pa-4 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="tonal" color="primary" @click="showQrDialog = false">
-            {{ tm('platformQr.close') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- 错误详情对话框 -->
-    <v-dialog v-model="showErrorDialog" max-width="700">
-      <v-card>
-        <v-card-title class="d-flex align-center pa-4">
-          <v-icon class="me-2">mdi-qrcode</v-icon>
-          {{ tm('platformQr.title') }}
-        </v-card-title>
-        <v-card-text class="px-4 pb-4">
-          <div class="platform-qr-status">
-            {{ tm('platformQr.status') }}: {{ getPlatformQrLoginStat(currentQrPlatformId)?.qr_status || tm('platformQr.waiting') }}
-          </div>
-          <QrCodeViewer
-            :value="(getPlatformQrLoginStat(currentQrPlatformId)?.qrcode_img_content || getPlatformQrLoginStat(currentQrPlatformId)?.qrcode || '')"
-            :alt="tm('platformQr.title')"
-          />
-        </v-card-text>
-        <v-card-actions class="pa-4 pt-0">
-          <v-spacer></v-spacer>
+          <v-spacer />
           <v-btn variant="tonal" color="primary" @click="showQrDialog = false">
             {{ tm('platformQr.close') }}
           </v-btn>
@@ -381,8 +356,7 @@ import QrCodeViewer from '@/components/shared/QrCodeViewer.vue';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n, mergeDynamicTranslations } from '@/i18n/composables';
 import {
-  getPlatformIcon,
-  getTutorialLink
+  getPlatformIcon
 } from '@/utils/platformUtils';
 import {
   askForConfirmation as askForConfirmationDialog,

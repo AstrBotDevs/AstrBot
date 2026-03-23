@@ -20,6 +20,10 @@ const BUILTIN_PLATFORM_ICON_MAP = {
     "@/assets/images/platform_logos/wecom.png",
     import.meta.url,
   ).href,
+  weixin_oc: new URL(
+    "@/assets/images/platform_logos/wechat.png",
+    import.meta.url,
+  ).href,
   weixin_official_account: new URL(
     "@/assets/images/platform_logos/wechat.png",
     import.meta.url,
