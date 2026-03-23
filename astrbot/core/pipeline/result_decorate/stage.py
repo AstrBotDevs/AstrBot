@@ -5,7 +5,7 @@ import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
-from astrbot.core.message.components import At, Image, Node, Plain, Record, Reply
+from astrbot.core.message.components import At, Image, Json, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -275,8 +275,21 @@ class ResultDecorateStage(Stage):
                 and event.get_extra("_llm_reasoning_content")
             ):
                 # inject reasoning content to chain
-                reasoning_content = event.get_extra("_llm_reasoning_content")
-                result.chain.insert(0, Plain(f"🤔 思考: {reasoning_content}\n"))
+                reasoning_content = str(event.get_extra("_llm_reasoning_content"))
+                if event.get_platform_name() == "lark":
+                    result.chain.insert(
+                        0,
+                        Json(
+                            data={
+                                "type": "lark_collapsible_panel_reasoning",
+                                "title": "💭 Thinking",
+                                "expanded": False,
+                                "content": reasoning_content,
+                            },
+                        ),
+                    )
+                else:
+                    result.chain.insert(0, Plain(f"🤔 思考: {reasoning_content}\n"))
 
             if should_tts and tts_provider:
                 new_chain = []
