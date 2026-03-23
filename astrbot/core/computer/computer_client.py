@@ -430,9 +430,9 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             len(managed),
         )
     finally:
-        if zip_path.exists():
+        if await zip_path.exists():
             try:
-                zip_path.unlink()
+                await zip_path.unlink()
             except Exception:
                 logger.warning(
                     "[Computer] sandbox_sync phase=cleanup status=failed path=%s",
