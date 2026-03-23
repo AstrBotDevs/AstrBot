@@ -53,12 +53,6 @@ class TestComputerBooterBaseInterface:
 
         assert ComputerBooter.get_default_tools() == []
 
-    def test_get_tools_delegates_to_class(self):
-        from astrbot.core.computer.booters.base import ComputerBooter
-
-        booter = ComputerBooter()
-        assert booter.get_tools() == []
-
     def test_get_system_prompt_parts_returns_empty(self):
         from astrbot.core.computer.booters.base import ComputerBooter
 

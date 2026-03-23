@@ -321,16 +321,20 @@ class TestResolveProfile:
 
 
 class TestBaseComputerBooter:
-    """Verify base class defaults."""
+    """Verify base class defaults via subclass."""
 
     def test_capabilities_default_none(self):
-        from astrbot.core.computer.booters.base import ComputerBooter
+        """Test that ComputerBooter base capabilities returns None by default."""
+        from astrbot.core.computer.booters.shipyard import ShipyardBooter
 
-        booter = ComputerBooter()
+        # ShipyardBooter is not abstract, can be instantiated to test defaults
+        booter = ShipyardBooter.__new__(ShipyardBooter)
         assert booter.capabilities is None
 
     def test_browser_default_none(self):
-        from astrbot.core.computer.booters.base import ComputerBooter
+        """Test that ComputerBooter base browser returns None by default."""
+        from astrbot.core.computer.booters.shipyard import ShipyardBooter
 
-        booter = ComputerBooter()
+        # ShipyardBooter is not abstract, can be instantiated to test defaults
+        booter = ShipyardBooter.__new__(ShipyardBooter)
         assert booter.browser is None
