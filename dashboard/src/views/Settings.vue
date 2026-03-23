@@ -1,6 +1,6 @@
 <template>
 
-    <div style="background-color: var(--v-theme-surface, #fff); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px;">
+    <div style="background-color: var(--v-theme-surface, #fff); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 24px;">
 
         <v-list lines="two">
             <v-list-subheader>{{ tm('network.title') }}</v-list-subheader>
@@ -61,6 +61,10 @@
 
             <v-list-item :subtitle="tm('system.restart.subtitle')" :title="tm('system.restart.title')">
                 <v-btn style="margin-top: 16px;" color="error" @click="restartAstrBot">{{ tm('system.restart.button') }}</v-btn>
+            </v-list-item>
+
+            <v-list-item class="py-2">
+                <StorageCleanupPanel />
             </v-list-item>
 
             <v-list-subheader>{{ tm('apiKey.title') }}</v-list-subheader>
@@ -230,6 +234,7 @@ import ProxySelector from '@/components/shared/ProxySelector.vue';
 import MigrationDialog from '@/components/shared/MigrationDialog.vue';
 import SidebarCustomizer from '@/components/shared/SidebarCustomizer.vue';
 import BackupDialog from '@/components/shared/BackupDialog.vue';
+import StorageCleanupPanel from '@/components/shared/StorageCleanupPanel.vue';
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
 import { useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
