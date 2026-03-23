@@ -43,9 +43,12 @@ EXIT_PLUGIN_LOAD = 3
 EXIT_RUNTIME = 4
 EXIT_PLUGIN_EXECUTION = 5
 BUILD_EXCLUDED_DIRS = {
+    ".agents",
+    ".claude",
     ".git",
     ".idea",
     ".mypy_cache",
+    ".opencode",
     ".pytest_cache",
     ".ruff_cache",
     ".venv",
@@ -779,6 +782,11 @@ def _render_init_test_py(*, plugin_name: str) -> str:
     )
 
 
+def _plugin_root_hint_for_agent(agent: str) -> str:
+    skill_dir = INIT_AGENT_SKILL_ROOTS[agent] / INIT_SKILL_TEMPLATE_NAME
+    return "/".join(".." for _ in skill_dir.parts) or "."
+
+
 def _build_agent_template_context(
     *,
     plugin_name: str,
@@ -790,7 +798,7 @@ def _build_agent_template_context(
         "display_name": display_name,
         "class_name": _class_name_for_plugin(plugin_name),
         "skill_name": f"{plugin_name}_project",
-        "plugin_root": "..",
+        "plugin_root": _plugin_root_hint_for_agent(agent),
         "agent_name": agent,
         "agent_display_name": INIT_AGENT_DISPLAY_NAMES[agent],
         "skill_dir_name": INIT_SKILL_TEMPLATE_NAME,

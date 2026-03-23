@@ -78,7 +78,9 @@ async def test_db_watch_prefix_filters_within_plugin_scope(
     monkeypatch.chdir(tmp_path)
     router = CapabilityRouter()
 
-    stream = await _stream(router, "db.watch", {"prefix": "user:"}, plugin_id="plugin-a")
+    stream = await _stream(
+        router, "db.watch", {"prefix": "user:"}, plugin_id="plugin-a"
+    )
     await _call(router, "db.set", {"key": "config:1", "value": 1}, plugin_id="plugin-a")
     await _call(router, "db.set", {"key": "user:2", "value": 2}, plugin_id="plugin-b")
     await _call(router, "db.set", {"key": "user:1", "value": 3}, plugin_id="plugin-a")

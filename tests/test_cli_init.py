@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import zipfile
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -62,6 +63,7 @@ def test_init_generates_claude_agent_directory() -> None:
         content = claude_file.read_text(encoding="utf-8")
         assert "astrbot_plugin_demo_plugin" in content
         assert "name: astrbot-plugin-dev" in content
+        assert "Plugin root: `../../..`" in content
         assert (
             plugin_dir
             / ".claude"
@@ -152,3 +154,34 @@ def test_init_generates_opencode_agent_directory() -> None:
         assert opencode_file.exists()
         content = opencode_file.read_text(encoding="utf-8")
         assert "astrbot_plugin_demo_plugin" in content
+        assert "Plugin root: `../../..`" in content
+
+
+def test_build_excludes_generated_agent_skill_directories() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        init_result = runner.invoke(
+            cli,
+            ["init", "demo-plugin", "--agents", "claude,codex,opencode"],
+        )
+        assert init_result.exit_code == 0
+
+        plugin_dir = Path("astrbot_plugin_demo_plugin")
+        build_result = runner.invoke(
+            cli,
+            ["build", "--plugin-dir", str(plugin_dir)],
+        )
+
+        assert build_result.exit_code == 0
+        archive_path = plugin_dir / "dist" / "astrbot_plugin_demo_plugin-1.0.0.zip"
+        assert archive_path.exists()
+
+        with zipfile.ZipFile(archive_path) as archive:
+            names = archive.namelist()
+
+        assert "plugin.yaml" in names
+        assert "main.py" in names
+        assert all(not name.startswith(".claude/") for name in names)
+        assert all(not name.startswith(".agents/") for name in names)
+        assert all(not name.startswith(".opencode/") for name in names)
