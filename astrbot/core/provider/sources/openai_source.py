@@ -330,14 +330,20 @@ class ProviderOpenAIOfficial(Provider):
         state = ChatCompletionStreamState()
 
         async for chunk in stream:
-            try:
-                state.handle_chunk(chunk)
-            except Exception as e:
-                logger.warning("Saving chunk state error: " + str(e))
             if not chunk.choices:
                 continue
             choice = chunk.choices[0]
             delta = choice.delta
+
+            # siliconflow workaround
+            if dtcs := delta.tool_calls:
+                for tc in dtcs:
+                    if tc.function and tc.function.arguments:
+                        tc.type = "function"
+            try:
+                state.handle_chunk(chunk)
+            except Exception as e:
+                logger.error("Saving chunk state error: " + str(e))
             # logger.debug(f"chunk delta: {delta}")
             # handle the content delta
             reasoning = self._extract_reasoning_content(chunk)

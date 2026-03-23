@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 231 icons */
+/* Auto-generated MDI subset – 235 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -110,6 +110,10 @@
 
 .mdi-brain::before {
   content: "\F09D1";
+}
+
+.mdi-broom::before {
+  content: "\F00E2";
 }
 
 .mdi-bug::before {
@@ -300,12 +304,20 @@
   content: "\F1640";
 }
 
+.mdi-database-refresh-outline::before {
+  content: "\F1634";
+}
+
 .mdi-delete::before {
   content: "\F01B4";
 }
 
 .mdi-delete-outline::before {
   content: "\F09E7";
+}
+
+.mdi-delete-sweep-outline::before {
+  content: "\F0C62";
 }
 
 .mdi-dots-hexagon::before {
@@ -726,6 +738,10 @@
 
 .mdi-puzzle-outline::before {
   content: "\F0A66";
+}
+
+.mdi-qrcode::before {
+  content: "\F0432";
 }
 
 .mdi-refresh::before {

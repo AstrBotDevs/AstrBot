@@ -84,6 +84,40 @@
       "title": "Backup & Restore",
       "subtitle": "Export or import all AstrBot data for easy migration to a new server",
       "button": "Backup Manager"
+    },
+    "cleanup": {
+      "title": "Log & Cache Cleanup",
+      "subtitle": "Review disk usage for logs and caches, then clean them from the UI without shell commands.",
+      "refresh": "Refresh Usage",
+      "cleanAll": "Clean All",
+      "panel": {
+        "title": "Cleanup Details",
+        "subtitle": "Current usage: {size}"
+      },
+      "fileCount": "{count} files",
+      "confirm": "Clean {target} now?",
+      "targetNames": {
+        "cache": "cache",
+        "logs": "logs",
+        "all": "logs and cache"
+      },
+      "targets": {
+        "cache": {
+          "title": "Cache",
+          "subtitle": "Remove temporary files, plugin market cache, and skill cache.",
+          "button": "Clean Cache"
+        },
+        "logs": {
+          "title": "Logs",
+          "subtitle": "Remove rotated logs and truncate the current active log files.",
+          "button": "Clean Logs"
+        }
+      },
+      "messages": {
+        "statusFailed": "Failed to load storage usage",
+        "cleanupSuccess": "Cleared {count} files and freed {size}",
+        "cleanupFailed": "Cleanup failed"
+      }
     }
   },
   "sidebar": {

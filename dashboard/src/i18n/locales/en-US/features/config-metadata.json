@@ -1469,15 +1469,15 @@
       },
       "mimo-tts-style-prompt": {
         "description": "Style prompt",
-        "hint": "Guides speaking style, tone, or emotion such as gentle, lively, or calm. Optional."
+        "hint": "Prepended to the synthesis target text as a <style>...</style> tag to control speed, emotion, character, or style, such as happy, faster, Sun Wukong, or whispering. Optional."
       },
       "mimo-tts-dialect": {
         "description": "Dialect",
-        "hint": "Target dialect or accent for generated speech, such as Sichuan dialect. Optional."
+        "hint": "Combined with the style prompt inside the leading <style>...</style> tag, for example Northeastern Mandarin, Sichuan dialect, Henan dialect, or Cantonese. Optional."
       },
       "mimo-tts-seed-text": {
         "description": "Seed text",
-        "hint": "Reference text used to guide voice characteristics and speaking style."
+        "hint": "Sent as an optional user message to help guide tone and speaking style. It is not appended to the synthesis target text."
       },
       "fishaudio-tts-character": {
         "description": "character",
