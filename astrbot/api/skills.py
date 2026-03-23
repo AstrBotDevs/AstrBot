@@ -24,7 +24,8 @@ Example:
 from __future__ import annotations
 
 # Import from _internal package (the canonical source)
-from astrbot._internal.skills.manager import SkillInfo, SkillManager
+# TODO: fix path - should be core.skills.skill_manager
+from astrbot.core.skills.skill_manager import SkillInfo, SkillManager
 from astrbot._internal.tools.base import FunctionTool
 
 __all__ = ["SkillInfo", "SkillManager", "get_skill_manager", "skill_to_tool"]

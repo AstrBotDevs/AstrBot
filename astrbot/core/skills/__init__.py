@@ -28,12 +28,10 @@ from astrbot._internal.skills import (
     SkillInfo,
     SkillManager,
     build_skills_prompt,
-    SkillToToolConverter,
 )
 
 __all__ = [
     "SkillInfo",
     "SkillManager",
     "build_skills_prompt",
-    "SkillToToolConverter",
 ]

@@ -60,6 +60,7 @@ def verify_dashboard_password(value: str, stored_hash: str) -> bool:
     Supported format:
     - Argon2 encoded string: $argon2id$...
     - PBKDF2 encoded string: pbkdf2_sha256$...
+    - Legacy SHA-256 (64 hex chars) and MD5 (32 hex chars) for backward compatibility.
     """
     if not stored_hash:
         return False
@@ -82,6 +83,14 @@ def verify_dashboard_password(value: str, stored_hash: str) -> bool:
             return dk.hex() == expected
         except Exception:
             return False
+
+    # Legacy plain hex digests: SHA-256 (64 hex chars) and MD5 (32 hex chars).
+    value_l = value.encode("utf-8")
+    s = stored_hash.lower()
+    if len(s) == 64 and all(ch in "0123456789abcdef" for ch in s):
+        return hashlib.sha256(value_l).hexdigest() == s
+    if len(s) == 32 and all(ch in "0123456789abcdef" for ch in s):
+        return hashlib.md5(value_l).hexdigest() == s
 
     return False
 
