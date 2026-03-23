@@ -22,7 +22,10 @@ from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_image_by_url, file_to_base64
-from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
+from astrbot.core.utils.tencent_record_helper import (
+    convert_to_pcm_wav,
+    wav_to_tencent_silk,
+)
 
 
 def _patch_qq_botpy_formdata() -> None:
@@ -602,22 +605,41 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 image_base64 = image_base64.removeprefix("base64://")
             elif isinstance(i, Record):
                 if i.file:
-                    record_wav_path = await i.convert_to_file_path()  # wav 路径
+                    record_wav_path = await i.convert_to_file_path()  # 可能不是wav
                     temp_dir = get_astrbot_temp_path()
                     record_tecent_silk_path = os.path.join(
                         temp_dir,
                         f"qqofficial_{uuid.uuid4()}.silk",
                     )
-                    try:
-                        duration = await wav_to_tencent_silk(
-                            record_wav_path,
-                            record_tecent_silk_path,
+                    # 检查是否为 WAV 文件，非 WAV 需要先转换
+                    ext = os.path.splitext(record_wav_path)[1].lower()
+                    if ext != ".wav":
+                        temp_wav_path = os.path.join(
+                            temp_dir,
+                            f"qqofficial_{uuid.uuid4()}.wav",
                         )
-                        if duration > 0:
-                            record_file_path = record_tecent_silk_path
+                        try:
+                            record_wav_path = await convert_to_pcm_wav(
+                                record_wav_path,
+                                temp_wav_path,
+                            )
+                        except Exception as e:
+                            logger.error(f"转换音频为WAV格式时出错: {e}")
+                            record_file_path = None
+                            record_wav_path = None
+                    try:
+                        if record_wav_path:
+                            duration = await wav_to_tencent_silk(
+                                record_wav_path,
+                                record_tecent_silk_path,
+                            )
+                            if duration > 0:
+                                record_file_path = record_tecent_silk_path
+                            else:
+                                record_file_path = None
+                                logger.error("转换音频格式时出错：音频时长不大于0")
                         else:
                             record_file_path = None
-                            logger.error("转换音频格式时出错：音频时长不大于0")
                     except Exception as e:
                         logger.error(f"处理语音时出错: {e}")
                         record_file_path = None
