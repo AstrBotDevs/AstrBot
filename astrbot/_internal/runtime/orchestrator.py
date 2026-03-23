@@ -71,6 +71,13 @@ class AstrbotOrchestrator(BaseAstrbotOrchestrator):
         self._running = True
         log.info("AstrbotOrchestrator run loop started.")
 
+        # TODO: Replace asyncio.sleep loop with proper task scheduling using anyio.
+        # The ASYNC110 warning is valid - this should use asyncio.Event.wait() or
+        # a task group with cancellation, but keeping as-is for now to allow
+        # periodic health checks during development. Final implementation should:
+        # - Use anyio.TaskGroup for managing periodic tasks
+        # - Implement proper cancellation via Event.wait()
+        # - Avoid busy-waiting with sleep intervals
         try:
             while self._running:
                 # TODO: Periodic tasks:

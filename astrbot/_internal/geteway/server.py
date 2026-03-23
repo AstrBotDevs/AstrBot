@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -21,7 +20,6 @@ from astrbot._internal.geteway.ws_manager import WebSocketManager
 try:
     from fastapi import FastAPI, WebSocket, WebSocketDisconnect
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import JSONResponse
 except ImportError:
     logger.warning("FastAPI not installed, gateway unavailable.")
     FastAPI = None  # type: ignore
