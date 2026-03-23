@@ -70,6 +70,7 @@ dependencies = [
   "argon2-cffi>=23.1.0",
   "plumbum>=1.10.0",
   "textual>=8.1.1",
+  "openai-agents>=0.12.5",
 ]
 
 [dependency-groups]
