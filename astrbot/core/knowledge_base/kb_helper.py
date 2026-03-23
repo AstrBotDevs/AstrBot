@@ -60,7 +60,7 @@ async def _repair_and_translate_chunk_with_retry(
     """
     Repairs, translates, and optionally re-chunks a single text chunk using the small LLM, with rate limiting.
     """
-    # 为了防止 LLM 上下文污染，在 user_prompt 中也加入明确的指令
+    # 为了防止 LLM 上下文污染,在 user_prompt 中也加入明确的指令
     user_prompt = f"""IGNORE ALL PREVIOUS INSTRUCTIONS. Your ONLY task is to process the following text chunk according to the system prompt provided.
 
 Text chunk to process:
@@ -95,7 +95,7 @@ Text chunk to process:
                 return []
         except Exception as e:
             logger.warning(
-                f"  - LLM call failed on attempt {attempt + 1}/{max_retries + 1}. Error: {str(e)}"
+                f"  - LLM call failed on attempt {attempt + 1}/{max_retries + 1}. Error: {e!s}"
             )
 
     logger.error(
@@ -141,7 +141,7 @@ class KBHelper:
     async def get_ep(self) -> EmbeddingProvider:
         if not self.kb.embedding_provider_id:
             raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
-        ep: EmbeddingProvider = await self.prov_mgr.get_provider_by_id(
+        ep = await self.prov_mgr.get_provider_by_id(
             self.kb.embedding_provider_id,
         )
         if not ep:
@@ -157,7 +157,7 @@ class KBHelper:
     async def get_rp(self) -> RerankProvider | None:
         if not self.kb.rerank_provider_id:
             return None
-        rp: RerankProvider = await self.prov_mgr.get_provider_by_id(
+        rp = await self.prov_mgr.get_provider_by_id(
             self.kb.rerank_provider_id,
         )
         if not rp:
@@ -212,7 +212,7 @@ class KBHelper:
         progress_callback=None,
         pre_chunked_text: list[str] | None = None,
     ) -> KBDocument:
-        """上传并处理文档（带原子性保证和失败清理）
+        """上传并处理文档(带原子性保证和失败清理)
 
         流程:
         1. 保存原始文件
@@ -220,11 +220,11 @@ class KBHelper:
         3. 提取多媒体资源
         4. 分块处理
         5. 生成向量并存储
-        6. 保存元数据（事务）
+        6. 保存元数据(事务)
         7. 更新统计
 
         Args:
-            progress_callback: 进度回调函数，接收参数 (stage, current, total)
+            progress_callback: 进度回调函数,接收参数 (stage, current, total)
                 - stage: 当前阶段 ('parsing', 'chunking', 'embedding')
                 - current: 当前进度
                 - total: 总数
@@ -233,29 +233,29 @@ class KBHelper:
         await self._ensure_vec_db()
         doc_id = str(uuid.uuid4())
         media_paths: list[Path] = []
+        saved_file_path: Path | None = None
         file_size = 0
 
-        # file_path = self.kb_files_dir / f"{doc_id}.{file_type}"
-        # async with aiofiles.open(file_path, "wb") as f:
-        #     await f.write(file_content)
-
         try:
-            chunks_text = []
-            saved_media = []
+            chunks_text: list[str] = []
+            saved_media: list[KBMedia] = []
 
             if pre_chunked_text is not None:
-                # 如果提供了预分块文本，直接使用
+                # 如果提供了预分块文本,直接使用
                 chunks_text = pre_chunked_text
                 file_size = sum(len(chunk) for chunk in chunks_text)
-                logger.info(f"使用预分块文本进行上传，共 {len(chunks_text)} 个块。")
+                logger.info(f"使用预分块文本进行上传,共 {len(chunks_text)} 个块｡")
             else:
-                # 否则，执行标准的文件解析和分块流程
+                # 否则,执行标准的文件解析和分块流程
                 if file_content is None:
                     raise ValueError(
-                        "当未提供 pre_chunked_text 时，file_content 不能为空。"
+                        "当未提供 pre_chunked_text 时,file_content 不能为空｡"
                     )
 
                 file_size = len(file_content)
+                saved_file_path = self.kb_files_dir / f"{doc_id}.{file_type}"
+                async with aiofiles.open(saved_file_path, "wb") as f:
+                    await f.write(file_content)
 
                 # 阶段1: 解析文档
                 if progress_callback:
@@ -305,7 +305,7 @@ class KBHelper:
             if progress_callback:
                 await progress_callback("chunking", 100, 100)
 
-            # 阶段3: 生成向量（带进度回调）
+            # 阶段3: 生成向量(带进度回调)
             async def embedding_progress_callback(current, total) -> None:
                 if progress_callback:
                     await progress_callback("embedding", current, total)
@@ -326,17 +326,15 @@ class KBHelper:
                 doc_name=file_name,
                 file_type=file_type,
                 file_size=file_size,
-                # file_path=str(file_path),
-                file_path="",
+                file_path=str(saved_file_path) if saved_file_path else "",
                 chunk_count=len(chunks_text),
-                media_count=0,
+                media_count=len(saved_media),
             )
             async with self.kb_db.get_db() as session:
                 async with session.begin():
                     session.add(doc)
                     for media in saved_media:
                         session.add(media)
-                    await session.commit()
 
                 await session.refresh(doc)
 
@@ -347,8 +345,14 @@ class KBHelper:
             return doc
         except Exception as e:
             logger.error(f"上传文档失败: {e}")
-            # if file_path.exists():
-            #     file_path.unlink()
+
+            if saved_file_path and saved_file_path.exists():
+                try:
+                    saved_file_path.unlink()
+                except Exception as file_error:
+                    logger.warning(
+                        f"清理原始文档文件失败 {saved_file_path}: {file_error}"
+                    )
 
             for media_path in media_paths:
                 try:
@@ -357,7 +361,7 @@ class KBHelper:
                 except Exception as me:
                     logger.warning(f"清理多媒体文件失败 {media_path}: {me}")
 
-            raise e
+            raise
 
     async def list_documents(
         self,
@@ -412,7 +416,6 @@ class KBHelper:
         async with self.kb_db.get_db() as session:
             async with session.begin():
                 session.add(doc)
-                await session.commit()
             await session.refresh(doc)
 
     async def get_chunks_by_doc_id(
@@ -492,7 +495,7 @@ class KBHelper:
         enable_cleaning: bool = False,
         cleaning_provider_id: str | None = None,
     ) -> KBDocument:
-        """从 URL 上传并处理文档（带原子性保证和失败清理）
+        """从 URL 上传并处理文档(带原子性保证和失败清理)
         Args:
             url: 要提取内容的网页 URL
             chunk_size: 文本块大小
@@ -500,7 +503,7 @@ class KBHelper:
             batch_size: 批处理大小
             tasks_limit: 并发任务限制
             max_retries: 最大重试次数
-            progress_callback: 进度回调函数，接收参数 (stage, current, total)
+            progress_callback: 进度回调函数,接收参数 (stage, current, total)
                 - stage: 当前阶段 ('extracting', 'cleaning', 'parsing', 'chunking', 'embedding')
                 - current: 当前进度
                 - total: 总数
@@ -549,7 +552,7 @@ class KBHelper:
 
         if enable_cleaning and not final_chunks:
             raise ValueError(
-                "内容清洗后未提取到有效文本。请尝试关闭内容清洗功能，或更换更高性能的LLM模型后重试。"
+                "内容清洗后未提取到有效文本｡请尝试关闭内容清洗功能,或更换更高性能的LLM模型后重试｡"
             )
 
         # 创建一个虚拟文件名
@@ -557,7 +560,7 @@ class KBHelper:
         if not Path(file_name).suffix:
             file_name += ".url"
 
-        # 复用现有的 upload_document 方法，但传入预分块文本
+        # 复用现有的 upload_document 方法,但传入预分块文本
         return await self.upload_document(
             file_name=file_name,
             file_content=None,
@@ -583,12 +586,12 @@ class KBHelper:
         chunk_overlap: int = 50,
     ) -> list[str]:
         """
-        对从 URL 获取的内容进行清洗、修复、翻译和重新分块。
+        对从 URL 获取的内容进行清洗､修复､翻译和重新分块｡
         """
         if not enable_cleaning:
-            # 如果不启用清洗，则使用从前端传递的参数进行分块
+            # 如果不启用清洗,则使用从前端传递的参数进行分块
             logger.info(
-                f"内容清洗未启用，使用指定参数进行分块: chunk_size={chunk_size}, chunk_overlap={chunk_overlap}"
+                f"内容清洗未启用,使用指定参数进行分块: chunk_size={chunk_size}, chunk_overlap={chunk_overlap}"
             )
             return await self.chunker.chunk(
                 content, chunk_size=chunk_size, chunk_overlap=chunk_overlap
@@ -596,7 +599,7 @@ class KBHelper:
 
         if not cleaning_provider_id:
             logger.warning(
-                "启用了内容清洗，但未提供 cleaning_provider_id，跳过清洗并使用默认分块。"
+                "启用了内容清洗,但未提供 cleaning_provider_id,跳过清洗并使用默认分块｡"
             )
             return await self.chunker.chunk(content)
 
@@ -612,14 +615,14 @@ class KBHelper:
                 )
 
             # 初步分块
-            # 优化分隔符，优先按段落分割，以获得更高质量的文本块
+            # 优化分隔符,优先按段落分割,以获得更高质量的文本块
             text_splitter = RecursiveCharacterChunker(
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
                 separators=["\n\n", "\n", " "],  # 优先使用段落分隔符
             )
             initial_chunks = await text_splitter.chunk(content)
-            logger.info(f"初步分块完成，生成 {len(initial_chunks)} 个块用于修复。")
+            logger.info(f"初步分块完成,生成 {len(initial_chunks)} 个块用于修复｡")
 
             # 并发处理所有块
             rate_limiter = RateLimiter(repair_max_rpm)
@@ -635,13 +638,13 @@ class KBHelper:
             final_chunks = []
             for i, result in enumerate(repaired_results):
                 if isinstance(result, Exception):
-                    logger.warning(f"块 {i} 处理异常: {str(result)}. 回退到原始块。")
+                    logger.warning(f"块 {i} 处理异常: {result!s}. 回退到原始块｡")
                     final_chunks.append(initial_chunks[i])
                 elif isinstance(result, list):
                     final_chunks.extend(result)
 
             logger.info(
-                f"文本修复完成: {len(initial_chunks)} 个原始块 -> {len(final_chunks)} 个最终块。"
+                f"文本修复完成: {len(initial_chunks)} 个原始块 -> {len(final_chunks)} 个最终块｡"
             )
 
             if progress_callback:
@@ -651,5 +654,5 @@ class KBHelper:
 
         except Exception as e:
             logger.error(f"使用 Provider '{cleaning_provider_id}' 清洗内容失败: {e}")
-            # 清洗失败，返回默认分块结果，保证流程不中断
+            # 清洗失败,返回默认分块结果,保证流程不中断
             return await self.chunker.chunk(content)

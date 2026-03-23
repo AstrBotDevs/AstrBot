@@ -255,7 +255,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import axios from 'axios'
+import axios from '@/utils/request'
 import { useModuleI18n } from '@/i18n/composables'
 import DocumentsTab from './components/DocumentsTab.vue'
 import RetrievalTab from './components/RetrievalTab.vue'

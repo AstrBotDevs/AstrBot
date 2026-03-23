@@ -378,7 +378,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import axios from '@/utils/request'
 import { useModuleI18n } from '@/i18n/composables'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/index')

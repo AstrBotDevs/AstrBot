@@ -62,7 +62,7 @@ class SharedPreferences:
         key: str | None = None,
     ) -> list[Preference]:
         """获取指定范围的偏好设置
-        Note: 返回 Preference 列表，其中的 value 属性是一个 dict，value["val"] 为值。scope_id 和 key 可以为 None，这时返回该范围下所有的偏好设置。
+        Note: 返回 Preference 列表,其中的 value 属性是一个 dict,value["val"] 为值｡scope_id 和 key 可以为 None,这时返回该范围下所有的偏好设置｡
         """
         ret = await self.db_helper.get_preferences(scope, scope_id, key)
         return ret
@@ -107,7 +107,7 @@ class SharedPreferences:
     ) -> _VT | list[Preference]:
         """获取会话范围的偏好设置
 
-        Note: 当 umo 或者 key 为 None，时，返回 Preference 列表，其中的 value 属性是一个 dict，value["val"] 为值。
+        Note: 当 umo 或者 key 为 None,时,返回 Preference 列表,其中的 value 属性是一个 dict,value["val"] 为值｡
         """
         if umo is None or key is None:
             return await self.range_get_async("umo", umo, key)
@@ -126,7 +126,7 @@ class SharedPreferences:
     ) -> _VT | list[Preference]:
         """获取全局范围的偏好设置
 
-        Note: 当 scope_id 或者 key 为 None，时，返回 Preference 列表，其中的 value 属性是一个 dict，value["val"] 为值。
+        Note: 当 scope_id 或者 key 为 None,时,返回 Preference 列表,其中的 value 属性是一个 dict,value["val"] 为值｡
         """
         if key is None:
             return await self.range_get_async("global", "global", key)
@@ -173,7 +173,7 @@ class SharedPreferences:
         scope: str | None = None,
         scope_id: str | None = "",
     ) -> _VT:
-        """获取偏好设置（已弃用）"""
+        """获取偏好设置(已弃用)"""
         if scope_id == "":
             scope_id = "unknown"
         if scope_id is None or key is None:
@@ -194,7 +194,7 @@ class SharedPreferences:
         scope_id: str | None = None,
         key: str | None = None,
     ) -> list[Preference]:
-        """获取指定范围的偏好设置（已弃用）"""
+        """获取指定范围的偏好设置(已弃用)"""
         result = asyncio.run_coroutine_threadsafe(
             self.range_get_async(scope, scope_id, key),
             self._sync_loop,
@@ -205,7 +205,7 @@ class SharedPreferences:
     def put(
         self, key, value, scope: str | None = None, scope_id: str | None = None
     ) -> None:
-        """设置偏好设置（已弃用）"""
+        """设置偏好设置(已弃用)"""
         asyncio.run_coroutine_threadsafe(
             self.put_async(scope or "unknown", scope_id or "unknown", key, value),
             self._sync_loop,
@@ -214,14 +214,14 @@ class SharedPreferences:
     def remove(
         self, key, scope: str | None = None, scope_id: str | None = None
     ) -> None:
-        """删除偏好设置（已弃用）"""
+        """删除偏好设置(已弃用)"""
         asyncio.run_coroutine_threadsafe(
             self.remove_async(scope or "unknown", scope_id or "unknown", key),
             self._sync_loop,
         ).result()
 
     def clear(self, scope: str | None = None, scope_id: str | None = None) -> None:
-        """清空偏好设置（已弃用）"""
+        """清空偏好设置(已弃用)"""
         asyncio.run_coroutine_threadsafe(
             self.clear_async(scope or "unknown", scope_id or "unknown"),
             self._sync_loop,

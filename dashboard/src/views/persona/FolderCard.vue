@@ -1,98 +1,32 @@
 <template>
-  <v-card
-    class="folder-card"
-    :class="{ 'drag-over': isDragOver }"
-    rounded="lg"
-    elevation="1"
-    hover
-    @click="$emit('click')"
-    @contextmenu.prevent="$emit('contextmenu', $event)"
-    @dragover.prevent="handleDragOver"
-    @dragleave="handleDragLeave"
-    @drop.prevent="handleDrop"
-  >
-    <v-card-text class="d-flex align-center pa-3">
-      <v-icon
-        size="40"
-        color="amber-darken-2"
-        class="mr-3"
-      >
-        mdi-folder
-      </v-icon>
-      <div class="folder-info flex-grow-1 overflow-hidden">
-        <div class="text-subtitle-1 font-weight-medium text-truncate">
-          {{ folder.name }}
-        </div>
-        <div
-          v-if="folder.description"
-          class="text-body-2 text-medium-emphasis text-truncate"
-        >
-          {{ folder.description }}
-        </div>
-      </div>
-      <v-menu offset-y>
-        <template #activator="{ props }">
-          <v-btn
-            icon="mdi-dots-vertical"
-            variant="text"
-            size="small"
-            v-bind="props"
-            @click.stop
-          />
-        </template>
-        <v-list density="compact">
-          <v-list-item @click.stop="$emit('open')">
-            <template #prepend>
-              <v-icon size="small">
-                mdi-folder-open
-              </v-icon>
-            </template>
-            <v-list-item-title>{{ tm('folder.contextMenu.open') }}</v-list-item-title>
-          </v-list-item>
-          <v-list-item @click.stop="$emit('rename')">
-            <template #prepend>
-              <v-icon size="small">
-                mdi-pencil
-              </v-icon>
-            </template>
-            <v-list-item-title>{{ tm('folder.contextMenu.rename') }}</v-list-item-title>
-          </v-list-item>
-          <v-list-item @click.stop="$emit('move')">
-            <template #prepend>
-              <v-icon size="small">
-                mdi-folder-move
-              </v-icon>
-            </template>
-            <v-list-item-title>{{ tm('folder.contextMenu.moveTo') }}</v-list-item-title>
-          </v-list-item>
-          <v-divider class="my-1" />
-          <v-list-item
-            class="text-error"
-            @click.stop="$emit('delete')"
-          >
-            <template #prepend>
-              <v-icon
-                size="small"
-                color="error"
-              >
-                mdi-delete
-              </v-icon>
-            </template>
-            <v-list-item-title>{{ tm('folder.contextMenu.delete') }}</v-list-item-title>
-          </v-list-item>
-        </v-list>
-      </v-menu>
-    </v-card-text>
-  </v-card>
+    <BaseFolderCard
+        :folder="folder"
+        :accept-drop-types="['persona']"
+        :labels="{
+            open: tm('folder.contextMenu.open'),
+            rename: tm('folder.contextMenu.rename'),
+            moveTo: tm('folder.contextMenu.moveTo'),
+            delete: tm('folder.contextMenu.delete')
+        }"
+        @click="$emit('click')"
+        @contextmenu.native.prevent="$emit('contextmenu', $event)"
+        @open="$emit('open')"
+        @rename="$emit('rename')"
+        @move="$emit('move')"
+        @delete="$emit('delete')"
+        @item-dropped="onItemDropped"
+    />
 </template>
 
 <script lang="ts">
 import { defineComponent, type PropType } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
+import BaseFolderCard from '@/components/folder/BaseFolderCard.vue';
 import type { Folder } from '@/components/folder/types';
 
 export default defineComponent({
     name: 'FolderCard',
+    components: { BaseFolderCard },
     props: {
         folder: {
             type: Object as PropType<Folder>,
@@ -104,35 +38,13 @@ export default defineComponent({
         const { tm } = useModuleI18n('features/persona');
         return { tm };
     },
-    data() {
-        return {
-            isDragOver: false
-        };
-    },
     methods: {
-        handleDragOver(event: DragEvent) {
-            if (event.dataTransfer) {
-                event.dataTransfer.dropEffect = 'move';
-            }
-            this.isDragOver = true;
-        },
-        handleDragLeave() {
-            this.isDragOver = false;
-        },
-        handleDrop(event: DragEvent) {
-            this.isDragOver = false;
-            if (!event.dataTransfer) return;
-            
-            try {
-                const data = JSON.parse(event.dataTransfer.getData('application/json'));
-                if (data.type === 'persona') {
-                    this.$emit('persona-dropped', {
-                        persona_id: data.persona_id,
-                        target_folder_id: this.folder.folder_id
-                    });
-                }
-            } catch (e) {
-                console.error('Failed to parse drop data:', e);
+        onItemDropped(data: { item_id: string; item_type: string; target_folder_id: string | null; source_data?: any }) {
+            if (data.item_type === 'persona') {
+                this.$emit('persona-dropped', {
+                    persona_id: data.item_id,
+                    target_folder_id: data.target_folder_id ?? this.folder.folder_id
+                });
             }
         }
     }

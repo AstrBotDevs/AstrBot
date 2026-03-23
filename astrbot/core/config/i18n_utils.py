@@ -16,13 +16,13 @@ class ConfigMetadataI18n:
         生成国际化键
 
         Args:
-            group: 配置组，如 'ai_group', 'platform_group'
-            section: 配置节，如 'agent_runner', 'general'
-            field: 字段名，如 'enable', 'default_provider'
-            attr: 属性类型，如 'description', 'hint', 'labels'
+            group: 配置组,如 'ai_group', 'platform_group'
+            section: 配置节,如 'agent_runner', 'general'
+            field: 字段名,如 'enable', 'default_provider'
+            attr: 属性类型,如 'description', 'hint', 'labels'
 
         Returns:
-            国际化键，格式如: 'ai_group.agent_runner.enable.description'
+            国际化键,格式如: 'ai_group.agent_runner.enable.description'
         """
         if field:
             return f"{group}.{section}.{field}.{attr}"

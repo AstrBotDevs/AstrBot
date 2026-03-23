@@ -589,7 +589,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import axios from '@/utils/request';
 import { debounce } from 'lodash';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import { useCommonStore } from '@/stores/common';

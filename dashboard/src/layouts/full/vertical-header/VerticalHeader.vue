@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
-import axios from "axios";
+import axios from "@/utils/request";
 import Logo from "@/components/shared/Logo.vue";
-import { md5 } from "js-md5";
 import { useAuthStore } from "@/stores/auth";
 import { useCommonStore } from "@/stores/common";
 import { MarkdownRender, enableKatex, enableMermaid } from "markstream-vue";
@@ -266,22 +265,16 @@ function handleLogout() {
 }
 
 // 账户修改
-function accountEdit() {
+async function accountEdit() {
   accountEditStatus.value.loading = true;
   accountEditStatus.value.error = false;
   accountEditStatus.value.success = false;
 
-  const passwordHash = password.value ? md5(password.value) : "";
-  const newPasswordHash = newPassword.value ? md5(newPassword.value) : "";
-  const confirmPasswordHash = confirmPassword.value
-    ? md5(confirmPassword.value)
-    : "";
-
   axios
     .post("/api/auth/account/edit", {
-      password: passwordHash,
-      new_password: newPasswordHash,
-      confirm_password: confirmPasswordHash,
+      password: password.value,
+      new_password: newPassword.value,
+      confirm_password: confirmPassword.value,
       new_username: newUsername.value ? newUsername.value : username,
     })
     .then((res) => {
@@ -616,13 +609,13 @@ const isChristmas = computed(() => {
         >
           <v-btn
             value="chat"
-            prepend-icon="mdi-chat-processing-outline"
+            prepend-icon="mdi-chat-processing"
           >
             Chat
           </v-btn>
           <v-btn
             value="bot"
-            prepend-icon="mdi-robot-outline"
+            prepend-icon="mdi-robot"
           >
             Bot
           </v-btn>
@@ -840,7 +833,7 @@ const isChristmas = computed(() => {
           @click="handleLogout"
         >
           <template #prepend>
-            <v-icon>mdi-logout</v-icon>
+            <v-icon>mdi-export</v-icon>
           </template>
           <v-list-item-title>
             {{

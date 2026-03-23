@@ -71,37 +71,13 @@
       </transition-group>
     </div>
 
-    <!-- iPython Tool Block -->
-    <ToolCallItem
-      v-else-if="renderPart.type === 'ipython'"
-      :is-dark="isDark"
-      style="margin: 8px 0 4px;"
-    >
-      <template #label="{ expanded }">
-        <v-icon size="x-small">
-          mdi-code-json
-        </v-icon>
-        <span class="ipython-label">{{ tm('actions.pythonCodeAnalysis') }}</span>
-        <span style="opacity: 0.6;">{{ renderPart.toolCall.finished_ts ?
-          formatDuration(renderPart.toolCall.finished_ts -
-            renderPart.toolCall.ts) : getElapsedTime(renderPart.toolCall.ts) }}</span>
-        <v-icon
-          size="small"
-          class="ipython-icon"
-          :class="{ rotated: expanded }"
-        >
-          mdi-chevron-right
-        </v-icon>
-      </template>
-      <template #details>
-        <IPythonToolBlock
-          :tool-call="renderPart.toolCall"
-          :is-dark="isDark"
-          :show-header="false"
-          :force-expanded="true"
-        />
-      </template>
-    </ToolCallItem>
+        <!-- Text (Markdown) -->
+        <MarkdownRender
+            v-else-if="renderPart.part.type === 'plain' && renderPart.part.text && renderPart.part.text.trim()"
+            custom-id="message-list" :custom-html-tags="['ref']"
+            :content="normalizeMarkdownContent(renderPart.part.text)" :typewriter="false"
+            class="markdown-content" :is-dark="isDark" :monacoOptions="{ theme: isDark ? 'vs-dark' : 'vs-light' }"
+            :key="`${renderPart.key}-${isDark ? 'dark' : 'light'}`"/>
 
     <!-- Text (Markdown) -->
     <MarkdownRender
@@ -239,6 +215,21 @@ const emitOpenImage = (url) => {
 
 const emitDownloadFile = (file) => {
     emit('download-file', file);
+};
+
+const isMarkdownCodeFence = (text) => /^(```|~~~)/.test(text.trim());
+
+const looksLikeStandaloneHtml = (text) => {
+    const normalized = text.trim();
+    if (!normalized) return false;
+    if (!/(<!doctype\s+html|<html\b|<head\b|<body\b)/i.test(normalized)) return false;
+    return /(<\/html>|<\/body>|<\/head>|<form\b|<input\b|<button\b)/i.test(normalized);
+};
+
+const normalizeMarkdownContent = (text) => {
+    if (typeof text !== 'string') return text;
+    if (isMarkdownCodeFence(text) || !looksLikeStandaloneHtml(text)) return text;
+    return `\`\`\`\`html\n${text}\n\`\`\`\``;
 };
 
 const formatDuration = (seconds) => {

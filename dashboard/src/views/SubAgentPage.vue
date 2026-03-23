@@ -332,7 +332,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import axios from 'axios'
+import axios from '@/utils/request'
 import ProviderSelector from '@/components/shared/ProviderSelector.vue'
 import PersonaSelector from '@/components/shared/PersonaSelector.vue'
 import PersonaQuickPreview from '@/components/shared/PersonaQuickPreview.vue'

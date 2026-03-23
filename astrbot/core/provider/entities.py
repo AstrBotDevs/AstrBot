@@ -95,12 +95,12 @@ class ProviderRequest:
     image_urls: list[str] = field(default_factory=list)
     """图片 URL 列表"""
     extra_user_content_parts: list[ContentPart] = field(default_factory=list)
-    """额外的用户消息内容部分列表，用于在用户消息后添加额外的内容块（如系统提醒、指令等）。支持 dict 或 ContentPart 对象"""
+    """额外的用户消息内容部分列表,用于在用户消息后添加额外的内容块(如系统提醒､指令等)｡支持 dict 或 ContentPart 对象"""
     func_tool: ToolSet | None = None
     """可用的函数工具"""
     contexts: list[dict] = field(default_factory=list)
     """
-    OpenAI 格式上下文列表。
+    OpenAI 格式上下文列表｡
     参考 https://platform.openai.com/docs/api-reference/chat/create#chat-create-messages
     """
     system_prompt: str = ""
@@ -108,9 +108,9 @@ class ProviderRequest:
     conversation: Conversation | None = None
     """关联的对话对象"""
     tool_calls_result: list[ToolCallsResult] | ToolCallsResult | None = None
-    """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
+    """附加的上次请求后工具调用的结果｡参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
     model: str | None = None
-    """模型名称，为 None 时使用提供商的默认模型"""
+    """模型名称,为 None 时使用提供商的默认模型"""
 
     def __repr__(self) -> str:
         return (
@@ -134,7 +134,7 @@ class ProviderRequest:
         self.tool_calls_result.append(tool_calls_result)
 
     def _print_friendly_context(self):
-        """打印友好的消息上下文。将 image_url 的值替换为 <Image>"""
+        """打印友好的消息上下文｡将 image_url 的值替换为 <Image>"""
         if not self.contexts:
             return f"prompt: {self.prompt}, image_count: {len(self.image_urls or [])}"
 
@@ -169,18 +169,18 @@ class ProviderRequest:
         return "\n".join(result_parts)
 
     async def assemble_context(self) -> dict:
-        """将请求(prompt 和 image_urls)包装成 OpenAI 的消息格式。"""
+        """将请求(prompt 和 image_urls)包装成 OpenAI 的消息格式｡"""
         # 构建内容块列表
         content_blocks = []
 
-        # 1. 用户原始发言（OpenAI 建议：用户发言在前）
+        # 1. 用户原始发言(OpenAI 建议:用户发言在前)
         if self.prompt and self.prompt.strip():
             content_blocks.append({"type": "text", "text": self.prompt})
         elif self.image_urls:
-            # 如果没有文本但有图片，添加占位文本
+            # 如果没有文本但有图片,添加占位文本
             content_blocks.append({"type": "text", "text": "[图片]"})
 
-        # 2. 额外的内容块（系统提醒、指令等）
+        # 2. 额外的内容块(系统提醒､指令等)
         if self.extra_user_content_parts:
             for part in self.extra_user_content_parts:
                 content_blocks.append(part.model_dump())
@@ -197,13 +197,13 @@ class ProviderRequest:
                 else:
                     image_data = await self._encode_image_bs64(image_url)
                 if not image_data:
-                    logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                    logger.warning(f"图片 {image_url} 得到的结果为空,将忽略｡")
                     continue
                 content_blocks.append(
                     {"type": "image_url", "image_url": {"url": image_data}},
                 )
 
-        # 只有当只有一个来自 prompt 的文本块且没有额外内容块时，才降级为简单格式以保持向后兼容
+        # 只有当只有一个来自 prompt 的文本块且没有额外内容块时,才降级为简单格式以保持向后兼容
         if (
             len(content_blocks) == 1
             and content_blocks[0]["type"] == "text"
@@ -315,7 +315,7 @@ class LLMResponse:
 
         Args:
             role (str): 角色, assistant, tool, err
-            completion_text (str, optional): 返回的结果文本，已经过时，推荐使用 result_chain. Defaults to "".
+            completion_text (str, optional): 返回的结果文本,已经过时,推荐使用 result_chain. Defaults to "".
             result_chain (MessageChain, optional): 返回的消息链. Defaults to None.
             tools_call_args (List[Dict[str, any]], optional): 工具调用参数. Defaults to None.
             tools_call_name (List[str], optional): 工具调用名称. Defaults to None.

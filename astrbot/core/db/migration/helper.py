@@ -18,9 +18,9 @@ from .migra_3_to_4 import (
 
 async def check_migration_needed_v4(db_helper: BaseDatabase) -> bool:
     """检查是否需要进行数据库迁移
-    如果存在 data_v3.db 并且 preference 中没有 migration_done_v4，则需要进行迁移。
+    如果存在 data_v3.db 并且 preference 中没有 migration_done_v4,则需要进行迁移｡
     """
-    # 仅当 data 目录下存在旧版本数据（data_v3.db 文件）时才考虑迁移
+    # 仅当 data 目录下存在旧版本数据(data_v3.db 文件)时才考虑迁移
     data_dir = get_astrbot_data_path()
     data_v3_db = os.path.join(data_dir, "data_v3.db")
 
@@ -42,8 +42,8 @@ async def do_migration_v4(
     astrbot_config: AstrBotConfig,
 ) -> None:
     """执行数据库迁移
-    迁移旧的 webchat_conversation 表到新的 conversation 表。
-    迁移旧的 platform 到新的 platform_stats 表。
+    迁移旧的 webchat_conversation 表到新的 conversation 表｡
+    迁移旧的 platform 到新的 platform_stats 表｡
     """
     if not await check_migration_needed_v4(db_helper):
         return
@@ -68,4 +68,4 @@ async def do_migration_v4(
     # 标记迁移完成
     await sp.put_async("global", "global", "migration_done_v4", True)
 
-    logger.info("数据库迁移完成。")
+    logger.info("数据库迁移完成｡")

@@ -1,27 +1,33 @@
-import re
 import os
-import aiohttp
+import re
 import ssl
-import certifi
-from io import BytesIO
-from typing import List, Tuple
 from abc import ABC, abstractmethod
+from io import BytesIO
+
+import certifi
+from PIL import Image, ImageDraw, ImageFont
+
 from astrbot.core.config import VERSION
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.io import save_temp_img
 
 from . import RenderStrategy
-from PIL import ImageFont, Image, ImageDraw
-from astrbot.core.utils.io import save_temp_img
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+
+def _get_aiohttp():
+    import aiohttp
+
+    return aiohttp
 
 
 class FontManager:
-    """字体管理类，负责加载和缓存字体"""
+    """字体管理类,负责加载和缓存字体"""
 
     _font_cache = {}
 
     @classmethod
     def get_font(cls, size: int) -> ImageFont.FreeTypeFont|ImageFont.ImageFont:
-        """获取指定大小的字体，优先从缓存获取"""
+        """获取指定大小的字体,优先从缓存获取"""
         if size in cls._font_cache:
             return cls._font_cache[size]
 
@@ -53,10 +59,10 @@ class FontManager:
             except Exception:
                 continue
 
-        # 如果所有字体都失败，使用默认字体
+        # 如果所有字体都失败,使用默认字体
         try:
             default_font = ImageFont.load_default()
-            # PIL默认字体大小固定，这里不缓存
+            # PIL默认字体大小固定,这里不缓存
             return default_font
         except Exception:
             raise RuntimeError("无法加载任何字体")
@@ -66,25 +72,27 @@ class TextMeasurer:
     """测量文本尺寸的工具类"""
 
     @staticmethod
-    def get_text_size(text: str, font: ImageFont.FreeTypeFont|ImageFont.ImageFont) -> tuple[int, int]:
+    def get_text_size(
+        text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont
+    ) -> tuple[int, int]:
         """获取文本的尺寸"""
 
-        # 依赖库Pillow>=11.2.1，不再需要考虑<9.0.0
+        # 依赖库Pillow>=11.2.1,不再需要考虑<9.0.0
         left, top, right, bottom = font.getbbox("Hello world")
         return int(right - left), int(bottom - top)
 
     @staticmethod
     def split_text_to_fit_width(
-        text: str, font: ImageFont.FreeTypeFont|ImageFont.ImageFont, max_width: int
+        text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont, max_width: int
     ) -> list[str]:
-        """将文本拆分为多行，确保每行不超过指定宽度"""
+        """将文本拆分为多行,确保每行不超过指定宽度"""
         lines = []
         if not text:
             return lines
 
         remaining_text = text
         while remaining_text:
-            # 如果文本宽度小于最大宽度，直接添加
+            # 如果文本宽度小于最大宽度,直接添加
             text_width = TextMeasurer.get_text_size(remaining_text, font)[0]
             if text_width <= max_width:
                 lines.append(remaining_text)
@@ -98,7 +106,7 @@ class TextMeasurer:
                     remaining_text = remaining_text[i:]
                     break
             else:
-                # 如果单个字符都放不下，强制放一个字符
+                # 如果单个字符都放不下,强制放一个字符
                 lines.append(remaining_text[0])
                 remaining_text = remaining_text[1:]
 
@@ -126,7 +134,7 @@ class MarkdownElement(ABC):
         image_width: int,
         font_size: int,
     ) -> int:
-        """渲染元素到图像，返回新的y坐标"""
+        """渲染元素到图像,返回新的y坐标"""
         pass
 
 
@@ -186,7 +194,7 @@ class BoldTextElement(MarkdownElement):
         image_width: int,
         font_size: int,
     ) -> int:
-        # 尝试使用粗体字体，如果没有则绘制两次模拟粗体效果
+        # 尝试使用粗体字体,如果没有则绘制两次模拟粗体效果
         try:
             bold_fonts = [
                 "msyhbd.ttc",  # 微软雅黑粗体 (Windows)
@@ -210,7 +218,7 @@ class BoldTextElement(MarkdownElement):
                     draw.text((x, y), line, font=bold_font, fill=(0, 0, 0))
                     y += font_size + 8
             else:
-                # 如果没有粗体字体，则绘制两次文本轻微偏移以模拟粗体
+                # 如果没有粗体字体,则绘制两次文本轻微偏移以模拟粗体
                 font = FontManager.get_font(font_size)
                 lines = TextMeasurer.split_text_to_fit_width(
                     self.content, font, image_width - 20
@@ -220,7 +228,7 @@ class BoldTextElement(MarkdownElement):
                     draw.text((x + 1, y), line, font=font, fill=(0, 0, 0))
                     y += font_size + 8
         except Exception:
-            # 兜底方案：使用普通字体
+            # 兜底方案:使用普通字体
             font = FontManager.get_font(font_size)
             lines = TextMeasurer.split_text_to_fit_width(
                 self.content, font, image_width - 20
@@ -251,7 +259,7 @@ class ItalicTextElement(MarkdownElement):
         image_width: int,
         font_size: int,
     ) -> int:
-        # 尝试使用斜体字体，如果没有则使用倾斜变换模拟斜体效果
+        # 尝试使用斜体字体,如果没有则使用倾斜变换模拟斜体效果
         try:
             italic_fonts = [
                 "msyhi.ttc",  # 微软雅黑斜体 (Windows)
@@ -275,7 +283,7 @@ class ItalicTextElement(MarkdownElement):
                     draw.text((x, y), line, font=italic_font, fill=(0, 0, 0))
                     y += font_size + 8
             else:
-                # 如果没有斜体字体，使用变换
+                # 如果没有斜体字体,使用变换
                 font = FontManager.get_font(font_size)
                 lines = TextMeasurer.split_text_to_fit_width(
                     self.content, font, image_width - 20
@@ -290,17 +298,20 @@ class ItalicTextElement(MarkdownElement):
                     text_draw = ImageDraw.Draw(text_img)
                     text_draw.text((0, 0), line, font=font, fill=(0, 0, 0, 255))
 
-                    # 倾斜变换，使用仿射变换实现斜体效果
+                    # 倾斜变换,使用仿射变换实现斜体效果
                     # 变换矩阵: [1, 0.2, 0, 0, 1, 0]
                     italic_img = text_img.transform(
-                        text_img.size, Image.Transform.AFFINE, (1, 0.2, 0, 0, 1, 0), Image.Resampling.BICUBIC
+                        text_img.size,
+                        Image.Transform.AFFINE,
+                        (1, 0.2, 0, 0, 1, 0),
+                        Image.Resampling.BICUBIC,
                     )
 
                     # 粘贴到原图像
                     image.paste(italic_img, (x, y), italic_img)
                     y += font_size + 8
         except Exception:
-            # 兜底方案：使用普通字体
+            # 兜底方案:使用普通字体
             font = FontManager.get_font(font_size)
             lines = TextMeasurer.split_text_to_fit_width(
                 self.content, font, image_width - 20
@@ -629,6 +640,7 @@ class ImageElement(MarkdownElement):
     async def load_image(self):
         """加载图片"""
         try:
+            aiohttp = _get_aiohttp()
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl=ssl_context)
 
@@ -696,7 +708,7 @@ class ImageElement(MarkdownElement):
 
 
 class MarkdownParser:
-    """Markdown解析器，将文本解析为元素"""
+    """Markdown解析器,将文本解析为元素"""
 
     @staticmethod
     async def parse(text: str) -> list[MarkdownElement]:
@@ -748,7 +760,7 @@ class MarkdownParser:
                 elements.append(CodeBlockElement(code_lines))
                 continue
 
-            # 检查行内样式（粗体、斜体、下划线、删除线、行内代码）
+            # 检查行内样式(粗体､斜体､下划线､删除线､行内代码)
             if re.search(
                 r"(\*\*.*?\*\*)|(\*.*?\*)|(__.*?__)|(_.*?_)|(~~.*?~~)|(`.*?`)", line
             ):
@@ -788,7 +800,7 @@ class MarkdownParser:
                 # 按开始位置排序
                 markers.sort(key=lambda x: x["start"])
 
-                # 如果没有找到任何匹配，直接添加为普通文本
+                # 如果没有找到任何匹配,直接添加为普通文本
                 if not markers:
                     elements.append(TextElement(line))
                     i += 1
@@ -835,7 +847,7 @@ class MarkdownParser:
 
 
 class MarkdownRenderer:
-    """Markdown渲染器，将元素渲染为图像"""
+    """Markdown渲染器,将元素渲染为图像"""
 
     def __init__(
         self,
@@ -870,7 +882,7 @@ class MarkdownRenderer:
             y = element.render(image, draw, 10, y, self.width, self.font_size)
 
         # 添加页脚
-        # 克莱因蓝色，近似RGB为(0, 47, 167)
+        # 克莱因蓝色,近似RGB为(0, 47, 167)
         klein_blue = (0, 47, 167)
         # 灰色
         grey_color = (130, 130, 130)
@@ -891,12 +903,12 @@ class MarkdownRenderer:
 
         footer_y = total_height - footer_height
 
-        # 绘制"Powered by "（灰色）
+        # 绘制"Powered by "(灰色)
         draw.text(
             (x_start, footer_y), powered_by_text, font=footer_font, fill=grey_color
         )
 
-        # 绘制"AstrBot"（克莱因蓝）
+        # 绘制"AstrBot"(克莱因蓝)
         draw.text(
             (x_start + powered_by_width, footer_y),
             astrbot_text,

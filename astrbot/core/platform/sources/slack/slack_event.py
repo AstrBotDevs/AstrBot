@@ -100,7 +100,7 @@ class SlackMessageEvent(AstrMessageEvent):
             if isinstance(segment, Plain):
                 text_content += segment.text
             else:
-                # 如果有文本内容，先添加文本块
+                # 如果有文本内容,先添加文本块
                 if text_content.strip():
                     blocks.append(
                         {
@@ -148,7 +148,7 @@ class SlackMessageEvent(AstrMessageEvent):
                     blocks=blocks or None,
                 )
         except Exception:
-            # 如果块发送失败，尝试只发送文本
+            # 如果块发送失败,尝试只发送文本
             parts = []
             for segment in message.chain:
                 if isinstance(segment, Plain):
@@ -191,14 +191,14 @@ class SlackMessageEvent(AstrMessageEvent):
             return await super().send_streaming(generator, use_fallback)
 
         buffer = ""
-        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
+        pattern = re.compile(r"[^｡?!~…]+[｡?!~…]+")
 
         async for chain in generator:
             if isinstance(chain, MessageChain):
                 for comp in chain.chain:
                     if isinstance(comp, Plain):
                         buffer += comp.text
-                        if any(p in buffer for p in "。？！~…"):
+                        if any(p in buffer for p in "｡?!~…"):
                             buffer = await self.process_buffer(buffer, pattern)
                     else:
                         await self.send(MessageChain(chain=[comp]))
@@ -238,7 +238,7 @@ class SlackMessageEvent(AstrMessageEvent):
                         ),
                     )
                 except Exception:
-                    # 如果获取用户信息失败，使用默认信息
+                    # 如果获取用户信息失败,使用默认信息
                     members.append(MessageMember(user_id=member_id, nickname=member_id))
 
             channel_data = cast(dict, channel_info["channel"])

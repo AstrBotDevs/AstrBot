@@ -4,7 +4,7 @@ import { ref, computed } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
-import axios from 'axios'
+import axios from '@/utils/request'
 import { useToast } from '@/utils/toast'
 
 const props = defineProps({

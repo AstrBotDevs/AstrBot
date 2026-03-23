@@ -14,11 +14,11 @@ from ..provider import TTSProvider
 from ..register import register_provider_adapter
 
 """
-edge_tts 方式，能够免费、快速生成语音，使用需要先安装edge-tts库
+edge_tts 方式,能够免费､快速生成语音,使用需要先安装edge-tts库
 ```
 pip install edge_tts
 ```
-Windows 如果提示找不到指定文件，以管理员身份运行命令行窗口，然后再次运行 AstrBot
+Windows 如果提示找不到指定文件,以管理员身份运行命令行窗口,然后再次运行 AstrBot
 """
 
 
@@ -35,7 +35,7 @@ class ProviderEdgeTTS(TTSProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
 
-        # 设置默认语音，如果没有指定则使用中文小萱
+        # 设置默认语音,如果没有指定则使用中文小萱
         self.voice = provider_config.get("edge-tts-voice", "zh-CN-XiaoxiaoNeural")
         self.rate = provider_config.get("rate")
         self.volume = provider_config.get("volume")

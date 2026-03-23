@@ -308,7 +308,7 @@ def retry_async(
                     sleep_time = backoff + jitter
 
                     logger.warning(
-                        f"[Misskey API] {func_name} 第 {attempt} 次重试失败: {e}，"
+                        f"[Misskey API] {func_name} 第 {attempt} 次重试失败: {e},"
                         f"{sleep_time:.1f}s后重试",
                     )
                     await asyncio.sleep(sleep_time)
@@ -687,28 +687,28 @@ class MisskeyAPI:
         max_wait_time: float = 30.0,
         check_interval: float = 2.0,
     ) -> dict[str, Any] | None:
-        """简化的文件上传：尝试 URL 上传，失败则下载后本地上传
+        """简化的文件上传:尝试 URL 上传,失败则下载后本地上传
 
         Args:
             url: 文件URL
-            name: 文件名（可选）
-            folder_id: 文件夹ID（可选）
-            max_wait_time: 保留参数（未使用）
-            check_interval: 保留参数（未使用）
+            name: 文件名(可选)
+            folder_id: 文件夹ID(可选)
+            max_wait_time: 保留参数(未使用)
+            check_interval: 保留参数(未使用)
 
         Returns:
-            包含文件ID和元信息的字典，失败时返回None
+            包含文件ID和元信息的字典,失败时返回None
 
         """
         if not url:
             raise APIError("URL不能为空")
 
-        # 通过本地上传获取即时文件 ID（下载文件 → 上传 → 返回 ID）
+        # 通过本地上传获取即时文件 ID(下载文件 ￫ 上传 ￫ 返回 ID)
         try:
             import os
             import tempfile
 
-            # SSL 验证下载，失败则重试不验证 SSL
+            # SSL 验证下载,失败则重试不验证 SSL
             tmp_bytes = None
             try:
                 tmp_bytes = await self._download_with_existing_session(
@@ -717,7 +717,7 @@ class MisskeyAPI:
                 ) or await self._download_with_temp_session(url, ssl_verify=True)
             except Exception as ssl_error:
                 logger.debug(
-                    f"[Misskey API] SSL 验证下载失败: {ssl_error}，重试不验证 SSL",
+                    f"[Misskey API] SSL 验证下载失败: {ssl_error},重试不验证 SSL",
                 )
                 try:
                     tmp_bytes = await self._download_with_existing_session(
@@ -755,7 +755,7 @@ class MisskeyAPI:
         user_id_or_payload: Any,
         text: str | None = None,
     ) -> dict[str, Any]:
-        """发送聊天消息。
+        """发送聊天消息｡
 
         Accepts either (user_id: str, text: str) or a single dict payload prepared by caller.
         """
@@ -774,7 +774,7 @@ class MisskeyAPI:
         room_id_or_payload: Any,
         text: str | None = None,
     ) -> dict[str, Any]:
-        """发送房间消息。
+        """发送房间消息｡
 
         Accepts either (room_id: str, text: str) or a single dict payload.
         """
@@ -833,7 +833,7 @@ class MisskeyAPI:
         local_files: list[str] | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        """通用消息发送函数：统一处理文本+媒体发送
+        """通用消息发送函数:统一处理文本+媒体发送
 
         Args:
             message_type: 消息类型 ('chat', 'room', 'note')
@@ -841,7 +841,7 @@ class MisskeyAPI:
             text: 文本内容
             media_urls: 媒体文件URL列表
             local_files: 本地文件路径列表
-            **kwargs: 其他参数（如visibility等）
+            **kwargs: 其他参数(如visibility等)
 
         Returns:
             发送结果字典
@@ -851,7 +851,7 @@ class MisskeyAPI:
 
         """
         if not text and not media_urls and not local_files:
-            raise APIError("消息内容不能为空：需要文本或媒体文件")
+            raise APIError("消息内容不能为空:需要文本或媒体文件")
 
         file_ids = []
 
@@ -873,7 +873,7 @@ class MisskeyAPI:
         )
 
     async def _process_media_urls(self, urls: list[str]) -> list[str]:
-        """处理远程媒体文件URL列表，返回文件ID列表"""
+        """处理远程媒体文件URL列表,返回文件ID列表"""
         file_ids = []
         for url in urls:
             try:
@@ -885,12 +885,12 @@ class MisskeyAPI:
                     logger.error(f"[Misskey API] URL媒体上传失败: {url}")
             except Exception as e:
                 logger.error(f"[Misskey API] URL媒体处理失败 {url}: {e}")
-                # 继续处理其他文件，不中断整个流程
+                # 继续处理其他文件,不中断整个流程
                 continue
         return file_ids
 
     async def _process_local_files(self, file_paths: list[str]) -> list[str]:
-        """处理本地文件路径列表，返回文件ID列表"""
+        """处理本地文件路径列表,返回文件ID列表"""
         file_ids = []
         for file_path in file_paths:
             try:

@@ -66,7 +66,7 @@ class DifyAPIClient:
             if resp.status != 200:
                 text = await resp.text()
                 raise Exception(
-                    f"Dify /chat-messages 接口请求失败：{resp.status}. {text}",
+                    f"Dify /chat-messages 接口请求失败:{resp.status}. {text}",
                 )
             async for event in _stream_sse(resp):
                 yield event
@@ -95,7 +95,7 @@ class DifyAPIClient:
             if resp.status != 200:
                 text = await resp.text()
                 raise Exception(
-                    f"Dify /workflows/run 接口请求失败：{resp.status}. {text}",
+                    f"Dify /workflows/run 接口请求失败:{resp.status}. {text}",
                 )
             async for event in _stream_sse(resp):
                 yield event
@@ -149,11 +149,11 @@ class DifyAPIClient:
         async with self.session.post(
             url,
             data=form,
-            headers=self.headers,  # 不包含 Content-Type，让 aiohttp 自动设置
+            headers=self.headers,  # 不包含 Content-Type,让 aiohttp 自动设置
         ) as resp:
             if resp.status != 200 and resp.status != 201:
                 text = await resp.text()
-                raise Exception(f"Dify 文件上传失败：{resp.status}. {text}")
+                raise Exception(f"Dify 文件上传失败:{resp.status}. {text}")
             return await resp.json()  # {"id": "xxx", ...}
 
     async def close(self) -> None:

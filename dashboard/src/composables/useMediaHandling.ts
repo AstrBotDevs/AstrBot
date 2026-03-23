@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import axios from 'axios';
+import axios from '@/utils/request';
 
 export interface StagedFileInfo {
     attachment_id: string;

@@ -57,7 +57,7 @@ def _discover_bay_credentials(endpoint: str) -> str:
         candidates.append(Path(bay_data_dir) / "credentials.json")
 
     # 2. Mono-repo layout: AstrBot/../pkgs/bay/credentials.json
-    astrbot_root = Path(__file__).resolve().parents[3]  # astrbot/core/computer/ → root
+    astrbot_root = Path(__file__).resolve().parents[3]  # astrbot/core/computer/ ￫ root
     candidates.append(astrbot_root.parent / "pkgs" / "bay" / "credentials.json")
 
     # 3. Current working directory
@@ -224,7 +224,7 @@ def parse_description(text: str) -> str:
     if end_idx is None:
         return ""
 
-    frontmatter = "\n".join(lines[1:end_idx])
+    frontmatter = "\\n".join(lines[1:end_idx])
     try:
         import yaml
     except ImportError:
@@ -393,7 +393,7 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
     skills_root = anyio.Path(get_astrbot_skills_path())
     if not await skills_root.is_dir():
         return
-    local_skill_dirs = _list_local_skill_dirs(skills_root)
+    local_skill_dirs = _list_local_skill_dirs(Path(skills_root))
 
     temp_dir = anyio.Path(get_astrbot_temp_path())
     await temp_dir.mkdir(parents=True, exist_ok=True)

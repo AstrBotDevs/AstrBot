@@ -71,7 +71,7 @@ class WecomServer:
         return await self.handle_verify(quart.request)
 
     async def handle_verify(self, request) -> str:
-        """处理验证请求，可被统一 webhook 入口复用
+        """处理验证请求,可被统一 webhook 入口复用
 
         Args:
             request: Quart 请求对象
@@ -88,10 +88,10 @@ class WecomServer:
                 args.get("nonce"),
                 args.get("echostr"),
             )
-            logger.info("验证请求有效性成功。")
+            logger.info("验证请求有效性成功｡")
             return echo_str
         except InvalidSignatureException:
-            logger.error("验证请求有效性失败，签名异常，请检查配置。")
+            logger.error("验证请求有效性失败,签名异常,请检查配置｡")
             raise
 
     async def callback_command(self):
@@ -99,7 +99,7 @@ class WecomServer:
         return await self.handle_callback(quart.request)
 
     async def handle_callback(self, request) -> str:
-        """处理回调请求，可被统一 webhook 入口复用
+        """处理回调请求,可被统一 webhook 入口复用
 
         Args:
             request: Quart 请求对象
@@ -114,7 +114,7 @@ class WecomServer:
         try:
             xml = self.crypto.decrypt_message(data, msg_signature, timestamp, nonce)
         except InvalidSignatureException:
-            logger.error("解密失败，签名异常，请检查配置。")
+            logger.error("解密失败,签名异常,请检查配置｡")
             raise
         else:
             msg = cast(BaseMessage, parse_message(xml))
@@ -127,7 +127,7 @@ class WecomServer:
 
     async def start_polling(self) -> None:
         logger.info(
-            f"将在 {self.callback_server_host}:{self.port} 端口启动 企业微信 适配器。",
+            f"将在 {self.callback_server_host}:{self.port} 端口启动 企业微信 适配器｡",
         )
         await self.server.run_task(
             host=self.callback_server_host,
@@ -220,12 +220,12 @@ class WecomPlatformAdapter(Platform):
     ) -> None:
         # 企业微信客服不支持主动发送
         if hasattr(self.client, "kf_message"):
-            logger.warning("企业微信客服模式不支持 send_by_session 主动发送。")
+            logger.warning("企业微信客服模式不支持 send_by_session 主动发送｡")
             await super().send_by_session(session, message_chain)
             return
         if not self.agent_id:
             logger.warning(
-                f"send_by_session 失败：无法为会话 {session.session_id} 推断 agent_id。",
+                f"send_by_session 失败:无法为会话 {session.session_id} 推断 agent_id｡",
             )
             await super().send_by_session(session, message_chain)
             return
@@ -278,7 +278,7 @@ class WecomPlatformAdapter(Platform):
                         continue
                     open_kfid = acc.get("open_kfid", None)
                     if not open_kfid:
-                        logger.error("获取微信客服失败，open_kfid 为空。")
+                        logger.error("获取微信客服失败,open_kfid 为空｡")
                     logger.debug(f"Found open_kfid: {open_kfid!s}")
                     kf_url = (
                         await loop.run_in_executor(
@@ -289,16 +289,16 @@ class WecomPlatformAdapter(Platform):
                         )
                     ).get("url", "")
                     logger.info(
-                        f"请打开以下链接，在微信扫码以获取客服微信: https://api.cl2wm.cn/api/qrcode/code?text={kf_url}",
+                        f"请打开以下链接,在微信扫码以获取客服微信: https://api.cl2wm.cn/api/qrcode/code?text={kf_url}",
                     )
             except Exception as e:
                 logger.error(e)
 
-        # 如果启用统一 webhook 模式，则不启动独立服务器
+        # 如果启用统一 webhook 模式,则不启动独立服务器
         webhook_uuid = self.config.get("webhook_uuid")
         if self.unified_webhook_mode and webhook_uuid:
             log_webhook_info(f"{self.meta().id}(企业微信)", webhook_uuid)
-            # 保持运行状态，等待 shutdown
+            # 保持运行状态,等待 shutdown
             await self.server.shutdown_event.wait()
         else:
             await self.server.start_polling()
@@ -354,7 +354,7 @@ class WecomPlatformAdapter(Platform):
                 path_wav = os.path.join(temp_dir, f"wecom_{msg.media_id}.wav")
                 path_wav = await convert_audio_to_wav(path, path_wav)
             except Exception as e:
-                logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
+                logger.error(f"转换音频失败: {e}｡如果没有安装 ffmpeg 请先安装｡")
                 path_wav = path
                 return
 
@@ -423,7 +423,7 @@ class WecomPlatformAdapter(Platform):
                 path_wav = os.path.join(temp_dir, f"weixinkefu_{media_id}.wav")
                 path_wav = await convert_audio_to_wav(path, path_wav)
             except Exception as e:
-                logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
+                logger.error(f"转换音频失败: {e}｡如果没有安装 ffmpeg 请先安装｡")
                 path_wav = path
                 return
 

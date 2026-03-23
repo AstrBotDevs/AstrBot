@@ -108,9 +108,21 @@
                   </v-chip>
                 </div>
                 <div
-                  v-if="getPlatformStat(item.id)?.unified_webhook && item.webhook_uuid"
-                  class="webhook-info"
+                  class="platform-qr-chip"
+                  v-if="hasQrPayload(item.id)"
                 >
+                  <v-chip
+                    size="small"
+                    color="primary"
+                    variant="tonal"
+                    class="platform-qr-chip-item"
+                    @click.stop="openPlatformQrDialog(item.id)"
+                  >
+                    <v-icon size="small" start>mdi-qrcode</v-icon>
+                    {{ tm('platformQr.show') }}
+                  </v-chip>
+                </div>
+                <div v-if="getPlatformStat(item.id)?.unified_webhook && item.webhook_uuid" class="webhook-info">
                   <v-chip
                     size="small"
                     color="primary"
@@ -230,6 +242,55 @@
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="showQrDialog" max-width="480">
+      <v-card>
+        <v-card-title class="d-flex align-center pa-4">
+          <v-icon class="me-2">mdi-qrcode</v-icon>
+          {{ tm('platformQr.title') }}
+        </v-card-title>
+        <v-card-text class="px-4 pb-4">
+          <div class="platform-qr-status">
+            {{ tm('platformQr.status') }}: {{ getPlatformQrLoginStat(currentQrPlatformId)?.qr_status || tm('platformQr.waiting') }}
+          </div>
+          <QrCodeViewer
+            :value="(getPlatformQrLoginStat(currentQrPlatformId)?.qrcode_img_content || getPlatformQrLoginStat(currentQrPlatformId)?.qrcode || '')"
+            :alt="tm('platformQr.title')"
+          />
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer></v-spacer>
+          <v-btn variant="tonal" color="primary" @click="showQrDialog = false">
+            {{ tm('platformQr.close') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- 错误详情对话框 -->
+    <v-dialog v-model="showErrorDialog" max-width="700">
+      <v-card>
+        <v-card-title class="d-flex align-center pa-4">
+          <v-icon class="me-2">mdi-qrcode</v-icon>
+          {{ tm('platformQr.title') }}
+        </v-card-title>
+        <v-card-text class="px-4 pb-4">
+          <div class="platform-qr-status">
+            {{ tm('platformQr.status') }}: {{ getPlatformQrLoginStat(currentQrPlatformId)?.qr_status || tm('platformQr.waiting') }}
+          </div>
+          <QrCodeViewer
+            :value="(getPlatformQrLoginStat(currentQrPlatformId)?.qrcode_img_content || getPlatformQrLoginStat(currentQrPlatformId)?.qrcode || '')"
+            :alt="tm('platformQr.title')"
+          />
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer></v-spacer>
+          <v-btn variant="tonal" color="primary" @click="showQrDialog = false">
+            {{ tm('platformQr.close') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- 错误详情对话框 -->
     <v-dialog
       v-model="showErrorDialog"
@@ -309,15 +370,17 @@
 </template>
 
 <script>
-import axios from 'axios';
+import axios from '@/utils/request';
+import { resolveApiUrl } from '@/utils/request';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ItemCard from '@/components/shared/ItemCard.vue';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
+import QrCodeViewer from '@/components/shared/QrCodeViewer.vue';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n, mergeDynamicTranslations } from '@/i18n/composables';
-import { getPlatformIcon, getTutorialLink } from '@/utils/platformUtils';
+import { getPlatformIcon } from '@/utils/platformUtils';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog
@@ -330,7 +393,8 @@ export default {
     WaitingForRestart,
     ConsoleDisplayer,
     ItemCard,
-    AddNewPlatform
+    AddNewPlatform,
+    QrCodeViewer,
   },
   setup() {
     const { t } = useI18n();
@@ -369,6 +433,8 @@ export default {
       // 错误详情对话框
       showErrorDialog: false,
       currentErrorPlatform: null,
+      showQrDialog: false,
+      currentQrPlatformId: "",
 
       store: useCommonStore()
     }
@@ -412,10 +478,10 @@ export default {
   mounted() {
     this.getConfig();
     this.getPlatformStats();
-    // 每 10 秒刷新一次平台状态
+    // 每 5 秒刷新一次平台状态
     this.statsRefreshInterval = setInterval(() => {
       this.getPlatformStats();
-    }, 10000);
+    }, 5000);
     
     // 监听语言切换事件，重新加载配置以获取插件的 i18n 数据
     window.addEventListener('astrbot-locale-changed', this.handleLocaleChange);
@@ -441,7 +507,7 @@ export default {
       const template = this.metadata['platform_group']?.metadata?.platform?.config_template?.[platform_id];
       if (template && template.logo_token) {
           // 通过文件服务访问插件提供的 logo
-        return `/api/file/${template.logo_token}`;
+        return resolveApiUrl(`/api/file/${template.logo_token}`);
       }
       return getPlatformIcon(platform_id);
     },
@@ -462,8 +528,8 @@ export default {
       });
     },
 
-    getPlatformStats() {
-      axios.get('/api/platform/stats').then((res) => {
+    async getPlatformStats() {
+      await axios.get('/api/platform/stats').then((res) => {
         if (res.data.status === 'ok') {
           // 将数组转换为以 id 为 key 的对象，方便查找
           const stats = {};
@@ -479,6 +545,31 @@ export default {
 
     getPlatformStat(platformId) {
       return this.platformStats[platformId] || null;
+    },
+
+    hasQrPayload(platformId) {
+      const stat = this.getPlatformQrLoginStat(platformId);
+      return Boolean(stat?.qrcode_img_content || stat?.qrcode);
+    },
+
+    getPlatformQrLoginStat(platformId) {
+      const stat = this.getPlatformStat(platformId);
+      if (stat?.weixin_oc) {
+        return stat.weixin_oc;
+      }
+      if (stat && typeof stat === "object") {
+        for (const value of Object.values(stat)) {
+          if (value && typeof value === "object" && ("qrcode_img_content" in value || "qrcode" in value)) {
+            return value;
+          }
+        }
+      }
+      return null;
+    },
+
+    openPlatformQrDialog(platformId) {
+      this.currentQrPlatformId = platformId;
+      this.showQrDialog = true;
     },
 
     getStatusColor(status) {
@@ -666,7 +757,7 @@ export default {
       if (callbackBase) {
         return `${callbackBase.replace(/\/$/, '')}/api/platform/webhook/${webhookUuid}`;
       }
-      return `/api/platform/webhook/${webhookUuid}`;
+      return resolveApiUrl(`/api/platform/webhook/${webhookUuid}`);
     },
 
     openWebhookDialog(webhookUuid) {
@@ -738,5 +829,15 @@ export default {
   word-break: break-word;
   max-height: 300px;
   overflow-y: auto;
+}
+
+.platform-qr-chip {
+  margin-top: 4px;
+}
+
+.platform-qr-status {
+  font-size: 13px;
+  margin-bottom: 10px;
+  color: rgba(0, 0, 0, 0.7);
 }
 </style>

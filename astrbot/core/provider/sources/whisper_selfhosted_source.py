@@ -33,13 +33,13 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
 
     async def initialize(self) -> None:
         loop = asyncio.get_running_loop()
-        logger.info("下载或者加载 Whisper 模型中，这可能需要一些时间 ...")
+        logger.info("下载或者加载 Whisper 模型中,这可能需要一些时间 ...")
         self.model = await loop.run_in_executor(
             None,
             whisper.load_model,
             self.model_name,
         )
-        logger.info("Whisper 模型加载完成。")
+        logger.info("Whisper 模型加载完成｡")
 
     async def _is_silk_file(self, file_path) -> bool:
         silk_header = b"SILK"

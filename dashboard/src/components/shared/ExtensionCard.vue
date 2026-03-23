@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, inject, watch } from "vue";
+import { ref, computed, inject, watch, useAttrs } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
 import { getPlatformDisplayName, getPlatformIcon } from "@/utils/platformUtils";
@@ -12,6 +12,10 @@ const props = defineProps({
   extension: {
     type: Object,
     required: true,
+  },
+  pinned: {
+    type: Boolean,
+    default: false,
   },
   marketMode: {
     type: Boolean,
@@ -31,6 +35,7 @@ const emit = defineEmits([
   "install",
   "uninstall",
   "toggle-activation",
+  "toggle-pin",
   "view-handlers",
   "view-readme",
   "view-changelog",
@@ -38,6 +43,8 @@ const emit = defineEmits([
 
 const reveal = ref(false);
 const showUninstallDialog = ref(false);
+
+const attrs = useAttrs();
 
 // 国际化
 const { tm } = useModuleI18n("features/extension");
@@ -114,6 +121,11 @@ const toggleActivation = () => {
   emit("toggle-activation", props.extension);
 };
 
+const togglePin = (e?: Event) => {
+  if (e) e.stopPropagation();
+  emit("toggle-pin", props.extension);
+};
+
 const viewHandlers = () => {
   emit("view-handlers", props.extension);
 };
@@ -130,6 +142,7 @@ const viewChangelog = () => {
 
 <template>
   <v-card
+    v-bind="attrs"
     class="mx-auto d-flex flex-column h-100"
     elevation="0"
     height="100%"
@@ -203,21 +216,35 @@ const viewChangelog = () => {
 
             <template v-if="!marketMode">
               <v-tooltip location="left">
-                <template #activator="{ props: tooltipProps }">
-                  <div
-                    v-bind="tooltipProps"
-                    class="extension-switch-wrap"
-                    @click.stop
-                  >
-                    <v-switch
-                      :model-value="extension.activated"
-                      color="success"
-                      density="compact"
-                      hide-details
-                      inset
-                      @update:model-value="toggleActivation"
-                    />
-                  </div>
+                <template v-slot:activator="{ props: tooltipProps }">
+                          <div class="extension-switch-wrap" @click.stop>
+                            <div v-bind="tooltipProps" style="display:inline-flex; align-items:center;">
+                              <v-switch
+                                :model-value="extension.activated"
+                                color="success"
+                                density="compact"
+                                hide-details
+                                inset
+                                @update:model-value="toggleActivation"
+                              ></v-switch>
+                            </div>
+
+                            <v-tooltip location="top" :text="pinned ? tm('buttons.unpin') : tm('buttons.pin')">
+                              <template #activator="{ props: pinProps }">
+                                <v-btn
+                                  v-bind="pinProps"
+                                  icon
+                                  size="small"
+                                  variant="tonal"
+                                  :color="pinned ? 'primary' : 'secondary'"
+                                  class="ml-2"
+                                  @click.stop="togglePin"
+                                >
+                                  <v-icon size="18">{{ pinned ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
+                                </v-btn>
+                              </template>
+                            </v-tooltip>
+                          </div>
                 </template>
                 <span>{{
                   extension.activated ? tm("buttons.disable") : tm("buttons.enable")

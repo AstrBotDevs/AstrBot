@@ -287,7 +287,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             if isinstance(component, Forward):
                 return E.message(id=str(component.id), forward=True)
 
-            # 对于其他未处理的组件类型，返回空字符串
+            # 对于其他未处理的组件类型,返回空字符串
             return E.text("")
 
         except Exception as e:
@@ -305,7 +305,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                         content_component,
                     )
                     content_parts.append(ans)
-            # 如果内容为空，添加默认内容
+            # 如果内容为空,添加默认内容
             if not content_parts:
                 content_parts.append(E.text("[转发消息]"))
             # 构建 Satori 格式的转发节点

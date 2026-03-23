@@ -145,7 +145,7 @@ class PersonaRoute(Route):
             if begin_dialogs and len(begin_dialogs) % 2 != 0:
                 return (
                     Response()
-                    .error("预设对话数量必须为偶数（用户和助手轮流对话）")
+                    .error("预设对话数量必须为偶数(用户和助手轮流对话)")
                     .__dict__
                 )
 
@@ -220,7 +220,7 @@ class PersonaRoute(Route):
             if begin_dialogs is not None and len(begin_dialogs) % 2 != 0:
                 return (
                     Response()
-                    .error("预设对话数量必须为偶数（用户和助手轮流对话）")
+                    .error("预设对话数量必须为偶数(用户和助手轮流对话)")
                     .__dict__
                 )
 
@@ -339,7 +339,7 @@ class PersonaRoute(Route):
         """获取文件夹列表"""
         try:
             parent_id = request.args.get("parent_id")
-            # 空字符串视为 None（根目录）
+            # 空字符串视为 None(根目录)
             if parent_id == "":
                 parent_id = None
             folders = await self.persona_mgr.get_folders(parent_id)

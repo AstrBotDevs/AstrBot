@@ -336,7 +336,7 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
-import axios from 'axios'
+import axios from '@/utils/request'
 
 const { t } = useI18n()
 const { tm } = useModuleI18n('core.shared')

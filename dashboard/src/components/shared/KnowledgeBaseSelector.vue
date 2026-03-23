@@ -158,7 +158,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
-import axios from 'axios'
+import axios from '@/utils/request'
 import { useRouter } from 'vue-router'
 import { useModuleI18n } from '@/i18n/composables'
 

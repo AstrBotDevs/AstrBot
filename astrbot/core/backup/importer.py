@@ -1,9 +1,9 @@
 """AstrBot 数据导入器
 
-负责从 ZIP 备份文件恢复所有数据。
-导入时进行版本校验：
-- 主版本（前两位）不同时直接拒绝导入
-- 小版本（第三位）不同时提示警告，用户可选择强制导入
+负责从 ZIP 备份文件恢复所有数据｡
+导入时进行版本校验:
+- 主版本(前两位)不同时直接拒绝导入
+- 小版本(第三位)不同时提示警告,用户可选择强制导入
 - 版本匹配时也需要用户确认
 """
 
@@ -40,13 +40,13 @@ if TYPE_CHECKING:
 
 
 def _get_major_version(version_str: str) -> str:
-    """提取版本的主版本部分（前两位）
+    """提取版本的主版本部分(前两位)
 
     Args:
-        version_str: 版本字符串，如 "4.9.1", "4.10.0-beta"
+        version_str: 版本字符串,如 "4.9.1", "4.10.0-beta"
 
     Returns:
-        主版本字符串，如 "4.9", "4.10"
+        主版本字符串,如 "4.9", "4.10"
     """
     if not version_str:
         return "0.0"
@@ -105,14 +105,14 @@ class _InvalidCountWarnLimiter:
         if self.limit > 0:
             if self._count < self.limit:
                 logger.warning(
-                    "platform_stats count 非法，已按 0 处理: value=%r, key=%s",
+                    "platform_stats count 非法,已按 0 处理: value=%r, key=%s",
                     value,
                     key_for_log,
                 )
                 self._count += 1
                 if self._count == self.limit and not self._suppression_logged:
                     logger.warning(
-                        "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
+                        "platform_stats 非法 count 告警已达到上限 (%d),后续将抑制",
                         self.limit,
                     )
                     self._suppression_logged = True
@@ -121,7 +121,7 @@ class _InvalidCountWarnLimiter:
         if not self._suppression_logged:
             # limit <= 0: emit only one suppression warning.
             logger.warning(
-                "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
+                "platform_stats 非法 count 告警已达到上限 (%d),后续将抑制",
                 self.limit,
             )
             self._suppression_logged = True
@@ -131,15 +131,15 @@ class _InvalidCountWarnLimiter:
 class ImportPreCheckResult:
     """导入预检查结果
 
-    用于在实际导入前检查备份文件的版本兼容性，
-    并返回确认信息让用户决定是否继续导入。
+    用于在实际导入前检查备份文件的版本兼容性,
+    并返回确认信息让用户决定是否继续导入｡
     """
 
-    # 检查是否通过（文件有效且版本可导入）
+    # 检查是否通过(文件有效且版本可导入)
     valid: bool = False
-    # 是否可以导入（版本兼容）
+    # 是否可以导入(版本兼容)
     can_import: bool = False
-    # 版本状态: match（完全匹配）, minor_diff（小版本差异）, major_diff（主版本不同，拒绝）
+    # 版本状态: match(完全匹配), minor_diff(小版本差异), major_diff(主版本不同,拒绝)
     version_status: str = ""
     # 备份文件中的 AstrBot 版本
     backup_version: str = ""
@@ -147,11 +147,11 @@ class ImportPreCheckResult:
     current_version: str = VERSION
     # 备份创建时间
     backup_time: str = ""
-    # 确认消息（显示给用户）
+    # 确认消息(显示给用户)
     confirm_message: str = ""
     # 警告消息列表
     warnings: list[str] = field(default_factory=list)
-    # 错误消息（如果检查失败）
+    # 错误消息(如果检查失败)
     error: str = ""
     # 备份包含的内容摘要
     backup_summary: dict = field(default_factory=dict)
@@ -209,18 +209,18 @@ class DatabaseClearError(RuntimeError):
 class AstrBotImporter:
     """AstrBot 数据导入器
 
-    导入备份文件中的所有数据，包括：
+    导入备份文件中的所有数据,包括:
     - 主数据库所有表
     - 知识库元数据和文档
     - 配置文件
     - 附件文件
     - 知识库多媒体文件
-    - 插件目录（data/plugins）
-    - 插件数据目录（data/plugin_data）
-    - 配置目录（data/config）
-    - T2I 模板目录（data/t2i_templates）
-    - WebChat 数据目录（data/webchat）
-    - 临时文件目录（data/temp）
+    - 插件目录(data/plugins)
+    - 插件数据目录(data/plugin_data)
+    - 配置目录(data/config)
+    - T2I 模板目录(data/t2i_templates)
+    - WebChat 数据目录(data/webchat)
+    - 临时文件目录(data/temp)
     """
 
     def __init__(
@@ -238,8 +238,8 @@ class AstrBotImporter:
     def pre_check(self, zip_path: str) -> ImportPreCheckResult:
         """预检查备份文件
 
-        在实际导入前检查备份文件的有效性和版本兼容性。
-        返回检查结果供前端显示确认对话框。
+        在实际导入前检查备份文件的有效性和版本兼容性｡
+        返回检查结果供前端显示确认对话框｡
 
         Args:
             zip_path: ZIP 备份文件路径
@@ -261,7 +261,7 @@ class AstrBotImporter:
                     manifest_data = zf.read("manifest.json")
                     manifest = json.loads(manifest_data)
                 except KeyError:
-                    result.error = "备份文件缺少 manifest.json，不是有效的 AstrBot 备份"
+                    result.error = "备份文件缺少 manifest.json,不是有效的 AstrBot 备份"
                     return result
                 except json.JSONDecodeError as e:
                     result.error = f"manifest.json 格式错误: {e}"
@@ -286,7 +286,7 @@ class AstrBotImporter:
                 result.can_import = version_check["can_import"]
 
                 # 版本信息由前端根据 version_status 和 i18n 生成显示
-                # 不再将版本消息添加到 warnings 列表中，避免中文硬编码
+                # 不再将版本消息添加到 warnings 列表中,避免中文硬编码
                 # warnings 列表保留用于其他非版本相关的警告
 
                 return result
@@ -301,9 +301,9 @@ class AstrBotImporter:
     def _check_version_compatibility(self, backup_version: str) -> dict:
         """检查版本兼容性
 
-        规则：
-        - 主版本（前两位，如 4.9）必须一致，否则拒绝
-        - 小版本（第三位，如 4.9.1 vs 4.9.2）不同时，警告但允许导入
+        规则:
+        - 主版本(前两位,如 4.9)必须一致,否则拒绝
+        - 小版本(第三位,如 4.9.1 vs 4.9.2)不同时,警告但允许导入
 
         Returns:
             dict: {status, can_import, message}
@@ -315,7 +315,7 @@ class AstrBotImporter:
                 "message": "备份文件缺少版本信息",
             }
 
-        # 提取主版本（前两位）进行比较
+        # 提取主版本(前两位)进行比较
         backup_major = _get_major_version(backup_version)
         current_major = _get_major_version(VERSION)
 
@@ -325,8 +325,8 @@ class AstrBotImporter:
                 "status": "major_diff",
                 "can_import": False,
                 "message": (
-                    f"主版本不兼容: 备份版本 {backup_version}, 当前版本 {VERSION}。"
-                    f"跨主版本导入可能导致数据损坏，请使用相同主版本的 AstrBot。"
+                    f"主版本不兼容: 备份版本 {backup_version}, 当前版本 {VERSION}｡"
+                    f"跨主版本导入可能导致数据损坏,请使用相同主版本的 AstrBot｡"
                 ),
             }
 
@@ -337,7 +337,7 @@ class AstrBotImporter:
                 "status": "minor_diff",
                 "can_import": True,
                 "message": (
-                    f"小版本差异: 备份版本 {backup_version}, 当前版本 {VERSION}。"
+                    f"小版本差异: 备份版本 {backup_version}, 当前版本 {VERSION}｡"
                 ),
             }
 
@@ -357,8 +357,8 @@ class AstrBotImporter:
 
         Args:
             zip_path: ZIP 备份文件路径
-            mode: 导入模式，目前仅支持 "replace"（清空后导入）
-            progress_callback: 进度回调函数，接收参数 (stage, current, total, message)
+            mode: 导入模式,目前仅支持 "replace"(清空后导入)
+            progress_callback: 进度回调函数,接收参数 (stage, current, total, message)
 
         Returns:
             ImportResult: 导入结果
@@ -497,8 +497,8 @@ class AstrBotImporter:
     def _validate_version(self, manifest: dict) -> None:
         """验证版本兼容性 - 仅允许相同主版本导入
 
-        注意：此方法仅在 import_all 中调用，用于双重校验。
-        前端应先调用 pre_check 获取详细的版本信息并让用户确认。
+        注意:此方法仅在 import_all 中调用,用于双重校验｡
+        前端应先调用 pre_check 获取详细的版本信息并让用户确认｡
         """
         backup_version = manifest.get("astrbot_version")
         if not backup_version:
@@ -593,7 +593,7 @@ class AstrBotImporter:
             duplicate_count = len(rows) - len(normalized_rows)
             if duplicate_count > 0:
                 logger.warning(
-                    "检测到 %s 重复键 %d 条，已在导入前聚合",
+                    "检测到 %s 重复键 %d 条,已在导入前聚合",
                     table_name,
                     duplicate_count,
                 )
@@ -865,10 +865,10 @@ class AstrBotImporter:
         """
         dir_stats: dict[str, int] = {}
 
-        # 检查备份版本是否支持目录备份（需要版本 >= 1.1）
+        # 检查备份版本是否支持目录备份(需要版本 >= 1.1)
         backup_version = manifest.get("version", "1.0")
         if VersionComparator.compare_version(backup_version, "1.1") < 0:
-            logger.info("备份版本不支持目录备份，跳过目录导入")
+            logger.info("备份版本不支持目录备份,跳过目录导入")
             return dir_stats
 
         backed_up_dirs = manifest.get("directories", [])
@@ -895,7 +895,7 @@ class AstrBotImporter:
                 if not dir_files:
                     continue
 
-                # 备份现有目录（如果存在）
+                # 备份现有目录(如果存在)
                 if await anyio.Path(target_dir).exists():
                     backup_path = Path(f"{target_dir}.bak")
                     if await anyio.Path(backup_path).exists():

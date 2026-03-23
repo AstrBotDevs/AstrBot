@@ -90,6 +90,10 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
   }
   return classes.length > 0 ? { class: classes.join(' ') } : {};
 };
+
+const canToggle = (cmd: CommandItem): boolean => cmd.supports_toggle !== false;
+const canRename = (cmd: CommandItem): boolean => cmd.supports_rename !== false;
+const canEditPermission = (cmd: CommandItem): boolean => cmd.supports_permission !== false;
 </script>
 
 <template>
@@ -97,7 +101,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
     <v-data-table
       :headers="commandHeaders"
       :items="items"
-      item-key="handler_full_name"
+      item-value="command_key"
       hover
       :row-props="getRowProps"
       :loading="props.loading"
@@ -197,6 +201,14 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
             </v-list-item>
           </v-list>
         </v-menu>
+        <v-chip
+          v-else
+          :color="getPermissionColor(item.permission)"
+          size="small"
+          class="font-weight-medium"
+        >
+          {{ getPermissionLabel(item.permission) }}
+        </v-chip>
       </template>
 
       <template #item.enabled="{ item }">
@@ -222,6 +234,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
               icon
               size="small"
               color="success"
+              :disabled="!canToggle(item)"
               @click="emit('toggle-command', item)"
             >
               <v-icon size="22">
@@ -239,6 +252,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
               icon
               size="small"
               color="error"
+              :disabled="!canToggle(item)"
               @click="emit('toggle-command', item)"
             >
               <v-icon size="22">

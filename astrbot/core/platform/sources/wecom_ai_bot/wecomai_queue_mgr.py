@@ -1,5 +1,5 @@
 """企业微信智能机器人队列管理器
-参考 webchat_queue_mgr.py，为企业微信智能机器人实现队列机制
+参考 webchat_queue_mgr.py,为企业微信智能机器人实现队列机制
 支持异步消息处理和流式响应
 """
 
@@ -22,9 +22,9 @@ class WecomAIQueueMgr:
         """StreamID 到输出队列的映射 - 用于发送机器人响应"""
 
         self.pending_responses: dict[str, dict[str, Any]] = {}
-        """待处理的响应缓存，用于流式响应"""
+        """待处理的响应缓存,用于流式响应"""
         self.completed_streams: dict[str, float] = {}
-        """已结束的 stream 缓存，用于兼容平台后续重复轮询"""
+        """已结束的 stream 缓存,用于兼容平台后续重复轮询"""
         self._queue_close_events: dict[str, asyncio.Event] = {}
         self._listener_tasks: dict[str, asyncio.Task] = {}
         self._listener_callback: Callable[[dict], Awaitable[None]] | None = None
@@ -131,7 +131,7 @@ class WecomAIQueueMgr:
 
         Args:
             session_id: 会话ID
-            callback_params: 回调参数（nonce, timestamp等）
+            callback_params: 回调参数(nonce, timestamp等)
 
         """
         self.pending_responses[session_id] = {
@@ -147,7 +147,7 @@ class WecomAIQueueMgr:
             session_id: 会话ID
 
         Returns:
-            响应参数，如果不存在则返回None
+            响应参数,如果不存在则返回None
 
         """
         return self.pending_responses.get(session_id)
@@ -170,7 +170,7 @@ class WecomAIQueueMgr:
         """清理过期的待处理响应
 
         Args:
-            max_age_seconds: 最大存活时间（秒）
+            max_age_seconds: 最大存活时间(秒)
 
         """
         current_time = time.monotonic()

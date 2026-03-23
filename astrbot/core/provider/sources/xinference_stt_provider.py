@@ -3,20 +3,19 @@ import uuid
 import aiofiles
 import aiohttp
 import anyio
+from astrbot.core.entities import ProviderType
+from astrbot.core.register import register_provider_adapter
 from xinference_client.client.restful.async_restful_client import (
     AsyncClient as Client,
 )
 
 from astrbot.core import logger
+from astrbot.core.provider import STTProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.tencent_record_helper import (
     convert_to_pcm_wav,
     tencent_silk_to_wav,
 )
-
-from ..entities import ProviderType
-from ..provider import STTProvider
-from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -156,7 +155,7 @@ class ProviderXinferenceSTT(STTProvider):
                     audio_bytes = await f.read()
 
             # 4. Transcribe
-            # 官方asyncCLient的客户端似乎实现有点问题，这里直接用aiohttp实现openai标准兼容请求，提交issue等待官方修复后再改回来
+            # 官方asyncCLient的客户端似乎实现有点问题,这里直接用aiohttp实现openai标准兼容请求,提交issue等待官方修复后再改回来
             url = f"{self.base_url}/v1/audio/transcriptions"
             headers = {
                 "accept": "application/json",

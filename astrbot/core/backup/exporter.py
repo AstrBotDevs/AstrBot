@@ -1,7 +1,7 @@
 """AstrBot 数据导出器
 
-负责将所有数据导出为 ZIP 备份文件。
-导出格式为 JSON，这是数据库无关的方案，支持未来向 MySQL/PostgreSQL 迁移。
+负责将所有数据导出为 ZIP 备份文件｡
+导出格式为 JSON,这是数据库无关的方案,支持未来向 MySQL/PostgreSQL 迁移｡
 """
 
 import hashlib
@@ -40,19 +40,19 @@ CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 class AstrBotExporter:
     """AstrBot 数据导出器
 
-    导出内容：
-    - 主数据库所有表（data/data_v4.db）
-    - 知识库元数据（data/knowledge_base/kb.db）
+    导出内容:
+    - 主数据库所有表(data/data_v4.db)
+    - 知识库元数据(data/knowledge_base/kb.db)
     - 每个知识库的向量文档数据
-    - 配置文件（data/cmd_config.json）
+    - 配置文件(data/cmd_config.json)
     - 附件文件
     - 知识库多媒体文件
-    - 插件目录（data/plugins）
-    - 插件数据目录（data/plugin_data）
-    - 配置目录（data/config）
-    - T2I 模板目录（data/t2i_templates）
-    - WebChat 数据目录（data/webchat）
-    - 临时文件目录（data/temp）
+    - 插件目录(data/plugins)
+    - 插件数据目录(data/plugin_data)
+    - 配置目录(data/config)
+    - T2I 模板目录(data/t2i_templates)
+    - WebChat 数据目录(data/webchat)
+    - 临时文件目录(data/temp)
     """
 
     def __init__(
@@ -75,7 +75,7 @@ class AstrBotExporter:
 
         Args:
             output_dir: 输出目录
-            progress_callback: 进度回调函数，接收参数 (stage, current, total, message)
+            progress_callback: 进度回调函数,接收参数 (stage, current, total, message)
 
         Returns:
             str: 生成的 ZIP 文件路径
@@ -321,7 +321,7 @@ class AstrBotExporter:
         for dir_name, dir_path in backup_directories.items():
             full_path = Path(dir_path)
             if not await anyio.Path(full_path).exists():
-                logger.debug(f"目录不存在，跳过: {full_path}")
+                logger.debug(f"目录不存在,跳过: {full_path}")
                 continue
 
             file_count = 0
@@ -377,9 +377,9 @@ class AstrBotExporter:
     def _model_to_dict(self, record: Any) -> dict:
         """将 SQLModel 实例转换为字典
 
-        这是数据库无关的序列化方式，支持未来迁移到其他数据库。
+        这是数据库无关的序列化方式,支持未来迁移到其他数据库｡
         """
-        # 使用 SQLModel 内置的 model_dump 方法（如果可用）
+        # 使用 SQLModel 内置的 model_dump 方法(如果可用)
         if hasattr(record, "model_dump"):
             data = record.model_dump(mode="python")
             # 处理 datetime 类型
@@ -450,7 +450,7 @@ class AstrBotExporter:
             "version": BACKUP_MANIFEST_VERSION,
             "astrbot_version": VERSION,
             "exported_at": datetime.now(timezone.utc).isoformat(),
-            "origin": "exported",  # 标记备份来源：exported=本实例导出, uploaded=用户上传
+            "origin": "exported",  # 标记备份来源:exported=本实例导出, uploaded=用户上传
             "schema_version": {
                 "main_db": "v4",
                 "kb_db": "v1",

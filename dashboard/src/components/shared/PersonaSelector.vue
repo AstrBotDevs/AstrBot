@@ -32,7 +32,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import axios from 'axios'
+import axios from '@/utils/request'
 import BaseFolderItemSelector from '@/components/folder/BaseFolderItemSelector.vue'
 import PersonaForm from './PersonaForm.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'

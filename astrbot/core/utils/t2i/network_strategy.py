@@ -2,8 +2,6 @@ import asyncio
 import logging
 import random
 
-import aiohttp
-
 from astrbot.core.config import VERSION
 from astrbot.core.utils.http_ssl import build_tls_connector
 from astrbot.core.utils.io import download_image_by_url
@@ -16,6 +14,12 @@ ASTRBOT_T2I_DEFAULT_ENDPOINT = "https://t2i.soulter.top/text2img"
 logger = logging.getLogger("astrbot")
 
 
+def _get_aiohttp():
+    import aiohttp
+
+    return aiohttp
+
+
 class NetworkRenderStrategy(RenderStrategy):
     def __init__(self, base_url: str | None = None) -> None:
         super().__init__()
@@ -23,21 +27,26 @@ class NetworkRenderStrategy(RenderStrategy):
             self.BASE_RENDER_URL = ASTRBOT_T2I_DEFAULT_ENDPOINT
         else:
             self.BASE_RENDER_URL = self._clean_url(base_url)
-
+        self.tasks = set()
         self.endpoints = [self.BASE_RENDER_URL]
         self.template_manager = TemplateManager()
 
     async def initialize(self) -> None:
         if self.BASE_RENDER_URL == ASTRBOT_T2I_DEFAULT_ENDPOINT:
-            asyncio.create_task(self.get_official_endpoints())
+            _get_official_endpoints_task = asyncio.create_task(
+                self.get_official_endpoints()
+            )
+            self.tasks.add(_get_official_endpoints_task)
+            _get_official_endpoints_task.add_done_callback(self.tasks.discard)
 
     async def get_template(self, name: str = "base") -> str:
         """通过名称获取文转图 HTML 模板"""
         return self.template_manager.get_template(name)
 
     async def get_official_endpoints(self) -> None:
-        """获取官方的 t2i 端点列表。"""
+        """获取官方的 t2i 端点列表｡"""
         try:
+            aiohttp = _get_aiohttp()
             async with aiohttp.ClientSession(
                 trust_env=True,
                 connector=build_tls_connector(),
@@ -89,6 +98,7 @@ class NetworkRenderStrategy(RenderStrategy):
         last_exception = None
         for endpoint in endpoints:
             try:
+                aiohttp = _get_aiohttp()
                 if return_url:
                     async with (
                         aiohttp.ClientSession(

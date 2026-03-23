@@ -66,16 +66,16 @@ pip_installer = PipInstaller(
     astrbot_config.get("pypi_index_url", None),
 )
 __all__ = [
-    "AstrBotConfig",
     "DEMO_MODE",
-    "astrbot_config",
-    "t2i_base_url",
-    "html_renderer",
-    "logger",
+    "AstrBotConfig",
     "LogBroker",
     "LogManager",
+    "astrbot_config",
     "db_helper",
-    "sp",
     "file_token_service",
+    "html_renderer",
+    "logger",
     "pip_installer",
+    "sp",
+    "t2i_base_url",
 ]

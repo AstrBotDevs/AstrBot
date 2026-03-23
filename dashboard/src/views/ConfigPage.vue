@@ -42,6 +42,22 @@
             style="min-width: 280px;"
             @update:model-value="onConfigSearchInput"
           />
+          <v-tooltip
+            :text="tm('actions.refresh')"
+            location="bottom"
+          >
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                icon="mdi-refresh"
+                variant="text"
+                color="primary"
+                :loading="refreshingConfig"
+                :disabled="!fetched && !selectedConfigID && !isSystemConfig"
+                @click="refreshConfigFromFile"
+              />
+            </template>
+          </v-tooltip>
           <!-- <a style="color: inherit;" href="https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6" target="_blank"><v-btn icon="mdi-help-circle" size="small" variant="plain"></v-btn></a> -->
         </div>
       </div>
@@ -345,7 +361,7 @@
 
 
 <script>
-import axios from 'axios';
+import axios from '@/utils/request';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
@@ -435,8 +451,9 @@ export default {
       save_message_snack: false,
       save_message: "",
       save_message_success: "",
-  configContentKey: 0,
+      configContentKey: 0,
       lastSavedConfigSnapshot: '',
+      refreshingConfig: false,
 
       // 配置类型切换
       configType: 'normal', // 'normal' 或 'system'
@@ -601,7 +618,7 @@ export default {
         this.save_message_success = "error";
       });
     },
-    getConfig(abconf_id) {
+    getConfig(abconf_id, reloadFromFile = false) {
       this.fetched = false
       const params = {};
 
@@ -610,27 +627,64 @@ export default {
       } else {
         params.id = abconf_id || this.selectedConfigID;
       }
+      if (reloadFromFile) {
+        params.reload_from_file = '1';
+      }
 
-      axios.get('/api/config/abconf', {
+      return axios.get('/api/config/abconf', {
         params: params
       }).then((res) => {
         this.config_data = res.data.data.config;
         this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
+        this.config_data_str = "";
+        this.config_data_has_changed = false;
         this.fetched = true
         this.metadata = res.data.data.metadata;
         this.configContentKey += 1;
         // 获取配置后更新
-          this.$nextTick(() => {
-            this.originalConfigData = JSON.parse(JSON.stringify(this.config_data));
-            if (!this.isSystemConfig) {
-              this.currentConfigId = abconf_id || this.selectedConfigID;
-            }
-          });
+        this.$nextTick(() => {
+          this.originalConfigData = JSON.parse(JSON.stringify(this.config_data));
+          if (!this.isSystemConfig) {
+            this.currentConfigId = abconf_id || this.selectedConfigID;
+          }
+        });
+        return res;
       }).catch((err) => {
         this.save_message = this.messages.loadError;
         this.save_message_snack = true;
         this.save_message_success = "error";
+        throw err;
       });
+    },
+    async refreshConfigFromFile() {
+      if (this.refreshingConfig) return;
+
+      if (this.hasUnsavedChanges) {
+        const shouldDiscard = await this.$refs.unsavedChangesDialog?.open({
+          title: this.tm('unsavedChangesWarning.dialogTitle'),
+          message: this.tm('unsavedChangesWarning.reloadConfig'),
+          confirmHint: `${this.tm('actions.refresh')}:${this.tm('unsavedChangesWarning.options.confirm')}`,
+          cancelHint: `${this.tm('unsavedChangesWarning.options.cancelReload')}:${this.tm('unsavedChangesWarning.options.cancel')}`,
+          closeHint: `${this.tm('unsavedChangesWarning.options.closeCard')}:"x"`
+        });
+        if (shouldDiscard !== true) {
+          return;
+        }
+      }
+
+      this.refreshingConfig = true;
+      try {
+        await this.getConfig(this.isSystemConfig ? undefined : this.selectedConfigID, true);
+        this.save_message = this.tm('messages.refreshSuccess');
+        this.save_message_snack = true;
+        this.save_message_success = "success";
+      } catch (error) {
+        this.save_message = this.tm('messages.refreshError');
+        this.save_message_snack = true;
+        this.save_message_success = "error";
+      } finally {
+        this.refreshingConfig = false;
+      }
     },
     updateConfig() {
       if (!this.fetched) return;

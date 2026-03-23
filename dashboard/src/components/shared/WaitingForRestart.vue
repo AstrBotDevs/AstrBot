@@ -17,7 +17,7 @@
 </template>
 
 <script>
-import axios from 'axios'
+import axios from '@/utils/request'
 import { useCommonStore } from '@/stores/common';
 import { useI18n } from '@/i18n/composables';
 

@@ -142,7 +142,7 @@ class FileUploadTool(FunctionTool):
             return f"File uploaded successfully to {file_path}"
         except Exception as e:
             logger.error(f"Error uploading file {local_path}: {e}")
-            return f"Error uploading file: {str(e)}"
+            return f"Error uploading file: {e!s}"
 
 
 @dataclass
@@ -213,4 +213,4 @@ class FileDownloadTool(FunctionTool):
             return f"File downloaded successfully to {local_path}"
         except Exception as e:
             logger.error(f"Error downloading file {remote_path}: {e}")
-            return f"Error downloading file: {str(e)}"
+            return f"Error downloading file: {e!s}"

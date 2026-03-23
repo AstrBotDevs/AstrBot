@@ -680,7 +680,8 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import axios from 'axios'
+import axios from '@/utils/request'
+import { resolveApiUrl } from '@/utils/request'
 import { useI18n } from '@/i18n/composables'
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot'
@@ -1115,7 +1116,7 @@ const downloadBackup = (filename) => {
     }
     
     // 直接使用浏览器下载，这样可以看到原生下载进度条
-    const downloadUrl = `/api/backup/download?filename=${encodeURIComponent(filename)}&token=${encodeURIComponent(token)}`
+    const downloadUrl = resolveApiUrl(`/api/backup/download?filename=${encodeURIComponent(filename)}&token=${encodeURIComponent(token)}`)
     
     // 创建隐藏的 a 标签触发下载
     const link = document.createElement('a')

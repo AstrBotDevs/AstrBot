@@ -1,5 +1,6 @@
 import { ref, reactive, type Ref } from 'vue';
-import axios from 'axios';
+import axios from '@/utils/request';
+import { resolveWebSocketUrl } from '@/utils/request';
 import { useToast } from '@/utils/toast';
 
 // 工具调用信息
@@ -91,6 +92,15 @@ type WsStreamContext = {
 
 const STREAMING_STORAGE_KEY = 'enableStreaming';
 const TRANSPORT_MODE_STORAGE_KEY = 'chatTransportMode';
+const HIDDEN_TOOL_CALL_NAMES = new Set(['send_message_to_user']);
+
+function isHiddenToolCall(toolCall: ToolCall | { name?: unknown } | null | undefined): boolean {
+    if (!toolCall || typeof toolCall !== 'object') {
+        return false;
+    }
+    const name = toolCall.name;
+    return typeof name === 'string' && HIDDEN_TOOL_CALL_NAMES.has(name);
+}
 
 export function useMessages(
     currSessionId: Ref<string>,
@@ -162,11 +172,7 @@ export function useMessages(
         if (!token) {
             throw new Error('Missing authentication token');
         }
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = new URL('/api/unified_chat/ws', window.location.href);
-        wsUrl.protocol = protocol;
-        wsUrl.searchParams.set('token', token);
-        return wsUrl.toString();
+        return resolveWebSocketUrl('/api/unified_chat/ws', { token });
     }
 
     function closeChatWebSocket() {
@@ -489,6 +495,9 @@ export function useMessages(
                     } catch {
                         return;
                     }
+                    if (isHiddenToolCall(toolCallData)) {
+                        return;
+                    }
 
                     const toolCall: ToolCall = {
                         id: toolCallData.id,
@@ -526,6 +535,9 @@ export function useMessages(
                     try {
                         resultData = JSON.parse(String(chunkJson.data || '{}'));
                     } catch {
+                        return;
+                    }
+                    if (isHiddenToolCall(resultData)) {
                         return;
                     }
 
@@ -658,7 +670,18 @@ export function useMessages(
 
         // 如果 message 是数组 (新格式)，遍历并填充 embedded 字段
         if (Array.isArray(message)) {
+            const filteredMessage: MessagePart[] = [];
             for (const part of message as MessagePart[]) {
+                if (part.type === 'tool_call' && Array.isArray(part.tool_calls)) {
+                    const visibleToolCalls = part.tool_calls.filter(
+                        (toolCall) => !isHiddenToolCall(toolCall),
+                    );
+                    if (!visibleToolCalls.length) {
+                        continue;
+                    }
+                    part.tool_calls = visibleToolCalls;
+                }
+
                 if (part.type === 'image' && part.attachment_id) {
                     part.embedded_url = await getAttachment(part.attachment_id);
                 } else if (part.type === 'record' && part.attachment_id) {
@@ -671,7 +694,9 @@ export function useMessages(
                     };
                 }
                 // plain, reply, tool_call, video 保持原样
+                filteredMessage.push(part);
             }
+            content.message = filteredMessage;
         }
 
         // 处理 agent_stats (snake_case -> camelCase)

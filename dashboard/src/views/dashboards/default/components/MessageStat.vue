@@ -105,7 +105,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import axios from '@/utils/request';
 import {useCustomizerStore} from "@/stores/customizer";
 import { useModuleI18n } from '@/i18n/composables';
 

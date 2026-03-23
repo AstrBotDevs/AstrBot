@@ -1,14 +1,15 @@
 import asyncio
+import errno
 import hashlib
 import logging
 import os
 import platform
+import re
 import socket
 from collections.abc import Callable
 from datetime import datetime
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from pathlib import Path
-from typing import Protocol
 
 import anyio
 import jwt
@@ -29,24 +30,84 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.io import get_local_ip_addresses
 
-from .routes import *
+from .routes import (
+    ApiKeyRoute,
+    AuthRoute,
+    BackupRoute,
+    ChatRoute,
+    ChatUIProjectRoute,
+    CommandRoute,
+    ConfigRoute,
+    ConversationRoute,
+    CronRoute,
+    FileRoute,
+    KnowledgeBaseRoute,
+    LiveChatRoute,
+    LogRoute,
+    OpenApiRoute,
+    PersonaRoute,
+    PlatformRoute,
+    PluginRoute,
+    Response,
+    RouteContext,
+    SessionManagementRoute,
+    SkillsRoute,
+    StaticFileRoute,
+    StatRoute,
+    SubAgentRoute,
+    T2iRoute,
+    ToolsRoute,
+    UpdateRoute,
+)
 from .routes.api_key import ALL_OPEN_API_SCOPES
 
 # Static assets shipped inside the wheel (built during `hatch build`).
 _BUNDLED_DIST = Path(__file__).parent / "dist"
 
 
-class _AddrWithPort(Protocol):
-    port: int
-
-
 APP: Quart
+_ENV_PLACEHOLDER_RE = re.compile(
+    r"\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)(?::-(?P<default>[^}]*))?\}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))"
+)
 
 
 def _parse_env_bool(value: str | None, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _expand_env_placeholders(value: str, field_name: str) -> str:
+    missing_vars: list[str] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        var_name = match.group("braced") or match.group("plain")
+        default = match.group("default")
+        env_value = os.environ.get(var_name)
+        if env_value is not None:
+            return env_value
+        if default is not None:
+            return default
+        missing_vars.append(var_name)
+        return match.group(0)
+
+    expanded = _ENV_PLACEHOLDER_RE.sub(_replace, value)
+    if missing_vars:
+        missing = ", ".join(sorted(set(missing_vars)))
+        raise ValueError(
+            f"Unresolved environment variable(s) in dashboard {field_name}: {missing}"
+        )
+    return expanded
+
+
+def _resolve_dashboard_value(
+    value: str | int | None,
+    *,
+    field_name: str,
+) -> str | int | None:
+    if not isinstance(value, str):
+        return value
+    return _expand_env_placeholders(value, field_name).strip()
 
 
 class AstrBotJSONProvider(DefaultJSONProvider):
@@ -141,10 +202,26 @@ class AstrBotDashboard:
         self.app.json.sort_keys = False
 
         # 配置 CORS
+        # 支持通过环境变量 CORS_ALLOW_ORIGIN 配置允许的域名,多个域名用逗号分隔
+        # 如果前端使用 withCredentials:true,需要设置具体的域名而非 "*"
+        cors_allow_origin = os.environ.get("CORS_ALLOW_ORIGIN", "*")
+        cors_allow_credentials = False
+        if cors_allow_origin != "*":
+            cors_allow_origin = [
+                origin.strip() for origin in cors_allow_origin.split(",")
+            ]
+            # 只有设置具体域名时才允许凭据
+            cors_allow_credentials = True
         self.app = cors(
             self.app,
-            allow_origin="*",
-            allow_headers=["Authorization", "Content-Type", "X-API-Key"],
+            allow_origin=cors_allow_origin,
+            allow_credentials=cors_allow_credentials,
+            allow_headers=[
+                "Authorization",
+                "Content-Type",
+                "X-API-Key",
+                "Accept-Language",
+            ],
             allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         )
 
@@ -188,6 +265,7 @@ class AstrBotDashboard:
         PluginRoute(
             self.context, self.core_lifecycle, self.core_lifecycle.plugin_manager
         )
+
         self.command_route = CommandRoute(self.context)
         self.cr = ConfigRoute(self.context, self.core_lifecycle)
         self.lr = LogRoute(self.context, self.core_lifecycle.log_broker)
@@ -229,9 +307,10 @@ class AstrBotDashboard:
         )
 
     def _init_plugin_route_index(self):
-        """将插件路由索引，避免 O(n) 查找"""
+        """将插件路由索引,避免 O(n) 查找"""
         self._plugin_route_map: dict[tuple[str, str], Callable] = {}
-
+        if self.core_lifecycle.star_context.registered_web_apis is None:
+            self.core_lifecycle.star_context.registered_web_apis = []
         for (
             route,
             handler,
@@ -362,8 +441,16 @@ class AstrBotDashboard:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 s.bind((host, port))
                 return False
-        except OSError:
-            return True
+        except OSError as exc:
+            if exc.errno == errno.EADDRINUSE:
+                return True
+            logger.warning(
+                "Skip port preflight for %s:%s due to bind probe failure: %s",
+                host,
+                port,
+                exc,
+            )
+            return False
 
     def get_process_using_port(self, port: int) -> str:
         """获取占用端口的进程信息"""
@@ -392,19 +479,27 @@ class AstrBotDashboard:
             )
 
         dashboard_config = self.config.get("dashboard", {})
-        host = (
-            os.environ.get("ASTRBOT_DASHBOARD_HOST")
+        host_value = (
+            os.environ.get("ASTRBOT_HOST")
             or os.environ.get("DASHBOARD_HOST")
             or dashboard_config.get("host", "0.0.0.0")
         )
-        port = int(
-            os.environ.get("ASTRBOT_DASHBOARD_PORT")
+        host = _resolve_dashboard_value(host_value, field_name="host")
+        if not isinstance(host, str) or not host:
+            raise ValueError("Dashboard host must be a non-empty string")
+
+        port_value = (
+            os.environ.get("ASTRBOT_PORT")
             or os.environ.get("DASHBOARD_PORT")
             or dashboard_config.get("port", 6185)
         )
+        resolved_port = _resolve_dashboard_value(port_value, field_name="port")
+        if resolved_port is None:
+            raise ValueError("Port configuration is missing")
+        port = int(resolved_port)
         ssl_config = dashboard_config.get("ssl", {})
         ssl_enable = _parse_env_bool(
-            os.environ.get("ASTRBOT_DASHBOARD_SSL_ENABLE")
+            os.environ.get("ASTRBOT_SSL_ENABLE")
             or os.environ.get("DASHBOARD_SSL_ENABLE"),
             ssl_config.get("enable", False),
         )
@@ -441,37 +536,37 @@ class AstrBotDashboard:
 
         if ssl_enable:
             cert_file = (
-                os.environ.get("ASTRBOT_DASHBOARD_SSL_CERT")
+                os.environ.get("ASTRBOT_SSL_CERT")
                 or os.environ.get("DASHBOARD_SSL_CERT")
                 or ssl_config.get("cert_file", "")
             )
+            cert_file = _resolve_dashboard_value(cert_file, field_name="ssl.cert_file")
             key_file = (
-                os.environ.get("ASTRBOT_DASHBOARD_SSL_KEY")
+                os.environ.get("ASTRBOT_SSL_KEY")
                 or os.environ.get("DASHBOARD_SSL_KEY")
                 or ssl_config.get("key_file", "")
             )
+            key_file = _resolve_dashboard_value(key_file, field_name="ssl.key_file")
             ca_certs = (
-                os.environ.get("ASTRBOT_DASHBOARD_SSL_CA_CERTS")
+                os.environ.get("ASTRBOT_SSL_CA_CERTS")
                 or os.environ.get("DASHBOARD_SSL_CA_CERTS")
                 or ssl_config.get("ca_certs", "")
             )
+            ca_certs = _resolve_dashboard_value(ca_certs, field_name="ssl.ca_certs")
 
-            cert_path = anyio.Path(cert_file).expanduser()
-            key_path = anyio.Path(key_file).expanduser()
-            if not cert_file or not key_file:
-                raise ValueError(
-                    "dashboard.ssl.enable 为 true 时，必须配置 cert_file 和 key_file。",
-                )
-            if not await cert_path.is_file():
-                raise ValueError(f"SSL 证书文件不存在: {cert_path}")
-            if not await key_path.is_file():
-                raise ValueError(f"SSL 私钥文件不存在: {key_path}")
+            if cert_file and key_file:
+                cert_path = await anyio.Path(str(cert_file)).expanduser()
+                key_path = await anyio.Path(str(key_file)).expanduser()
+                if not await cert_path.is_file():
+                    raise ValueError(f"SSL 证书文件不存在: {cert_path}")
+                if not await key_path.is_file():
+                    raise ValueError(f"SSL 私钥文件不存在: {key_path}")
 
-            config.certfile = str(await cert_path.resolve())
-            config.keyfile = str(await key_path.resolve())
+                config.certfile = str(await cert_path.resolve())
+                config.keyfile = str(await key_path.resolve())
 
             if ca_certs:
-                ca_path = anyio.Path(ca_certs).expanduser()
+                ca_path = await anyio.Path(str(ca_certs)).expanduser()
                 if not await ca_path.is_file():
                     raise ValueError(f"SSL CA 证书文件不存在: {ca_path}")
                 config.ca_certs = str(await ca_path.resolve())
@@ -531,7 +626,7 @@ class AstrBotDashboard:
 
         if not local_ips:
             parts.append(
-                "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问。\n"
+                "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问｡\n"
             )
 
         logger.info("".join(parts))

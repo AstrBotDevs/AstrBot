@@ -7,7 +7,7 @@ import click
 from click.shell_completion import get_completion_class
 
 from . import __version__
-from .commands import bk, conf, init, plug, run, uninstall
+from .commands import bk, conf, init, plug, run, tui, uninstall
 
 logo_tmpl = r"""
      ___           _______.___________..______      .______     ______   .___________.
@@ -22,7 +22,9 @@ logo_tmpl = r"""
 @click.group()
 @click.version_option(__version__, prog_name="AstrBot")
 def cli() -> None:
-    """The AstrBot CLI"""
+    """Astrbot
+    Agentic IM Chatbot infrastructure that integrates lots of IM platforms, LLMs, plugins and AI feature, and can be your openclaw alternative. ✨
+    """
     click.echo(logo_tmpl)
     click.echo("Welcome to AstrBot CLI!")
     click.echo(f"AstrBot CLI version: {__version__}")
@@ -82,6 +84,7 @@ cli.add_command(plug)
 cli.add_command(conf)
 cli.add_command(uninstall)
 cli.add_command(bk)
+cli.add_command(tui)
 
 
 @click.command()
@@ -104,6 +107,9 @@ def completion(shell: str | None) -> None:
             sys.exit(1)
 
     comp_cls = get_completion_class(shell)
+    if comp_cls is None:
+        click.echo(f"No completion support for shell: {shell}", err=True)
+        sys.exit(1)
     comp = comp_cls(
         cli, ctx_args={}, prog_name="astrbot", complete_var="_ASTRBOT_COMPLETE"
     )

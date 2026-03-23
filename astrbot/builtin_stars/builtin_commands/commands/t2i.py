@@ -16,8 +16,8 @@ class T2ICommand:
         if config["t2i"]:
             config["t2i"] = False
             config.save_config()
-            event.set_result(MessageEventResult().message("已关闭文本转图片模式。"))
+            event.set_result(MessageEventResult().message("已关闭文本转图片模式｡"))
             return
         config["t2i"] = True
         config.save_config()
-        event.set_result(MessageEventResult().message("已开启文本转图片模式。"))
+        event.set_result(MessageEventResult().message("已开启文本转图片模式｡"))

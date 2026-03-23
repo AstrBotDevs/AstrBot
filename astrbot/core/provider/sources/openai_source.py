@@ -146,7 +146,7 @@ class ProviderOpenAIOfficial(Provider):
         image_fallback_used: bool = False,
     ) -> tuple:
         logger.warning(
-            "检测到图片请求失败（%s），已移除图片并重试（保留文本内容）。",
+            "检测到图片请求失败(%s),已移除图片并重试(保留文本内容)｡",
             reason,
         )
         new_contexts = await self._remove_image_from_context(context_query)
@@ -211,6 +211,26 @@ class ProviderOpenAIOfficial(Provider):
 
         self.reasoning_key = "reasoning_content"
 
+    def _ollama_disable_thinking_enabled(self) -> bool:
+        value = self.provider_config.get("ollama_disable_thinking", False)
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    def _apply_provider_specific_extra_body_overrides(
+        self, extra_body: dict[str, Any]
+    ) -> None:
+        if self.provider_config.get("provider") != "ollama":
+            return
+        if not self._ollama_disable_thinking_enabled():
+            return
+
+        # Ollama's OpenAI-compatible endpoint reliably maps reasoning_effort=none
+        # to think=false, while direct think=false passthrough is not stable.
+        extra_body.pop("reasoning", None)
+        extra_body.pop("think", None)
+        extra_body["reasoning_effort"] = "none"
+
     async def get_models(self):
         try:
             models_str = []
@@ -220,7 +240,7 @@ class ProviderOpenAIOfficial(Provider):
                 models_str.append(model.id)
             return models_str
         except NotFoundError as e:
-            raise Exception(f"获取模型列表失败：{e}")
+            raise Exception(f"获取模型列表失败:{e}")
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
@@ -246,6 +266,7 @@ class ProviderOpenAIOfficial(Provider):
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
+        self._apply_provider_specific_extra_body_overrides(extra_body)
 
         model = payloads.get("model", "").lower()
 
@@ -257,7 +278,7 @@ class ProviderOpenAIOfficial(Provider):
 
         if not isinstance(completion, ChatCompletion):
             raise Exception(
-                f"API 返回的 completion 类型错误：{type(completion)}: {completion}。",
+                f"API 返回的 completion 类型错误:{type(completion)}: {completion}｡",
             )
 
         logger.debug(f"completion: {completion}")
@@ -271,7 +292,7 @@ class ProviderOpenAIOfficial(Provider):
         payloads: dict,
         tools: ToolSet | None,
     ) -> AsyncGenerator[LLMResponse, None]:
-        """流式查询API，逐步返回结果"""
+        """流式查询API,逐步返回结果"""
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -296,6 +317,7 @@ class ProviderOpenAIOfficial(Provider):
                 to_del.append(key)
         for key in to_del:
             del payloads[key]
+        self._apply_provider_specific_extra_body_overrides(extra_body)
 
         stream = await self.client.chat.completions.create(
             **payloads,
@@ -314,7 +336,8 @@ class ProviderOpenAIOfficial(Provider):
                 logger.warning("Saving chunk state error: " + str(e))
             if not chunk.choices:
                 continue
-            delta = chunk.choices[0].delta
+            choice = chunk.choices[0]
+            delta = choice.delta
             # logger.debug(f"chunk delta: {delta}")
             # handle the content delta
             reasoning = self._extract_reasoning_content(chunk)
@@ -332,6 +355,11 @@ class ProviderOpenAIOfficial(Provider):
                 _y = True
             if chunk.usage:
                 llm_response.usage = self._extract_usage(chunk.usage)
+            elif choice_usage := getattr(choice, "usage", None):
+                # Workaround for some providers that only return usage in choices[].usage, e.g. MoonshotAI
+                # See https://github.com/AstrBotDevs/AstrBot/issues/6614
+                llm_response.usage = self._extract_usage(choice_usage)
+                state.current_completion_snapshot.usage = choice_usage
             if _y:
                 yield llm_response
 
@@ -360,13 +388,17 @@ class ProviderOpenAIOfficial(Provider):
                 reasoning_text = str(reasoning_attr)
         return reasoning_text
 
-    def _extract_usage(self, usage: CompletionUsage) -> TokenUsage:
-        ptd = usage.prompt_tokens_details
-        cached = ptd.cached_tokens if ptd and ptd.cached_tokens else 0
-        prompt_tokens = 0 if usage.prompt_tokens is None else usage.prompt_tokens
-        completion_tokens = (
-            0 if usage.completion_tokens is None else usage.completion_tokens
-        )
+    def _extract_usage(self, usage: CompletionUsage | dict) -> TokenUsage:
+        ptd = getattr(usage, "prompt_tokens_details", None)
+        cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
+        cached = (
+            cached if isinstance(cached, int) else 0
+        )  # ptd.cached_tokens 可能为None
+        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0  # 安全
+        completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+        cached = cached or 0
+        prompt_tokens = prompt_tokens or 0
+        completion_tokens = completion_tokens or 0
         return TokenUsage(
             input_other=prompt_tokens - cached,
             input_cached=cached,
@@ -470,7 +502,7 @@ class ProviderOpenAIOfficial(Provider):
         llm_response = LLMResponse("assistant")
 
         if not completion.choices:
-            raise Exception("API 返回的 completion 为空。")
+            raise Exception("API 返回的 completion 为空｡")
         choice = completion.choices[0]
 
         # parse the text completion
@@ -533,11 +565,11 @@ class ProviderOpenAIOfficial(Provider):
         # specially handle finish reason
         if choice.finish_reason == "content_filter":
             raise Exception(
-                "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。",
+                "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)｡",
             )
         if llm_response.completion_text is None and not llm_response.tools_call_args:
-            logger.error(f"API 返回的 completion 无法解析：{completion}。")
-            raise Exception(f"API 返回的 completion 无法解析：{completion}。")
+            logger.error(f"API 返回的 completion 无法解析:{completion}｡")
+            raise Exception(f"API 返回的 completion 无法解析:{completion}｡")
 
         llm_response.raw_completion = completion
         llm_response.id = completion.id
@@ -625,7 +657,7 @@ class ProviderOpenAIOfficial(Provider):
         """处理API错误并尝试恢复"""
         if "429" in str(e):
             logger.warning(
-                f"API 调用过于频繁，尝试使用其他 Key 重试。当前 Key: {chosen_key[:12]}",
+                f"API 调用过于频繁,尝试使用其他 Key 重试｡当前 Key: {chosen_key[:12]}",
             )
             # 最后一次不等待
             if retry_cnt < max_retries - 1:
@@ -646,7 +678,7 @@ class ProviderOpenAIOfficial(Provider):
             raise e
         if "maximum context length" in str(e):
             logger.warning(
-                f"上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}",
+                f"上下文长度超过限制｡尝试弹出最早的记录然后重试｡当前记录条数: {len(context_query)}",
             )
             await self.pop_record(context_query)
             payloads["messages"] = context_query
@@ -690,9 +722,9 @@ class ProviderOpenAIOfficial(Provider):
             or ("tool" in str(e).lower() and "support" in str(e).lower())
             or ("function" in str(e).lower() and "support" in str(e).lower())
         ):
-            # openai, ollama, gemini openai, siliconcloud 的错误提示与 code 不统一，只能通过字符串匹配
+            # openai, ollama, gemini openai, siliconcloud 的错误提示与 code 不统一,只能通过字符串匹配
             logger.info(
-                f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。",
+                f"{self.get_model()} 不支持函数工具调用,已自动去除,不影响使用｡",
             )
             payloads.pop("tools", None)
             return (
@@ -704,10 +736,10 @@ class ProviderOpenAIOfficial(Provider):
                 None,
                 image_fallback_used,
             )
-        # logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
+        # logger.error(f"发生了错误｡Provider 配置如下: {self.provider_config}")
 
         if "tool" in str(e).lower() and "support" in str(e).lower():
-            logger.error("疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
+            logger.error("疑似该模型不支持函数调用工具调用｡请输入 /tool off_all")
 
         if is_connection_error(e):
             proxy = self.provider_config.get("proxy", "")
@@ -777,7 +809,7 @@ class ProviderOpenAIOfficial(Provider):
                     break
 
         if retry_cnt == max_retries - 1 or llm_response is None:
-            logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
+            logger.error(f"API 调用失败,重试 {max_retries} 次仍然失败｡")
             if last_exception is None:
                 raise Exception("未知错误")
             raise last_exception
@@ -795,7 +827,7 @@ class ProviderOpenAIOfficial(Provider):
         model=None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
-        """流式对话，与服务商交互并逐步返回结果"""
+        """流式对话,与服务商交互并逐步返回结果"""
         payloads, context_query = await self._prepare_chat_payload(
             prompt,
             image_urls,
@@ -844,7 +876,7 @@ class ProviderOpenAIOfficial(Provider):
                     break
 
         if retry_cnt == max_retries - 1:
-            logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
+            logger.error(f"API 调用失败,重试 {max_retries} 次仍然失败｡")
             if last_exception is None:
                 raise Exception("未知错误")
             raise last_exception
@@ -895,7 +927,7 @@ class ProviderOpenAIOfficial(Provider):
             else:
                 image_data = await self.encode_image_bs64(image_url)
             if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                logger.warning(f"图片 {image_url} 得到的结果为空,将忽略｡")
                 return None
             return {
                 "type": "image_url",
@@ -905,17 +937,17 @@ class ProviderOpenAIOfficial(Provider):
         # 构建内容块列表
         content_blocks = []
 
-        # 1. 用户原始发言（OpenAI 建议：用户发言在前）
+        # 1. 用户原始发言(OpenAI 建议:用户发言在前)
         if text:
             content_blocks.append({"type": "text", "text": text})
         elif image_urls:
-            # 如果没有文本但有图片，添加占位文本
+            # 如果没有文本但有图片,添加占位文本
             content_blocks.append({"type": "text", "text": "[图片]"})
         elif extra_user_content_parts:
-            # 如果只有额外内容块，也需要添加占位文本
+            # 如果只有额外内容块,也需要添加占位文本
             content_blocks.append({"type": "text", "text": " "})
 
-        # 2. 额外的内容块（系统提醒、指令等）
+        # 2. 额外的内容块(系统提醒､指令等)
         if extra_user_content_parts:
             for part in extra_user_content_parts:
                 if isinstance(part, TextPart):
@@ -934,7 +966,7 @@ class ProviderOpenAIOfficial(Provider):
                 if image_part:
                     content_blocks.append(image_part)
 
-        # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
+        # 如果只有主文本且没有额外内容块和图片,返回简单格式以保持向后兼容
         if (
             text
             and not extra_user_content_parts

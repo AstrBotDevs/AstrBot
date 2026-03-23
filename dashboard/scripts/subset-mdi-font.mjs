@@ -30,7 +30,7 @@ const UTILITY_CLASSES = new Set([
     "mdi-set", "mdi-spin", "mdi-rotate-45", "mdi-rotate-90", "mdi-rotate-135",
     "mdi-rotate-180", "mdi-rotate-225", "mdi-rotate-270", "mdi-rotate-315",
     "mdi-flip-h", "mdi-flip-v", "mdi-light", "mdi-dark", "mdi-inactive",
-    "mdi-18px", "mdi-24px", "mdi-36px", "mdi-48px",
+    "mdi-18px", "mdi-24px", "mdi-36px", "mdi-48px", "mdi-subset",
 ]);
 
 // Regex to match individual icon class definitions in MDI CSS

@@ -11,7 +11,7 @@ class BaseKBModel(SQLModel, table=False):
 class KnowledgeBase(BaseKBModel, table=True):
     """知识库表
 
-    存储知识库的基本信息和统计数据。
+    存储知识库的基本信息和统计数据｡
     """
 
     __tablename__ = "knowledge_bases"  # type: ignore
@@ -59,7 +59,7 @@ class KnowledgeBase(BaseKBModel, table=True):
 class KBDocument(BaseKBModel, table=True):
     """文档表
 
-    存储上传到知识库的文档元数据。
+    存储上传到知识库的文档元数据｡
     """
 
     __tablename__ = "kb_documents"  # type: ignore
@@ -93,7 +93,7 @@ class KBDocument(BaseKBModel, table=True):
 class KBMedia(BaseKBModel, table=True):
     """多媒体资源表
 
-    存储从文档中提取的图片、视频等多媒体资源。
+    存储从文档中提取的图片､视频等多媒体资源｡
     """
 
     __tablename__ = "kb_media"  # type: ignore

@@ -24,9 +24,9 @@ async def migrate_token_usage(db_helper: BaseDatabase) -> None:
     if migration_done:
         return
 
-    logger.info("开始执行数据库迁移（添加 conversations.token_usage 列）...")
+    logger.info("开始执行数据库迁移(添加 conversations.token_usage 列)...")
 
-    # 这里只适配了 SQLite。因为截止至这一版本，AstrBot 仅支持 SQLite。
+    # 这里只适配了 SQLite｡因为截止至这一版本,AstrBot 仅支持 SQLite｡
 
     try:
         async with db_helper.get_db() as session:
@@ -36,7 +36,7 @@ async def migrate_token_usage(db_helper: BaseDatabase) -> None:
             column_names = [col[1] for col in columns]
 
             if "token_usage" in column_names:
-                logger.info("token_usage 列已存在，跳过迁移")
+                logger.info("token_usage 列已存在,跳过迁移")
                 await sp.put_async(
                     "global", "global", "migration_done_token_usage_1", True
                 )

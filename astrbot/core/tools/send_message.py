@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from typing import Any, TypedDict
 
 import anyio
 from pydantic import Field
@@ -24,6 +25,16 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 
+class MessageComponent(TypedDict, total=False):
+    """Type-safe message component structure."""
+
+    type: str
+    text: str
+    path: str
+    url: str
+    mention_user_id: str
+
+
 @dataclass
 class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     name: str = "send_message_to_user"
@@ -38,32 +49,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     "description": "An ordered list of message components to send. `mention_user` type can be used to mention the user.",
                     "items": {
                         "type": "object",
-                        "properties": {
-                            "type": {
-                                "type": "string",
-                                "description": (
-                                    "Component type. One of: "
-                                    "plain, image, record, video, file, mention_user. Record is voice message."
-                                ),
-                            },
-                            "text": {
-                                "type": "string",
-                                "description": "Text content for `plain` type.",
-                            },
-                            "path": {
-                                "type": "string",
-                                "description": "File path for `image`, `record`, or `file` types. Both local path and sandbox path are supported.",
-                            },
-                            "url": {
-                                "type": "string",
-                                "description": "URL for `image`, `record`, or `file` types.",
-                            },
-                            "mention_user_id": {
-                                "type": "string",
-                                "description": "User ID to mention for `mention_user` type.",
-                            },
-                        },
-                        "required": ["type"],
+                        "additionalProperties": {"type": "string"},
                     },
                 },
             },
@@ -111,10 +97,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         return path, False
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
+        self, context: ContextWrapper[AstrAgentContext], **kwargs: Any
     ) -> ToolExecResult:
-        session = kwargs.get("session") or context.context.event.unified_msg_origin
-        messages = kwargs.get("messages")
+        session: str | MessageSession = kwargs.get("session") or context.context.event.unified_msg_origin
+        messages: list[dict[str, Any]] | None = kwargs.get("messages")
 
         if not isinstance(messages, list) or not messages:
             return "error: messages parameter is empty or invalid."
@@ -125,11 +111,11 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             if not isinstance(msg, dict):
                 return f"error: messages[{idx}] should be an object."
 
-            msg_type = str(msg.get("type", "")).lower()
-            if not msg_type:
+            if "type" not in msg:
                 return f"error: messages[{idx}].type is required."
+            msg_type = str(msg["type"]).lower()
 
-            file_from_sandbox = False
+            _file_from_sandbox = False
 
             try:
                 if msg_type == "plain":
@@ -143,7 +129,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if path:
                         (
                             local_path,
-                            file_from_sandbox,
+                            _file_from_sandbox,
                         ) = await self._resolve_path_from_sandbox(context, path)
                         components.append(Comp.Image.fromFileSystem(path=local_path))
                     elif url:
@@ -156,7 +142,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if path:
                         (
                             local_path,
-                            file_from_sandbox,
+                            _file_from_sandbox,
                         ) = await self._resolve_path_from_sandbox(context, path)
                         components.append(Comp.Record.fromFileSystem(path=local_path))
                     elif url:
@@ -169,7 +155,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if path:
                         (
                             local_path,
-                            file_from_sandbox,
+                            _file_from_sandbox,
                         ) = await self._resolve_path_from_sandbox(context, path)
                         components.append(Comp.Video.fromFileSystem(path=local_path))
                     elif url:
@@ -188,7 +174,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if path:
                         (
                             local_path,
-                            file_from_sandbox,
+                            _file_from_sandbox,
                         ) = await self._resolve_path_from_sandbox(context, path)
                         components.append(Comp.File(name=name, file=local_path))
                     elif url:

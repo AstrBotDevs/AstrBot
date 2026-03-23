@@ -102,7 +102,7 @@ import RunningTime from './components/RunningTime.vue';
 import MemoryUsage from './components/MemoryUsage.vue';
 import MessageStat from './components/MessageStat.vue';
 import PlatformStat from './components/PlatformStat.vue';
-import axios from 'axios';
+import axios from '@/utils/request';
 import { useModuleI18n } from '@/i18n/composables';
 
 export default {

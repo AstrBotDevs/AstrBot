@@ -13,14 +13,19 @@ Core:
 - `DEMO_MODE`: Enable demo mode.
 - `PYTHON`: Python executable path override (for local code execution).
 
-Dashboard:
+Dashboard / Backend:
 - `ASTRBOT_DASHBOARD_ENABLE` / `DASHBOARD_ENABLE`: Enable/Disable Dashboard.
-- `ASTRBOT_DASHBOARD_HOST` / `DASHBOARD_HOST`: Dashboard bind host.
-- `ASTRBOT_DASHBOARD_PORT` / `DASHBOARD_PORT`: Dashboard bind port.
-- `ASTRBOT_DASHBOARD_SSL_ENABLE` / `DASHBOARD_SSL_ENABLE`: Enable SSL.
-- `ASTRBOT_DASHBOARD_SSL_CERT` / `DASHBOARD_SSL_CERT`: SSL Certificate path.
-- `ASTRBOT_DASHBOARD_SSL_KEY` / `DASHBOARD_SSL_KEY`: SSL Key path.
-- `ASTRBOT_DASHBOARD_SSL_CA_CERTS` / `DASHBOARD_SSL_CA_CERTS`: SSL CA Certs path.
+- `ASTRBOT_HOST` / `DASHBOARD_HOST`: Dashboard bind host.
+- `ASTRBOT_PORT` / `DASHBOARD_PORT`: Dashboard bind port.
+
+Backend-standard SSL names (preferred for server):
+- `ASTRBOT_SSL_ENABLE` / `DASHBOARD_SSL_ENABLE`: Enable SSL for API.
+- `ASTRBOT_SSL_CERT` / `DASHBOARD_SSL_CERT`: SSL Certificate path for backend.
+- `ASTRBOT_SSL_KEY` / `DASHBOARD_SSL_KEY`: SSL Key path for backend.
+- `ASTRBOT_SSL_CA_CERTS` / `DASHBOARD_SSL_CA_CERTS`: SSL CA Certs path for backend.
+
+Legacy compatibility:
+- The CLI will set both `ASTRBOT_SSL_*` and the legacy `DASHBOARD_SSL_*` names to remain compatible.
 
 Network:
 - `http_proxy` / `https_proxy`: Proxy URL.
@@ -35,18 +40,48 @@ Platform Specific:
 - `TEST_MODE`: Test mode for QQOfficial.
 """
 
+from __future__ import annotations
+
 import asyncio
 import os
+import re
 import sys
 import traceback
 from pathlib import Path
 
 import click
+from dotenv import load_dotenv
 from filelock import FileLock, Timeout
 
-from astrbot.core.utils.astrbot_path import astrbot_paths
+from astrbot.cli.utils import DashboardManager
+from astrbot.runtime_bootstrap import initialize_runtime_bootstrap
 
-from ..utils import check_astrbot_root, check_dashboard
+initialize_runtime_bootstrap()
+# Regular expression to find bash-like parameter expansions:
+# ${VAR:-default} or ${VAR}
+_PARAM_EXPAND_RE = re.compile(r"\$\{([^}:]+?)(:-([^}]*))?\}")
+
+
+def _expand_parameter(
+    match: re.Match, env: dict[str, str], local: dict[str, str]
+) -> str:
+    """Helper to expand a single ${VAR:-default} or ${VAR} occurrence.
+
+    Precedence:
+      1. local dict (parsed from the same file, earlier entries)
+      2. environment variables
+      3. default provided in the expansion (if any)
+      4. empty string
+    """
+    var = match.group(1)
+    default = match.group(3) if match.group(3) is not None else ""
+    # Prefer 'local' parsed values first
+    if var in local and local[var] != "":
+        return local[var]
+    val = env.get(var, "")
+    if val != "":
+        return val
+    return default
 
 
 async def run_astrbot(astrbot_root: Path) -> None:
@@ -58,9 +93,7 @@ async def run_astrbot(astrbot_root: Path) -> None:
         os.environ.get("ASTRBOT_DASHBOARD_ENABLE", os.environ.get("DASHBOARD_ENABLE"))
         == "True"
     ):
-        # 避免在 systemd 模式下因等待输入而阻塞
-        if os.environ.get("ASTRBOT_SYSTEMD") != "1":
-            await check_dashboard(astrbot_root)
+        await DashboardManager().ensure_installed(astrbot_root)
 
     log_broker = LogBroker()
     LogManager.set_queue_handler(logger, log_broker)
@@ -78,7 +111,7 @@ async def run_astrbot(astrbot_root: Path) -> None:
 @click.option(
     "--service-config",
     "-c",
-    help="Service configuration file path",
+    help="Service configuration file path (supports ${VAR:-default} style expansion)",
     required=False,
     type=str,
 )
@@ -97,6 +130,24 @@ async def run_astrbot(astrbot_root: Path) -> None:
     type=str,
     default="INFO",
 )
+@click.option(
+    "--ssl-cert",
+    help="SSL certificate file path for backend (preferred env name: ASTRBOT_SSL_CERT)",
+    required=False,
+    type=str,
+)
+@click.option(
+    "--ssl-key",
+    help="SSL private key file path for backend (preferred env name: ASTRBOT_SSL_KEY)",
+    required=False,
+    type=str,
+)
+@click.option(
+    "--ssl-ca",
+    help="SSL CA certificates file path for backend (preferred env name: ASTRBOT_SSL_CA_CERTS)",
+    required=False,
+    type=str,
+)
 @click.option("--debug", is_flag=True, help="Enable debug mode")
 @click.command()
 def run(
@@ -107,6 +158,9 @@ def run(
     service_config: str,
     backend_only: bool,
     log_level: str,
+    ssl_cert: str,
+    ssl_key: str,
+    ssl_ca: str,
     debug: bool,
 ) -> None:
     """Run AstrBot"""
@@ -114,69 +168,104 @@ def run(
         if debug:
             log_level = "DEBUG"
 
+        # --- Step 1: Resolve service-config path (if provided). We'll treat it as a .env file later. ---
+        svc_path: Path | None = None
         if service_config:
-            svc_path = Path(service_config)
-            if svc_path.exists():
-                content = svc_path.read_text(encoding="utf-8")
-                for line in content.splitlines():
-                    line = line.strip()
-                    if not line or line.startswith("#"):
-                        continue
-                    if "=" in line:
-                        key, value = line.split("=", 1)
-                        key = key.strip()
-                        value = value.strip()
-                        # Remove quotes
-                        if (value.startswith('"') and value.endswith('"')) or (
-                            value.startswith("'") and value.endswith("'")
-                        ):
-                            value = value[1:-1]
+            candidate = Path(service_config)
+            if not candidate.exists():
+                # Try to expand user and resolve
+                candidate = Path(os.path.expanduser(service_config))
+            if candidate.exists():
+                svc_path = candidate
 
-                        if key == "HOST" and not host:
-                            host = value
-                        elif key == "PORT" and not port:
-                            port = value
-                        elif key == "ASTRBOT_ROOT" and not root:
-                            root = value
+        # NOTE:
+        # Loading of common .env files (CWD/.env, packaged project .env, ASTRBOT_ROOT/.env)
+        # has been moved to astrbot.core.utils.astrbot_path during import-time to avoid
+        # early-initialization ordering issues. Those files are loaded there using
+        # `override=False` so they do not clobber environment variables provided by the
+        # systemd unit or the caller.
+        #
+        # Here we only load an explicit service-config file (if given). Service-config
+        # should be able to override the common .env files, but CLI-provided values must
+        # still win; the CLI will set/overwrite corresponding environment variables
+        # below after this load.
+        if svc_path and svc_path.exists():
+            # Load service-config as an env file and allow it to override previously-loaded
+            # .env values (those were loaded by astrbot_path). CLI variables are applied
+            # after this point and will take precedence.
+            load_dotenv(dotenv_path=str(svc_path), override=True)
 
         # Normalize environment variables for backward compatibility
-        # If the legacy env var is set but the new one isn't, copy it over.
+        # If legacy env vars are set but the preferred new ones aren't, copy them over.
         env_map = {
+            # Dashboard legacy -> standardized dashboard-prefixed
             "DASHBOARD_ENABLE": "ASTRBOT_DASHBOARD_ENABLE",
-            "DASHBOARD_HOST": "ASTRBOT_DASHBOARD_HOST",
-            "DASHBOARD_PORT": "ASTRBOT_DASHBOARD_PORT",
-            "DASHBOARD_SSL_ENABLE": "ASTRBOT_DASHBOARD_SSL_ENABLE",
-            "DASHBOARD_SSL_CERT": "ASTRBOT_DASHBOARD_SSL_CERT",
-            "DASHBOARD_SSL_KEY": "ASTRBOT_DASHBOARD_SSL_KEY",
-            "DASHBOARD_SSL_CA_CERTS": "ASTRBOT_DASHBOARD_SSL_CA_CERTS",
+            "DASHBOARD_HOST": "ASTRBOT_HOST",
+            "DASHBOARD_PORT": "ASTRBOT_PORT",
+            "DASHBOARD_SSL_ENABLE": "ASTRBOT_SSL_ENABLE",
+            "DASHBOARD_SSL_CERT": "ASTRBOT_SSL_CERT",
+            "DASHBOARD_SSL_KEY": "ASTRBOT_SSL_KEY",
+            "DASHBOARD_SSL_CA_CERTS": "ASTRBOT_SSL_CA_CERTS",
+            # Some packages used alternate names
+            "ASTRBOT_DASHBOARD_SSL_CERT": "ASTRBOT_SSL_CERT",
         }
         for legacy, new in env_map.items():
             if legacy in os.environ and new not in os.environ:
                 os.environ[new] = os.environ[legacy]
 
+        # Mark CLI execution
         os.environ["ASTRBOT_CLI"] = "1"
+
+        from astrbot.core.utils.astrbot_path import astrbot_paths
+
+        # Resolve astrbot_root with the following precedence:
+        # 1. CLI --root parameter (local variable `root`)
+        # 2. ASTRBOT_ROOT environment variable (possibly from .env or parsed service config)
+        # 3. packaged default astrbot_paths.root
         if root:
             os.environ["ASTRBOT_ROOT"] = root
             astrbot_root = Path(root)
+        elif os.environ.get("ASTRBOT_ROOT"):
+            astrbot_root = Path(os.environ["ASTRBOT_ROOT"])
         else:
             astrbot_root = astrbot_paths.root
 
-        if not check_astrbot_root(astrbot_root):
+        if not astrbot_paths.is_root:
             raise click.ClickException(
                 f"{astrbot_root} is not a valid AstrBot root directory. Use 'astrbot init' to initialize",
             )
 
+        # Ensure ASTRBOT_ROOT env var is set to the resolved root (without overriding a CLI-provided root value above)
         os.environ["ASTRBOT_ROOT"] = str(astrbot_root)
         sys.path.insert(0, str(astrbot_root))
 
+        # Host/Port precedence: CLI args > parsed service config/env/.env > defaults.
         if port is not None:
-            os.environ["ASTRBOT_DASHBOARD_PORT"] = port
-            os.environ["DASHBOARD_PORT"] = port  # 今后应该移除
+            os.environ["ASTRBOT_PORT"] = port
+            os.environ["DASHBOARD_PORT"] = port  # legacy
+        # If CLI didn't provide port but env/.env provided ASTRBOT_DASHBOARD_PORT, leave it as-is.
+
         if host is not None:
-            os.environ["ASTRBOT_DASHBOARD_HOST"] = host
-            os.environ["DASHBOARD_HOST"] = host  # 今后应该移除
+            os.environ["ASTRBOT_HOST"] = host
+            os.environ["DASHBOARD_HOST"] = host  # legacy
+        # If CLI didn't provide host but env/.env provided ASTRBOT_DASHBOARD_HOST, leave it as-is.
+
+        # CLI-provided SSL paths should set backend-standard env names (preferred),
+        # and also set legacy/dashboard names for compatibility.
+        if ssl_cert is not None:
+            os.environ["ASTRBOT_SSL_CERT"] = ssl_cert
+            os.environ["DASHBOARD_SSL_CERT"] = ssl_cert
+        if ssl_key is not None:
+            os.environ["ASTRBOT_SSL_KEY"] = ssl_key
+            os.environ["DASHBOARD_SSL_KEY"] = ssl_key
+        if ssl_ca is not None:
+            os.environ["ASTRBOT_SSL_CA_CERTS"] = ssl_ca
+            os.environ["DASHBOARD_SSL_CA_CERTS"] = ssl_ca
+
+        # Dashboard enable is derived from CLI flag (--backend-only). CLI decision should win.
         os.environ["ASTRBOT_DASHBOARD_ENABLE"] = str(not backend_only)
-        os.environ["DASHBOARD_ENABLE"] = str(not backend_only)  # 今后应该移除
+        os.environ["DASHBOARD_ENABLE"] = str(not backend_only)  # legacy
+
         os.environ["ASTRBOT_LOG_LEVEL"] = log_level
 
         if reload:
@@ -197,18 +286,24 @@ def run(
                 "PYTHON",
                 "ASTRBOT_DASHBOARD_ENABLE",
                 "DASHBOARD_ENABLE",
-                "ASTRBOT_DASHBOARD_HOST",
+                "ASTRBOT_HOST",
                 "DASHBOARD_HOST",
-                "ASTRBOT_DASHBOARD_PORT",
+                "ASTRBOT_PORT",
                 "DASHBOARD_PORT",
-                "ASTRBOT_DASHBOARD_SSL_ENABLE",
+                # Dashboard SSL (legacy)
+                "ASTRBOT_SSL_ENABLE",
                 "DASHBOARD_SSL_ENABLE",
-                "ASTRBOT_DASHBOARD_SSL_CERT",
+                "ASTRBOT_SSL_CERT",
                 "DASHBOARD_SSL_CERT",
-                "ASTRBOT_DASHBOARD_SSL_KEY",
+                "ASTRBOT_SSL_KEY",
                 "DASHBOARD_SSL_KEY",
-                "ASTRBOT_DASHBOARD_SSL_CA_CERTS",
+                "ASTRBOT_SSL_CA_CERTS",
                 "DASHBOARD_SSL_CA_CERTS",
+                # Backend-standard SSL (preferred)
+                "ASTRBOT_SSL_ENABLE",
+                "ASTRBOT_SSL_CERT",
+                "ASTRBOT_SSL_KEY",
+                "ASTRBOT_SSL_CA_CERTS",
                 "http_proxy",
                 "https_proxy",
                 "no_proxy",
@@ -228,11 +323,20 @@ def run(
                         else:
                             val = "****"
                     click.echo(f"  {click.style(key, fg='cyan')}: {val}")
+            if svc_path:
+                click.echo(
+                    f"  {click.style('SERVICE_CONFIG', fg='cyan')}: {svc_path!s}"
+                )
             click.echo("")
 
         lock_file = astrbot_root / "astrbot.lock"
         lock = FileLock(lock_file, timeout=5)
         with lock.acquire():
+            click.echo("AstrBot is running...")
+            if backend_only:
+                click.echo("Visit the dashboard at : https://dash.astrbot.men/")
+                click.echo("Backend Requests : localhost or based on https")
+
             asyncio.run(run_astrbot(astrbot_root))
     except KeyboardInterrupt:
         click.echo("AstrBot has been shut down.")
@@ -241,4 +345,5 @@ def run(
             "Cannot acquire lock file. Please check if another instance is running"
         )
     except Exception as e:
+        # Keep original traceback visible for diagnostics
         raise click.ClickException(f"Runtime error: {e}\n{traceback.format_exc()}")

@@ -136,7 +136,7 @@ class SatoriPlatformAdapter(Platform):
                 break
 
             if retry_count >= max_retries:
-                logger.error(f"达到最大重试次数 ({max_retries})，停止重试")
+                logger.error(f"达到最大重试次数 ({max_retries}),停止重试")
                 break
 
             if not self.auto_reconnect:
@@ -419,7 +419,7 @@ class SatoriPlatformAdapter(Platform):
                     nickname=quote_author.name or "",
                 )
             else:
-                # 如果没有作者信息，使用默认值
+                # 如果没有作者信息,使用默认值
                 quote_abm.sender = MessageMember(
                     user_id=self_id,
                     nickname="内容",
@@ -435,7 +435,7 @@ class SatoriPlatformAdapter(Platform):
 
             quote_abm.timestamp = int(time.time())
 
-            # 如果没有任何内容，使用默认文本
+            # 如果没有任何内容,使用默认文本
             if not quote_abm.message_str.strip():
                 quote_abm.message_str = "[引用消息]"
 

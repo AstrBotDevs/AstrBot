@@ -1,5 +1,5 @@
 """插件开发工具集
-封装了许多常用的操作，方便插件开发者使用
+封装了许多常用的操作,方便插件开发者使用
 
 说明:
 
@@ -28,12 +28,6 @@ from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
-    AiocqhttpMessageEvent,
-)
-from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
-    AiocqhttpAdapter,
-)
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_map
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -41,14 +35,14 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 class StarTools:
     """提供给插件使用的便捷工具函数集合
-    这些方法封装了一些常用操作，使插件开发更加简单便捷!
+    这些方法封装了一些常用操作,使插件开发更加简单便捷!
     """
 
     _context: ClassVar[Context | None] = None
 
     @classmethod
     def initialize(cls, context: Context) -> None:
-        """初始化StarTools，设置context引用
+        """初始化StarTools,设置context引用
 
         Args:
             context: 暴露给插件的上下文
@@ -65,7 +59,7 @@ class StarTools:
         """根据session(unified_msg_origin)主动发送消息
 
         Args:
-            session: 消息会话。通过event.session或者event.unified_msg_origin获取
+            session: 消息会话｡通过event.session或者event.unified_msg_origin获取
             message_chain: 消息链
 
         Returns:
@@ -96,13 +90,20 @@ class StarTools:
             type (str): 消息类型, 可选: PrivateMessage, GroupMessage
             id (str): 目标ID, 例如QQ号, 群号等
             message_chain (MessageChain): 消息链
-            platform (str): 可选的平台名称，默认平台(aiocqhttp), 目前只支持 aiocqhttp
+            platform (str): 可选的平台名称,默认平台(aiocqhttp), 目前只支持 aiocqhttp
 
         """
         if cls._context is None:
             raise ValueError("StarTools not initialized")
         platforms = cls._context.platform_manager.get_insts()
         if platform == "aiocqhttp":
+            from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
+                AiocqhttpMessageEvent,
+            )
+            from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
+                AiocqhttpAdapter,
+            )
+
             adapter = next(
                 (p for p in platforms if isinstance(p, AiocqhttpAdapter)),
                 None,
@@ -175,7 +176,7 @@ class StarTools:
 
         Args:
             abm (AstrBotMessage): 要提交的消息对象, 请先使用 create_message 创建
-            platform (str): 可选的平台名称，默认平台(aiocqhttp), 目前只支持 aiocqhttp
+            platform (str): 可选的平台名称,默认平台(aiocqhttp), 目前只支持 aiocqhttp
             is_wake (bool): 是否标记为唤醒事件, 默认为 True, 只有唤醒事件才会被 llm 响应
 
         """
@@ -183,6 +184,13 @@ class StarTools:
             raise ValueError("StarTools not initialized")
         platforms = cls._context.platform_manager.get_insts()
         if platform == "aiocqhttp":
+            from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
+                AiocqhttpMessageEvent,
+            )
+            from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
+                AiocqhttpAdapter,
+            )
+
             adapter = next(
                 (p for p in platforms if isinstance(p, AiocqhttpAdapter)),
                 None,
@@ -234,13 +242,13 @@ class StarTools:
         desc: str,
         func_obj: Callable[..., Awaitable[Any]],
     ) -> None:
-        """为函数调用（function-calling/tools-use）添加工具
+        """为函数调用(function-calling/tools-use)添加工具
 
         Args:
             name (str): 工具名称
             func_args (list): 函数参数列表
             desc (str): 工具描述
-            func_obj (Awaitable): 函数对象，必须是异步函数
+            func_obj (Awaitable): 函数对象,必须是异步函数
 
         """
         if cls._context is None:
@@ -250,7 +258,7 @@ class StarTools:
     @classmethod
     def unregister_llm_tool(cls, name: str) -> None:
         """删除一个函数调用工具
-        如果再要启用，需要重新注册
+        如果再要启用,需要重新注册
 
         Args:
             name (str): 工具名称
@@ -262,22 +270,22 @@ class StarTools:
 
     @classmethod
     def get_data_dir(cls, plugin_name: str | None = None) -> Path:
-        """返回插件数据目录的绝对路径。
+        """返回插件数据目录的绝对路径｡
 
-        此方法会在 data/plugin_data 目录下为插件创建一个专属的数据目录。如果未提供插件名称，
-        会自动从调用栈中获取插件信息。
+        此方法会在 data/plugin_data 目录下为插件创建一个专属的数据目录｡如果未提供插件名称,
+        会自动从调用栈中获取插件信息｡
 
         Args:
-            plugin_name: 可选的插件名称。如果为None，将自动检测调用者的插件名称。
+            plugin_name: 可选的插件名称｡如果为None,将自动检测调用者的插件名称｡
 
         Returns:
-            Path (Path): 插件数据目录的绝对路径，位于 data/plugin_data/{plugin_name}。
+            Path (Path): 插件数据目录的绝对路径,位于 data/plugin_data/{plugin_name}｡
 
         Raises:
             RuntimeError: 当出现以下情况时抛出:
                 - 无法获取调用者模块信息
                 - 无法获取模块的元数据信息
-                - 创建目录失败（权限不足或其他IO错误）
+                - 创建目录失败(权限不足或其他IO错误)
 
         """
         if not plugin_name:
@@ -308,7 +316,7 @@ class StarTools:
             data_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
             if isinstance(e, PermissionError):
-                raise RuntimeError(f"无法创建目录 {data_dir}：权限不足") from e
-            raise RuntimeError(f"无法创建目录 {data_dir}：{e!s}") from e
+                raise RuntimeError(f"无法创建目录 {data_dir}:权限不足") from e
+            raise RuntimeError(f"无法创建目录 {data_dir}:{e!s}") from e
 
         return data_dir.resolve()

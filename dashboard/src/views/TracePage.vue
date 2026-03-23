@@ -2,7 +2,7 @@
 import TraceDisplayer from '@/components/shared/TraceDisplayer.vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { ref, onMounted } from 'vue';
-import axios from 'axios';
+import axios from '@/utils/request';
 
 const { tm } = useModuleI18n('features/trace');
 

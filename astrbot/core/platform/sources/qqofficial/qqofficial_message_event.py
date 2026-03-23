@@ -71,23 +71,23 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         await self._post_send()
 
     async def send_streaming(self, generator, use_fallback: bool = False):
-        """流式输出仅支持消息列表私聊（C2C），其他消息源退化为普通发送"""
-        # 先标记事件层“已执行发送操作”，避免异常路径遗漏
+        """流式输出仅支持消息列表私聊(C2C),其他消息源退化为普通发送"""
+        # 先标记事件层“已执行发送操作”,避免异常路径遗漏
         await super().send_streaming(generator, use_fallback)
-        # QQ C2C 流式协议：开始/中间分片使用 state=1，结束分片使用 state=10
+        # QQ C2C 流式协议:开始/中间分片使用 state=1,结束分片使用 state=10
         stream_payload = {"state": 1, "id": None, "index": 0, "reset": False}
         last_edit_time = 0  # 上次发送分片的时间
         throttle_interval = 1  # 分片间最短间隔 (秒)
         ret = None
         source = (
             self.message_obj.raw_message
-        )  # 提前获取，避免 generator 为空时 NameError
+        )  # 提前获取,避免 generator 为空时 NameError
         try:
             async for chain in generator:
                 source = self.message_obj.raw_message
 
                 if not isinstance(source, botpy.message.C2CMessage):
-                    # 非 C2C 场景：直接累积，最后统一发
+                    # 非 C2C 场景:直接累积,最后统一发
                     if not self.send_buffer:
                         self.send_buffer = chain
                     else:
@@ -96,7 +96,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
                 # ---- C2C 流式场景 ----
 
-                # tool_call break 信号：工具开始执行，先把已有 buffer 以 state=10 结束当前流式段
+                # tool_call break 信号:工具开始执行,先把已有 buffer 以 state=10 结束当前流式段
                 if chain.type == "break":
                     if self.send_buffer:
                         stream_payload["state"] = 10
@@ -104,7 +104,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         ret_id = self._extract_response_message_id(ret)
                         if ret_id is not None:
                             stream_payload["id"] = ret_id
-                    # 重置 stream_payload，为下一段流式做准备
+                    # 重置 stream_payload,为下一段流式做准备
                     stream_payload = {
                         "state": 1,
                         "id": None,
@@ -120,7 +120,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 else:
                     self.send_buffer.chain.extend(chain.chain)
 
-                # 节流：按时间间隔发送中间分片
+                # 节流:按时间间隔发送中间分片
                 current_time = asyncio.get_running_loop().time()
                 if current_time - last_edit_time >= throttle_interval:
                     ret = cast(
@@ -132,10 +132,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     if ret_id is not None:
                         stream_payload["id"] = ret_id
                     last_edit_time = asyncio.get_running_loop().time()
-                    self.send_buffer = None  # 清空已发送的分片，避免下次重复发送旧内容
+                    self.send_buffer = None  # 清空已发送的分片,避免下次重复发送旧内容
 
             if isinstance(source, botpy.message.C2CMessage):
-                # 结束流式对话，发送 buffer 中剩余内容
+                # 结束流式对话,发送 buffer 中剩余内容
                 stream_payload["state"] = 10
                 ret = await self._post_send(stream=stream_payload)
             else:
@@ -143,15 +143,15 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         except Exception as e:
             logger.error(f"发送流式消息时出错: {e}", exc_info=True)
-            # 避免累计内容在异常后被整包重复发送：仅清理缓存，不做非流式整包兜底
-            # 如需兜底，应该只发送未发送 delta（后续可继续优化）
+            # 避免累计内容在异常后被整包重复发送:仅清理缓存,不做非流式整包兜底
+            # 如需兜底,应该只发送未发送 delta(后续可继续优化)
             self.send_buffer = None
 
         return None
 
     @staticmethod
     def _extract_response_message_id(ret) -> str | None:
-        """兼容 qq-botpy 返回 Message 对象或 dict 两种形态。"""
+        """兼容 qq-botpy 返回 Message 对象或 dict 两种形态｡"""
         if ret is None:
             return None
         if isinstance(ret, dict):
@@ -186,9 +186,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             file_name,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(self.send_buffer)
 
-        # C2C 流式仅用于文本分片，富媒体时降级为普通发送，避免平台侧流式校验报错。
+        # C2C 流式仅用于文本分片,富媒体时降级为普通发送,避免平台侧流式校验报错｡
         if stream and (image_base64 or record_file_path):
-            logger.debug("[QQOfficial] 检测到富媒体，降级为非流式发送。")
+            logger.debug("[QQOfficial] 检测到富媒体,降级为非流式发送｡")
             stream = None
 
         if (
@@ -201,9 +201,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ):
             return None
 
-        # QQ C2C 流式 API 说明：
-        # - 开始/中间分片（state=1）：增量追加内容，不需要 \n（加了会导致强制换行）
-        # - 最终分片（state=10）：结束流，content 必须以 \n 结尾（QQ API 要求）
+        # QQ C2C 流式 API 说明:
+        # - 开始/中间分片(state=1):增量追加内容,不需要 \n(加了会导致强制换行)
+        # - 最终分片(state=10):结束流,content 必须以 \n 结尾(QQ API 要求)
         if (
             stream
             and stream.get("state") == 10
@@ -401,8 +401,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         try:
             return await send_func(payload)
         except botpy.errors.ServerError as err:
-            # QQ 流式 markdown 分片校验：内容必须以换行结尾。
-            # 某些边界场景服务端仍可能判定失败，这里做一次修正重试。
+            # QQ 流式 markdown 分片校验:内容必须以换行结尾｡
+            # 某些边界场景服务端仍可能判定失败,这里做一次修正重试｡
             if stream and self.STREAM_MARKDOWN_NEWLINE_ERROR in str(err):
                 retry_payload = payload.copy()
 
@@ -417,7 +417,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     retry_payload["content"] = content + "\n"
 
                 logger.warning(
-                    "[QQOfficial] 流式 markdown 分片换行校验失败，已修正后重试一次。"
+                    "[QQOfficial] 流式 markdown 分片换行校验失败,已修正后重试一次｡"
                 )
                 return await send_func(retry_payload)
 
@@ -428,9 +428,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             ):
                 raise
 
-            logger.warning(
-                "[QQOfficial] markdown 发送被拒绝，回退到 content 模式重试。"
-            )
+            logger.warning("[QQOfficial] markdown 发送被拒绝,回退到 content 模式重试｡")
             fallback_payload = payload.copy()
             fallback_payload.pop("markdown", None)
             fallback_payload["content"] = plain_text
@@ -555,7 +553,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         markdown: message.MarkdownPayload | None = None,
         keyboard: message.Keyboard | None = None,
         stream: dict | None = None,
-    ) -> message.Message:
+    ) -> message.Message | None:
         payload = locals()
         payload.pop("self", None)
         # QQ API does not accept stream.id=None; remove it when not yet assigned
@@ -568,7 +566,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         result = await self.bot.api._http.request(route, json=payload)
 
         if result is None:
-            logger.warning("[QQOfficial] post_c2c_message: API 返回 None，跳过本次发送")
+            logger.warning("[QQOfficial] post_c2c_message: API 返回 None,跳过本次发送")
             return None
         if not isinstance(result, dict):
             logger.error(f"[QQOfficial] post_c2c_message: 响应不是 dict: {result}")
@@ -619,7 +617,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                             record_file_path = record_tecent_silk_path
                         else:
                             record_file_path = None
-                            logger.error("转换音频格式时出错：音频时长不大于0")
+                            logger.error("转换音频格式时出错:音频时长不大于0")
                     except Exception as e:
                         logger.error(f"处理语音时出错: {e}")
                         record_file_path = None

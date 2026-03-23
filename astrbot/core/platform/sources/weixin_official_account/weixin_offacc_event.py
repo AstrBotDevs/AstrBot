@@ -59,15 +59,15 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
             cut_position = end
             for i in range(end, start, -1):
                 if i < len(plain) and plain[i - 1] in [
-                    "。",
-                    "！",
-                    "？",
+                    "｡",
+                    "!",
+                    "?",
                     ".",
                     "!",
                     "?",
                     "\n",
                     ";",
-                    "；",
+                    ";",
                 ]:
                     cut_position = i
                     break
@@ -173,7 +173,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                             logger.warning(f"删除临时音频文件失败: {e}")
 
             else:
-                logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
+                logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}｡")
 
         await super().send(message)
 

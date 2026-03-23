@@ -24,7 +24,7 @@ class HelpCommand:
 
     async def _build_reserved_command_lines(self) -> list[str]:
         """
-        使用实时指令配置生成内置指令清单，确保重命名/禁用后与实际生效状态保持一致。
+        使用实时指令配置生成内置指令清单,确保重命名/禁用后与实际生效状态保持一致｡
         """
         try:
             commands = await command_management.list_commands()

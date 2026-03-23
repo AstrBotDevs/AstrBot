@@ -1,17 +1,27 @@
 """媒体文件处理工具
 
-提供音视频格式转换、时长获取等功能。
+提供音视频格式转换｡时长获取等功能｡
+
 """
 
 import asyncio
+import base64
+import io
 import os
 import subprocess
 import uuid
+from pathlib import Path
 
 import anyio
+from PIL import Image as PILImage
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+IMAGE_COMPRESS_DEFAULT_MAX_SIZE = 1280
+IMAGE_COMPRESS_DEFAULT_QUALITY = 95
+IMAGE_COMPRESS_DEFAULT_OPTIMIZE = True
+IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
 
 
 async def get_media_duration(file_path: str) -> int | None:
@@ -21,7 +31,7 @@ async def get_media_duration(file_path: str) -> int | None:
         file_path: 媒体文件路径
 
     Returns:
-        时长（毫秒），如果获取失败返回None
+        时长(毫秒),如果获取失败返回None
     """
     try:
         # 使用ffprobe获取时长
@@ -38,7 +48,7 @@ async def get_media_duration(file_path: str) -> int | None:
             stderr=subprocess.PIPE,
         )
 
-        stdout, stderr = await process.communicate()
+        stdout, _stderr = await process.communicate()
 
         if process.returncode == 0 and stdout:
             duration_seconds = float(stdout.decode().strip())
@@ -51,7 +61,7 @@ async def get_media_duration(file_path: str) -> int | None:
 
     except FileNotFoundError:
         logger.warning(
-            "[Media Utils] ffprobe未安装或不在PATH中，无法获取媒体时长。请安装ffmpeg: https://ffmpeg.org/"
+            "[Media Utils] ffprobe未安装或不在PATH中,无法获取媒体时长｡请安装ffmpeg: https://ffmpeg.org/"
         )
         return None
     except Exception as e:
@@ -64,7 +74,7 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
 
     Args:
         audio_path: 原始音频文件路径
-        output_path: 输出文件路径，如果为None则自动生成
+        output_path: 输出文件路径,如果为None则自动生成
 
     Returns:
         转换后的opus文件路径
@@ -72,7 +82,7 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
     Raises:
         Exception: 转换失败时抛出异常
     """
-    # 如果已经是opus格式，直接返回
+    # 如果已经是opus格式,直接返回
     if audio_path.lower().endswith(".opus"):
         return audio_path
 
@@ -105,7 +115,7 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
             stderr=subprocess.PIPE,
         )
 
-        stdout, stderr = await process.communicate()
+        _stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
             # 清理可能已生成但无效的临时文件
@@ -127,7 +137,7 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
 
     except FileNotFoundError:
         logger.error(
-            "[Media Utils] ffmpeg未安装或不在PATH中，无法转换音频格式。请安装ffmpeg: https://ffmpeg.org/"
+            "[Media Utils] ffmpeg未安装或不在PATH中,无法转换音频格式｡请安装ffmpeg: https://ffmpeg.org/"
         )
         raise Exception("ffmpeg not found")
     except Exception as e:
@@ -142,8 +152,8 @@ async def convert_video_format(
 
     Args:
         video_path: 原始视频文件路径
-        output_format: 目标格式，默认mp4
-        output_path: 输出文件路径，如果为None则自动生成
+        output_format: 目标格式,默认mp4
+        output_path: 输出文件路径,如果为None则自动生成
 
     Returns:
         转换后的视频文件路径
@@ -151,7 +161,7 @@ async def convert_video_format(
     Raises:
         Exception: 转换失败时抛出异常
     """
-    # 如果已经是目标格式，直接返回
+    # 如果已经是目标格式,直接返回
     if video_path.lower().endswith(f".{output_format}"):
         return video_path
 
@@ -180,7 +190,7 @@ async def convert_video_format(
             stderr=subprocess.PIPE,
         )
 
-        stdout, stderr = await process.communicate()
+        _stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
             # 清理可能已生成但无效的临时文件
@@ -204,7 +214,7 @@ async def convert_video_format(
 
     except FileNotFoundError:
         logger.error(
-            "[Media Utils] ffmpeg未安装或不在PATH中，无法转换视频格式。请安装ffmpeg: https://ffmpeg.org/"
+            "[Media Utils] ffmpeg未安装或不在PATH中,无法转换视频格式｡请安装ffmpeg: https://ffmpeg.org/"
         )
         raise Exception("ffmpeg not found")
     except Exception as e:
@@ -217,12 +227,12 @@ async def convert_audio_format(
     output_format: str = "amr",
     output_path: str | None = None,
 ) -> str:
-    """使用ffmpeg将音频转换为指定格式。
+    """使用ffmpeg将音频转换为指定格式｡
 
     Args:
         audio_path: 原始音频文件路径
-        output_format: 目标格式，例如 amr / ogg
-        output_path: 输出文件路径，如果为None则自动生成
+        output_format: 目标格式,例如 amr / ogg
+        output_path: 输出文件路径,如果为None则自动生成
 
     Returns:
         转换后的音频文件路径
@@ -264,7 +274,7 @@ async def convert_audio_format(
 
 
 async def convert_audio_to_amr(audio_path: str, output_path: str | None = None) -> str:
-    """将音频转换为amr格式。"""
+    """将音频转换为amr格式｡"""
     return await convert_audio_format(
         audio_path=audio_path,
         output_format="amr",
@@ -273,7 +283,7 @@ async def convert_audio_to_amr(audio_path: str, output_path: str | None = None) 
 
 
 async def convert_audio_to_wav(audio_path: str, output_path: str | None = None) -> str:
-    """将音频转换为wav格式。"""
+    """将音频转换为wav格式｡"""
     return await convert_audio_format(
         audio_path=audio_path,
         output_format="wav",
@@ -285,7 +295,7 @@ async def extract_video_cover(
     video_path: str,
     output_path: str | None = None,
 ) -> str:
-    """从视频中提取封面图（JPG）。"""
+    """从视频中提取封面图(JPG)｡"""
     if output_path is None:
         temp_dir = anyio.Path(get_astrbot_temp_path())
         await temp_dir.mkdir(parents=True, exist_ok=True)
@@ -317,3 +327,88 @@ async def extract_video_cover(
         return output_path
     except FileNotFoundError:
         raise Exception("ffmpeg not found")
+
+
+def _compress_image_sync(
+    data: bytes,
+    temp_dir: Path,
+    max_size: int,
+    quality: int,
+    optimize: bool,
+) -> str:
+    """Run image compression synchronously via ``asyncio.to_thread``."""
+    with PILImage.open(io.BytesIO(data)) as opened_img:
+        img = opened_img
+        converted_img: PILImage.Image | None = None
+
+        try:
+            if img.mode != "RGB":
+                converted_img = img.convert("RGB")
+                img = converted_img
+
+            if max(img.size) > max_size:
+                img.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
+
+            new_uuid = uuid.uuid4().hex
+            save_path = temp_dir / f"compressed_{new_uuid}.jpg"
+            img.save(save_path, "JPEG", quality=quality, optimize=optimize)
+            logger.debug(f"Image compressed successfully: {save_path}")
+            return str(save_path)
+        finally:
+            if converted_img is not None:
+                converted_img.close()
+
+
+async def compress_image(
+    url_or_path: str,
+    max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
+    quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
+) -> str:
+    """Compress large user-uploaded images.
+
+    Args:
+        url_or_path: Image path or URL.
+        max_size: Longest edge of the compressed image in pixels.
+        quality: JPEG output quality in the range 1-100.
+
+    Returns:
+        The compressed image path. Returns the original path if compression
+        fails or the source does not need compression.
+    """
+    max_size = max(int(max_size), 1)
+    quality = min(max(int(quality), 1), 100)
+    optimize = IMAGE_COMPRESS_DEFAULT_OPTIMIZE
+    min_file_size_bytes = int(IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB * 1024 * 1024)
+    data = None
+    # Skip compression for remote images and return the original value.
+    if url_or_path.startswith("http"):
+        return url_or_path
+    elif url_or_path.startswith("data:image"):
+        _header, encoded = url_or_path.split(",", 1)
+        data = base64.b64decode(encoded)
+        if len(data) < min_file_size_bytes:
+            return url_or_path
+    else:
+        local_path = Path(url_or_path)
+        if not local_path.exists():
+            return url_or_path
+        if local_path.stat().st_size < min_file_size_bytes:
+            return url_or_path
+        with local_path.open("rb") as f:
+            data = f.read()
+
+    if not data:
+        return url_or_path
+
+    temp_dir = Path(get_astrbot_temp_path())
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    # Offload the blocking image processing task to a thread.
+    return await asyncio.to_thread(
+        _compress_image_sync,
+        data,
+        temp_dir,
+        max_size,
+        quality,
+        optimize,
+    )

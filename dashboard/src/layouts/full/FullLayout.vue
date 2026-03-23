@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { RouterView, useRoute } from 'vue-router';
 import { ref, onMounted, computed } from 'vue';
-import axios from 'axios';
+import axios from '@/utils/request';
 import VerticalSidebarVue from './vertical-sidebar/VerticalSidebar.vue';
 import VerticalHeaderVue from './vertical-header/VerticalHeader.vue';
 import MigrationDialog from '@/components/shared/MigrationDialog.vue';

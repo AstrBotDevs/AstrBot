@@ -111,7 +111,7 @@ class DingtalkPlatformAdapter(Platform):
             staff_id = await self._get_sender_staff_id(session)
             if not staff_id:
                 logger.warning(
-                    "钉钉私聊会话缺少 staff_id 映射，回退使用 session_id 作为 userId 发送",
+                    "钉钉私聊会话缺少 staff_id 映射,回退使用 session_id 作为 userId 发送",
                 )
                 staff_id = session.session_id
             await self.send_message_chain_to_user(
@@ -168,7 +168,7 @@ class DingtalkPlatformAdapter(Platform):
         abm.raw_message = message
 
         if abm.type == MessageType.GROUP_MESSAGE:
-            # 处理所有被 @ 的用户（包括机器人自己，因 at_users 已包含）
+            # 处理所有被 @ 的用户(包括机器人自己,因 at_users 已包含)
             if message.at_users:
                 for user in message.at_users:
                     if id := self._id_to_sid(user.dingtalk_id):
@@ -200,7 +200,7 @@ class DingtalkPlatformAdapter(Platform):
                     str, (image_content.download_code if image_content else "") or ""
                 )
                 if not download_code:
-                    logger.warning("钉钉图片消息缺少 downloadCode，已跳过")
+                    logger.warning("钉钉图片消息缺少 downloadCode,已跳过")
                 else:
                     f_path = await self.download_ding_file(
                         download_code,
@@ -210,7 +210,7 @@ class DingtalkPlatformAdapter(Platform):
                     if f_path:
                         abm.message.append(Image.fromFileSystem(f_path))
                     else:
-                        logger.warning("钉钉图片消息下载失败，无法解析为图片")
+                        logger.warning("钉钉图片消息下载失败,无法解析为图片")
             case "richText":
                 rtc: dingtalk_stream.RichTextContent = cast(
                     dingtalk_stream.RichTextContent, message.rich_text_content
@@ -226,9 +226,7 @@ class DingtalkPlatformAdapter(Platform):
                     elif "type" in content and content["type"] == "picture":
                         download_code = cast(str, content.get("downloadCode") or "")
                         if not download_code:
-                            logger.warning(
-                                "钉钉富文本图片消息缺少 downloadCode，已跳过"
-                            )
+                            logger.warning("钉钉富文本图片消息缺少 downloadCode,已跳过")
                             continue
                         if not robot_code:
                             logger.error(
@@ -246,7 +244,7 @@ class DingtalkPlatformAdapter(Platform):
             case "audio" | "voice":
                 download_code = cast(str, raw_content.get("downloadCode") or "")
                 if not download_code:
-                    logger.warning("钉钉语音消息缺少 downloadCode，已跳过")
+                    logger.warning("钉钉语音消息缺少 downloadCode,已跳过")
                 elif not robot_code:
                     logger.error("钉钉语音消息解析失败: 回调中缺少 robotCode")
                 else:
@@ -264,7 +262,7 @@ class DingtalkPlatformAdapter(Platform):
             case "file":
                 download_code = cast(str, raw_content.get("downloadCode") or "")
                 if not download_code:
-                    logger.warning("钉钉文件消息缺少 downloadCode，已跳过")
+                    logger.warning("钉钉文件消息缺少 downloadCode,已跳过")
                 elif not robot_code:
                     logger.error("钉钉文件消息解析失败: 回调中缺少 robotCode")
                 else:
@@ -481,7 +479,7 @@ class DingtalkPlatformAdapter(Platform):
             logger.warning(f"清理临时文件失败: {file_path}, {e}")
 
     async def _prepare_voice_for_dingtalk(self, input_path: str) -> tuple[str, bool]:
-        """优先转换为 OGG(Opus)，不可用时回退 AMR。"""
+        """优先转换为 OGG(Opus),不可用时回退 AMR｡"""
         lower_path = input_path.lower()
         if lower_path.endswith((".amr", ".ogg")):
             return input_path, False
@@ -490,7 +488,7 @@ class DingtalkPlatformAdapter(Platform):
             converted = await convert_audio_format(input_path, "ogg")
             return converted, converted != input_path
         except Exception as e:
-            logger.warning(f"钉钉语音转 OGG 失败，回退 AMR: {e}")
+            logger.warning(f"钉钉语音转 OGG 失败,回退 AMR: {e}")
             converted = await convert_audio_format(input_path, "amr")
             return converted, converted != input_path
 
@@ -747,7 +745,7 @@ class DingtalkPlatformAdapter(Platform):
 
     async def run(self) -> None:
         # await self.client_.start()
-        # 钉钉的 SDK 并没有实现真正的异步，start() 里面有堵塞方法。
+        # 钉钉的 SDK 并没有实现真正的异步,start() 里面有堵塞方法｡
         def start_client(loop: asyncio.AbstractEventLoop) -> None:
             try:
                 self._shutdown_event = threading.Event()

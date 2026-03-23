@@ -1,10 +1,9 @@
 import asyncio
 import os
-import sys
 import time
 import uuid
 from collections.abc import Callable, Coroutine
-from typing import Any, cast
+from typing import Any, cast, override
 
 import aiofiles
 import quart
@@ -32,11 +31,6 @@ from astrbot.core.utils.media_utils import convert_audio_to_wav
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .weixin_offacc_event import WeixinOfficialAccountPlatformEvent
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 class WeixinOfficialAccountServer:
@@ -73,14 +67,14 @@ class WeixinOfficialAccountServer:
 
         self._wx_msg_time_out = 4.0  # 微信服务器要求 5 秒内回复
         self.user_buffer: dict[str, dict[str, Any]] = user_buffer  # from_user -> state
-        self.active_send_mode = False  # 是否启用主动发送模式，启用后 callback 将直接返回回复内容，无需等待微信回调
+        self.active_send_mode = False  # 是否启用主动发送模式,启用后 callback 将直接返回回复内容,无需等待微信回调
 
     async def verify(self):
         """内部服务器的 GET 验证入口"""
         return await self.handle_verify(quart.request)
 
     async def handle_verify(self, request) -> str:
-        """处理验证请求，可被统一 webhook 入口复用
+        """处理验证请求,可被统一 webhook 入口复用
 
         Args:
             request: Quart 请求对象
@@ -92,7 +86,7 @@ class WeixinOfficialAccountServer:
 
         args = request.args
         if not args.get("signature", None):
-            logger.error("未知的响应，请检查回调地址是否填写正确。")
+            logger.error("未知的响应,请检查回调地址是否填写正确｡")
             return "err"
         try:
             check_signature(
@@ -101,10 +95,10 @@ class WeixinOfficialAccountServer:
                 args.get("timestamp"),
                 args.get("nonce"),
             )
-            logger.info("验证请求有效性成功。")
+            logger.info("验证请求有效性成功｡")
             return args.get("echostr", "empty")
         except InvalidSignatureException:
-            logger.error("验证请求有效性失败，签名异常，请检查配置。")
+            logger.error("验证请求有效性失败,签名异常,请检查配置｡")
             return "err"
 
     async def callback_command(self):
@@ -117,7 +111,7 @@ class WeixinOfficialAccountServer:
         return xml or "success"
 
     def _preview(self, msg: BaseMessage, limit: int = 24) -> str:
-        """生成消息预览文本，供占位符使用"""
+        """生成消息预览文本,供占位符使用"""
         if isinstance(msg, TextMessage):
             t = cast(str, msg.content).strip()
             return (t[:limit] + "...") if len(t) > limit else (t or "空消息")
@@ -128,7 +122,7 @@ class WeixinOfficialAccountServer:
         return getattr(msg, "type", "未知消息")
 
     async def handle_callback(self, request) -> str:
-        """处理回调请求，可被统一 webhook 入口复用
+        """处理回调请求,可被统一 webhook 入口复用
 
         Args:
             request: Quart 请求对象
@@ -143,12 +137,12 @@ class WeixinOfficialAccountServer:
         try:
             xml = self.crypto.decrypt_message(data, msg_signature, timestamp, nonce)
         except InvalidSignatureException:
-            logger.error("解密失败，签名异常，请检查配置。")
+            logger.error("解密失败,签名异常,请检查配置｡")
             raise
         else:
             msg = parse_message(xml)
             if not msg:
-                logger.error("解析失败。msg为None。")
+                logger.error("解析失败｡msg为None｡")
                 raise
             logger.info(f"解析成功: {msg}")
 
@@ -186,14 +180,13 @@ class WeixinOfficialAccountServer:
                         return _reply_text(cached_xml)
                     else:
                         return _reply_text(
-                            cached_xml
-                            + "\n【后续消息还在缓冲中，回复任意文字继续获取】"
+                            cached_xml + "\n【后续消息还在缓冲中,回复任意文字继续获取】"
                         )
 
                 task: asyncio.Task | None = cast(asyncio.Task | None, state.get("task"))
                 placeholder = (
-                    f"【正在思考'{state.get('preview', '...')}'中，已思考"
-                    f"{int(time.monotonic() - state.get('started_at', time.monotonic()))}s，回复任意文字尝试获取回复】"
+                    f"【正在思考'{state.get('preview', '...')}'中,已思考"
+                    f"{int(time.monotonic() - state.get('started_at', time.monotonic()))}s,回复任意文字尝试获取回复】"
                 )
 
                 # same msgid => WeChat retry: wait a little; new msgid => user trigger: just placeholder
@@ -224,7 +217,7 @@ class WeixinOfficialAccountServer:
                                     )
                                     return _reply_text(
                                         cached_xml
-                                        + "\n【后续消息还在缓冲中，回复任意文字继续获取】"
+                                        + "\n【后续消息还在缓冲中,回复任意文字继续获取】"
                                     )
                             logger.info(
                                 f"wx finished in window but not final; return placeholder: user={from_user} msg_id={msg_id} "
@@ -235,7 +228,7 @@ class WeixinOfficialAccountServer:
                                 "wx task failed in passive window", exc_info=True
                             )
                             self.user_buffer.pop(from_user, None)
-                            return _reply_text("处理消息失败，请稍后再试。")
+                            return _reply_text("处理消息失败,请稍后再试｡")
 
                     logger.info(
                         f"wx passive window timeout: user={from_user} msg_id={msg_id}"
@@ -248,9 +241,7 @@ class WeixinOfficialAccountServer:
             # create new trigger when state is empty, and store state in buffer
             logger.debug(f"wx new trigger: user={from_user} msg_id={msg_id}")
             preview = self._preview(msg)
-            placeholder = (
-                f"【正在思考'{preview}'中，已思考0s，回复任意文字尝试获取回复】"
-            )
+            placeholder = f"【正在思考'{preview}'中,已思考0s,回复任意文字尝试获取回复】"
             logger.info(
                 f"wx start task: user={from_user} msg_id={msg_id} preview={preview}"
             )
@@ -285,7 +276,7 @@ class WeixinOfficialAccountServer:
                         else:
                             return _reply_text(
                                 cached_xml
-                                + "\n【后续消息还在缓冲中，回复任意文字继续获取】"
+                                + "\n【后续消息还在缓冲中,回复任意文字继续获取】"
                             )
                     logger.info(
                         f"wx not finished in first window; return placeholder: user={from_user} msg_id={msg_id} "
@@ -294,14 +285,14 @@ class WeixinOfficialAccountServer:
                 except Exception:
                     logger.critical("wx task failed in first window", exc_info=True)
                     self.user_buffer.pop(from_user, None)
-                    return _reply_text("处理消息失败，请稍后再试。")
+                    return _reply_text("处理消息失败,请稍后再试｡")
 
             logger.info(f"wx first window timeout: user={from_user} msg_id={msg_id}")
             return _reply_text(placeholder)
 
     async def start_polling(self) -> None:
         logger.info(
-            f"将在 {self.callback_server_host}:{self.port} 端口启动 微信公众平台 适配器。",
+            f"将在 {self.callback_server_host}:{self.port} 端口启动 微信公众平台 适配器｡",
         )
         await self.server.run_task(
             host=self.callback_server_host,
@@ -355,7 +346,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
 
         self.client.__setattr__("API_BASE_URL", self.api_base_url)
 
-        # 微信公众号必须 5 秒内进行回复，否则会重试 3 次，我们需要对其进行消息排重
+        # 微信公众号必须 5 秒内进行回复,否则会重试 3 次,我们需要对其进行消息排重
         # msgid -> Future
         self.wexin_event_workers: dict[str, asyncio.Future] = {}
 
@@ -380,9 +371,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                     )  # wait for 180s
                 logger.debug(f"Got future result: {result}")
                 return result
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.info(f"callback 处理消息超时: message_id={msg.id}")
-                return create_reply("处理消息超时，请稍后再试。", msg)
+                return create_reply("处理消息超时,请稍后再试｡", msg)
             except Exception as e:
                 logger.error(f"转换消息时出现异常: {e}")
             finally:
@@ -411,11 +402,11 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
 
     @override
     async def run(self) -> None:
-        # 如果启用统一 webhook 模式，则不启动独立服务器
+        # 如果启用统一 webhook 模式,则不启动独立服务器
         webhook_uuid = self.config.get("webhook_uuid")
         if self.unified_webhook_mode and webhook_uuid:
             log_webhook_info(f"{self.meta().id}(微信公众平台)", webhook_uuid)
-            # 保持运行状态，等待 shutdown
+            # 保持运行状态,等待 shutdown
             await self.server.shutdown_event.wait()
         else:
             await self.server.start_polling()
@@ -480,7 +471,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                 path_wav = await convert_audio_to_wav(path, path_wav)
             except Exception as e:
                 logger.error(
-                    f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。",
+                    f"转换音频失败: {e}｡如果没有安装 ffmpeg 请先安装｡",
                 )
                 path_wav = path
                 return
@@ -514,7 +505,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         buffer = self.user_buffer.get(message.sender.user_id, None)
         if buffer is None:
             logger.critical(
-                f"用户消息未找到缓冲状态，无法处理消息: user={message.sender.user_id} message_id={message.message_id}"
+                f"用户消息未找到缓冲状态,无法处理消息: user={message.sender.user_id} message_id={message.message_id}"
             )
             return
         message_event = WeixinOfficialAccountPlatformEvent(

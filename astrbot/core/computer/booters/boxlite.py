@@ -97,7 +97,7 @@ class MockShipyardSandboxClient:
             logger.error("[Computer] file_upload_failed booter=boxlite error=%s", e)
             return {
                 "success": False,
-                "error": f"Connection error: {str(e)}",
+                "error": f"Connection error: {e!s}",
                 "message": "File upload failed",
             }
         except asyncio.TimeoutError:
@@ -126,7 +126,7 @@ class MockShipyardSandboxClient:
             )
             return {
                 "success": False,
-                "error": f"Internal error: {str(exc)}",
+                "error": f"Internal error: {exc!s}",
                 "message": "File upload failed",
             }
 

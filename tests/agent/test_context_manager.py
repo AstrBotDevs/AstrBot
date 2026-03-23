@@ -27,12 +27,12 @@ class MockProvider:
         }
 
     async def text_chat(self, **kwargs):
-        """模拟 LLM 调用，返回摘要"""
+        """模拟 LLM 调用,返回摘要"""
         messages = kwargs.get("messages", [])
-        # 简单的摘要逻辑：返回消息数量统计
+        # 简单的摘要逻辑:返回消息数量统计
         return LLMResponse(
             role="assistant",
-            completion_text=f"历史对话包含 {len(messages) - 1} 条消息，主要讨论了技术话题。",
+            completion_text=f"历史对话包含 {len(messages) - 1} 条消息,主要讨论了技术话题｡",
         )
 
     def get_model(self):

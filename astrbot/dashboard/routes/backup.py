@@ -29,11 +29,11 @@ from .route import Response, Route, RouteContext
 
 # 分片上传常量
 CHUNK_SIZE = 1024 * 1024  # 1MB
-UPLOAD_EXPIRE_SECONDS = 3600  # 上传会话过期时间（1小时）
+UPLOAD_EXPIRE_SECONDS = 3600  # 上传会话过期时间(1小时)
 
 
 def secure_filename(filename: str) -> str:
-    """清洗文件名，移除路径遍历字符和危险字符
+    """清洗文件名,移除路径遍历字符和危险字符
 
     Args:
         filename: 原始文件名
@@ -41,21 +41,21 @@ def secure_filename(filename: str) -> str:
     Returns:
         安全的文件名
     """
-    # 跨平台处理：先将反斜杠替换为正斜杠，再取文件名
+    # 跨平台处理:先将反斜杠替换为正斜杠,再取文件名
     filename = filename.replace("\\", "/")
-    # 仅保留文件名部分，移除路径
+    # 仅保留文件名部分,移除路径
     filename = os.path.basename(filename)
 
     # 替换路径遍历字符
     filename = filename.replace("..", "_")
 
-    # 仅保留字母、数字、下划线、连字符、点
+    # 仅保留字母､数字､下划线､连字符､点
     filename = re.sub(r"[^\w\-.]", "_", filename)
 
-    # 移除前导点（隐藏文件）和尾部点
+    # 移除前导点(隐藏文件)和尾部点
     filename = filename.strip(".")
 
-    # 如果文件名为空或只包含下划线，生成一个默认名称
+    # 如果文件名为空或只包含下划线,生成一个默认名称
     if not filename or filename.replace("_", "") == "":
         filename = "backup"
 
@@ -63,13 +63,13 @@ def secure_filename(filename: str) -> str:
 
 
 def generate_unique_filename(original_filename: str) -> str:
-    """生成唯一的文件名，在原文件名后添加时间戳后缀避免重名
+    """生成唯一的文件名,在原文件名后添加时间戳后缀避免重名
 
     Args:
-        original_filename: 原始文件名（已清洗）
+        original_filename: 原始文件名(已清洗)
 
     Returns:
-        添加了时间戳后缀的唯一文件名，格式为 {原文件名}_{YYYYMMDD_HHMMSS}.{扩展名}
+        添加了时间戳后缀的唯一文件名,格式为 {原文件名}_{YYYYMMDD_HHMMSS}.{扩展名}
     """
     name, ext = os.path.splitext(original_filename)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -79,7 +79,7 @@ def generate_unique_filename(original_filename: str) -> str:
 class BackupRoute(Route):
     """备份管理路由
 
-    提供备份导出、导入、列表等 API 接口
+    提供备份导出､导入､列表等 API 接口
     """
 
     def __init__(
@@ -89,6 +89,7 @@ class BackupRoute(Route):
         core_lifecycle: AstrBotCoreLifecycle,
     ) -> None:
         super().__init__(context)
+        self.tasks: set = set()
         self.db = db
         self.core_lifecycle = core_lifecycle
         self.backup_dir = get_astrbot_backups_path()
@@ -110,7 +111,7 @@ class BackupRoute(Route):
         self.routes = {
             "/backup/list": ("GET", self.list_backups),
             "/backup/export": ("POST", self.export_backup),
-            "/backup/upload": ("POST", self.upload_backup),  # 上传文件（兼容小文件）
+            "/backup/upload": ("POST", self.upload_backup),  # 上传文件(兼容小文件)
             "/backup/upload/init": ("POST", self.upload_init),  # 分片上传初始化
             "/backup/upload/chunk": ("POST", self.upload_chunk),  # 上传分片
             "/backup/upload/complete": ("POST", self.upload_complete),  # 完成分片上传
@@ -198,20 +199,20 @@ class BackupRoute(Route):
         return _callback
 
     def _ensure_cleanup_task_started(self) -> None:
-        """确保后台清理任务已启动（在异步上下文中延迟启动）"""
+        """确保后台清理任务已启动(在异步上下文中延迟启动)"""
         if self._cleanup_task is None or self._cleanup_task.done():
             try:
                 self._cleanup_task = asyncio.create_task(
                     self._cleanup_expired_uploads()
                 )
             except RuntimeError:
-                # 如果没有运行中的事件循环，跳过（等待下次异步调用时启动）
+                # 如果没有运行中的事件循环,跳过(等待下次异步调用时启动)
                 pass
 
     async def _cleanup_expired_uploads(self) -> None:
         """定期清理过期的上传会话
 
-        基于 last_activity 字段判断过期，避免清理活跃的上传会话。
+        基于 last_activity 字段判断过期,避免清理活跃的上传会话｡
         """
         while True:
             try:
@@ -220,7 +221,7 @@ class BackupRoute(Route):
                 expired_sessions = []
 
                 for upload_id, session in self.upload_sessions.items():
-                    # 使用 last_activity 判断过期，而非 created_at
+                    # 使用 last_activity 判断过期,而非 created_at
                     last_activity = session.get("last_activity", session["created_at"])
                     if current_time - last_activity > UPLOAD_EXPIRE_SECONDS:
                         expired_sessions.append(upload_id)
@@ -230,7 +231,7 @@ class BackupRoute(Route):
                     logger.info(f"清理过期的上传会话: {upload_id}")
 
             except asyncio.CancelledError:
-                # 任务被取消，正常退出
+                # 任务被取消,正常退出
                 break
             except Exception as e:
                 logger.error(f"清理过期上传会话失败: {e}")
@@ -254,7 +255,7 @@ class BackupRoute(Route):
             zip_path: ZIP 文件路径
 
         Returns:
-            dict | None: manifest 内容，如果不是有效备份则返回 None
+            dict | None: manifest 内容,如果不是有效备份则返回 None
         """
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
@@ -262,11 +263,11 @@ class BackupRoute(Route):
                     manifest_data = zf.read("manifest.json")
                     return json.loads(manifest_data.decode("utf-8"))
                 else:
-                    # 没有 manifest.json，不是有效的 AstrBot 备份
+                    # 没有 manifest.json,不是有效的 AstrBot 备份
                     return None
         except Exception as e:
             logger.debug(f"读取备份 manifest 失败: {e}")
-        return None  # 无法读取，不是有效备份
+        return None  # 无法读取,不是有效备份
 
     async def list_backups(self):
         # 确保后台清理任务已启动
@@ -288,7 +289,7 @@ class BackupRoute(Route):
             # 获取所有备份文件
             backup_files = []
             for filename in os.listdir(self.backup_dir):
-                # 只处理 .zip 文件，排除隐藏文件和目录
+                # 只处理 .zip 文件,排除隐藏文件和目录
                 if not filename.endswith(".zip") or filename.startswith("."):
                     continue
 
@@ -297,7 +298,7 @@ class BackupRoute(Route):
                     continue
 
                 # 读取 manifest.json 获取备份信息
-                # 如果返回 None，说明不是有效的 AstrBot 备份，跳过
+                # 如果返回 None,说明不是有效的 AstrBot 备份,跳过
                 manifest = self._get_backup_manifest(file_path)
                 if manifest is None:
                     logger.debug(f"跳过无效备份文件: {filename}")
@@ -335,18 +336,18 @@ class BackupRoute(Route):
                         "page_size": page_size,
                     }
                 )
-                .__dict__
+                .to_json()
             )
         except Exception as e:
             logger.error(f"获取备份列表失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"获取备份列表失败: {e!s}").__dict__
+            return Response().error(f"获取备份列表失败: {e!s}").to_json()
 
     async def export_backup(self):
         """创建备份
 
         返回:
-        - task_id: 任务ID，用于查询导出进度
+        - task_id: 任务ID,用于查询导出进度
         """
         try:
             # 生成任务ID
@@ -356,8 +357,11 @@ class BackupRoute(Route):
             self._init_task(task_id, "export", "pending")
 
             # 启动后台导出任务
-            asyncio.create_task(self._background_export_task(task_id))
-
+            _background_export_task = asyncio.create_task(
+                self._background_export_task(task_id)
+            )
+            self.tasks.add(_background_export_task)
+            _background_export_task.add_done_callback(self.tasks.discard)
             return (
                 Response()
                 .ok(
@@ -366,12 +370,12 @@ class BackupRoute(Route):
                         "message": "export task created, processing in background",
                     }
                 )
-                .__dict__
+                .to_json()
             )
         except Exception as e:
             logger.error(f"创建备份失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"创建备份失败: {e!s}").__dict__
+            return Response().error(f"创建备份失败: {e!s}").to_json()
 
     async def _background_export_task(self, task_id: str) -> None:
         """后台导出任务"""
@@ -414,8 +418,8 @@ class BackupRoute(Route):
     async def upload_backup(self):
         """上传备份文件
 
-        将备份文件上传到服务器，返回保存的文件名。
-        上传后应调用 check_backup 进行预检查。
+        将备份文件上传到服务器,返回保存的文件名｡
+        上传后应调用 check_backup 进行预检查｡
 
         Form Data:
         - file: 备份文件 (.zip)
@@ -426,13 +430,13 @@ class BackupRoute(Route):
         try:
             files = await request.files
             if "file" not in files:
-                return Response().error("缺少备份文件").__dict__
+                return Response().error("缺少备份文件").to_json()
 
             file = files["file"]
             if not file.filename or not file.filename.endswith(".zip"):
-                return Response().error("请上传 ZIP 格式的备份文件").__dict__
+                return Response().error("请上传 ZIP 格式的备份文件").to_json()
 
-            # 清洗文件名并生成唯一名称，防止路径遍历和覆盖
+            # 清洗文件名并生成唯一名称,防止路径遍历和覆盖
             safe_filename = secure_filename(file.filename)
             unique_filename = generate_unique_filename(safe_filename)
 
@@ -454,26 +458,26 @@ class BackupRoute(Route):
                         "size": (await anyio.Path(zip_path).stat()).st_size,
                     }
                 )
-                .__dict__
+                .to_json()
             )
         except Exception as e:
             logger.error(f"上传备份文件失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"上传备份文件失败: {e!s}").__dict__
+            return Response().error(f"上传备份文件失败: {e!s}").to_json()
 
     async def upload_init(self):
         """初始化分片上传
 
-        创建一个上传会话，返回 upload_id 供后续分片上传使用。
+        创建一个上传会话,返回 upload_id 供后续分片上传使用｡
 
         JSON Body:
         - filename: 原始文件名
-        - total_size: 文件总大小（字节）
+        - total_size: 文件总大小(字节)
 
         返回:
         - upload_id: 上传会话 ID
-        - chunk_size: 分片大小（由后端决定）
-        - total_chunks: 分片总数（由后端根据 total_size 和 chunk_size 计算）
+        - chunk_size: 分片大小(由后端决定)
+        - total_chunks: 分片总数(由后端根据 total_size 和 chunk_size 计算)
         """
         try:
             data = await request.json
@@ -481,15 +485,15 @@ class BackupRoute(Route):
             total_size = data.get("total_size", 0)
 
             if not filename:
-                return Response().error("缺少 filename 参数").__dict__
+                return Response().error("缺少 filename 参数").to_json()
 
             if not filename.endswith(".zip"):
-                return Response().error("请上传 ZIP 格式的备份文件").__dict__
+                return Response().error("请上传 ZIP 格式的备份文件").to_json()
 
             if total_size <= 0:
-                return Response().error("无效的文件大小").__dict__
+                return Response().error("无效的文件大小").to_json()
 
-            # 由后端计算分片总数，确保前后端一致
+            # 由后端计算分片总数,确保前后端一致
             import math
 
             total_chunks = math.ceil(total_size / CHUNK_SIZE)
@@ -533,21 +537,21 @@ class BackupRoute(Route):
                         "filename": unique_filename,
                     }
                 )
-                .__dict__
+                .to_json()
             )
         except Exception as e:
             logger.error(f"初始化分片上传失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"初始化分片上传失败: {e!s}").__dict__
+            return Response().error(f"初始化分片上传失败: {e!s}").to_json()
 
     async def upload_chunk(self):
         """上传分片
 
-        上传单个分片数据。
+        上传单个分片数据｡
 
         Form Data:
         - upload_id: 上传会话 ID
-        - chunk_index: 分片索引（从 0 开始）
+        - chunk_index: 分片索引(从 0 开始)
         - chunk: 分片数据
 
         返回:
@@ -562,34 +566,34 @@ class BackupRoute(Route):
             chunk_index_str = form.get("chunk_index")
 
             if not upload_id or chunk_index_str is None:
-                return Response().error("缺少必要参数").__dict__
+                return Response().error("缺少必要参数").to_json()
 
             try:
                 chunk_index = int(chunk_index_str)
             except ValueError:
-                return Response().error("无效的分片索引").__dict__
+                return Response().error("无效的分片索引").to_json()
 
             if "chunk" not in files:
-                return Response().error("缺少分片数据").__dict__
+                return Response().error("缺少分片数据").to_json()
 
             # 验证上传会话
             if upload_id not in self.upload_sessions:
-                return Response().error("上传会话不存在或已过期").__dict__
+                return Response().error("上传会话不存在或已过期").to_json()
 
             session = self.upload_sessions[upload_id]
 
             # 验证分片索引
             if chunk_index < 0 or chunk_index >= session["total_chunks"]:
-                return Response().error("分片索引超出范围").__dict__
+                return Response().error("分片索引超出范围").to_json()
 
             # 保存分片
             chunk_file = files["chunk"]
             chunk_path = os.path.join(session["chunk_dir"], f"{chunk_index}.part")
             await chunk_file.save(chunk_path)
 
-            # 记录已接收的分片，并更新最后活动时间
+            # 记录已接收的分片,并更新最后活动时间
             session["received_chunks"].add(chunk_index)
-            session["last_activity"] = time.time()  # 刷新活动时间，防止活跃上传被清理
+            session["last_activity"] = time.time()  # 刷新活动时间,防止活跃上传被清理
 
             received_count = len(session["received_chunks"])
             total_chunks = session["total_chunks"]
@@ -608,18 +612,18 @@ class BackupRoute(Route):
                         "chunk_index": chunk_index,
                     }
                 )
-                .__dict__
+                .to_json()
             )
         except Exception as e:
             logger.error(f"上传分片失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"上传分片失败: {e!s}").__dict__
+            return Response().error(f"上传分片失败: {e!s}").to_json()
 
     def _mark_backup_as_uploaded(self, zip_path: str) -> None:
-        """修改备份文件的 manifest.json，将 origin 设置为 uploaded
+        """修改备份文件的 manifest.json,将 origin 设置为 uploaded
 
-        使用 zipfile 的 append 模式添加新的 manifest.json，
-        ZIP 规范中后添加的同名文件会覆盖先前的文件。
+        使用 zipfile 的 append 模式添加新的 manifest.json,
+        ZIP 规范中后添加的同名文件会覆盖先前的文件｡
 
         Args:
             zip_path: ZIP 文件路径
@@ -635,7 +639,7 @@ class BackupRoute(Route):
                     manifest["uploaded_at"] = datetime.now().isoformat()
 
             # 使用 append 模式添加新的 manifest.json
-            # ZIP 规范中，后添加的同名文件会覆盖先前的
+            # ZIP 规范中,后添加的同名文件会覆盖先前的
             with zipfile.ZipFile(zip_path, "a") as zf:
                 new_manifest = json.dumps(manifest, ensure_ascii=False, indent=2)
                 zf.writestr("manifest.json", new_manifest)
@@ -647,7 +651,7 @@ class BackupRoute(Route):
     async def upload_complete(self):
         """完成分片上传
 
-        合并所有分片为完整文件。
+        合并所有分片为完整文件｡
 
         JSON Body:
         - upload_id: 上传会话 ID
@@ -661,11 +665,11 @@ class BackupRoute(Route):
             upload_id = data.get("upload_id")
 
             if not upload_id:
-                return Response().error("缺少 upload_id 参数").__dict__
+                return Response().error("缺少 upload_id 参数").to_json()
 
             # 验证上传会话
             if upload_id not in self.upload_sessions:
-                return Response().error("上传会话不存在或已过期").__dict__
+                return Response().error("上传会话不存在或已过期").to_json()
 
             session = self.upload_sessions[upload_id]
 
@@ -677,8 +681,8 @@ class BackupRoute(Route):
                 missing = set(range(total)) - received
                 return (
                     Response()
-                    .error(f"分片不完整，缺少: {sorted(missing)[:10]}...")
-                    .__dict__
+                    .error(f"分片不完整,缺少: {sorted(missing)[:10]}...")
+                    .to_json()
                 )
 
             # 合并分片
@@ -695,7 +699,7 @@ class BackupRoute(Route):
                         async with await anyio.open_file(
                             chunk_path, "rb"
                         ) as chunk_file:
-                            # 分块读取，避免内存溢出
+                            # 分块读取,避免内存溢出
                             while True:
                                 data_block = await chunk_file.read(8192)
                                 if not data_block:
@@ -704,7 +708,7 @@ class BackupRoute(Route):
 
                 file_size = (await anyio.Path(output_path).stat()).st_size
 
-                # 标记备份为上传来源（修改 manifest.json 中的 origin 字段）
+                # 标记备份为上传来源(修改 manifest.json 中的 origin 字段)
                 self._mark_backup_as_uploaded(output_path)
 
                 logger.info(
@@ -723,10 +727,10 @@ class BackupRoute(Route):
                             "size": file_size,
                         }
                     )
-                    .__dict__
+                    .to_json()
                 )
             except Exception as e:
-                # 如果合并失败，删除不完整的文件
+                # 如果合并失败,删除不完整的文件
                 if await anyio.Path(output_path).exists():
                     await anyio.Path(output_path).unlink()
                 raise e
@@ -734,12 +738,12 @@ class BackupRoute(Route):
         except Exception as e:
             logger.error(f"完成分片上传失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"完成分片上传失败: {e!s}").__dict__
+            return Response().error(f"完成分片上传失败: {e!s}").to_json()
 
     async def upload_abort(self):
         """取消分片上传
 
-        取消上传并清理已上传的分片。
+        取消上传并清理已上传的分片｡
 
         JSON Body:
         - upload_id: 上传会话 ID
@@ -749,28 +753,28 @@ class BackupRoute(Route):
             upload_id = data.get("upload_id")
 
             if not upload_id:
-                return Response().error("缺少 upload_id 参数").__dict__
+                return Response().error("缺少 upload_id 参数").to_json()
 
             if upload_id not in self.upload_sessions:
-                # 会话已不存在，可能已过期或已完成
-                return Response().ok(message="上传已取消").__dict__
+                # 会话已不存在,可能已过期或已完成
+                return Response().ok(message="上传已取消").to_json()
 
             # 清理会话
             await self._cleanup_upload_session(upload_id)
 
             logger.info(f"取消分片上传: {upload_id}")
 
-            return Response().ok(message="上传已取消").__dict__
+            return Response().ok(message="上传已取消").to_json()
         except Exception as e:
             logger.error(f"取消上传失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"取消上传失败: {e!s}").__dict__
+            return Response().error(f"取消上传失败: {e!s}").to_json()
 
     async def check_backup(self):
         """预检查备份文件
 
-        检查备份文件的版本兼容性，返回确认信息。
-        用户确认后调用 import_backup 执行导入。
+        检查备份文件的版本兼容性,返回确认信息｡
+        用户确认后调用 import_backup 执行导入｡
 
         JSON Body:
         - filename: 已上传的备份文件名
@@ -782,17 +786,17 @@ class BackupRoute(Route):
             data = await request.json
             filename = data.get("filename")
             if not filename:
-                return Response().error("缺少 filename 参数").__dict__
+                return Response().error("缺少 filename 参数").to_json()
 
             # 安全检查 - 防止路径遍历
             if ".." in filename or "/" in filename or "\\" in filename:
-                return Response().error("无效的文件名").__dict__
+                return Response().error("无效的文件名").to_json()
 
             zip_path = os.path.join(self.backup_dir, filename)
             if not await anyio.Path(zip_path).exists():
-                return Response().error(f"备份文件不存在: {filename}").__dict__
+                return Response().error(f"备份文件不存在: {filename}").to_json()
 
-            # 获取知识库管理器（用于构造 importer）
+            # 获取知识库管理器(用于构造 importer)
             kb_manager = getattr(self.core_lifecycle, "kb_manager", None)
 
             importer = AstrBotImporter(
@@ -804,24 +808,24 @@ class BackupRoute(Route):
             # 执行预检查
             check_result = importer.pre_check(zip_path)
 
-            return Response().ok(check_result.to_dict()).__dict__
+            return Response().ok(check_result.to_dict()).to_json()
         except Exception as e:
             logger.error(f"预检查备份文件失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"预检查备份文件失败: {e!s}").__dict__
+            return Response().error(f"预检查备份文件失败: {e!s}").to_json()
 
     async def import_backup(self):
         """执行备份导入
 
-        在用户确认后执行实际的导入操作。
-        需要先调用 upload_backup 上传文件，再调用 check_backup 预检查。
+        在用户确认后执行实际的导入操作｡
+        需要先调用 upload_backup 上传文件,再调用 check_backup 预检查｡
 
         JSON Body:
-        - filename: 已上传的备份文件名（必填）
-        - confirmed: 用户已确认（必填，必须为 true）
+        - filename: 已上传的备份文件名(必填)
+        - confirmed: 用户已确认(必填,必须为 true)
 
         返回:
-        - task_id: 任务ID，用于查询导入进度
+        - task_id: 任务ID,用于查询导入进度
         """
         try:
             data = await request.json
@@ -829,22 +833,22 @@ class BackupRoute(Route):
             confirmed = data.get("confirmed", False)
 
             if not filename:
-                return Response().error("缺少 filename 参数").__dict__
+                return Response().error("缺少 filename 参数").to_json()
 
             if not confirmed:
                 return (
                     Response()
-                    .error("请先确认导入。导入将会清空并覆盖现有数据，此操作不可撤销。")
-                    .__dict__
+                    .error("请先确认导入｡导入将会清空并覆盖现有数据,此操作不可撤销｡")
+                    .to_json()
                 )
 
             # 安全检查 - 防止路径遍历
             if ".." in filename or "/" in filename or "\\" in filename:
-                return Response().error("无效的文件名").__dict__
+                return Response().error("无效的文件名").to_json()
 
             zip_path = os.path.join(self.backup_dir, filename)
             if not await anyio.Path(zip_path).exists():
-                return Response().error(f"备份文件不存在: {filename}").__dict__
+                return Response().error(f"备份文件不存在: {filename}").to_json()
 
             # 生成任务ID
             task_id = str(uuid.uuid4())
@@ -853,7 +857,11 @@ class BackupRoute(Route):
             self._init_task(task_id, "import", "pending")
 
             # 启动后台导入任务
-            asyncio.create_task(self._background_import_task(task_id, zip_path))
+            _background_import_task = asyncio.create_task(
+                self._background_import_task(task_id, zip_path)
+            )
+            self.tasks.add(_background_import_task)
+            _background_import_task.add_done_callback(self.tasks.discard)
 
             return (
                 Response()
@@ -863,12 +871,12 @@ class BackupRoute(Route):
                         "message": "import task created, processing in background",
                     }
                 )
-                .__dict__
+                .to_json()
             )
         except Exception as e:
             logger.error(f"导入备份失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"导入备份失败: {e!s}").__dict__
+            return Response().error(f"导入备份失败: {e!s}").to_json()
 
     async def _background_import_task(self, task_id: str, zip_path: str) -> None:
         """后台导入任务"""
@@ -921,10 +929,10 @@ class BackupRoute(Route):
         try:
             task_id = request.args.get("task_id")
             if not task_id:
-                return Response().error("缺少参数 task_id").__dict__
+                return Response().error("缺少参数 task_id").to_json()
 
             if task_id not in self.backup_tasks:
-                return Response().error("找不到该任务").__dict__
+                return Response().error("找不到该任务").to_json()
 
             task_info = self.backup_tasks[task_id]
             status = task_info["status"]
@@ -935,49 +943,49 @@ class BackupRoute(Route):
                 "status": status,
             }
 
-            # 如果任务正在处理，返回进度信息
+            # 如果任务正在处理,返回进度信息
             if status == "processing" and task_id in self.backup_progress:
                 response_data["progress"] = self.backup_progress[task_id]
 
-            # 如果任务完成，返回结果
+            # 如果任务完成,返回结果
             if status == "completed":
                 response_data["result"] = task_info["result"]
 
-            # 如果任务失败，返回错误信息
+            # 如果任务失败,返回错误信息
             if status == "failed":
                 response_data["error"] = task_info["error"]
 
-            return Response().ok(response_data).__dict__
+            return Response().ok(response_data).to_json()
         except Exception as e:
             logger.error(f"获取任务进度失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"获取任务进度失败: {e!s}").__dict__
+            return Response().error(f"获取任务进度失败: {e!s}").to_json()
 
     async def download_backup(self):
         """下载备份文件
 
         Query 参数:
         - filename: 备份文件名 (必填)
-        - token: JWT token (必填，用于浏览器原生下载鉴权)
+        - token: JWT token (必填,用于浏览器原生下载鉴权)
 
-        注意: 此路由已被添加到 auth_middleware 白名单中，
-              使用 URL 参数中的 token 进行鉴权，以支持浏览器原生下载。
+        注意: 此路由已被添加到 auth_middleware 白名单中,
+              使用 URL 参数中的 token 进行鉴权,以支持浏览器原生下载｡
         """
         try:
             filename = request.args.get("filename")
             token = request.args.get("token")
 
             if not filename:
-                return Response().error("缺少参数 filename").__dict__
+                return Response().error("缺少参数 filename").to_json()
 
             if not token:
-                return Response().error("缺少参数 token").__dict__
+                return Response().error("缺少参数 token").to_json()
 
             # 验证 JWT token
             try:
                 jwt_secret = self.config.get("dashboard", {}).get("jwt_secret")
                 if not jwt_secret:
-                    return Response().error("服务器配置错误").__dict__
+                    return Response().error("服务器配置错误").to_json()
 
                 # Verify JWT token with strict security options
                 jwt.decode(
@@ -991,28 +999,28 @@ class BackupRoute(Route):
                     },
                 )
             except jwt.ExpiredSignatureError:
-                return Response().error("Token 已过期，请刷新页面后重试").__dict__
+                return Response().error("Token 已过期,请刷新页面后重试").to_json()
             except jwt.InvalidTokenError:
-                return Response().error("Token 无效").__dict__
+                return Response().error("Token 无效").to_json()
 
             # 安全检查 - 防止路径遍历
             if ".." in filename or "/" in filename or "\\" in filename:
-                return Response().error("无效的文件名").__dict__
+                return Response().error("无效的文件名").to_json()
 
             file_path = os.path.join(self.backup_dir, filename)
             if not await anyio.Path(file_path).exists():
-                return Response().error("备份文件不存在").__dict__
+                return Response().error("备份文件不存在").to_json()
 
             return await send_file(
                 file_path,
                 as_attachment=True,
                 attachment_filename=filename,
-                conditional=True,  # 启用 Range 请求支持（断点续传）
+                conditional=True,  # 启用 Range 请求支持(断点续传)
             )
         except Exception as e:
             logger.error(f"下载备份失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"下载备份失败: {e!s}").__dict__
+            return Response().error(f"下载备份失败: {e!s}").to_json()
 
     async def delete_backup(self):
         """删除备份文件
@@ -1024,29 +1032,29 @@ class BackupRoute(Route):
             data = await request.json
             filename = data.get("filename")
             if not filename:
-                return Response().error("缺少参数 filename").__dict__
+                return Response().error("缺少参数 filename").to_json()
 
             # 安全检查 - 防止路径遍历
             if ".." in filename or "/" in filename or "\\" in filename:
-                return Response().error("无效的文件名").__dict__
+                return Response().error("无效的文件名").to_json()
 
             file_path = os.path.join(self.backup_dir, filename)
             if not await anyio.Path(file_path).exists():
-                return Response().error("备份文件不存在").__dict__
+                return Response().error("备份文件不存在").to_json()
 
             await anyio.Path(file_path).unlink()
-            return Response().ok(message="删除备份成功").__dict__
+            return Response().ok(message="删除备份成功").to_json()
         except Exception as e:
             logger.error(f"删除备份失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"删除备份失败: {e!s}").__dict__
+            return Response().error(f"删除备份失败: {e!s}").to_json()
 
     async def rename_backup(self):
         """重命名备份文件
 
         Body:
         - filename: 当前文件名 (必填)
-        - new_name: 新文件名 (必填，不含扩展名)
+        - new_name: 新文件名 (必填,不含扩展名)
         """
         try:
             data = await request.json
@@ -1054,25 +1062,25 @@ class BackupRoute(Route):
             new_name = data.get("new_name")
 
             if not filename:
-                return Response().error("缺少参数 filename").__dict__
+                return Response().error("缺少参数 filename").to_json()
 
             if not new_name:
-                return Response().error("缺少参数 new_name").__dict__
+                return Response().error("缺少参数 new_name").to_json()
 
             # 安全检查 - 防止路径遍历
             if ".." in filename or "/" in filename or "\\" in filename:
-                return Response().error("无效的文件名").__dict__
+                return Response().error("无效的文件名").to_json()
 
-            # 清洗新文件名（移除路径和危险字符）
+            # 清洗新文件名(移除路径和危险字符)
             new_name = secure_filename(new_name)
 
-            # 移除新文件名中的扩展名（如果有的话）
+            # 移除新文件名中的扩展名(如果有的话)
             if new_name.endswith(".zip"):
                 new_name = new_name[:-4]
 
             # 验证新文件名不为空
             if not new_name or new_name.replace("_", "") == "":
-                return Response().error("新文件名无效").__dict__
+                return Response().error("新文件名无效").to_json()
 
             # 强制使用 .zip 扩展名
             new_filename = f"{new_name}.zip"
@@ -1080,12 +1088,12 @@ class BackupRoute(Route):
             # 检查原文件是否存在
             old_path = os.path.join(self.backup_dir, filename)
             if not await anyio.Path(old_path).exists():
-                return Response().error("备份文件不存在").__dict__
+                return Response().error("备份文件不存在").to_json()
 
             # 检查新文件名是否已存在
             new_path = os.path.join(self.backup_dir, new_filename)
             if await anyio.Path(new_path).exists():
-                return Response().error(f"文件名 '{new_filename}' 已存在").__dict__
+                return Response().error(f"文件名 '{new_filename}' 已存在").to_json()
 
             # 执行重命名
             os.rename(old_path, new_path)
@@ -1100,9 +1108,9 @@ class BackupRoute(Route):
                         "new_filename": new_filename,
                     }
                 )
-                .__dict__
+                .to_json()
             )
         except Exception as e:
             logger.error(f"重命名备份失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"重命名备份失败: {e!s}").__dict__
+            return Response().error(f"重命名备份失败: {e!s}").to_json()

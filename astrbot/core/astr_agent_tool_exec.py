@@ -114,11 +114,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
     @classmethod
     async def execute(cls, tool, run_context, **tool_args):
-        """执行函数调用。
+        """执行函数调用｡
 
         Args:
-            event (AstrMessageEvent): 事件对象, 当 origin 为 local 时必须提供。
-            **kwargs: 函数调用的参数。
+            event (AstrMessageEvent): 事件对象, 当 origin 为 local 时必须提供｡
+            **kwargs: 函数调用的参数｡
 
         Returns:
             AsyncGenerator[None | mcp.types.CallToolResult, None]
@@ -158,7 +158,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         exc_info=True,
                     )
 
-            asyncio.create_task(_run_in_background())
+            asyncio.create_task(_run_in_background())  # noqa: RUF006
             text_content = mcp.types.TextContent(
                 type="text",
                 text=f"Background task submitted. task_id={task_id}",
@@ -357,7 +357,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     continue
 
         prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
-        agent_max_step = int(prov_settings.get("max_agent_step", 30))
+        agent_max_step = int(prov_settings.get("max_agent_step", 3))
         stream = prov_settings.get("streaming_response", False)
         llm_resp = await ctx.tool_loop_agent(
             event=event,
@@ -368,6 +368,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             tools=toolset,
             contexts=contexts,
             max_steps=agent_max_step,
+            tool_call_timeout=run_context.tool_call_timeout,
             stream=stream,
         )
         yield mcp.types.CallToolResult(
@@ -405,7 +406,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     exc_info=True,
                 )
 
-        asyncio.create_task(_run_handoff_in_background())
+        asyncio.create_task(_run_handoff_in_background())  # noqa: RUF006
 
         text_content = mcp.types.TextContent(
             type="text",
@@ -548,7 +549,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
 
         config = MainAgentBuildConfig(
-            tool_call_timeout=3600,
+            tool_call_timeout=run_context.tool_call_timeout,
             streaming_response=ctx.get_config()
             .get("provider_settings", {})
             .get("stream", False),
@@ -582,7 +583,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
         runner = result.agent_runner
-        async for _ in runner.step_until_done(30):
+        async for _ in runner.step_until_done(3):
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
@@ -642,6 +643,24 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             method_name = "run"
         if awaitable is None:
             raise ValueError("Tool must have a valid handler or override 'run' method.")
+
+        sdk_plugin_bridge = getattr(
+            run_context.context.context, "sdk_plugin_bridge", None
+        )
+        if sdk_plugin_bridge is not None:
+            try:
+                await sdk_plugin_bridge.dispatch_message_event(
+                    "calling_func_tool",
+                    event,
+                    {
+                        "tool_name": tool.name,
+                        "tool_args": json.loads(
+                            json.dumps(tool_args, ensure_ascii=False, default=str)
+                        ),
+                    },
+                )
+            except Exception as exc:
+                logger.warning("SDK calling_func_tool dispatch failed: %s", exc)
 
         wrapper = call_local_llm_tool(
             context=run_context,
@@ -738,11 +757,11 @@ async def call_local_llm_tool(
     except ValueError as e:
         raise Exception(f"Tool execution ValueError: {e}") from e
     except TypeError as e:
-        # 获取函数的签名（包括类型），除了第一个 event/context 参数。
+        # 获取函数的签名(包括类型),除了第一个 event/context 参数｡
         try:
             sig = inspect.signature(handler)
             params = list(sig.parameters.values())
-            # 跳过第一个参数（event 或 context）
+            # 跳过第一个参数(event 或 context)
             if params:
                 params = params[1:]
 
@@ -781,7 +800,7 @@ async def call_local_llm_tool(
         try:
             async for ret in ready_to_call:
                 # 这里逐步执行异步生成器, 对于每个 yield 返回的 ret, 执行下面的代码
-                # 返回值只能是 MessageEventResult 或者 None（无返回值）
+                # 返回值只能是 MessageEventResult 或者 None(无返回值)
                 _has_yielded = True
                 if isinstance(ret, MessageEventResult | CommandResult):
                     # 如果返回值是 MessageEventResult, 设置结果并继续
