@@ -25,12 +25,11 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
-    - name: Install uv
-      shell: bash
-      run: |
-        set -euo pipefail
-        python -m pip install --upgrade pip
-        python -m pip install "uv==${{ inputs.uv-version }}"
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v7.6.0
+      with:
+        version: ${{ inputs.uv-version }}
+        enable-cache: "true"
 
     - name: Sync dependencies
       if: ${{ inputs.sync-deps == 'true' }}

@@ -53,9 +53,11 @@ jobs:
 
           docs_only=true
           dashboard_changed=false
+          has_changed_files=false
 
           while IFS= read -r f; do
             [[ -z "$f" ]] && continue
+            has_changed_files=true
 
             if [[ "$f" == dashboard/* ]]; then
               dashboard_changed=true
@@ -65,6 +67,11 @@ jobs:
               docs_only=false
             fi
           done <<< "$changed_files"
+
+          # Empty diff can happen in edge cases; fail closed to avoid skipping core checks.
+          if [[ "$has_changed_files" == "false" ]]; then
+            docs_only=false
+          fi
 
           echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
           echo "dashboard_changed=$dashboard_changed" >> "$GITHUB_OUTPUT"
@@ -143,6 +150,16 @@ jobs:
           trap cleanup EXIT
 
           for _ in {1..60}; do
+            if ! kill -0 "$app_pid" 2>/dev/null; then
+              app_exit=0
+              wait "$app_pid" || app_exit=$?
+              if [[ "$app_exit" -eq 0 ]]; then
+                app_exit=1
+              fi
+              echo "Application exited early with status $app_exit"
+              exit "$app_exit"
+            fi
+
             if curl -sf http://localhost:6185 >/dev/null 2>&1; then
               exit 0
             fi
