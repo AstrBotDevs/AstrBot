@@ -1648,8 +1648,11 @@ class SdkPluginBridge:
 
     def _match_handlers(self, event: AstrMessageEvent) -> list[TriggerMatch]:
         matches: list[TriggerMatch] = []
+        normalized_platform = self._normalize_platform_name(event.get_platform_name())
         for record in self._records.values():
             if record.state in {SDK_STATE_DISABLED, SDK_STATE_FAILED}:
+                continue
+            if not self._record_supports_platform(record, normalized_platform):
                 continue
             for handler in record.handlers:
                 match = TriggerConverter.match_handler(
@@ -1717,6 +1720,9 @@ class SdkPluginBridge:
         event_type: str,
         payload: dict[str, Any] | None = None,
     ) -> None:
+        normalized_platform = self._normalize_platform_name(
+            (payload or {}).get("platform")
+        )
         event_payload = {
             "type": event_type,
             "event_type": event_type,
@@ -1731,7 +1737,10 @@ class SdkPluginBridge:
         }
         for key, value in (payload or {}).items():
             event_payload[key] = value
-        matches = self._match_event_handlers(event_type)
+        matches = self._match_event_handlers(
+            event_type,
+            platform_name=normalized_platform,
+        )
         for record, descriptor in matches:
             if record.session is None:
                 continue
@@ -1766,9 +1775,11 @@ class SdkPluginBridge:
         overlay = self.get_request_overlay_by_token(dispatch_token)
         if overlay is None:
             return
+        normalized_platform = self._normalize_platform_name(event.get_platform_name())
         matches = self._match_event_handlers(
             event_type,
             allowed_plugins=overlay.handler_whitelist,
+            platform_name=normalized_platform,
         )
         for record, descriptor in matches:
             if record.session is None:
@@ -1870,6 +1881,7 @@ class SdkPluginBridge:
         event_type: str,
         *,
         allowed_plugins: set[str] | None = None,
+        platform_name: str = "",
     ) -> list[tuple[SdkPluginRecord, HandlerDescriptor]]:
         matches: list[tuple[int, int, int, SdkPluginRecord, HandlerDescriptor]] = []
         for record in self._records.values():
@@ -1881,11 +1893,18 @@ class SdkPluginBridge:
                 continue
             if allowed_plugins is not None and record.plugin_id not in allowed_plugins:
                 continue
+            if not self._record_supports_platform(record, platform_name):
+                continue
             for handler in record.handlers:
                 trigger = handler.descriptor.trigger
                 if not isinstance(trigger, EventTrigger):
                     continue
                 if trigger.event_type != event_type:
+                    continue
+                if not self._descriptor_supports_platform(
+                    handler.descriptor,
+                    platform_name,
+                ):
                     continue
                 matches.append(
                     (
@@ -2270,19 +2289,48 @@ class SdkPluginBridge:
         return descriptor
 
     @staticmethod
+    def _normalize_platform_name(value: Any) -> str:
+        return str(value or "").strip().lower()
+
+    @classmethod
+    def _normalized_platform_names(cls, values: Any) -> set[str]:
+        if not isinstance(values, list):
+            return set()
+        return {
+            cls._normalize_platform_name(item)
+            for item in values
+            if cls._normalize_platform_name(item)
+        }
+
+    @classmethod
+    def _manifest_supported_platforms(cls, manifest_data: Any) -> set[str]:
+        if not isinstance(manifest_data, dict):
+            return set()
+        return cls._normalized_platform_names(manifest_data.get("support_platforms"))
+
+    def plugin_supports_platform(self, plugin_id: str, platform_name: str) -> bool:
+        normalized_platform = self._normalize_platform_name(platform_name)
+        if not normalized_platform:
+            return True
+        record = self._records.get(str(plugin_id))
+        if record is None:
+            return True
+        return self._record_supports_platform(record, normalized_platform)
+
+    @staticmethod
     def _record_supports_platform(
         record: SdkPluginRecord,
         platform_name: str,
     ) -> bool:
-        support_platforms = record.plugin.manifest_data.get("support_platforms")
-        if not isinstance(support_platforms, list):
+        normalized_platform = SdkPluginBridge._normalize_platform_name(platform_name)
+        if not normalized_platform:
             return True
-        normalized = {
-            str(item).strip().lower() for item in support_platforms if str(item).strip()
-        }
+        plugin = getattr(record, "plugin", None)
+        manifest_data = getattr(plugin, "manifest_data", None)
+        normalized = SdkPluginBridge._manifest_supported_platforms(manifest_data)
         if not normalized:
             return True
-        return platform_name in normalized
+        return normalized_platform in normalized
 
     @staticmethod
     def _local_mcp_tool_name(server_name: str, tool_name: str) -> str:
@@ -2788,17 +2836,16 @@ class SdkPluginBridge:
         descriptor: HandlerDescriptor,
         platform_name: str,
     ) -> bool:
+        normalized_platform = cls._normalize_platform_name(platform_name)
+        if not normalized_platform:
+            return True
         trigger_platforms = getattr(descriptor.trigger, "platforms", [])
         if isinstance(trigger_platforms, list):
-            normalized = {
-                str(item).strip().lower()
-                for item in trigger_platforms
-                if str(item).strip()
-            }
-            if normalized and platform_name not in normalized:
+            normalized = cls._normalized_platform_names(trigger_platforms)
+            if normalized and normalized_platform not in normalized:
                 return False
         for filter_spec in descriptor.filters:
-            if not cls._filter_supports_platform(filter_spec, platform_name):
+            if not cls._filter_supports_platform(filter_spec, normalized_platform):
                 return False
         return True
 

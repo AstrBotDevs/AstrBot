@@ -1,9 +1,9 @@
 # ruff: noqa: E402
 from __future__ import annotations
 
-from asyncio import Queue
 import sys
 import types
+from asyncio import Queue
 from functools import partial
 from pathlib import Path
 
@@ -61,7 +61,9 @@ from astrbot_sdk.protocol.descriptors import (
     CommandTrigger,
     EventTrigger,
     HandlerDescriptor,
+    MessageTrigger,
     ParamSpec,
+    PlatformFilterSpec,
     ScheduleTrigger,
 )
 from astrbot_sdk.testing import MockContext
@@ -269,6 +271,42 @@ async def test_mock_context_platform_and_session_managers() -> None:
     )
     assert current is not None
     assert current.session == session
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_mock_context_platform_capabilities_respect_support_platforms() -> None:
+    ctx = MockContext(
+        plugin_id="sdk-demo",
+        plugin_metadata={"support_platforms": ["telegram"]},
+    )
+    ctx.router.set_platform_instances(
+        [
+            {
+                "id": "telegram-main",
+                "name": "Telegram",
+                "type": "telegram",
+                "status": "running",
+            },
+            {
+                "id": "qq-main",
+                "name": "QQ",
+                "type": "qq",
+                "status": "running",
+            },
+        ]
+    )
+
+    platforms = await ctx.list_platforms()
+
+    assert [platform.id for platform in platforms] == ["telegram-main"]
+    assert await ctx.get_platform("qq") is None
+
+    with pytest.raises(AstrBotError, match="does not support platform 'qq'"):
+        await ctx.platform.send_by_session(
+            "qq-main:private:user-1",
+            "hello unsupported",
+        )
 
 
 @pytest.mark.unit
@@ -1035,6 +1073,159 @@ async def test_sdk_bridge_dispatch_system_event_exposes_sent_payload_fields() ->
     assert sent_payload["sent_messages"] == [
         {"type": "text", "data": {"text": "reply text"}}
     ]
+
+
+@pytest.mark.unit
+def test_sdk_bridge_match_handlers_skips_plugins_without_platform_support() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    bridge._records = {
+        "sdk-supported": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-supported",
+            plugin=types.SimpleNamespace(
+                manifest_data={"support_platforms": ["demo-platform"]}
+            ),
+            load_order=0,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-supported:main.on_message",
+                        trigger=MessageTrigger(keywords=["hello"]),
+                    ),
+                    declaration_order=0,
+                )
+            ],
+            dynamic_command_routes=[],
+        ),
+        "sdk-blocked": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-blocked",
+            plugin=types.SimpleNamespace(
+                manifest_data={"support_platforms": ["other-platform"]}
+            ),
+            load_order=1,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-blocked:main.on_message",
+                        trigger=MessageTrigger(keywords=["hello"]),
+                    ),
+                    declaration_order=0,
+                )
+            ],
+            dynamic_command_routes=[],
+        ),
+    }
+
+    matches = bridge._match_handlers(_TypedHookFakeEvent())  # noqa: SLF001
+
+    assert [match.plugin_id for match in matches] == ["sdk-supported"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_dispatch_system_event_filters_by_supported_platform() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    supported_session = _SystemEventSession()
+    blocked_session = _SystemEventSession()
+    bridge._records = {
+        "sdk-supported": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-supported",
+            plugin=types.SimpleNamespace(
+                manifest_data={"support_platforms": ["demo-platform"]}
+            ),
+            load_order=0,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-supported:main.platform_loaded",
+                        trigger=EventTrigger(event_type="platform_loaded"),
+                    ),
+                    declaration_order=0,
+                )
+            ],
+            session=supported_session,
+        ),
+        "sdk-blocked": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-blocked",
+            plugin=types.SimpleNamespace(
+                manifest_data={"support_platforms": ["other-platform"]}
+            ),
+            load_order=1,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-blocked:main.platform_loaded",
+                        trigger=EventTrigger(event_type="platform_loaded"),
+                    ),
+                    declaration_order=0,
+                )
+            ],
+            session=blocked_session,
+        ),
+    }
+
+    await bridge.dispatch_system_event(
+        "platform_loaded",
+        {"platform": "demo-platform", "platform_id": "demo-1"},
+    )
+
+    assert [call[0] for call in supported_session.calls] == [
+        "sdk-supported:main.platform_loaded"
+    ]
+    assert blocked_session.calls == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_dispatch_message_event_respects_event_platform_filters() -> (
+    None
+):
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    session = _SystemEventSession()
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-demo",
+            plugin=types.SimpleNamespace(manifest_data={}),
+            load_order=0,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.allowed",
+                        trigger=EventTrigger(event_type="after_message_sent"),
+                        filters=[PlatformFilterSpec(platforms=["demo-platform"])],
+                    ),
+                    declaration_order=0,
+                ),
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.blocked",
+                        trigger=EventTrigger(event_type="after_message_sent"),
+                        filters=[PlatformFilterSpec(platforms=["other-platform"])],
+                    ),
+                    declaration_order=1,
+                ),
+            ],
+            session=session,
+        )
+    }
+
+    event = _TypedHookFakeEvent()
+    bridge._request_overlays["dispatch-typed"] = bridge._ensure_request_overlay(
+        "dispatch-typed",
+        should_call_llm=False,
+    )
+
+    await bridge.dispatch_message_event(
+        "after_message_sent",
+        event,
+        {"message_outline": "reply text"},
+    )
+
+    assert [call[0] for call in session.calls] == ["sdk-demo:main.allowed"]
 
 
 @pytest.mark.unit

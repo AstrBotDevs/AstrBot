@@ -78,6 +78,11 @@ class PlatformCapabilityMixin(CapabilityMixinHost):
         _token,
     ) -> dict[str, Any]:
         session, dispatch_token = self._resolve_dispatch_target(request_id, payload)
+        self._require_platform_support_for_session(
+            request_id,
+            session,
+            "platform.send",
+        )
         self._plugin_bridge.before_platform_send(dispatch_token)
         await self._star_context.send_message(
             session,
@@ -92,6 +97,11 @@ class PlatformCapabilityMixin(CapabilityMixinHost):
         _token,
     ) -> dict[str, Any]:
         session, dispatch_token = self._resolve_dispatch_target(request_id, payload)
+        self._require_platform_support_for_session(
+            request_id,
+            session,
+            "platform.send_image",
+        )
         self._plugin_bridge.before_platform_send(dispatch_token)
         image_url = str(payload.get("image_url", ""))
         component = (
@@ -109,6 +119,11 @@ class PlatformCapabilityMixin(CapabilityMixinHost):
         _token,
     ) -> dict[str, Any]:
         session, dispatch_token = self._resolve_dispatch_target(request_id, payload)
+        self._require_platform_support_for_session(
+            request_id,
+            session,
+            "platform.send_chain",
+        )
         self._plugin_bridge.before_platform_send(dispatch_token)
         chain_payload = payload.get("chain")
         if not isinstance(chain_payload, list):
@@ -137,6 +152,11 @@ class PlatformCapabilityMixin(CapabilityMixinHost):
             raise AstrBotError.invalid_input(
                 "platform.send_by_session requires a session"
             )
+        self._require_platform_support_for_session(
+            request_id,
+            session,
+            "platform.send_by_session",
+        )
         request_context = self._resolve_event_request_context(request_id, payload)
         dispatch_token = None
         if request_context is not None and not request_context.cancelled:
@@ -186,10 +206,11 @@ class PlatformCapabilityMixin(CapabilityMixinHost):
 
     async def _platform_list_instances(
         self,
-        _request_id: str,
+        request_id: str,
         _payload: dict[str, Any],
         _token,
     ) -> dict[str, Any]:
+        plugin_id = self._resolve_plugin_id(request_id)
         platform_manager = getattr(self._star_context, "platform_manager", None)
         if platform_manager is None or not hasattr(platform_manager, "get_insts"):
             return {"platforms": []}
@@ -203,6 +224,8 @@ class PlatformCapabilityMixin(CapabilityMixinHost):
             platform_id = str(getattr(meta, "id", "")).strip()
             platform_type = str(getattr(meta, "name", "")).strip()
             if not platform_id or not platform_type:
+                continue
+            if not self._plugin_supports_platform(plugin_id, platform_type):
                 continue
             status = getattr(platform, "status", None)
             status_value = getattr(status, "value", status)

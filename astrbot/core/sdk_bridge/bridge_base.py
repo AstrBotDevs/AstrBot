@@ -498,6 +498,47 @@ class CapabilityBridgeBase(CapabilityRouter):
             f"{capability_name} is restricted to reserved/system plugins"
         )
 
+    def _plugin_supports_platform(self, plugin_id: str, platform_name: str) -> bool:
+        checker = getattr(self._plugin_bridge, "plugin_supports_platform", None)
+        if not callable(checker):
+            return True
+        return bool(checker(plugin_id, platform_name))
+
+    def _platform_name_from_id(self, platform_id: str) -> str:
+        platform = self._get_platform_inst_by_id(platform_id)
+        if platform is None:
+            return ""
+        meta = getattr(platform, "meta", None)
+        if not callable(meta):
+            return ""
+        try:
+            payload = meta()
+        except Exception:
+            return ""
+        return str(getattr(payload, "name", "") or "").strip().lower()
+
+    def _session_platform_name(self, session: str) -> str:
+        platform_id = str(session).split(":", maxsplit=1)[0].strip()
+        if not platform_id:
+            return ""
+        return self._platform_name_from_id(platform_id)
+
+    def _require_platform_support_for_session(
+        self,
+        request_id: str,
+        session: str,
+        capability_name: str,
+    ) -> str:
+        plugin_id = self._resolve_plugin_id(request_id)
+        platform_name = self._session_platform_name(session)
+        if not platform_name or self._plugin_supports_platform(
+            plugin_id, platform_name
+        ):
+            return plugin_id
+        raise AstrBotError.invalid_input(
+            f"{capability_name} does not support platform '{platform_name}' for plugin '{plugin_id}'"
+        )
+
     def _resolve_dispatch_target(
         self,
         request_id: str,

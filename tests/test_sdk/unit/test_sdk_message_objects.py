@@ -561,6 +561,26 @@ async def test_platform_send_by_session_accepts_existing_payload_shapes() -> Non
 @pytest.mark.asyncio
 async def test_context_p0_7_register_commands_and_platform_facade() -> None:
     peer = _DummyPeer()
+    peer.platform_instances = [
+        {
+            "id": "demo",
+            "name": "Demo Platform",
+            "type": "demo",
+            "status": "running",
+        },
+        {
+            "id": "demo-2",
+            "name": "Demo Platform 2",
+            "type": "demo",
+            "status": "stopped",
+        },
+        {
+            "id": "",
+            "name": "Broken Platform",
+            "type": "broken",
+            "status": "running",
+        },
+    ]
     ctx = Context(
         peer=peer,
         plugin_id="sdk-demo",
@@ -574,11 +594,14 @@ async def test_context_p0_7_register_commands_and_platform_facade() -> None:
         priority=7,
         use_regex=False,
     )
+    platforms = await ctx.list_platforms()
     platform = await ctx.get_platform("demo")
     assert platform is not None
     assert platform.id == "demo"
     assert platform.status == "running"
     assert await ctx.get_platform_inst("missing") is None
+    assert [item.id for item in platforms] == ["demo", "demo-2"]
+    assert [item.status for item in platforms] == ["running", "stopped"]
 
     await platform.send_by_id("user-99", "hello from facade")
 

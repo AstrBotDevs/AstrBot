@@ -425,18 +425,39 @@ async def test_platform_send_by_session_supports_proactive_send_without_dispatch
 ):
     sent: dict[str, object] = {}
 
+    class _FakeMeta:
+        def __init__(self, platform_id: str, name: str) -> None:
+            self.id = platform_id
+            self.name = name
+
+    class _FakePlatform:
+        def __init__(self, platform_id: str, name: str) -> None:
+            self._meta = _FakeMeta(platform_id, name)
+
+        def meta(self):
+            return self._meta
+
     async def fake_send_message(session: str, chain) -> None:
         sent["session"] = session
         sent["chain"] = chain
 
     bridge = object.__new__(capability_bridge_module.CoreCapabilityBridge)
-    bridge._star_context = SimpleNamespace(send_message=fake_send_message)
+    bridge._star_context = SimpleNamespace(
+        send_message=fake_send_message,
+        platform_manager=SimpleNamespace(
+            get_insts=lambda: [_FakePlatform("demo", "demo")]
+        ),
+    )
     bridge._plugin_bridge = SimpleNamespace(
         resolve_request_session=lambda _request_id: None,
         before_platform_send=lambda _dispatch_token: None,
         mark_platform_send=lambda _dispatch_token: "should-not-be-used",
         get_request_context_by_token=lambda _dispatch_token: None,
+        plugin_supports_platform=lambda _plugin_id, platform_name: (
+            platform_name == "demo"
+        ),
     )
+    bridge._resolve_plugin_id = lambda _request_id: "sdk-demo"
 
     output = await bridge._platform_send_by_session(
         "request-1",
@@ -450,6 +471,53 @@ async def test_platform_send_by_session_supports_proactive_send_without_dispatch
     assert sent["session"] == "demo:private:user-1"
     assert sent["chain"].get_plain_text() == "hello proactive"
     assert output["message_id"].startswith("sdk_proactive_")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_platform_send_by_session_rejects_unsupported_platform() -> None:
+    class _FakeMeta:
+        def __init__(self, platform_id: str, name: str) -> None:
+            self.id = platform_id
+            self.name = name
+
+    class _FakePlatform:
+        def __init__(self, platform_id: str, name: str) -> None:
+            self._meta = _FakeMeta(platform_id, name)
+
+        def meta(self):
+            return self._meta
+
+    async def fake_send_message(_session: str, _chain) -> None:
+        raise AssertionError("send_message should not run for unsupported platforms")
+
+    bridge = object.__new__(capability_bridge_module.CoreCapabilityBridge)
+    bridge._star_context = SimpleNamespace(
+        send_message=fake_send_message,
+        platform_manager=SimpleNamespace(
+            get_insts=lambda: [_FakePlatform("qq-main", "qq")]
+        ),
+    )
+    bridge._plugin_bridge = SimpleNamespace(
+        resolve_request_session=lambda _request_id: None,
+        before_platform_send=lambda _dispatch_token: None,
+        mark_platform_send=lambda _dispatch_token: "should-not-be-used",
+        get_request_context_by_token=lambda _dispatch_token: None,
+        plugin_supports_platform=lambda _plugin_id, platform_name: (
+            platform_name == "telegram"
+        ),
+    )
+    bridge._resolve_plugin_id = lambda _request_id: "sdk-demo"
+
+    with pytest.raises(AstrBotError, match="does not support platform 'qq'"):
+        await bridge._platform_send_by_session(
+            "request-1",
+            {
+                "session": "qq-main:private:user-1",
+                "chain": [{"type": "text", "data": {"text": "hello proactive"}}],
+            },
+            None,
+        )
 
 
 @pytest.mark.unit
@@ -530,6 +598,10 @@ async def test_platform_list_instances_uses_platform_manager_metadata() -> None:
             ]
         )
     )
+    bridge._plugin_bridge = SimpleNamespace(
+        plugin_supports_platform=lambda _plugin_id, _platform_name: True
+    )
+    bridge._resolve_plugin_id = lambda _request_id: "sdk-demo"
 
     output = await bridge._platform_list_instances("request-1", {}, None)
     assert output == {
@@ -546,6 +618,53 @@ async def test_platform_list_instances_uses_platform_manager_metadata() -> None:
                 "type": "webchat",
                 "status": "running",
             },
+        ]
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_platform_list_instances_filters_unsupported_platforms() -> None:
+    class _FakeMeta:
+        def __init__(self, platform_id: str, name: str, display_name: str) -> None:
+            self.id = platform_id
+            self.name = name
+            self.adapter_display_name = display_name
+
+    class _FakePlatform:
+        def __init__(self, platform_id: str, name: str, display_name: str) -> None:
+            self._meta = _FakeMeta(platform_id, name, display_name)
+            self.status = SimpleNamespace(value="running")
+
+        def meta(self):
+            return self._meta
+
+    bridge = object.__new__(capability_bridge_module.CoreCapabilityBridge)
+    bridge._star_context = SimpleNamespace(
+        platform_manager=SimpleNamespace(
+            get_insts=lambda: [
+                _FakePlatform("qq-main", "qq", "QQ"),
+                _FakePlatform("telegram-main", "telegram", "Telegram"),
+            ]
+        )
+    )
+    bridge._plugin_bridge = SimpleNamespace(
+        plugin_supports_platform=lambda _plugin_id, platform_name: (
+            platform_name == "telegram"
+        )
+    )
+    bridge._resolve_plugin_id = lambda _request_id: "sdk-demo"
+
+    output = await bridge._platform_list_instances("request-1", {}, None)
+
+    assert output == {
+        "platforms": [
+            {
+                "id": "telegram-main",
+                "name": "Telegram",
+                "type": "telegram",
+                "status": "running",
+            }
         ]
     }
 
@@ -630,16 +749,18 @@ async def test_skill_capabilities_forward_to_bridge_and_sync(
             "skill_dir": "/tmp/skill",
         },
         unregister_skill=lambda **kwargs: True,
-        list_registered_skills=lambda plugin_id: [
-            {
-                "name": "sdk-demo.browser-helper",
-                "description": "demo skill",
-                "path": "/tmp/skill/SKILL.md",
-                "skill_dir": "/tmp/skill",
-            }
-        ]
-        if plugin_id == "sdk-demo"
-        else [],
+        list_registered_skills=lambda plugin_id: (
+            [
+                {
+                    "name": "sdk-demo.browser-helper",
+                    "description": "demo skill",
+                    "path": "/tmp/skill/SKILL.md",
+                    "skill_dir": "/tmp/skill",
+                }
+            ]
+            if plugin_id == "sdk-demo"
+            else []
+        ),
     )
 
     registered = await bridge._skill_register(

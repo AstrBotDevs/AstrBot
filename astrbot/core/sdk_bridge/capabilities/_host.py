@@ -66,6 +66,23 @@ if TYPE_CHECKING:
             capability_name: str,
         ) -> str: ...
 
+        def _plugin_supports_platform(
+            self,
+            plugin_id: str,
+            platform_name: str,
+        ) -> bool: ...
+
+        def _platform_name_from_id(self, platform_id: str) -> str: ...
+
+        def _session_platform_name(self, session: str) -> str: ...
+
+        def _require_platform_support_for_session(
+            self,
+            request_id: str,
+            session: str,
+            capability_name: str,
+        ) -> str: ...
+
         def _get_platform_inst_by_id(self, platform_id: str) -> Any | None: ...
 
         def _serialize_platform_snapshot(
