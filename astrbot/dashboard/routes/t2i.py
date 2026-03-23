@@ -38,12 +38,17 @@ class T2iRoute(Route):
         ]
         self.register_routes()
 
+    async def _reload_all_pipeline_schedulers(self) -> None:
+        """热重载所有配置对应的 pipeline scheduler。"""
+        for conf_id in self.core_lifecycle.astrbot_config_mgr.confs:
+            await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
+
     async def _sync_active_template_to_all_configs(self, name: str) -> None:
         """同步当前激活模板到所有配置文件，并热重载对应流水线。"""
-        for conf_id, config in self.core_lifecycle.astrbot_config_mgr.confs.items():
+        for config in self.core_lifecycle.astrbot_config_mgr.confs.values():
             config["t2i_active_template"] = name
-            config.save_config(config)
-            await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
+            config.save_config()
+        await self._reload_all_pipeline_schedulers()
 
     async def list_templates(self):
         """获取所有T2I模板列表"""
@@ -140,8 +145,7 @@ class T2iRoute(Route):
             # 检查更新的是否为当前激活的模板，如果是，则热重载
             active_template = self.config.get("t2i_active_template", "base")
             if name == active_template:
-                for conf_id in self.core_lifecycle.astrbot_config_mgr.confs:
-                    await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
+                await self._reload_all_pipeline_schedulers()
                 message = f"模板 '{name}' 已更新并重新加载。"
             else:
                 message = f"模板 '{name}' 已更新。"
