@@ -89,7 +89,7 @@ class TestAstrbotOrchestrator:
         mock_star = MagicMock()
         mock_star.call_tool = AsyncMock()
 
-        with patch.object(orchestrator.abp, 'register_star', new_callable=AsyncMock) as mock_register:
+        with patch.object(orchestrator.abp, 'register_star', new_callable=MagicMock) as mock_register:
             await orchestrator.register_star("test_star", mock_star)
             mock_register.assert_called_once_with("test_star", mock_star)
 
@@ -109,7 +109,7 @@ class TestAstrbotOrchestrator:
         mock_star = MagicMock()
         orchestrator._stars["test_star"] = mock_star
 
-        with patch.object(orchestrator.abp, 'unregister_star', new_callable=AsyncMock) as mock_unregister:
+        with patch.object(orchestrator.abp, 'unregister_star', new_callable=MagicMock) as mock_unregister:
             await orchestrator.unregister_star("test_star")
             mock_unregister.assert_called_once_with("test_star")
 
