@@ -36,4 +36,12 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        uv sync ${{ inputs.sync-args }}
+        sync_args_raw="${{ inputs.sync-args }}"
+        if [[ -z "$sync_args_raw" ]]; then
+          uv sync
+          exit 0
+        fi
+
+        # Split configured sync arguments into an array to avoid glob expansion.
+        read -r -a sync_args <<< "$sync_args_raw"
+        uv sync "${sync_args[@]}"
