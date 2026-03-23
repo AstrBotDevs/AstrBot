@@ -118,8 +118,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install uv
 
-      - name: Run pytest suite
-        run: bash ./scripts/run_pytests_ci.sh ./tests
+      - name: Run pytest suite (script performs uv sync --dev)
+        run: |
+          # scripts/run_pytests_ci.sh includes dependency sync (`uv sync --dev`) before pytest.
+          bash ./scripts/run_pytests_ci.sh ./tests
 
   smoke:
     name: Smoke Test
@@ -185,7 +187,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '22.x'
+          node-version: '24.13.0'
           cache: 'pnpm'
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
