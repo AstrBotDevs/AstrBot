@@ -3,6 +3,7 @@ import shutil
 
 import click
 
+from astrbot.cli.i18n import t
 from astrbot.cli.utils import (
     PluginStatus,
     build_plug_list,
@@ -43,7 +44,7 @@ def new(name: str) -> None:
     plug_path = base_path / "plugins" / name
 
     if plug_path.exists():
-        raise click.ClickException(f"Plugin {name} already exists")
+        raise click.ClickException(t("plugin_already_exists", name=name))
 
     author = click.prompt("Enter plugin author", type=str)
     desc = click.prompt("Enter plugin description", type=str)
@@ -155,7 +156,7 @@ def install(name: str, proxy: str | None) -> None:
     )
 
     if not plugin:
-        raise click.ClickException(f"Plugin {name} not found or already installed")
+        raise click.ClickException(t("plugin_not_found_or_installed", name=name))
 
     manage_plugin(plugin, plug_path, is_update=False, proxy=proxy)
 
@@ -171,19 +172,19 @@ def remove(name: str) -> None:
     plugin = next((p for p in plugins if p["name"] == name), None)
 
     if not plugin or not plugin.get("local_path"):
-        raise click.ClickException(f"Plugin {name} does not exist or is not installed")
+        raise click.ClickException(t("plugin_not_found_or_installed", name=name))
 
     plugin_path = plugin["local_path"]
 
     click.confirm(
-        f"Are you sure you want to uninstall plugin {name}?", default=False, abort=True
+        t("plugin_uninstall_confirm", name=name), default=False, abort=True
     )
 
     try:
         shutil.rmtree(plugin_path)
-        click.echo(f"Plugin {name} has been uninstalled")
+        click.echo(t("plugin_uninstall_success", name=name))
     except Exception as e:
-        raise click.ClickException(f"Failed to uninstall plugin {name}: {e}")
+        raise click.ClickException(t("plugin_uninstall_failed_ex", name=name, error=str(e)))
 
 
 @plug.command()
@@ -219,13 +220,13 @@ def update(name: str, proxy: str | None) -> None:
         ]
 
         if not need_update_plugins:
-            click.echo("No plugins need updating")
+            click.echo(t("plugin_no_update_needed"))
             return
 
-        click.echo(f"Found {len(need_update_plugins)} plugin(s) needing update")
+        click.echo(t("plugin_found_update", count=str(len(need_update_plugins))))
         for plugin in need_update_plugins:
             plugin_name = plugin["name"]
-            click.echo(f"Updating plugin {plugin_name}...")
+            click.echo(t("plugin_updating", name=plugin_name))
             manage_plugin(plugin, plug_path, is_update=True, proxy=proxy)
 
 
@@ -247,7 +248,7 @@ def search(query: str) -> None:
     ]
 
     if not matched_plugins:
-        click.echo(f"No plugins matching '{query}' found")
+        click.echo(t("plugin_search_no_result", query=query))
         return
 
-    display_plugins(matched_plugins, f"Search results: '{query}'", "cyan")
+    display_plugins(matched_plugins, t("plugin_search_results", query=query), "cyan")

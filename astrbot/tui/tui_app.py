@@ -10,6 +10,7 @@ import curses
 from dataclasses import dataclass, field
 from enum import Enum
 
+from astrbot.tui.i18n import TUITranslations, t
 from astrbot.tui.screen import Screen
 
 
@@ -19,6 +20,25 @@ class MessageSender(Enum):
     SYSTEM = "system"
     TOOL = "tool"
     REASONING = "reasoning"
+
+
+# Translation accessor for templates
+tr = TUITranslations()
+
+
+# Mapping from sender to translation key
+_SENDER_TO_KEY = {
+    MessageSender.USER: "indicator_user",
+    MessageSender.BOT: "indicator_bot",
+    MessageSender.SYSTEM: "indicator_system",
+    MessageSender.TOOL: "indicator_tool",
+    MessageSender.REASONING: "indicator_reasoning",
+}
+
+
+def get_indicator(sender: MessageSender) -> str:
+    """Get the localized indicator string for a message sender."""
+    return t(_SENDER_TO_KEY.get(sender, "indicator_system"))
 
 
 @dataclass
@@ -33,7 +53,7 @@ class TUIState:
     messages: list[Message] = field(default_factory=list)
     input_buffer: str = ""
     cursor_x: int = 0
-    status: str = "Ready"
+    status: str = field(default_factory=lambda: t("status_ready"))
     running: bool = True
     connected: bool = False
 
@@ -182,9 +202,9 @@ class AstrBotTUI:
         self.screen.layout_windows()
 
         # Welcome message
-        self.add_system_message("Welcome to AstrBot TUI (local mode)!")
-        self.add_system_message("Type your message and press Enter to send.")
-        self.add_system_message("Press ESC or Ctrl+C to exit.")
+        self.add_system_message(t("welcome_title"))
+        self.add_system_message(t("welcome_local_mode"))
+        self.add_system_message(t("welcome_instructions"))
 
         # Initial render
         self.render()

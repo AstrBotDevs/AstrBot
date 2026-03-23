@@ -14,22 +14,23 @@ Core:
 - `PYTHON`: Python executable path override (for local code execution).
 
 Dashboard / Backend:
-- `ASTRBOT_DASHBOARD_ENABLE` / `DASHBOARD_ENABLE`: Enable/Disable Dashboard.
-- `ASTRBOT_HOST` / `DASHBOARD_HOST`: Dashboard bind host.
-- `ASTRBOT_PORT` / `DASHBOARD_PORT`: Dashboard bind port.
+- `ASTRBOT_DASHBOARD_ENABLE`: Enable/Disable Dashboard.
+- `ASTRBOT_HOST`: Dashboard bind host.
+- `ASTRBOT_PORT`: Dashboard bind port.
 
-Backend-standard SSL names (preferred for server):
-- `ASTRBOT_SSL_ENABLE` / `DASHBOARD_SSL_ENABLE`: Enable SSL for API.
-- `ASTRBOT_SSL_CERT` / `DASHBOARD_SSL_CERT`: SSL Certificate path for backend.
-- `ASTRBOT_SSL_KEY` / `DASHBOARD_SSL_KEY`: SSL Key path for backend.
-- `ASTRBOT_SSL_CA_CERTS` / `DASHBOARD_SSL_CA_CERTS`: SSL CA Certs path for backend.
-
-Legacy compatibility:
-- The CLI will set both `ASTRBOT_SSL_*` and the legacy `DASHBOARD_SSL_*` names to remain compatible.
+SSL (AstrBot-standard names):
+- `ASTRBOT_SSL_ENABLE`: Enable SSL for API.
+- `ASTRBOT_SSL_CERT`: SSL Certificate path for backend.
+- `ASTRBOT_SSL_KEY`: SSL Key path for backend.
+- `ASTRBOT_SSL_CA_CERTS`: SSL CA Certs path for backend.
 
 Network:
 - `http_proxy` / `https_proxy`: Proxy URL.
 - `no_proxy`: No proxy list.
+
+Internationalization:
+- `ASTRBOT_CLI_LANG`: CLI interface language (zh/en).
+- `ASTRBOT_TUI_LANG`: TUI interface language (zh/en).
 
 Integrations:
 - `DASHSCOPE_API_KEY`: Alibaba DashScope API Key (for Rerank).

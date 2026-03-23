@@ -8,6 +8,7 @@ from click.shell_completion import get_completion_class
 
 from . import __version__
 from .commands import bk, conf, init, plug, run, tui, uninstall
+from .i18n import t
 
 logo_tmpl = r"""
      ___           _______.___________..______      .______     ______   .___________.
@@ -26,8 +27,8 @@ def cli() -> None:
     Agentic IM Chatbot infrastructure that integrates lots of IM platforms, LLMs, plugins and AI feature, and can be your openclaw alternative. ✨
     """
     click.echo(logo_tmpl)
-    click.echo("Welcome to AstrBot CLI!")
-    click.echo(f"AstrBot CLI version: {__version__}")
+    click.echo(t("cli_welcome"))
+    click.echo(t("cli_version", version=__version__))
 
 
 @click.command()
@@ -70,7 +71,7 @@ def help(command_name: str | None, all: bool) -> None:
             cmd_ctx = click.Context(command, info_name=command.name, parent=parent)
             click.echo(command.get_help(cmd_ctx))
         else:
-            click.echo(f"Unknown command: {command_name}")
+            click.echo(t("cli_unknown_command", command=command_name))
             sys.exit(1)
     else:
         # Display general help information

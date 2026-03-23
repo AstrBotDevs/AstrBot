@@ -1,3 +1,28 @@
+"""
+MCP client - DEPRECATED
+
+.. deprecated::
+    This module has been moved to :mod:`astrbot._internal.mcp`.
+    Please update your imports accordingly.
+
+    Old import (deprecated):
+        from astrbot.core.agent.mcp_client import MCPClient, MCPTool
+
+    New import:
+        from astrbot._internal.mcp import MCPClient, MCPTool
+
+This file exists solely for backward compatibility and will be removed in a future version.
+"""
+
+import warnings
+
+warnings.warn(
+    "astrbot.core.agent.mcp_client has been moved to astrbot._internal.mcp. "
+    "Please update your imports.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 import asyncio
 import logging
 import os
