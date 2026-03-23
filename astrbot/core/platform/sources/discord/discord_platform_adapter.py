@@ -384,42 +384,6 @@ class DiscordPlatformAdapter(Platform):
             self.client.add_application_command(slash_command)
             registered_commands.append(cmd_name)
 
-        for handler_md in star_handlers_registry:
-            if not star_map[handler_md.handler_module_path].activated:
-                continue
-            if not handler_md.enabled:
-                continue
-            for event_filter in handler_md.event_filters:
-                cmd_info = self._extract_command_info(event_filter, handler_md)
-                if not cmd_info:
-                    continue
-
-                cmd_name, description, _cmd_filter_instance = cmd_info
-
-                # 创建动态回调
-                callback = self._create_dynamic_callback(cmd_name)
-
-                # 创建一个通用的参数选项来接收所有文本输入
-                options = [
-                    discord.Option(
-                        name="params",
-                        description="指令的所有参数",
-                        type=discord.SlashCommandOptionType.string,
-                        required=False,
-                    ),
-                ]
-
-                # 创建SlashCommand
-                slash_command = discord.SlashCommand(
-                    name=cmd_name,
-                    description=description,
-                    func=callback,
-                    options=options,
-                    guild_ids=[self.guild_id] if self.guild_id else None,
-                )
-                self.client.add_application_command(slash_command)
-                registered_commands.append(cmd_name)
-
         if registered_commands:
             logger.info(
                 f"[Discord] 准备同步 {len(registered_commands)} 个指令: {', '.join(registered_commands)}",
