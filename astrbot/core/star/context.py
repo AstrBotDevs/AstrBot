@@ -66,7 +66,7 @@ class Context:
     registered_web_apis: list | None = None
 
     # 向后兼容的变量
-    _register_tasks: list[Awaitable[Any]] | None = None
+    _register_tasks: list[Coroutine[Any, Any, Any]] | None = None
     _star_manager: StarManagerProtocol | None = None
 
     def __init__(
@@ -676,7 +676,7 @@ class Context:
             )
         star_handlers_registry.append(md)
 
-    def register_task(self, task: Awaitable[Any], desc: str) -> None:
+    def register_task(self, task: Coroutine[Any, Any, Any], desc: str) -> None:
         """[DEPRECATED]注册一个异步任务｡
 
         Args:

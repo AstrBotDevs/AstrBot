@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import uuid
+from typing import Any
 
 import anyio
 from pydantic import Field
@@ -167,21 +168,22 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         return path, False
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
+        self, context: ContextWrapper[AstrAgentContext], **kwargs: Any
     ) -> ToolExecResult:
         session = kwargs.get("session") or context.context.event.unified_msg_origin
-        messages = kwargs.get("messages")
+        messages_raw: list[dict[str, Any]] | None = kwargs.get("messages")
 
-        if not isinstance(messages, list) or not messages:
+        if not isinstance(messages_raw, list) or not messages_raw:
             return "error: messages parameter is empty or invalid."
 
         components: list[Comp.BaseMessageComponent] = []
 
-        for idx, msg in enumerate(messages):
+        for idx, msg in enumerate(messages_raw):
             if not isinstance(msg, dict):
                 return f"error: messages[{idx}] should be an object."
 
-            msg_type = str(msg.get("type", "")).lower()
+            msg_dict: dict[str, Any] = msg  # type: ignore[assignment]
+            msg_type = str(msg_dict.get("type", "")).lower()
             if not msg_type:
                 return f"error: messages[{idx}].type is required."
 
@@ -189,13 +191,13 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
             try:
                 if msg_type == "plain":
-                    text = str(msg.get("text", "")).strip()
+                    text = str(msg_dict.get("text", "")).strip()
                     if not text:
                         return f"error: messages[{idx}].text is required for plain component."
                     components.append(Comp.Plain(text=text))
                 elif msg_type == "image":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = msg_dict.get("path")
+                    url = msg_dict.get("url")
                     if path:
                         (
                             local_path,
@@ -207,8 +209,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for image component."
                 elif msg_type == "record":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = msg_dict.get("path")
+                    url = msg_dict.get("url")
                     if path:
                         (
                             local_path,
@@ -220,8 +222,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for record component."
                 elif msg_type == "video":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = msg_dict.get("path")
+                    url = msg_dict.get("url")
                     if path:
                         (
                             local_path,
@@ -233,10 +235,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for video component."
                 elif msg_type == "file":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = msg_dict.get("path")
+                    url = msg_dict.get("url")
                     name = (
-                        msg.get("text")
+                        msg_dict.get("text")
                         or (os.path.basename(path) if path else "")
                         or (os.path.basename(url) if url else "")
                         or "file"
@@ -252,7 +254,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for file component."
                 elif msg_type == "mention_user":
-                    mention_user_id = msg.get("mention_user_id")
+                    mention_user_id = msg_dict.get("mention_user_id")
                     if not mention_user_id:
                         return f"error: messages[{idx}].mention_user_id is required for mention_user component."
                     components.append(

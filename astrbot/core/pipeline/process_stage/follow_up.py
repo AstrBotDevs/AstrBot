@@ -2,14 +2,23 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from typing import TypedDict
 
 from astrbot import logger
 from astrbot.core.agent.runners.tool_loop_agent_runner import FollowUpTicket
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
+
+class _FollowUpStatusDict(TypedDict):
+    statuses: dict[int, str]
+    next_order: int
+    next_turn: int
+    condition: asyncio.Condition
+
+
 _ACTIVE_AGENT_RUNNERS: dict[str, AgentRunner] = {}
-_FOLLOW_UP_ORDER_STATE: dict[str, dict[str, object]] = {}
+_FOLLOW_UP_ORDER_STATE: dict[str, _FollowUpStatusDict] = {}
 """UMO-level follow-up order state.
 
 State fields:
@@ -43,28 +52,26 @@ def unregister_active_runner(umo: str, runner: AgentRunner) -> None:
         _ACTIVE_AGENT_RUNNERS.pop(umo, None)
 
 
-def _get_follow_up_order_state(umo: str) -> dict[str, object]:
+def _get_follow_up_order_state(umo: str) -> _FollowUpStatusDict:
     state = _FOLLOW_UP_ORDER_STATE.get(umo)
     if state is None:
-        state = {
-            "condition": asyncio.Condition(),
+        state = _FollowUpStatusDict(
+            condition=asyncio.Condition(),
             # Sequence status map for strict in-order resume after unresolved follow-ups.
-            "statuses": {},
+            statuses={},
             # Stable allocator for arrival order; never decreases for the same UMO state.
-            "next_order": 0,
+            next_order=0,
             # The sequence currently allowed to continue main internal flow.
-            "next_turn": 0,
-        }
+            next_turn=0,
+        )
         _FOLLOW_UP_ORDER_STATE[umo] = state
     return state
 
 
-def _advance_follow_up_turn_locked(state: dict[str, object]) -> None:
+def _advance_follow_up_turn_locked(state: _FollowUpStatusDict) -> None:
     # Skip slots that are already handled, and stop at the first unfinished slot.
     statuses = state["statuses"]
-    assert isinstance(statuses, dict)
     next_turn = state["next_turn"]
-    assert isinstance(next_turn, int)
 
     while True:
         curr = statuses.get(next_turn)

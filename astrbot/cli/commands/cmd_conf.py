@@ -20,6 +20,7 @@ import argon2.exceptions as argon2_exceptions
 import click
 from argon2 import PasswordHasher
 
+from astrbot.cli.i18n import t
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import astrbot_paths
 
@@ -111,9 +112,7 @@ def _validate_log_level(value: str) -> str:
     value_up = value.upper()
     allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
     if value_up not in allowed:
-        raise click.ClickException(
-            "Log level must be one of DEBUG/INFO/WARNING/ERROR/CRITICAL"
-        )
+        raise click.ClickException(t("config_log_level_invalid"))
     return value_up
 
 
@@ -121,21 +120,21 @@ def _validate_dashboard_port(value: str) -> int:
     try:
         port = int(value)
     except ValueError:
-        raise click.ClickException("Port must be a number")
+        raise click.ClickException(t("config_port_must_be_number"))
     if port < 1 or port > 65535:
-        raise click.ClickException("Port must be in range 1-65535")
+        raise click.ClickException(t("config_port_range_invalid"))
     return port
 
 
 def _validate_dashboard_username(value: str) -> str:
     if value is None or value.strip() == "":
-        raise click.ClickException("Username cannot be empty")
+        raise click.ClickException(t("config_username_empty"))
     return value.strip()
 
 
 def _validate_dashboard_password(value: str) -> str:
     if value is None or value == "":
-        raise click.ClickException("Password cannot be empty")
+        raise click.ClickException(t("config_password_empty"))
     # Return the canonical stored representation.
     return hash_dashboard_password_secure(value)
 
@@ -144,17 +143,13 @@ def _validate_timezone(value: str) -> str:
     try:
         zoneinfo.ZoneInfo(value)
     except Exception:
-        raise click.ClickException(
-            f"Invalid timezone: {value}. Please use a valid IANA timezone name"
-        )
+        raise click.ClickException(t("config_timezone_invalid", value=value))
     return value
 
 
 def _validate_callback_api_base(value: str) -> str:
     if not (value.startswith("http://") or value.startswith("https://")):
-        raise click.ClickException(
-            "Callback API base must start with http:// or https://"
-        )
+        raise click.ClickException(t("config_callback_invalid"))
     return value
 
 

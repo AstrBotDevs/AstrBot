@@ -499,8 +499,11 @@ def _get_image_compress_args(
     if not isinstance(enabled, bool):
         enabled = True
 
-    raw_options = provider_settings.get("image_compress_options", {})
-    options = raw_options if isinstance(raw_options, dict) else {}
+    raw_options: Any = provider_settings.get("image_compress_options", {})
+    if isinstance(raw_options, dict):
+        options = dict(raw_options)
+    else:
+        options: dict[str, Any] = {}
 
     max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
     if not isinstance(max_size, int):
@@ -539,8 +542,11 @@ def _get_image_compress_args(
     if not isinstance(enabled, bool):
         enabled = True
 
-    raw_options = provider_settings.get("image_compress_options", {})
-    options = raw_options if isinstance(raw_options, dict) else {}
+    raw_options: Any = provider_settings.get("image_compress_options", {})
+    if isinstance(raw_options, dict):
+        options = dict(raw_options)
+    else:
+        options: dict[str, Any] = {}
 
     max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
     if not isinstance(max_size, int):
@@ -590,8 +596,11 @@ def _get_image_compress_args(
     if not isinstance(enabled, bool):
         enabled = True
 
-    raw_options = provider_settings.get("image_compress_options", {})
-    options = raw_options if isinstance(raw_options, dict) else {}
+    raw_options: Any = provider_settings.get("image_compress_options", {})
+    if isinstance(raw_options, dict):
+        options = dict(raw_options)
+    else:
+        options: dict[str, Any] = {}
 
     max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
     if not isinstance(max_size, int):

@@ -4,7 +4,7 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import anyio
 from quart import Response as QuartResponse
@@ -220,7 +220,7 @@ class TUIChatRoute(Route):
         if text:
             bot_message_parts.append({"type": "plain", "text": text})
 
-        new_his = {"type": "bot", "message": bot_message_parts}
+        new_his: dict[str, Any] = {"type": "bot", "message": bot_message_parts}
         if reasoning:
             new_his["reasoning"] = reasoning
         if agent_stats:
@@ -713,7 +713,7 @@ class TUIChatRoute(Route):
 
         history_res = [history.model_dump() for history in history_ls]
 
-        response_data = {
+        response_data: dict[str, Any] = {
             "history": history_res,
             "is_running": self.running_convs.get(session_id, False),
         }

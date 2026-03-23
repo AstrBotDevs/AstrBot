@@ -1,7 +1,7 @@
 from typing import cast
 
 from astrbot.core.entities import ProviderType, RerankResult
-from astrbot.core.register import register_provider_adapter
+from astrbot.core.provider.register import register_provider_adapter
 from xinference_client.client.restful.async_restful_client import (
     AsyncClient as Client,
 )
