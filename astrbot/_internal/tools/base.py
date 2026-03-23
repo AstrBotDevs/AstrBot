@@ -108,6 +108,10 @@ class ToolSet:
         """Get a tool by name."""
         return self._tools.get(name)
 
+    def get_tool(self, name: str) -> FunctionTool | None:
+        """Get a tool by name (alias for get)."""
+        return self.get(name)
+
     def list_tools(self) -> list[FunctionTool]:
         """List all tools in this set."""
         return list(self._tools.values())
@@ -117,3 +121,8 @@ class ToolSet:
 
     def __len__(self) -> int:
         return len(self._tools)
+
+    @property
+    def tools(self) -> list[FunctionTool]:
+        """List all tools in this set."""
+        return list(self._tools.values())
