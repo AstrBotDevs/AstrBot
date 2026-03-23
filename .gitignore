@@ -59,6 +59,7 @@ CharacterModels/
 GenieData/
 .agent/
 .codex/
+.claude/
 .opencode/
 .kilocode/
 .serena
