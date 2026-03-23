@@ -142,13 +142,13 @@ class McpClient(BaseAstrbotMcpClient):
         self.active: bool = True
         self.tools: list[mcp.Tool] = []
         self.server_errlogs: list[str] = []
-        self.running_event = asyncio.Event()
+        self.running_event = anyio.Event()
         self.process_pid: int | None = None
 
         # Store connection config for reconnection
-        self._mcp_server_config: dict | None = None
+        self._mcp_server_config: McpServerConfig | None = None
         self._server_name: str | None = None
-        self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
+        self._reconnect_lock = anyio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False  # For logging and debugging
 
     async def connect(self) -> None:

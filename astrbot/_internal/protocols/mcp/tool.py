@@ -19,7 +19,7 @@ class MCPTool(FunctionTool):
 
     def __init__(
         self,
-        mcp_tool: "mcp.types.Tool",  # type: ignore[name-defined]
+        mcp_tool: "mcp.types.Tool",
         mcp_client: "McpClient",
         mcp_server_name: str,
         **kwargs: Any,

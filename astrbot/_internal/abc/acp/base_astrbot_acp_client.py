@@ -37,7 +37,7 @@ class BaseAstrbotAcpClient(ABC):
         ...
 
     @abstractmethod
-    async def connect_to_unix_socket(self, path: str) -> None:
+    async def connect_to_unix_socket(self, socket_path: str) -> None:
         """Connect via Unix domain socket."""
         ...
 

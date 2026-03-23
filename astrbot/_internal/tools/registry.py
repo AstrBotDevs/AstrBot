@@ -34,11 +34,11 @@ try:
     )
 except ImportError:
     DEFAULT_MCP_CONFIG: dict[str, Any] = {}
-    MCPAllServicesFailedError = Exception
-    MCPInitError = Exception
-    MCPInitSummary = dict
-    MCPInitTimeoutError = TimeoutError
-    MCPShutdownTimeoutError = TimeoutError
+    MCPAllServicesFailedError: type[Exception] = Exception
+    MCPInitError: type[Exception] = Exception
+    MCPInitSummary: type[dict] = dict
+    MCPInitTimeoutError: type[TimeoutError] = TimeoutError
+    MCPShutdownTimeoutError: type[TimeoutError] = TimeoutError
 
 ENABLE_MCP_TIMEOUT_ENV = "ASTRBOT_MCP_TIMEOUT_ENABLED"
 MCP_INIT_TIMEOUT_ENV = "ASTRBOT_MCP_INIT_TIMEOUT"

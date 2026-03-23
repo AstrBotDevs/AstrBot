@@ -11,8 +11,8 @@ import asyncio
 import json
 from typing import Any
 
-from astrbot._internal.abc.lsp.base_astrbot_lsp_client import BaseAstrbotLspClient
 from astrbot import logger
+from astrbot._internal.abc.lsp.base_astrbot_lsp_client import BaseAstrbotLspClient
 
 log = logger
 

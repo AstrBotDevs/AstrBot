@@ -154,11 +154,11 @@ class TestAstrbotOrchestrator:
 
         source = inspect.getsource(orchestrator.run_loop)
 
-        # Check if asyncio.sleep is used (VIOLATION)
+        # Check that asyncio.sleep is NOT used (COMPLIANCE)
         uses_asyncio_sleep = "asyncio.sleep" in source
 
-        # This assertion documents the violation
-        assert uses_asyncio_sleep, (
+        # This assertion documents compliance
+        assert not uses_asyncio_sleep, (
             "run_loop should use anyio.sleep instead of asyncio.sleep "
             "per the 'async_library: Use anyio' directive in openspec"
         )

@@ -7,6 +7,7 @@ Transport: stdio | SSE | streamable_http
 
 from __future__ import annotations
 
+import anyio
 import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -92,7 +93,7 @@ class TestMcpClientReconnect:
     def test_reconnect_lock_exists(self, mcp_client):
         """MCP client should have a reconnect lock."""
         assert mcp_client._reconnect_lock is not None
-        assert isinstance(mcp_client._reconnect_lock, asyncio.Lock)
+        assert isinstance(mcp_client._reconnect_lock, anyio.Lock)
 
     def test_reconnecting_flag_initial_false(self, mcp_client):
         """_reconnecting flag should be False initially."""
@@ -100,26 +101,24 @@ class TestMcpClientReconnect:
 
 
 class TestMcpClientUsesAsyncioNotAnyio:
-    """TEST REQUIREMENT: Document asyncio vs anyio violations.
+    """TEST REQUIREMENT: Document asyncio vs anyio compliance.
 
     Per openspec directive: "异步库使用anyio" (Use anyio as async library).
 
-    The MCP client implementation currently uses asyncio primitives:
-    - asyncio.Lock instead of anyio.Lock
-    - asyncio.Future instead of anyio.Future
-    - asyncio.Event instead of anyio.Event
-
-    This is a VIOLATION of the architecture requirement.
+    The MCP client implementation should use anyio primitives:
+    - anyio.Lock instead of asyncio.Lock
+    - anyio.Future instead of asyncio.Future
+    - anyio.Event instead of asyncio.Event
     """
 
     def test_mcp_client_uses_asyncio_lock(self):
-        """VIOLATION: MCP client uses asyncio.Lock instead of anyio.Lock."""
+        """COMPLIANCE: MCP client uses anyio.Lock, not asyncio.Lock."""
         from astrbot._internal.protocols.mcp.client import McpClient
 
         client = McpClient()
 
-        # Check if _reconnect_lock is asyncio.Lock (violation)
-        assert isinstance(client._reconnect_lock, asyncio.Lock), (
+        # Check that _reconnect_lock is anyio.Lock (compliant)
+        assert isinstance(client._reconnect_lock, anyio.Lock), (
             "MCP client should use anyio.Lock instead of asyncio.Lock "
             "per the 'async_library: Use anyio' directive in openspec"
         )
@@ -135,27 +134,27 @@ class TestMcpClientUsesAsyncioNotAnyio:
         # Note: Futures are created in call_star_tool, not at init
 
     def test_orchestrator_run_loop_uses_asyncio_sleep(self):
-        """VIOLATION: Orchestrator uses asyncio.sleep instead of anyio."""
+        """COMPLIANCE: Orchestrator uses anyio.sleep, not asyncio.sleep."""
         from astrbot._internal.runtime.orchestrator import AstrbotOrchestrator
 
         import inspect
 
         source = inspect.getsource(AstrbotOrchestrator.run_loop)
 
-        assert "asyncio.sleep" in source, (
+        assert "asyncio.sleep" not in source, (
             "Orchestrator should use anyio.sleep instead of asyncio.sleep "
             "per the 'async_library: Use anyio' directive in openspec"
         )
 
     def test_orchestrator_run_loop_handles_asyncio_cancelled_error(self):
-        """VIOLATION: Orchestrator catches asyncio.CancelledError not anyio."""
+        """COMPLIANCE: Orchestrator catches anyio.CancelledError, not asyncio."""
         from astrbot._internal.runtime.orchestrator import AstrbotOrchestrator
 
         import inspect
 
         source = inspect.getsource(AstrbotOrchestrator.run_loop)
 
-        assert "asyncio.CancelledError" in source, (
+        assert "asyncio.CancelledError" not in source, (
             "Orchestrator should catch anyio.CancelledError not asyncio.CancelledError "
             "per the 'async_library: Use anyio' directive in openspec"
         )

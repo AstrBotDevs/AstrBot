@@ -7,8 +7,9 @@ and runs the main event loop that dispatches messages between components.
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
+
+import anyio
 
 from astrbot import logger
 from astrbot._internal.abc.base_astrbot_orchestrator import BaseAstrbotOrchestrator
@@ -71,13 +72,14 @@ class AstrbotOrchestrator(BaseAstrbotOrchestrator):
         self._running = True
         log.info("AstrbotOrchestrator run loop started.")
 
-        # TODO: Replace asyncio.sleep loop with proper task scheduling using anyio.
-        # The ASYNC110 warning is valid - this should use asyncio.Event.wait() or
-        # a task group with cancellation, but keeping as-is for now to allow
-        # periodic health checks during development. Final implementation should:
-        # - Use anyio.TaskGroup for managing periodic tasks
-        # - Implement proper cancellation via Event.wait()
-        # - Avoid busy-waiting with sleep intervals
+        stop_event = anyio.Event()
+
+        def set_stop() -> None:
+            stop_event.set()
+
+        # Store the callback for cleanup
+        self._stop_callback = set_stop
+
         try:
             while self._running:
                 # TODO: Periodic tasks:
@@ -86,12 +88,15 @@ class AstrbotOrchestrator(BaseAstrbotOrchestrator):
                 # - Check ACP client connections
                 # - Process any pending star notifications
 
-                await asyncio.sleep(5)
+                # Wait for 5 seconds or until shutdown is called
+                with anyio.move_on_after(5):
+                    await stop_event.wait()
 
-        except asyncio.CancelledError:
+        except anyio.get_cancelled_exc_class():
             log.info("Orchestrator run loop cancelled.")
         finally:
             self._running = False
+            self._stop_callback = None
             log.info("AstrbotOrchestrator run loop stopped.")
 
     async def register_star(self, name: str, star_instance: Any) -> None:
