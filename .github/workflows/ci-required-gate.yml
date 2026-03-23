@@ -61,7 +61,7 @@ jobs:
               dashboard_changed=true
             fi
 
-            if [[ ! "$f" =~ ^docs/ && ! "$f" =~ ^README.*\.md$ && ! "$f" =~ ^changelogs/ ]]; then
+            if [[ ! "$f" =~ ^docs/ && ! "$f" =~ ^docs-[^/]+/ && ! "$f" =~ ^README.*\.md$ && ! "$f" =~ ^changelogs/ ]]; then
               docs_only=false
             fi
           done <<< "$changed_files"
@@ -187,7 +187,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '24.13.0'
+          node-version: '24'
           cache: 'pnpm'
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
