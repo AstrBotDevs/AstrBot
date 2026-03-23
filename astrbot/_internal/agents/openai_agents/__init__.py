@@ -5,7 +5,7 @@ allowing AstrBot to leverage the openai-agents Agent implementation
 while using its existing tool and provider infrastructure.
 
 Usage:
-    from astrbot.core.agent.runners.openai_agents import OpenAIAgentsRunner
+    from astrbot._internal.agents import OpenAIAgentsRunner
 
     runner = OpenAIAgentsRunner(agent_config)
     async for response in runner.run():

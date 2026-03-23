@@ -15,12 +15,11 @@ from agents.run_config import RunConfig
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper, TContext
 from astrbot.core.agent.runners.base import AgentState, BaseAgentRunner
-from astrbot.core.agent.runners.openai_agents.tool_adapter import (
-    astrbot_tool_to_agents_tool,
-)
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
+
+from .tool_adapter import astrbot_tool_to_agents_tool
 
 
 class OpenAIAgentsRunner(BaseAgentRunner[TContext]):
