@@ -349,12 +349,16 @@ class LarkMessageEvent(AstrMessageEvent):
             else:
                 return None
 
-        return {
-            "schema": "2.0",
-            "body": {
-                "elements": elements,
-            },
-        } if elements else None
+        return (
+            {
+                "schema": "2.0",
+                "body": {
+                    "elements": elements,
+                },
+            }
+            if elements
+            else None
+        )
 
     @staticmethod
     async def _send_interactive_card(
