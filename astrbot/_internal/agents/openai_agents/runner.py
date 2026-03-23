@@ -6,18 +6,29 @@ and the openai-agents library from OpenAI.
 
 from __future__ import annotations
 
+import sys
+from collections.abc import AsyncGenerator
 from typing import Any
+
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
 
 from agents import Agent as OpenAIAgent
 from agents import Model, Runner, RunResult
 from agents.run_config import RunConfig
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.response import AgentResponse, AgentResponseData
 from astrbot.core.agent.run_context import ContextWrapper, TContext
 from astrbot.core.agent.runners.base import AgentState, BaseAgentRunner
+from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.agent.tool import FunctionTool
-from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
+from astrbot.core.provider.provider import Provider
 
 from .tool_adapter import astrbot_tool_to_agents_tool
 
@@ -82,10 +93,25 @@ class OpenAIAgentsRunner(BaseAgentRunner[TContext]):
                 return tool.handler
         raise ValueError(f"Tool handler not found for: {tool_name}")
 
+    @override
     async def reset(
         self,
+        provider: Provider,
+        request: ProviderRequest,
         run_context: ContextWrapper[TContext],
+        tool_executor: BaseFunctionToolExecutor[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
+        streaming: bool = False,
+        enforce_max_turns: int = -1,
+        llm_compress_instruction: str | None = None,
+        llm_compress_keep_recent: int = 0,
+        llm_compress_provider: Provider | None = None,
+        truncate_turns: int = 1,
+        custom_token_counter: Any = None,
+        custom_compressor: Any = None,
+        tool_schema_mode: str | None = "full",
+        fallback_providers: list[Provider] | None = None,
+        provider_config: dict | None = None,
         **kwargs: Any,
     ) -> None:
         """Reset the agent to its initial state."""
@@ -103,13 +129,17 @@ class OpenAIAgentsRunner(BaseAgentRunner[TContext]):
             **self._openai_agents_kwargs,
         )
 
-    async def step(self) -> Any:
+    @override
+    async def step(self) -> AsyncGenerator[AgentResponse, None]:
         """Process a single step of the agent (not directly supported)."""
         raise NotImplementedError(
             "step() is not directly supported. Use step_until_done() instead."
         )
 
-    async def step_until_done(self, max_step: int = 50) -> Any:
+    @override
+    async def step_until_done(
+        self, max_step: int
+    ) -> AsyncGenerator[AgentResponse, None]:
         """Run the agent until completion or max steps."""
         if not self._agent or not self._run_context:
             raise RuntimeError("Agent not initialized. Call reset() first.")
@@ -125,11 +155,16 @@ class OpenAIAgentsRunner(BaseAgentRunner[TContext]):
                 run_config=run_config,
             )
             self._state = AgentState.DONE
+
+            if self._run_result:
+                chain = MessageChain().message(self._run_result.final_output)
+                yield AgentResponse(
+                    type="llm_result",
+                    data=AgentResponseData(chain=chain),
+                )
         except Exception:
             self._state = AgentState.ERROR
             raise
-
-        return self._run_result
 
     def done(self) -> bool:
         """Check if the agent has completed its task."""
@@ -140,7 +175,6 @@ class OpenAIAgentsRunner(BaseAgentRunner[TContext]):
         if not self._run_result:
             return None
         return LLMResponse(
-            content=self._run_result.final_output,
-            model=self._run_result.model,
-            usage=self._run_result.usage,
+            role="assistant",
+            completion_text=self._run_result.final_output,
         )
