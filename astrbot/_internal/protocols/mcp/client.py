@@ -6,7 +6,7 @@ import os
 import sys
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 from tenacity import (
     before_sleep_log,
@@ -166,12 +166,12 @@ class McpClient(BaseAstrbotMcpClient):
         """True if MCP client has an active session."""
         return self.session is not None
 
-    async def list_tools(self) -> list[dict[str, Any]]:
+    async def list_tools(self) -> list[McpToolInfo]:
         """List all tools from connected MCP servers."""
         if not self.session:
             return []
         result = await self.list_tools_and_save()
-        return [
+        tools = [
             {
                 "name": tool.name,
                 "description": tool.description or "",
@@ -179,6 +179,7 @@ class McpClient(BaseAstrbotMcpClient):
             }
             for tool in result.tools
         ]
+        return cast(list[McpToolInfo], tools)
 
     async def call_tool(
         self,

@@ -12,7 +12,7 @@ import json
 from typing import Any
 
 from astrbot._internal.abc.lsp.base_astrbot_lsp_client import BaseAstrbotLspClient
-from astrbot.core.utils.astrbot_path import logger
+from astrbot import logger
 
 log = logger
 
