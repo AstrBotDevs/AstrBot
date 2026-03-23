@@ -135,7 +135,9 @@ class FuncCall(FunctionToolManager):
         """Test MCP server connection (stub implementation)."""
         # Import the actual test function if available
         try:
-            from astrbot._internal.protocols.mcp.client import _quick_test_mcp_connection
+            from astrbot._internal.protocols.mcp.client import (
+                _quick_test_mcp_connection,
+            )
             success, message = await _quick_test_mcp_connection(config)
             if not success:
                 raise Exception(message)
