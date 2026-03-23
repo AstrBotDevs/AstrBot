@@ -329,6 +329,8 @@ class ProviderOpenAIOfficial(Provider):
         state = ChatCompletionStreamState()
 
         async for chunk in stream:
+            if not chunk.choices:
+                continue
             choice = chunk.choices[0]
             delta = choice.delta
 
@@ -341,8 +343,6 @@ class ProviderOpenAIOfficial(Provider):
                 state.handle_chunk(chunk)
             except Exception as e:
                 logger.error("Saving chunk state error: " + str(e))
-            if not chunk.choices:
-                continue
             # logger.debug(f"chunk delta: {delta}")
             # handle the content delta
             reasoning = self._extract_reasoning_content(chunk)
