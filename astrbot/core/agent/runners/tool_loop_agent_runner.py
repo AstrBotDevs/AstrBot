@@ -128,6 +128,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
         fallback_providers: list[Provider] | None = None,
+        provider_config: dict | None = None,
         **kwargs: Any,
     ) -> None:
         self.req = request

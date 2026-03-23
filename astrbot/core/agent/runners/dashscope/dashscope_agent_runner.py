@@ -23,7 +23,7 @@ from ...hooks import BaseAgentRunHooks
 from ...response import AgentResponseData
 from ...run_context import ContextWrapper, TContext
 from ..base import AgentResponse, AgentState, BaseAgentRunner
-from ..tool_executor import BaseFunctionToolExecutor
+from ...tool_executor import BaseFunctionToolExecutor
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -295,7 +295,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
 
     async def _handle_streaming_response(
         self, response: Any, session_id: str
-    ) -> T.AsyncGenerator[AgentResponse, None]:
+    ) -> AsyncGenerator[AgentResponse, None]:
         """处理流式响应
 
         Args:
