@@ -170,7 +170,7 @@ class Prpcrypt:
         pkcs7 = PKCS7Encoder()
         text = pkcs7.encode(text)
         # 加密
-        cryptor = AES.new(self.key, self.mode, self.key[:16])  # type: ignore
+        cryptor = AES.new(self.key, self.mode, self.key[:16])
         try:
             ciphertext = cryptor.encrypt(text)
             # 使用BASE64对加密后的字符串进行编码
@@ -186,7 +186,7 @@ class Prpcrypt:
         @return: 删除填充补位后的明文
         """
         try:
-            cryptor = AES.new(self.key, self.mode, self.key[:16])  # type: ignore
+            cryptor = AES.new(self.key, self.mode, self.key[:16])
             # 使用BASE64对密文进行解码,然后AES-CBC解密
             plain_text = cryptor.decrypt(base64.b64decode(text))
         except Exception as e:
@@ -259,7 +259,7 @@ class WXBizJsonMsgCrypt:
         # return:成功0,sEncryptMsg,失败返回对应的错误码None
         pc = Prpcrypt(self.key)
         ret, encrypt = pc.encrypt(sReplyMsg, self.m_sReceiveId)
-        encrypt = encrypt.decode("utf-8")  # type: ignore
+        encrypt = encrypt.decode("utf-8")
         if ret != 0:
             return ret, None
         if timestamp is None:

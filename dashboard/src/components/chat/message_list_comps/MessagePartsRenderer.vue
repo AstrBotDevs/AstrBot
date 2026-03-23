@@ -71,13 +71,18 @@
       </transition-group>
     </div>
 
-        <!-- Text (Markdown) -->
-        <MarkdownRender
-            v-else-if="renderPart.part.type === 'plain' && renderPart.part.text && renderPart.part.text.trim()"
-            custom-id="message-list" :custom-html-tags="['ref']"
-            :content="normalizeMarkdownContent(renderPart.part.text)" :typewriter="false"
-            class="markdown-content" :is-dark="isDark" :monacoOptions="{ theme: isDark ? 'vs-dark' : 'vs-light' }"
-            :key="`${renderPart.key}-${isDark ? 'dark' : 'light'}`"/>
+    <!-- Text (Markdown) -->
+    <MarkdownRender
+      v-else-if="renderPart.part.type === 'plain' && renderPart.part.text && renderPart.part.text.trim()"
+      :key="`${renderPart.key}-${isDark ? 'dark' : 'light'}`"
+      custom-id="message-list"
+      :custom-html-tags="['ref']"
+      :content="normalizeMarkdownContent(renderPart.part.text)"
+      :typewriter="false"
+      class="markdown-content"
+      :is-dark="isDark"
+      :monaco-options="{ theme: isDark ? 'vs-dark' : 'vs-light' }"
+    />
 
     <!-- Text (Markdown) -->
     <MarkdownRender

@@ -1,21 +1,21 @@
 <template>
-    <BaseFolderCard
-        :folder="folder"
-        :accept-drop-types="['persona']"
-        :labels="{
-            open: tm('folder.contextMenu.open'),
-            rename: tm('folder.contextMenu.rename'),
-            moveTo: tm('folder.contextMenu.moveTo'),
-            delete: tm('folder.contextMenu.delete')
-        }"
-        @click="$emit('click')"
-        @contextmenu.native.prevent="$emit('contextmenu', $event)"
-        @open="$emit('open')"
-        @rename="$emit('rename')"
-        @move="$emit('move')"
-        @delete="$emit('delete')"
-        @item-dropped="onItemDropped"
-    />
+  <BaseFolderCard
+    :folder="folder"
+    :accept-drop-types="['persona']"
+    :labels="{
+      open: tm('folder.contextMenu.open'),
+      rename: tm('folder.contextMenu.rename'),
+      moveTo: tm('folder.contextMenu.moveTo'),
+      delete: tm('folder.contextMenu.delete')
+    }"
+    @click="$emit('click')"
+    @contextmenu.native.prevent="$emit('contextmenu', $event)"
+    @open="$emit('open')"
+    @rename="$emit('rename')"
+    @move="$emit('move')"
+    @delete="$emit('delete')"
+    @item-dropped="onItemDropped"
+  />
 </template>
 
 <script lang="ts">

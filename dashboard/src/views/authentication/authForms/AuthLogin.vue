@@ -80,7 +80,10 @@ async function validate(_values: any, { setErrors }: any) {
       <span class="login-btn-text">{{ t("login") }}</span>
     </v-btn>
 
-    <div v-if="errors.apiError" class="mt-4 error-container">
+    <div
+      v-if="errors.apiError"
+      class="mt-4 error-container"
+    >
       <v-alert
         color="error"
         variant="tonal"

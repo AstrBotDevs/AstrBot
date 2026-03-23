@@ -14,7 +14,7 @@ class KnowledgeBase(BaseKBModel, table=True):
     存储知识库的基本信息和统计数据｡
     """
 
-    __tablename__ = "knowledge_bases"  # type: ignore
+    __tablename__ = "knowledge_bases"
 
     id: int | None = Field(
         primary_key=True,
@@ -62,7 +62,7 @@ class KBDocument(BaseKBModel, table=True):
     存储上传到知识库的文档元数据｡
     """
 
-    __tablename__ = "kb_documents"  # type: ignore
+    __tablename__ = "kb_documents"
 
     id: int | None = Field(
         primary_key=True,
@@ -96,7 +96,7 @@ class KBMedia(BaseKBModel, table=True):
     存储从文档中提取的图片､视频等多媒体资源｡
     """
 
-    __tablename__ = "kb_media"  # type: ignore
+    __tablename__ = "kb_media"
 
     id: int | None = Field(
         primary_key=True,

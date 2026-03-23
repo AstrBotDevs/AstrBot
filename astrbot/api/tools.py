@@ -1,6 +1,9 @@
 """
 Tools Public API for AstrBot.
 
+This module provides a simple, stable interface for tool registration
+and management. All implementations are delegated to the _internal package.
+
 Example:
     from astrbot.api.tools import tool, get_registry
 
@@ -18,20 +21,27 @@ from collections.abc import Awaitable, Callable
 from functools import wraps
 from typing import Any
 
-from astrbot.core.agent.tool import FunctionTool
+# Import from _internal package (the canonical source)
+from astrbot._internal.tools.base import FunctionTool, ToolSet
+from astrbot._internal.tools.registry import FunctionToolManager
 
-__all__ = ["FunctionTool", "ToolRegistry", "get_registry", "tool"]
+__all__ = ["FunctionTool", "ToolRegistry", "ToolSet", "get_registry", "tool"]
 
 
 class ToolRegistry:
-    """Simple wrapper around FunctionToolManager for tool registration."""
+    """Wrapper around FunctionToolManager for simplified tool registration.
+
+    This class provides a user-friendly interface for registering and
+    managing tools, delegating to the internal FunctionToolManager.
+    """
 
     _instance: ToolRegistry | None = None
 
     def __init__(self) -> None:
+        # Import here to avoid circular imports
         from astrbot.core.provider.register import llm_tools as func_tool_manager
 
-        self._manager = func_tool_manager
+        self._manager: FunctionToolManager = func_tool_manager
 
     @classmethod
     def get_instance(cls) -> ToolRegistry:

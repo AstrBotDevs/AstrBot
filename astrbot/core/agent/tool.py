@@ -229,7 +229,7 @@ class ToolSet:
                 if (
                     tool.parameters and tool.parameters.get("properties")
                 ) or not omit_empty_parameter_field:
-                    func_def["function"]["parameters"] = tool.parameters  # type: ignore[index]
+                    func_def["function"]["parameters"] = tool.parameters
 
             result.append(func_def)
         return result

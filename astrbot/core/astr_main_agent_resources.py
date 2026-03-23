@@ -182,7 +182,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             if not isinstance(msg, dict):
                 return f"error: messages[{idx}] should be an object."
 
-            msg_dict: dict[str, Any] = msg  # type: ignore[assignment]
+            msg_dict: dict[str, Any] = msg
             msg_type = str(msg_dict.get("type", "")).lower()
             if not msg_type:
                 return f"error: messages[{idx}].type is required."

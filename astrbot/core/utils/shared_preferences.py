@@ -44,8 +44,8 @@ class SharedPreferences:
         scope: str,
         scope_id: str,
         key: str,
-        default: _VT = None,  # type: ignore[invalid-parameter-default]
-    ) -> _VT:
+        default: _VT | None = None,
+    ) -> _VT | None:
         """获取指定范围和键的偏好设置"""
         if scope_id is not None and key is not None:
             result = await self.db_helper.get_preference(scope, scope_id, key)
@@ -72,8 +72,8 @@ class SharedPreferences:
         self,
         umo: str,
         key: str,
-        default: _VT = None,  # type: ignore[invalid-parameter-default]
-    ) -> _VT: ...
+        default: _VT | None = None,
+    ) -> _VT | None: ...
 
     @overload
     async def session_get(
@@ -103,8 +103,8 @@ class SharedPreferences:
         self,
         umo: str | None,
         key: str | None = None,
-        default: _VT = None,  # type: ignore[invalid-parameter-default]
-    ) -> _VT | list[Preference]:
+        default: _VT | None = None,
+    ) -> _VT | None | list[Preference]:
         """获取会话范围的偏好设置
 
         Note: 当 umo 或者 key 为 None,时,返回 Preference 列表,其中的 value 属性是一个 dict,value["val"] 为值｡
@@ -117,13 +117,13 @@ class SharedPreferences:
     async def global_get(self, key: None, default: Any = None) -> list[Preference]: ...
 
     @overload
-    async def global_get(self, key: str, default: _VT = None) -> _VT: ...  # type: ignore[invalid-parameter-default]
+    async def global_get(self, key: str, default: _VT | None = None) -> _VT | None: ...
 
     async def global_get(
         self,
         key: str | None,
-        default: _VT = None,  # type: ignore[invalid-parameter-default]
-    ) -> _VT | list[Preference]:
+        default: _VT | None = None,
+    ) -> _VT | None | list[Preference]:
         """获取全局范围的偏好设置
 
         Note: 当 scope_id 或者 key 为 None,时,返回 Preference 列表,其中的 value 属性是一个 dict,value["val"] 为值｡
@@ -169,10 +169,10 @@ class SharedPreferences:
     def get(
         self,
         key: str,
-        default: _VT = None,  # type: ignore[invalid-parameter-default]
+        default: _VT | None = None,
         scope: str | None = None,
         scope_id: str | None = "",
-    ) -> _VT:
+    ) -> _VT | None:
         """获取偏好设置(已弃用)"""
         if scope_id == "":
             scope_id = "unknown"

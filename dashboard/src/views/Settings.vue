@@ -1,229 +1,326 @@
 <template>
+  <div style="background-color: var(--v-theme-surface, #fff); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 24px;">
+    <v-list lines="two">
+      <v-list-subheader>{{ tm('network.title') }}</v-list-subheader>
 
-    <div style="background-color: var(--v-theme-surface, #fff); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 24px;">
+      <v-list-item>
+        <ProxySelector />
+      </v-list-item>
 
-        <v-list lines="two">
-            <v-list-subheader>{{ tm('network.title') }}</v-list-subheader>
+      <v-list-subheader>{{ tm('sidebar.title') }}</v-list-subheader>
 
-            <v-list-item>
-                <ProxySelector></ProxySelector>
-            </v-list-item>
+      <v-list-item
+        :subtitle="tm('sidebar.customize.subtitle')"
+        :title="tm('sidebar.customize.title')"
+      >
+        <SidebarCustomizer />
+      </v-list-item>
 
-            <v-list-subheader>{{ tm('sidebar.title') }}</v-list-subheader>
+      <v-list-subheader>{{ tm('theme.title') }}</v-list-subheader>
 
-            <v-list-item :subtitle="tm('sidebar.customize.subtitle')" :title="tm('sidebar.customize.title')">
-                <SidebarCustomizer></SidebarCustomizer>
-            </v-list-item>
+      <v-list-item
+        :subtitle="tm('theme.subtitle')"
+        :title="tm('theme.customize.title')"
+      >
+        <v-row
+          class="mt-2"
+          dense
+        >
+          <v-col
+            cols="4"
+            sm="2"
+          >
+            <v-text-field
+              v-model="primaryColor"
+              type="color"
+              :label="tm('theme.customize.primary')"
+              hide-details
+              variant="outlined"
+              density="compact"
+              style="max-width: 220px;"
+            />
+          </v-col>
+          <v-col
+            cols="4"
+            sm="2   "
+          >
+            <v-text-field
+              v-model="secondaryColor"
+              type="color"
+              :label="tm('theme.customize.secondary')"
+              hide-details
+              variant="outlined"
+              density="compact"
+              style="max-width: 220px;"
+            />
+          </v-col>
+          <v-col cols="12">
+            <v-btn
+              size="small"
+              variant="tonal"
+              color="primary"
+              @click="resetThemeColors"
+            >
+              <v-icon class="mr-2">
+                mdi-restore
+              </v-icon>
+              {{ tm('theme.customize.reset') }}
+            </v-btn>
+          </v-col>
+        </v-row>
+      </v-list-item>
 
-            <v-list-subheader>{{ tm('theme.title') }}</v-list-subheader>
+      <v-list-subheader>{{ tm('system.title') }}</v-list-subheader>
 
-            <v-list-item :subtitle="tm('theme.subtitle')" :title="tm('theme.customize.title')">
-                <v-row class="mt-2" dense>
-                    <v-col cols="4" sm="2">
-                        <v-text-field
-                            v-model="primaryColor"
-                            type="color"
-                            :label="tm('theme.customize.primary')"
-                            hide-details
-                            variant="outlined"
-                            density="compact"
-                            style="max-width: 220px;"
-                        />
-                    </v-col>
-                    <v-col cols="4" sm="2   ">
-                        <v-text-field
-                            v-model="secondaryColor"
-                            type="color"
-                            :label="tm('theme.customize.secondary')"
-                            hide-details
-                            variant="outlined"
-                            density="compact"
-                            style="max-width: 220px;"
-                        />
-                    </v-col>
-                    <v-col cols="12">
-                        <v-btn size="small" variant="tonal" color="primary" @click="resetThemeColors">
-                            <v-icon class="mr-2">mdi-restore</v-icon>
-                            {{ tm('theme.customize.reset') }}
-                        </v-btn>
-                    </v-col>
-                </v-row>
-            </v-list-item>
+      <v-list-item
+        :subtitle="tm('system.backup.subtitle')"
+        :title="tm('system.backup.title')"
+      >
+        <v-btn
+          style="margin-top: 16px;"
+          color="primary"
+          @click="openBackupDialog"
+        >
+          <v-icon class="mr-2">
+            mdi-backup-restore
+          </v-icon>
+          {{ tm('system.backup.button') }}
+        </v-btn>
+      </v-list-item>
 
-            <v-list-subheader>{{ tm('system.title') }}</v-list-subheader>
+      <v-list-item
+        :subtitle="tm('system.restart.subtitle')"
+        :title="tm('system.restart.title')"
+      >
+        <v-btn
+          style="margin-top: 16px;"
+          color="error"
+          @click="restartAstrBot"
+        >
+          {{ tm('system.restart.button') }}
+        </v-btn>
+      </v-list-item>
 
-            <v-list-item :subtitle="tm('system.backup.subtitle')" :title="tm('system.backup.title')">
-                <v-btn style="margin-top: 16px;" color="primary" @click="openBackupDialog">
-                    <v-icon class="mr-2">mdi-backup-restore</v-icon>
-                    {{ tm('system.backup.button') }}
+      <v-list-item class="py-2">
+        <StorageCleanupPanel />
+      </v-list-item>
+
+      <v-list-subheader>{{ tm('apiKey.title') }}</v-list-subheader>
+
+      <v-list-item :subtitle="tm('apiKey.subtitle')">
+        <template #title>
+          <div class="d-flex align-center">
+            <span>{{ tm('apiKey.manageTitle') }}</span>
+            <v-tooltip location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon
+                  size="x-small"
+                  variant="text"
+                  class="ml-2"
+                  :aria-label="tm('apiKey.docsLink')"
+                  href="https://docs.astrbot.app/dev/openapi.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <v-icon size="18">
+                    mdi-help-circle-outline
+                  </v-icon>
                 </v-btn>
-            </v-list-item>
+              </template>
+              <span>{{ tm('apiKey.docsLink') }}</span>
+            </v-tooltip>
+          </div>
+        </template>
+        <v-row
+          class="mt-2"
+          dense
+        >
+          <v-col
+            cols="12"
+            md="4"
+          >
+            <v-text-field
+              v-model="newApiKeyName"
+              :label="tm('apiKey.name')"
+              variant="outlined"
+              density="compact"
+              hide-details
+            />
+          </v-col>
+          <v-col
+            cols="12"
+            md="3"
+          >
+            <v-select
+              v-model="newApiKeyExpiresInDays"
+              :items="apiKeyExpiryOptions"
+              :label="tm('apiKey.expiresInDays')"
+              variant="outlined"
+              density="compact"
+              hide-details
+            />
+          </v-col>
+          <v-col
+            v-if="newApiKeyExpiresInDays === 'permanent'"
+            cols="12"
+          >
+            <v-alert
+              type="warning"
+              variant="tonal"
+              density="comfortable"
+            >
+              {{ tm('apiKey.permanentWarning') }}
+            </v-alert>
+          </v-col>
+          <v-col
+            cols="12"
+            md="5"
+            class="d-flex align-center"
+          >
+            <v-btn
+              color="primary"
+              :loading="apiKeyCreating"
+              @click="createApiKey"
+            >
+              <v-icon class="mr-2">
+                mdi-key-plus
+              </v-icon>
+              {{ tm('apiKey.create') }}
+            </v-btn>
+          </v-col>
 
-            <v-list-item :subtitle="tm('system.restart.subtitle')" :title="tm('system.restart.title')">
-                <v-btn style="margin-top: 16px;" color="error" @click="restartAstrBot">{{ tm('system.restart.button') }}</v-btn>
-            </v-list-item>
+          <v-col cols="12">
+            <div class="text-caption text-medium-emphasis mb-1">
+              {{ tm('apiKey.scopes') }}
+            </div>
+            <v-chip-group
+              v-model="newApiKeyScopes"
+              multiple
+            >
+              <v-chip
+                v-for="scope in availableScopes"
+                :key="scope.value"
+                :value="scope.value"
+                :color="newApiKeyScopes.includes(scope.value) ? 'primary' : undefined"
+                :variant="newApiKeyScopes.includes(scope.value) ? 'flat' : 'tonal'"
+              >
+                {{ scope.label }}
+              </v-chip>
+            </v-chip-group>
+          </v-col>
 
-            <v-list-item class="py-2">
-                <StorageCleanupPanel />
-            </v-list-item>
+          <v-col
+            v-if="createdApiKeyPlaintext"
+            cols="12"
+          >
+            <v-alert
+              type="warning"
+              variant="tonal"
+            >
+              <div class="d-flex align-center justify-space-between flex-wrap">
+                <span>{{ tm('apiKey.plaintextHint') }}</span>
+                <v-btn
+                  size="small"
+                  variant="text"
+                  color="primary"
+                  @click="copyCreatedApiKey"
+                >
+                  <v-icon class="mr-1">
+                    mdi-content-copy
+                  </v-icon>{{ tm('apiKey.copy') }}
+                </v-btn>
+              </div>
+              <code style="word-break: break-all;">{{ createdApiKeyPlaintext }}</code>
+            </v-alert>
+          </v-col>
 
-            <v-list-subheader>{{ tm('apiKey.title') }}</v-list-subheader>
+          <v-col cols="12">
+            <v-table density="compact">
+              <thead>
+                <tr>
+                  <th>{{ tm('apiKey.table.name') }}</th>
+                  <th>{{ tm('apiKey.table.prefix') }}</th>
+                  <th>{{ tm('apiKey.table.scopes') }}</th>
+                  <th>{{ tm('apiKey.table.status') }}</th>
+                  <th>{{ tm('apiKey.table.lastUsed') }}</th>
+                  <th>{{ tm('apiKey.table.createdAt') }}</th>
+                  <th>{{ tm('apiKey.table.actions') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="item in apiKeys"
+                  :key="item.key_id"
+                >
+                  <td>{{ item.name }}</td>
+                  <td><code>{{ item.key_prefix }}</code></td>
+                  <td>{{ (item.scopes || []).join(', ') }}</td>
+                  <td>
+                    <v-chip
+                      size="small"
+                      :color="item.is_revoked || item.is_expired ? 'error' : 'success'"
+                      variant="tonal"
+                    >
+                      {{ item.is_revoked || item.is_expired ? tm('apiKey.status.inactive') : tm('apiKey.status.active') }}
+                    </v-chip>
+                  </td>
+                  <td>{{ formatDate(item.last_used_at) }}</td>
+                  <td>{{ formatDate(item.created_at) }}</td>
+                  <td>
+                    <v-btn
+                      v-if="!item.is_revoked"
+                      size="x-small"
+                      color="warning"
+                      variant="tonal"
+                      class="mr-2"
+                      @click="revokeApiKey(item.key_id)"
+                    >
+                      {{ tm('apiKey.revoke') }}
+                    </v-btn>
+                    <v-btn
+                      size="x-small"
+                      color="error"
+                      variant="tonal"
+                      @click="deleteApiKey(item.key_id)"
+                    >
+                      {{ tm('apiKey.delete') }}
+                    </v-btn>
+                  </td>
+                </tr>
+                <tr v-if="apiKeys.length === 0">
+                  <td
+                    colspan="7"
+                    class="text-center text-medium-emphasis"
+                  >
+                    {{ tm('apiKey.empty') }}
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
+          </v-col>
+        </v-row>
+      </v-list-item>
+    </v-list>
 
-            <v-list-item :subtitle="tm('apiKey.subtitle')">
-                <template #title>
-                    <div class="d-flex align-center">
-                        <span>{{ tm('apiKey.manageTitle') }}</span>
-                        <v-tooltip location="top">
-                            <template #activator="{ props }">
-                                <v-btn
-                                    v-bind="props"
-                                    icon
-                                    size="x-small"
-                                    variant="text"
-                                    class="ml-2"
-                                    :aria-label="tm('apiKey.docsLink')"
-                                    href="https://docs.astrbot.app/dev/openapi.html"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
-                                    <v-icon size="18">mdi-help-circle-outline</v-icon>
-                                </v-btn>
-                            </template>
-                            <span>{{ tm('apiKey.docsLink') }}</span>
-                        </v-tooltip>
-                    </div>
-                </template>
-                <v-row class="mt-2" dense>
-                    <v-col cols="12" md="4">
-                        <v-text-field
-                            v-model="newApiKeyName"
-                            :label="tm('apiKey.name')"
-                            variant="outlined"
-                            density="compact"
-                            hide-details
-                        />
-                    </v-col>
-                    <v-col cols="12" md="3">
-                        <v-select
-                            v-model="newApiKeyExpiresInDays"
-                            :items="apiKeyExpiryOptions"
-                            :label="tm('apiKey.expiresInDays')"
-                            variant="outlined"
-                            density="compact"
-                            hide-details
-                        />
-                    </v-col>
-                    <v-col v-if="newApiKeyExpiresInDays === 'permanent'" cols="12">
-                        <v-alert type="warning" variant="tonal" density="comfortable">
-                            {{ tm('apiKey.permanentWarning') }}
-                        </v-alert>
-                    </v-col>
-                    <v-col cols="12" md="5" class="d-flex align-center">
-                        <v-btn color="primary" :loading="apiKeyCreating" @click="createApiKey">
-                            <v-icon class="mr-2">mdi-key-plus</v-icon>
-                            {{ tm('apiKey.create') }}
-                        </v-btn>
-                    </v-col>
+    <v-list-item
+      :subtitle="tm('system.migration.subtitle')"
+      :title="tm('system.migration.title')"
+    >
+      <v-btn
+        style="margin-top: 16px;"
+        color="primary"
+        @click="startMigration"
+      >
+        {{ tm('system.migration.button') }}
+      </v-btn>
+    </v-list-item>
+  </div>
 
-                    <v-col cols="12">
-                        <div class="text-caption text-medium-emphasis mb-1">{{ tm('apiKey.scopes') }}</div>
-                        <v-chip-group v-model="newApiKeyScopes" multiple>
-                            <v-chip
-                                v-for="scope in availableScopes"
-                                :key="scope.value"
-                                :value="scope.value"
-                                :color="newApiKeyScopes.includes(scope.value) ? 'primary' : undefined"
-                                :variant="newApiKeyScopes.includes(scope.value) ? 'flat' : 'tonal'"
-                            >
-                                {{ scope.label }}
-                            </v-chip>
-                        </v-chip-group>
-                    </v-col>
-
-                    <v-col v-if="createdApiKeyPlaintext" cols="12">
-                        <v-alert type="warning" variant="tonal">
-                            <div class="d-flex align-center justify-space-between flex-wrap">
-                                <span>{{ tm('apiKey.plaintextHint') }}</span>
-                                <v-btn size="small" variant="text" color="primary" @click="copyCreatedApiKey">
-                                    <v-icon class="mr-1">mdi-content-copy</v-icon>{{ tm('apiKey.copy') }}
-                                </v-btn>
-                            </div>
-                            <code style="word-break: break-all;">{{ createdApiKeyPlaintext }}</code>
-                        </v-alert>
-                    </v-col>
-
-                    <v-col cols="12">
-                        <v-table density="compact">
-                            <thead>
-                                <tr>
-                                    <th>{{ tm('apiKey.table.name') }}</th>
-                                    <th>{{ tm('apiKey.table.prefix') }}</th>
-                                    <th>{{ tm('apiKey.table.scopes') }}</th>
-                                    <th>{{ tm('apiKey.table.status') }}</th>
-                                    <th>{{ tm('apiKey.table.lastUsed') }}</th>
-                                    <th>{{ tm('apiKey.table.createdAt') }}</th>
-                                    <th>{{ tm('apiKey.table.actions') }}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="item in apiKeys" :key="item.key_id">
-                                    <td>{{ item.name }}</td>
-                                    <td><code>{{ item.key_prefix }}</code></td>
-                                    <td>{{ (item.scopes || []).join(', ') }}</td>
-                                    <td>
-                                        <v-chip
-                                            size="small"
-                                            :color="item.is_revoked || item.is_expired ? 'error' : 'success'"
-                                            variant="tonal"
-                                        >
-                                            {{ item.is_revoked || item.is_expired ? tm('apiKey.status.inactive') : tm('apiKey.status.active') }}
-                                        </v-chip>
-                                    </td>
-                                    <td>{{ formatDate(item.last_used_at) }}</td>
-                                    <td>{{ formatDate(item.created_at) }}</td>
-                                    <td>
-                                        <v-btn
-                                            v-if="!item.is_revoked"
-                                            size="x-small"
-                                            color="warning"
-                                            variant="tonal"
-                                            class="mr-2"
-                                            @click="revokeApiKey(item.key_id)"
-                                        >
-                                            {{ tm('apiKey.revoke') }}
-                                        </v-btn>
-                                        <v-btn
-                                            size="x-small"
-                                            color="error"
-                                            variant="tonal"
-                                            @click="deleteApiKey(item.key_id)"
-                                        >
-                                            {{ tm('apiKey.delete') }}
-                                        </v-btn>
-                                    </td>
-                                </tr>
-                                <tr v-if="apiKeys.length === 0">
-                                    <td colspan="7" class="text-center text-medium-emphasis">
-                                        {{ tm('apiKey.empty') }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </v-table>
-                    </v-col>
-                </v-row>
-            </v-list-item>
-        </v-list>
-
-            <v-list-item :subtitle="tm('system.migration.subtitle')" :title="tm('system.migration.title')">
-                <v-btn style="margin-top: 16px;" color="primary" @click="startMigration">{{ tm('system.migration.button') }}</v-btn>
-            </v-list-item>
-
-    </div>
-
-    <WaitingForRestart ref="wfr"></WaitingForRestart>
-    <MigrationDialog ref="migrationDialog"></MigrationDialog>
-    <BackupDialog ref="backupDialog"></BackupDialog>
-
+  <WaitingForRestart ref="wfr" />
+  <MigrationDialog ref="migrationDialog" />
+  <BackupDialog ref="backupDialog" />
 </template>
 
 <script setup>

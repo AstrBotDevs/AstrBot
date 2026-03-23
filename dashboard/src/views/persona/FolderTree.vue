@@ -1,30 +1,30 @@
 <template>
-    <div class="folder-tree">
-        <BaseFolderTree
-            :folder-tree="folderTree"
-            :current-folder-id="currentFolderId"
-            :expanded-folder-ids="expandedFolderIds"
-            :tree-loading="treeLoading"
-            :accept-drop-types="['persona']"
-            :labels="{
-                searchPlaceholder: tm('folder.searchPlaceholder'),
-                rootFolder: tm('folder.rootFolder'),
-                noFolders: tm('folder.noFolders'),
-                contextMenu: {
-                    open: tm('folder.contextMenu.open'),
-                    rename: tm('folder.contextMenu.rename'),
-                    moveTo: tm('folder.contextMenu.moveTo'),
-                    delete: tm('folder.contextMenu.delete')
-                }
-            }"
-            @folder-click="handleFolderClick"
-            @rename-folder="onRenameFolder"
-            @move-folder="$emit('move-folder', $event)"
-            @delete-folder="onDeleteFolder"
-            @item-dropped="onItemDropped"
-            @toggle-expansion="toggleFolderExpansion"
-            @set-expansion="setFolderExpansion"
-        />
+  <div class="folder-tree">
+    <BaseFolderTree
+      :folder-tree="folderTree"
+      :current-folder-id="currentFolderId"
+      :expanded-folder-ids="expandedFolderIds"
+      :tree-loading="treeLoading"
+      :accept-drop-types="['persona']"
+      :labels="{
+        searchPlaceholder: tm('folder.searchPlaceholder'),
+        rootFolder: tm('folder.rootFolder'),
+        noFolders: tm('folder.noFolders'),
+        contextMenu: {
+          open: tm('folder.contextMenu.open'),
+          rename: tm('folder.contextMenu.rename'),
+          moveTo: tm('folder.contextMenu.moveTo'),
+          delete: tm('folder.contextMenu.delete')
+        }
+      }"
+      @folder-click="handleFolderClick"
+      @rename-folder="onRenameFolder"
+      @move-folder="$emit('move-folder', $event)"
+      @delete-folder="onDeleteFolder"
+      @item-dropped="onItemDropped"
+      @toggle-expansion="toggleFolderExpansion"
+      @set-expansion="setFolderExpansion"
+    />
 
     <!-- 重命名对话框 -->
     <v-dialog

@@ -1,103 +1,125 @@
 <template>
-    <div class="storage-cleanup-panel">
-        <div class="text-subtitle-1 font-weight-medium mb-1">
-            {{ tm('system.cleanup.title') }}
-        </div>
-        <div class="text-body-2 text-medium-emphasis mb-4">
-            {{ tm('system.cleanup.subtitle') }}
-        </div>
-
-        <v-expansion-panels variant="accordion">
-            <v-expansion-panel elevation="0" class="border rounded-lg">
-                <v-expansion-panel-title class="py-4">
-                    <div class="d-flex align-center justify-space-between w-100 pr-4 ga-3">
-                        <div class="d-flex align-center ga-3">
-                            <v-icon color="warning">mdi-broom</v-icon>
-                            <div>
-                                <div class="font-weight-medium">{{ tm('system.cleanup.panel.title') }}</div>
-                                <div class="text-caption text-medium-emphasis">
-                                    {{ tm('system.cleanup.panel.subtitle', { size: formatBytes(storageStatus.total_bytes || 0) }) }}
-                                </div>
-                            </div>
-                        </div>
-                        <v-chip size="small" color="warning" variant="tonal">
-                            {{ formatBytes(storageStatus.total_bytes || 0) }}
-                        </v-chip>
-                    </div>
-                </v-expansion-panel-title>
-
-                <v-expansion-panel-text>
-                    <div class="d-flex flex-wrap ga-2 mb-4">
-                        <v-btn
-                            size="small"
-                            variant="tonal"
-                            color="primary"
-                            :loading="statusLoading"
-                            @click="loadStorageStatus"
-                        >
-                            <v-icon class="mr-2">mdi-refresh</v-icon>
-                            {{ tm('system.cleanup.refresh') }}
-                        </v-btn>
-                        <v-btn
-                            size="small"
-                            color="warning"
-                            :loading="cleaningTarget === 'all'"
-                            @click="cleanupStorage('all')"
-                        >
-                            <v-icon class="mr-2">mdi-broom</v-icon>
-                            {{ tm('system.cleanup.cleanAll') }}
-                        </v-btn>
-                    </div>
-
-                    <v-row dense>
-                        <v-col
-                            v-for="item in storageCards"
-                            :key="item.key"
-                            cols="12"
-                            md="6"
-                        >
-                            <v-card variant="tonal" class="h-100">
-                                <v-card-text>
-                                    <div class="d-flex align-start justify-space-between ga-3">
-                                        <div>
-                                            <div class="text-subtitle-1 font-weight-medium">
-                                                {{ item.title }}
-                                            </div>
-                                            <div class="text-body-2 text-medium-emphasis mt-1">
-                                                {{ item.subtitle }}
-                                            </div>
-                                        </div>
-                                        <v-icon :color="item.color">{{ item.icon }}</v-icon>
-                                    </div>
-
-                                    <div class="text-h5 mt-4">
-                                        {{ formatBytes(item.sizeBytes) }}
-                                    </div>
-                                    <div class="text-caption text-medium-emphasis mt-1">
-                                        {{ tm('system.cleanup.fileCount', { count: item.fileCount }) }}
-                                    </div>
-                                    <div class="text-caption text-medium-emphasis mt-2 storage-cleanup-path">
-                                        {{ item.path }}
-                                    </div>
-
-                                    <v-btn
-                                        class="mt-4"
-                                        size="small"
-                                        :color="item.color"
-                                        :loading="cleaningTarget === item.key"
-                                        @click="cleanupStorage(item.key)"
-                                    >
-                                        <v-icon class="mr-2">mdi-delete-sweep-outline</v-icon>
-                                        {{ item.buttonText }}
-                                    </v-btn>
-                                </v-card-text>
-                            </v-card>
-                        </v-col>
-                    </v-row>
-                </v-expansion-panel-text>
-            </v-expansion-panel>
-        </v-expansion-panels>
+  <div class="storage-cleanup-panel">
+    <div class="text-subtitle-1 font-weight-medium mb-1">
+      {{ tm('system.cleanup.title') }}
     </div>
+    <div class="text-body-2 text-medium-emphasis mb-4">
+      {{ tm('system.cleanup.subtitle') }}
+    </div>
+
+    <v-expansion-panels variant="accordion">
+      <v-expansion-panel
+        elevation="0"
+        class="border rounded-lg"
+      >
+        <v-expansion-panel-title class="py-4">
+          <div class="d-flex align-center justify-space-between w-100 pr-4 ga-3">
+            <div class="d-flex align-center ga-3">
+              <v-icon color="warning">
+                mdi-broom
+              </v-icon>
+              <div>
+                <div class="font-weight-medium">
+                  {{ tm('system.cleanup.panel.title') }}
+                </div>
+                <div class="text-caption text-medium-emphasis">
+                  {{ tm('system.cleanup.panel.subtitle', { size: formatBytes(storageStatus.total_bytes || 0) }) }}
+                </div>
+              </div>
+            </div>
+            <v-chip
+              size="small"
+              color="warning"
+              variant="tonal"
+            >
+              {{ formatBytes(storageStatus.total_bytes || 0) }}
+            </v-chip>
+          </div>
+        </v-expansion-panel-title>
+
+        <v-expansion-panel-text>
+          <div class="d-flex flex-wrap ga-2 mb-4">
+            <v-btn
+              size="small"
+              variant="tonal"
+              color="primary"
+              :loading="statusLoading"
+              @click="loadStorageStatus"
+            >
+              <v-icon class="mr-2">
+                mdi-refresh
+              </v-icon>
+              {{ tm('system.cleanup.refresh') }}
+            </v-btn>
+            <v-btn
+              size="small"
+              color="warning"
+              :loading="cleaningTarget === 'all'"
+              @click="cleanupStorage('all')"
+            >
+              <v-icon class="mr-2">
+                mdi-broom
+              </v-icon>
+              {{ tm('system.cleanup.cleanAll') }}
+            </v-btn>
+          </div>
+
+          <v-row dense>
+            <v-col
+              v-for="item in storageCards"
+              :key="item.key"
+              cols="12"
+              md="6"
+            >
+              <v-card
+                variant="tonal"
+                class="h-100"
+              >
+                <v-card-text>
+                  <div class="d-flex align-start justify-space-between ga-3">
+                    <div>
+                      <div class="text-subtitle-1 font-weight-medium">
+                        {{ item.title }}
+                      </div>
+                      <div class="text-body-2 text-medium-emphasis mt-1">
+                        {{ item.subtitle }}
+                      </div>
+                    </div>
+                    <v-icon :color="item.color">
+                      {{ item.icon }}
+                    </v-icon>
+                  </div>
+
+                  <div class="text-h5 mt-4">
+                    {{ formatBytes(item.sizeBytes) }}
+                  </div>
+                  <div class="text-caption text-medium-emphasis mt-1">
+                    {{ tm('system.cleanup.fileCount', { count: item.fileCount }) }}
+                  </div>
+                  <div class="text-caption text-medium-emphasis mt-2 storage-cleanup-path">
+                    {{ item.path }}
+                  </div>
+
+                  <v-btn
+                    class="mt-4"
+                    size="small"
+                    :color="item.color"
+                    :loading="cleaningTarget === item.key"
+                    @click="cleanupStorage(item.key)"
+                  >
+                    <v-icon class="mr-2">
+                      mdi-delete-sweep-outline
+                    </v-icon>
+                    {{ item.buttonText }}
+                  </v-btn>
+                </v-card-text>
+              </v-card>
+            </v-col>
+          </v-row>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+    </v-expansion-panels>
+  </div>
 </template>
 
 <script setup>

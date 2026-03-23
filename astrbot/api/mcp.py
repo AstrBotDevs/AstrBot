@@ -1,6 +1,9 @@
 """
 MCP (Model Context Protocol) Public API for AstrBot.
 
+This module provides a simple, stable interface for MCP server management,
+delegating to the _internal package.
+
 Example:
     from astrbot.api.mcp import get_mcp_servers, register_mcp_server
 
@@ -26,8 +29,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from astrbot.core.agent.mcp_client import MCPClient, MCPTool
-from astrbot.core.provider.func_tool_manager import FunctionToolManager
+# Import from _internal package (the canonical source)
+from astrbot._internal.mcp.client import MCPClient
+from astrbot._internal.mcp.tool import MCPTool
 
 __all__ = [
     "MCPClient",
@@ -42,7 +46,7 @@ def get_mcp_servers() -> dict[str, MCPClient]:
     """Get all connected MCP servers."""
     from astrbot.core.provider.register import llm_tools as func_tool_manager
 
-    manager: FunctionToolManager = func_tool_manager
+    manager = func_tool_manager
     return dict(manager.mcp_client_dict)
 
 
@@ -69,7 +73,7 @@ async def register_mcp_server(
     """
     from astrbot.core.provider.register import llm_tools as func_tool_manager
 
-    manager: FunctionToolManager = func_tool_manager
+    manager = func_tool_manager
 
     config: dict[str, Any] = {}
     if command is not None:
@@ -89,5 +93,5 @@ async def unregister_mcp_server(name: str) -> None:
     """Disconnect and remove an MCP server."""
     from astrbot.core.provider.register import llm_tools as func_tool_manager
 
-    manager: FunctionToolManager = func_tool_manager
+    manager = func_tool_manager
     await manager.disable_mcp_server(name=name)

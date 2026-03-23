@@ -216,35 +216,46 @@ const viewChangelog = () => {
 
             <template v-if="!marketMode">
               <v-tooltip location="left">
-                <template v-slot:activator="{ props: tooltipProps }">
-                          <div class="extension-switch-wrap" @click.stop>
-                            <div v-bind="tooltipProps" style="display:inline-flex; align-items:center;">
-                              <v-switch
-                                :model-value="extension.activated"
-                                color="success"
-                                density="compact"
-                                hide-details
-                                inset
-                                @update:model-value="toggleActivation"
-                              ></v-switch>
-                            </div>
+                <template #activator="{ props: tooltipProps }">
+                  <div
+                    class="extension-switch-wrap"
+                    @click.stop
+                  >
+                    <div
+                      v-bind="tooltipProps"
+                      style="display:inline-flex; align-items:center;"
+                    >
+                      <v-switch
+                        :model-value="extension.activated"
+                        color="success"
+                        density="compact"
+                        hide-details
+                        inset
+                        @update:model-value="toggleActivation"
+                      />
+                    </div>
 
-                            <v-tooltip location="top" :text="pinned ? tm('buttons.unpin') : tm('buttons.pin')">
-                              <template #activator="{ props: pinProps }">
-                                <v-btn
-                                  v-bind="pinProps"
-                                  icon
-                                  size="small"
-                                  variant="tonal"
-                                  :color="pinned ? 'primary' : 'secondary'"
-                                  class="ml-2"
-                                  @click.stop="togglePin"
-                                >
-                                  <v-icon size="18">{{ pinned ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
-                                </v-btn>
-                              </template>
-                            </v-tooltip>
-                          </div>
+                    <v-tooltip
+                      location="top"
+                      :text="pinned ? tm('buttons.unpin') : tm('buttons.pin')"
+                    >
+                      <template #activator="{ props: pinProps }">
+                        <v-btn
+                          v-bind="pinProps"
+                          icon
+                          size="small"
+                          variant="tonal"
+                          :color="pinned ? 'primary' : 'secondary'"
+                          class="ml-2"
+                          @click.stop="togglePin"
+                        >
+                          <v-icon size="18">
+                            {{ pinned ? 'mdi-pin' : 'mdi-pin-outline' }}
+                          </v-icon>
+                        </v-btn>
+                      </template>
+                    </v-tooltip>
+                  </div>
                 </template>
                 <span>{{
                   extension.activated ? tm("buttons.disable") : tm("buttons.enable")

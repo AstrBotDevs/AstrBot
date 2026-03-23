@@ -771,7 +771,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
 
                 _final_resp: CallToolResult | None = None
-                async for resp in self._iter_tool_executor_results(executor):  # type: ignore
+                async for resp in self._iter_tool_executor_results(executor):
                     if isinstance(resp, CallToolResult):
                         res = resp
                         _final_resp = resp
@@ -913,7 +913,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         contexts: list[dict[str, Any]] = []
         for msg in self.run_context.messages:
             if hasattr(msg, "model_dump"):
-                contexts.append(msg.model_dump())  # type: ignore[call-arg]
+                contexts.append(msg.model_dump())
             elif isinstance(msg, dict):
                 contexts.append(copy.deepcopy(msg))
         instruction = (

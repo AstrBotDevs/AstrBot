@@ -60,7 +60,7 @@ async def run_third_party_agent(
     类似于 run_agent 函数,但专门处理第三方 agent runner
     """
     try:
-        async for resp in runner.step_until_done(max_step=30):  # type: ignore[misc]
+        async for resp in runner.step_until_done(max_step=30):
             if resp.type == "streaming_delta":
                 if stream_to_general:
                     continue

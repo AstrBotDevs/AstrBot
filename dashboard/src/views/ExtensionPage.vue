@@ -238,7 +238,6 @@ const {
 
           <!-- 插件市场标签页内容 -->
           <MarketPluginsTab :state="pageState" />
-
         </v-card-text>
       </v-card>
     </v-col>

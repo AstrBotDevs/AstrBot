@@ -7,7 +7,7 @@ import click
 from click.shell_completion import get_completion_class
 
 from . import __version__
-from .commands import bk, conf, init, plug, run, tui, uninstall
+from .commands import bk, conf, dev, init, plug, run, tui, uninstall
 from .i18n import t
 
 logo_tmpl = r"""
@@ -86,6 +86,7 @@ cli.add_command(conf)
 cli.add_command(uninstall)
 cli.add_command(bk)
 cli.add_command(tui)
+cli.add_command(dev)
 
 
 @click.command()

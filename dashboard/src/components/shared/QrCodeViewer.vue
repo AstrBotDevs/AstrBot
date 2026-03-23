@@ -5,8 +5,11 @@
       :src="imageSrc"
       :alt="alt"
       class="qr-code-image"
-    />
-    <div v-else class="qr-code-empty">
+    >
+    <div
+      v-else
+      class="qr-code-empty"
+    >
       {{ emptyHint }}
     </div>
   </div>

@@ -14,19 +14,11 @@ MCP client - DEPRECATED
 This file exists solely for backward compatibility and will be removed in a future version.
 """
 
-import warnings
-
-warnings.warn(
-    "astrbot.core.agent.mcp_client has been moved to astrbot._internal.mcp. "
-    "Please update your imports.",
-    DeprecationWarning,
-    stacklevel=2,
-)
-
 import asyncio
 import logging
 import os
 import sys
+import warnings
 from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import Generic
@@ -46,6 +38,12 @@ from astrbot.core.utils.log_pipe import LogPipe
 from .run_context import TContext
 from .tool import FunctionTool
 
+warnings.warn(
+    "astrbot.core.agent.mcp_client has been moved to astrbot._internal.mcp. "
+    "Please update your imports.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 try:
     import anyio
     import mcp
@@ -246,7 +244,7 @@ class MCPClient:
                     mcp.ClientSession(
                         *streams,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore
+                        logging_callback=logging_callback,
                     ),
                 )
             else:
@@ -272,7 +270,7 @@ class MCPClient:
                         read_stream=read_s,
                         write_stream=write_s,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore
+                        logging_callback=logging_callback,
                     ),
                 )
 
@@ -303,7 +301,7 @@ class MCPClient:
                         logger=logger,
                         identifier=f"MCPServer-{name}",
                         callback=callback,
-                    ),  # type: ignore
+                    ),
                 ),
             )
             self.process_pid = self._extract_stdio_process_pid(self._streams_context)

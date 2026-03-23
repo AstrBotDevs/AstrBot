@@ -108,8 +108,8 @@
                   </v-chip>
                 </div>
                 <div
-                  class="platform-qr-chip"
                   v-if="hasQrPayload(item.id)"
+                  class="platform-qr-chip"
                 >
                   <v-chip
                     size="small"
@@ -118,11 +118,19 @@
                     class="platform-qr-chip-item"
                     @click.stop="openPlatformQrDialog(item.id)"
                   >
-                    <v-icon size="small" start>mdi-qrcode</v-icon>
+                    <v-icon
+                      size="small"
+                      start
+                    >
+                      mdi-qrcode
+                    </v-icon>
                     {{ tm('platformQr.show') }}
                   </v-chip>
                 </div>
-                <div v-if="getPlatformStat(item.id)?.unified_webhook && item.webhook_uuid" class="webhook-info">
+                <div
+                  v-if="getPlatformStat(item.id)?.unified_webhook && item.webhook_uuid"
+                  class="webhook-info"
+                >
                   <v-chip
                     size="small"
                     color="primary"
@@ -242,10 +250,15 @@
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="showQrDialog" max-width="480">
+    <v-dialog
+      v-model="showQrDialog"
+      max-width="480"
+    >
       <v-card>
         <v-card-title class="d-flex align-center pa-4">
-          <v-icon class="me-2">mdi-qrcode</v-icon>
+          <v-icon class="me-2">
+            mdi-qrcode
+          </v-icon>
           {{ tm('platformQr.title') }}
         </v-card-title>
         <v-card-text class="px-4 pb-4">
@@ -258,8 +271,12 @@
           />
         </v-card-text>
         <v-card-actions class="pa-4 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="tonal" color="primary" @click="showQrDialog = false">
+          <v-spacer />
+          <v-btn
+            variant="tonal"
+            color="primary"
+            @click="showQrDialog = false"
+          >
             {{ tm('platformQr.close') }}
           </v-btn>
         </v-card-actions>
@@ -267,10 +284,15 @@
     </v-dialog>
 
     <!-- 错误详情对话框 -->
-    <v-dialog v-model="showErrorDialog" max-width="700">
+    <v-dialog
+      v-model="showErrorDialog"
+      max-width="700"
+    >
       <v-card>
         <v-card-title class="d-flex align-center pa-4">
-          <v-icon class="me-2">mdi-qrcode</v-icon>
+          <v-icon class="me-2">
+            mdi-qrcode
+          </v-icon>
           {{ tm('platformQr.title') }}
         </v-card-title>
         <v-card-text class="px-4 pb-4">
@@ -283,8 +305,12 @@
           />
         </v-card-text>
         <v-card-actions class="pa-4 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="tonal" color="primary" @click="showQrDialog = false">
+          <v-spacer />
+          <v-btn
+            variant="tonal"
+            color="primary"
+            @click="showQrDialog = false"
+          >
             {{ tm('platformQr.close') }}
           </v-btn>
         </v-card-actions>

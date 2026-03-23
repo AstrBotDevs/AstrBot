@@ -73,14 +73,17 @@ onMounted(() => {
 
 <template>
   <div class="login-page-container">
-    <v-card class="login-card" elevation="1">
+    <v-card
+      class="login-card"
+      elevation="1"
+    >
       <v-card-title>
         <div class="d-flex justify-space-between align-center w-100">
           <img
             width="80"
             src="@/assets/images/icon-no-shadow.svg"
             alt="AstrBot Logo"
-          />
+          >
           <div class="d-flex align-center gap-1">
             <LanguageSwitcher />
             <v-divider
@@ -100,10 +103,16 @@ onMounted(() => {
               size="small"
               @click="serverConfigDialog = true"
             >
-              <v-icon size="18" :color="'rgb(var(--v-theme-primary))'">
+              <v-icon
+                size="18"
+                :color="'rgb(var(--v-theme-primary))'"
+              >
                 mdi-server
               </v-icon>
-              <v-tooltip activator="parent" location="top">
+              <v-tooltip
+                activator="parent"
+                location="top"
+              >
                 {{ t("serverConfig.tooltip") }}
               </v-tooltip>
             </v-btn>
@@ -115,14 +124,20 @@ onMounted(() => {
               size="small"
               @click="toggleTheme"
             >
-              <v-icon size="18" :color="'rgb(var(--v-theme-primary))'">
+              <v-icon
+                size="18"
+                :color="'rgb(var(--v-theme-primary))'"
+              >
                 {{
                   customizer.isDarkTheme
                     ? "mdi-weather-night"
                     : "mdi-white-balance-sunny"
                 }}
               </v-icon>
-              <v-tooltip activator="parent" location="top">
+              <v-tooltip
+                activator="parent"
+                location="top"
+              >
                 {{
                   customizer.isDarkTheme
                     ? t("theme.switchToLight")
@@ -132,10 +147,16 @@ onMounted(() => {
             </v-btn>
           </div>
         </div>
-        <div class="ml-2" style="font-size: 26px">
+        <div
+          class="ml-2"
+          style="font-size: 26px"
+        >
           {{ t("logo.title") }}
         </div>
-        <div class="mt-2 ml-2" style="font-size: 14px; color: grey">
+        <div
+          class="mt-2 ml-2"
+          style="font-size: 14px; color: grey"
+        >
           {{ t("logo.subtitle") }}
         </div>
       </v-card-title>
@@ -144,7 +165,10 @@ onMounted(() => {
       </v-card-text>
     </v-card>
 
-    <v-dialog v-model="serverConfigDialog" max-width="450">
+    <v-dialog
+      v-model="serverConfigDialog"
+      max-width="450"
+    >
       <v-card>
         <v-card-title>{{ t("serverConfig.title") }}</v-card-title>
         <v-card-text>
@@ -155,7 +179,7 @@ onMounted(() => {
           <div
             v-if="
               (apiStore.presets && apiStore.presets.length > 0) ||
-              apiStore.customPresets
+                apiStore.customPresets
             "
             class="mb-4"
           >
@@ -236,10 +260,17 @@ onMounted(() => {
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="serverConfigDialog = false">
+          <v-btn
+            variant="text"
+            @click="serverConfigDialog = false"
+          >
             {{ t("serverConfig.cancel") }}
           </v-btn>
-          <v-btn color="primary" variant="flat" @click="saveApiUrl">
+          <v-btn
+            color="primary"
+            variant="flat"
+            @click="saveApiUrl"
+          >
             {{ t("serverConfig.save") }}
           </v-btn>
         </v-card-actions>

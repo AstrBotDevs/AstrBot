@@ -42,7 +42,6 @@ const handleInstall = (plugin) => {
     class="rounded-lg d-flex flex-column plugin-card"
     elevation="0"
   >
-
     <v-card-text
       class="plugin-card-content"
     >
@@ -51,7 +50,7 @@ const handleInstall = (plugin) => {
           :src="plugin?.logo || defaultPluginIcon"
           :alt="plugin.name"
           class="plugin-cover__image"
-        />
+        >
       </div>
 
       <div class="plugin-info">
@@ -130,7 +129,7 @@ const handleInstall = (plugin) => {
               icon="mdi-star"
               size="x-small"
               style="margin-right: 2px"
-            ></v-icon>
+            />
             <span>{{ plugin.stars }}</span>
           </div>
         </div>
@@ -159,7 +158,7 @@ const handleInstall = (plugin) => {
           />
         </div>
 
-        <div class="plugin-stats"></div>
+        <div class="plugin-stats" />
       </div>
     </v-card-text>
 

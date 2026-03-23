@@ -13,6 +13,9 @@ Modules:
 
 from astrbot import logger
 
+# Tool API
+from astrbot._internal.tools.base import FunctionTool, ToolSet
+
 # MCP API
 from astrbot.api.mcp import (
     MCPClient,
@@ -30,18 +33,15 @@ from astrbot.api.skills import (
     skill_to_tool,
 )
 
-# Tools API
+# Tools API (public interface)
 from astrbot.api.tools import ToolRegistry, get_registry, tool
 from astrbot.core import html_renderer, sp
-from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.star.register import register_agent as agent
 from astrbot.core.star.register import register_llm_tool as llm_tool
 
 __all__ = [
     "AstrBotConfig",
-    "BaseFunctionToolExecutor",
     "FunctionTool",
     "MCPClient",
     "MCPTool",

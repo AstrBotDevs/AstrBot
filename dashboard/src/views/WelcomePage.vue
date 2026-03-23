@@ -1,6 +1,9 @@
 <template>
   <div class="welcome-page">
-    <v-container fluid class="pa-0">
+    <v-container
+      fluid
+      class="pa-0"
+    >
       <v-row class="px-4 py-3 pb-6">
         <v-col cols="12">
           <h1 class="text-h1 font-weight-bold mb-2 d-flex align-center">
@@ -14,7 +17,11 @@
 
       <v-row class="px-4">
         <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0" border>
+          <v-card
+            class="welcome-card pa-6"
+            elevation="0"
+            border
+          >
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm("onboard.title") }}
             </div>
@@ -45,7 +52,7 @@
                   <p class="text-body-2 text-medium-emphasis mb-3">
                     {{
                       tm("onboard.step0Desc") ||
-                      "配置 AstrBot 的后端 API 地址。"
+                        "配置 AstrBot 的后端 API 地址。"
                     }}
                   </p>
                   <div class="d-flex align-center">
@@ -178,12 +185,19 @@
 
       <v-row class="px-4 mt-4">
         <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0" border>
+          <v-card
+            class="welcome-card pa-6"
+            elevation="0"
+            border
+          >
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm("resources.title") }}
             </div>
             <v-row>
-              <v-col cols="12" sm="4">
+              <v-col
+                cols="12"
+                sm="4"
+              >
                 <!-- GitHub Card -->
                 <v-card
                   variant="outlined"
@@ -192,7 +206,12 @@
                   target="_blank"
                 >
                   <div class="d-flex align-center mb-3">
-                    <v-icon size="32" class="mr-3"> mdi-github </v-icon>
+                    <v-icon
+                      size="32"
+                      class="mr-3"
+                    >
+                      mdi-github
+                    </v-icon>
                     <span class="text-h6 font-weight-bold">GitHub</span>
                   </div>
                   <p class="text-body-2 text-medium-emphasis mb-0">
@@ -201,7 +220,10 @@
                 </v-card>
               </v-col>
 
-              <v-col cols="12" sm="4">
+              <v-col
+                cols="12"
+                sm="4"
+              >
                 <!-- Docs Card -->
                 <v-card
                   variant="outlined"
@@ -210,7 +232,10 @@
                   target="_blank"
                 >
                   <div class="d-flex align-center mb-3">
-                    <v-icon size="32" class="mr-3">
+                    <v-icon
+                      size="32"
+                      class="mr-3"
+                    >
                       mdi-book-open-variant
                     </v-icon>
                     <span class="text-h6 font-weight-bold">{{
@@ -223,7 +248,10 @@
                 </v-card>
               </v-col>
 
-              <v-col cols="12" sm="4">
+              <v-col
+                cols="12"
+                sm="4"
+              >
                 <!-- Afdian Card -->
                 <v-card
                   variant="outlined"
@@ -232,7 +260,12 @@
                   target="_blank"
                 >
                   <div class="d-flex align-center mb-3">
-                    <v-icon size="32" class="mr-3"> mdi-hand-heart </v-icon>
+                    <v-icon
+                      size="32"
+                      class="mr-3"
+                    >
+                      mdi-hand-heart
+                    </v-icon>
                     <span class="text-h6 font-weight-bold">{{
                       tm("resources.afdianTitle")
                     }}</span>
@@ -247,9 +280,16 @@
         </v-col>
       </v-row>
 
-      <v-row v-if="showAnnouncement" class="px-4 mb-4">
+      <v-row
+        v-if="showAnnouncement"
+        class="px-4 mb-4"
+      >
         <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0" border>
+          <v-card
+            class="welcome-card pa-6"
+            elevation="0"
+            border
+          >
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm("announcement.title") }}
             </div>

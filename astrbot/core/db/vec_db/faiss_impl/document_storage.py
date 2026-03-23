@@ -18,7 +18,7 @@ class BaseDocModel(SQLModel, table=False):
 class Document(BaseDocModel, table=True):
     """SQLModel for documents table."""
 
-    __tablename__ = "documents"  # type: ignore
+    __tablename__ = "documents"
 
     id: int | None = Field(
         default=None,
@@ -46,7 +46,7 @@ class DocumentStorage:
     async def initialize(self) -> None:
         """Initialize the SQLite database and create the documents table if it doesn't exist."""
         await self.connect()
-        async with self.engine.begin() as conn:  # type: ignore
+        async with self.engine.begin() as conn:
             # Create tables using SQLModel
             await conn.run_sync(BaseDocModel.metadata.create_all)
 
@@ -89,15 +89,15 @@ class DocumentStorage:
                 future=True,
             )
             self.async_session_maker = sessionmaker(
-                self.engine,  # type: ignore
+                self.engine,
                 class_=AsyncSession,
                 expire_on_commit=False,
-            )  # type: ignore
+            )
 
     @asynccontextmanager
     async def get_session(self):
         """Context manager for database sessions."""
-        async with self.async_session_maker() as session:  # type: ignore
+        async with self.async_session_maker() as session:
             yield session
 
     async def get_documents(
@@ -172,7 +172,7 @@ class DocumentStorage:
             )
             session.add(document)
             await session.flush()  # Flush to get the ID
-            return document.id  # type: ignore
+            return document.id
 
     async def insert_documents_batch(
         self,
@@ -209,7 +209,7 @@ class DocumentStorage:
                 session.add(document)
 
             await session.flush()  # Flush to get all IDs
-            return [doc.id for doc in documents]  # type: ignore
+            return [doc.id for doc in documents]
 
     async def delete_document_by_doc_id(self, doc_id: str) -> None:
         """Delete a document by its doc_id.

@@ -1,12 +1,12 @@
 <template>
-    <BaseFolderBreadcrumb
-        :breadcrumb-path="breadcrumbPath"
-        :current-folder-id="currentFolderId"
-        :root-folder-name="rootName"
-        @navigate="handleClick"
-        :labels="{ rootFolder: tm('folder.rootFolder') }"
-        class="folder-breadcrumb pa-0"
-    />
+  <BaseFolderBreadcrumb
+    :breadcrumb-path="breadcrumbPath"
+    :current-folder-id="currentFolderId"
+    :root-folder-name="rootName"
+    :labels="{ rootFolder: tm('folder.rootFolder') }"
+    class="folder-breadcrumb pa-0"
+    @navigate="handleClick"
+  />
 </template>
 
 <script lang="ts">

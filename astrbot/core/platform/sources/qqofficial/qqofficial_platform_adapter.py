@@ -185,7 +185,7 @@ class QQOfficialPlatformAdapter(Platform):
                 payload["msg_seq"] = random.randint(1, 10000)
                 if image_base64:
                     media = await QQOfficialMessageEvent.upload_group_and_c2c_image(
-                        send_helper,  # type: ignore
+                        send_helper,
                         image_base64,
                         QQOfficialMessageEvent.IMAGE_FILE_TYPE,
                         group_openid=session.session_id,
@@ -194,7 +194,7 @@ class QQOfficialPlatformAdapter(Platform):
                     payload["msg_type"] = 7
                 if record_file_path:
                     media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
-                        send_helper,  # type: ignore
+                        send_helper,
                         record_file_path,
                         QQOfficialMessageEvent.VOICE_FILE_TYPE,
                         group_openid=session.session_id,
@@ -204,7 +204,7 @@ class QQOfficialPlatformAdapter(Platform):
                         payload["msg_type"] = 7
                 if video_file_source:
                     media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
-                        send_helper,  # type: ignore
+                        send_helper,
                         video_file_source,
                         QQOfficialMessageEvent.VIDEO_FILE_TYPE,
                         group_openid=session.session_id,
@@ -215,7 +215,7 @@ class QQOfficialPlatformAdapter(Platform):
                         payload.pop("msg_id", None)
                 if file_source:
                     media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
-                        send_helper,  # type: ignore
+                        send_helper,
                         file_source,
                         QQOfficialMessageEvent.FILE_FILE_TYPE,
                         file_name=file_name,
@@ -241,7 +241,7 @@ class QQOfficialPlatformAdapter(Platform):
             payload["msg_seq"] = random.randint(1, 10000)
             if image_base64:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_image(
-                    send_helper,  # type: ignore
+                    send_helper,
                     image_base64,
                     QQOfficialMessageEvent.IMAGE_FILE_TYPE,
                     openid=session.session_id,
@@ -250,7 +250,7 @@ class QQOfficialPlatformAdapter(Platform):
                 payload["msg_type"] = 7
             if record_file_path:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
-                    send_helper,  # type: ignore
+                    send_helper,
                     record_file_path,
                     QQOfficialMessageEvent.VOICE_FILE_TYPE,
                     openid=session.session_id,
@@ -260,7 +260,7 @@ class QQOfficialPlatformAdapter(Platform):
                     payload["msg_type"] = 7
             if video_file_source:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
-                    send_helper,  # type: ignore
+                    send_helper,
                     video_file_source,
                     QQOfficialMessageEvent.VIDEO_FILE_TYPE,
                     openid=session.session_id,
@@ -273,7 +273,7 @@ class QQOfficialPlatformAdapter(Platform):
                     payload.pop("msg_id", None)
             if file_source:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
-                    send_helper,  # type: ignore
+                    send_helper,
                     file_source,
                     QQOfficialMessageEvent.FILE_FILE_TYPE,
                     file_name=file_name,
@@ -285,7 +285,7 @@ class QQOfficialPlatformAdapter(Platform):
                     payload.pop("msg_id", None)
 
             ret = await QQOfficialMessageEvent.post_c2c_message(
-                send_helper,  # type: ignore
+                send_helper,
                 openid=session.session_id,
                 **payload,
             )

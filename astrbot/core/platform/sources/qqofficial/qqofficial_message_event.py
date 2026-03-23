@@ -35,7 +35,7 @@ def _patch_qq_botpy_formdata() -> None:
     """
 
     try:
-        from botpy.http import _FormData  # type: ignore
+        from botpy.http import _FormData
 
         if not hasattr(_FormData, "_is_processed"):
             setattr(_FormData, "_is_processed", False)
@@ -276,7 +276,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload["content"] = plain_text or None
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_group_message(
-                        group_openid=source.group_openid,  # type: ignore
+                        group_openid=source.group_openid,
                         **retry_payload,
                     ),
                     payload=payload,
@@ -572,7 +572,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             logger.error(f"[QQOfficial] post_c2c_message: 响应不是 dict: {result}")
             return None
 
-        return message.Message(**cast(dict[str, Any], result))  # type: ignore[arg-type]
+        return message.Message(**cast(dict[str, Any], result))
 
     @staticmethod
     async def _parse_to_qqofficial(message: MessageChain):

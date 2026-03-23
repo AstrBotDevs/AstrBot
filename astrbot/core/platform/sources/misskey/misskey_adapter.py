@@ -18,7 +18,7 @@ from astrbot.core.platform.astr_message_event import MessageSession
 from .misskey_api import MisskeyAPI
 
 try:
-    import magic  # type: ignore
+    import magic
 except Exception:
     magic = None
 
@@ -200,7 +200,7 @@ class MisskeyPlatformAdapter(Platform):
         try:
             if not isinstance(message.raw_message, dict):
                 message.raw_message = {}
-            raw_msg: dict[str, Any] = message.raw_message  # type: ignore[assignment]
+            raw_msg: dict[str, Any] = message.raw_message
             raw_msg["poll"] = poll
             message.__setattr__("poll", poll)
         except Exception:
