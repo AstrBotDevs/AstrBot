@@ -801,6 +801,9 @@ async def test_commands_permission_missing_params(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
 async def test_t2i_set_active_template_syncs_all_configs(
     app: Quart,
     authenticated_header: dict,
