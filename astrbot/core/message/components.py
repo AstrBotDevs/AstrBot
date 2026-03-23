@@ -36,7 +36,7 @@ else:
 
 from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file, download_image_by_url, file_to_base64
+from astrbot.core.utils.io import download_audio_by_url, download_file, download_image_by_url, file_to_base64
 
 
 class ComponentType(str, Enum):
@@ -157,7 +157,7 @@ class Record(BaseMessageComponent):
         if self.file.startswith("file:///"):
             return self.file[8:]
         if self.file.startswith("http"):
-            file_path = await download_image_by_url(self.file)
+            file_path = await download_audio_by_url(self.file)
             return os.path.abspath(file_path)
         if self.file.startswith("base64://"):
             bs64_data = self.file.removeprefix("base64://")

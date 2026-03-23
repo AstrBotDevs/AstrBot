@@ -63,6 +63,16 @@ def save_temp_img(img: Image.Image | bytes) -> str:
     return p
 
 
+def save_temp_audio(audio_data: bytes) -> str:
+    """Save audio data to a temporary file with a proper extension."""
+    temp_dir = get_astrbot_temp_path()
+    timestamp = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
+    p = os.path.join(temp_dir, f"recordseg_{timestamp}.audio")
+    with open(p, "wb") as f:
+        f.write(audio_data)
+    return p
+
+
 async def download_image_by_url(
     url: str,
     post: bool = False,
@@ -119,6 +129,34 @@ async def download_image_by_url(
                     with open(path, "wb") as f:
                         f.write(await resp.read())
                     return path
+    except Exception as e:
+        raise e
+
+
+async def download_audio_by_url(url: str) -> str:
+    """Download audio from URL, preserving extension. Returns local file path."""
+    try:
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(
+            trust_env=True,
+            connector=connector,
+        ) as session:
+            async with session.get(url) as resp:
+                data = await resp.read()
+                return save_temp_audio(data)
+    except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
+        logger.warning(
+            f"SSL certificate verification failed for {url}. "
+            "Disabling SSL verification (CERT_NONE) as a fallback."
+        )
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, ssl=ssl_context) as resp:
+                data = await resp.read()
+                return save_temp_audio(data)
     except Exception as e:
         raise e
 
