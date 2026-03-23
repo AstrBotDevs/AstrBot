@@ -95,16 +95,6 @@ def is_dashboard_password_hash(value: str) -> bool:
     return value.startswith("$argon2") or value.startswith("pbkdf2_sha256$")
 
 
-def is_legacy_dashboard_password_hash(value: str) -> bool:
-    """
-    Return True when `value` looks like an old dashboard password hash format.
-    """
-    if not isinstance(value, str) or not value:
-        return False
-    value_l = value.lower()
-    return len(value_l) in {32, 64} and all(ch in "0123456789abcdef" for ch in value_l)
-
-
 # --- Validators for CLI configuration items ---
 
 
