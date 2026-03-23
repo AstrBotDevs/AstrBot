@@ -473,9 +473,14 @@ class AstrBotDashboard:
 
     async def run(self) -> None:
         """Run dashboard server (blocking)"""
+        logger.info(
+            "[Dashboard] Starting server... enable_webui=%s, ASTRBOT_DASHBOARD_ENABLE=%s",
+            self.enable_webui,
+            os.environ.get("ASTRBOT_DASHBOARD_ENABLE"),
+        )
         if not self.enable_webui:
             logger.warning(
-                "WebUI 已禁用 (dashboard.enable=false or ASTRBOT_DASHBOARD_ENABLE=false)"
+                "WebUI 已禁用 (dashboard.enable=false or ASTRBOT_DASHBOARD_ENABLE=false), 但 API 服务器将继续启动"
             )
 
         dashboard_config = self.config.get("dashboard", {})
