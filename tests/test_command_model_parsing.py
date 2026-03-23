@@ -15,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from pydantic import BaseModel
 
 from astrbot_sdk._internal.command_model import (
-    CommandModelParseResult,
     ResolvedCommandModelParam,
     format_command_model_help,
     parse_command_model_remainder,
