@@ -112,6 +112,59 @@ def test_trigger_converter_matches_command_and_respects_admin() -> None:
 
 
 @pytest.mark.unit
+def test_permissions_model_normalizes_required_role() -> None:
+    assert Permissions(require_admin=True) == Permissions(required_role="admin")
+
+    with pytest.raises(ValueError, match="conflicts"):
+        Permissions(require_admin=True, required_role="member")
+
+
+@pytest.mark.unit
+def test_trigger_converter_respects_required_role_metadata() -> None:
+    admin_descriptor = HandlerDescriptor(
+        id="demo:demo.admin",
+        trigger=CommandTrigger(command="panel"),
+        permissions=Permissions(required_role="admin"),
+    )
+    member_descriptor = HandlerDescriptor(
+        id="demo:demo.member",
+        trigger=CommandTrigger(command="ping"),
+        permissions=Permissions(required_role="member"),
+    )
+
+    assert (
+        TriggerConverter.match_handler(
+            plugin_id="demo",
+            descriptor=admin_descriptor,
+            event=_FakeEvent(text="panel", admin=False),
+            load_order=0,
+            declaration_order=0,
+        )
+        is None
+    )
+    assert (
+        TriggerConverter.match_handler(
+            plugin_id="demo",
+            descriptor=admin_descriptor,
+            event=_FakeEvent(text="panel", admin=True),
+            load_order=0,
+            declaration_order=0,
+        )
+        is not None
+    )
+    assert (
+        TriggerConverter.match_handler(
+            plugin_id="demo",
+            descriptor=member_descriptor,
+            event=_FakeEvent(text="ping", admin=False),
+            load_order=0,
+            declaration_order=0,
+        )
+        is not None
+    )
+
+
+@pytest.mark.unit
 def test_trigger_converter_matches_command_aliases() -> None:
     descriptor = HandlerDescriptor(
         id="demo:demo.alias",

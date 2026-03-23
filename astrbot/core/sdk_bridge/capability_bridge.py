@@ -10,6 +10,7 @@ from .capabilities import (
     LLMCapabilityMixin,
     MCPCapabilityMixin,
     MessageHistoryCapabilityMixin,
+    PermissionCapabilityMixin,
     PersonaCapabilityMixin,
     PlatformCapabilityMixin,
     ProviderCapabilityMixin,
@@ -30,6 +31,7 @@ class CoreCapabilityBridge(
     ProviderCapabilityMixin,
     MCPCapabilityMixin,
     PlatformCapabilityMixin,
+    PermissionCapabilityMixin,
     KnowledgeBaseCapabilityMixin,
     MessageHistoryCapabilityMixin,
     ConversationCapabilityMixin,
@@ -55,6 +57,7 @@ class CoreCapabilityBridge(
         self._register_provider_manager_capabilities()
         self._register_mcp_capabilities()
         self._register_platform_manager_capabilities()
+        self._register_permission_capabilities()
         self._register_persona_capabilities()
         self._register_conversation_capabilities()
         self._register_message_history_capabilities()

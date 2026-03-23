@@ -4,6 +4,7 @@ from .kb import KnowledgeBaseCapabilityMixin
 from .llm import LLMCapabilityMixin
 from .mcp import MCPCapabilityMixin
 from .message_history import MessageHistoryCapabilityMixin
+from .permission import PermissionCapabilityMixin
 from .persona import PersonaCapabilityMixin
 from .platform import PlatformCapabilityMixin
 from .provider import ProviderCapabilityMixin
@@ -18,6 +19,7 @@ __all__ = [
     "LLMCapabilityMixin",
     "MCPCapabilityMixin",
     "MessageHistoryCapabilityMixin",
+    "PermissionCapabilityMixin",
     "PersonaCapabilityMixin",
     "PlatformCapabilityMixin",
     "ProviderCapabilityMixin",

@@ -245,7 +245,10 @@ class TriggerConverter:
     ) -> TriggerMatch | None:
         trigger = descriptor.trigger
 
-        if descriptor.permissions.require_admin and not event.is_admin():
+        required_role = descriptor.permissions.required_role
+        if required_role is None and descriptor.permissions.require_admin:
+            required_role = "admin"
+        if required_role == "admin" and not event.is_admin():
             return None
         if not cls._match_filters(descriptor, event):
             return None

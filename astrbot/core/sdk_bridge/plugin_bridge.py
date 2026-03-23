@@ -1942,6 +1942,7 @@ class SdkPluginBridge:
             "priority": descriptor.priority,
             "kind": descriptor.kind,
             "require_admin": descriptor.permissions.require_admin,
+            "required_role": descriptor.permissions.required_role,
         }
 
     def get_handlers_by_event_type(self, event_type: str) -> list[dict[str, Any]]:
