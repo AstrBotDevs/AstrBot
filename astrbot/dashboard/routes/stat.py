@@ -98,9 +98,11 @@ class StatRoute(Route):
         try:
             status = await asyncio.to_thread(self.storage_cleaner.get_status)
             return Response().ok(status).__dict__
-        except Exception as e:
-            logger.error(f"获取存储占用失败: {e}", exc_info=True)
-            return Response().error(f"获取存储占用失败: {e}").__dict__
+        except Exception:
+            logger.error("获取存储占用失败", exc_info=True)
+            return (
+                Response().error("获取存储占用失败，请查看后端日志了解详情。").__dict__
+            )
 
     async def cleanup_storage(self):
         try:

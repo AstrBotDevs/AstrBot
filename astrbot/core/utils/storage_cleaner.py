@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+import os
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
-
-
-class ConfigLike(Protocol):
-    def get(self, key: str, default=None): ...
 
 
 @dataclass(frozen=True)
@@ -26,7 +22,7 @@ class StorageCleaner:
 
     def __init__(
         self,
-        config: ConfigLike,
+        config: Mapping[str, object],
         *,
         data_dir: Path | None = None,
         temp_dir: Path | None = None,
@@ -178,19 +174,27 @@ class StorageCleaner:
         return [
             LogFileConfig(
                 path=self._resolve_log_path(
-                    self._config.get("log_file_path"),
+                    self._get_optional_str("log_file_path"),
                     default_relative_path="logs/astrbot.log",
                 ),
-                enabled=bool(self._config.get("log_file_enable", False)),
+                enabled=self._get_bool("log_file_enable", False),
             ),
             LogFileConfig(
                 path=self._resolve_log_path(
-                    self._config.get("trace_log_path"),
+                    self._get_optional_str("trace_log_path"),
                     default_relative_path="logs/astrbot.trace.log",
                 ),
-                enabled=bool(self._config.get("trace_log_enable", False)),
+                enabled=self._get_bool("trace_log_enable", False),
             ),
         ]
+
+    def _get_optional_str(self, key: str) -> str | None:
+        value = self._config.get(key)
+        return value if isinstance(value, str) else None
+
+    def _get_bool(self, key: str, default: bool = False) -> bool:
+        value = self._config.get(key, default)
+        return value if isinstance(value, bool) else default
 
     def _configured_log_paths(self) -> set[Path]:
         return {config.path for config in self._log_file_configs()}
@@ -257,10 +261,9 @@ class StorageCleaner:
     def _cleanup_empty_dirs(root_dir: Path) -> None:
         if not root_dir.exists():
             return
-        for path in sorted(
-            root_dir.rglob("*"), key=lambda item: len(item.parts), reverse=True
-        ):
-            if not path.is_dir():
+        for dirpath, dirnames, filenames in os.walk(root_dir, topdown=False):
+            path = Path(dirpath)
+            if path == root_dir:
                 continue
             try:
                 path.rmdir()
