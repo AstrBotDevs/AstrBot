@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -10,6 +11,12 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_t
 
 class ConfigLike(Protocol):
     def get(self, key: str, default=None): ...
+
+
+@dataclass(frozen=True)
+class LogFileConfig:
+    path: Path
+    enabled: bool
 
 
 class StorageCleaner:
@@ -47,31 +54,41 @@ class StorageCleaner:
             if normalized_target == "all"
             else [normalized_target]
         )
-        results = {
-            target_name: self._cleanup_target(target_name) for target_name in targets
+        results: dict[str, dict] = {}
+        aggregates = {
+            "removed_bytes": 0,
+            "processed_files": 0,
+            "deleted_files": 0,
+            "truncated_files": 0,
+            "failed_files": 0,
         }
+
+        for target_name in targets:
+            result = self._cleanup_target(target_name)
+            results[target_name] = result
+            for key in aggregates:
+                aggregates[key] += result[key]
+
         status = self.get_status()
 
         return {
             "target": normalized_target,
             "results": results,
-            "removed_bytes": sum(item["removed_bytes"] for item in results.values()),
-            "processed_files": sum(
-                item["processed_files"] for item in results.values()
-            ),
-            "deleted_files": sum(item["deleted_files"] for item in results.values()),
-            "truncated_files": sum(
-                item["truncated_files"] for item in results.values()
-            ),
-            "failed_files": sum(item["failed_files"] for item in results.values()),
+            **aggregates,
             "status": status,
         }
 
     def _build_status(self, target: str) -> dict:
-        files = self._collect_target_files(target)
-        size_bytes, file_count = self._summarize_files(files)
-        primary_path = self._primary_path_for_target(target)
+        if target == self.TARGET_LOGS:
+            files = self._collect_log_files()
+            primary_path = self._data_dir / "logs"
+        elif target == self.TARGET_CACHE:
+            files = self._collect_cache_files()
+            primary_path = self._temp_dir
+        else:
+            raise ValueError(f"Unsupported cleanup target: {target}")
 
+        size_bytes, file_count = self._summarize_files(files)
         return {
             "size_bytes": size_bytes,
             "file_count": file_count,
@@ -80,14 +97,19 @@ class StorageCleaner:
         }
 
     def _cleanup_target(self, target: str) -> dict:
-        files = self._collect_target_files(target)
+        if target == self.TARGET_LOGS:
+            files = self._collect_log_files()
+            active_log_files = self._active_log_files()
+        elif target == self.TARGET_CACHE:
+            files = self._collect_cache_files()
+            active_log_files = set()
+        else:
+            raise ValueError(f"Unsupported cleanup target: {target}")
+
         removed_bytes = 0
         deleted_files = 0
         truncated_files = 0
         failed_files = 0
-        active_log_files = (
-            self._active_log_files() if target == self.TARGET_LOGS else set()
-        )
 
         for file_path in sorted(files):
             if not file_path.exists():
@@ -133,13 +155,6 @@ class StorageCleaner:
             "failed_files": failed_files,
         }
 
-    def _collect_target_files(self, target: str) -> set[Path]:
-        if target == self.TARGET_LOGS:
-            return self._collect_log_files()
-        if target == self.TARGET_CACHE:
-            return self._collect_cache_files()
-        raise ValueError(f"Unsupported cleanup target: {target}")
-
     def _collect_log_files(self) -> set[Path]:
         files = set(self._iter_files(self._data_dir / "logs"))
         for log_path in self._configured_log_paths():
@@ -159,35 +174,29 @@ class StorageCleaner:
 
         return files
 
-    def _configured_log_paths(self) -> set[Path]:
-        return {
-            self._resolve_log_path(
-                self._config.get("log_file_path"),
-                default_relative_path="logs/astrbot.log",
-            ),
-            self._resolve_log_path(
-                self._config.get("trace_log_path"),
-                default_relative_path="logs/astrbot.trace.log",
-            ),
-        }
-
-    def _active_log_files(self) -> set[Path]:
-        active_files: set[Path] = set()
-        if self._config.get("log_file_enable", False):
-            active_files.add(
-                self._resolve_log_path(
+    def _log_file_configs(self) -> list[LogFileConfig]:
+        return [
+            LogFileConfig(
+                path=self._resolve_log_path(
                     self._config.get("log_file_path"),
                     default_relative_path="logs/astrbot.log",
-                )
-            )
-        if self._config.get("trace_log_enable", False):
-            active_files.add(
-                self._resolve_log_path(
+                ),
+                enabled=bool(self._config.get("log_file_enable", False)),
+            ),
+            LogFileConfig(
+                path=self._resolve_log_path(
                     self._config.get("trace_log_path"),
                     default_relative_path="logs/astrbot.trace.log",
-                )
-            )
-        return active_files
+                ),
+                enabled=bool(self._config.get("trace_log_enable", False)),
+            ),
+        ]
+
+    def _configured_log_paths(self) -> set[Path]:
+        return {config.path for config in self._log_file_configs()}
+
+    def _active_log_files(self) -> set[Path]:
+        return {config.path for config in self._log_file_configs() if config.enabled}
 
     def _resolve_log_path(
         self,
@@ -203,37 +212,21 @@ class StorageCleaner:
 
     def _iter_log_family_files(self, log_path: Path) -> set[Path]:
         files: set[Path] = set()
+        parent_dir = log_path.parent
         if log_path.is_file():
             files.add(log_path)
-
-        parent_dir = log_path.parent
         if not parent_dir.exists():
             return files
 
-        base_name = log_path.name
         suffix = log_path.suffix
-        stem = base_name[: -len(suffix)] if suffix else base_name
+        stem = log_path.stem if suffix else log_path.name
+        pattern = f"{stem}.*{suffix}" if suffix else f"{stem}.*"
 
-        for candidate in parent_dir.iterdir():
-            if not candidate.is_file() or candidate == log_path:
-                continue
-            candidate_name = candidate.name
-            if suffix:
-                if candidate_name.startswith(f"{stem}.") and candidate_name.endswith(
-                    suffix
-                ):
-                    files.add(candidate)
-            elif candidate_name.startswith(f"{stem}."):
+        for candidate in parent_dir.glob(pattern):
+            if candidate.is_file() and candidate != log_path:
                 files.add(candidate)
 
         return files
-
-    def _primary_path_for_target(self, target: str) -> Path:
-        if target == self.TARGET_LOGS:
-            return self._data_dir / "logs"
-        if target == self.TARGET_CACHE:
-            return self._temp_dir
-        raise ValueError(f"Unsupported cleanup target: {target}")
 
     @staticmethod
     def _iter_files(path: Path) -> Iterable[Path]:

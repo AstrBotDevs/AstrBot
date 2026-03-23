@@ -113,9 +113,9 @@ class StatRoute(Route):
             return Response().ok(result).__dict__
         except ValueError as e:
             return Response().error(str(e)).__dict__
-        except Exception as e:
-            logger.error(f"清理存储失败: {e}", exc_info=True)
-            return Response().error(f"清理存储失败: {e}").__dict__
+                except Exception:
+            logger.error("清理存储失败", exc_info=True)
+            return Response().error("清理存储失败，请查看后端日志了解详情。").__dict__
 
     async def get_stat(self):
         offset_sec = request.args.get("offset_sec", 86400)
