@@ -408,6 +408,8 @@ class PersonaManager:
                 "chat_config": persona.chat_config,
                 "robot_config": persona.robot_config,
                 "is_advanced": persona.is_advanced,
+                "llm_model_config": persona.llm_model_config,
+
             }
             for persona in self.personas
         ]

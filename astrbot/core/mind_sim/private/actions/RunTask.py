@@ -75,25 +75,29 @@ class RunTaskAction(Action):
     """
 
     name = "run_task"
-    description = """执行任务动作 - 使用 Agent 执行任务
-是解决不了的问题都可以调用这个动作试试看,这是原本的agent，有可能本身就是只想转诉给这个对话助手
-
+    description = """
+执行任务动作 - 使用 Agent 执行动作
+是解决不了的问题都可以调用这个动作试试看
 **重要：每执行完一轮会自动触发主思考**
-
 适用于：
 - 执行复杂的多步骤任务
 - 需要使用工具查询信息
 - 任务需要多轮交互才能完成
 - 操作电脑，执行程序，查看电脑上的东西调用控制台等，
-
+- 一切需要操作的事情
+- 建议多调用这个工具
 工作流程：
 1. 你指定任务目标和参数，启动动作
 2. 动作执行过程中，每完成一步会触发重新思考
 3. 你可以通过 SEND 追加新的指令或信息
 4. 你可以通过 STOP 停止任务
-
 参数:
 {"task": "任务描述"(不能为空，传递给Agent的指令,要详细), "max_steps": 10}
+示例
+{"task": "帮我看看我电脑桌面有什么东西", "max_steps": 10}
+{"task": "帮我打开飞书", "max_steps": 10}
+{"task": "写某某代码保存到桌面新建文件夹", "max_steps": 20}
+
 """
     fixed_prompt = "执行任务中"
     priority = 10  # 高优先级，任务通常比较重要
@@ -231,14 +235,17 @@ class RunTaskAction(Action):
 
         if build_result:
             # 强制覆盖 system_prompt，只使用工具助手提示词，不使用人格配置
-            build_result.provider_request.system_prompt = TOOL_ASSISTANT_PROMPT
+            # build_result.provider_request.system_prompt = TOOL_ASSISTANT_PROMPT
+            build_result.provider_request.prompt += TOOL_ASSISTANT_PROMPT
 
             # 如果 apply_reset=False，需要手动调用 reset
             if build_result.reset_coro:
                 await build_result.reset_coro
 
             # 覆盖 agent_runner 内部的 req
-            build_result.agent_runner.req.system_prompt = TOOL_ASSISTANT_PROMPT
+            # build_result.agent_runner.req.system_prompt = TOOL_ASSISTANT_PROMPT
+            build_result.agent_runner.req.prompt += TOOL_ASSISTANT_PROMPT
+
             return build_result.agent_runner
 
         return None
@@ -255,7 +262,7 @@ class RunTaskAction(Action):
                         tool_name = comp.data.get("name", "unknown")
                         break
             self._append_prompt_contribution(f"[使用工具: {tool_name}]")
-            self._pending_think_reason = f"Agent使用了工具 {tool_name}"
+            # self._pending_think_reason = f"Agent使用了工具 {tool_name}"
 
         elif resp_type == "tool_call_result":
             # 工具结果
@@ -278,7 +285,7 @@ class RunTaskAction(Action):
                         "content": content,
                     }
                 )
-                self._pending_think_reason = f"Agent回复了: {content}..."
+                self._pending_think_reason = f"Agent回复了: {content}...现在需要确认要不要根据Agent的回复向对方报告进度"
 
         elif resp_type == "done":
             # 任务完成
@@ -287,7 +294,7 @@ class RunTaskAction(Action):
             if final_resp and final_resp.completion_text:
                 self._final_result_responses = final_resp.completion_text
                 self._append_prompt_contribution(
-                    f"[任务完成，最终回复: {final_resp.completion_text}...]"
+                    f"[任务完成，最终回复: {final_resp.completion_text}...请根据结果回复给对方]"
                 )
             else:
                 self._append_prompt_contribution("[任务已完成]")

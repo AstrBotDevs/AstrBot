@@ -354,6 +354,15 @@ export default defineComponent({
                         thinking_enabled: false,
                         thinking_budget: undefined
                     }
+                },
+                image_caption_model: {
+                    provider_id: '',
+                    model: '',
+                    temperature: 0.7,
+                    max_tokens: 256,
+                    thinking_enabled: false,
+                    thinking_budget: undefined,
+                    prompt: '请简洁描述这张图片的内容，用一句话概括。'
                 }
             },
             begin_dialogs: [] as string[]
@@ -604,6 +613,15 @@ export default defineComponent({
                                     thinking_enabled: false,
                                     thinking_budget: undefined
                                 }
+                            },
+                            image_caption_model: (data.llm_model_config && data.llm_model_config.image_caption_model) ? data.llm_model_config.image_caption_model : {
+                                provider_id: '',
+                                model: '',
+                                temperature: 0.7,
+                                max_tokens: 256,
+                                thinking_enabled: false,
+                                thinking_budget: undefined,
+                                prompt: '请简洁描述这张图片的内容，用一句话概括。'
                             }
                         },
                         begin_dialogs: data.begin_dialogs || []

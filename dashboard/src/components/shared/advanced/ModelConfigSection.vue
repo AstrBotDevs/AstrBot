@@ -114,6 +114,39 @@
                     </div>
                 </v-card-text>
             </v-card>
+
+            <!-- 图片描述模型配置 -->
+            <v-card variant="outlined" class="mt-4">
+                <v-card-title class="text-subtitle-1">
+                    <v-icon start size="small" color="orange">mdi-image-text</v-icon>
+                    图片描述模型
+                    <v-chip size="x-small" color="orange" variant="outlined" class="ml-2">可选</v-chip>
+                </v-card-title>
+                <v-card-subtitle class="text-caption">
+                    用于为用户发送的图片生成文字描述，以便高级人格理解图片内容。
+                    如不配置，将使用默认的正在使用的提供商。
+                </v-card-subtitle>
+                <v-card-text>
+                    <ModelSelector
+                        v-model="localConfig.image_caption_model"
+                        label="选择图片描述模型"
+                        :providers="providers"
+                        :loading="loadingProviders"
+                        @refresh="$emit('refresh-providers')"
+                    />
+                    <!-- 自定义描述提示词 -->
+                    <v-textarea
+                        v-model="localConfig.image_caption_model.prompt"
+                        label="图片描述提示词"
+                        hint="发送给模型用于描述图片的提示词"
+                        variant="outlined"
+                        density="comfortable"
+                        rows="2"
+                        persistent-hint
+                        class="mt-3"
+                    />
+                </v-card-text>
+            </v-card>
         </v-card-text>
     </v-card>
 </template>
@@ -130,6 +163,7 @@ interface ModelConfig {
     max_tokens: number;
     thinking_enabled: boolean;
     thinking_budget?: number;
+    prompt?: string;
 }
 
 interface ThinkingModels {
@@ -142,6 +176,7 @@ interface ModelConfigData {
     function_model: ModelConfig;
     reply_model: ModelConfig;
     thinking_models: ThinkingModels;
+    image_caption_model: ModelConfig;
 }
 
 export default defineComponent({
@@ -189,6 +224,15 @@ export default defineComponent({
                         max_tokens: 2048,
                         thinking_enabled: false
                     }
+                },
+                image_caption_model: {
+                    provider_id: '',
+                    model: '',
+                    temperature: 0.7,
+                    max_tokens: 256,
+                    thinking_enabled: false,
+                    thinking_budget: undefined,
+                    prompt: '请简洁描述这张图片的内容，用一句话概括。'
                 }
             })
         },
@@ -203,7 +247,20 @@ export default defineComponent({
     },
     emits: ['update:modelValue', 'refresh-providers'],
     setup(props, { emit }) {
-        const localConfig = ref<ModelConfigData>({ ...props.modelValue });
+        const localConfig = ref<ModelConfigData>(JSON.parse(JSON.stringify(props.modelValue)));
+
+        // 安全检查：确保 image_caption_model 始终存在（兼容旧配置）
+        if (!localConfig.value.image_caption_model) {
+            localConfig.value.image_caption_model = {
+                provider_id: '',
+                model: '',
+                temperature: 0.7,
+                max_tokens: 256,
+                thinking_enabled: false,
+                thinking_budget: undefined,
+                prompt: '请简洁描述这张图片的内容，用一句话概括。'
+            };
+        }
 
         // 监听输入变化
         watch(localConfig, (newVal) => {
@@ -212,11 +269,31 @@ export default defineComponent({
 
         // 监听props变化
         watch(() => props.modelValue, (newVal) => {
-            localConfig.value = { ...newVal };
+            localConfig.value = JSON.parse(JSON.stringify(newVal));
+            // props 变化后也要安全检查
+            if (!localConfig.value.image_caption_model) {
+                localConfig.value.image_caption_model = {
+                    provider_id: '',
+                    model: '',
+                    temperature: 0.7,
+                    max_tokens: 256,
+                    thinking_enabled: false,
+                    thinking_budget: undefined,
+                    prompt: '请简洁描述这张图片的内容，用一句话概括。'
+                };
+            }
         }, { deep: true });
 
+        // 更新图片描述提示词
+        const updateImageCaptionPrompt = (value: any) => {
+            if (localConfig.value.image_caption_model) {
+                localConfig.value.image_caption_model.prompt = value;
+            }
+        };
+
         return {
-            localConfig
+            localConfig,
+            updateImageCaptionPrompt
         };
     }
 });

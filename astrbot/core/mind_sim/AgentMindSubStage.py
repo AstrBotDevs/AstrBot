@@ -20,7 +20,7 @@ from astrbot.core.agent.message import Message
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
-    build_main_agent,
+    build_main_agent, MainAgentBuildResult,
 )
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -199,7 +199,7 @@ class AgentMindSubStage:
         """
         errors = []
         robot_config = persona_config.get("robot_config", {})
-        llm_model_config = robot_config.get("llm_model_config", {})
+        llm_model_config = persona_config.get("llm_model_config", {})
 
         role_map = {
             "deep": llm_model_config.get("thinking_models", {}).get("deep", {}),
@@ -255,7 +255,7 @@ class AgentMindSubStage:
         user_prompt: str,
         contexts: list[dict] | None = None,
         role: str = "deep",
-    ) -> tuple[AgentRunner, ProviderRequest, Any, Any]:
+    ) -> MainAgentBuildResult:
         """构建 Agent Runner
 
         与 internal.py 一致，返回 reset_coro 由调用方决定何时执行。
@@ -300,7 +300,7 @@ class AgentMindSubStage:
             prompt=user_prompt,
             session_id=str(self.event.session),
             image_urls=[],
-            contexts=messages,
+            contexts=[],
             system_prompt=system_prompt,
             conversation=conversation,
             func_tool=None,
@@ -320,17 +320,24 @@ class AgentMindSubStage:
         result = await build_main_agent(
             event=self.event,
             plugin_context=self.plugin_context,
+            req=req,
             config=build_cfg,
             apply_reset=False,
         )
 
         if result is None:
             raise RuntimeError("Agent 构建失败")
+        # result.provider_request.contexts =[]
+        # result.provider_request.prompt = user_prompt
 
-        agent_runner = result.agent_runner
-        reset_coro = result.reset_coro
-
-        return agent_runner, req, provider, reset_coro
+        return result
+        # # build_main_agent 会用数据库对话历史覆盖 req.contexts，
+        # req.contexts = messages
+        #
+        # agent_runner = result.agent_runner
+        # reset_coro = result.reset_coro
+        #
+        # return agent_runner, req, provider, reset_coro
 
     async def _pipeline_yield(self):
         """桥接 pipeline yield 机制
@@ -387,12 +394,17 @@ class AgentMindSubStage:
 
                 try:
                     # 4. 构建 Agent Runner
-                    agent_runner, req, provider, reset_coro = await self._build_agent_runner(
+                    build_result= await self._build_agent_runner(
                         system_prompt=system_prompt,
                         user_prompt=prompt,
                         contexts=contexts,
                         role=role,
                     )
+                    # 提取构建结果中的组件
+                    agent_runner = build_result.agent_runner
+                    req = build_result.provider_request
+                    provider = build_result.provider
+                    reset_coro = build_result.reset_coro
 
                     # 安全检查
                     api_base = provider.provider_config.get("api_base", "")
@@ -596,54 +608,55 @@ class AgentMindSubStage:
 
         与 internal.py 的 _save_to_history 逻辑完全一致。
         """
-        if not req or not req.conversation:
-            return
-
-        if not llm_response and not user_aborted:
-            return
-
-        if llm_response and llm_response.role != "assistant":
-            if not user_aborted:
-                return
-            llm_response = LLMResponse(
-                role="assistant",
-                completion_text=llm_response.completion_text or "",
-            )
-        elif llm_response is None:
-            llm_response = LLMResponse(role="assistant", completion_text="")
-
-        if (
-            not llm_response.completion_text
-            and not req.tool_calls_result
-            and not user_aborted
-        ):
-            logger.debug("[AgentMindSubStage] LLM 响应为空，不保存记录。")
-            return
-
-        # 过滤和准备要保存的消息
-        message_to_save = []
-        skipped_initial_system = False
-        for message in all_messages:
-            if message.role == "system" and not skipped_initial_system:
-                skipped_initial_system = True
-                continue
-            if message.role in ["assistant", "user"] and message._no_save:
-                continue
-            message_to_save.append(message.model_dump())
-
-        token_usage = None
-        if runner_stats and llm_response and llm_response.usage:
-            token_usage = llm_response.usage.total
-
-        if not self._conv_manager:
-            self._conv_manager = self.plugin_context.conversation_manager
-
-        await self._conv_manager.update_conversation(
-            self.event.unified_msg_origin,
-            req.conversation.cid,
-            history=message_to_save,
-            token_usage=token_usage,
-        )
+        return # 在这里暂时不保存
+        # if not req or not req.conversation:
+        #     return
+        #
+        # if not llm_response and not user_aborted:
+        #     return
+        #
+        # if llm_response and llm_response.role != "assistant":
+        #     if not user_aborted:
+        #         return
+        #     llm_response = LLMResponse(
+        #         role="assistant",
+        #         completion_text=llm_response.completion_text or "",
+        #     )
+        # elif llm_response is None:
+        #     llm_response = LLMResponse(role="assistant", completion_text="")
+        #
+        # if (
+        #     not llm_response.completion_text
+        #     and not req.tool_calls_result
+        #     and not user_aborted
+        # ):
+        #     logger.debug("[AgentMindSubStage] LLM 响应为空，不保存记录。")
+        #     return
+        #
+        # # 过滤和准备要保存的消息
+        # message_to_save = []
+        # skipped_initial_system = False
+        # for message in all_messages:
+        #     if message.role == "system" and not skipped_initial_system:
+        #         skipped_initial_system = True
+        #         continue
+        #     if message.role in ["assistant", "user"] and message._no_save:
+        #         continue
+        #     message_to_save.append(message.model_dump())
+        #
+        # token_usage = None
+        # if runner_stats and llm_response and llm_response.usage:
+        #     token_usage = llm_response.usage.total
+        #
+        # if not self._conv_manager:
+        #     self._conv_manager = self.plugin_context.conversation_manager
+        #
+        # await self._conv_manager.update_conversation(
+        #     self.event.unified_msg_origin,
+        #     req.conversation.cid,
+        #     history=message_to_save,
+        #     token_usage=token_usage,
+        # )
 
     async def call_simple(
         self,

@@ -59,7 +59,7 @@ class ReplyAction(Action):
         text = self._state.data.get("reply_text", "")
         if text:
             self.add_temp_prompt(
-                f"已回复: {text} 提示：距离0秒的这条语句 则这是回复后调用思考，可以选择只等待，或者追加回复，避免频繁回复",
+                f"已回复: {text} 提示：距离0秒的这条语句 则这是回复后调用思考，可以选择只等待，或者追加回复，避免频繁回复，不要回复的太频繁",
                 rounds=5,
             )
 

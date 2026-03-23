@@ -98,6 +98,7 @@ class Action(ABC):
         self._temp_prompt_callback: Callable | None = None
         self._executor: Any = None  # ActionExecutor 引用，由 executor 注入
         self._params: dict = {}  # 保存启动参数，用于 on_complete
+        self._cancelled: bool = False  # 是否被 cancel（用于阻止被停止后继续发事件）
 
     def bind_context(self, ctx: Any) -> "Action":
         """绑定上下文（由 ActionExecutor 调用）"""
@@ -228,6 +229,12 @@ class Action(ABC):
         """
         pass
 
+    async def on_stop(self) -> None:
+        """停止钩子 - 在动作被强制停止时调用
+
+        子类可以重写此方法来清理资源。
+        """
+        pass
     def get_completion_output(self) -> ActionOutput | None:
         """获取完成后要发送的事件
 
@@ -279,6 +286,9 @@ class Action(ABC):
         self._params = params  # 保存参数供 on_complete 使用
         try:
             async for output in self.run(params):
+                # 如果已被 cancel，跳过发送任何产出，立即退出
+                if self._cancelled:
+                    break
                 await self.send_to_main(output)
             self._state.status = "completed"
             self._state.prompt_contribution = None
@@ -288,12 +298,16 @@ class Action(ABC):
 
             # 获取子类定义的完成事件（可能为 None）
             completion_output = self.get_completion_output()
-            if completion_output:
+            # 被 cancel 时不发送完成事件
+            if completion_output and not self._cancelled:
                 await self.send_to_main(completion_output)
         except asyncio.CancelledError:
+            # CancelledError 继承自 Exception (Python 3.8+)，
+            # asyncio.create_task 会吞掉从 async def 函数中 raise 的 CancelledError。
+            # 所以这里不 re-raise，而是正常返回，让 finally 统一处理清理。
+            self._cancelled = True
             self._state.status = "stopped"
             self._state.prompt_contribution = None
-            raise
         except Exception as e:
             self._state.status = "error"
             self._state.error = str(e)
@@ -306,14 +320,29 @@ class Action(ABC):
                     metadata={"error": str(e)},
                 )
             )
+        finally:
+            # 统一清理：无论是正常完成、cancel、还是异常，都调用 on_stop()
+            if self._cancelled:
+                # noinspection PyBroadException
+                try:
+                    await self.on_stop()
+                except Exception as e:
+                    logger.debug(f"[Action] on_stop 异常: {e}")
 
     async def stop(self, reason: str = ""):
-        """停止动作"""
+        """强制停止动作（外部杀掉）
+
+        三件事同时发生：
+        1. 设置 _cancelled 标志，阻止后续产出发送
+        2. cancel asyncio.Task，让动作立即从 await 点退出
+        3. 清理持有的资源（AgentRunner 等）
+        """
+        self._cancelled = True
+        self._state.status = "stopped"
+        self._state.progress = f"已停止: {reason}" if reason else "已停止"
         if self._task and not self._task.done():
             self._task.cancel()
             # 不 await task，避免等待阻塞中的 check_message 超时
-        self._state.status = "stopped"
-        self._state.progress = f"已停止: {reason}" if reason else "已停止"
 
     def is_running(self) -> bool:
         """是否正在运行"""

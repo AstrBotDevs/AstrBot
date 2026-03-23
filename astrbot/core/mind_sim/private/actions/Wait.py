@@ -38,22 +38,31 @@ class WaitAction(Action):
     - 等待结束后会自动再次进入思考
     """
 
+    def __init__(self):
+        super().__init__()
+        self._stop_event = None
+
     async def on_complete(self, params: dict) -> None:
         """完成后添加临时提示词（仅正常完成时调用）"""
         # 从 state 中获取实际等待时间
         wait_time = self._state.data.get("actual_wait_time", 0)
         if wait_time:
             self.add_temp_prompt(
-                f"已等待: {int(wait_time)}秒 ，如果有重复的等待，其实可以调用空时间啥也不用干",
+                f"已等待: {int(wait_time)}秒 ，如果有这句话，则有重复的等待，不用重新调用等待任务",
                 rounds=5,
                 min_duration=30.0,
             )
+    async def on_stop(self) -> None:
+        """立即中断等待"""
+        if self._stop_event:
+            self._stop_event.set()
 
     async def run(self, params: dict) -> AsyncGenerator[ActionOutput, None]:
         self.update_state(
             progress="等待中",
-            prompt_contribution="正在等待用户回复",
+            prompt_contribution="如果有这句话，这不用重复等待，可以noop跳过本轮",
         )
+        self._stop_event = asyncio.Event()
 
         wait_time = float(params.get("duration", 60))  # 转换为 float
         start_time = asyncio.get_event_loop().time()
@@ -62,6 +71,11 @@ class WaitAction(Action):
 
         try:
             while True:
+                # 检查 stop event
+                if self._stop_event and self._stop_event.is_set():
+                    self.update_state(progress="等待被停止")
+                    return
+
                 elapsed = asyncio.get_event_loop().time() - start_time
                 remaining = wait_time - elapsed
 
@@ -91,6 +105,8 @@ class WaitAction(Action):
         except asyncio.CancelledError:
             self.update_state(progress="等待被取消")
             return
+        finally:
+            self._stop_event = None
 
         # 记录实际等待时间
         actual_wait = asyncio.get_event_loop().time() - start_time
