@@ -461,6 +461,33 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
         )
         return {"value": value}
 
+    async def _memory_list_keys(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        plugin_id = self._memory_plugin_id()
+        keys = await self._memory_backend_for_plugin(plugin_id).list_keys(
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+        )
+        return {"keys": keys}
+
+    async def _memory_exists(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        plugin_id = self._memory_plugin_id()
+        exists = await self._memory_backend_for_plugin(plugin_id).exists(
+            str(payload.get("key", "")),
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+        )
+        return {"exists": exists}
+
     async def _memory_delete(
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
@@ -474,6 +501,22 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
             ),
         )
         return {}
+
+    async def _memory_clear_namespace(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        plugin_id = self._memory_plugin_id()
+        deleted_count = await self._memory_backend_for_plugin(
+            plugin_id
+        ).clear_namespace(
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+            include_descendants=bool(payload.get("include_descendants", False)),
+        )
+        return {"deleted_count": deleted_count}
 
     async def _memory_save_with_ttl(
         self, _request_id: str, payload: dict[str, Any], _token
@@ -532,6 +575,20 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
         )
         return {"deleted_count": deleted_count}
 
+    async def _memory_count(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        plugin_id = self._memory_plugin_id()
+        count = await self._memory_backend_for_plugin(plugin_id).count(
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+            include_descendants=bool(payload.get("include_descendants", False)),
+        )
+        return {"count": count}
+
     async def _memory_stats(
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
@@ -561,8 +618,20 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
             call_handler=self._memory_get,
         )
         self.register(
+            self._builtin_descriptor("memory.list_keys", "列出命名空间内的记忆键"),
+            call_handler=self._memory_list_keys,
+        )
+        self.register(
+            self._builtin_descriptor("memory.exists", "检查记忆键是否存在"),
+            call_handler=self._memory_exists,
+        )
+        self.register(
             self._builtin_descriptor("memory.delete", "删除记忆"),
             call_handler=self._memory_delete,
+        )
+        self.register(
+            self._builtin_descriptor("memory.clear_namespace", "清理记忆命名空间"),
+            call_handler=self._memory_clear_namespace,
         )
         self.register(
             self._builtin_descriptor("memory.save_with_ttl", "保存带过期时间的记忆"),
@@ -575,6 +644,10 @@ class MemoryCapabilityMixin(CapabilityRouterBridgeBase):
         self.register(
             self._builtin_descriptor("memory.delete_many", "批量删除记忆"),
             call_handler=self._memory_delete_many,
+        )
+        self.register(
+            self._builtin_descriptor("memory.count", "统计命名空间内的记忆数量"),
+            call_handler=self._memory_count,
         )
         self.register(
             self._builtin_descriptor("memory.stats", "获取记忆统计信息"),

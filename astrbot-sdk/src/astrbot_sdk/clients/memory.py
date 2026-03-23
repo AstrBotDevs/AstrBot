@@ -198,6 +198,35 @@ class MemoryClient:
         value = output.get("value")
         return value if isinstance(value, dict) else None
 
+    async def list_keys(
+        self,
+        *,
+        namespace: str | None = None,
+    ) -> list[str]:
+        """List keys in the exact namespace using case-insensitive ordering."""
+
+        payload: dict[str, Any] = {
+            "namespace": self._resolve_exact_namespace(namespace)
+        }
+        output = await self._proxy.call("memory.list_keys", payload)
+        keys = output.get("keys")
+        if not isinstance(keys, (list, tuple)):
+            return []
+        return [str(item) for item in keys]
+
+    async def exists(
+        self,
+        key: str,
+        *,
+        namespace: str | None = None,
+    ) -> bool:
+        """Check whether a key exists in the exact namespace."""
+
+        payload: dict[str, Any] = {"key": key}
+        payload["namespace"] = self._resolve_exact_namespace(namespace)
+        output = await self._proxy.call("memory.exists", payload)
+        return bool(output.get("exists", False))
+
     async def delete(
         self,
         key: str,
@@ -215,6 +244,21 @@ class MemoryClient:
         payload: dict[str, Any] = {"key": key}
         payload["namespace"] = self._resolve_exact_namespace(namespace)
         await self._proxy.call("memory.delete", payload)
+
+    async def clear_namespace(
+        self,
+        *,
+        namespace: str | None = None,
+        include_descendants: bool = False,
+    ) -> int:
+        """Delete memories in a namespace and optionally its descendants."""
+
+        payload: dict[str, Any] = {
+            "namespace": self._resolve_exact_namespace(namespace),
+            "include_descendants": bool(include_descendants),
+        }
+        output = await self._proxy.call("memory.clear_namespace", payload)
+        return int(output.get("deleted_count", 0))
 
     async def save_with_ttl(
         self,
@@ -313,6 +357,21 @@ class MemoryClient:
         payload["namespace"] = self._resolve_exact_namespace(namespace)
         output = await self._proxy.call("memory.delete_many", payload)
         return int(output.get("deleted_count", 0))
+
+    async def count(
+        self,
+        *,
+        namespace: str | None = None,
+        include_descendants: bool = False,
+    ) -> int:
+        """Count memories in a namespace and optionally its descendants."""
+
+        payload: dict[str, Any] = {
+            "namespace": self._resolve_exact_namespace(namespace),
+            "include_descendants": bool(include_descendants),
+        }
+        output = await self._proxy.call("memory.count", payload)
+        return int(output.get("count", 0))
 
     async def stats(
         self,

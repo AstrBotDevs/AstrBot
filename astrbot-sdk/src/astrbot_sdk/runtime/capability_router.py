@@ -19,9 +19,13 @@
         memory.save: 保存记忆
         memory.save_with_ttl: 保存带过期时间的记忆
         memory.get: 读取单条记忆
+        memory.list_keys: 列出命名空间中的记忆键
+        memory.exists: 检查记忆键是否存在
         memory.get_many: 批量获取多条记忆
         memory.delete: 删除记忆
+        memory.clear_namespace: 清理命名空间中的记忆
         memory.delete_many: 批量删除多条记忆
+        memory.count: 统计命名空间中的记忆数量
         memory.stats: 获取记忆统计信息
     DB:
         db.get: 读取 KV 存储
