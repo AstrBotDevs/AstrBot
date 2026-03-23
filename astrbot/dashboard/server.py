@@ -177,8 +177,8 @@ class AstrBotDashboard:
 
         if self.enable_webui and not (Path(self.data_path) / "index.html").exists():
             logger.warning(
-                f"Dashboard static assets not found: index.html is missing in {self.data_path}. "
-                "WebUI will be disabled."
+                f"找不到内置前端 (index.html missing in {self.data_path})，"
+                "但你可以通过在线面板访问：dash.astrbot.men"
             )
             self.enable_webui = False
 
@@ -473,15 +473,8 @@ class AstrBotDashboard:
 
     async def run(self) -> None:
         """Run dashboard server (blocking)"""
-        logger.info(
-            "[Dashboard] Starting server... enable_webui=%s, ASTRBOT_DASHBOARD_ENABLE=%s",
-            self.enable_webui,
-            os.environ.get("ASTRBOT_DASHBOARD_ENABLE"),
-        )
         if not self.enable_webui:
-            logger.warning(
-                "WebUI 已禁用 (dashboard.enable=false or ASTRBOT_DASHBOARD_ENABLE=false), 但 API 服务器将继续启动"
-            )
+            logger.warning("内置前端已禁用，请访问在线前端面板：dash.astrbot.men")
 
         dashboard_config = self.config.get("dashboard", {})
         host_value = (
