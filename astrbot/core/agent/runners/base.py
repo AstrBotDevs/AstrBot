@@ -1,13 +1,15 @@
 import abc
-import typing as T
+from collections.abc import AsyncGenerator
 from enum import Enum, auto
+from typing import Any, Generic
 
 from astrbot import logger
-from astrbot.core.provider.entities import LLMResponse
-
-from ..hooks import BaseAgentRunHooks
-from ..response import AgentResponse
-from ..run_context import ContextWrapper, TContext
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.response import AgentResponse
+from astrbot.core.agent.run_context import ContextWrapper, TContext
+from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
+from astrbot.core.provider.entities import LLMResponse, ProviderRequest
+from astrbot.core.provider.provider import Provider
 
 
 class AgentState(Enum):
@@ -19,7 +21,7 @@ class AgentState(Enum):
     ERROR = auto()  # Error state
 
 
-class BaseAgentRunner(T.Generic[TContext]):
+class BaseAgentRunner(Generic[TContext]):
     def __init__(
         self,
     ):
@@ -28,9 +30,23 @@ class BaseAgentRunner(T.Generic[TContext]):
     @abc.abstractmethod
     async def reset(
         self,
+        provider: Provider,
+        request: ProviderRequest,
         run_context: ContextWrapper[TContext],
+        tool_executor: BaseFunctionToolExecutor[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
-        **kwargs: T.Any,
+        streaming: bool = False,
+        enforce_max_turns: int = -1,
+        llm_compress_instruction: str | None = None,
+        llm_compress_keep_recent: int = 0,
+        llm_compress_provider: Provider | None = None,
+        truncate_turns: int = 1,
+        custom_token_counter: Any = None,
+        custom_compressor: Any = None,
+        tool_schema_mode: str | None = "full",
+        fallback_providers: list[Provider] | None = None,
+        provider_config: dict | None = None,
+        **kwargs: Any,
     ) -> None:
         """Reset the agent to its initial state.
         This method should be called before starting a new run.
@@ -38,14 +54,14 @@ class BaseAgentRunner(T.Generic[TContext]):
         ...
 
     @abc.abstractmethod
-    async def step(self) -> T.AsyncGenerator[AgentResponse, None]:
+    async def step(self) -> AsyncGenerator[AgentResponse, None]:
         """Process a single step of the agent."""
         ...
 
     @abc.abstractmethod
     async def step_until_done(
         self, max_step: int
-    ) -> T.AsyncGenerator[AgentResponse, None]:
+    ) -> AsyncGenerator[AgentResponse, None]:
         """Process steps until the agent is done."""
         ...
 

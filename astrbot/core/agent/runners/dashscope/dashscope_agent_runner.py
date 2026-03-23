@@ -4,7 +4,8 @@ import queue
 import re
 import sys
 import threading
-import typing as T
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from dashscope import Application
 from dashscope.app.application_response import ApplicationResponse
@@ -16,11 +17,13 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
+from astrbot.core.provider.provider import Provider
 
 from ...hooks import BaseAgentRunHooks
 from ...response import AgentResponseData
 from ...run_context import ContextWrapper, TContext
 from ..base import AgentResponse, AgentState, BaseAgentRunner
+from ..tool_executor import BaseFunctionToolExecutor
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -34,19 +37,32 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
     @override
     async def reset(
         self,
+        provider: Provider,
         request: ProviderRequest,
         run_context: ContextWrapper[TContext],
+        tool_executor: BaseFunctionToolExecutor[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
-        provider_config: dict,
-        **kwargs: T.Any,
+        streaming: bool = False,
+        enforce_max_turns: int = -1,
+        llm_compress_instruction: str | None = None,
+        llm_compress_keep_recent: int = 0,
+        llm_compress_provider: Provider | None = None,
+        truncate_turns: int = 1,
+        custom_token_counter: Any = None,
+        custom_compressor: Any = None,
+        tool_schema_mode: str | None = "full",
+        fallback_providers: list[Provider] | None = None,
+        provider_config: dict | None = None,
+        **kwargs: Any,
     ) -> None:
         self.req = request
-        self.streaming = kwargs.get("streaming", False)
+        self.streaming = streaming
         self.final_llm_resp = None
         self._state = AgentState.IDLE
         self.agent_hooks = agent_hooks
         self.run_context = run_context
 
+        provider_config = provider_config or {}
         self.api_key = provider_config.get("dashscope_api_key", "")
         if not self.api_key:
             raise Exception("阿里云百炼 API Key 不能为空｡")
@@ -117,14 +133,14 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step_until_done(
-        self, max_step: int = 3
-    ) -> T.AsyncGenerator[AgentResponse, None]:
+        self, max_step: int
+    ) -> AsyncGenerator[AgentResponse, None]:
         while not self.done():
             async for resp in self.step():
                 yield resp
 
     def _consume_sync_generator(
-        self, response: T.Any, response_queue: queue.Queue
+        self, response: Any, response_queue: queue.Queue
     ) -> None:
         """在线程中消费同步generator,将结果放入队列
 
@@ -278,7 +294,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             return payload
 
     async def _handle_streaming_response(
-        self, response: T.Any, session_id: str
+        self, response: Any, session_id: str
     ) -> T.AsyncGenerator[AgentResponse, None]:
         """处理流式响应
 
