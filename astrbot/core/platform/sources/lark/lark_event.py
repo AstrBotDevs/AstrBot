@@ -281,32 +281,47 @@ class LarkMessageEvent(AstrMessageEvent):
         return ret
 
     @staticmethod
+    def _build_collapsible_panel_element(
+        reasoning_content: str,
+        title: str,
+        expanded: bool = False,
+    ) -> dict:
+        return {
+            "tag": "collapsible_panel",
+            "expanded": expanded,
+            "background_color": "grey",
+            "padding": "8px 8px 8px 8px",
+            "margin": "4px 0px 4px 0px",
+            "border": {
+                "color": "grey",
+                "corner_radius": "6px",
+            },
+            "header": {
+                "title": {
+                    "tag": "plain_text",
+                    "content": title,
+                },
+                "background_color": "grey",
+            },
+            "elements": [
+                {
+                    "tag": "markdown",
+                    "content": reasoning_content,
+                }
+            ],
+        }
+
+    @staticmethod
     def _build_reasoning_collapsible_panel(reasoning_content: str, title: str) -> dict:
         return {
             "schema": "2.0",
             "body": {
                 "elements": [
-                    {
-                        "tag": "collapsible_panel",
-                        "expanded": False,
-                        "background_color": "grey",
-                        "padding": "8px 8px 8px 8px",
-                        "margin": "4px 0px 4px 0px",
-                        "border": {
-                            "color": "grey",
-                            "corner_radius": "6px",
-                        },
-                        "header": {
-                            "title": {
-                                "tag": "plain_text",
-                                "content": title,
-                            },
-                            "background_color": "grey",
-                        },
-                        "elements": [
-                            {"tag": "markdown", "content": reasoning_content},
-                        ],
-                    }
+                    LarkMessageEvent._build_collapsible_panel_element(
+                        reasoning_content=reasoning_content,
+                        title=title,
+                        expanded=False,
+                    )
                 ]
             },
         }
@@ -322,32 +337,11 @@ class LarkMessageEvent(AstrMessageEvent):
                 if not reasoning_content:
                     continue
                 elements.append(
-                    {
-                        "tag": "collapsible_panel",
-                        "expanded": bool(comp.data.get("expanded", False)),
-                        "background_color": "grey",
-                        "padding": "8px 8px 8px 8px",
-                        "margin": "4px 0px 4px 0px",
-                        "border": {
-                            "color": "grey",
-                            "corner_radius": "6px",
-                        },
-                        "header": {
-                            "title": {
-                                "tag": "plain_text",
-                                "content": str(
-                                    comp.data.get("title", "💭 Thinking"),
-                                ),
-                            },
-                            "background_color": "grey",
-                        },
-                        "elements": [
-                            {
-                                "tag": "markdown",
-                                "content": reasoning_content,
-                            }
-                        ],
-                    }
+                    LarkMessageEvent._build_collapsible_panel_element(
+                        reasoning_content=reasoning_content,
+                        title=str(comp.data.get("title", "💭 Thinking")),
+                        expanded=bool(comp.data.get("expanded", False)),
+                    )
                 )
             elif isinstance(comp, Plain):
                 if comp.text:
