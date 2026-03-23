@@ -444,8 +444,6 @@ class Main(star.Star):
     async def _get_brave_key(self, cfg: AstrBotConfig) -> str:
         """并发安全的从列表中获取并轮换 Brave API 密钥。"""
         brave_keys = cfg.get("provider_settings", {}).get("websearch_brave_key", [])
-        if not brave_keys:
-            raise ValueError("错误：Brave API密钥未在AstrBot中配置。")
 
         async with self.brave_key_lock:
             key = brave_keys[self.brave_key_index]

@@ -6,7 +6,7 @@ services:
     container_name: astrbot
     restart: always
     ports:  # mappings description: https://github.com/AstrBotDevs/AstrBot/issues/497
-      - 6184:6185  # 必选，AstrBot WebUI 端口
+      - 6185:6185  # 必选，AstrBot WebUI 端口
       # - "6195:6195" # 可选, 企业微信 Webhook 端口
       # - "6196:6196" # 可选, QQ 官方接口 Webhook 端口
     environment: [TZ=Asia/Shanghai]
