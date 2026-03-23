@@ -131,7 +131,8 @@ class QQOfficialPlatformAdapter(Platform):
 
         self.client.set_platform(self)
 
-        self._session_last_message_id: dict[str, str] = {}
+        self._session_last_inbound_message_id: dict[str, str] = {}
+        self._session_last_outbound_message_id: dict[str, str] = {}
         self._session_scene: dict[str, str] = {}
 
         self.test_mode = os.environ.get("TEST_MODE", "off") == "on"
@@ -167,10 +168,10 @@ class QQOfficialPlatformAdapter(Platform):
         ):
             return
 
-        msg_id = self._session_last_message_id.get(session.session_id)
+        msg_id = self._session_last_inbound_message_id.get(session.session_id)
         if not msg_id:
             logger.warning(
-                "[QQOfficial] No cached msg_id for session: %s, skip send_by_session",
+                "[QQOfficial] No cached inbound msg_id for session: %s, skip send_by_session",
                 session.session_id,
             )
             return
@@ -298,13 +299,25 @@ class QQOfficialPlatformAdapter(Platform):
 
         sent_message_id = self._extract_message_id(ret)
         if sent_message_id:
-            self.remember_session_message_id(session.session_id, sent_message_id)
+            self.remember_session_sent_message_id(session.session_id, sent_message_id)
         await super().send_by_session(session, message_chain)
 
-    def remember_session_message_id(self, session_id: str, message_id: str) -> None:
+    def remember_session_inbound_message_id(
+        self, session_id: str, message_id: str
+    ) -> None:
         if not session_id or not message_id:
             return
-        self._session_last_message_id[session_id] = message_id
+        self._session_last_inbound_message_id[session_id] = message_id
+
+    def remember_session_message_id(self, session_id: str, message_id: str) -> None:
+        self.remember_session_inbound_message_id(session_id, message_id)
+
+    def remember_session_sent_message_id(
+        self, session_id: str, message_id: str
+    ) -> None:
+        if not session_id or not message_id:
+            return
+        self._session_last_outbound_message_id[session_id] = message_id
 
     def remember_session_scene(self, session_id: str, scene: str) -> None:
         if not session_id or not scene:
