@@ -74,7 +74,7 @@ class AstrbotGateway(BaseAstrbotGateway):
 
         # CORS middleware
         self._app.add_middleware(
-            CORSMiddleware,
+            CORSMiddleware,  # type: ignore[misc]
             allow_origins=["*"],
             allow_credentials=True,
             allow_methods=["*"],

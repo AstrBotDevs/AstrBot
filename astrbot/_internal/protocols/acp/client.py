@@ -7,13 +7,12 @@ similar to MCP but designed specifically for AstrBot's architecture.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
-import anyio
-
-from astrbot import logger
 from astrbot._internal.abc.acp.base_astrbot_acp_client import BaseAstrbotAcpClient
+from astrbot.core.utils.astrbot_path import logger
 
 log = logger
 
@@ -28,12 +27,12 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
 
     def __init__(self) -> None:
         self._connected = False
-        self._reader: anyio.AsyncFile | None = None
-        self._writer: anyio.AsyncFile | None = None
+        self._reader: asyncio.StreamReader | None = None
+        self._writer: asyncio.StreamWriter | None = None
         self._server_url: str | None = None
-        self._pending_requests: dict[str, anyio.Future[dict[str, Any]]] = {}
+        self._pending_requests: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self._request_id = 0
-        self._reader_task: anyio.Task[None] | None = None
+        self._reader_task: asyncio.Task[None] | None = None
 
     @property
     def connected(self) -> bool:
@@ -60,11 +59,11 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
             port: Server port
         """
         self._server_url = f"{host}:{port}"
-        self._reader, self._writer = await anyio.connect_tcp(host, port)
+        self._reader, self._writer = await asyncio.open_connection(host, port)
         self._connected = True
 
         # Start reading responses
-        self._reader_task = anyio.create_task(self._read_messages())
+        self._reader_task = asyncio.create_task(self._read_messages())
 
         log.info(f"ACP client connected to {self._server_url}")
 
@@ -76,10 +75,10 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
             socket_path: Path to the Unix socket
         """
         self._server_url = f"unix://{socket_path}"
-        self._reader, self._writer = await anyio.connect_unix(socket_path)
+        self._reader, self._writer = await asyncio.open_unix_connection(socket_path)
         self._connected = True
 
-        self._reader_task = anyio.create_task(self._read_messages())
+        self._reader_task = asyncio.create_task(self._read_messages())
 
         log.info(f"ACP client connected to {self._server_url}")
 
@@ -108,10 +107,7 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
                         continue
 
                     content_length = header.get("content-length", 0)
-                    if (
-                        content_length == 0
-                        or len(buffer) < header_end + 1 + content_length
-                    ):
+                    if content_length == 0 or len(buffer) < header_end + 1 + content_length:
                         break
 
                     content = buffer[header_end + 1 : header_end + 1 + content_length]
@@ -167,7 +163,7 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
             "params": arguments,
         }
 
-        future: anyio.Future[dict[str, Any]] = anyio.Future()
+        future: asyncio.Future[dict[str, Any]] = asyncio.Future()
         self._pending_requests[request_id] = future
 
         await self._send_message(message)
@@ -181,15 +177,17 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
         content = json.dumps(message)
         header = json.dumps({"content-length": len(content)}) + "\n"
 
-        await self._writer.write((header + content).encode())
-        await self._writer.flush()
+        self._writer.write((header + content).encode())
+        await self._writer.drain()
 
-    async def send_notification(self, method: str, params: dict[str, Any]) -> None:
+    async def send_notification(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> None:
         """Send a one-way notification to the server."""
         message = {
             "jsonrpc": "2.0",
             "method": method,
-            "params": params,
+            "params": params or {},
         }
         await self._send_message(message)
 
@@ -201,7 +199,7 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
             self._reader_task.cancel()
             try:
                 await self._reader_task
-            except (anyio.ExceptionGroup, BaseException):
+            except asyncio.CancelledError:
                 pass
 
         if self._writer:

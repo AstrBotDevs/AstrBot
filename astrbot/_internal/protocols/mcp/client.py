@@ -17,7 +17,11 @@ from tenacity import (
 )
 
 from astrbot import logger
-from astrbot._internal.abc.mcp.base_astrbot_mcp_client import BaseAstrbotMcpClient
+from astrbot._internal.abc.mcp.base_astrbot_mcp_client import (
+    BaseAstrbotMcpClient,
+    McpServerConfig,
+    McpToolInfo,
+)
 from astrbot.core.utils.log_pipe import LogPipe
 
 log = logger
@@ -207,7 +211,7 @@ class McpClient(BaseAstrbotMcpClient):
         except (TypeError, ValueError):
             return None
 
-    async def connect_to_server(self, mcp_server_config: dict, name: str) -> None:
+    async def connect_to_server(self, config: McpServerConfig, name: str) -> None:
         """Connect to MCP server
 
         If `url` parameter exists:
@@ -216,15 +220,15 @@ class McpClient(BaseAstrbotMcpClient):
             3. If not specified, default to SSE connection to MCP service.
 
         Args:
-            mcp_server_config (dict): Configuration for the MCP server. See https://modelcontextprotocol.io/quickstart/server
+            config: Configuration for the MCP server. See https://modelcontextprotocol.io/quickstart/server
 
         """
         # Store config for reconnection
-        self._mcp_server_config = mcp_server_config
+        self._mcp_server_config = config
         self._server_name = name
         self.process_pid = None
 
-        cfg = _prepare_config(mcp_server_config.copy())
+        cfg = _prepare_config(dict(config))
 
         def logging_callback(
             msg: str | mcp.types.LoggingMessageNotificationParams,

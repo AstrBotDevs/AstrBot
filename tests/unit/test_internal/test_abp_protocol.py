@@ -197,11 +197,13 @@ class TestAbpCodeQuality:
         """验证返回类型标注存在"""
         import inspect
 
-        # connect 返回 None
-        assert inspect.signature(abp_client.connect).return_annotation is None
+        # connect 返回 None (annotation is 'None' string in Python 3.12)
+        connect_ann = inspect.signature(abp_client.connect).return_annotation
+        assert connect_ann in (None, "None")
 
         # shutdown 返回 None
-        assert inspect.signature(abp_client.shutdown).return_annotation is None
+        shutdown_ann = inspect.signature(abp_client.shutdown).return_annotation
+        assert shutdown_ann in (None, "None")
 
     @pytest.mark.asyncio
     async def test_error_handling_has_type_hints(self, abp_client):

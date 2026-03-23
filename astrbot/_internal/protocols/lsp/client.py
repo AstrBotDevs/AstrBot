@@ -2,18 +2,17 @@
 LSP (Language Server Protocol) client implementation.
 
 The orchestrator acts as an LSP client, connecting to LSP servers
-that provide language intelligence features (completions, diagnostics, etc.)
+that provide language intelligence features (completions, diagnostics, etc.).
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
-import anyio
-
-from astrbot import logger
 from astrbot._internal.abc.lsp.base_astrbot_lsp_client import BaseAstrbotLspClient
+from astrbot.core.utils.astrbot_path import logger
 
 log = logger
 
@@ -28,13 +27,13 @@ class AstrbotLspClient(BaseAstrbotLspClient):
 
     def __init__(self) -> None:
         self._connected = False
-        self._reader: Any = None
-        self._writer: Any = None
-        self._server_process: Any = None
-        self._pending_requests: dict[int, anyio.abc.TaskGroup] = {}
+        self._reader: asyncio.StreamReader | None = None
+        self._writer: asyncio.StreamWriter | None = None
+        self._server_process: asyncio.subprocess.Process | None = None
+        self._pending_requests: dict[int, asyncio.Future[dict[str, Any]]] = {}
         self._request_id = 0
         self._server_command: list[str] | None = None
-        self._read_task: anyio.abc.Task | None = None
+        self._read_task: asyncio.Task[None] | None = None
 
     @property
     def connected(self) -> bool:
@@ -64,11 +63,11 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         """
         log.debug(f"Starting LSP server: {' '.join(command)}")
 
-        self._server_process = await anyio.open_process(
-            command,
-            stdin=anyio.PIPE,
-            stdout=anyio.PIPE,
-            stderr=anyio.PIPE,
+        self._server_process = await asyncio.create_subprocess_exec(
+            *command,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         self._reader = self._server_process.stdout
         self._writer = self._server_process.stdin
@@ -76,10 +75,10 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         self._connected = True
 
         # Start reading responses in background
-        self._read_task = anyio.create_task(self._read_responses())
+        self._read_task = asyncio.create_task(self._read_responses())
 
         # Send initialize request
-        await self._send_request(
+        await self.send_request(
             "initialize",
             {
                 "processId": None,
@@ -110,7 +109,7 @@ class AstrbotLspClient(BaseAstrbotLspClient):
             "params": params or {},
         }
 
-        future: anyio.Future[dict[str, Any]] = anyio.Future()
+        future: asyncio.Future[dict[str, Any]] = asyncio.Future()
         self._pending_requests[request_id] = future
 
         content = json.dumps(message)
@@ -120,7 +119,9 @@ class AstrbotLspClient(BaseAstrbotLspClient):
 
         return await future
 
-    async def send_notification(self, method: str, params: dict[str, Any] | None = None) -> None:
+    async def send_notification(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> None:
         """Send an LSP notification (no response expected)."""
         if not self._writer:
             raise RuntimeError("LSP client not connected")
@@ -207,9 +208,8 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         if self._server_process:
             self._server_process.terminate()
             try:
-                with anyio.move_on_after(5.0):
-                    await self._server_process.wait()
-            except Exception:
+                await asyncio.wait_for(self._server_process.wait(), timeout=5.0)
+            except asyncio.TimeoutError:
                 self._server_process.kill()
             self._server_process = None
 
