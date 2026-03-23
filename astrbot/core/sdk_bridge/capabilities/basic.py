@@ -219,8 +219,23 @@ class BasicCapabilityMixin(CapabilityMixinHost):
             call_handler=self._memory_get,
         )
         self.register(
+            self._builtin_descriptor("memory.list_keys", "List plugin memory keys"),
+            call_handler=self._memory_list_keys,
+        )
+        self.register(
+            self._builtin_descriptor("memory.exists", "Check plugin memory key"),
+            call_handler=self._memory_exists,
+        )
+        self.register(
             self._builtin_descriptor("memory.delete", "Delete plugin memory"),
             call_handler=self._memory_delete,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "memory.clear_namespace",
+                "Delete plugin memory in a namespace",
+            ),
+            call_handler=self._memory_clear_namespace,
         )
         self.register(
             self._builtin_descriptor(
@@ -236,6 +251,10 @@ class BasicCapabilityMixin(CapabilityMixinHost):
         self.register(
             self._builtin_descriptor("memory.delete_many", "Delete plugin memories"),
             call_handler=self._memory_delete_many,
+        )
+        self.register(
+            self._builtin_descriptor("memory.count", "Count plugin memories"),
+            call_handler=self._memory_count,
         )
         self.register(
             self._builtin_descriptor("memory.stats", "Get plugin memory stats"),
@@ -375,6 +394,39 @@ class BasicCapabilityMixin(CapabilityMixinHost):
         )
         return {"value": value}
 
+    async def _memory_list_keys(
+        self,
+        request_id: str,
+        payload: dict[str, Any],
+        _token,
+    ) -> dict[str, Any]:
+        plugin_id = self._resolve_plugin_id(request_id)
+        keys = await self._memory_backend_for_plugin(plugin_id).list_keys(
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+        )
+        return {"keys": keys}
+
+    async def _memory_exists(
+        self,
+        request_id: str,
+        payload: dict[str, Any],
+        _token,
+    ) -> dict[str, Any]:
+        plugin_id = self._resolve_plugin_id(request_id)
+        exists = await self._memory_backend_for_plugin(plugin_id).exists(
+            str(payload.get("key", "")),
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+        )
+        return {"exists": exists}
+
     async def _memory_delete(
         self,
         request_id: str,
@@ -391,6 +443,25 @@ class BasicCapabilityMixin(CapabilityMixinHost):
             ),
         )
         return {}
+
+    async def _memory_clear_namespace(
+        self,
+        request_id: str,
+        payload: dict[str, Any],
+        _token,
+    ) -> dict[str, Any]:
+        plugin_id = self._resolve_plugin_id(request_id)
+        deleted_count = await self._memory_backend_for_plugin(
+            plugin_id
+        ).clear_namespace(
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+            include_descendants=bool(payload.get("include_descendants", False)),
+        )
+        return {"deleted_count": deleted_count}
 
     async def _memory_save_with_ttl(
         self,
@@ -456,6 +527,23 @@ class BasicCapabilityMixin(CapabilityMixinHost):
             ),
         )
         return {"deleted_count": deleted_count}
+
+    async def _memory_count(
+        self,
+        request_id: str,
+        payload: dict[str, Any],
+        _token,
+    ) -> dict[str, Any]:
+        plugin_id = self._resolve_plugin_id(request_id)
+        count = await self._memory_backend_for_plugin(plugin_id).count(
+            namespace=(
+                str(payload.get("namespace"))
+                if payload.get("namespace") is not None
+                else None
+            ),
+            include_descendants=bool(payload.get("include_descendants", False)),
+        )
+        return {"count": count}
 
     async def _memory_stats(
         self,

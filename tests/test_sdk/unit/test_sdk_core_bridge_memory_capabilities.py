@@ -1,6 +1,7 @@
 # ruff: noqa: E402
 from __future__ import annotations
 
+import asyncio
 import math
 import sys
 import types
@@ -479,3 +480,268 @@ async def test_core_bridge_memory_ttl_entries_are_purged_during_search(
     # This test verifies the TTL entry was created and returned before expiration
     stats = await _call(bridge, "memory.stats", {}, request_id="plugin-a:req-3")
     assert stats["ttl_entries"] == 1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_core_bridge_memory_management_capabilities_cover_scope_and_ordering(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _patch_embedding_runtime: None,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    fake_sp = _FakeSp()
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.capabilities.basic._get_runtime_sp",
+        lambda: fake_sp,
+    )
+    bridge = CoreCapabilityBridge(
+        star_context=_FakeStarContext(),
+        plugin_bridge=_FakePluginBridge(),
+    )
+
+    await _call(
+        bridge,
+        "memory.save",
+        {
+            "key": "beta",
+            "namespace": "users/alice",
+            "value": {"content": "beta note"},
+        },
+        request_id="plugin-a:req-1",
+    )
+    await _call(
+        bridge,
+        "memory.save",
+        {
+            "key": "Alpha",
+            "namespace": "users/alice",
+            "value": {"content": "alpha note"},
+        },
+        request_id="plugin-a:req-2",
+    )
+    await _call(
+        bridge,
+        "memory.save",
+        {
+            "key": "apple",
+            "namespace": "users/alice",
+            "value": {"content": "apple note"},
+        },
+        request_id="plugin-a:req-3",
+    )
+    await _call(
+        bridge,
+        "memory.save",
+        {
+            "key": "child-note",
+            "namespace": "users/alice/sessions/1",
+            "value": {"content": "child note"},
+        },
+        request_id="plugin-a:req-4",
+    )
+
+    keys = await _call(
+        bridge,
+        "memory.list_keys",
+        {"namespace": "users/alice"},
+        request_id="plugin-a:req-5",
+    )
+    exact_count = await _call(
+        bridge,
+        "memory.count",
+        {"namespace": "users/alice"},
+        request_id="plugin-a:req-6",
+    )
+    recursive_count = await _call(
+        bridge,
+        "memory.count",
+        {"namespace": "users/alice", "include_descendants": True},
+        request_id="plugin-a:req-7",
+    )
+    exists = await _call(
+        bridge,
+        "memory.exists",
+        {"key": "child-note", "namespace": "users/alice/sessions/1"},
+        request_id="plugin-a:req-8",
+    )
+    missing = await _call(
+        bridge,
+        "memory.exists",
+        {"key": "child-note", "namespace": "users/alice"},
+        request_id="plugin-a:req-9",
+    )
+    cleared_exact = await _call(
+        bridge,
+        "memory.clear_namespace",
+        {"namespace": "users/alice"},
+        request_id="plugin-a:req-10",
+    )
+    remaining_recursive = await _call(
+        bridge,
+        "memory.count",
+        {"namespace": "users/alice", "include_descendants": True},
+        request_id="plugin-a:req-11",
+    )
+    cleared_recursive = await _call(
+        bridge,
+        "memory.clear_namespace",
+        {"namespace": "users/alice", "include_descendants": True},
+        request_id="plugin-a:req-12",
+    )
+
+    assert keys == {"keys": ["Alpha", "apple", "beta"]}
+    assert exact_count == {"count": 3}
+    assert recursive_count == {"count": 4}
+    assert exists == {"exists": True}
+    assert missing == {"exists": False}
+    assert cleared_exact == {"deleted_count": 3}
+    assert remaining_recursive == {"count": 1}
+    assert cleared_recursive == {"deleted_count": 1}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_core_bridge_memory_management_capabilities_ignore_expired_ttl_entries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _patch_embedding_runtime: None,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    fake_sp = _FakeSp()
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.capabilities.basic._get_runtime_sp",
+        lambda: fake_sp,
+    )
+    base_now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    import astrbot_sdk._memory_backend as memory_backend_module
+
+    monkeypatch.setattr(memory_backend_module, "_utcnow", lambda: base_now)
+    bridge = CoreCapabilityBridge(
+        star_context=_FakeStarContext(),
+        plugin_bridge=_FakePluginBridge(),
+    )
+
+    await _call(
+        bridge,
+        "memory.save_with_ttl",
+        {
+            "key": "temp",
+            "namespace": "users/alice",
+            "value": {"content": "temporary note"},
+            "ttl_seconds": 60,
+        },
+        request_id="plugin-a:req-1",
+    )
+
+    monkeypatch.setattr(
+        memory_backend_module,
+        "_utcnow",
+        lambda: base_now + timedelta(seconds=61),
+    )
+
+    keys = await _call(
+        bridge,
+        "memory.list_keys",
+        {"namespace": "users/alice"},
+        request_id="plugin-a:req-2",
+    )
+    count = await _call(
+        bridge,
+        "memory.count",
+        {"namespace": "users/alice"},
+        request_id="plugin-a:req-3",
+    )
+    exists = await _call(
+        bridge,
+        "memory.exists",
+        {"key": "temp", "namespace": "users/alice"},
+        request_id="plugin-a:req-4",
+    )
+
+    assert keys == {"keys": []}
+    assert count == {"count": 0}
+    assert exists == {"exists": False}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_core_bridge_memory_management_capabilities_remain_plugin_scoped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _patch_embedding_runtime: None,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    fake_sp = _FakeSp()
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.capabilities.basic._get_runtime_sp",
+        lambda: fake_sp,
+    )
+    bridge = CoreCapabilityBridge(
+        star_context=_FakeStarContext(),
+        plugin_bridge=_FakePluginBridge(),
+    )
+
+    await _call(
+        bridge,
+        "memory.save",
+        {
+            "key": "profile",
+            "namespace": "users/alice",
+            "value": {"content": "plugin a"},
+        },
+        request_id="plugin-a:req-1",
+    )
+    await _call(
+        bridge,
+        "memory.save",
+        {
+            "key": "session",
+            "namespace": "users/alice/sessions/1",
+            "value": {"content": "plugin a child"},
+        },
+        request_id="plugin-a:req-2",
+    )
+    await _call(
+        bridge,
+        "memory.save",
+        {
+            "key": "profile",
+            "namespace": "users/alice",
+            "value": {"content": "plugin b"},
+        },
+        request_id="plugin-b:req-1",
+    )
+
+    cleared, plugin_b_count, plugin_b_exists = await asyncio.gather(
+        _call(
+            bridge,
+            "memory.clear_namespace",
+            {"namespace": "users/alice", "include_descendants": True},
+            request_id="plugin-a:req-3",
+        ),
+        _call(
+            bridge,
+            "memory.count",
+            {"namespace": "users/alice", "include_descendants": True},
+            request_id="plugin-b:req-2",
+        ),
+        _call(
+            bridge,
+            "memory.exists",
+            {"key": "profile", "namespace": "users/alice"},
+            request_id="plugin-b:req-3",
+        ),
+    )
+
+    plugin_a_after = await _call(
+        bridge,
+        "memory.count",
+        {"namespace": "users/alice", "include_descendants": True},
+        request_id="plugin-a:req-4",
+    )
+
+    assert cleared == {"deleted_count": 2}
+    assert plugin_b_count == {"count": 1}
+    assert plugin_b_exists == {"exists": True}
+    assert plugin_a_after == {"count": 0}
