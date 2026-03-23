@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.resources as resources
 import os
 import re
 import sys
@@ -24,6 +25,7 @@ import zipfile
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from pathlib import Path
+from importlib.resources.abc import Traversable
 from textwrap import dedent
 from typing import Any
 
@@ -41,9 +43,12 @@ EXIT_PLUGIN_LOAD = 3
 EXIT_RUNTIME = 4
 EXIT_PLUGIN_EXECUTION = 5
 BUILD_EXCLUDED_DIRS = {
+    ".agents",
+    ".claude",
     ".git",
     ".idea",
     ".mypy_cache",
+    ".opencode",
     ".pytest_cache",
     ".ruff_cache",
     ".venv",
@@ -54,6 +59,19 @@ BUILD_EXCLUDED_FILES = {
     ".astrbot-worker-state.json",
 }
 WATCH_POLL_INTERVAL_SECONDS = 0.5
+SUPPORTED_INIT_AGENTS = ("claude", "codex", "opencode")
+_TEMPLATE_VARIABLE_PATTERN = re.compile(r"{{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*}}")
+INIT_AGENT_SKILL_ROOTS = {
+    "claude": Path(".claude") / "skills",
+    "codex": Path(".agents") / "skills",
+    "opencode": Path(".opencode") / "skills",
+}
+INIT_AGENT_DISPLAY_NAMES = {
+    "claude": "Claude Code",
+    "codex": "Codex",
+    "opencode": "OpenCode",
+}
+INIT_SKILL_TEMPLATE_NAME = "astrbot-plugin-dev"
 
 
 class _CliPluginValidationError(RuntimeError):
@@ -619,6 +637,37 @@ def _sanitize_build_part(value: str) -> str:
     return sanitized or "artifact"
 
 
+def _parse_init_agents(
+    _ctx: click.Context,
+    _param: click.Parameter,
+    value: str | None,
+) -> tuple[str, ...]:
+    if value is None:
+        return ()
+
+    normalized_agents: list[str] = []
+    seen: set[str] = set()
+    invalid_agents: list[str] = []
+    for raw_agent in value.split(","):
+        candidate = raw_agent.strip().lower()
+        if not candidate:
+            invalid_agents.append("<empty>")
+            continue
+        if candidate not in SUPPORTED_INIT_AGENTS:
+            invalid_agents.append(raw_agent.strip())
+            continue
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        normalized_agents.append(candidate)
+
+    if invalid_agents:
+        supported = ", ".join(SUPPORTED_INIT_AGENTS)
+        invalid = ", ".join(invalid_agents)
+        raise click.BadParameter(f"仅支持以下 agent: {supported}；非法值: {invalid}")
+    return tuple(normalized_agents)
+
+
 def _render_init_plugin_yaml(
     *,
     plugin_name: str,
@@ -733,6 +782,90 @@ def _render_init_test_py(*, plugin_name: str) -> str:
     )
 
 
+def _plugin_root_hint_for_agent(agent: str) -> str:
+    skill_dir = INIT_AGENT_SKILL_ROOTS[agent] / INIT_SKILL_TEMPLATE_NAME
+    return "/".join(".." for _ in skill_dir.parts) or "."
+
+
+def _build_agent_template_context(
+    *,
+    plugin_name: str,
+    display_name: str,
+    agent: str,
+) -> dict[str, str]:
+    return {
+        "plugin_name": plugin_name,
+        "display_name": display_name,
+        "class_name": _class_name_for_plugin(plugin_name),
+        "skill_name": f"{plugin_name}_project",
+        "plugin_root": _plugin_root_hint_for_agent(agent),
+        "agent_name": agent,
+        "agent_display_name": INIT_AGENT_DISPLAY_NAMES[agent],
+        "skill_dir_name": INIT_SKILL_TEMPLATE_NAME,
+    }
+
+
+def _render_template_text(template_text: str, context: dict[str, str]) -> str:
+    def replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in context:
+            raise _CliPluginValidationError(f"agent 模板变量未定义：{key}")
+        return context[key]
+
+    return _TEMPLATE_VARIABLE_PATTERN.sub(replace, template_text)
+
+
+def _copy_rendered_template_tree(
+    source_dir: Traversable,
+    target_dir: Path,
+    *,
+    context: dict[str, str],
+) -> None:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for entry in sorted(source_dir.iterdir(), key=lambda item: item.name):
+        destination = target_dir / entry.name
+        if entry.is_dir():
+            _copy_rendered_template_tree(entry, destination, context=context)
+            continue
+        destination.write_text(
+            _render_template_text(entry.read_text(encoding="utf-8"), context),
+            encoding="utf-8",
+        )
+
+
+def _render_init_agent_templates(
+    *,
+    target_dir: Path,
+    plugin_name: str,
+    display_name: str,
+    agents: tuple[str, ...],
+) -> None:
+    if not agents:
+        return
+
+    template_root = resources.files("astrbot_sdk").joinpath(
+        "templates",
+        "skills",
+        INIT_SKILL_TEMPLATE_NAME,
+    )
+    if not template_root.is_dir():
+        raise _CliPluginValidationError(
+            f"未找到项目级 skill 模板：{INIT_SKILL_TEMPLATE_NAME}"
+        )
+
+    for agent in agents:
+        context = _build_agent_template_context(
+            plugin_name=plugin_name,
+            display_name=display_name,
+            agent=agent,
+        )
+        _copy_rendered_template_tree(
+            template_root,
+            target_dir / INIT_AGENT_SKILL_ROOTS[agent] / INIT_SKILL_TEMPLATE_NAME,
+            context=context,
+        )
+
+
 def _ensure_plugin_dir_exists(plugin_dir: Path) -> Path:
     resolved = plugin_dir.resolve()
     if not resolved.exists() or not resolved.is_dir():
@@ -821,7 +954,7 @@ def _collect_init_metadata(name: str | None) -> tuple[str, str, str, str]:
     return plugin_name, author, desc, version or "1.0.0"
 
 
-def _init_plugin(name: str | None) -> None:
+def _init_plugin(name: str | None, agents: tuple[str, ...] = ()) -> None:
     raw_name, author, desc, version = _collect_init_metadata(name)
     plugin_name = _normalize_plugin_name(raw_name)
     target_dir = Path(plugin_name)
@@ -854,7 +987,19 @@ def _init_plugin(name: str | None) -> None:
         _render_init_test_py(plugin_name=plugin_name),
         encoding="utf-8",
     )
+    _render_init_agent_templates(
+        target_dir=target_dir,
+        plugin_name=plugin_name,
+        display_name=display_name,
+        agents=agents,
+    )
     click.echo(f"已创建插件：{target_dir}")
+    if agents:
+        generated_paths = ", ".join(
+            str(INIT_AGENT_SKILL_ROOTS[agent] / INIT_SKILL_TEMPLATE_NAME)
+            for agent in agents
+        )
+        click.echo(f"已生成项目级 skill：{generated_paths}")
     click.echo("后续命令：")
     click.echo(f"  astrbot-sdk validate --plugin-dir {target_dir}")
     click.echo(
@@ -932,10 +1077,16 @@ def run(plugins_dir: Path, protocol_stdout: str | None) -> None:
 
 @cli.command()
 @click.argument("name", type=str, required=False)
-def init(name: str | None) -> None:
+@click.option(
+    "--agents",
+    callback=_parse_init_agents,
+    metavar="claude,codex,opencode",
+    help="Generate per-agent project templates, comma-separated: claude,codex,opencode",
+)
+def init(name: str | None, agents: tuple[str, ...]) -> None:
     """Create a new plugin skeleton in the target directory."""
     _run_sync_entrypoint(
-        lambda: _init_plugin(name),
+        lambda: _init_plugin(name, agents),
         log_message=f"创建插件：{name or '<interactive>'}",
         context={"target": name or "<interactive>"},
     )
