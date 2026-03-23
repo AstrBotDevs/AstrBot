@@ -84,6 +84,40 @@
       "title": "数据备份与恢复",
       "subtitle": "导出或导入 AstrBot 的所有数据，方便迁移到新服务器",
       "button": "备份管理"
+    },
+    "cleanup": {
+      "title": "日志与缓存清理",
+      "subtitle": "查看当前日志和缓存占用，并一键清理。",
+      "refresh": "刷新占用",
+      "cleanAll": "全部清理",
+      "panel": {
+        "title": "清理详情",
+        "subtitle": "当前占用 {size}"
+      },
+      "fileCount": "{count} 个文件",
+      "confirm": "确定要清理 {target} 吗？",
+      "targetNames": {
+        "cache": "缓存",
+        "logs": "日志",
+        "all": "日志和缓存"
+      },
+      "targets": {
+        "cache": {
+          "title": "缓存",
+          "subtitle": "清理临时文件、插件市场缓存和技能缓存。",
+          "button": "清理缓存"
+        },
+        "logs": {
+          "title": "日志",
+          "subtitle": "清理历史日志，并清空当前正在写入的日志文件内容。",
+          "button": "清理日志"
+        }
+      },
+      "messages": {
+        "statusFailed": "加载存储占用失败",
+        "cleanupSuccess": "已清理 {count} 个文件，释放 {size}",
+        "cleanupFailed": "清理失败"
+      }
     }
   },
   "sidebar": {

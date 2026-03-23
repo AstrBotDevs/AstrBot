@@ -9,16 +9,11 @@ export const useAuthStore = defineStore({
     returnUrl: null as string | null,
   }),
   actions: {
-    async login(
-      username: string,
-      password: string,
-      passwordMd5 = "",
-    ): Promise<void> {
+    async login(username: string, password: string): Promise<void> {
       try {
         const res = await axios.post("/api/auth/login", {
           username: username,
           password: password,
-          password_md5: passwordMd5,
         });
 
         if (res.data.status === "error") {

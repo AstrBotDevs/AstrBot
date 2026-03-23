@@ -1,3 +1,4 @@
+import asyncio
 import os
 import re
 import threading
@@ -11,10 +12,6 @@ import anyio
 import psutil
 from quart import request
 
-from astrbot.cli.commands.cmd_conf import (
-    DEFAULT_DASHBOARD_PASSWORD_MD5,
-    DEFAULT_DASHBOARD_PASSWORD_SHA256,
-)
 from astrbot.core import DEMO_MODE, logger
 from astrbot.core.config import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -22,6 +19,7 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.migration.helper import check_migration_needed_v4
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.io import get_dashboard_version
+from astrbot.core.utils.storage_cleaner import StorageCleaner
 from astrbot.core.utils.version_comparator import VersionComparator
 
 from .route import Response, Route, RouteContext
@@ -48,10 +46,13 @@ class StatRoute(Route):
             "/stat/changelog": ("GET", self.get_changelog),
             "/stat/changelog/list": ("GET", self.list_changelog_versions),
             "/stat/first-notice": ("GET", self.get_first_notice),
+            "/stat/storage": ("GET", self.get_storage_status),
+            "/stat/storage/cleanup": ("POST", self.cleanup_storage),
         }
         self.db_helper = db_helper
         self.register_routes()
         self.core_lifecycle = core_lifecycle
+        self.storage_cleaner = StorageCleaner(self.config)
 
     async def restart_core(self):
         if DEMO_MODE:
@@ -71,14 +72,7 @@ class StatRoute(Route):
         return {"hours": hours, "minutes": minutes, "seconds": seconds}
 
     def is_default_cred(self):
-        username = self.config["dashboard"]["username"]
-        password = self.config["dashboard"]["password"]
-        return (
-            username == "astrbot"
-            and password
-            in {DEFAULT_DASHBOARD_PASSWORD_MD5, DEFAULT_DASHBOARD_PASSWORD_SHA256}
-            and not DEMO_MODE
-        )
+        return False
 
     async def get_version(self):
         need_migration = await check_migration_needed_v4(self.core_lifecycle.db)
@@ -98,6 +92,31 @@ class StatRoute(Route):
 
     async def get_start_time(self):
         return Response().ok({"start_time": self.core_lifecycle.start_time}).__dict__
+
+    async def get_storage_status(self):
+        try:
+            status = await asyncio.to_thread(self.storage_cleaner.get_status)
+            return Response().ok(status).__dict__
+        except Exception:
+            logger.error("获取存储占用失败", exc_info=True)
+            return (
+                Response().error("获取存储占用失败，请查看后端日志了解详情。").__dict__
+            )
+
+    async def cleanup_storage(self):
+        try:
+            data = await request.get_json(silent=True)
+            target = "all"
+            if isinstance(data, dict):
+                target = str(data.get("target", "all"))
+
+            result = await asyncio.to_thread(self.storage_cleaner.cleanup, target)
+            return Response().ok(result).__dict__
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception:
+            logger.error("清理存储失败", exc_info=True)
+            return Response().error("清理存储失败，请查看后端日志了解详情。").__dict__
 
     async def get_stat(self):
         offset_sec = request.args.get("offset_sec", 86400)

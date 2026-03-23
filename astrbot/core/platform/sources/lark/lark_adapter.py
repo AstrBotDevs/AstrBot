@@ -62,7 +62,7 @@ class LarkPlatformAdapter(Platform):
             await self.convert_msg(event)
 
         def do_v2_msg_event(event: lark.im.v1.P2ImMessageReceiveV1) -> None:
-            asyncio.create_task(on_msg_event_recv(event))
+            asyncio.create_task(on_msg_event_recv(event))  # noqa: RUF006
 
         self.event_handler = (
             lark.EventDispatcherHandler.builder("", "")

@@ -8,11 +8,14 @@ import pytest_asyncio
 from quart import Quart, g, request
 from werkzeug.datastructures import FileStorage
 
+from astrbot.cli.commands.cmd_conf import hash_dashboard_password_secure
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.dashboard.routes.route import Response
 from astrbot.dashboard.server import AstrBotDashboard
+
+TEST_DASHBOARD_PASSWORD = "astrbot-test-password"
 
 
 def _get_open_api_route(app: Quart):
@@ -54,6 +57,10 @@ async def core_lifecycle_td(tmp_path_factory):
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
+    core_lifecycle.astrbot_config["dashboard"]["username"] = "astrbot"
+    core_lifecycle.astrbot_config["dashboard"]["password"] = (
+        hash_dashboard_password_secure(TEST_DASHBOARD_PASSWORD)
+    )
     try:
         yield core_lifecycle
     finally:
@@ -79,7 +86,7 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": core_lifecycle_td.astrbot_config["dashboard"]["password"],
+            "password": TEST_DASHBOARD_PASSWORD,
         },
     )
     data = await response.get_json()

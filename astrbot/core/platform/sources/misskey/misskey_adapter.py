@@ -200,7 +200,8 @@ class MisskeyPlatformAdapter(Platform):
         try:
             if not isinstance(message.raw_message, dict):
                 message.raw_message = {}
-            message.raw_message["poll"] = poll
+            raw_msg: dict[str, Any] = message.raw_message  # type: ignore[assignment]
+            raw_msg["poll"] = poll
             message.__setattr__("poll", poll)
         except Exception:
             pass
@@ -542,7 +543,7 @@ class MisskeyPlatformAdapter(Platform):
                 for r in results:
                     if not r:
                         continue
-                    if isinstance(r, dict) and r.get("fallback_url"):
+                    if isinstance(r, dict):
                         url = r.get("fallback_url")
                         if url:
                             fallback_urls.append(str(url))

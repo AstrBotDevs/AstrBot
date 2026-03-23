@@ -92,6 +92,7 @@ const toggleOrder = () => {
 
 .plugin-sort-control__select {
   min-width: 180px;
+  width: 190px;
   max-width: 220px;
 }
 

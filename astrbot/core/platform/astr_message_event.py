@@ -1,15 +1,16 @@
+from __future__ import annotations
+
 import abc
 import asyncio
 import hashlib
+import os
 import re
 import uuid
 from collections.abc import AsyncGenerator
 from time import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from astrbot import logger
-from astrbot.core.agent.tool import ToolSet
-from astrbot.core.db.po import Conversation
 from astrbot.core.message.components import (
     At,
     AtAll,
@@ -22,7 +23,6 @@ from astrbot.core.message.components import (
 )
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.trace import TraceSpan
 
@@ -30,6 +30,11 @@ from .astrbot_message import AstrBotMessage, Group
 from .message_session import MessageSesion as MessageSesion
 from .message_session import MessageSession
 from .platform_metadata import PlatformMetadata
+
+if TYPE_CHECKING:
+    from astrbot.core.agent.tool import ToolSet
+    from astrbot.core.db.po import Conversation
+    from astrbot.core.provider.entities import ProviderRequest
 
 
 class AstrMessageEvent(abc.ABC):
@@ -89,6 +94,8 @@ class AstrMessageEvent(abc.ABC):
         """在此次事件中是否有过至少一次发送消息的操作"""
         self.call_llm = False
         """是否在此消息事件中禁止默认的 LLM 请求"""
+        self._temporary_local_files: list[str] = []
+        """Temporary local files created during this event and safe to delete when it finishes."""
 
         self.plugins_name: list[str] | None = None
         """该事件启用的插件名称列表｡None 表示所有插件都启用｡空列表表示没有启用任何插件｡"""
@@ -229,6 +236,24 @@ class AstrMessageEvent(abc.ABC):
         logger.info(f"清除 {self.get_platform_name()} 的额外信息: {self._extras}")
         self._extras.clear()
 
+    def track_temporary_local_file(self, path: str) -> None:
+        if path and path not in self._temporary_local_files:
+            self._temporary_local_files.append(path)
+
+    def cleanup_temporary_local_files(self) -> None:
+        paths = list(self._temporary_local_files)
+        self._temporary_local_files.clear()
+        for path in paths:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except OSError as e:
+                logger.warning(
+                    "Failed to remove temporary local file %s: %s",
+                    path,
+                    e,
+                )
+
     def is_private_chat(self) -> bool:
         """是否是私聊｡"""
         return self.get_message_type() == MessageType.FRIEND_MESSAGE
@@ -262,7 +287,7 @@ class AstrMessageEvent(abc.ABC):
         目前仅支持: telegram,qq official 私聊｡
         Fallback仅支持 aiocqhttp｡
         """
-        asyncio.create_task(
+        asyncio.create_task(  # noqa: RUF006  # noqa: RUF006
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
         )
         self._has_send_oper = True
@@ -420,6 +445,8 @@ class AstrMessageEvent(abc.ABC):
         if len(contexts) > 0 and conversation:
             conversation = None
 
+        from astrbot.core.provider.entities import ProviderRequest
+
         return ProviderRequest(
             prompt=prompt,
             session_id=session_id,
@@ -443,7 +470,7 @@ class AstrMessageEvent(abc.ABC):
         # Leverage BLAKE2 hash function to generate a non-reversible hash of the sender ID for privacy.
         hash_obj = hashlib.blake2b(self.get_sender_id().encode("utf-8"), digest_size=16)
         sid = str(uuid.UUID(bytes=hash_obj.digest()))
-        asyncio.create_task(
+        asyncio.create_task(  # noqa: RUF006
             Metric.upload(
                 msg_event_tick=1,
                 adapter_name=self.platform_meta.name,

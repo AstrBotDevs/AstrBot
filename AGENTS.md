@@ -29,7 +29,21 @@ Runs on `http://localhost:3000` by default.
 4. When committing, ensure to use conventional commits messages, such as `feat: add new agent for data analysis` or `fix: resolve bug in provider manager`.
 5. Use English for all new comments.
 6. For path handling, use `pathlib.Path` instead of string paths, and use `astrbot.core.utils.path_utils` to get the AstrBot data and temp directory.
-7. Use Python 3.12+ type hinting syntax (e.g., `list[str]` over `List[str]`, `int | None` over `Optional[int]`). Avoid using `Any` and ensure comprehensive type annotations are provided.
+7. Use Python 3.12+ type hinting syntax (e.g., `list[str]` over `List[str]`, `int | None` over `Optional[int]`). Avoid using `Any` and `cast()` - use proper TypedDict, dataclass, or Protocol instead. When encountering dict access issues (e.g., `msg.get("key")` where ty infers wrong type), define a TypedDict with `total=False` to explicitly declare allowed keys.
+
+   Good example:
+   ```python
+   class MessageComponent(TypedDict, total=False):
+       type: str
+       text: str
+       path: str
+   ```
+
+   Bad example (avoid):
+   ```python
+   msg: Any = something
+   msg = cast(dict, msg)
+   ```
 8. When introducing new environment variables:
    - Use the `ASTRBOT_` prefix for naming (e.g., `ASTRBOT_ENABLE_FEATURE`).
    - Add the variable and description to `.env.example`.
@@ -37,7 +51,7 @@ Runs on `http://localhost:3000` by default.
      - Add to the module docstring under "Environment Variables Used in Project".
      - Add to the `keys_to_print` list in the `run` function for debug output.
 9. To check all available CLI commands and their usage recursively, run `astrbot help --all`.
-
+10. uv sync --group dev && uv run pytest --cov=astrbot tests/
 
 ## PR instructions
 

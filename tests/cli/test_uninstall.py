@@ -1,23 +1,11 @@
-import platform
 import shutil
-import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
 
 from astrbot.cli.commands.cmd_uninstall import uninstall
-
-
-@pytest.fixture
-def mock_systemctl():
-    """Mock shutil.which('systemctl') and subprocess.run"""
-    with patch("astrbot.cli.commands.cmd_uninstall.shutil.which") as mock_which, patch(
-        "astrbot.cli.commands.cmd_uninstall.subprocess.run"
-    ) as mock_run:
-        mock_which.return_value = "/usr/bin/systemctl"
-        yield mock_which, mock_run
 
 
 @pytest.fixture
@@ -39,44 +27,6 @@ def mock_astrbot_paths(tmp_path):
         yield mock_paths
 
 
-@pytest.mark.skipif(platform.system() != "Linux", reason="Systemd tests only on Linux")
-def test_uninstall_systemd_service(mock_systemctl, mock_astrbot_paths):
-    """Test systemd service removal"""
-    mock_which, mock_run = mock_systemctl
-    runner = CliRunner()
-
-    # Mock Path.home() to return a temp directory
-    with patch("pathlib.Path.home") as mock_home:
-        fake_home = mock_astrbot_paths.root / "home"
-        fake_home.mkdir()
-        mock_home.return_value = fake_home
-
-        # Create fake service file
-        service_dir = fake_home / ".config" / "systemd" / "user"
-        service_dir.mkdir(parents=True)
-        service_file = service_dir / "astrbot.service"
-        service_file.write_text("fake service content")
-
-        # Run with --yes to skip confirmation, --keep-data to focus on systemd
-        result = runner.invoke(uninstall, ["--yes", "--keep-data"])
-
-        assert result.exit_code == 0
-        assert "Stopping AstrBot service..." in result.output
-        assert "Systemd service uninstalled." in result.output
-
-        # Verify subprocess calls
-        mock_run.assert_any_call(
-            ["systemctl", "--user", "stop", "astrbot"], check=False
-        )
-        mock_run.assert_any_call(
-            ["systemctl", "--user", "disable", "astrbot"], check=False
-        )
-        mock_run.assert_any_call(["systemctl", "--user", "daemon-reload"], check=True)
-
-        # Verify file removed
-        assert not service_file.exists()
-
-
 def test_uninstall_data_removal(mock_astrbot_paths):
     """Test data directory removal"""
     runner = CliRunner()
@@ -90,7 +40,7 @@ def test_uninstall_data_removal(mock_astrbot_paths):
     result = runner.invoke(uninstall, ["--yes"])
 
     assert result.exit_code == 0
-    assert "AstrBot data removed successfully" in result.output
+    assert "AstrBot files removed successfully" in result.output
 
     # Verify removal
     assert not mock_astrbot_paths.data.exists()
@@ -105,7 +55,7 @@ def test_uninstall_keep_data(mock_astrbot_paths):
     result = runner.invoke(uninstall, ["--yes", "--keep-data"])
 
     assert result.exit_code == 0
-    assert "Skipping data removal as requested" in result.output
+    assert "Keeping data directory as requested" in result.output
 
     # Verify data still exists
     assert mock_astrbot_paths.data.exists()

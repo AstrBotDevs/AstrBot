@@ -13,7 +13,7 @@ from astrbot.core.utils.shared_preferences import SharedPreferences
 _VT = TypeVar("_VT")
 
 
-class ConfInfo(TypedDict):
+class ConfInfo(TypedDict, total=False):
     """Configuration information for a specific session or platform."""
 
     id: str  # UUID of the configuration or "default"
@@ -266,8 +266,8 @@ class AstrBotConfigManager:
         self,
         umo: str | None = None,
         key: str | None = None,
-        default: _VT = None,
-    ) -> _VT:
+        default: _VT | None = None,
+    ) -> _VT | None:
         """获取配置项｡umo 为 None 时使用默认配置"""
         if umo is None:
             return self.confs["default"].get(key, default)

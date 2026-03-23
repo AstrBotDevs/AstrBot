@@ -239,18 +239,6 @@ const {
           <!-- 插件市场标签页内容 -->
           <MarketPluginsTab :state="pageState" />
 
-          <v-row v-if="loading_">
-            <v-col
-              cols="12"
-              class="d-flex justify-center"
-            >
-              <v-progress-circular
-                indeterminate
-                color="primary"
-                size="48"
-              />
-            </v-col>
-          </v-row>
         </v-card-text>
       </v-card>
     </v-col>

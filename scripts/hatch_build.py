@@ -18,10 +18,12 @@ import os
 import shutil
 import subprocess
 import sys
+from logging import getLogger
 from pathlib import Path
 
 from hatchling.builders.hooks.plugin.interface import BuildHookInterface
-from loguru import logger
+
+logger = getLogger(__name__)
 
 
 class CustomBuildHook(BuildHookInterface):

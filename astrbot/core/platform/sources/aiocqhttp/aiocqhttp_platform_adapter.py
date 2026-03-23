@@ -4,7 +4,7 @@ import itertools
 import logging
 import time
 import uuid
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Coroutine
 from typing import Any, cast
 
 from aiocqhttp import CQHttp, Event
@@ -423,7 +423,7 @@ class AiocqhttpAdapter(Platform):
 
         return abm
 
-    def run(self) -> Awaitable[Any]:
+    def run(self) -> Coroutine[Any, Any, None]:
         if not self.host or not self.port:
             logger.warning(
                 "aiocqhttp: 未配置 ws_reverse_host 或 ws_reverse_port,将使用默认值:http://0.0.0.0:6199",

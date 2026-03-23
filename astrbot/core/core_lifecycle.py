@@ -230,7 +230,7 @@ class AstrBotCoreLifecycle:
         # 初始化关闭控制面板的事件
         self.dashboard_shutdown_event = asyncio.Event()
 
-        asyncio.create_task(update_llm_metadata())
+        asyncio.create_task(update_llm_metadata())  # noqa: RUF006
 
     def _load(self) -> None:
         """加载事件总线和任务并初始化."""
@@ -255,9 +255,10 @@ class AstrBotCoreLifecycle:
 
         # 把插件中注册的所有协程函数注册到事件总线中并执行
         extra_tasks = []
-        for task in self.star_context._register_tasks:
-            task_name = getattr(task, "__name__", task.__class__.__name__)
-            extra_tasks.append(asyncio.create_task(task, name=task_name))
+        if self.star_context._register_tasks is not None:
+            for task in self.star_context._register_tasks:
+                task_name = getattr(task, "__name__", task.__class__.__name__)
+                extra_tasks.append(asyncio.create_task(task, name=task_name))
 
         tasks_ = [event_bus_task, *(extra_tasks if extra_tasks else [])]
         if cron_task:

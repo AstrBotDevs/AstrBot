@@ -65,6 +65,33 @@ function normalizeBaseUrl(baseUrl: string | null | undefined): string {
   return stripTrailingSlashes(baseUrl?.trim() || "");
 }
 
+export function normalizeConfiguredApiBaseUrl(
+  baseUrl: string | null | undefined,
+): string {
+  return normalizeBaseUrl(baseUrl);
+}
+
+export function getApiBaseUrlValidationError(
+  baseUrl: string | null | undefined,
+): string {
+  const normalizedBaseUrl = normalizeConfiguredApiBaseUrl(baseUrl);
+
+  if (!normalizedBaseUrl) {
+    return "";
+  }
+
+  try {
+    const parsedUrl = new URL(normalizedBaseUrl);
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+      return "API Base URL must use http:// or https://";
+    }
+  } catch {
+    return "API Base URL must be a valid absolute URL";
+  }
+
+  return "";
+}
+
 export function getApiBaseUrl(): string {
   return normalizeBaseUrl(service.defaults.baseURL);
 }

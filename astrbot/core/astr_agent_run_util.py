@@ -106,7 +106,7 @@ def _extract_final_streaming_chain(msg_chain: MessageChain) -> MessageChain | No
 
 async def run_agent(
     agent_runner: AgentRunner,
-    max_step: int = 30,
+    max_step: int = 3,
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
     stream_to_general: bool = False,
@@ -182,8 +182,13 @@ async def run_agent(
                     # 对于其他情况,暂时先不处理
                     continue
                 elif resp.type == "tool_call":
-                    if agent_runner.streaming:
-                        # 用来标记流式响应需要分节
+                    if agent_runner.streaming and show_tool_use:
+                        # 向下游平台发送 "break" 分段信号（空 MessageChain，不携带数据）。
+                        # 平台适配器收到后会关闭当前流式消息，并在后续文本到来时创建新消息。
+                        # 仅在 show_tool_use 为 True 时才发送：此时紧接着会通过
+                        # astr_event.send() 独立发送工具状态消息（如"🔨 调用工具: xxx"），
+                        # 需要分段才能保证消息顺序正确。
+                        # 若 show_tool_use 为 False，不会有独立消息插入，无需分段。
                         yield MessageChain(chain=[], type="break")
 
                     tool_info = _extract_chain_json_data(resp.data["chain"])
@@ -301,7 +306,7 @@ async def _watch_agent_stop_signal(agent_runner: AgentRunner, astr_event) -> Non
 async def run_live_agent(
     agent_runner: AgentRunner,
     tts_provider: TTSProvider | None = None,
-    max_step: int = 30,
+    max_step: int = 3,
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
     show_reasoning: bool = False,

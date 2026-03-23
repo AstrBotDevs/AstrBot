@@ -170,7 +170,7 @@ class ToolsRoute(Route):
                     await self.tool_mgr.enable_mcp_server(
                         name,
                         server_config,
-                        timeout=30,
+                        init_timeout=30,
                     )
                 except TimeoutError:
                     rollback_ok = self._rollback_mcp_server(name)
@@ -271,7 +271,7 @@ class ToolsRoute(Route):
                         or is_rename
                     ):
                         try:
-                            await self.tool_mgr.disable_mcp_server(old_name, timeout=10)
+                            await self.tool_mgr.disable_mcp_server(old_name, shutdown_timeout=10)
                         except TimeoutError as e:
                             return (
                                 Response()
@@ -293,7 +293,7 @@ class ToolsRoute(Route):
                         await self.tool_mgr.enable_mcp_server(
                             name,
                             config["mcpServers"][name],
-                            timeout=30,
+                            init_timeout=30,
                         )
                     except TimeoutError:
                         return (

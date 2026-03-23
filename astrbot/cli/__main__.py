@@ -7,7 +7,8 @@ import click
 from click.shell_completion import get_completion_class
 
 from . import __version__
-from .commands import bk, conf, init, plug, run, uninstall, webui
+from .commands import bk, conf, init, plug, run, tui, uninstall
+from .i18n import t
 
 logo_tmpl = r"""
      ___           _______.___________..______      .______     ______   .___________.
@@ -22,10 +23,12 @@ logo_tmpl = r"""
 @click.group()
 @click.version_option(__version__, prog_name="AstrBot")
 def cli() -> None:
-    """The AstrBot CLI"""
+    """Astrbot
+    Agentic IM Chatbot infrastructure that integrates lots of IM platforms, LLMs, plugins and AI feature, and can be your openclaw alternative. ✨
+    """
     click.echo(logo_tmpl)
-    click.echo("Welcome to AstrBot CLI!")
-    click.echo(f"AstrBot CLI version: {__version__}")
+    click.echo(t("cli_welcome"))
+    click.echo(t("cli_version", version=__version__))
 
 
 @click.command()
@@ -68,7 +71,7 @@ def help(command_name: str | None, all: bool) -> None:
             cmd_ctx = click.Context(command, info_name=command.name, parent=parent)
             click.echo(command.get_help(cmd_ctx))
         else:
-            click.echo(f"Unknown command: {command_name}")
+            click.echo(t("cli_unknown_command", command=command_name))
             sys.exit(1)
     else:
         # Display general help information
@@ -77,12 +80,12 @@ def help(command_name: str | None, all: bool) -> None:
 
 cli.add_command(init)
 cli.add_command(run)
-cli.add_command(webui)
 cli.add_command(help)
 cli.add_command(plug)
 cli.add_command(conf)
 cli.add_command(uninstall)
 cli.add_command(bk)
+cli.add_command(tui)
 
 
 @click.command()
@@ -105,6 +108,9 @@ def completion(shell: str | None) -> None:
             sys.exit(1)
 
     comp_cls = get_completion_class(shell)
+    if comp_cls is None:
+        click.echo(f"No completion support for shell: {shell}", err=True)
+        sys.exit(1)
     comp = comp_cls(
         cli, ctx_args={}, prog_name="astrbot", complete_var="_ASTRBOT_COMPLETE"
     )

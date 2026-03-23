@@ -567,9 +567,9 @@ class Main(star.Star):
         if provider == "default":
             web_search_t = func_tool_mgr.get_func("web_search")
             fetch_url_t = func_tool_mgr.get_func("fetch_url")
-            if web_search_t:
+            if web_search_t and web_search_t.active:
                 tool_set.add_tool(web_search_t)
-            if fetch_url_t:
+            if fetch_url_t and fetch_url_t.active:
                 tool_set.add_tool(fetch_url_t)
             tool_set.remove_tool("web_search_tavily")
             tool_set.remove_tool("tavily_extract_web_page")
@@ -578,9 +578,9 @@ class Main(star.Star):
         elif provider == "tavily":
             web_search_tavily = func_tool_mgr.get_func("web_search_tavily")
             tavily_extract_web_page = func_tool_mgr.get_func("tavily_extract_web_page")
-            if web_search_tavily:
+            if web_search_tavily and web_search_tavily.active:
                 tool_set.add_tool(web_search_tavily)
-            if tavily_extract_web_page:
+            if tavily_extract_web_page and tavily_extract_web_page.active:
                 tool_set.add_tool(tavily_extract_web_page)
             tool_set.remove_tool("web_search")
             tool_set.remove_tool("fetch_url")
@@ -590,9 +590,8 @@ class Main(star.Star):
             try:
                 await self.ensure_baidu_ai_search_mcp(event.unified_msg_origin)
                 aisearch_tool = func_tool_mgr.get_func("AIsearch")
-                if not aisearch_tool:
-                    raise ValueError("Cannot get Baidu AI Search MCP tool.")
-                tool_set.add_tool(aisearch_tool)
+                if aisearch_tool and aisearch_tool.active:
+                    tool_set.add_tool(aisearch_tool)
                 tool_set.remove_tool("web_search")
                 tool_set.remove_tool("fetch_url")
                 tool_set.remove_tool("web_search_tavily")
@@ -602,7 +601,7 @@ class Main(star.Star):
                 logger.error(f"Cannot Initialize Baidu AI Search MCP Server: {e}")
         elif provider == "bocha":
             web_search_bocha = func_tool_mgr.get_func("web_search_bocha")
-            if web_search_bocha:
+            if web_search_bocha and web_search_bocha.active:
                 tool_set.add_tool(web_search_bocha)
             tool_set.remove_tool("web_search")
             tool_set.remove_tool("fetch_url")

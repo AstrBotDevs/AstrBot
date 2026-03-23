@@ -101,6 +101,13 @@ class ProviderManager:
         if hook not in self._provider_change_hooks:
             self._provider_change_hooks.append(hook)
 
+    def unregister_provider_change_hook(
+        self,
+        hook: Callable[[str, ProviderType, str | None], None],
+    ) -> None:
+        if hook in self._provider_change_hooks:
+            self._provider_change_hooks.remove(hook)
+
     def _notify_provider_changed(
         self,
         provider_id: str,
@@ -380,6 +387,10 @@ class ProviderManager:
                 from .sources.anthropic_source import (
                     ProviderAnthropic as ProviderAnthropic,
                 )
+            case "kimi_code_chat_completion":
+                from .sources.kimi_code_source import (
+                    ProviderKimiCode as ProviderKimiCode,
+                )
             case "googlegenai_chat_completion":
                 from .sources.gemini_source import (
                     ProviderGoogleGenAI as ProviderGoogleGenAI,
@@ -392,6 +403,10 @@ class ProviderManager:
                 from .sources.whisper_api_source import (
                     ProviderOpenAIWhisperAPI as ProviderOpenAIWhisperAPI,
                 )
+            case "mimo_stt_api":
+                from .sources.mimo_stt_api_source import (
+                    ProviderMiMoSTTAPI as ProviderMiMoSTTAPI,
+                )
             case "openai_whisper_selfhost":
                 from .sources.whisper_selfhosted_source import (
                     ProviderOpenAIWhisperSelfHost as ProviderOpenAIWhisperSelfHost,
@@ -403,6 +418,10 @@ class ProviderManager:
             case "openai_tts_api":
                 from .sources.openai_tts_api_source import (
                     ProviderOpenAITTSAPI as ProviderOpenAITTSAPI,
+                )
+            case "mimo_tts_api":
+                from .sources.mimo_tts_api_source import (
+                    ProviderMiMoTTSAPI as ProviderMiMoTTSAPI,
                 )
             case "genie_tts":
                 from .sources.genie_tts import (

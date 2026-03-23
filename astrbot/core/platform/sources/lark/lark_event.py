@@ -762,35 +762,20 @@ class LarkMessageEvent(AstrMessageEvent):
     async def send_streaming(self, generator, use_fallback: bool = False):
         """使用 CardKit 流式卡片实现打字机效果｡
 
-        流程:创建卡片实体 ￫ 发送消息 ￫ 流式更新文本 ￫ 关闭流式模式｡
+        流程:首字到来时创建卡片实体 ￫ 发送消息 ￫ 流式更新文本 ￫ 关闭流式模式｡
+        卡片创建延迟到第一个文本 token 到达时,避免工具调用阶段就渲染空卡片｡
         使用解耦发送循环,LLM token 到达时只更新 buffer 并唤醒发送协程,
         发送频率由网络 RTT 自然限流｡
         """
-        # Step 1: 创建流式卡片实体
-        card_id = await self._create_streaming_card()
-        if not card_id:
-            logger.warning("[Lark] 无法创建流式卡片,回退到非流式发送")
-            await self._fallback_send_streaming(generator, use_fallback)
-            return
-
-        # Step 2: 发送卡片消息
-        sent = await self._send_card_message(
-            card_id,
-            reply_message_id=self.message_obj.message_id,
-        )
-        if not sent:
-            logger.error("[Lark] 发送流式卡片消息失败,回退到非流式发送")
-            await self._fallback_send_streaming(generator, use_fallback)
-            return
-
-        logger.info("[Lark] 流式输出: 使用 CardKit 流式卡片")
-
-        # Step 3: 解耦发送循环 (Event-driven, 参考 Telegram Draft 路径)
+        # Lazy-init: card & sender loop created on first text token
+        card_id = None
         sequence = 0
         delta = ""
         last_sent = ""
         done = False
         text_changed = asyncio.Event()
+        sender_task = None
+        fallback_used = False  # 回退路径已处理 Metric,避免重复上报
 
         async def _sender_loop() -> None:
             """信号驱动的文本发送循环,有新内容就发,RTT 自然限流｡"""
@@ -807,7 +792,32 @@ class LarkMessageEvent(AstrMessageEvent):
                     if delta != snapshot:
                         text_changed.set()
 
-        sender_task = asyncio.create_task(_sender_loop())
+        async def _consume_rest_and_fallback(gen, initial_text: str) -> None:
+            """Card creation failed; consume remaining chunks and send non-streaming."""
+            nonlocal fallback_used
+            fallback_used = True
+            buffer = MessageChain().message(initial_text) if initial_text else None
+            async for chain in gen:
+                if not isinstance(chain, MessageChain):
+                    continue
+                if buffer is None:
+                    buffer = chain
+                else:
+                    buffer.chain.extend(chain.chain)
+            if buffer:
+                buffer.squash_plain()
+                await self.send(buffer)
+            await Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+            self._has_send_oper = True
+
+        async def _flush_and_close_card() -> None:
+            """补发最终文本并关闭当前卡片的流式模式｡"""
+            nonlocal sequence
+            if delta and delta != last_sent:
+                sequence += 1
+                await self._update_streaming_text(card_id, delta, sequence)
+            sequence += 1
+            await self._close_streaming_mode(card_id, sequence)
 
         try:
             async for chain in generator:
@@ -815,26 +825,69 @@ class LarkMessageEvent(AstrMessageEvent):
                     continue
 
                 if chain.type == "break":
-                    # 飞书卡片不支持分段,忽略 break
+                    # Tool call boundary: close current card, next text
+                    # token will lazily create a new one below the tool
+                    # status message.
+                    if card_id and sender_task:
+                        done = True
+                        text_changed.set()
+                        await sender_task
+                        await _flush_and_close_card()
+                        # Reset for lazy new-card creation
+                        card_id = None
+                        sequence = 0
+                        delta = ""
+                        last_sent = ""
+                        done = False
+                        sender_task = None
                     continue
 
                 for comp in chain.chain:
                     if isinstance(comp, Plain):
                         delta += comp.text
+
+                        # Lazy card creation on first text token
+                        if card_id is None:
+                            card_id = await self._create_streaming_card()
+                            if not card_id:
+                                logger.warning(
+                                    "[Lark] 无法创建流式卡片,回退到非流式发送"
+                                )
+                                await _consume_rest_and_fallback(generator, delta)
+                                return
+
+                            sent = await self._send_card_message(
+                                card_id,
+                                reply_message_id=self.message_obj.message_id,
+                            )
+                            if not sent:
+                                logger.error(
+                                    "[Lark] 发送流式卡片消息失败,回退到非流式发送"
+                                )
+                                await _consume_rest_and_fallback(generator, delta)
+                                return
+
+                            logger.info("[Lark] 流式输出: 使用 CardKit 流式卡片")
+                            sender_task = asyncio.create_task(_sender_loop())
+
                         text_changed.set()
         finally:
             done = True
             text_changed.set()
-            await sender_task
+            if sender_task:
+                await sender_task
 
-        # Step 4: 必要时补发最终文本 + 关闭流式模式
-        if delta and delta != last_sent:
-            sequence += 1
-            await self._update_streaming_text(card_id, delta, sequence)
+        # If no text was produced at all, no card was created
+        if card_id is None:
+            if not fallback_used:
+                await Metric.upload(
+                    msg_event_tick=1, adapter_name=self.platform_meta.name
+                )
+                self._has_send_oper = True
+            return
 
-        sequence += 1
-        await self._close_streaming_mode(card_id, sequence)
+        await _flush_and_close_card()
 
-        # Step 5: 内联父类 send_streaming 的副作用
+        # 内联父类 send_streaming 的副作用
         await Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
         self._has_send_oper = True

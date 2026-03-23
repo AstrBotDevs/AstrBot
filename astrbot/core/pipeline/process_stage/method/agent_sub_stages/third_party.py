@@ -4,18 +4,10 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from astrbot.core import astrbot_config, logger
-from astrbot.core.agent.runners.coze.coze_agent_runner import CozeAgentRunner
-from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
-    DashscopeAgentRunner,
-)
 from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
     DEERFLOW_PROVIDER_TYPE,
 )
-from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
-    DeerFlowAgentRunner,
-)
-from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -32,6 +24,8 @@ from astrbot.core.persona_error_reply import (
 if TYPE_CHECKING:
     from astrbot.core.agent.runners.base import BaseAgentRunner
     from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
+from astrbot.core.pipeline.context import PipelineContext, call_event_hook
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
@@ -40,9 +34,6 @@ from astrbot.core.provider.entities import (
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.metrics import Metric
-
-from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
-from ....context import PipelineContext, call_event_hook
 
 AGENT_RUNNER_TYPE_KEY = {
     "dify": "dify_agent_runner_provider_id",
@@ -164,6 +155,9 @@ async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
 class ThirdPartyAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
+        self.provider_wake_prefix: str = ctx.astrbot_config["provider_settings"][
+            "wake_prefix"
+        ]
         self.conf = ctx.astrbot_config
         self.runner_type = self.conf["provider_settings"]["agent_runner_type"]
         self.prov_id = self.conf["provider_settings"].get(
@@ -287,12 +281,13 @@ class ThirdPartyAgentSubStage(Stage):
         yield
 
     async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str
-    ) -> AsyncGenerator[None, None]:
+        self,
+        event: AstrMessageEvent,
+    ) -> None | AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
-        if provider_wake_prefix and not event.message_str.startswith(
-            provider_wake_prefix
+        if self.provider_wake_prefix and not event.message_str.startswith(
+            self.provider_wake_prefix
         ):
             return
 
@@ -312,7 +307,7 @@ class ThirdPartyAgentSubStage(Stage):
         # make provider request
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
-        req.prompt = event.message_str[len(provider_wake_prefix) :]
+        req.prompt = event.message_str[len(self.provider_wake_prefix) :]
         for comp in event.message_obj.message:
             if isinstance(comp, Image):
                 image_path = await comp.convert_to_base64()
@@ -327,14 +322,46 @@ class ThirdPartyAgentSubStage(Stage):
         # call event hook
         if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
             return
+        sdk_plugin_bridge = getattr(
+            self.ctx.plugin_manager.context, "sdk_plugin_bridge", None
+        )
+        if sdk_plugin_bridge is not None:
+            try:
+                await sdk_plugin_bridge.dispatch_message_event(
+                    "llm_request",
+                    event,
+                    {
+                        "prompt": req.prompt,
+                        "provider_id": self.prov_id,
+                    },
+                    provider_request=req,
+                )
+            except Exception as exc:
+                logger.warning("SDK llm_request dispatch failed: %s", exc)
 
         if self.runner_type == "dify":
+            from astrbot.core.agent.runners.dify.dify_agent_runner import (
+                DifyAgentRunner,
+            )
+
             runner = DifyAgentRunner[AstrAgentContext]()
         elif self.runner_type == "coze":
+            from astrbot.core.agent.runners.coze.coze_agent_runner import (
+                CozeAgentRunner,
+            )
+
             runner = CozeAgentRunner[AstrAgentContext]()
         elif self.runner_type == "dashscope":
+            from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
+                DashscopeAgentRunner,
+            )
+
             runner = DashscopeAgentRunner[AstrAgentContext]()
         elif self.runner_type == DEERFLOW_PROVIDER_TYPE:
+            from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
+                DeerFlowAgentRunner,
+            )
+
             runner = DeerFlowAgentRunner[AstrAgentContext]()
         else:
             raise ValueError(
@@ -378,7 +405,7 @@ class ThirdPartyAgentSubStage(Stage):
                 request=req,
                 run_context=AgentContextWrapper(
                     context=astr_agent_ctx,
-                    tool_call_timeout=60,
+                    tool_call_timeout=120,
                 ),
                 agent_hooks=MAIN_AGENT_HOOKS,
                 provider_config=self.prov_cfg,
@@ -417,7 +444,7 @@ class ThirdPartyAgentSubStage(Stage):
             if not streaming_used:
                 await close_runner_once()
 
-        asyncio.create_task(
+        asyncio.create_task(  # noqa: RUF006
             Metric.upload(
                 llm_tick=1,
                 model_name=self.runner_type,

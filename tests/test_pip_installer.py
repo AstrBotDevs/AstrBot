@@ -911,8 +911,8 @@ def test_get_core_constraints_caches_fallback_resolution(monkeypatch):
     finally:
         core_constraints_module._get_core_constraints.cache_clear()
 
-    assert first == ("shared-lib==2.0",)
-    assert second == ("shared-lib==2.0",)
+    assert first == ("shared-lib>=1.0",)
+    assert second == ("shared-lib>=1.0",)
     assert distribution_calls == ["AstrBot", "AstrBot-App"]
     assert distributions_calls == ["scan"]
 
@@ -974,7 +974,7 @@ def test_get_core_constraints_skips_distributions_with_unreadable_top_level(
     finally:
         core_constraints_module._get_core_constraints.cache_clear()
 
-    assert constraints == ("shared-lib==2.0",)
+    assert constraints == ("shared-lib>=1.0",)
 
 
 def test_core_constraints_file_propagates_inner_conflict_without_fake_warning(

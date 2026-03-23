@@ -7,6 +7,7 @@ from openai import NOT_GIVEN, AsyncOpenAI
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
+from astrbot.core.utils.media_utils import convert_audio_to_wav
 from astrbot.core.utils.tencent_record_helper import (
     convert_to_pcm_wav,
     tencent_silk_to_wav,
@@ -81,7 +82,22 @@ class ProviderOpenAIWhisperAPI(STTProvider):
         if not await anyio.Path(audio_url).exists():
             raise FileNotFoundError(f"文件不存在: {audio_url}")
 
-        if audio_url.endswith(".amr") or audio_url.endswith(".silk") or is_tencent:
+        lower_audio_url = audio_url.lower()
+
+        if lower_audio_url.endswith(".opus"):
+            temp_dir = get_astrbot_temp_path()
+            output_path = os.path.join(
+                temp_dir,
+                f"whisper_api_{uuid.uuid4().hex[:8]}.wav",
+            )
+            logger.info("Converting opus file to wav using convert_audio_to_wav...")
+            await convert_audio_to_wav(audio_url, output_path)
+            audio_url = output_path
+        elif (
+            lower_audio_url.endswith(".amr")
+            or lower_audio_url.endswith(".silk")
+            or is_tencent
+        ):
             file_format = await self._get_audio_format(audio_url)
 
             # 判断是否需要转换

@@ -1,0 +1,755 @@
+import asyncio
+import json
+import os
+import uuid
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any, cast
+
+import anyio
+from quart import Response as QuartResponse
+from quart import g, make_response, request, send_file
+
+from astrbot.core import logger
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.db import BaseDatabase
+from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.sources.tui.tui_queue_mgr import tui_queue_mgr
+from astrbot.core.platform.sources.webchat.message_parts_helper import (
+    build_webchat_message_parts,
+    create_attachment_part_from_existing_file,
+    strip_message_parts_path_fields,
+    webchat_message_parts_have_content,
+)
+from astrbot.core.utils.active_event_registry import active_event_registry
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.datetime_utils import to_utc_isoformat
+
+from .route import Response, Route, RouteContext
+
+
+@asynccontextmanager
+async def track_conversation(convs: dict, conv_id: str):
+    convs[conv_id] = True
+    try:
+        yield
+    finally:
+        convs.pop(conv_id, None)
+
+
+async def _poll_tui_stream_result(back_queue, username: str):
+    try:
+        result = await asyncio.wait_for(back_queue.get(), timeout=1)
+    except asyncio.TimeoutError:
+        return None, False
+    except asyncio.CancelledError:
+        logger.debug(f"[TUI] User {username} disconnected.")
+        return None, True
+    except Exception as e:
+        logger.error(f"TUI stream error: {e}")
+        return None, False
+    return result, False
+
+
+def _resolve_path(path: str) -> Path:
+    return Path(path).resolve(strict=False)
+
+
+class TUIChatRoute(Route):
+    def __init__(
+        self,
+        context: RouteContext,
+        db: BaseDatabase,
+        core_lifecycle: AstrBotCoreLifecycle,
+    ) -> None:
+        super().__init__(context)
+        self.routes = {
+            "/tui/chat": ("POST", self.chat),
+            "/tui/new_session": ("GET", self.new_session),
+            "/tui/sessions": ("GET", self.get_sessions),
+            "/tui/get_session": ("GET", self.get_session),
+            "/tui/stop": ("POST", self.stop_session),
+            "/tui/delete_session": ("GET", self.delete_tui_session),
+            "/tui/batch_delete_sessions": ("POST", self.batch_delete_sessions),
+            "/tui/update_session_display_name": (
+                "POST",
+                self.update_session_display_name,
+            ),
+            "/tui/get_file": ("GET", self.get_file),
+            "/tui/get_attachment": ("GET", self.get_attachment),
+            "/tui/post_file": ("POST", self.post_file),
+        }
+        self.core_lifecycle = core_lifecycle
+        self.register_routes()
+        self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
+        os.makedirs(self.attachments_dir, exist_ok=True)
+
+        self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
+        self.conv_mgr = core_lifecycle.conversation_manager
+        self.platform_history_mgr = core_lifecycle.platform_message_history_manager
+        self.db = db
+        self.umop_config_router = core_lifecycle.umop_config_router
+
+        self.running_convs: dict[str, bool] = {}
+
+    async def get_file(self):
+        filename = request.args.get("filename")
+        if not filename:
+            return Response().error("Missing key: filename").__dict__
+
+        try:
+            file_path = os.path.join(self.attachments_dir, os.path.basename(filename))
+            resolved_file_path = _resolve_path(file_path)
+            resolved_base_dir = _resolve_path(self.attachments_dir)
+
+            if not await anyio.Path(resolved_file_path).exists():
+                return Response().error("File not found").__dict__
+
+            try:
+                resolved_file_path.relative_to(resolved_base_dir)
+            except ValueError:
+                return Response().error("Invalid file path").__dict__
+
+            filename_ext = os.path.splitext(filename)[1].lower()
+            if filename_ext == ".wav":
+                return await send_file(str(resolved_file_path), mimetype="audio/wav")
+            if filename_ext[1:] in self.supported_imgs:
+                return await send_file(str(resolved_file_path), mimetype="image/jpeg")
+            return await send_file(str(resolved_file_path))
+
+        except (FileNotFoundError, OSError):
+            return Response().error("File access error").__dict__
+
+    async def get_attachment(self):
+        """Get attachment file by attachment_id."""
+        attachment_id = request.args.get("attachment_id")
+        if not attachment_id:
+            return Response().error("Missing key: attachment_id").__dict__
+
+        try:
+            attachment = await self.db.get_attachment_by_id(attachment_id)
+            if not attachment:
+                return Response().error("Attachment not found").__dict__
+
+            file_path = attachment.path
+            resolved_file_path = _resolve_path(file_path)
+
+            return await send_file(
+                str(resolved_file_path), mimetype=attachment.mime_type
+            )
+
+        except (FileNotFoundError, OSError):
+            return Response().error("File access error").__dict__
+
+    async def post_file(self):
+        """Upload a file and create an attachment record, return attachment_id."""
+        post_data = await request.files
+        if "file" not in post_data:
+            return Response().error("Missing key: file").__dict__
+
+        file = post_data["file"]
+        filename = file.filename or f"{uuid.uuid4()!s}"
+        content_type = file.content_type or "application/octet-stream"
+
+        if content_type.startswith("image"):
+            attach_type = "image"
+        elif content_type.startswith("audio"):
+            attach_type = "record"
+        elif content_type.startswith("video"):
+            attach_type = "video"
+        else:
+            attach_type = "file"
+
+        path = os.path.join(self.attachments_dir, filename)
+        await file.save(path)
+
+        attachment = await self.db.insert_attachment(
+            path=path,
+            type=attach_type,
+            mime_type=content_type,
+        )
+
+        if not attachment:
+            return Response().error("Failed to create attachment").__dict__
+
+        filename = os.path.basename(attachment.path)
+
+        return (
+            Response()
+            .ok(
+                data={
+                    "attachment_id": attachment.attachment_id,
+                    "filename": filename,
+                    "type": attach_type,
+                }
+            )
+            .__dict__
+        )
+
+    async def _build_user_message_parts(self, message: str | list) -> list[dict]:
+        """Build user message parts list."""
+        return await build_webchat_message_parts(
+            message,
+            get_attachment_by_id=self.db.get_attachment_by_id,
+            strict=False,
+        )
+
+    async def _create_attachment_from_file(
+        self, filename: str, attach_type: str
+    ) -> dict | None:
+        """Create attachment from local file and return message part."""
+        return await create_attachment_part_from_existing_file(
+            filename,
+            attach_type=attach_type,
+            insert_attachment=self.db.insert_attachment,
+            attachments_dir=self.attachments_dir,
+        )
+
+    async def _save_bot_message(
+        self,
+        tui_conv_id: str,
+        text: str,
+        media_parts: list,
+        reasoning: str,
+        agent_stats: dict,
+        refs: dict,
+    ):
+        """Save bot message to history, return saved record."""
+        bot_message_parts = []
+        bot_message_parts.extend(media_parts)
+        if text:
+            bot_message_parts.append({"type": "plain", "text": text})
+
+        new_his: dict[str, Any] = {"type": "bot", "message": bot_message_parts}
+        if reasoning:
+            new_his["reasoning"] = reasoning
+        if agent_stats:
+            new_his["agent_stats"] = agent_stats
+        if refs:
+            new_his["refs"] = refs
+
+        record = await self.platform_history_mgr.insert(
+            platform_id="tui",
+            user_id=tui_conv_id,
+            content=new_his,
+            sender_id="bot",
+            sender_name="bot",
+        )
+        return record
+
+    async def chat(self, post_data: dict | None = None):
+        username = g.get("username", "guest")
+
+        if post_data is None:
+            post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+        if "message" not in post_data and "files" not in post_data:
+            return Response().error("Missing key: message or files").__dict__
+
+        if "session_id" not in post_data and "conversation_id" not in post_data:
+            return (
+                Response().error("Missing key: session_id or conversation_id").__dict__
+            )
+
+        message = post_data["message"]
+        session_id = post_data.get("session_id", post_data.get("conversation_id"))
+        selected_provider = post_data.get("selected_provider")
+        selected_model = post_data.get("selected_model")
+        enable_streaming = post_data.get("enable_streaming", True)
+
+        if not session_id:
+            return Response().error("session_id is empty").__dict__
+
+        tui_conv_id = session_id
+
+        message_parts = await self._build_user_message_parts(message)
+        if not webchat_message_parts_have_content(message_parts):
+            return (
+                Response()
+                .error("Message content is empty (reply only is not allowed)")
+                .__dict__
+            )
+
+        message_id = str(uuid.uuid4())
+        back_queue = tui_queue_mgr.get_or_create_back_queue(
+            message_id,
+            tui_conv_id,
+        )
+
+        async def stream():
+            client_disconnected = False
+            accumulated_parts = []
+            accumulated_text = ""
+            accumulated_reasoning = ""
+            tool_calls = {}
+            agent_stats = {}
+            refs = {}
+            try:
+                session_info = {
+                    "type": "session_id",
+                    "data": None,
+                    "session_id": tui_conv_id,
+                }
+                yield f"data: {json.dumps(session_info, ensure_ascii=False)}\n\n"
+
+                async with track_conversation(self.running_convs, tui_conv_id):
+                    while True:
+                        result, should_break = await _poll_tui_stream_result(
+                            back_queue, username
+                        )
+                        if should_break:
+                            client_disconnected = True
+                            break
+                        if not result:
+                            continue
+
+                        if (
+                            "message_id" in result
+                            and result["message_id"] != message_id
+                        ):
+                            logger.warning("TUI stream message_id mismatch")
+                            continue
+
+                        result_text = result["data"]
+                        msg_type = result.get("type")
+                        streaming = result.get("streaming", False)
+                        chain_type = result.get("chain_type")
+
+                        if chain_type == "agent_stats":
+                            stats_info = {
+                                "type": "agent_stats",
+                                "data": json.loads(result_text),
+                            }
+                            yield f"data: {json.dumps(stats_info, ensure_ascii=False)}\n\n"
+                            agent_stats = stats_info["data"]
+                            continue
+
+                        try:
+                            if not client_disconnected:
+                                yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
+                        except Exception as e:
+                            if not client_disconnected:
+                                logger.debug(f"[TUI] User {username} disconnected. {e}")
+                            client_disconnected = True
+
+                        try:
+                            if not client_disconnected:
+                                await asyncio.sleep(0.05)
+                        except asyncio.CancelledError:
+                            logger.debug(f"[TUI] User {username} disconnected.")
+                            client_disconnected = True
+
+                        if msg_type == "plain":
+                            chain_type = result.get("chain_type")
+                            if chain_type == "tool_call":
+                                tool_call = json.loads(result_text)
+                                tool_calls[tool_call.get("id")] = tool_call
+                                if accumulated_text:
+                                    accumulated_parts.append(
+                                        {"type": "plain", "text": accumulated_text}
+                                    )
+                                    accumulated_text = ""
+                            elif chain_type == "tool_call_result":
+                                tcr = json.loads(result_text)
+                                tc_id = tcr.get("id")
+                                if tc_id in tool_calls:
+                                    tool_calls[tc_id]["result"] = tcr.get("result")
+                                    tool_calls[tc_id]["finished_ts"] = tcr.get("ts")
+                                    accumulated_parts.append(
+                                        {
+                                            "type": "tool_call",
+                                            "tool_calls": [tool_calls[tc_id]],
+                                        }
+                                    )
+                                    tool_calls.pop(tc_id, None)
+                            elif chain_type == "reasoning":
+                                accumulated_reasoning += result_text
+                            elif streaming:
+                                accumulated_text += result_text
+                            else:
+                                accumulated_text = result_text
+                        elif msg_type == "image":
+                            filename = result_text.replace("[IMAGE]", "")
+                            part = await self._create_attachment_from_file(
+                                filename, "image"
+                            )
+                            if part:
+                                accumulated_parts.append(part)
+                        elif msg_type == "record":
+                            filename = result_text.replace("[RECORD]", "")
+                            part = await self._create_attachment_from_file(
+                                filename, "record"
+                            )
+                            if part:
+                                accumulated_parts.append(part)
+                        elif msg_type == "file":
+                            filename = result_text.replace("[FILE]", "")
+                            part = await self._create_attachment_from_file(
+                                filename, "file"
+                            )
+                            if part:
+                                accumulated_parts.append(part)
+
+                        if msg_type == "end":
+                            break
+                        elif (streaming and msg_type == "complete") or not streaming:
+                            if (
+                                chain_type == "tool_call"
+                                or chain_type == "tool_call_result"
+                            ):
+                                continue
+
+                            saved_record = await self._save_bot_message(
+                                tui_conv_id,
+                                accumulated_text,
+                                accumulated_parts,
+                                accumulated_reasoning,
+                                agent_stats,
+                                refs,
+                            )
+                            if saved_record and not client_disconnected:
+                                saved_info = {
+                                    "type": "message_saved",
+                                    "data": {
+                                        "id": saved_record.id,
+                                        "created_at": to_utc_isoformat(
+                                            saved_record.created_at
+                                        ),
+                                    },
+                                }
+                                try:
+                                    yield f"data: {json.dumps(saved_info, ensure_ascii=False)}\n\n"
+                                except Exception:
+                                    pass
+                            accumulated_parts = []
+                            accumulated_text = ""
+                            accumulated_reasoning = ""
+                            agent_stats = {}
+                            refs = {}
+            except BaseException as e:
+                logger.exception(f"TUI stream unexpected error: {e}", exc_info=True)
+            finally:
+                tui_queue_mgr.remove_back_queue(message_id)
+
+        chat_queue = tui_queue_mgr.get_or_create_queue(tui_conv_id)
+        await chat_queue.put(
+            (
+                username,
+                tui_conv_id,
+                {
+                    "message": message_parts,
+                    "selected_provider": selected_provider,
+                    "selected_model": selected_model,
+                    "enable_streaming": enable_streaming,
+                    "message_id": message_id,
+                },
+            ),
+        )
+
+        message_parts_for_storage = strip_message_parts_path_fields(message_parts)
+
+        await self.platform_history_mgr.insert(
+            platform_id="tui",
+            user_id=tui_conv_id,
+            content={"type": "user", "message": message_parts_for_storage},
+            sender_id=username,
+            sender_name=username,
+        )
+
+        response = cast(
+            QuartResponse,
+            await make_response(
+                stream(),
+                {
+                    "Content-Type": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                    "Transfer-Encoding": "chunked",
+                    "Connection": "keep-alive",
+                },
+            ),
+        )
+        response.timeout = None
+        return response
+
+    async def stop_session(self):
+        """Stop active agent runs for a session."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        session_id = post_data.get("session_id")
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+
+        username = g.get("username", "guest")
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        message_type = (
+            MessageType.GROUP_MESSAGE.value
+            if session.is_group
+            else MessageType.FRIEND_MESSAGE.value
+        )
+        umo = (
+            f"{session.platform_id}:{message_type}:"
+            f"{session.platform_id}!{username}!{session_id}"
+        )
+        stopped_count = active_event_registry.request_agent_stop_all(umo)
+
+        return Response().ok(data={"stopped_count": stopped_count}).__dict__
+
+    async def _delete_session_internal(self, session, username: str) -> None:
+        """Delete a single session and all its related data."""
+        session_id = session.session_id
+
+        message_type = "GroupMessage" if session.is_group else "FriendMessage"
+        unified_msg_origin = f"{session.platform_id}:{message_type}:{session.platform_id}!{username}!{session_id}"
+        await self.conv_mgr.delete_conversations_by_user_id(unified_msg_origin)
+
+        history_list = await self.platform_history_mgr.get(
+            platform_id=session.platform_id,
+            user_id=session_id,
+            page=1,
+            page_size=100000,
+        )
+        attachment_ids = self._extract_attachment_ids(history_list)
+        if attachment_ids:
+            await self._delete_attachments(attachment_ids)
+
+        await self.platform_history_mgr.delete(
+            platform_id=session.platform_id,
+            user_id=session_id,
+            offset_sec=99999999,
+        )
+
+        try:
+            await self.umop_config_router.delete_route(unified_msg_origin)
+        except ValueError:
+            logger.warning(
+                "Failed to delete UMO route %s during session cleanup.",
+                unified_msg_origin,
+            )
+
+        if session.platform_id == "tui":
+            tui_queue_mgr.remove_queues(session_id)
+
+        await self.db.delete_platform_session(session_id)
+
+    async def delete_tui_session(self):
+        """Delete a Platform session and all its related data."""
+        session_id = request.args.get("session_id")
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        username = g.get("username", "guest")
+
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        await self._delete_session_internal(session, username)
+
+        return Response().ok().__dict__
+
+    async def batch_delete_sessions(self):
+        """Batch delete multiple Platform sessions."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+        if not isinstance(post_data, dict):
+            return Response().error("Invalid JSON body: expected object").__dict__
+
+        session_ids = post_data.get("session_ids")
+        if not session_ids or not isinstance(session_ids, list):
+            return Response().error("Missing or invalid key: session_ids").__dict__
+
+        username = g.get("username", "guest")
+        sessions = await self.db.get_platform_sessions_by_ids(session_ids)
+        sessions_by_id = {session.session_id: session for session in sessions}
+        deleted_count = 0
+        failed_items = []
+
+        for sid in session_ids:
+            session = sessions_by_id.get(sid)
+            if not session:
+                failed_items.append({"session_id": sid, "reason": "not found"})
+                continue
+            if session.creator != username:
+                failed_items.append({"session_id": sid, "reason": "permission denied"})
+                continue
+
+            try:
+                await self._delete_session_internal(session, username)
+                deleted_count += 1
+                sessions_by_id.pop(sid, None)
+            except Exception:
+                logger.warning("Failed to delete session %s", sid)
+                failed_items.append({"session_id": sid, "reason": "internal_error"})
+
+        return (
+            Response()
+            .ok(
+                data={
+                    "deleted_count": deleted_count,
+                    "failed_count": len(failed_items),
+                    "failed_items": failed_items,
+                }
+            )
+            .__dict__
+        )
+
+    def _extract_attachment_ids(self, history_list) -> list[str]:
+        """Extract all attachment_ids from message history."""
+        attachment_ids = []
+        for history in history_list:
+            content = history.content
+            if not content or "message" not in content:
+                continue
+            message_parts = content.get("message", [])
+            for part in message_parts:
+                if isinstance(part, dict) and "attachment_id" in part:
+                    attachment_ids.append(part["attachment_id"])
+        return attachment_ids
+
+    async def _delete_attachments(self, attachment_ids: list[str]) -> None:
+        """Delete attachments including DB records and disk files."""
+        try:
+            attachments = await self.db.get_attachments(attachment_ids)
+            for attachment in attachments:
+                if not await anyio.Path(attachment.path).exists():
+                    continue
+                try:
+                    await anyio.Path(attachment.path).unlink()
+                except OSError as e:
+                    logger.warning(
+                        f"Failed to delete attachment file {attachment.path}: {e}"
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to get attachments: {e}")
+
+        try:
+            await self.db.delete_attachments(attachment_ids)
+        except Exception as e:
+            logger.warning(f"Failed to delete attachments: {e}")
+
+    async def new_session(self):
+        """Create a new Platform session for TUI."""
+        username = g.get("username", "guest")
+
+        session = await self.db.create_platform_session(
+            creator=username,
+            platform_id="tui",
+            is_group=0,
+        )
+
+        return (
+            Response()
+            .ok(
+                data={
+                    "session_id": session.session_id,
+                    "platform_id": session.platform_id,
+                }
+            )
+            .__dict__
+        )
+
+    async def get_sessions(self):
+        """Get all Platform sessions for the current user filtered by TUI platform."""
+        username = g.get("username", "guest")
+
+        platform_id = request.args.get("platform_id", "tui")
+
+        sessions, _ = await self.db.get_platform_sessions_by_creator_paginated(
+            creator=username,
+            platform_id=platform_id,
+            page=1,
+            page_size=100,
+            exclude_project_sessions=True,
+        )
+
+        sessions_data = []
+        for item in sessions:
+            session = item["session"]
+
+            sessions_data.append(
+                {
+                    "session_id": session.session_id,
+                    "platform_id": session.platform_id,
+                    "creator": session.creator,
+                    "display_name": session.display_name,
+                    "is_group": session.is_group,
+                    "created_at": to_utc_isoformat(session.created_at),
+                    "updated_at": to_utc_isoformat(session.updated_at),
+                }
+            )
+
+        return Response().ok(data=sessions_data).__dict__
+
+    async def get_session(self):
+        """Get session information and message history by session_id."""
+        session_id = request.args.get("session_id")
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+
+        session = await self.db.get_platform_session_by_id(session_id)
+        platform_id = session.platform_id if session else "tui"
+
+        username = g.get("username", "guest")
+        project_info = await self.db.get_project_by_session(
+            session_id=session_id, creator=username
+        )
+
+        history_ls = await self.platform_history_mgr.get(
+            platform_id=platform_id,
+            user_id=session_id,
+            page=1,
+            page_size=1000,
+        )
+
+        history_res = [history.model_dump() for history in history_ls]
+
+        response_data: dict[str, Any] = {
+            "history": history_res,
+            "is_running": self.running_convs.get(session_id, False),
+        }
+
+        if project_info:
+            response_data["project"] = {
+                "project_id": project_info.project_id,
+                "title": project_info.title,
+                "emoji": project_info.emoji,
+            }
+
+        return Response().ok(data=response_data).__dict__
+
+    async def update_session_display_name(self):
+        """Update a Platform session's display name."""
+        post_data = await request.json
+
+        session_id = post_data.get("session_id")
+        display_name = post_data.get("display_name")
+
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        if display_name is None:
+            return Response().error("Missing key: display_name").__dict__
+
+        username = g.get("username", "guest")
+
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        await self.db.update_platform_session(
+            session_id=session_id,
+            display_name=display_name,
+        )
+
+        return Response().ok().__dict__

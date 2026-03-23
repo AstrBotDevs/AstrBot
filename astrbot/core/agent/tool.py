@@ -72,7 +72,7 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
-    async def call(self, context: ContextWrapper[TContext], **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[TContext], **kwargs: Any) -> ToolExecResult:
         """Run the tool with the given arguments. The handler field has priority."""
         raise NotImplementedError(
             "FunctionTool.call() must be implemented by subclasses or set a handler."
@@ -94,11 +94,21 @@ class ToolSet:
         return len(self.tools) == 0
 
     def add_tool(self, tool: FunctionTool) -> None:
-        """Add a tool to the set."""
-        # 检查是否已存在同名工具
+        """Add a tool to the set.
+
+        If a tool with the same name already exists:
+        - Prefer the one that is active (active=True)
+        - If both have the same active state, use the new one (overwrite)
+        """
         for i, existing_tool in enumerate(self.tools):
             if existing_tool.name == tool.name:
-                self.tools[i] = tool
+                # Use getattr with a default of True for compatibility with tools
+                # that may not define an `active` attribute (e.g., mocks).
+                existing_active = bool(getattr(existing_tool, "active", True))
+                new_active = bool(getattr(tool, "active", True))
+                # Overwrite if new tool is active, or if existing tool is not active
+                if new_active or not existing_active:
+                    self.tools[i] = tool
                 return
         self.tools.append(tool)
 
@@ -135,8 +145,8 @@ class ToolSet:
             light_tools.append(
                 FunctionTool(
                     name=tool.name,
-                    parameters=light_params,
                     description=tool.description,
+                    parameters=light_params,
                     handler=None,
                 )
             )
@@ -156,8 +166,8 @@ class ToolSet:
             param_tools.append(
                 FunctionTool(
                     name=tool.name,
-                    parameters=params,
                     description="",
+                    parameters=params,
                     handler=None,
                 )
             )
@@ -208,7 +218,10 @@ class ToolSet:
         """Convert tools to OpenAI API function calling schema format."""
         result = []
         for tool in self.tools:
-            func_def = {"type": "function", "function": {"name": tool.name}}
+            func_def: dict[str, Any] = {
+                "type": "function",
+                "function": {"name": tool.name},
+            }
             if tool.description:
                 func_def["function"]["description"] = tool.description
 
@@ -216,7 +229,7 @@ class ToolSet:
                 if (
                     tool.parameters and tool.parameters.get("properties")
                 ) or not omit_empty_parameter_field:
-                    func_def["function"]["parameters"] = tool.parameters
+                    func_def["function"]["parameters"] = tool.parameters  # type: ignore[index]
 
             result.append(func_def)
         return result
@@ -307,8 +320,15 @@ class ToolSet:
                 if properties:
                     result["properties"] = properties
 
-            if "items" in schema:
-                result["items"] = convert_schema(schema["items"])
+            if target_type == "array":
+                items_schema = schema.get("items")
+                if isinstance(items_schema, dict):
+                    result["items"] = convert_schema(items_schema)
+                else:
+                    # Gemini requires array schemas to include an `items` schema.
+                    # JSON Schema allows omitting it, so fall back to a permissive
+                    # string item schema instead of emitting an invalid declaration.
+                    result["items"] = {"type": "string"}
 
             return result
 

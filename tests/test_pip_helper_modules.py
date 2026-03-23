@@ -68,7 +68,7 @@ def test_core_constraints_provider_writes_constraints_file_from_fallback_distrib
         with provider.constraints_file() as constraints_path:
             assert constraints_path is not None
             assert (
-                Path(constraints_path).read_text(encoding="utf-8") == "shared-lib==2.0"
+                Path(constraints_path).read_text(encoding="utf-8") == "shared-lib>=1.0"
             )
     finally:
         core_constraints_module._get_core_constraints.cache_clear()

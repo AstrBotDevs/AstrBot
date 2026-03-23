@@ -74,6 +74,12 @@ class FaissVecDB(BaseVecDB):
         metadatas = metadatas or [{} for _ in contents]
         ids = ids or [str(uuid.uuid4()) for _ in contents]
 
+        if not contents:
+            logger.debug(
+                "No contents provided for batch insert; skipping embedding generation."
+            )
+            return []
+
         start = time.time()
         logger.debug(f"Generating embeddings for {len(contents)} contents...")
         vectors = await self.embedding_provider.get_embeddings_batch(

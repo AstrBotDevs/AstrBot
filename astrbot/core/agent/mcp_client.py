@@ -1,5 +1,32 @@
+"""
+MCP client - DEPRECATED
+
+.. deprecated::
+    This module has been moved to :mod:`astrbot._internal.mcp`.
+    Please update your imports accordingly.
+
+    Old import (deprecated):
+        from astrbot.core.agent.mcp_client import MCPClient, MCPTool
+
+    New import:
+        from astrbot._internal.mcp import MCPClient, MCPTool
+
+This file exists solely for backward compatibility and will be removed in a future version.
+"""
+
+import warnings
+
+warnings.warn(
+    "astrbot.core.agent.mcp_client has been moved to astrbot._internal.mcp. "
+    "Please update your imports.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 import asyncio
 import logging
+import os
+import sys
 from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import Generic
@@ -43,6 +70,22 @@ def _prepare_config(config: dict) -> dict:
         config = config["mcpServers"][first_key]
     config.pop("active", None)
     return config
+
+
+def _prepare_stdio_env(config: dict) -> dict:
+    """Preserve Windows executable resolution for stdio subprocesses."""
+    if sys.platform != "win32":
+        return config
+
+    pathext = os.environ.get("PATHEXT")
+    if not pathext:
+        return config
+
+    prepared = config.copy()
+    env = dict(prepared.get("env") or {})
+    env.setdefault("PATHEXT", pathext)
+    prepared["env"] = env
+    return prepared
 
 
 async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
@@ -119,12 +162,31 @@ class MCPClient:
         self.tools: list[mcp.Tool] = []
         self.server_errlogs: list[str] = []
         self.running_event = asyncio.Event()
+        self.process_pid: int | None = None
 
         # Store connection config for reconnection
         self._mcp_server_config: dict | None = None
         self._server_name: str | None = None
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False  # For logging and debugging
+
+    @staticmethod
+    def _extract_stdio_process_pid(streams_context: object) -> int | None:
+        """Best-effort extraction for stdio subprocess PID used by lease cleanup.
+
+        TODO(refactor): replace this async-generator frame introspection with a
+        stable MCP library hook once the upstream transport exposes process PID.
+        """
+        generator = getattr(streams_context, "gen", None)
+        frame = getattr(generator, "ag_frame", None)
+        if frame is None:
+            return None
+        process = frame.f_locals.get("process")
+        pid = getattr(process, "pid", None)
+        try:
+            return int(pid) if pid is not None else None
+        except (TypeError, ValueError):
+            return None
 
     async def connect_to_server(self, mcp_server_config: dict, name: str) -> None:
         """Connect to MCP server
@@ -141,6 +203,7 @@ class MCPClient:
         # Store config for reconnection
         self._mcp_server_config = mcp_server_config
         self._server_name = name
+        self.process_pid = None
 
         cfg = _prepare_config(mcp_server_config.copy())
 
@@ -214,6 +277,7 @@ class MCPClient:
                 )
 
         else:
+            cfg = _prepare_stdio_env(cfg)
             server_params = mcp.StdioServerParameters(
                 **cfg,
             )
@@ -242,6 +306,7 @@ class MCPClient:
                     ),  # type: ignore
                 ),
             )
+            self.process_pid = self._extract_stdio_process_pid(self._streams_context)
 
             # Create a new client session
             self.session = await self.exit_stack.enter_async_context(
@@ -371,6 +436,7 @@ class MCPClient:
 
         # Set running_event first to unblock any waiting tasks
         self.running_event.set()
+        self.process_pid = None
 
 
 class MCPTool(FunctionTool, Generic[TContext]):

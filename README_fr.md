@@ -199,6 +199,13 @@ Connectez AstrBot à vos plateformes de chat préférées.
 | Minimax TTS | Synthèse vocale (Text-to-Speech) |
 | Volcengine TTS | Synthèse vocale (Text-to-Speech) |
 
+## ❤️ Sponsors
+
+<p align="center">
+  <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
+</p>
+
+
 ## ❤️ Contribution
 
 Les Issues et Pull Requests sont les bienvenus ! Soumettez simplement vos modifications à ce projet :)

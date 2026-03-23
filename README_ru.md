@@ -199,6 +199,13 @@ yay -S astrbot-git
 | Minimax TTS | Синтез речи (TTS) |
 | Volcengine TTS | Синтез речи (TTS) |
 
+## ❤️ Sponsors
+
+<p align="center">
+  <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
+</p>
+
+
 ## ❤️ Вклад в проект
 
 Мы приветствуем любые Issues и Pull Requests! Просто отправьте свои изменения в этот проект :)

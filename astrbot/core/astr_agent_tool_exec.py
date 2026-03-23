@@ -158,7 +158,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         exc_info=True,
                     )
 
-            asyncio.create_task(_run_in_background())
+            asyncio.create_task(_run_in_background())  # noqa: RUF006
             text_content = mcp.types.TextContent(
                 type="text",
                 text=f"Background task submitted. task_id={task_id}",
@@ -357,7 +357,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     continue
 
         prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
-        agent_max_step = int(prov_settings.get("max_agent_step", 30))
+        agent_max_step = int(prov_settings.get("max_agent_step", 3))
         stream = prov_settings.get("streaming_response", False)
         llm_resp = await ctx.tool_loop_agent(
             event=event,
@@ -368,6 +368,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             tools=toolset,
             contexts=contexts,
             max_steps=agent_max_step,
+            tool_call_timeout=run_context.tool_call_timeout,
             stream=stream,
         )
         yield mcp.types.CallToolResult(
@@ -405,7 +406,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     exc_info=True,
                 )
 
-        asyncio.create_task(_run_handoff_in_background())
+        asyncio.create_task(_run_handoff_in_background())  # noqa: RUF006
 
         text_content = mcp.types.TextContent(
             type="text",
@@ -548,7 +549,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
 
         config = MainAgentBuildConfig(
-            tool_call_timeout=3600,
+            tool_call_timeout=run_context.tool_call_timeout,
             streaming_response=ctx.get_config()
             .get("provider_settings", {})
             .get("stream", False),
@@ -582,7 +583,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
         runner = result.agent_runner
-        async for _ in runner.step_until_done(30):
+        async for _ in runner.step_until_done(3):
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
@@ -642,6 +643,24 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             method_name = "run"
         if awaitable is None:
             raise ValueError("Tool must have a valid handler or override 'run' method.")
+
+        sdk_plugin_bridge = getattr(
+            run_context.context.context, "sdk_plugin_bridge", None
+        )
+        if sdk_plugin_bridge is not None:
+            try:
+                await sdk_plugin_bridge.dispatch_message_event(
+                    "calling_func_tool",
+                    event,
+                    {
+                        "tool_name": tool.name,
+                        "tool_args": json.loads(
+                            json.dumps(tool_args, ensure_ascii=False, default=str)
+                        ),
+                    },
+                )
+            except Exception as exc:
+                logger.warning("SDK calling_func_tool dispatch failed: %s", exc)
 
         wrapper = call_local_llm_tool(
             context=run_context,

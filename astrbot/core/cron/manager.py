@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
@@ -65,7 +66,8 @@ class CronJobManager:
         self,
         *,
         name: str,
-        cron_expression: str,
+        cron_expression: str | None = None,
+        interval_seconds: int | None = None,
         handler: Callable[..., Any | Awaitable[Any]],
         description: str | None = None,
         timezone: str | None = None,
@@ -73,12 +75,19 @@ class CronJobManager:
         enabled: bool = True,
         persistent: bool = False,
     ) -> CronJob:
+        if (cron_expression is None) == (interval_seconds is None):
+            raise ValueError(
+                "cron_expression and interval_seconds must have exactly one value"
+            )
+        payload_data = dict(payload or {})
+        if interval_seconds is not None:
+            payload_data["interval_seconds"] = interval_seconds
         job = await self.db.create_cron_job(
             name=name,
             job_type="basic",
             cron_expression=cron_expression,
             timezone=timezone,
-            payload=payload or {},
+            payload=payload_data,
             description=description,
             enabled=enabled,
             persistent=persistent,
@@ -167,7 +176,21 @@ class CronJobManager:
                     run_at = run_at.replace(tzinfo=tzinfo)
                 trigger = DateTrigger(run_date=run_at, timezone=tzinfo)
             else:
-                trigger = CronTrigger.from_crontab(job.cron_expression, timezone=tzinfo)
+                interval_seconds = None
+                if isinstance(job.payload, dict):
+                    payload_interval = job.payload.get("interval_seconds")
+                    if isinstance(payload_interval, int):
+                        interval_seconds = payload_interval
+                if interval_seconds is not None:
+                    trigger = IntervalTrigger(
+                        seconds=interval_seconds,
+                        timezone=tzinfo,
+                    )
+                else:
+                    trigger = CronTrigger.from_crontab(
+                        job.cron_expression,
+                        timezone=tzinfo,
+                    )
             self.scheduler.add_job(
                 self._run_job,
                 id=job.job_id,
@@ -176,7 +199,7 @@ class CronJobManager:
                 replace_existing=True,
                 misfire_grace_time=30,
             )
-            asyncio.create_task(
+            asyncio.create_task(  # noqa: RUF006
                 self.db.update_cron_job(
                     job.job_id, next_run_time=self._get_next_run_time(job.job_id)
                 )
@@ -311,8 +334,11 @@ class CronJobManager:
 
         from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
 
+        tool_call_timeout = cfg.get("provider_settings", {}).get(
+            "tool_call_timeout", 120
+        )
         config = MainAgentBuildConfig(
-            tool_call_timeout=3600,
+            tool_call_timeout=tool_call_timeout,
             llm_safety_mode=False,
             streaming_response=False,
             tool_providers=[ComputerToolProvider()],

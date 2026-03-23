@@ -433,7 +433,7 @@ class PersonaManager:
                     user_turn = not user_turn
 
             try:
-                persona = Personality(
+                persona = Personality(  # type: ignore[misc]
                     **persona_cfg,
                     _begin_dialogs_processed=bd_processed,
                     _mood_imitation_dialogs_processed="",  # deprecated

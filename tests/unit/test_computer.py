@@ -5,6 +5,8 @@ filesystem operations, Python execution, shell execution, and security restricti
 """
 
 import sys
+import os
+import shutil
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,6 +19,15 @@ from astrbot.core.computer.booters.local import (
     LocalShellComponent,
     _ensure_safe_path,
     _is_safe_command,
+)
+
+from astrbot.core.computer.booters.bwrap import (
+    BwrapBooter,
+    BwrapConfig,
+    build_bwrap_cmd,
+    HostBackedFileSystemComponent,
+    BwrapPythonComponent,
+    BwrapShellComponent,
 )
 
 
@@ -626,6 +637,7 @@ class TestComputerClient:
         mock_config = MagicMock()
         mock_config.get = lambda key, default=None: {
             "provider_settings": {
+                "computer_use_runtime": "sandbox",
                 "sandbox": {
                     "booter": "shipyard",
                     "shipyard_endpoint": "http://localhost:8080",
@@ -677,6 +689,7 @@ class TestComputerClient:
         mock_config = MagicMock()
         mock_config.get = lambda key, default=None: {
             "provider_settings": {
+                "computer_use_runtime": "sandbox",
                 "sandbox": {
                     "booter": "unknown_type",
                 }
@@ -700,6 +713,7 @@ class TestComputerClient:
         mock_config = MagicMock()
         mock_config.get = lambda key, default=None: {
             "provider_settings": {
+                "computer_use_runtime": "sandbox",
                 "sandbox": {
                     "booter": "shipyard",
                     "shipyard_endpoint": "http://localhost:8080",
@@ -744,6 +758,7 @@ class TestComputerClient:
         mock_config = MagicMock()
         mock_config.get = lambda key, default=None: {
             "provider_settings": {
+                "computer_use_runtime": "sandbox",
                 "sandbox": {
                     "booter": "shipyard",
                     "shipyard_endpoint": "http://localhost:8080",
@@ -882,3 +897,143 @@ class TestSyncSkillsToSandbox:
         ):
             # Should not raise
             await computer_client._sync_skills_to_sandbox(mock_booter)
+
+class TestBwrapConfigAndBuilder:
+    def test_bwrap_config_defaults(self):
+        config = BwrapConfig(workspace_dir="/tmp/test")
+        # System defaults should be merged
+        assert "/usr" in config.ro_binds
+        assert "/etc" in config.ro_binds
+
+        # Test custom additions
+        config2 = BwrapConfig(workspace_dir="/tmp/test", ro_binds=["/custom"])
+        assert "/custom" in config2.ro_binds
+        assert "/usr" in config2.ro_binds
+
+    def test_build_bwrap_cmd(self):
+        config = BwrapConfig(workspace_dir="/tmp/test", rw_binds=[], ro_binds=[])
+        cmd = build_bwrap_cmd(config, ["echo", "hello"])
+
+        assert "bwrap" in cmd
+        assert "--unshare-pid" in cmd
+        assert "--bind" in cmd
+        assert "/tmp/test" in cmd
+        assert "--" in cmd
+        assert "echo" == cmd[-2]
+        assert "hello" == cmd[-1]
+
+
+@pytest.mark.skipif(shutil.which("bwrap") is None, reason="bwrap is not installed")
+class TestBwrapBooterLifecycle:
+    @pytest.mark.asyncio
+    async def test_bwrap_boot(self):
+        booter = BwrapBooter()
+        await booter.boot("test_session_123")
+        assert booter.config is not None
+        assert os.path.exists(booter.config.workspace_dir)
+        await booter.shutdown()
+        assert not os.path.exists(booter.config.workspace_dir)
+
+    @pytest.mark.asyncio
+    async def test_bwrap_available(self):
+        booter = BwrapBooter()
+        avail = await booter.available()
+        assert avail is True  # We skipped if no bwrap installed
+
+    @pytest.mark.asyncio
+    async def test_bwrap_upload_download(self, tmp_path):
+        booter = BwrapBooter()
+        await booter.boot("test_session_io")
+
+        # Test upload
+        host_file = tmp_path / "test_upload.txt"
+        host_file.write_text("hello bwrap")
+
+        res = await booter.upload_file(str(host_file), "target.txt")
+        assert res.get("success") is True
+
+        # Verify it exists in workspace
+        target_path = os.path.join(booter.config.workspace_dir, "target.txt")
+        assert os.path.exists(target_path)
+
+        # Test download
+        dl_path = tmp_path / "downloaded.txt"
+        await booter.download_file("target.txt", str(dl_path))
+        assert dl_path.exists()
+        assert dl_path.read_text() == "hello bwrap"
+
+        await booter.shutdown()
+
+@pytest.mark.skipif(shutil.which("bwrap") is None, reason="bwrap is not installed")
+class TestBwrapShellComponent:
+    @pytest.mark.asyncio
+    async def test_bwrap_shell_exec(self):
+        booter = BwrapBooter()
+        await booter.boot("test_shell")
+        res = await booter.shell.exec("echo 'hello bwrap'")
+        assert res["exit_code"] == 0
+        assert "hello bwrap" in res["stdout"]
+        await booter.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_bwrap_shell_ro_slash(self):
+        # Testing the system-first + ro root order you mentioned
+        booter = BwrapBooter(ro_binds=["/"])
+        await booter.boot("test_shell_ro")
+
+        # Will it write to /dev/null correctly despite ro /?
+        res = await booter.shell.exec("echo xxx > /dev/null && echo success")
+        assert res["exit_code"] == 0
+        assert "success" in res["stdout"]
+
+        # Will it fail to write to ro /tmp?
+        res2 = await booter.shell.exec("echo yyy > /tmp/test_write.txt", shell=True)
+        # /tmp in bwrap is tmpfs by default from our flags, so this might actually succeed.
+        # Let's try writing to /usr instead
+        res3 = await booter.shell.exec("echo yyy > /usr/test_write.txt", shell=True)
+        assert res3["exit_code"] != 0
+
+        await booter.shutdown()
+
+
+@pytest.mark.skipif(shutil.which("bwrap") is None, reason="bwrap is not installed")
+class TestBwrapPythonComponent:
+    @pytest.mark.asyncio
+    async def test_bwrap_python_exec(self):
+        booter = BwrapBooter()
+        await booter.boot("test_python")
+        res = await booter.python.exec("print('hello python from bwrap')")
+        assert res["exit_code"] == 0
+        assert "hello python from bwrap" in res["stdout"]
+        await booter.shutdown()
+
+
+class TestHostBackedFileSystemComponent:
+    @pytest.mark.asyncio
+    async def test_fs_create_read_delete(self, tmp_path):
+        fs = HostBackedFileSystemComponent(str(tmp_path))
+
+        # create
+        res = await fs.create_file("test.txt", "hello fs")
+        assert res["success"] is True
+        assert (tmp_path / "test.txt").exists()
+
+        # read
+        res_read = await fs.read_file("test.txt")
+        assert res_read["success"] is True
+        assert res_read["content"] == "hello fs"
+
+        # write
+        res_write = await fs.write_file("test.txt", "updated fs")
+        assert res_write["success"] is True
+        assert (tmp_path / "test.txt").read_text() == "updated fs"
+
+        # list
+        res_list = await fs.list_dir()
+        assert res_list["success"] is True
+        assert "test.txt" in res_list["items"]
+
+        # delete
+        res_del = await fs.delete_file("test.txt")
+        assert res_del["success"] is True
+        assert not (tmp_path / "test.txt").exists()

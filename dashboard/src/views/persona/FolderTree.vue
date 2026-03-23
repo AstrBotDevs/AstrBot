@@ -1,131 +1,30 @@
 <template>
-  <div class="folder-tree">
-    <!-- 搜索框 -->
-    <v-text-field
-      v-model="searchQuery"
-      :placeholder="tm('folder.searchPlaceholder')"
-      prepend-inner-icon="mdi-magnify"
-      variant="outlined"
-      density="compact"
-      hide-details
-      clearable
-      class="mb-3"
-    />
-
-    <!-- 根目录节点 -->
-    <v-list
-      density="compact"
-      nav
-      class="tree-list"
-      bg-color="transparent"
-    >
-      <v-list-item
-        :active="currentFolderId === null"
-        rounded="lg"
-        :class="['root-item', { 'drag-over': isRootDragOver }]"
-        @click="handleFolderClick(null)"
-        @dragover.prevent="handleRootDragOver"
-        @dragleave="handleRootDragLeave"
-        @drop.prevent="handleRootDrop"
-      >
-        <template #prepend>
-          <v-icon>mdi-home</v-icon>
-        </template>
-        <v-list-item-title>{{ tm('folder.rootFolder') }}</v-list-item-title>
-      </v-list-item>
-
-      <!-- 文件夹树 -->
-      <template v-if="!treeLoading">
-        <FolderTreeNode
-          v-for="folder in filteredFolderTree"
-          :key="folder.folder_id"
-          :folder="folder"
-          :depth="0"
-          :current-folder-id="currentFolderId"
-          :search-query="searchQuery"
-          @folder-click="handleFolderClick"
-          @folder-context-menu="handleContextMenu"
-          @persona-dropped="$emit('persona-dropped', $event)"
+    <div class="folder-tree">
+        <BaseFolderTree
+            :folder-tree="folderTree"
+            :current-folder-id="currentFolderId"
+            :expanded-folder-ids="expandedFolderIds"
+            :tree-loading="treeLoading"
+            :accept-drop-types="['persona']"
+            :labels="{
+                searchPlaceholder: tm('folder.searchPlaceholder'),
+                rootFolder: tm('folder.rootFolder'),
+                noFolders: tm('folder.noFolders'),
+                contextMenu: {
+                    open: tm('folder.contextMenu.open'),
+                    rename: tm('folder.contextMenu.rename'),
+                    moveTo: tm('folder.contextMenu.moveTo'),
+                    delete: tm('folder.contextMenu.delete')
+                }
+            }"
+            @folder-click="handleFolderClick"
+            @rename-folder="onRenameFolder"
+            @move-folder="$emit('move-folder', $event)"
+            @delete-folder="onDeleteFolder"
+            @item-dropped="onItemDropped"
+            @toggle-expansion="toggleFolderExpansion"
+            @set-expansion="setFolderExpansion"
         />
-      </template>
-
-      <!-- 加载状态 -->
-      <div
-        v-if="treeLoading"
-        class="text-center pa-4"
-      >
-        <v-progress-circular
-          indeterminate
-          size="24"
-        />
-      </div>
-
-      <!-- 空状态 -->
-      <div
-        v-if="!treeLoading && folderTree.length === 0"
-        class="text-center pa-4 text-medium-emphasis"
-      >
-        <v-icon
-          size="32"
-          class="mb-2"
-        >
-          mdi-folder-outline
-        </v-icon>
-        <div class="text-body-2">
-          {{ tm('folder.noFolders') }}
-        </div>
-      </div>
-    </v-list>
-
-    <!-- 右键菜单 -->
-    <v-menu
-      v-model="contextMenu.show"
-      :target="contextMenu.target as any"
-      location="end"
-      :close-on-content-click="true"
-    >
-      <v-list density="compact">
-        <v-list-item @click="openFolder">
-          <template #prepend>
-            <v-icon size="small">
-              mdi-folder-open
-            </v-icon>
-          </template>
-          <v-list-item-title>{{ tm('folder.contextMenu.open') }}</v-list-item-title>
-        </v-list-item>
-        <v-list-item @click="renameFolder">
-          <template #prepend>
-            <v-icon size="small">
-              mdi-pencil
-            </v-icon>
-          </template>
-          <v-list-item-title>{{ tm('folder.contextMenu.rename') }}</v-list-item-title>
-        </v-list-item>
-        <v-list-item @click="$emit('move-folder', contextMenu.folder)">
-          <template #prepend>
-            <v-icon size="small">
-              mdi-folder-move
-            </v-icon>
-          </template>
-          <v-list-item-title>{{ tm('folder.contextMenu.moveTo') }}</v-list-item-title>
-        </v-list-item>
-        <v-divider class="my-1" />
-        <v-list-item
-          class="text-error"
-          @click="confirmDeleteFolder"
-        >
-          <template #prepend>
-            <v-icon
-              size="small"
-              color="error"
-            >
-              mdi-delete
-            </v-icon>
-          </template>
-          <v-list-item-title>{{ tm('folder.contextMenu.delete') }}</v-list-item-title>
-        </v-list-item>
-      </v-list>
-    </v-menu>
 
     <!-- 重命名对话框 -->
     <v-dialog
@@ -221,7 +120,7 @@ import { defineComponent } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { usePersonaStore } from '@/stores/personaStore';
 import { mapState, mapActions } from 'pinia';
-import FolderTreeNode from './FolderTreeNode.vue';
+import BaseFolderTree from '@/components/folder/BaseFolderTree.vue';
 import type { FolderTreeNode as FolderTreeNodeType } from '@/components/folder/types';
 
 interface ContextMenuState {
@@ -246,7 +145,7 @@ interface DeleteDialogState {
 export default defineComponent({
     name: 'FolderTree',
     components: {
-        FolderTreeNode
+        BaseFolderTree
     },
     emits: ['move-folder', 'error', 'success', 'persona-dropped'],
     setup() {
@@ -276,7 +175,7 @@ export default defineComponent({
         };
     },
     computed: {
-        ...mapState(usePersonaStore, ['folderTree', 'currentFolderId', 'treeLoading']),
+        ...mapState(usePersonaStore, ['folderTree', 'currentFolderId', 'treeLoading', 'expandedFolderIds']),
 
         filteredFolderTree(): FolderTreeNodeType[] {
             if (!this.searchQuery) {
@@ -287,8 +186,7 @@ export default defineComponent({
         }
     },
     methods: {
-        ...mapActions(usePersonaStore, ['navigateToFolder', 'updateFolder', 'deleteFolder']),
-
+        ...mapActions(usePersonaStore, ['navigateToFolder', 'updateFolder', 'deleteFolder', 'toggleFolderExpansion', 'setFolderExpansion']),
         filterTreeBySearch(nodes: FolderTreeNodeType[], query: string): FolderTreeNodeType[] {
             return nodes.filter(node => {
                 const matches = node.name.toLowerCase().includes(query);
@@ -304,51 +202,25 @@ export default defineComponent({
             this.navigateToFolder(folderId);
         },
 
-        handleRootDragOver(event: DragEvent) {
-            if (event.dataTransfer) {
-                event.dataTransfer.dropEffect = 'move';
-            }
-            this.isRootDragOver = true;
+        // rename event from BaseFolderTree
+        onRenameFolder(folder: FolderTreeNodeType) {
+            this.renameDialog.folder = folder;
+            this.renameDialog.name = folder.name;
+            this.renameDialog.show = true;
         },
 
-        handleRootDragLeave() {
-            this.isRootDragOver = false;
+        // delete event from BaseFolderTree
+        onDeleteFolder(folder: FolderTreeNodeType) {
+            this.deleteDialog.folder = folder;
+            this.deleteDialog.show = true;
         },
 
-        handleRootDrop(event: DragEvent) {
-            this.isRootDragOver = false;
-            if (!event.dataTransfer) return;
-            
-            try {
-                const data = JSON.parse(event.dataTransfer.getData('application/json'));
-                if (data.type === 'persona') {
-                    this.$emit('persona-dropped', {
-                        persona_id: data.persona_id,
-                        target_folder_id: null
-                    });
-                }
-            } catch (e) {
-                console.error('Failed to parse drop data:', e);
-            }
-        },
-
-        handleContextMenu(eventData: { event: MouseEvent; folder: FolderTreeNodeType }) {
-            this.contextMenu.target = [eventData.event.clientX, eventData.event.clientY];
-            this.contextMenu.folder = eventData.folder;
-            this.contextMenu.show = true;
-        },
-
-        openFolder() {
-            if (this.contextMenu.folder) {
-                this.navigateToFolder(this.contextMenu.folder.folder_id);
-            }
-        },
-
-        renameFolder() {
-            if (this.contextMenu.folder) {
-                this.renameDialog.folder = this.contextMenu.folder;
-                this.renameDialog.name = this.contextMenu.folder.name;
-                this.renameDialog.show = true;
+        onItemDropped(data: { item_id: string; item_type: string; target_folder_id: string | null; source_data?: any }) {
+            if (data.item_type === 'persona') {
+                this.$emit('persona-dropped', {
+                    persona_id: data.item_id,
+                    target_folder_id: data.target_folder_id
+                });
             }
         },
 
@@ -367,13 +239,6 @@ export default defineComponent({
                 this.$emit('error', error.message || this.tm('folder.messages.renameError'));
             } finally {
                 this.renameDialog.loading = false;
-            }
-        },
-
-        confirmDeleteFolder() {
-            if (this.contextMenu.folder) {
-                this.deleteDialog.folder = this.contextMenu.folder;
-                this.deleteDialog.show = true;
             }
         },
 

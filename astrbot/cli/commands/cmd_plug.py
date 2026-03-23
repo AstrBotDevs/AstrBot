@@ -1,15 +1,12 @@
 import re
 import shutil
-from pathlib import Path
 
 import click
 
-from astrbot.core.utils.astrbot_path import astrbot_paths
-
-from ..utils import (
+from astrbot.cli.i18n import t
+from astrbot.cli.utils import (
     PluginStatus,
     build_plug_list,
-    check_astrbot_root,
     get_git_repo,
     manage_plugin,
 )
@@ -18,15 +15,6 @@ from ..utils import (
 @click.group()
 def plug() -> None:
     """Plugin management"""
-
-
-def _get_data_path() -> Path:
-    base = astrbot_paths.root
-    if not check_astrbot_root(base):
-        raise click.ClickException(
-            f"{base} is not a valid AstrBot root directory. Use 'astrbot init' to initialize",
-        )
-    return astrbot_paths.data.resolve()
 
 
 def display_plugins(plugins, title=None, color=None) -> None:
@@ -50,11 +38,13 @@ def display_plugins(plugins, title=None, color=None) -> None:
 @click.argument("name")
 def new(name: str) -> None:
     """Create a new plugin"""
-    base_path = _get_data_path()
+    from astrbot.core.utils.astrbot_path import astrbot_paths
+
+    base_path = astrbot_paths.data
     plug_path = base_path / "plugins" / name
 
     if plug_path.exists():
-        raise click.ClickException(f"Plugin {name} already exists")
+        raise click.ClickException(t("plugin_already_exists", name=name))
 
     author = click.prompt("Enter plugin author", type=str)
     desc = click.prompt("Enter plugin description", type=str)
@@ -107,7 +97,9 @@ def new(name: str) -> None:
 @click.option("--all", "-a", is_flag=True, help="List uninstalled plugins")
 def list(all: bool) -> None:
     """List plugins"""
-    base_path = _get_data_path()
+    from astrbot.core.utils.astrbot_path import astrbot_paths
+
+    base_path = astrbot_paths.data
     plugins = build_plug_list(base_path / "plugins")
 
     # Unpublished plugins
@@ -148,7 +140,9 @@ def list(all: bool) -> None:
 @click.option("--proxy", help="Proxy server address")
 def install(name: str, proxy: str | None) -> None:
     """Install a plugin"""
-    base_path = _get_data_path()
+    from astrbot.core.utils.astrbot_path import astrbot_paths
+
+    base_path = astrbot_paths.data
     plug_path = base_path / "plugins"
     plugins = build_plug_list(base_path / "plugins")
 
@@ -162,7 +156,7 @@ def install(name: str, proxy: str | None) -> None:
     )
 
     if not plugin:
-        raise click.ClickException(f"Plugin {name} not found or already installed")
+        raise click.ClickException(t("plugin_not_found_or_installed", name=name))
 
     manage_plugin(plugin, plug_path, is_update=False, proxy=proxy)
 
@@ -171,24 +165,26 @@ def install(name: str, proxy: str | None) -> None:
 @click.argument("name")
 def remove(name: str) -> None:
     """Uninstall a plugin"""
-    base_path = _get_data_path()
+    from astrbot.core.utils.astrbot_path import astrbot_paths
+
+    base_path = astrbot_paths.data
     plugins = build_plug_list(base_path / "plugins")
     plugin = next((p for p in plugins if p["name"] == name), None)
 
     if not plugin or not plugin.get("local_path"):
-        raise click.ClickException(f"Plugin {name} does not exist or is not installed")
+        raise click.ClickException(t("plugin_not_found_or_installed", name=name))
 
     plugin_path = plugin["local_path"]
 
     click.confirm(
-        f"Are you sure you want to uninstall plugin {name}?", default=False, abort=True
+        t("plugin_uninstall_confirm", name=name), default=False, abort=True
     )
 
     try:
         shutil.rmtree(plugin_path)
-        click.echo(f"Plugin {name} has been uninstalled")
+        click.echo(t("plugin_uninstall_success", name=name))
     except Exception as e:
-        raise click.ClickException(f"Failed to uninstall plugin {name}: {e}")
+        raise click.ClickException(t("plugin_uninstall_failed_ex", name=name, error=str(e)))
 
 
 @plug.command()
@@ -196,7 +192,9 @@ def remove(name: str) -> None:
 @click.option("--proxy", help="GitHub proxy address")
 def update(name: str, proxy: str | None) -> None:
     """Update plugins"""
-    base_path = _get_data_path()
+    from astrbot.core.utils.astrbot_path import astrbot_paths
+
+    base_path = astrbot_paths.data
     plug_path = base_path / "plugins"
     plugins = build_plug_list(base_path / "plugins")
 
@@ -222,13 +220,13 @@ def update(name: str, proxy: str | None) -> None:
         ]
 
         if not need_update_plugins:
-            click.echo("No plugins need updating")
+            click.echo(t("plugin_no_update_needed"))
             return
 
-        click.echo(f"Found {len(need_update_plugins)} plugin(s) needing update")
+        click.echo(t("plugin_found_update", count=str(len(need_update_plugins))))
         for plugin in need_update_plugins:
             plugin_name = plugin["name"]
-            click.echo(f"Updating plugin {plugin_name}...")
+            click.echo(t("plugin_updating", name=plugin_name))
             manage_plugin(plugin, plug_path, is_update=True, proxy=proxy)
 
 
@@ -236,7 +234,9 @@ def update(name: str, proxy: str | None) -> None:
 @click.argument("query")
 def search(query: str) -> None:
     """Search for plugins"""
-    base_path = _get_data_path()
+    from astrbot.core.utils.astrbot_path import astrbot_paths
+
+    base_path = astrbot_paths.data
     plugins = build_plug_list(base_path / "plugins")
 
     matched_plugins = [
@@ -248,7 +248,7 @@ def search(query: str) -> None:
     ]
 
     if not matched_plugins:
-        click.echo(f"No plugins matching '{query}' found")
+        click.echo(t("plugin_search_no_result", query=query))
         return
 
-    display_plugins(matched_plugins, f"Search results: '{query}'", "cyan")
+    display_plugins(matched_plugins, t("plugin_search_results", query=query), "cyan")

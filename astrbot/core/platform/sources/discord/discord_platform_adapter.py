@@ -1,7 +1,7 @@
 import asyncio
 import re
 import sys
-from typing import Any, cast
+from typing import Any
 
 import discord
 from discord.abc import GuildChannel, Messageable, PrivateChannel
@@ -10,7 +10,7 @@ from discord.errors import HTTPException
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain
+from astrbot.api.message_components import At, File, Image, Plain
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -52,6 +52,7 @@ class DiscordPlatformAdapter(Platform):
         self.settings = platform_settings
         self.client_self_id: str | None = None
         self.registered_handlers = []
+        self.sdk_plugin_bridge = None
         # 指令注册相关
         self.enable_command_register = self.config.get("discord_command_register", True)
         self.guild_id = self.config.get("discord_guild_id_for_debug", None)
@@ -99,7 +100,6 @@ class DiscordPlatformAdapter(Platform):
             user_id=str(self.client_self_id),
             nickname=self.client.user.display_name,
         )
-        message_obj.self_id = cast(str, self.client_self_id)
         message_obj.session_id = session.session_id
         message_obj.message = message_chain.chain
 
@@ -120,7 +120,7 @@ class DiscordPlatformAdapter(Platform):
         return PlatformMetadata(
             "discord",
             "Discord 适配器",
-            id=cast(str, self.config.get("id")),
+            id=str(self.config.get("id")),
             default_config_tmpl=self.config,
             support_streaming_message=False,
         )
@@ -188,19 +188,21 @@ class DiscordPlatformAdapter(Platform):
 
     def _convert_message_to_abm(self, data: dict) -> AstrBotMessage:
         """将普通消息转换为 AstrBotMessage"""
+
         message = data["message"]
-
         content = message.content
-
         # 如果机器人被@,移除@部分
         # 剥离 User Mention (<@id>, <@!id>)
+        bot_was_mentioned = False
         if self.client and self.client.user:
             mention_str = f"<@{self.client.user.id}>"
             mention_str_nickname = f"<@!{self.client.user.id}>"
             if content.startswith(mention_str):
                 content = content[len(mention_str) :].lstrip()
+                bot_was_mentioned = True
             elif content.startswith(mention_str_nickname):
                 content = content[len(mention_str_nickname) :].lstrip()
+                bot_was_mentioned = True
 
         # 剥离 Role Mention(bot 拥有的任一角色被提及,<@&role_id>)
         if (
@@ -229,6 +231,11 @@ class DiscordPlatformAdapter(Platform):
             nickname=message.author.display_name,
         )
         message_chain = []
+        # 如果机器人被 @,在 message_chain 开头添加 At 组件
+        if self.client and self.client.user and bot_was_mentioned:
+            message_chain.insert(
+                0, At(qq=str(self.client.user.id), name=self.client.user.name)
+            )
         if abm.message_str:
             message_chain.append(Plain(text=abm.message_str))
         if message.attachments:
@@ -245,7 +252,7 @@ class DiscordPlatformAdapter(Platform):
                     )
         abm.message = message_chain
         abm.raw_message = message
-        abm.self_id = cast(str, self.client_self_id)
+        abm.self_id = str(self.client_self_id)
         abm.session_id = str(message.channel.id)
         abm.message_id = str(message.id)
         return abm
@@ -357,6 +364,25 @@ class DiscordPlatformAdapter(Platform):
         """收集所有指令并注册到Discord"""
         logger.info("[Discord] 开始收集并注册斜杠指令...")
         registered_commands = []
+        for cmd_name, description in self.collect_commands():
+            callback = self._create_dynamic_callback(cmd_name)
+            options = [
+                discord.Option(
+                    name="params",
+                    description="指令的所有参数",
+                    type=discord.SlashCommandOptionType.string,
+                    required=False,
+                ),
+            ]
+            slash_command = discord.SlashCommand(
+                name=cmd_name,
+                description=description,
+                func=callback,
+                options=options,
+                guild_ids=[self.guild_id] if self.guild_id else None,
+            )
+            self.client.add_application_command(slash_command)
+            registered_commands.append(cmd_name)
 
         for handler_md in star_handlers_registry:
             if not star_map[handler_md.handler_module_path].activated:
@@ -368,7 +394,7 @@ class DiscordPlatformAdapter(Platform):
                 if not cmd_info:
                     continue
 
-                cmd_name, description, cmd_filter_instance = cmd_info
+                cmd_name, description, _cmd_filter_instance = cmd_info
 
                 # 创建动态回调
                 callback = self._create_dynamic_callback(cmd_name)
@@ -414,6 +440,53 @@ class DiscordPlatformAdapter(Platform):
                 return
             raise
 
+    def collect_commands(self) -> list[tuple[str, str]]:
+        """收集 legacy 与 SDK 的顶层原生命令。"""
+        command_dict: dict[str, str] = {}
+
+        for handler_md in star_handlers_registry:
+            if not star_map[handler_md.handler_module_path].activated:
+                continue
+            if not handler_md.enabled:
+                continue
+            for event_filter in handler_md.event_filters:
+                cmd_info = self._extract_command_info(event_filter, handler_md)
+                if not cmd_info:
+                    continue
+                cmd_name, description, _cmd_filter_instance = cmd_info
+                if cmd_name in command_dict:
+                    logger.warning(
+                        f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
+                        f"'{command_dict[cmd_name]}'"
+                    )
+                command_dict.setdefault(cmd_name, description)
+
+        sdk_bridge = getattr(self, "sdk_plugin_bridge", None)
+        if sdk_bridge is not None:
+            for item in sdk_bridge.list_native_command_candidates("discord"):
+                cmd_name = str(item.get("name", "")).strip()
+                if not cmd_name:
+                    continue
+                if not re.match(r"^[a-z0-9_-]{1,32}$", cmd_name):
+                    logger.debug(f"[Discord] 跳过不符合规范的 SDK 指令: {cmd_name}")
+                    continue
+                description = str(item.get("description") or "").strip()
+                if not description:
+                    if item.get("is_group"):
+                        description = f"Command group: {cmd_name}"
+                    else:
+                        description = f"Command: {cmd_name}"
+                if len(description) > 100:
+                    description = f"{description[:97]}..."
+                if cmd_name in command_dict:
+                    logger.warning(
+                        f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
+                        f"'{command_dict[cmd_name]}'"
+                    )
+                command_dict.setdefault(cmd_name, description)
+
+        return sorted(command_dict.items(), key=lambda item: item[0].lower())
+
     def _create_dynamic_callback(self, cmd_name: str):
         """为每个指令动态创建一个异步回调函数"""
 
@@ -458,15 +531,30 @@ class DiscordPlatformAdapter(Platform):
                 abm.group_id = str(ctx.channel_id)
 
             abm.message_str = message_str_for_filter
+            # ctx.author can be None in some edge cases
+            author_id = (
+                getattr(ctx.author, "id", None)
+                or getattr(ctx.user, "id", None)
+                or "unknown"
+            )
+            author_name = (
+                getattr(ctx.author, "display_name", None)
+                or getattr(ctx.user, "display_name", None)
+                or "unknown"
+            )
             abm.sender = MessageMember(
-                user_id=str(ctx.author.id),
-                nickname=ctx.author.display_name,
+                user_id=str(author_id),
+                nickname=str(author_name),
             )
             abm.message = [Plain(text=message_str_for_filter)]
             abm.raw_message = ctx.interaction
-            abm.self_id = cast(str, self.client_self_id)
+            abm.self_id = str(self.client_self_id)
             abm.session_id = str(ctx.channel_id)
-            abm.message_id = str(ctx.interaction.id)
+            abm.message_id = (
+                str(getattr(ctx.interaction, "id", ctx.interaction))
+                if ctx.interaction
+                else str(getattr(ctx, "id", "unknown"))
+            )
 
             # 3. 将消息和 webhook 分别交给 handle_msg 处理
             await self.handle_msg(abm, followup_webhook)
@@ -480,7 +568,6 @@ class DiscordPlatformAdapter(Platform):
     ) -> tuple[str, str, CommandFilter | None] | None:
         """从事件过滤器中提取指令信息"""
         cmd_name = None
-        # is_group = False
         cmd_filter_instance = None
 
         if isinstance(event_filter, CommandFilter):
@@ -500,7 +587,6 @@ class DiscordPlatformAdapter(Platform):
         if not cmd_name:
             return None
 
-        # Discord 斜杠指令名称规范
         if not re.match(r"^[a-z0-9_-]{1,32}$", cmd_name):
             logger.debug(f"[Discord] 跳过不符合规范的指令: {cmd_name}")
             return None

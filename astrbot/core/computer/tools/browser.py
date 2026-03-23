@@ -76,6 +76,7 @@ class BrowserExecTool(FunctionTool):
         tags: str | None = None,
         learn: bool = False,
         include_trace: bool = False,
+        **kwargs: Any,
     ) -> ToolExecResult:
         if err := _ensure_admin(context):
             return err
@@ -139,6 +140,7 @@ class BrowserBatchExecTool(FunctionTool):
         tags: str | None = None,
         learn: bool = False,
         include_trace: bool = False,
+        **kwargs: Any,
     ) -> ToolExecResult:
         if err := _ensure_admin(context):
             return err
@@ -186,6 +188,7 @@ class RunBrowserSkillTool(FunctionTool):
         include_trace: bool = False,
         description: str | None = None,
         tags: str | None = None,
+        **kwargs: Any,
     ) -> ToolExecResult:
         if err := _ensure_admin(context):
             return err

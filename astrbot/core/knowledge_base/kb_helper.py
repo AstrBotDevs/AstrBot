@@ -141,7 +141,7 @@ class KBHelper:
     async def get_ep(self) -> EmbeddingProvider:
         if not self.kb.embedding_provider_id:
             raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
-        ep: EmbeddingProvider = await self.prov_mgr.get_provider_by_id(
+        ep = await self.prov_mgr.get_provider_by_id(
             self.kb.embedding_provider_id,
         )
         if not ep:
@@ -157,7 +157,7 @@ class KBHelper:
     async def get_rp(self) -> RerankProvider | None:
         if not self.kb.rerank_provider_id:
             return None
-        rp: RerankProvider = await self.prov_mgr.get_provider_by_id(
+        rp = await self.prov_mgr.get_provider_by_id(
             self.kb.rerank_provider_id,
         )
         if not rp:
@@ -233,15 +233,12 @@ class KBHelper:
         await self._ensure_vec_db()
         doc_id = str(uuid.uuid4())
         media_paths: list[Path] = []
+        saved_file_path: Path | None = None
         file_size = 0
 
-        # file_path = self.kb_files_dir / f"{doc_id}.{file_type}"
-        # async with aiofiles.open(file_path, "wb") as f:
-        #     await f.write(file_content)
-
         try:
-            chunks_text = []
-            saved_media = []
+            chunks_text: list[str] = []
+            saved_media: list[KBMedia] = []
 
             if pre_chunked_text is not None:
                 # 如果提供了预分块文本,直接使用
@@ -256,6 +253,9 @@ class KBHelper:
                     )
 
                 file_size = len(file_content)
+                saved_file_path = self.kb_files_dir / f"{doc_id}.{file_type}"
+                async with aiofiles.open(saved_file_path, "wb") as f:
+                    await f.write(file_content)
 
                 # 阶段1: 解析文档
                 if progress_callback:
@@ -326,17 +326,15 @@ class KBHelper:
                 doc_name=file_name,
                 file_type=file_type,
                 file_size=file_size,
-                # file_path=str(file_path),
-                file_path="",
+                file_path=str(saved_file_path) if saved_file_path else "",
                 chunk_count=len(chunks_text),
-                media_count=0,
+                media_count=len(saved_media),
             )
             async with self.kb_db.get_db() as session:
                 async with session.begin():
                     session.add(doc)
                     for media in saved_media:
                         session.add(media)
-                    await session.commit()
 
                 await session.refresh(doc)
 
@@ -347,8 +345,14 @@ class KBHelper:
             return doc
         except Exception as e:
             logger.error(f"上传文档失败: {e}")
-            # if file_path.exists():
-            #     file_path.unlink()
+
+            if saved_file_path and saved_file_path.exists():
+                try:
+                    saved_file_path.unlink()
+                except Exception as file_error:
+                    logger.warning(
+                        f"清理原始文档文件失败 {saved_file_path}: {file_error}"
+                    )
 
             for media_path in media_paths:
                 try:
@@ -357,7 +361,7 @@ class KBHelper:
                 except Exception as me:
                     logger.warning(f"清理多媒体文件失败 {media_path}: {me}")
 
-            raise e
+            raise
 
     async def list_documents(
         self,
@@ -412,7 +416,6 @@ class KBHelper:
         async with self.kb_db.get_db() as session:
             async with session.begin():
                 session.add(doc)
-                await session.commit()
             await session.refresh(doc)
 
     async def get_chunks_by_doc_id(

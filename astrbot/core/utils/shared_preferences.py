@@ -44,7 +44,7 @@ class SharedPreferences:
         scope: str,
         scope_id: str,
         key: str,
-        default: _VT = None,
+        default: _VT = None,  # type: ignore[invalid-parameter-default]
     ) -> _VT:
         """获取指定范围和键的偏好设置"""
         if scope_id is not None and key is not None:
@@ -72,7 +72,7 @@ class SharedPreferences:
         self,
         umo: str,
         key: str,
-        default: _VT = None,
+        default: _VT = None,  # type: ignore[invalid-parameter-default]
     ) -> _VT: ...
 
     @overload
@@ -103,7 +103,7 @@ class SharedPreferences:
         self,
         umo: str | None,
         key: str | None = None,
-        default: _VT = None,
+        default: _VT = None,  # type: ignore[invalid-parameter-default]
     ) -> _VT | list[Preference]:
         """获取会话范围的偏好设置
 
@@ -117,12 +117,12 @@ class SharedPreferences:
     async def global_get(self, key: None, default: Any = None) -> list[Preference]: ...
 
     @overload
-    async def global_get(self, key: str, default: _VT = None) -> _VT: ...
+    async def global_get(self, key: str, default: _VT = None) -> _VT: ...  # type: ignore[invalid-parameter-default]
 
     async def global_get(
         self,
         key: str | None,
-        default: _VT = None,
+        default: _VT = None,  # type: ignore[invalid-parameter-default]
     ) -> _VT | list[Preference]:
         """获取全局范围的偏好设置
 
@@ -169,7 +169,7 @@ class SharedPreferences:
     def get(
         self,
         key: str,
-        default: _VT = None,
+        default: _VT = None,  # type: ignore[invalid-parameter-default]
         scope: str | None = None,
         scope_id: str | None = "",
     ) -> _VT:

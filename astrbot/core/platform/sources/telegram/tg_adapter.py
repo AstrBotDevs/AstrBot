@@ -8,6 +8,7 @@ from typing import cast
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
 from telegram.constants import ChatType
+from telegram.error import Forbidden, InvalidToken
 from telegram.ext import ApplicationBuilder, ContextTypes, ExtBot, filters
 from telegram.ext import MessageHandler as TelegramMessageHandler
 
@@ -50,6 +51,7 @@ class TelegramPlatformAdapter(Platform):
         super().__init__(platform_config, event_queue)
         self.settings = platform_settings
         self.client_self_id = uuid.uuid4().hex[:8]
+        self.sdk_plugin_bridge = None
 
         base_url = self.config.get(
             "telegram_api_base_url",
@@ -93,6 +95,26 @@ class TelegramPlatformAdapter(Platform):
         logger.debug(f"Telegram base url: {self.client.base_url}")
 
         self.scheduler = AsyncIOScheduler()
+        self._terminating = False
+        raw_delay = self.config.get("telegram_polling_restart_delay", 5.0)
+        try:
+            delay = float(raw_delay)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid 'telegram_polling_restart_delay' value %r in config, "
+                "falling back to default 5.0s",
+                raw_delay,
+            )
+            delay = 5.0
+
+        if delay < 0.1:
+            logger.warning(
+                "Configured 'telegram_polling_restart_delay' (%s) is too small; "
+                "enforcing minimum of 0.1s to avoid tight restart loops",
+                delay,
+            )
+            delay = 0.1
+        self._polling_restart_delay = delay
 
         # Media group handling
         # Cache structure: {media_group_id: {"created_at": datetime, "items": [(update, context), ...]}}
@@ -145,9 +167,43 @@ class TelegramPlatformAdapter(Platform):
             logger.error("Telegram Updater is not initialized. Cannot start polling.")
             return
 
-        queue = self.application.updater.start_polling()
-        logger.info("Telegram Platform Adapter is running.")
-        await queue
+        while not self._terminating:
+            try:
+                logger.info("Starting Telegram polling...")
+                await self.application.updater.start_polling(
+                    error_callback=self._on_polling_error
+                )
+                logger.info("Telegram Platform Adapter is running.")
+                while self.application.updater.running and not self._terminating:  # noqa: ASYNC110
+                    await asyncio.sleep(1)
+
+                if not self._terminating:
+                    logger.warning(
+                        "Telegram polling loop exited unexpectedly, "
+                        f"retrying in {self._polling_restart_delay}s."
+                    )
+            except asyncio.CancelledError:
+                raise
+            except (Forbidden, InvalidToken) as e:
+                logger.error(
+                    f"Telegram token is invalid or unauthorized: {e}. Polling stopped."
+                )
+                break
+            except Exception as e:
+                logger.exception(
+                    "Telegram polling crashed with exception: "
+                    f"{type(e).__name__}: {e!s}. "
+                    f"Retrying in {self._polling_restart_delay}s.",
+                )
+
+            if not self._terminating:
+                await asyncio.sleep(self._polling_restart_delay)
+
+    def _on_polling_error(self, error: Exception) -> None:
+        logger.error(
+            f"Telegram polling request failed: {type(error).__name__}: {error!s}",
+            exc_info=error,
+        )
 
     async def register_commands(self) -> None:
         """收集所有注册的指令并注册到 Telegram"""
@@ -192,6 +248,31 @@ class TelegramPlatformAdapter(Platform):
                                 f"'{command_dict[cmd_name]}'"
                             )
                         command_dict.setdefault(cmd_name, description)
+
+        sdk_bridge = getattr(self, "sdk_plugin_bridge", None)
+        if sdk_bridge is not None:
+            for item in sdk_bridge.list_native_command_candidates("telegram"):
+                cmd_name = str(item.get("name", "")).strip()
+                if not cmd_name or cmd_name in skip_commands:
+                    continue
+                if not re.match(r"^[a-z0-9_]+$", cmd_name) or len(cmd_name) > 32:
+                    continue
+
+                description = str(item.get("description") or "").strip()
+                if not description:
+                    if item.get("is_group"):
+                        description = f"Command group: {cmd_name}"
+                    else:
+                        description = f"Command: {cmd_name}"
+                if len(description) > 30:
+                    description = description[:30] + "..."
+
+                if cmd_name in command_dict:
+                    logger.warning(
+                        f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
+                        f"'{command_dict[cmd_name]}'"
+                    )
+                command_dict.setdefault(cmd_name, description)
 
         commands_a = sorted(command_dict.keys())
         return [BotCommand(cmd, command_dict[cmd]) for cmd in commands_a]
@@ -567,6 +648,7 @@ class TelegramPlatformAdapter(Platform):
 
     async def terminate(self) -> None:
         try:
+            self._terminating = True
             if self.scheduler.running:
                 self.scheduler.shutdown()
 

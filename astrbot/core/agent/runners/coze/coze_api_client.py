@@ -145,7 +145,7 @@ class CozeAPIClient:
         session = await self._ensure_session()
         url = f"{self.api_base}/v3/chat"
 
-        payload = {
+        payload: dict[str, Any] = {
             "bot_id": bot_id,
             "user_id": user_id,
             "stream": stream,

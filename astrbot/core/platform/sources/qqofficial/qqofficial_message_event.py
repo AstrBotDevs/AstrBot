@@ -3,7 +3,7 @@ import base64
 import os
 import random
 import uuid
-from typing import cast
+from typing import Any, cast
 
 import aiofiles
 import anyio
@@ -75,7 +75,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         # 先标记事件层“已执行发送操作”,避免异常路径遗漏
         await super().send_streaming(generator, use_fallback)
         # QQ C2C 流式协议:开始/中间分片使用 state=1,结束分片使用 state=10
-        stream_payload = {"state": 1, "id": None, "index": 0, "reset": False}
+        stream_payload: dict[str, Any] = {"state": 1, "id": None, "index": 0, "reset": False}
         last_edit_time = 0  # 上次发送分片的时间
         throttle_interval = 1  # 分片间最短间隔 (秒)
         ret = None
@@ -489,7 +489,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     ) -> Media | None:
         """上传媒体文件"""
         # 构建基础payload
-        payload = {"file_type": file_type, "srv_send_msg": srv_send_msg}
+        payload: dict[str, Any] = {"file_type": file_type, "srv_send_msg": srv_send_msg}
         if file_name:
             payload["file_name"] = file_name
 
@@ -572,7 +572,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             logger.error(f"[QQOfficial] post_c2c_message: 响应不是 dict: {result}")
             return None
 
-        return message.Message(**result)
+        return message.Message(**cast(dict[str, Any], result))  # type: ignore[arg-type]
 
     @staticmethod
     async def _parse_to_qqofficial(message: MessageChain):

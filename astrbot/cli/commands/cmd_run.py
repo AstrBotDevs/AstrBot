@@ -14,22 +14,23 @@ Core:
 - `PYTHON`: Python executable path override (for local code execution).
 
 Dashboard / Backend:
-- `ASTRBOT_DASHBOARD_ENABLE` / `DASHBOARD_ENABLE`: Enable/Disable Dashboard.
-- `ASTRBOT_HOST` / `DASHBOARD_HOST`: Dashboard bind host.
-- `ASTRBOT_PORT` / `DASHBOARD_PORT`: Dashboard bind port.
+- `ASTRBOT_DASHBOARD_ENABLE`: Enable/Disable Dashboard.
+- `ASTRBOT_HOST`: Dashboard bind host.
+- `ASTRBOT_PORT`: Dashboard bind port.
 
-Backend-standard SSL names (preferred for server):
-- `ASTRBOT_SSL_ENABLE` / `ASTRBOT_DASHBOARD_SSL_ENABLE`: Enable SSL for API.
-- `ASTRBOT_SSL_CERT` / `ASTRBOT_DASHBOARD_SSL_CERT`: SSL Certificate path for backend.
-- `ASTRBOT_SSL_KEY` / `ASTRBOT_DASHBOARD_SSL_KEY`: SSL Key path for backend.
-- `ASTRBOT_SSL_CA_CERTS` / `ASTRBOT_DASHBOARD_SSL_CA_CERTS`: SSL CA Certs path for backend.
-
-Legacy compatibility:
-- The CLI will set both `ASTRBOT_SSL_*` and the legacy `ASTRBOT_DASHBOARD_SSL_*` / `DASHBOARD_SSL_*` names to remain compatible.
+SSL (AstrBot-standard names):
+- `ASTRBOT_SSL_ENABLE`: Enable SSL for API.
+- `ASTRBOT_SSL_CERT`: SSL Certificate path for backend.
+- `ASTRBOT_SSL_KEY`: SSL Key path for backend.
+- `ASTRBOT_SSL_CA_CERTS`: SSL CA Certs path for backend.
 
 Network:
 - `http_proxy` / `https_proxy`: Proxy URL.
 - `no_proxy`: No proxy list.
+
+Internationalization:
+- `ASTRBOT_CLI_LANG`: CLI interface language (zh/en).
+- `ASTRBOT_TUI_LANG`: TUI interface language (zh/en).
 
 Integrations:
 - `DASHSCOPE_API_KEY`: Alibaba DashScope API Key (for Rerank).
@@ -53,8 +54,7 @@ import click
 from dotenv import load_dotenv
 from filelock import FileLock, Timeout
 
-from astrbot.cli.utils import check_astrbot_root, check_dashboard
-from astrbot.core.utils.astrbot_path import astrbot_paths
+from astrbot.cli.utils import DashboardManager
 from astrbot.runtime_bootstrap import initialize_runtime_bootstrap
 
 initialize_runtime_bootstrap()
@@ -85,85 +85,6 @@ def _expand_parameter(
     return default
 
 
-def expand_value(
-    value: str,
-    env: dict[str, str] | None = None,
-    local: dict[str, str] | None = None,
-) -> str:
-    """Expand bash-like ${VAR:-default} and ${VAR} placeholders in `value`.
-
-    This resolves references from `local` first (previously parsed keys), then from `env`.
-    Repeats expansion until stable or a maximum iteration count is reached to allow
-    nested expansions.
-    """
-    if env is None:
-        env = dict(os.environ)
-    if local is None:
-        local = {}
-
-    # Fast path: if there's no ${...} pattern, return as-is
-    if "${" not in value:
-        return value
-
-    def _repl(m: re.Match) -> str:
-        return _expand_parameter(m, env=env, local=local)
-
-    prev = None
-    current = value
-    # Allow nested expansions but prevent infinite loops
-    for _ in range(8):
-        new = _PARAM_EXPAND_RE.sub(_repl, current)
-        if new == current:
-            break
-        prev, current = current, new
-    return current
-
-
-def parse_service_config_file(
-    path: Path, env: dict[str, str] | None = None
-) -> dict[str, str]:
-    """Parse a service/config template file supporting:
-      - KEY=VALUE lines (with optional surrounding quotes)
-      - export KEY=VALUE
-      - Comments starting with '#'
-      - Bash-like parameter expansions ${VAR:-default} and ${VAR}
-    Returns a dictionary of parsed keys -> expanded values (expansion can reference env and earlier keys).
-    """
-    if env is None:
-        env = dict(os.environ)
-
-    parsed: dict[str, str] = {}
-
-    text = path.read_text(encoding="utf-8")
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        # Allow "export KEY=VALUE" too
-        if line.startswith("export "):
-            line = line[len("export ") :].strip()
-
-        if "=" not in line:
-            # Not a key-value, skip
-            continue
-
-        key, val = line.split("=", 1)
-        key = key.strip()
-        val = val.strip()
-
-        # Remove surrounding quotes if present
-        if (val.startswith('"') and val.endswith('"')) or (
-            val.startswith("'") and val.endswith("'")
-        ):
-            val = val[1:-1]
-
-        # Expand placeholders using current parsed + environment
-        expanded = expand_value(val, env=env, local=parsed)
-        parsed[key] = expanded
-
-    return parsed
-
-
 async def run_astrbot(astrbot_root: Path) -> None:
     """Run AstrBot"""
     from astrbot.core import LogBroker, LogManager, db_helper, logger
@@ -173,9 +94,7 @@ async def run_astrbot(astrbot_root: Path) -> None:
         os.environ.get("ASTRBOT_DASHBOARD_ENABLE", os.environ.get("DASHBOARD_ENABLE"))
         == "True"
     ):
-        # Avoid blocking when running under systemd by waiting for input
-        if os.environ.get("ASTRBOT_SYSTEMD") != "1":
-            await check_dashboard(astrbot_root)
+        await DashboardManager().ensure_installed(astrbot_root)
 
     log_broker = LogBroker()
     LogManager.set_queue_handler(logger, log_broker)
@@ -250,103 +169,37 @@ def run(
         if debug:
             log_level = "DEBUG"
 
-        # --- Step 1: If a service config is provided, read and parse it to local overrides ---
-        parsed_service: dict[str, str] = {}
-        # If explicit config path provided, use it.
+        # --- Step 1: Resolve service-config path (if provided). We'll treat it as a .env file later. ---
         svc_path: Path | None = None
         if service_config:
             candidate = Path(service_config)
-            if candidate.exists():
-                svc_path = candidate
-            else:
+            if not candidate.exists():
                 # Try to expand user and resolve
                 candidate = Path(os.path.expanduser(service_config))
-                if candidate.exists():
-                    svc_path = candidate
+            if candidate.exists():
+                svc_path = candidate
 
-            if svc_path is not None:
-                parsed_service = parse_service_config_file(svc_path)
-
-        # Local variables (CLI args) should keep the highest precedence.
-        # Apply parsed service values only if CLI didn't supply them.
-        # Recognized keys we care about: HOST, PORT, ASTRBOT_ROOT, ASTRBOT_PORT, ASTRBOT_HOST
-        if parsed_service:
-            if not host:
-                host = (
-                    parsed_service.get("HOST")
-                    or parsed_service.get("ASTRBOT_HOST")
-                    or parsed_service.get("DASHBOARD_HOST")
-                    or host
-                )
-            if not port:
-                port = (
-                    parsed_service.get("PORT")
-                    or parsed_service.get("ASTRBOT_PORT")
-                    or parsed_service.get("DASHBOARD_PORT")
-                    or port
-                )
-            if not root:
-                root = (
-                    parsed_service.get("ASTRBOT_ROOT")
-                    or parsed_service.get("ASTRBOT_HOME")
-                    or parsed_service.get("ROOT")
-                    or root
-                )
-
-            # Also export other useful keys from parsed_service into environment,
-            # but do not override existing environment variables.
-            for k, v in parsed_service.items():
-                if k not in os.environ:
-                    os.environ[k] = v
-
-        # --- Step 2: Load .env files early so file-based environment vars are available. ---
-        # Precedence principle implemented here:
-        # 1. CLI args (local variables) keep highest priority and will not be overwritten.
-        # 2. Service config (already applied to local variables above) has next priority.
-        # 3. Environment variables and .env files provide defaults and are loaded here.
-        # Loading .env files should NOT override existing environment variables.
-        dotenv_candidates = []
-
-        # Prefer .env in current working directory first
-        dotenv_candidates.append(Path.cwd() / ".env")
-
-        # If ASTRBOT_ROOT already set in environment, try loading .env from there as well
-        astrbot_root_env = os.environ.get("ASTRBOT_ROOT")
-        if astrbot_root_env:
-            dotenv_candidates.append(Path(astrbot_root_env) / ".env")
-
-        # Also try loading from the packaged default astrbot_paths.root location
-        try:
-            dotenv_candidates.append(astrbot_paths.root / ".env")
-        except Exception:
-            # astrbot_paths.root should normally be available, but be defensive
-            pass
-
-        for p in dotenv_candidates:
-            if p.exists():
-                # load_dotenv with override=False will NOT overwrite existing os.environ values
-                load_dotenv(dotenv_path=str(p), override=False)
-
-        # Normalize environment variables for backward compatibility
-        # If legacy env vars are set but the preferred new ones aren't, copy them over.
-        env_map = {
-            # Dashboard legacy -> standardized dashboard-prefixed
-            "DASHBOARD_ENABLE": "ASTRBOT_DASHBOARD_ENABLE",
-            "DASHBOARD_HOST": "ASTRBOT_HOST",
-            "DASHBOARD_PORT": "ASTRBOT_PORT",
-            "DASHBOARD_SSL_ENABLE": "ASTRBOT_SSL_ENABLE",
-            "DASHBOARD_SSL_CERT": "ASTRBOT_SSL_CERT",
-            "DASHBOARD_SSL_KEY": "ASTRBOT_SSL_KEY",
-            "DASHBOARD_SSL_CA_CERTS": "ASTRBOT_SSL_CA_CERTS",
-            # Some packages used alternate names
-            "ASTRBOT_DASHBOARD_SSL_CERT": "ASTRBOT_SSL_CERT",
-        }
-        for legacy, new in env_map.items():
-            if legacy in os.environ and new not in os.environ:
-                os.environ[new] = os.environ[legacy]
+        # NOTE:
+        # Loading of common .env files (CWD/.env, packaged project .env, ASTRBOT_ROOT/.env)
+        # has been moved to astrbot.core.utils.astrbot_path during import-time to avoid
+        # early-initialization ordering issues. Those files are loaded there using
+        # `override=False` so they do not clobber environment variables provided by the
+        # systemd unit or the caller.
+        #
+        # Here we only load an explicit service-config file (if given). Service-config
+        # should be able to override the common .env files, but CLI-provided values must
+        # still win; the CLI will set/overwrite corresponding environment variables
+        # below after this load.
+        if svc_path and svc_path.exists():
+            # Load service-config as an env file and allow it to override previously-loaded
+            # .env values (those were loaded by astrbot_path). CLI variables are applied
+            # after this point and will take precedence.
+            load_dotenv(dotenv_path=str(svc_path), override=True)
 
         # Mark CLI execution
         os.environ["ASTRBOT_CLI"] = "1"
+
+        from astrbot.core.utils.astrbot_path import astrbot_paths
 
         # Resolve astrbot_root with the following precedence:
         # 1. CLI --root parameter (local variable `root`)
@@ -360,7 +213,7 @@ def run(
         else:
             astrbot_root = astrbot_paths.root
 
-        if not check_astrbot_root(astrbot_root):
+        if not astrbot_paths.is_root:
             raise click.ClickException(
                 f"{astrbot_root} is not a valid AstrBot root directory. Use 'astrbot init' to initialize",
             )
@@ -372,29 +225,20 @@ def run(
         # Host/Port precedence: CLI args > parsed service config/env/.env > defaults.
         if port is not None:
             os.environ["ASTRBOT_PORT"] = port
-            os.environ["DASHBOARD_PORT"] = port  # legacy
-        # If CLI didn't provide port but env/.env provided ASTRBOT_DASHBOARD_PORT, leave it as-is.
 
         if host is not None:
             os.environ["ASTRBOT_HOST"] = host
-            os.environ["DASHBOARD_HOST"] = host  # legacy
-        # If CLI didn't provide host but env/.env provided ASTRBOT_DASHBOARD_HOST, leave it as-is.
 
-        # CLI-provided SSL paths should set backend-standard env names (preferred),
-        # and also set legacy/dashboard names for compatibility.
+        # CLI-provided SSL paths should set backend-standard env names.
         if ssl_cert is not None:
             os.environ["ASTRBOT_SSL_CERT"] = ssl_cert
-            os.environ["DASHBOARD_SSL_CERT"] = ssl_cert
         if ssl_key is not None:
             os.environ["ASTRBOT_SSL_KEY"] = ssl_key
-            os.environ["DASHBOARD_SSL_KEY"] = ssl_key
         if ssl_ca is not None:
             os.environ["ASTRBOT_SSL_CA_CERTS"] = ssl_ca
-            os.environ["DASHBOARD_SSL_CA_CERTS"] = ssl_ca
 
         # Dashboard enable is derived from CLI flag (--backend-only). CLI decision should win.
         os.environ["ASTRBOT_DASHBOARD_ENABLE"] = str(not backend_only)
-        os.environ["DASHBOARD_ENABLE"] = str(not backend_only)  # legacy
 
         os.environ["ASTRBOT_LOG_LEVEL"] = log_level
 
@@ -434,13 +278,6 @@ def run(
                 "ASTRBOT_SSL_CERT",
                 "ASTRBOT_SSL_KEY",
                 "ASTRBOT_SSL_CA_CERTS",
-                # API specific envs
-                "ASTRBOT_API_HOST",
-                "ASTRBOT_API_PORT",
-                "ASTRBOT_API_SSL_ENABLE",
-                "ASTRBOT_API_SSL_CERT",
-                "ASTRBOT_API_SSL_KEY",
-                "ASTRBOT_API_SSL_CA_CERTS",
                 "http_proxy",
                 "https_proxy",
                 "no_proxy",
@@ -469,7 +306,29 @@ def run(
         lock_file = astrbot_root / "astrbot.lock"
         lock = FileLock(lock_file, timeout=5)
         with lock.acquire():
-            asyncio.run(run_astrbot(astrbot_root))
+            # Use TUI if in interactive TTY mode
+            if sys.stdin.isatty() and sys.stdout.isatty():
+                from astrbot.cli.commands.cmd_run_tui import run_tui
+
+                async def wrapped_startup() -> None:
+                    await run_astrbot(astrbot_root)
+
+                asyncio.run(
+                    run_tui(
+                        startup_coro=wrapped_startup,
+                        astrbot_root=astrbot_root,
+                        backend_only=backend_only,
+                        host=os.environ.get("ASTRBOT_HOST"),
+                        port=os.environ.get("ASTRBOT_PORT"),
+                    )
+                )
+            else:
+                click.echo("AstrBot is running...")
+                if backend_only:
+                    click.echo("Visit the dashboard at : https://dash.astrbot.men/")
+                    click.echo("Backend Requests : localhost or based on https")
+
+                asyncio.run(run_astrbot(astrbot_root))
     except KeyboardInterrupt:
         click.echo("AstrBot has been shut down.")
     except Timeout:
