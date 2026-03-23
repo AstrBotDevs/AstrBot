@@ -3,6 +3,7 @@ import MarketPluginCard from "@/components/extension/MarketPluginCard.vue";
 import PluginSortControl from "@/components/extension/PluginSortControl.vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import { computed } from "vue";
+import { normalizeTextInput } from "@/utils/inputValue";
 
 const props = defineProps({
   state: {
@@ -80,6 +81,8 @@ const {
   sortOrder,
   randomPluginNames,
   showRandomPlugins,
+  marketCategoryFilter,
+  marketCategoryItems,
   normalizeStr,
   toPinyinText,
   toInitials,
@@ -165,6 +168,13 @@ const marketSortItems = computed(() => [
   { title: tm("sort.author"), value: "author" },
   { title: tm("sort.updated"), value: "updated" },
 ]);
+
+const marketCategorySelectItems = computed(() =>
+  marketCategoryItems.value.map((item) => ({
+    title: `${item.label || ""} (${item.count || 0})`,
+    value: item.value,
+  })),
+);
 </script>
 
 <template>
@@ -212,11 +222,13 @@ const marketSortItems = computed(() => [
                 </div>
 
                 <v-text-field
-                  v-model="marketSearch"
+                  :model-value="marketSearch"
+                  @update:model-value="marketSearch = normalizeTextInput($event)"
                   class="ml-auto"
                   density="compact"
                   :label="tm('search.marketPlaceholder')"
                   prepend-inner-icon="mdi-magnify"
+                  clearable
                   variant="solo-filled"
                   flat
                   hide-details
@@ -267,10 +279,94 @@ const marketSortItems = computed(() => [
             </v-tooltip>
 
             <div class="mt-4">
+              <div
+                class="d-flex align-center mb-2"
+                style="
+                  justify-content: space-between;
+                  flex-wrap: wrap;
+                  gap: 8px;
+                "
+              >
+                <div class="d-flex align-center" style="gap: 6px">
+                  <h2>
+                    {{ tm("market.allPlugins") }}
+                  </h2>
+                  <v-btn
+                    icon
+                    variant="text"
+                    @click="refreshPluginMarket"
+                    :loading="loading_ || refreshingMarket"
+                    :disabled="loading_ || refreshingMarket"
+                  >
+                    <v-icon>mdi-refresh</v-icon>
+                  </v-btn>
+                </div>
+
+                <div
+                  class="d-flex align-center"
+                  style="gap: 8px; flex-wrap: wrap"
+                >
+                  <v-select
+                    v-if="marketCategoryItems.length > 0"
+                    v-model="marketCategoryFilter"
+                    :items="marketCategorySelectItems"
+                    item-title="title"
+                    item-value="value"
+                    :label="tm('market.category')"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="market-filter-control"
+                    :menu-props="{ openOnHover: true, closeOnContentClick: false }"
+                  ></v-select>
+
+                  <PluginSortControl
+                    v-model="sortBy"
+                    :items="marketSortItems"
+                    :label="tm('sort.by')"
+                    :order="sortOrder"
+                    :ascending-label="tm('sort.ascending')"
+                    :descending-label="tm('sort.descending')"
+                    :show-order="sortBy !== 'default'"
+                    @update:order="sortOrder = $event"
+                  />
+                </div>
+              </div>
+
+              <v-row style="min-height: 26rem" dense>
+                <v-col
+                  v-for="plugin in paginatedPlugins"
+                  :key="plugin.name"
+                  cols="12"
+                  md="6"
+                  lg="4"
+                  class="pb-2"
+                >
+                  <MarketPluginCard
+                    :plugin="plugin"
+                    :default-plugin-icon="defaultPluginIcon"
+                    :show-plugin-full-name="showPluginFullName"
+                    @install="handleInstallPlugin"
+                  />
+                </v-col>
+              </v-row>
+
+              <div
+                class="d-flex justify-center mt-4"
+                v-if="totalPages > 1"
+              >
+                <v-pagination
+                  v-model="currentPage"
+                  :length="totalPages"
+                  :total-visible="7"
+                  size="small"
+                ></v-pagination>
+              </div>
+
               <v-expand-transition>
                 <div v-if="showRandomPlugins">
                   <div
-                    class="d-flex align-center mb-2"
+                    class="d-flex align-center mb-2 mt-4"
                     style="justify-content: space-between; flex-wrap: wrap; gap: 8px"
                   >
                     <h2>
@@ -306,74 +402,22 @@ const marketSortItems = computed(() => [
                   </v-row>
                 </div>
               </v-expand-transition>
-
-              <div
-                class="d-flex align-center mb-2"
-                style="
-                  justify-content: space-between;
-                  flex-wrap: wrap;
-                  gap: 8px;
-                "
-              >
-                <div class="d-flex align-center" style="gap: 6px">
-                  <h2>
-                    {{ tm("market.allPlugins") }}({{
-                      filteredMarketPlugins.length
-                    }})
-                  </h2>
-                  <v-btn
-                    icon
-                    variant="text"
-                    @click="refreshPluginMarket"
-                    :loading="refreshingMarket"
-                  >
-                    <v-icon>mdi-refresh</v-icon>
-                  </v-btn>
-                </div>
-
-                <div
-                  class="d-flex align-center"
-                  style="gap: 8px; flex-wrap: wrap"
-                >
-                  <PluginSortControl
-                    v-model="sortBy"
-                    :items="marketSortItems"
-                    :label="tm('sort.by')"
-                    :order="sortOrder"
-                    :ascending-label="tm('sort.ascending')"
-                    :descending-label="tm('sort.descending')"
-                    :show-order="sortBy !== 'default'"
-                    @update:order="sortOrder = $event"
-                  />
-                </div>
-              </div>
-
-              <v-row style="min-height: 26rem" dense>
-                <v-col
-                  v-for="plugin in paginatedPlugins"
-                  :key="plugin.name"
-                  cols="12"
-                  md="6"
-                  lg="4"
-                  class="pb-2"
-                >
-                  <MarketPluginCard
-                    :plugin="plugin"
-                    :default-plugin-icon="defaultPluginIcon"
-                    :show-plugin-full-name="showPluginFullName"
-                    @install="handleInstallPlugin"
-                  />
-                </v-col>
-              </v-row>
-
-              <div class="d-flex justify-center mt-4" v-if="totalPages > 1">
-                <v-pagination
-                  v-model="currentPage"
-                  :length="totalPages"
-                  :total-visible="7"
-                  size="small"
-                ></v-pagination>
-              </div>
             </div>
+
+          
           </v-tab-item>
 </template>
+
+<style scoped>
+.market-filter-control {
+  min-width: 190px;
+  max-width: 220px;
+}
+
+.market-filter-control :deep(.v-field__input),
+.market-filter-control :deep(.v-field-label),
+.market-filter-control :deep(.v-select__selection-text),
+.market-filter-control :deep(.v-field__prepend-inner) {
+  font-size: 0.875rem;
+}
+</style>

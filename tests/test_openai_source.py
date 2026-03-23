@@ -1,7 +1,9 @@
 from types import SimpleNamespace
 
 import pytest
+from openai.types.chat.chat_completion import ChatCompletion
 
+from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 
 
@@ -27,6 +29,21 @@ def _make_provider(overrides: dict | None = None) -> ProviderOpenAIOfficial:
     if overrides:
         provider_config.update(overrides)
     return ProviderOpenAIOfficial(
+        provider_config=provider_config,
+        provider_settings={},
+    )
+
+
+def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
+    provider_config = {
+        "id": "test-groq",
+        "type": "groq_chat_completion",
+        "model": "qwen/qwen3-32b",
+        "key": ["test-key"],
+    }
+    if overrides:
+        provider_config.update(overrides)
+    return ProviderGroq(
         provider_config=provider_config,
         provider_settings={},
     )
@@ -196,6 +213,57 @@ def test_extract_error_text_candidates_truncates_long_response_text():
     assert max(len(candidate) for candidate in candidates) <= (
         ProviderOpenAIOfficial._ERROR_TEXT_CANDIDATE_MAX_CHARS
     )
+
+
+@pytest.mark.asyncio
+async def test_openai_payload_keeps_reasoning_content_in_assistant_history():
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "think", "think": "step 1"},
+                        {"type": "text", "text": "final answer"},
+                    ],
+                }
+            ]
+        }
+
+        provider._finally_convert_payload(payloads)
+
+        assistant_message = payloads["messages"][0]
+        assert assistant_message["content"] == [{"type": "text", "text": "final answer"}]
+        assert assistant_message["reasoning_content"] == "step 1"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_groq_payload_drops_reasoning_content_from_assistant_history():
+    provider = _make_groq_provider()
+    try:
+        payloads = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "think", "think": "step 1"},
+                        {"type": "text", "text": "final answer"},
+                    ],
+                }
+            ]
+        }
+
+        provider._finally_convert_payload(payloads)
+
+        assistant_message = payloads["messages"][0]
+        assert assistant_message["content"] == [{"type": "text", "text": "final answer"}]
+        assert "reasoning_content" not in assistant_message
+        assert "reasoning" not in assistant_message
+    finally:
+        await provider.terminate()
 
 
 @pytest.mark.asyncio
@@ -378,5 +446,90 @@ async def test_handle_api_error_unknown_image_error_raises():
                 retry_cnt=0,
                 max_retries=10,
             )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_apply_provider_specific_extra_body_overrides_disables_ollama_thinking():
+    provider = _make_provider(
+        {
+            "provider": "ollama",
+            "ollama_disable_thinking": True,
+        }
+    )
+    try:
+        extra_body = {
+            "reasoning": {"effort": "high"},
+            "reasoning_effort": "low",
+            "think": True,
+            "temperature": 0.2,
+        }
+
+        provider._apply_provider_specific_extra_body_overrides(extra_body)
+
+        assert extra_body["reasoning_effort"] == "none"
+        assert "reasoning" not in extra_body
+        assert "think" not in extra_body
+        assert extra_body["temperature"] == 0.2
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_injects_reasoning_effort_none_for_ollama(monkeypatch):
+    provider = _make_provider(
+        {
+            "provider": "ollama",
+            "ollama_disable_thinking": True,
+            "custom_extra_body": {
+                "reasoning": {"effort": "high"},
+                "temperature": 0.1,
+            },
+        }
+    )
+    try:
+        captured_kwargs = {}
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return ChatCompletion.model_validate(
+                {
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "qwen3.5:4b",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": "ok",
+                            },
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            )
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        await provider._query(
+            payloads={
+                "model": "qwen3.5:4b",
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+            tools=None,
+        )
+
+        extra_body = captured_kwargs["extra_body"]
+        assert extra_body["reasoning_effort"] == "none"
+        assert "reasoning" not in extra_body
+        assert extra_body["temperature"] == 0.1
     finally:
         await provider.terminate()

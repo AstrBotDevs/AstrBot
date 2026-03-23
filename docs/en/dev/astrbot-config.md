@@ -74,7 +74,7 @@ The default AstrBot configuration is as follows:
         "show_tool_use_status": False,
         "streaming_segmented": False,
         "max_agent_step": 30,
-        "tool_call_timeout": 60,
+        "tool_call_timeout": 120,
     },
     "provider_stt_settings": {
         "enable": False,
@@ -127,6 +127,9 @@ The default AstrBot configuration is as follows:
         },
         "telegram": {
             "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
+        },
+        "discord": {
+            "pre_ack_emoji": {"enable": False, "emojis": ["🤔"]},
         },
     },
     "wake_prefix": ["/"],
@@ -510,6 +513,11 @@ When enabled, AstrBot sends a pre-reply emoji before requesting the LLM to infor
 
 - `enable`: Whether to enable pre-reply emojis for Telegram messages. Default is `false`.
 - `emojis`: List of pre-reply emojis. Default is `["✍️"]`. Telegram only supports a fixed set of reactions; refer to [reactions.txt](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9).
+
+##### discord
+
+- `enable`: Whether to enable pre-reply emojis for Discord messages. Default is `false`.
+- `emojis`: List of pre-reply emojis. Default is `["🤔"]`. Refer to [Discord Reaction FAQ](https://support.discord.com/hc/en-us/articles/12102061808663-Reactions-and-Super-Reactions-FAQ).
 
 ### `wake_prefix`
 

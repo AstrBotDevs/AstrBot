@@ -18,6 +18,7 @@ concurrency:
 
 jobs:
   sync:
+    if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,10 +31,10 @@ jobs:
           exit 1
 
       - name: Check out docs repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 

@@ -8,6 +8,7 @@ on:
 
 jobs:
   build:
+    if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -45,7 +46,7 @@ jobs:
 
       - name: Create GitHub Release
         if: github.event_name == 'push'
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@v1.21.0
         with:
           tag: release-${{ github.sha }}
           owner: AstrBotDevs

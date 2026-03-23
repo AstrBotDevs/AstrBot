@@ -57,6 +57,21 @@
                     {{ getPlatformStat(item.id)?.error_count }} {{ tm('runtimeStatus.errors') }}
                   </v-chip>
                 </div>
+                <div
+                  class="platform-qr-chip"
+                  v-if="hasQrPayload(item.id)"
+                >
+                  <v-chip
+                    size="small"
+                    color="primary"
+                    variant="tonal"
+                    class="platform-qr-chip-item"
+                    @click.stop="openPlatformQrDialog(item.id)"
+                  >
+                    <v-icon size="small" start>mdi-qrcode</v-icon>
+                    {{ tm('platformQr.show') }}
+                  </v-chip>
+                </div>
                 <div v-if="getPlatformStat(item.id)?.unified_webhook && item.webhook_uuid" class="webhook-info">
                   <v-chip
                     size="small"
@@ -138,6 +153,30 @@
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="showQrDialog" max-width="480">
+      <v-card>
+        <v-card-title class="d-flex align-center pa-4">
+          <v-icon class="me-2">mdi-qrcode</v-icon>
+          {{ tm('platformQr.title') }}
+        </v-card-title>
+        <v-card-text class="px-4 pb-4">
+          <div class="platform-qr-status">
+            {{ tm('platformQr.status') }}: {{ getPlatformQrLoginStat(currentQrPlatformId)?.qr_status || tm('platformQr.waiting') }}
+          </div>
+          <QrCodeViewer
+            :value="(getPlatformQrLoginStat(currentQrPlatformId)?.qrcode_img_content || getPlatformQrLoginStat(currentQrPlatformId)?.qrcode || '')"
+            :alt="tm('platformQr.title')"
+          />
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer></v-spacer>
+          <v-btn variant="tonal" color="primary" @click="showQrDialog = false">
+            {{ tm('platformQr.close') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- 错误详情对话框 -->
     <v-dialog v-model="showErrorDialog" max-width="700">
       <v-card>
@@ -194,9 +233,10 @@ import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ItemCard from '@/components/shared/ItemCard.vue';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
+import QrCodeViewer from '@/components/shared/QrCodeViewer.vue';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n, mergeDynamicTranslations } from '@/i18n/composables';
-import { getPlatformIcon, getTutorialLink } from '@/utils/platformUtils';
+import { getPlatformIcon } from '@/utils/platformUtils';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog
@@ -209,7 +249,8 @@ export default {
     WaitingForRestart,
     ConsoleDisplayer,
     ItemCard,
-    AddNewPlatform
+    AddNewPlatform,
+    QrCodeViewer,
   },
   setup() {
     const { t } = useI18n();
@@ -249,6 +290,8 @@ export default {
       // 错误详情对话框
       showErrorDialog: false,
       currentErrorPlatform: null,
+      showQrDialog: false,
+      currentQrPlatformId: "",
 
       store: useCommonStore()
     }
@@ -330,6 +373,7 @@ export default {
     },
 
     async getPlatformStats() {
+
       try {
         const res = await axios.get('/api/platform/stats', { timeout: 8000 });
         if (res.data.status === 'ok') {
@@ -347,6 +391,31 @@ export default {
 
     getPlatformStat(platformId) {
       return this.platformStats[platformId] || null;
+    },
+
+    hasQrPayload(platformId) {
+      const stat = this.getPlatformQrLoginStat(platformId);
+      return Boolean(stat?.qrcode_img_content || stat?.qrcode);
+    },
+
+    getPlatformQrLoginStat(platformId) {
+      const stat = this.getPlatformStat(platformId);
+      if (stat?.weixin_oc) {
+        return stat.weixin_oc;
+      }
+      if (stat && typeof stat === "object") {
+        for (const value of Object.values(stat)) {
+          if (value && typeof value === "object" && ("qrcode_img_content" in value || "qrcode" in value)) {
+            return value;
+          }
+        }
+      }
+      return null;
+    },
+
+    openPlatformQrDialog(platformId) {
+      this.currentQrPlatformId = platformId;
+      this.showQrDialog = true;
     },
 
     getStatusColor(status) {
@@ -621,5 +690,15 @@ export default {
   word-break: break-word;
   max-height: 300px;
   overflow-y: auto;
+}
+
+.platform-qr-chip {
+  margin-top: 4px;
+}
+
+.platform-qr-status {
+  font-size: 13px;
+  margin-bottom: 10px;
+  color: rgba(0, 0, 0, 0.7);
 }
 </style>

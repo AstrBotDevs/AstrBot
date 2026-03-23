@@ -21,6 +21,7 @@
     },
     "description": {
       "openai": "Supports all OpenAI API compatible providers.",
+      "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API compatibility layer.",
       "default": ""
     }
   },
@@ -132,6 +133,7 @@
     "deleteSuccess": "Model deleted successfully",
     "deleteError": "Failed to delete model",
     "testSuccess": "Model {id} test passed",
+    "testSuccessWithLatency": "Model {id} test passed, latency {latency} ms",
     "testError": "Model test failed",
     "searchPlaceholder": "Search models or ID",
     "manualAddButton": "Custom Model",

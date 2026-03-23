@@ -6,15 +6,13 @@ This documentation may not cover all features comprehensively. If you have any q
 
 ### Discord
 
-<https://discord.gg/PxgzhmxJ>
+<https://discord.gg/hAVk6tgV36>
 
 ### GitHub
 
 Welcome to submit Issues or Pull Requests:
 
 - [AstrBotDevs/AstrBot](https://github.com/AstrBotDevs/AstrBot)
-
-- [AstrBotDevs/AstrBot-Docs](https://github.com/AstrBotDevs/AstrBot-docs)
 
 ### Tencent QQ Groups
 

@@ -154,6 +154,14 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             audio_stream = self._call_tts_stream(text)
             audio = await self._audio_play(audio_stream)
 
+            # 检查音频数据是否为空
+            if not audio or len(audio) == 0:
+                raise Exception(
+                    "MiniMax TTS API returned empty audio data. "
+                    "Please verify your configuration, especially the 'group_id' parameter. "
+                    "You can find your group_id in Account Management -> Basic Information on the MiniMax platform."
+                )
+
             # 结果保存至文件
             with open(path, "wb") as file:
                 file.write(audio)
@@ -161,4 +169,4 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             return path
 
         except aiohttp.ClientError as e:
-            raise e
+            raise Exception(f"MiniMax TTS API request failed: {e!s}")

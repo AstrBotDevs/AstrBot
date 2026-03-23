@@ -21,8 +21,8 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
-DEFAULT_MCP_INIT_TIMEOUT_SECONDS = 20.0
-DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS = 30.0
+DEFAULT_MCP_INIT_TIMEOUT_SECONDS = 180.0
+DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS = 180.0
 MCP_INIT_TIMEOUT_ENV = "ASTRBOT_MCP_INIT_TIMEOUT"
 ENABLE_MCP_TIMEOUT_ENV = "ASTRBOT_MCP_ENABLE_TIMEOUT"
 MAX_MCP_TIMEOUT_SECONDS = 300.0
@@ -311,13 +311,30 @@ class FunctionToolManager:
                 break
 
     def get_func(self, name) -> FuncTool | None:
-        for f in self.func_list:
+        # 优先返回已激活的工具（后加载的覆盖前面的，与 ToolSet.add_tool 保持一致）
+        # 使用 getattr(..., True) 与 ToolSet.add_tool 保持一致：没有 active 属性的工具视为已激活
+        for f in reversed(self.func_list):
+            if f.name == name and getattr(f, "active", True):
+                return f
+        # 退化则拿最后一个同名工具
+        for f in reversed(self.func_list):
             if f.name == name:
                 return f
+        return None
 
     def get_full_tool_set(self) -> ToolSet:
-        """获取完整工具集"""
-        tool_set = ToolSet(self.func_list.copy())
+        """获取完整工具集
+
+        使用 ToolSet.add_tool 进行填充。对于同名工具，去重规则为：
+        - 优先保留 active=True 的工具；
+        - 当 active 状态相同时，后加载的工具会覆盖前面的工具。
+
+        因此，后加载的 inactive 工具不会覆盖已激活的工具；
+        同时，MCP 工具在需要时仍可覆盖被禁用的内置工具。
+        """
+        tool_set = ToolSet()
+        for tool in self.func_list:
+            tool_set.add_tool(tool)
         return tool_set
 
     @staticmethod
@@ -417,9 +434,11 @@ class FunctionToolManager:
         for (name, cfg, _), result in zip(active_configs, results, strict=False):
             if isinstance(result, Exception):
                 if isinstance(result, MCPInitTimeoutError):
-                    logger.error(f"MCP 服务 {name} 初始化超时（{timeout_display}秒）")
+                    logger.error(
+                        f"Connected to MCP server {name} timeout ({timeout_display} seconds)"
+                    )
                 else:
-                    logger.error(f"MCP 服务 {name} 初始化失败: {result}")
+                    logger.error(f"Failed to initialize MCP server {name}: {result}")
                 self._log_safe_mcp_debug_config(cfg)
                 failed_services.append(name)
                 async with self._runtime_lock:
@@ -430,16 +449,18 @@ class FunctionToolManager:
 
         if failed_services:
             logger.warning(
-                f"以下 MCP 服务初始化失败: {', '.join(failed_services)}。"
-                f"请检查配置文件 mcp_server.json 和服务器可用性。"
+                f"The following MCP services failed to initialize: {', '.join(failed_services)}. "
+                f"Please check the mcp_server.json file and server availability."
             )
 
         summary = MCPInitSummary(
             total=len(active_configs), success=success_count, failed=failed_services
         )
-        logger.info(f"MCP 服务初始化完成: {summary.success}/{summary.total} 成功")
+        logger.info(
+            f"MCP services initialization completed: {summary.success}/{summary.total} successful, {len(summary.failed)} failed."
+        )
         if summary.total > 0 and summary.success == 0:
-            msg = "全部 MCP 服务初始化失败，请检查 mcp_server.json 配置和服务器可用性。"
+            msg = "All MCP services failed to initialize, please check the mcp_server.json and server availability."
             if raise_on_all_failed:
                 raise MCPAllServicesFailedError(msg)
             logger.error(msg)
@@ -461,7 +482,7 @@ class FunctionToolManager:
         async with self._runtime_lock:
             if name in self._mcp_server_runtime or name in self._mcp_starting:
                 logger.warning(
-                    f"MCP 服务 {name} 已在运行，忽略本次启用请求（timeout={timeout:g}）。"
+                    f"Connected to MCP server {name}, ignoring this startup request (timeout={timeout:g})."
                 )
                 self._log_safe_mcp_debug_config(cfg)
                 return
@@ -478,10 +499,10 @@ class FunctionToolManager:
             )
         except asyncio.TimeoutError as exc:
             raise MCPInitTimeoutError(
-                f"MCP 服务 {name} 初始化超时（{timeout:g} 秒）"
+                f"Connected to MCP server {name} timeout ({timeout:g} seconds)"
             ) from exc
         except Exception:
-            logger.error(f"初始化 MCP 客户端 {name} 失败", exc_info=True)
+            logger.error(f"Failed to initialize MCP client {name}", exc_info=True)
             raise
         finally:
             if mcp_client is None:
@@ -491,9 +512,9 @@ class FunctionToolManager:
         async def lifecycle() -> None:
             try:
                 await shutdown_event.wait()
-                logger.info(f"收到 MCP 客户端 {name} 终止信号")
+                logger.info(f"Received shutdown signal for MCP client {name}")
             except asyncio.CancelledError:
-                logger.debug(f"MCP 客户端 {name} 任务被取消")
+                logger.debug(f"MCP client {name} task was cancelled")
                 raise
             finally:
                 await self._terminate_mcp_client(name)
@@ -545,7 +566,7 @@ class FunctionToolManager:
             if strict:
                 raise MCPShutdownTimeoutError(pending_names, timeout)
             logger.warning(
-                "MCP 服务关闭超时（%s 秒），以下服务未完全关闭：%s",
+                "MCP server shutdown timeout (%s seconds), the following servers were not fully closed: %s",
                 f"{timeout:g}",
                 ", ".join(pending_names),
             )
@@ -568,7 +589,9 @@ class FunctionToolManager:
         try:
             await mcp_client.cleanup()
         except Exception as cleanup_exc:  # noqa: BLE001 - only log here
-            logger.error(f"清理 MCP 客户端资源 {name} 失败: {cleanup_exc}")
+            logger.error(
+                f"Failed to cleanup MCP client resources {name}: {cleanup_exc}"
+            )
 
     async def _init_mcp_client(self, name: str, config: dict) -> MCPClient:
         """初始化单个MCP客户端"""
@@ -602,7 +625,7 @@ class FunctionToolManager:
             )
             self.func_list.append(func_tool)
 
-        logger.info(f"已连接 MCP 服务 {name}, Tools: {tool_names}")
+        logger.info(f"Connected to MCP server {name}, Tools: {tool_names}")
         return mcp_client
 
     async def _terminate_mcp_client(self, name: str) -> None:
@@ -622,7 +645,7 @@ class FunctionToolManager:
             async with self._runtime_lock:
                 self._mcp_server_runtime.pop(name, None)
                 self._mcp_starting.discard(name)
-            logger.info(f"已关闭 MCP 服务 {name}")
+            logger.info(f"Disconnected from MCP server {name}")
             return
 
         # Runtime missing but stale tools may still exist after failed flows.
