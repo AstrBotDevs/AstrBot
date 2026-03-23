@@ -28,7 +28,7 @@ from lark_oapi.api.im.v1 import (
 
 from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import At, File, Plain, Record, Video
+from astrbot.api.message_components import At, File, Json, Plain, Record, Video
 from astrbot.api.message_components import Image as AstrBotImage
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_image_by_url
@@ -281,6 +281,158 @@ class LarkMessageEvent(AstrMessageEvent):
         return ret
 
     @staticmethod
+    def _build_reasoning_collapsible_panel(reasoning_content: str, title: str) -> dict:
+        return {
+            "schema": "2.0",
+            "body": {
+                "elements": [
+                    {
+                        "tag": "collapsible_panel",
+                        "expanded": False,
+                        "background_color": "grey",
+                        "padding": "8px 8px 8px 8px",
+                        "margin": "4px 0px 4px 0px",
+                        "border": {
+                            "color": "grey",
+                            "corner_radius": "6px",
+                        },
+                        "header": {
+                            "title": {
+                                "tag": "plain_text",
+                                "content": title,
+                            },
+                            "background_color": "grey",
+                        },
+                        "elements": [
+                            {"tag": "markdown", "content": reasoning_content},
+                        ],
+                    }
+                ]
+            },
+        }
+
+    @staticmethod
+    def _build_reasoning_card(message_chain: MessageChain) -> dict | None:
+        elements: list[dict] = []
+        for comp in message_chain.chain:
+            if isinstance(comp, Json) and isinstance(comp.data, dict):
+                if comp.data.get("type") != "lark_collapsible_panel_reasoning":
+                    continue
+                reasoning_content = str(comp.data.get("content", "")).strip()
+                if not reasoning_content:
+                    continue
+                elements.append(
+                    {
+                        "tag": "collapsible_panel",
+                        "expanded": bool(comp.data.get("expanded", False)),
+                        "background_color": "grey",
+                        "padding": "8px 8px 8px 8px",
+                        "margin": "4px 0px 4px 0px",
+                        "border": {
+                            "color": "grey",
+                            "corner_radius": "6px",
+                        },
+                        "header": {
+                            "title": {
+                                "tag": "plain_text",
+                                "content": str(
+                                    comp.data.get("title", "💭 Thinking"),
+                                ),
+                            },
+                            "background_color": "grey",
+                        },
+                        "elements": [
+                            {
+                                "tag": "markdown",
+                                "content": reasoning_content,
+                            }
+                        ],
+                    }
+                )
+            elif isinstance(comp, Plain):
+                if comp.text:
+                    elements.append({"tag": "markdown", "content": comp.text})
+            else:
+                return None
+
+        return {
+            "schema": "2.0",
+            "body": {
+                "elements": elements,
+            },
+        } if elements else None
+
+    @staticmethod
+    async def _send_interactive_card(
+        card_json: dict,
+        lark_client: lark.Client,
+        reply_message_id: str | None = None,
+        receive_id: str | None = None,
+        receive_id_type: str | None = None,
+    ) -> bool:
+        if lark_client.cardkit is None:
+            logger.error("[Lark] API Client cardkit 模块未初始化，无法发送卡片")
+            return False
+
+        try:
+            response = await lark_client.cardkit.v1.card.acreate(
+                CreateCardRequest.builder()
+                .request_body(
+                    CreateCardRequestBody.builder()
+                    .type("card_json")
+                    .data(json.dumps(card_json, ensure_ascii=False))
+                    .build()
+                )
+                .build()
+            )
+        except Exception as e:
+            logger.error(f"[Lark] 创建卡片失败: {e}")
+            return False
+
+        if not response.success():
+            logger.error(f"[Lark] 创建卡片失败({response.code}): {response.msg}")
+            return False
+        if response.data is None or not response.data.card_id:
+            logger.error("[Lark] 创建卡片成功但未返回 card_id")
+            return False
+
+        card_content = json.dumps(
+            {"type": "card", "data": {"card_id": response.data.card_id}},
+            ensure_ascii=False,
+        )
+        return await LarkMessageEvent._send_im_message(
+            lark_client,
+            content=card_content,
+            msg_type="interactive",
+            reply_message_id=reply_message_id,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+        )
+
+    @staticmethod
+    async def _send_collapsible_reasoning_panel(
+        reasoning_content: str,
+        title: str,
+        lark_client: lark.Client,
+        reply_message_id: str | None = None,
+        receive_id: str | None = None,
+        receive_id_type: str | None = None,
+    ) -> bool:
+        if not reasoning_content:
+            return True
+        card_json = LarkMessageEvent._build_reasoning_collapsible_panel(
+            reasoning_content=reasoning_content,
+            title=title,
+        )
+        return await LarkMessageEvent._send_interactive_card(
+            card_json,
+            lark_client=lark_client,
+            reply_message_id=reply_message_id,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+        )
+
+    @staticmethod
     async def send_message_chain(
         message_chain: MessageChain,
         lark_client: lark.Client,
@@ -317,27 +469,89 @@ class LarkMessageEvent(AstrMessageEvent):
             else:
                 other_components.append(comp)
 
+        has_reasoning_marker = any(
+            isinstance(comp, Json)
+            and isinstance(comp.data, dict)
+            and comp.data.get("type") == "lark_collapsible_panel_reasoning"
+            for comp in other_components
+        )
+        if (
+            has_reasoning_marker
+            and not file_components
+            and not audio_components
+            and not media_components
+        ):
+            card_json = LarkMessageEvent._build_reasoning_card(message_chain)
+            if card_json and await LarkMessageEvent._send_interactive_card(
+                card_json,
+                lark_client=lark_client,
+                reply_message_id=reply_message_id,
+                receive_id=receive_id,
+                receive_id_type=receive_id_type,
+            ):
+                return
+
         # 先发送非文件内容（如果有）
         if other_components:
-            temp_chain = MessageChain()
-            temp_chain.chain = other_components
-            res = await LarkMessageEvent._convert_to_lark(temp_chain, lark_client)
+            buffered_components: list = []
 
-            if res:  # 只在有内容时发送
-                wrapped = {
-                    "zh_cn": {
-                        "title": "",
-                        "content": res,
-                    },
-                }
-                await LarkMessageEvent._send_im_message(
+            async def _flush_buffer() -> None:
+                nonlocal buffered_components
+                if not buffered_components:
+                    return
+
+                pending_chain = MessageChain()
+                pending_chain.chain = buffered_components
+                buffered_components = []
+
+                res = await LarkMessageEvent._convert_to_lark(
+                    pending_chain,
                     lark_client,
-                    content=json.dumps(wrapped),
-                    msg_type="post",
-                    reply_message_id=reply_message_id,
-                    receive_id=receive_id,
-                    receive_id_type=receive_id_type,
                 )
+                if res:  # 只在有内容时发送
+                    wrapped = {
+                        "zh_cn": {
+                            "title": "",
+                            "content": res,
+                        },
+                    }
+                    await LarkMessageEvent._send_im_message(
+                        lark_client,
+                        content=json.dumps(wrapped),
+                        msg_type="post",
+                        reply_message_id=reply_message_id,
+                        receive_id=receive_id,
+                        receive_id_type=receive_id_type,
+                    )
+
+            # 维持组件顺序：遇到折叠面板标记先 flush 当前普通内容并发送卡片
+            for comp in other_components:
+                if isinstance(comp, Json) and isinstance(comp.data, dict):
+                    comp_type = comp.data.get("type")
+                    if comp_type == "lark_collapsible_panel_reasoning":
+                        await _flush_buffer()
+                        if reason_text := str(comp.data.get("content", "")).strip():
+                            panel_title = str(
+                                comp.data.get("title", "💭 Thinking"),
+                            )
+                            success = await LarkMessageEvent._send_collapsible_reasoning_panel(
+                                reasoning_content=reason_text,
+                                title=panel_title,
+                                lark_client=lark_client,
+                                reply_message_id=reply_message_id,
+                                receive_id=receive_id,
+                                receive_id_type=receive_id_type,
+                            )
+                            if not success:
+                                buffered_components.append(
+                                    Plain(
+                                        f"🤔 {panel_title}: {reason_text}",
+                                    ),
+                                )
+                        continue
+                buffered_components.append(comp)
+
+            await _flush_buffer()
 
         # 发送附件
         for file_comp in file_components:
@@ -765,7 +979,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 await text_changed.wait()
                 text_changed.clear()
                 snapshot = delta
-                if snapshot and snapshot != last_sent:
+                if snapshot and snapshot != last_sent and card_id:
                     sequence += 1
                     ok = await self._update_streaming_text(card_id, snapshot, sequence)
                     if ok:
@@ -793,6 +1007,8 @@ class LarkMessageEvent(AstrMessageEvent):
 
         async def _flush_and_close_card() -> None:
             """补发最终文本并关闭当前卡片的流式模式。"""
+            if not card_id:
+                return
             nonlocal sequence
             if delta and delta != last_sent:
                 sequence += 1
