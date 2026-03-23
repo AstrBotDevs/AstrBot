@@ -270,7 +270,7 @@ class McpClient(BaseAstrbotMcpClient):
                     mcp.ClientSession(
                         *streams,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore
+                        logging_callback=cast(Any, logging_callback),
                     ),
                 )
             else:
@@ -322,12 +322,12 @@ class McpClient(BaseAstrbotMcpClient):
             stdio_transport = await self.exit_stack.enter_async_context(
                 mcp.stdio_client(
                     server_params,
-                    errlog=LogPipe(
+                    errlog=cast(Any, LogPipe(
                         level=logging.INFO,
                         logger=logger,
                         identifier=f"MCPServer-{name}",
                         callback=callback,
-                    ),  # type: ignore
+                    )),
                 ),
             )
             self.process_pid = self._extract_stdio_process_pid(stdio_transport)
@@ -421,7 +421,7 @@ class McpClient(BaseAstrbotMcpClient):
             retry=retry_if_exception_type(anyio.ClosedResourceError),
             stop=stop_after_attempt(2),
             wait=wait_exponential(multiplier=1, min=1, max=3),
-            before_sleep=before_sleep_log(logger, logging.WARNING),  # type: ignore[arg-type]
+            before_sleep=cast(Any, before_sleep_log(logger, logging.WARNING)),
             reraise=True,
         )
         async def _call_with_retry():

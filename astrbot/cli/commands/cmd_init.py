@@ -3,6 +3,7 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Any, cast
 
 import click
 from filelock import FileLock, Timeout
@@ -112,7 +113,7 @@ async def initialize_astrbot(
     effective_admin_username = (
         admin_username.strip()
         if admin_username
-        else str(DEFAULT_CONFIG["dashboard"]["username"])  # type: ignore[index]
+        else str(cast(dict[str, Any], DEFAULT_CONFIG)["dashboard"]["username"])
     )
     if admin_username:
         config = ensure_config_file()

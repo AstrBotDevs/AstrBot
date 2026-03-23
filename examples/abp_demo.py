@@ -12,10 +12,10 @@ Run with: uv run python examples/abp_demo.py
 
 from __future__ import annotations
 
-import anyio
-import asyncio
 from dataclasses import dataclass
 from typing import Any
+
+import anyio
 
 
 # Mock Star class that implements the expected interface
