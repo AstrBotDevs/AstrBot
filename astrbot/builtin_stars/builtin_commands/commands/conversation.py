@@ -48,7 +48,7 @@ class ConversationCommands:
 
         scene = RstScene.get_scene(is_group, is_unique_session)
 
-        alter_cmd_cfg = await sp.get_async("global", "global", "alter_cmd", {})
+        alter_cmd_cfg = await sp.get_async("global", "global", "alter_cmd", {}) or {}
         plugin_config = alter_cmd_cfg.get("astrbot", {})
         reset_cfg = plugin_config.get("reset", {})
 

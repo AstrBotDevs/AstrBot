@@ -4,8 +4,9 @@ WebSocket connection manager for the AstrBot gateway.
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
+
+import anyio
 
 from astrbot import logger
 
@@ -27,7 +28,7 @@ class WebSocketManager:
 
     def __init__(self) -> None:
         self._connections: set[WebSocket] = set()
-        self._lock = asyncio.Lock()
+        self._lock = anyio.Lock()
 
     async def connect(self, websocket: WebSocket) -> None:
         """Accept and register a new WebSocket connection."""

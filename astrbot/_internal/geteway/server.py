@@ -7,7 +7,6 @@ The gateway acts as the communication bridge between the dashboard and the orche
 
 from __future__ import annotations
 
-import asyncio
 import json
 from contextlib import asynccontextmanager
 from typing import Any
@@ -41,7 +40,6 @@ class AstrbotGateway(BaseAstrbotGateway):
         self.orchestrator = orchestrator
         self.ws_manager = WebSocketManager()
         self._app: FastAPI | None = None
-        self._server_task: asyncio.Task[None] | None = None
         self._host = "0.0.0.0"
         self._port = 8765
 
