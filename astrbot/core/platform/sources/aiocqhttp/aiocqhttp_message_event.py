@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 from collections.abc import AsyncGenerator
 
@@ -32,10 +33,40 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         self.bot = bot
 
     @staticmethod
+    def _resolve_file_uri(segment: Image | Record) -> str | None:
+        """尝试从 Image/Record 中提取可以直接透传给协议端的 file URI。
+
+        NapCat 等 OneBot 协议端支持 file://、http(s)://、base64:// 三种格式，
+        如果输入本身就是这些格式则无需做 base64 转换，直接透传即可。
+        返回 None 表示需要走 base64 兜底。
+        """
+        raw = segment.url or segment.file if isinstance(segment, Image) else segment.file
+        if not raw:
+            return None
+
+        # 协议端能直接处理的格式，原样透传
+        if raw.startswith(("file:///", "http://", "https://", "base64://")):
+            return raw
+
+        # 裸路径，转成 file:// URI 让协议端自己读
+        if os.path.isabs(raw) and os.path.exists(raw):
+            import pathlib
+            return pathlib.Path(raw).as_uri()
+
+        return None
+
+    @staticmethod
     async def _from_segment_to_dict(segment: BaseMessageComponent) -> dict:
         """修复部分字段"""
         if isinstance(segment, Image | Record):
-            # For Image and Record segments, we convert them to base64
+            # 优先透传 file/http URL，避免不必要的 base64 转换
+            file_uri = AiocqhttpMessageEvent._resolve_file_uri(segment)
+            if file_uri is not None:
+                return {
+                    "type": segment.type.lower(),
+                    "data": {"file": file_uri},
+                }
+            # 兜底：无法直接透传时才走 base64
             bs64 = await segment.convert_to_base64()
             return {
                 "type": segment.type.lower(),
