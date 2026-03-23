@@ -44,35 +44,53 @@ class ProviderMiMoTTSAPI(TTSProvider):
         self.set_model(provider_config.get("model", DEFAULT_MIMO_TTS_MODEL))
         self.client = create_http_client(self.timeout, self.proxy)
 
-    def _build_user_prompt(self) -> str:
-        prompt_parts: list[str] = []
+    def _build_user_prompt(self) -> str | None:
+        seed_text = self.seed_text.strip()
+        return seed_text or None
+
+    def _build_style_prefix(self) -> str:
+        style_parts: list[str] = []
 
         if self.style_prompt.strip():
-            prompt_parts.append(self.style_prompt.strip())
+            style_parts.append(self.style_prompt.strip())
         if self.dialect.strip():
-            prompt_parts.append(f"Please use {self.dialect.strip()} when speaking.")
+            style_parts.append(self.dialect.strip())
 
-        if not prompt_parts:
-            return self.seed_text
+        style_content = " ".join(style_parts).strip()
+        if not style_content:
+            return ""
 
-        if self.seed_text.strip():
-            prompt_parts.append(self.seed_text.strip())
+        # MiMo recommends using only the singing style tag at the very beginning.
+        if "唱歌" in style_content:
+            return "<style>唱歌</style>"
 
-        return " ".join(prompt_parts)
+        return f"<style>{style_content}</style>"
+
+    def _build_assistant_content(self, text: str) -> str:
+        return f"{self._build_style_prefix()}{text}"
 
     def _build_payload(self, text: str) -> dict:
-        return {
-            "model": self.model_name,
-            "messages": [
+        messages: list[dict[str, str]] = []
+
+        user_prompt = self._build_user_prompt()
+        if user_prompt:
+            messages.append(
                 {
                     "role": "user",
-                    "content": self._build_user_prompt(),
-                },
-                {
-                    "role": "assistant",
-                    "content": text,
-                },
-            ],
+                    "content": user_prompt,
+                }
+            )
+
+        messages.append(
+            {
+                "role": "assistant",
+                "content": self._build_assistant_content(text),
+            }
+        )
+
+        return {
+            "model": self.model_name,
+            "messages": messages,
             "audio": {
                 "format": self.audio_format,
                 "voice": self.voice,
