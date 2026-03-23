@@ -528,8 +528,10 @@ class ProviderGoogleGenAI(Provider):
 
         conversation = self._prepare_conversation(payloads)
         temperature = payloads.get("temperature", 0.7)
+        # Keep the retry knobs local to this narrow Gemini workaround.
+        EMPTY_PARTS_RETRY_DELAY_SECONDS = 0.2
+        MAX_EMPTY_PARTS_RETRIES = 3
         empty_parts_retry_count = 0
-        max_empty_parts_retries = 3
 
         result: types.GenerateContentResponse | None = None
         while True:
@@ -568,19 +570,19 @@ class ProviderGoogleGenAI(Provider):
                     and candidate.content
                     and not candidate.content.parts
                 ):
-                    if empty_parts_retry_count < max_empty_parts_retries:
+                    if empty_parts_retry_count < MAX_EMPTY_PARTS_RETRIES:
                         empty_parts_retry_count += 1
                         logger.warning(
                             "Gemini 返回 STOP 但 candidate.content.parts 为空，正在重试(%s/%s): %s",
                             empty_parts_retry_count,
-                            max_empty_parts_retries,
+                            MAX_EMPTY_PARTS_RETRIES,
                             candidate,
                         )
-                        await asyncio.sleep(0.2)
+                        await asyncio.sleep(EMPTY_PARTS_RETRY_DELAY_SECONDS)
                         continue
                     logger.warning(
                         "Gemini 在 %s 次重试后仍返回空的 candidate.content.parts，将沿用现有失败逻辑。",
-                        max_empty_parts_retries,
+                        MAX_EMPTY_PARTS_RETRIES,
                     )
 
                 break
