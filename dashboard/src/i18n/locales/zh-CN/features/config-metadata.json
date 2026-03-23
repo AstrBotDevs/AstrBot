@@ -124,7 +124,7 @@
           "hint": "可添加多个 Key 进行轮询。"
         },
         "websearch_brave_key": {
-          "description": "Brave API Key",
+          "description": "Brave Search API Key",
           "hint": "可添加多个 Key 进行轮询。"
         },
         "websearch_baidu_app_builder_key": {

@@ -122,7 +122,7 @@
           "hint": "Multiple keys can be added for rotation."
         },
         "websearch_brave_key": {
-          "description": "Brave API Key",
+          "description": "Brave Search API Key",
           "hint": "Multiple keys can be added for rotation."
         },
         "websearch_baidu_app_builder_key": {

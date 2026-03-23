@@ -3113,7 +3113,7 @@ CONFIG_METADATA_3 = {
                         },
                     },
                     "provider_settings.websearch_brave_key": {
-                        "description": "Brave API Key",
+                        "description": "Brave Search API Key",
                         "type": "list",
                         "items": {"type": "string"},
                         "hint": "可添加多个 Key 进行轮询。",

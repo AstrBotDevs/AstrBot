@@ -122,7 +122,7 @@
                     "hint": "Можно добавить несколько ключей для ротации."
                 },
                 "websearch_brave_key": {
-                    "description": "API-ключ Brave",
+                    "description": "API-ключ Brave Search",
                     "hint": "Можно добавить несколько ключей для ротации."
                 },
                 "websearch_baidu_app_builder_key": {
