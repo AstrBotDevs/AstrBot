@@ -1,0 +1,36 @@
+name: Setup Python and uv
+description: Set up Python, install uv, and optionally sync dependencies.
+inputs:
+  python-version:
+    description: Python version to install.
+    required: false
+    default: "3.12"
+  sync-deps:
+    description: Whether to run dependency sync via uv.
+    required: false
+    default: "false"
+  sync-args:
+    description: Extra arguments passed to `uv sync`.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install uv
+      shell: bash
+      run: |
+        set -euo pipefail
+        python -m pip install --upgrade pip
+        python -m pip install uv
+
+    - name: Sync dependencies
+      if: ${{ inputs.sync-deps == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        uv sync ${{ inputs.sync-args }}
