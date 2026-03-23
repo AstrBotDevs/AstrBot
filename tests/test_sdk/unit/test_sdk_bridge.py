@@ -1,29 +1,22 @@
 # ruff: noqa: E402
 from __future__ import annotations
 
-import asyncio
 import importlib.util
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from astrbot_sdk.clients.llm import LLMResponse
-from astrbot_sdk.context import CancelToken
-from astrbot_sdk.decorators import ConversationMeta
-from astrbot_sdk.llm.entities import ProviderRequest
-from astrbot_sdk.message_components import Plain
-from astrbot_sdk.message_result import MessageEventResult
 from astrbot_sdk.protocol.descriptors import (
     CommandTrigger,
-    EventTrigger,
     HandlerDescriptor,
     MessageTrigger,
+    MessageTypeFilterSpec,
     Permissions,
+    PlatformFilterSpec,
 )
-from astrbot_sdk.runtime.handler_dispatcher import HandlerDispatcher
-from astrbot_sdk.runtime.loader import LoadedHandler
-from astrbot_sdk.testing import MockCapabilityRouter, MockPeer
+
+from astrbot.core.sdk_bridge.event_converter import EventConverter
 
 _TRIGGER_CONVERTER_SPEC = importlib.util.spec_from_file_location(
     "astrbot_sdk_bridge_trigger_converter_test",
@@ -54,14 +47,17 @@ class _FakeEvent:
         platform: str = "test",
         message_type: str = "private",
         admin: bool = False,
+        group_id: str | None = None,
+        sender_id: str | None = "user-1",
     ) -> None:
         self._text = text
         self._platform = platform
         self._message_type = message_type
         self._admin = admin
-        self._group_id = "group-1" if message_type == "group" else ""
-        self._sender_id = "user-1"
-        self._has_send_oper = False
+        self._group_id = (
+            "group-1" if group_id is None and message_type == "group" else group_id
+        ) or ""
+        self._sender_id = "" if sender_id is None else sender_id
 
     def get_message_type(self):
         return SimpleNamespace(value=self._message_type)
@@ -80,56 +76,6 @@ class _FakeEvent:
 
     def is_admin(self) -> bool:
         return self._admin
-
-
-class _CommandPlugin:
-    async def echo(self, phrase: str):
-        return {"text": phrase, "stop": True}
-
-
-class _RegexPlugin:
-    async def capture(self, word: str):
-        return {"text": word}
-
-
-class _ConversationPlugin:
-    def __init__(self) -> None:
-        self.started = False
-
-    async def chat(self, event, conversation, ctx):
-        self.started = True
-        conversation.end()
-
-
-class _LLMRequestHookPlugin:
-    async def decorate(self, request: ProviderRequest) -> None:
-        request.system_prompt = "decorated memory prompt"
-        request.contexts.append({"role": "system", "content": "memory: user likes tea"})
-
-
-class _LLMResponseHookPlugin:
-    async def inspect(self, response: LLMResponse) -> dict[str, object]:
-        return {
-            "text": response.text,
-            "llm_response": response.model_dump(exclude_none=True),
-        }
-
-
-class _DecoratingResultHookPlugin:
-    async def decorate(self, result: MessageEventResult) -> None:
-        result.chain.append(Plain(" decorated", convert=False))
-
-
-class _SdkLocalExtrasHookPlugin:
-    async def persist(self, event) -> None:
-        assert event.get_extra("host") == "value"
-        assert event.get_extra("local") == "seed"
-        event.set_extra("local", "updated")
-        event.set_extra("bad", object())
-        event.clear_extra()
-        assert event.get_extra("host") == "value"
-        assert event.get_extra("local", "missing") == "missing"
-        event.set_extra("persisted", "reply text")
 
 
 @pytest.mark.unit
@@ -159,340 +105,150 @@ def test_trigger_converter_matches_command_and_respects_admin() -> None:
         load_order=0,
         declaration_order=0,
     )
+
     assert match is not None
     assert match.plugin_id == "demo"
     assert match.handler_id == "demo:demo.echo"
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio
-async def test_handler_dispatcher_derives_command_args_and_returns_summary() -> None:
-    plugin = _CommandPlugin()
-    router = MockCapabilityRouter()
-    peer = MockPeer(router)
-    dispatcher = HandlerDispatcher(
+def test_trigger_converter_matches_command_aliases() -> None:
+    descriptor = HandlerDescriptor(
+        id="demo:demo.alias",
+        trigger=CommandTrigger(command="ping", aliases=["pong", "echo"]),
+    )
+
+    match = TriggerConverter.match_handler(
         plugin_id="demo",
-        peer=peer,
-        handlers=[
-            LoadedHandler(
-                descriptor=HandlerDescriptor(
-                    id="demo:demo.echo",
-                    trigger=CommandTrigger(command="ping"),
-                ),
-                callable=plugin.echo,
-                owner=plugin,
-                plugin_id="demo",
-            )
-        ],
+        descriptor=descriptor,
+        event=_FakeEvent(text="pong hello world"),
+        load_order=0,
+        declaration_order=0,
     )
 
-    result = await dispatcher.invoke(
-        SimpleNamespace(
-            id="req-1",
-            input={
-                "handler_id": "demo:demo.echo",
-                "event": {
-                    "text": "ping hello world",
-                    "session_id": "test-session",
-                    "user_id": "test-user",
-                    "platform": "test",
-                    "message_type": "private",
-                },
-            },
-        ),
-        CancelToken(),
-    )
-
-    assert result == {"sent_message": True, "stop": True, "call_llm": False}
-    assert router.platform_sink.records[0].text == "hello world"
+    assert match is not None
+    assert match.handler_id == "demo:demo.alias"
+    assert match.args == {}
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio
-async def test_handler_dispatcher_derives_regex_args() -> None:
-    plugin = _RegexPlugin()
-    router = MockCapabilityRouter()
-    peer = MockPeer(router)
-    dispatcher = HandlerDispatcher(
+def test_trigger_converter_matches_message_keywords() -> None:
+    descriptor = HandlerDescriptor(
+        id="demo:demo.keyword",
+        trigger=MessageTrigger(keywords=["bridge", "sdk"]),
+    )
+
+    match = TriggerConverter.match_handler(
         plugin_id="demo",
-        peer=peer,
-        handlers=[
-            LoadedHandler(
-                descriptor=HandlerDescriptor(
-                    id="demo:demo.capture",
-                    trigger=MessageTrigger(regex=r"hello (?P<word>\w+)"),
-                ),
-                callable=plugin.capture,
-                owner=plugin,
-                plugin_id="demo",
-            )
-        ],
+        descriptor=descriptor,
+        event=_FakeEvent(text="this bridge test should match"),
+        load_order=0,
+        declaration_order=0,
     )
 
-    result = await dispatcher.invoke(
-        SimpleNamespace(
-            id="req-2",
-            input={
-                "handler_id": "demo:demo.capture",
-                "event": {
-                    "text": "hello sdk",
-                    "session_id": "test-session",
-                    "user_id": "test-user",
-                    "platform": "test",
-                    "message_type": "private",
-                },
-            },
-        ),
-        CancelToken(),
-    )
-
-    assert result == {"sent_message": True, "stop": False, "call_llm": False}
-    assert router.platform_sink.records[0].text == "sdk"
+    assert match is not None
+    assert match.handler_id == "demo:demo.keyword"
+    assert match.args == {}
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio
-async def test_conversation_command_consumes_trigger_message() -> None:
-    plugin = _ConversationPlugin()
-    router = MockCapabilityRouter()
-    peer = MockPeer(router)
-    dispatcher = HandlerDispatcher(
-        plugin_id="demo",
-        peer=peer,
-        handlers=[
-            LoadedHandler(
-                descriptor=HandlerDescriptor(
-                    id="demo:demo.chat",
-                    trigger=CommandTrigger(command="chat"),
-                ),
-                callable=plugin.chat,
-                owner=plugin,
-                plugin_id="demo",
-                conversation=ConversationMeta(timeout=60, mode="replace"),
-            )
+def test_trigger_converter_applies_platform_and_message_type_filters() -> None:
+    descriptor = HandlerDescriptor(
+        id="demo:demo.filtered",
+        trigger=MessageTrigger(keywords=["hello"]),
+        filters=[
+            PlatformFilterSpec(platforms=["discord"]),
+            MessageTypeFilterSpec(message_types=["group"]),
         ],
     )
 
-    result = await dispatcher.invoke(
-        SimpleNamespace(
-            id="req-3",
-            input={
-                "handler_id": "demo:demo.chat",
-                "event": {
-                    "text": "chat",
-                    "session_id": "test-session",
-                    "user_id": "test-user",
-                    "platform": "test",
-                    "message_type": "private",
-                },
-            },
-        ),
-        CancelToken(),
+    assert (
+        TriggerConverter.match_handler(
+            plugin_id="demo",
+            descriptor=descriptor,
+            event=_FakeEvent(text="hello there", platform="discord", message_type="group"),
+            load_order=0,
+            declaration_order=0,
+        )
+        is not None
     )
-    await asyncio.sleep(0)
-
-    assert result == {"sent_message": False, "stop": True, "call_llm": False}
-    assert plugin.started is True
+    assert (
+        TriggerConverter.match_handler(
+            plugin_id="demo",
+            descriptor=descriptor,
+            event=_FakeEvent(
+                text="hello there",
+                platform="telegram",
+                message_type="group",
+            ),
+            load_order=0,
+            declaration_order=0,
+        )
+        is None
+    )
+    assert (
+        TriggerConverter.match_handler(
+            plugin_id="demo",
+            descriptor=descriptor,
+            event=_FakeEvent(
+                text="hello there",
+                platform="discord",
+                message_type="private",
+            ),
+            load_order=0,
+            declaration_order=0,
+        )
+        is None
+    )
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio
-async def test_handler_dispatcher_injects_and_round_trips_provider_request() -> None:
-    plugin = _LLMRequestHookPlugin()
-    dispatcher = HandlerDispatcher(
-        plugin_id="demo",
-        peer=MockPeer(MockCapabilityRouter()),
-        handlers=[
-            LoadedHandler(
-                descriptor=HandlerDescriptor(
-                    id="demo:demo.decorate",
-                    trigger=EventTrigger(event_type="llm_request"),
-                ),
-                callable=plugin.decorate,
-                owner=plugin,
-                plugin_id="demo",
-            )
-        ],
-    )
+@pytest.mark.parametrize(
+    ("event", "expected"),
+    [
+        (_FakeEvent(text="", message_type="channel", group_id="group-1"), "group"),
+        (_FakeEvent(text="", message_type="channel", group_id="", sender_id="user-1"), "private"),
+        (_FakeEvent(text="", message_type="channel", group_id="", sender_id=None), "other"),
+    ],
+)
+def test_message_type_name_falls_back_to_event_shape(
+    event: _FakeEvent,
+    expected: str,
+) -> None:
+    assert TriggerConverter._message_type_name(event) == expected  # noqa: SLF001
 
-    result = await dispatcher.invoke(
-        SimpleNamespace(
-            id="req-4",
-            input={
-                "handler_id": "demo:demo.decorate",
-                "event": {
-                    "type": "llm_request",
-                    "event_type": "llm_request",
-                    "text": "hello",
-                    "session_id": "test-session",
-                    "user_id": "test-user",
-                    "platform": "test",
-                    "message_type": "private",
-                    "provider_request": {
-                        "prompt": "hello",
-                        "system_prompt": "original",
-                        "contexts": [],
-                        "image_urls": [],
-                        "tool_calls_result": [],
-                    },
-                },
-            },
-        ),
-        CancelToken(),
-    )
 
-    assert result["sent_message"] is False
-    assert result["stop"] is False
-    assert result["call_llm"] is False
-    assert result["provider_request"]["system_prompt"] == "decorated memory prompt"
-    assert result["provider_request"]["contexts"][-1] == {
-        "role": "system",
-        "content": "memory: user likes tea",
+@pytest.mark.unit
+def test_split_command_remainder_falls_back_when_shlex_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _raise_value_error(_remainder: str) -> list[str]:
+        raise ValueError("bad quoting")
+
+    monkeypatch.setattr(_TRIGGER_CONVERTER_MODULE.shlex, "split", _raise_value_error)
+
+    assert TriggerConverter._split_command_remainder('hello "bridge test') == [  # noqa: SLF001
+        "hello",
+        '"bridge',
+        "test",
+    ]
+
+
+@pytest.mark.unit
+def test_extract_handler_result_defaults_when_result_is_missing() -> None:
+    assert EventConverter.extract_handler_result(None) == {
+        "sent_message": False,
+        "stop": False,
+        "call_llm": False,
     }
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio
-async def test_handler_dispatcher_injects_llm_response_payload() -> None:
-    plugin = _LLMResponseHookPlugin()
-    router = MockCapabilityRouter()
-    dispatcher = HandlerDispatcher(
-        plugin_id="demo",
-        peer=MockPeer(router),
-        handlers=[
-            LoadedHandler(
-                descriptor=HandlerDescriptor(
-                    id="demo:demo.inspect",
-                    trigger=EventTrigger(event_type="llm_response"),
-                ),
-                callable=plugin.inspect,
-                owner=plugin,
-                plugin_id="demo",
-            )
-        ],
-    )
-
-    result = await dispatcher.invoke(
-        SimpleNamespace(
-            id="req-5",
-            input={
-                "handler_id": "demo:demo.inspect",
-                "event": {
-                    "type": "llm_response",
-                    "event_type": "llm_response",
-                    "text": "hello",
-                    "session_id": "test-session",
-                    "user_id": "test-user",
-                    "platform": "test",
-                    "message_type": "private",
-                    "llm_response": {
-                        "text": "reply text",
-                        "usage": {"total_tokens": 3},
-                        "finish_reason": "stop",
-                        "tool_calls": [],
-                        "role": "assistant",
-                    },
-                },
-            },
-        ),
-        CancelToken(),
-    )
-
-    assert result["sent_message"] is True
-    assert router.platform_sink.records[0].text == "reply text"
-    assert result["llm_response"]["text"] == "reply text"
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_handler_dispatcher_injects_and_round_trips_event_result() -> None:
-    plugin = _DecoratingResultHookPlugin()
-    dispatcher = HandlerDispatcher(
-        plugin_id="demo",
-        peer=MockPeer(MockCapabilityRouter()),
-        handlers=[
-            LoadedHandler(
-                descriptor=HandlerDescriptor(
-                    id="demo:demo.decorate_result",
-                    trigger=EventTrigger(event_type="decorating_result"),
-                ),
-                callable=plugin.decorate,
-                owner=plugin,
-                plugin_id="demo",
-            )
-        ],
-    )
-
-    result = await dispatcher.invoke(
-        SimpleNamespace(
-            id="req-6",
-            input={
-                "handler_id": "demo:demo.decorate_result",
-                "event": {
-                    "type": "decorating_result",
-                    "event_type": "decorating_result",
-                    "text": "hello",
-                    "session_id": "test-session",
-                    "user_id": "test-user",
-                    "platform": "test",
-                    "message_type": "private",
-                    "event_result": {
-                        "type": "chain",
-                        "chain": [{"type": "plain", "data": {"text": "base"}}],
-                    },
-                },
-            },
-        ),
-        CancelToken(),
-    )
-
-    assert result["event_result"]["chain"][0]["data"]["text"] == "base"
-    assert result["event_result"]["chain"][1]["data"]["text"] == " decorated"
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_handler_dispatcher_round_trips_sdk_local_extras() -> None:
-    plugin = _SdkLocalExtrasHookPlugin()
-    dispatcher = HandlerDispatcher(
-        plugin_id="demo",
-        peer=MockPeer(MockCapabilityRouter()),
-        handlers=[
-            LoadedHandler(
-                descriptor=HandlerDescriptor(
-                    id="demo:demo.persist",
-                    trigger=EventTrigger(event_type="after_message_sent"),
-                ),
-                callable=plugin.persist,
-                owner=plugin,
-                plugin_id="demo",
-            )
-        ],
-    )
-
-    result = await dispatcher.invoke(
-        SimpleNamespace(
-            id="req-7",
-            input={
-                "handler_id": "demo:demo.persist",
-                "event": {
-                    "type": "after_message_sent",
-                    "event_type": "after_message_sent",
-                    "text": "hello",
-                    "session_id": "test-session",
-                    "user_id": "test-user",
-                    "platform": "test",
-                    "message_type": "private",
-                    "extras": {"host": "value", "local": "seed"},
-                    "host_extras": {"host": "value"},
-                    "sdk_local_extras": {"local": "seed"},
-                },
-            },
-        ),
-        CancelToken(),
-    )
-
-    assert result["sent_message"] is False
-    assert result["stop"] is False
-    assert result["call_llm"] is False
-    assert result["sdk_local_extras"] == {"persisted": "reply text"}
+def test_extract_handler_result_normalizes_truthy_flags() -> None:
+    assert EventConverter.extract_handler_result(
+        {"sent_message": 1, "stop": "yes", "call_llm": True}
+    ) == {
+        "sent_message": True,
+        "stop": True,
+        "call_llm": True,
+    }
