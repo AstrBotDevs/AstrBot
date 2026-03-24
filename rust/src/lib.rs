@@ -18,11 +18,21 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_lossless)]
 #![allow(clippy::unnecessary_struct_initialization)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::unwrap_used)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::return_self_not_must_use)]
+#![allow(clippy::must_use_candidate)]
 
+pub mod cli;
 pub mod error;
 pub mod orchestrator;
 pub mod message;
 pub mod stats;
+pub mod protocol;
+pub mod config;
 
 #[cfg(feature = "python")]
 pub mod python;

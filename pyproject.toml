@@ -5,6 +5,7 @@ description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 
+
 keywords = ["Astrbot", "Astrbot Module", "Astrbot Plugin"]
 
 dependencies = [
@@ -72,6 +73,9 @@ dependencies = [
   "openai-agents>=0.12.5",
   "fastapi>=0.135.1",
 ]
+[project.scripts]
+astrbot = "astrbot.cli.__main__:cli"
+astrbot-rs = "astrbot._internal.runtime._core:cli"
 
 [dependency-groups]
 dev = [
@@ -84,8 +88,7 @@ dev = [
   "textual-dev>=1.8.0",
 ]
 
-[project.scripts]
-astrbot = "astrbot.cli.__main__:cli"
+
 
 [tool.ruff]
 exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests"]
@@ -124,14 +127,13 @@ exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
 [tool.hatch.metadata]
 allow-direct-references = true
 
-# Include bundled dashboard dist even though it is not tracked by VCS.
-[tool.hatch.build.targets.wheel]
-artifacts = ["astrbot/dashboard/dist/**"]
-
-# Custom build hook: builds the Vue dashboard and copies dist into the package.
-[tool.hatch.build.hooks.custom]
-path = "scripts/hatch_build.py"
+# AstrBot Core Rust extension
+#:schema strict = false
+[tool.maturin]
+manifest-path = "rust/Cargo.toml"
+module-name = "astrbot._internal.runtime.rust._core"
+build-hook = "buildHooks.custom:pre_build_hook"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.12.0"]
+build-backend = "maturin"

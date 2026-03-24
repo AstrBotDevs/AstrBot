@@ -70,3 +70,11 @@ GenieData/
 dashboard/warker.js
 dashboard/bun.lock
 .pua/
+
+# Rust build artifacts
+rust/target/
+
+# Build outputs
+dist/
+*.whl
+*.so

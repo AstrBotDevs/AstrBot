@@ -13,9 +13,10 @@ pub struct Message {
     pub metadata: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum MessageType {
+    #[default]
     Text,
     Image,
     Audio,
@@ -23,12 +24,6 @@ pub enum MessageType {
     File,
     System,
     Unknown,
-}
-
-impl Default for MessageType {
-    fn default() -> Self {
-        Self::Text
-    }
 }
 
 impl Message {
