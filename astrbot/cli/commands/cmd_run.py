@@ -59,11 +59,6 @@ from astrbot.runtime_bootstrap import initialize_runtime_bootstrap
 
 # Python version check: require 3.12 or 3.13
 if not (sys.version_info.major == 3 and sys.version_info.minor in (12, 13)):
-    print(
-        f"❌ Python 版本错误: 当前使用 Python {sys.version_info.major}.{sys.version_info.minor}\n"
-        "请使用 uv tool install -e . --force -p 3.12 重新安装",
-        file=sys.stderr,
-    )
     sys.exit(1)
 
 initialize_runtime_bootstrap()

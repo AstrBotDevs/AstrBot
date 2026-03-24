@@ -3,7 +3,8 @@ import inspect
 import json
 import traceback
 import uuid
-from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence, Set
+from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
+from collections.abc import Set as AbstractSet
 from typing import Any
 
 import mcp
@@ -47,7 +48,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if isinstance(image_urls_raw, str):
             return [image_urls_raw]
 
-        if isinstance(image_urls_raw, (Sequence, Set)) and not isinstance(
+        if isinstance(image_urls_raw, (Sequence, AbstractSet)) and not isinstance(
             image_urls_raw, (str, bytes, bytearray)
         ):
             return [item for item in image_urls_raw if isinstance(item, str)]

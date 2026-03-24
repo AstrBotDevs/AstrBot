@@ -37,13 +37,6 @@ from .dingtalk_event import DingtalkMessageEvent
 
 class MyEventHandler(dingtalk_stream.EventHandler):
     async def process(self, event: dingtalk_stream.EventMessage):
-        print(
-            "2",
-            event.headers.event_type,
-            event.headers.event_id,
-            event.headers.event_born_time,
-            event.data,
-        )
         return AckMessage.STATUS_OK, "OK"
 
 

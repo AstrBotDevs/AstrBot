@@ -212,7 +212,7 @@ class LLMSummaryCompressor:
 
         # build payload
         instruction_message = Message(role="user", content=self.instruction_text)
-        llm_payload = messages_to_summarize + [instruction_message]
+        llm_payload = [*messages_to_summarize, instruction_message]
 
         # generate summary
         try:

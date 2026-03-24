@@ -9,6 +9,8 @@ import time
 from dataclasses import dataclass, field
 from typing import ClassVar
 
+from typing_extensions import Self
+
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -40,7 +42,7 @@ class ToolImageCache:
     # Cache expiry time in seconds (1 hour)
     CACHE_EXPIRY: ClassVar[int] = 3600
 
-    def __new__(cls) -> "ToolImageCache":
+    def __new__(cls) -> Self:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False

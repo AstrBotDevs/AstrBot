@@ -655,7 +655,7 @@ class MisskeyPlatformAdapter(Platform):
         raw_text = raw_data.get("text", "")
 
         if raw_text:
-            text_parts, processed_text = process_at_mention(
+            text_parts, _processed_text = process_at_mention(
                 message,
                 raw_text,
                 self._bot_username,
@@ -735,7 +735,7 @@ class MisskeyPlatformAdapter(Platform):
 
         if raw_text:
             if self._bot_username and f"@{self._bot_username}" in raw_text:
-                text_parts, processed_text = process_at_mention(
+                text_parts, _processed_text = process_at_mention(
                     message,
                     raw_text,
                     self._bot_username,

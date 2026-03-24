@@ -107,7 +107,6 @@ class QQOfficialWebhook:
         if opcode == 13:
             # validation
             signed = await self.webhook_validation(cast(dict, data))
-            print(signed)
             return signed
 
         event_id = msg.get("id")
