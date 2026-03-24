@@ -317,6 +317,48 @@ class PlatformManager:
     def get_insts(self):
         return self.platform_insts
 
+    async def refresh_native_commands(
+        self, *, platforms: set[str] | None = None
+    ) -> None:
+        """Refresh native command menus for running platform adapters.
+
+        Native command registration is platform-specific. Today Telegram owns its
+        own command sync path, so plugin hot reloads need an explicit follow-up
+        refresh to make newly loaded SDK commands visible without waiting for the
+        periodic registration job or a full restart.
+        """
+        requested_platforms = (
+            {item.strip().lower() for item in platforms if item and item.strip()}
+            if platforms
+            else None
+        )
+        for inst in list(self.platform_insts):
+            platform_name = ""
+            try:
+                platform_name = str(inst.meta().name).strip().lower()
+            except Exception:
+                logger.debug("Failed to read platform metadata during command refresh.")
+                continue
+
+            if (
+                requested_platforms is not None
+                and platform_name not in requested_platforms
+            ):
+                continue
+
+            register_commands = getattr(inst, "register_commands", None)
+            if not callable(register_commands):
+                continue
+
+            try:
+                await register_commands()
+            except Exception as exc:
+                logger.warning(
+                    "刷新 %s 平台原生命令失败: %s",
+                    platform_name or "unknown",
+                    exc,
+                )
+
     def get_all_stats(self) -> dict:
         """获取所有平台的统计信息
 

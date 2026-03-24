@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from astrbot_sdk.llm.entities import LLMToolSpec
@@ -28,6 +29,9 @@ class _BridgeStarContext:
     def __init__(self) -> None:
         self.registered_web_apis = []
         self.cron_manager = None
+        self.platform_manager = SimpleNamespace(
+            refresh_native_commands=AsyncMock(),
+        )
 
     def get_all_stars(self) -> list[object]:
         return []
@@ -170,8 +174,13 @@ def test_discord_collect_commands_includes_sdk_candidates(
         DiscordPlatformAdapter,
     )
 
-    monkeypatch.setattr("astrbot.core.platform.sources.discord.discord_platform_adapter.star_handlers_registry", [])
-    monkeypatch.setattr("astrbot.core.platform.sources.discord.discord_platform_adapter.star_map", {})
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.discord.discord_platform_adapter.star_handlers_registry",
+        [],
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.discord.discord_platform_adapter.star_map", {}
+    )
 
     adapter = DiscordPlatformAdapter(
         {"discord_token": "test-token", "id": "discord-test"},
@@ -193,6 +202,47 @@ def test_discord_collect_commands_includes_sdk_candidates(
     )
 
     assert adapter.collect_commands() == [("gf", "AI girlfriend commands")]
+
+
+@pytest.mark.unit
+def test_sdk_bridge_refresh_native_platform_commands_delegates_to_platform_manager() -> (
+    None
+):
+    star_context = _BridgeStarContext()
+    bridge = SdkPluginBridge(star_context)
+
+    asyncio.run(bridge._refresh_native_platform_commands({"telegram"}))  # noqa: SLF001
+
+    star_context.platform_manager.refresh_native_commands.assert_awaited_once_with(
+        platforms={"telegram"}
+    )
+
+
+@pytest.mark.unit
+def test_sdk_bridge_reload_plugin_refreshes_telegram_commands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bridge = SdkPluginBridge(_BridgeStarContext())
+    plugin = SimpleNamespace(name="astrbot_plugin_moodlog")
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.discover_plugins",
+        lambda _plugins_dir: SimpleNamespace(plugins=[plugin], issues=[]),
+    )
+    bridge.env_manager.plan = lambda _plugins: None  # type: ignore[method-assign]
+    monkeypatch.setattr(bridge, "_set_discovery_issues", lambda _issues: None)
+    load_mock = AsyncMock()
+    refresh_mock = AsyncMock()
+    monkeypatch.setattr(bridge, "_load_or_reload_plugin", load_mock)
+    monkeypatch.setattr(bridge, "_refresh_native_platform_commands", refresh_mock)
+
+    asyncio.run(bridge.reload_plugin("astrbot_plugin_moodlog"))
+
+    load_mock.assert_awaited_once_with(
+        plugin,
+        load_order=0,
+        reset_restart_budget=True,
+    )
+    refresh_mock.assert_awaited_once_with({"telegram"})
 
 
 @pytest.mark.unit

@@ -326,6 +326,7 @@ class SdkPluginBridge:
                 load_order=load_order,
                 reset_restart_budget=reset_restart_budget,
             )
+        await self._refresh_native_platform_commands({"telegram"})
 
     async def reload_plugin(self, plugin_id: str) -> None:
         discovered = discover_plugins(self.plugins_dir)
@@ -339,6 +340,7 @@ class SdkPluginBridge:
                 load_order=load_order,
                 reset_restart_budget=True,
             )
+            await self._refresh_native_platform_commands({"telegram"})
             return
         raise ValueError(f"SDK plugin not found: {plugin_id}")
 
@@ -351,6 +353,7 @@ class SdkPluginBridge:
         await self._teardown_plugin(plugin_id)
         record.failure_reason = ""
         self._set_disabled_override(plugin_id, disabled=True)
+        await self._refresh_native_platform_commands({"telegram"})
 
     async def turn_on_plugin(self, plugin_id: str) -> None:
         discovered = discover_plugins(self.plugins_dir)
@@ -365,6 +368,7 @@ class SdkPluginBridge:
                 load_order=load_order,
                 reset_restart_budget=True,
             )
+            await self._refresh_native_platform_commands({"telegram"})
             return
         raise ValueError(f"SDK plugin not found: {plugin_id}")
 
@@ -3119,6 +3123,20 @@ class SdkPluginBridge:
         for issue in issues:
             grouped.setdefault(issue.plugin_id, []).append(issue.to_payload())
         self._discovery_issues = grouped
+
+    async def _refresh_native_platform_commands(
+        self, platforms: set[str] | None = None
+    ) -> None:
+        platform_manager = getattr(self.star_context, "platform_manager", None)
+        if platform_manager is None:
+            return
+        refresh_commands = getattr(platform_manager, "refresh_native_commands", None)
+        if not callable(refresh_commands):
+            return
+        try:
+            await refresh_commands(platforms=platforms)
+        except Exception as exc:
+            logger.warning("Failed to refresh native platform commands: %s", exc)
 
     async def _invoke_schedule_handler(
         self,
