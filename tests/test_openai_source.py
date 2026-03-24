@@ -4,6 +4,9 @@ import pytest
 from openai.types.chat.chat_completion import ChatCompletion
 
 from astrbot.core.provider.sources.groq_source import ProviderGroq
+from astrbot.core.provider.sources.openai_embedding_source import (
+    OpenAIEmbeddingProvider,
+)
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 
 
@@ -44,6 +47,20 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
     if overrides:
         provider_config.update(overrides)
     return ProviderGroq(
+        provider_config=provider_config,
+        provider_settings={},
+    )
+
+
+def _make_embedding_provider(overrides: dict | None = None) -> OpenAIEmbeddingProvider:
+    provider_config = {
+        "id": "test-openai-embedding",
+        "type": "openai_embedding",
+        "embedding_api_key": "test-key",
+    }
+    if overrides:
+        provider_config.update(overrides)
+    return OpenAIEmbeddingProvider(
         provider_config=provider_config,
         provider_settings={},
     )
@@ -234,7 +251,9 @@ async def test_openai_payload_keeps_reasoning_content_in_assistant_history():
         provider._finally_convert_payload(payloads)
 
         assistant_message = payloads["messages"][0]
-        assert assistant_message["content"] == [{"type": "text", "text": "final answer"}]
+        assert assistant_message["content"] == [
+            {"type": "text", "text": "final answer"}
+        ]
         assert assistant_message["reasoning_content"] == "step 1"
     finally:
         await provider.terminate()
@@ -259,7 +278,9 @@ async def test_groq_payload_drops_reasoning_content_from_assistant_history():
         provider._finally_convert_payload(payloads)
 
         assistant_message = payloads["messages"][0]
-        assert assistant_message["content"] == [{"type": "text", "text": "final answer"}]
+        assert assistant_message["content"] == [
+            {"type": "text", "text": "final answer"}
+        ]
         assert "reasoning_content" not in assistant_message
         assert "reasoning" not in assistant_message
     finally:
@@ -531,5 +552,27 @@ async def test_query_injects_reasoning_effort_none_for_ollama(monkeypatch):
         assert extra_body["reasoning_effort"] == "none"
         assert "reasoning" not in extra_body
         assert extra_body["temperature"] == 0.1
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_embedding_provider_appends_v1_to_base_url_when_missing():
+    provider = _make_embedding_provider(
+        {"embedding_api_base": "https://example.com/openai"}
+    )
+    try:
+        assert str(provider.client.base_url) == "https://example.com/openai/v1/"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_embedding_provider_preserves_existing_v1_suffix():
+    provider = _make_embedding_provider(
+        {"embedding_api_base": "https://example.com/openai/v1/"}
+    )
+    try:
+        assert str(provider.client.base_url) == "https://example.com/openai/v1/"
     finally:
         await provider.terminate()

@@ -14,6 +14,13 @@ from ..register import register_provider_adapter
     provider_type=ProviderType.EMBEDDING,
 )
 class OpenAIEmbeddingProvider(EmbeddingProvider):
+    @staticmethod
+    def _normalize_embedding_api_base(api_base: str) -> str:
+        normalized_api_base = api_base.rstrip("/")
+        if not normalized_api_base.endswith("/v1"):
+            normalized_api_base = f"{normalized_api_base}/v1"
+        return normalized_api_base
+
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
         self.provider_config = provider_config
@@ -27,6 +34,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         api_base = provider_config.get(
             "embedding_api_base", "https://api.openai.com/v1"
         ).strip()
+        if api_base:
+            api_base = self._normalize_embedding_api_base(api_base)
         logger.info(f"[OpenAI Embedding] {provider_id} Using API Base: {api_base}")
         self.client = AsyncOpenAI(
             api_key=provider_config.get("embedding_api_key"),
