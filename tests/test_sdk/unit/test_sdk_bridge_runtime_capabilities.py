@@ -874,6 +874,33 @@ async def test_schedule_handler_tracks_request_scope_for_proactive_send() -> Non
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_schedule_runner_ignores_scheduler_payload_kwargs() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    captured: list[dict[str, object]] = []
+
+    async def _capture_invoke_schedule_handler(**kwargs: object) -> None:
+        captured.append(dict(kwargs))
+
+    bridge._invoke_schedule_handler = _capture_invoke_schedule_handler  # type: ignore[method-assign]
+    runner = bridge._build_schedule_runner(
+        plugin_id="sdk-demo",
+        handler_id="sdk-demo:main.tick",
+        trigger=ScheduleTrigger(interval_seconds=60),
+    )
+
+    await runner(interval_seconds=60)
+
+    assert captured == [
+        {
+            "plugin_id": "sdk-demo",
+            "handler_id": "sdk-demo:main.tick",
+            "trigger": ScheduleTrigger(interval_seconds=60),
+        }
+    ]
+
+
+@pytest.mark.unit
 def test_unregister_http_api_empty_methods_remove_entire_route() -> None:
     bridge = SdkPluginBridge(_OverlayFakeStarContext())
     bridge.register_http_api(

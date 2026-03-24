@@ -3084,7 +3084,11 @@ class SdkPluginBridge:
         handler_id: str,
         trigger: ScheduleTrigger,
     ):
-        async def _run() -> None:
+        async def _run(**_scheduler_payload: Any) -> None:
+            # CronJobManager stores scheduler metadata such as interval_seconds in the
+            # job payload and replays that payload into basic handlers. SDK schedule
+            # handlers do not consume those transport-level kwargs, so the bridge
+            # must swallow them here and only forward the synthesized schedule event.
             await self._invoke_schedule_handler(
                 plugin_id=plugin_id,
                 handler_id=handler_id,
