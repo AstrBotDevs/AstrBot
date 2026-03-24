@@ -152,65 +152,65 @@ class PlatformManager:
             match platform_config["type"]:
                 case "aiocqhttp":
                     from .sources.aiocqhttp.aiocqhttp_platform_adapter import (
-                        AiocqhttpAdapter,  # noqa: F401
+                        AiocqhttpAdapter,
                     )
                 case "qq_official":
                     from .sources.qqofficial.qqofficial_platform_adapter import (
-                        QQOfficialPlatformAdapter,  # noqa: F401
+                        QQOfficialPlatformAdapter,
                     )
                 case "qq_official_webhook":
                     from .sources.qqofficial_webhook.qo_webhook_adapter import (
-                        QQOfficialWebhookPlatformAdapter,  # noqa: F401
+                        QQOfficialWebhookPlatformAdapter,
                     )
                 case "lark":
                     from .sources.lark.lark_adapter import (
-                        LarkPlatformAdapter,  # noqa: F401
+                        LarkPlatformAdapter,
                     )
                 case "dingtalk":
                     from .sources.dingtalk.dingtalk_adapter import (
-                        DingtalkPlatformAdapter,  # noqa: F401
+                        DingtalkPlatformAdapter,
                     )
                 case "telegram":
                     from .sources.telegram.tg_adapter import (
-                        TelegramPlatformAdapter,  # noqa: F401
+                        TelegramPlatformAdapter,
                     )
                 case "wecom":
                     from .sources.wecom.wecom_adapter import (
-                        WecomPlatformAdapter,  # noqa: F401
+                        WecomPlatformAdapter,
                     )
                 case "wecom_ai_bot":
                     from .sources.wecom_ai_bot.wecomai_adapter import (
-                        WecomAIBotAdapter,  # noqa: F401
+                        WecomAIBotAdapter,
                     )
                 case "weixin_official_account":
                     from .sources.weixin_official_account.weixin_offacc_adapter import (
-                        WeixinOfficialAccountPlatformAdapter,  # noqa: F401
+                        WeixinOfficialAccountPlatformAdapter,
                     )
                 case "discord":
                     from .sources.discord.discord_platform_adapter import (
-                        DiscordPlatformAdapter,  # noqa: F401
+                        DiscordPlatformAdapter,
                     )
                 case "misskey":
                     from .sources.misskey.misskey_adapter import (
-                        MisskeyPlatformAdapter,  # noqa: F401
+                        MisskeyPlatformAdapter,
                     )
                 case "weixin_oc":
                     from .sources.weixin_oc.weixin_oc_adapter import (
-                        WeixinOCAdapter,  # noqa: F401
+                        WeixinOCAdapter,
                     )
                 case "slack":
-                    from .sources.slack.slack_adapter import SlackAdapter  # noqa: F401
+                    from .sources.slack.slack_adapter import SlackAdapter
                 case "satori":
                     from .sources.satori.satori_adapter import (
-                        SatoriPlatformAdapter,  # noqa: F401
+                        SatoriPlatformAdapter,
                     )
                 case "line":
                     from .sources.line.line_adapter import (
-                        LinePlatformAdapter,  # noqa: F401
+                        LinePlatformAdapter,
                     )
                 case "kook":
                     from .sources.kook.kook_adapter import (
-                        KookPlatformAdapter,  # noqa: F401
+                        KookPlatformAdapter,
                     )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(

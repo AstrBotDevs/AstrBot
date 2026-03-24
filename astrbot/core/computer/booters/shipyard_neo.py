@@ -39,7 +39,7 @@ class NeoPythonComponent(PythonComponent):
         self,
         code: str,
         kernel_id: str | None = None,
-        timeout: int = 30,  # noqa: ASYNC109
+        timeout: int = 30,
         silent: bool = False,
     ) -> dict[str, Any]:
         _ = kernel_id  # Bay runtime does not expose kernel_id in current SDK.
@@ -81,7 +81,7 @@ class NeoShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = 30,  # noqa: ASYNC109
+        timeout: int | None = 30,
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
@@ -198,7 +198,7 @@ class NeoBrowserComponent(BrowserComponent):
     async def exec(
         self,
         cmd: str,
-        timeout: int = 30,  # noqa: ASYNC109
+        timeout: int = 30,
         description: str | None = None,
         tags: str | None = None,
         learn: bool = False,
@@ -217,7 +217,7 @@ class NeoBrowserComponent(BrowserComponent):
     async def exec_batch(
         self,
         commands: list[str],
-        timeout: int = 60,  # noqa: ASYNC109
+        timeout: int = 60,
         stop_on_error: bool = True,
         description: str | None = None,
         tags: str | None = None,
@@ -238,7 +238,7 @@ class NeoBrowserComponent(BrowserComponent):
     async def run_skill(
         self,
         skill_key: str,
-        timeout: int = 60,  # noqa: ASYNC109
+        timeout: int = 60,
         stop_on_error: bool = True,
         include_trace: bool = False,
         description: str | None = None,

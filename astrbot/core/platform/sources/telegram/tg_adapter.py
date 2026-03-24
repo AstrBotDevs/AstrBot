@@ -174,7 +174,7 @@ class TelegramPlatformAdapter(Platform):
                     error_callback=self._on_polling_error
                 )
                 logger.info("Telegram Platform Adapter is running.")
-                while self.application.updater.running and not self._terminating:  # noqa: ASYNC110
+                while self.application.updater.running and not self._terminating:
                     await asyncio.sleep(1)
 
                 if not self._terminating:

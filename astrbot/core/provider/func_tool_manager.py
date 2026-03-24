@@ -28,7 +28,7 @@ PY_TO_JSON_TYPE = {
 }
 
 # Re-export from _internal for backward compatibility
-# ruff: noqa: E402 - Constants above must be defined before this import
+
 from astrbot._internal.tools.registry import (
     DEFAULT_MCP_CONFIG,
     ENABLE_MCP_TIMEOUT_ENV,
