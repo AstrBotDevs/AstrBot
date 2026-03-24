@@ -586,6 +586,19 @@ def test_get_event_extra_supports_single_arg_getter_signature():
     assert FunctionToolExecutor._get_event_extra(event, "missing", default=42) == 42
 
 
+def test_get_event_extra_supports_keyword_only_getter_signature():
+    class _EventWithKeywordOnlyGetter:
+        def __init__(self) -> None:
+            self._extras = {"present": "value"}
+
+        def get_extra(self, *, key: str, default=None):
+            return self._extras.get(key, default)
+
+    event = _EventWithKeywordOnlyGetter()
+    assert FunctionToolExecutor._get_event_extra(event, "present", default=42) == "value"
+    assert FunctionToolExecutor._get_event_extra(event, "missing", default=42) == 42
+
+
 def test_get_event_extra_propagates_internal_type_error():
     class _EventWithBrokenGetter:
         def get_extra(self, _key: str, _default=None):

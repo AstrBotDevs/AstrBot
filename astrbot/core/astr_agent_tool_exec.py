@@ -84,25 +84,23 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             signature = None
 
         if signature is not None:
-            positional_params = [
-                p
-                for p in signature.parameters.values()
-                if p.kind
-                in (
-                    inspect.Parameter.POSITIONAL_ONLY,
-                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                )
-            ]
-            has_var_positional = any(
-                p.kind == inspect.Parameter.VAR_POSITIONAL
-                for p in signature.parameters.values()
+            # Probe call shapes that can be bound by signature to support:
+            # - get_extra(key, default)
+            # - get_extra(key)
+            # - get_extra(*, key, default=None)
+            # - get_extra(*, key)
+            candidate_calls = (
+                ((key, default), {}),
+                ((key,), {}),
+                ((), {"key": key, "default": default}),
+                ((), {"key": key}),
             )
-
-            if has_var_positional or len(positional_params) >= 2:
-                result = get_extra(key, default)
-                return default if result is None else result
-            if len(positional_params) >= 1:
-                result = get_extra(key)
+            for args, kwargs in candidate_calls:
+                try:
+                    signature.bind_partial(*args, **kwargs)
+                except TypeError:
+                    continue
+                result = get_extra(*args, **kwargs)
                 return default if result is None else result
             return default
 
