@@ -98,15 +98,26 @@ async def get_file(session: aiohttp.ClientSession, base_url: str, api_key: str, 
         return await resp.read()
 
 
-async def run_live_check(base_url: str, api_key: str, username: str, attachment_id: str, text: str) -> None:
+async def run_live_check(
+    base_url: str,
+    api_key: str,
+    username: str,
+    attachment_id: str | None,
+    text: str,
+) -> None:
     logger = logging.getLogger("live_upload_flow")
     ws_url = build_ws_url(base_url, api_key, username)
+    message_parts = []
+    if attachment_id:
+        message_parts.append({"type": "file", "attachment_id": attachment_id})
+    if text:
+        message_parts.append({"type": "plain", "text": text})
+    if not message_parts:
+        raise ValueError("text is empty and no attachment_id provided")
+
     message = {
         "t": "text_input",
-        "message": [
-            {"type": "file", "attachment_id": attachment_id},
-            {"type": "plain", "text": text},
-        ],
+        "message": message_parts,
     }
 
     async with websockets.connect(ws_url) as websocket:
@@ -130,7 +141,18 @@ async def main() -> None:
     parser.add_argument("--base-url", default="http://localhost:6185", help="Server base URL")
     parser.add_argument("--api-key", required=True, help="OpenAPI key")
     parser.add_argument("--username", default="alice", help="OpenAPI username")
-    parser.add_argument("--file", required=True, type=Path, help="Local file to upload")
+    parser.add_argument(
+        "--file",
+        type=Path,
+        required=False,
+        default=None,
+        help="Local file to upload",
+    )
+    parser.add_argument(
+        "--attachment-id",
+        help="Existing attachment_id to use directly",
+        default=None,
+    )
     parser.add_argument(
         "--text",
         default="Please analyze the uploaded file.",
@@ -138,6 +160,7 @@ async def main() -> None:
     )
     parser.add_argument(
         "--log-file",
+        default=str(Path.cwd() / "test.log"),
         help="Write logs to this file in addition to terminal output",
     )
     parser.add_argument(
@@ -151,17 +174,33 @@ async def main() -> None:
     create_logger(args.log_file)
     logger = logging.getLogger("live_upload_flow")
 
-    if not args.file.exists():
-        raise FileNotFoundError(f"file not found: {args.file}")
-    if not args.file.is_file():
-        raise ValueError(f"not a regular file: {args.file}")
+    if args.file is not None:
+        if not args.file.exists():
+            raise FileNotFoundError(f"file not found: {args.file}")
+        if not args.file.is_file():
+            raise ValueError(f"not a regular file: {args.file}")
 
     timeout = aiohttp.ClientTimeout(total=30)
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        attachment_id = await upload_file(session, args.base_url, args.api_key, args.file)
-        if not args.skip_download_check:
-            content = await get_file(session, args.base_url, args.api_key, attachment_id)
-            logger.info("[GET] attachment size=%s bytes", len(content))
+        attachment_id = args.attachment_id
+        if args.file is not None:
+            attachment_id = await upload_file(
+                session,
+                args.base_url,
+                args.api_key,
+                args.file,
+            )
+
+            if not args.skip_download_check:
+                content = await get_file(
+                    session, args.base_url, args.api_key, attachment_id
+                )
+                logger.info("[GET] attachment size=%s bytes", len(content))
+        elif attachment_id:
+            logger.info("[INPUT] using attachment_id=%s", attachment_id)
+
+        if args.file is None and not attachment_id:
+            logger.info("[INPUT] no attachment_id provided, using text message only")
 
     await run_live_check(
         args.base_url,
