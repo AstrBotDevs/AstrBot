@@ -19,9 +19,7 @@ class _FakeProxy:
 
 @pytest.mark.asyncio
 async def test_permission_client_check_preserves_optional_session_id() -> None:
-    proxy = _FakeProxy(
-        {"permission.check": {"is_admin": True, "role": "admin"}}
-    )
+    proxy = _FakeProxy({"permission.check": {"is_admin": True, "role": "admin"}})
     client = PermissionClient(proxy)  # type: ignore[arg-type]
 
     result = await client.check("user-1", session_id="demo:group:42")
