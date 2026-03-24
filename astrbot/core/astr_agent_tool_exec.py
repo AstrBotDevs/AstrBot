@@ -142,7 +142,16 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         run_context: ContextWrapper[AstrAgentContext],
     ) -> tuple[bool, int]:
         event = run_context.context.event
-        max_handoff_calls = cls._resolve_handoff_call_limit(run_context)
+        max_handoff_calls = cls._DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
+        try:
+            max_handoff_calls = cls._resolve_handoff_call_limit(run_context)
+        except Exception as e:
+            logger.warning(
+                "Failed to resolve handoff call limit: %s; reject delegation to fail closed.",
+                e,
+            )
+            return False, max_handoff_calls
+
         try:
             raw_handoff_count = cls._get_event_extra(
                 event,

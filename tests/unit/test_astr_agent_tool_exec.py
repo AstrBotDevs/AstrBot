@@ -760,6 +760,39 @@ async def test_execute_handoff_rejects_when_call_counter_read_fails():
     assert call_count["tool_loop"] == 0
 
 
+def test_check_and_increment_handoff_calls_rejects_when_limit_resolution_fails():
+    class _EventWithExtras:
+        def __init__(self) -> None:
+            self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
+            self.message_obj = SimpleNamespace(message=[])
+            self._extras: dict[str, int] = {}
+
+        def get_extra(self, key: str, default=None):
+            return self._extras.get(key, default)
+
+        def set_extra(self, key: str, value):
+            self._extras[key] = value
+
+    event = _EventWithExtras()
+
+    def _raise_get_config(**_kwargs):
+        raise RuntimeError("config unavailable")
+
+    context = SimpleNamespace(get_config=_raise_get_config)
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+
+    allowed, max_handoff_calls = FunctionToolExecutor._check_and_increment_handoff_calls(
+        run_context
+    )
+
+    assert allowed is False
+    assert (
+        max_handoff_calls
+        == FunctionToolExecutor._DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
+    )
+    assert event._extras == {}
+
+
 @pytest.mark.asyncio
 async def test_execute_handoff_rejects_when_event_extra_exceeds_sanity_limit():
     call_count = {"tool_loop": 0}
