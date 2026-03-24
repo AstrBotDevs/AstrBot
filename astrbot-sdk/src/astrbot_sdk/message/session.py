@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .._message_types import normalize_message_type
+
 
 @dataclass(slots=True)
 class MessageSession:
@@ -30,7 +32,7 @@ class MessageSession:
 
     def __post_init__(self) -> None:
         self.platform_id = str(self.platform_id)
-        self.message_type = str(self.message_type).lower()
+        self.message_type = normalize_message_type(self.message_type)
         self.session_id = str(self.session_id)
 
     def __str__(self) -> str:

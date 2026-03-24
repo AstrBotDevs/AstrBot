@@ -17,6 +17,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from ._message_types import normalize_message_type
 from .message.components import (
     At,
     BaseMessageComponent,
@@ -177,7 +178,11 @@ class MessageEvent:
         )
         self.self_id = _coerce_str(self_id)
         self.platform_id = _coerce_str(platform_id) or normalized_platform
-        self.message_type = _coerce_str(message_type).lower()
+        self.message_type = normalize_message_type(
+            message_type,
+            group_id=normalized_group_id,
+            user_id=normalized_user_id,
+        )
         self.sender_name = _coerce_str(sender_name)
         self._is_admin = bool(is_admin)
         self.raw = raw or {}
