@@ -143,6 +143,10 @@ class WakingCheckStage(Stage):
                 event.is_at_or_wake_command = True
                 wake_prefix = ""
 
+        if is_wake and not event.message_str and not messages:
+            event.stop_event()
+            return
+
         # 检查插件的 handler filter
         activated_handlers = []
         handlers_parsed_params = {}  # 注册了指令的 handler
