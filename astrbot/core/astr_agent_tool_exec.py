@@ -45,6 +45,8 @@ from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     _HANDOFF_CALL_COUNT_EXTRA_KEY = "_subagent_handoff_call_count"
+    _DEFAULT_MAX_HANDOFF_CALLS_PER_RUN = 8
+    _MAX_HANDOFF_CALL_COUNT_SANITY_LIMIT = 10_000
 
     @classmethod
     def _coerce_int(
@@ -68,27 +70,28 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         key: str,
         default: T.Any = None,
     ) -> T.Any:
-        if event is None or not hasattr(event, "get_extra"):
+        if event is None:
             return default
+
+        get_extra = getattr(event, "get_extra", None)
+        if get_extra is None:
+            return default
+
         try:
-            return event.get_extra(key, default)
+            return get_extra(key, default)
         except TypeError:
-            try:
-                result = event.get_extra(key)
-            except Exception:
-                return default
+            result = get_extra(key)
             return default if result is None else result
-        except Exception:
-            return default
 
     @classmethod
     def _set_event_extra(cls, event: T.Any, key: str, value: T.Any) -> bool:
-        if event is None or not hasattr(event, "set_extra"):
+        set_extra = getattr(event, "set_extra", None)
+        if set_extra is None:
             return False
         try:
-            event.set_extra(key, value)
+            set_extra(key, value)
             return True
-        except Exception:
+        except TypeError:
             return False
 
     @classmethod
@@ -101,13 +104,39 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         subagent_cfg = cfg.get("subagent_orchestrator", {})
         if not isinstance(subagent_cfg, dict):
-            return 8
+            return cls._DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
         return cls._coerce_int(
-            subagent_cfg.get("max_handoff_calls_per_run", 8),
-            default=8,
+            subagent_cfg.get(
+                "max_handoff_calls_per_run",
+                cls._DEFAULT_MAX_HANDOFF_CALLS_PER_RUN,
+            ),
+            default=cls._DEFAULT_MAX_HANDOFF_CALLS_PER_RUN,
             minimum=1,
             maximum=128,
         )
+
+    @classmethod
+    def _check_and_increment_handoff_calls(
+        cls,
+        run_context: ContextWrapper[AstrAgentContext],
+    ) -> tuple[bool, int]:
+        event = run_context.context.event
+        max_handoff_calls = cls._resolve_handoff_call_limit(run_context)
+        current_handoff_count = cls._coerce_int(
+            cls._get_event_extra(event, cls._HANDOFF_CALL_COUNT_EXTRA_KEY, 0),
+            default=0,
+            minimum=0,
+            maximum=cls._MAX_HANDOFF_CALL_COUNT_SANITY_LIMIT,
+        )
+        if current_handoff_count >= max_handoff_calls:
+            return False, max_handoff_calls
+
+        cls._set_event_extra(
+            event,
+            cls._HANDOFF_CALL_COUNT_EXTRA_KEY,
+            current_handoff_count + 1,
+        )
+        return True, max_handoff_calls
 
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
@@ -312,15 +341,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         tool_args = dict(tool_args)
         input_ = tool_args.get("input")
         ctx = run_context.context.context
-        event = run_context.context.event
-        max_handoff_calls = cls._resolve_handoff_call_limit(run_context)
-        current_handoff_count = cls._coerce_int(
-            cls._get_event_extra(event, cls._HANDOFF_CALL_COUNT_EXTRA_KEY, 0),
-            default=0,
-            minimum=0,
-            maximum=10_000,
-        )
-        if current_handoff_count >= max_handoff_calls:
+        allowed, max_handoff_calls = cls._check_and_increment_handoff_calls(run_context)
+        if not allowed:
             yield mcp.types.CallToolResult(
                 content=[
                     mcp.types.TextContent(
@@ -334,11 +356,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 ]
             )
             return
-        cls._set_event_extra(
-            event,
-            cls._HANDOFF_CALL_COUNT_EXTRA_KEY,
-            current_handoff_count + 1,
-        )
+        event = run_context.context.event
         if image_urls_prepared:
             prepared_image_urls = tool_args.get("image_urls")
             if isinstance(prepared_image_urls, list):

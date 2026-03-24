@@ -464,3 +464,98 @@ async def test_execute_handoff_increments_call_count_on_success():
         event._extras[FunctionToolExecutor._HANDOFF_CALL_COUNT_EXTRA_KEY]
         == 1
     )
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_enforces_call_limit_across_multiple_calls():
+    call_count = {"tool_loop": 0}
+
+    class _EventWithExtras:
+        def __init__(self) -> None:
+            self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
+            self.message_obj = SimpleNamespace(message=[])
+            self._extras: dict[str, int] = {}
+
+        def get_extra(self, key: str, default=None):
+            return self._extras.get(key, default)
+
+        def set_extra(self, key: str, value):
+            self._extras[key] = value
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**_kwargs):
+        call_count["tool_loop"] += 1
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {
+            "provider_settings": {},
+            "subagent_orchestrator": {"max_handoff_calls_per_run": 2},
+        },
+    )
+    event = _EventWithExtras()
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    first_results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="first",
+        image_urls=[],
+    ):
+        first_results.append(result)
+    assert len(first_results) == 1
+    assert "handoff_call_limit_reached" not in first_results[0].content[0].text
+    assert (
+        event._extras[FunctionToolExecutor._HANDOFF_CALL_COUNT_EXTRA_KEY]
+        == 1
+    )
+
+    second_results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="second",
+        image_urls=[],
+    ):
+        second_results.append(result)
+    assert len(second_results) == 1
+    assert "handoff_call_limit_reached" not in second_results[0].content[0].text
+    assert (
+        event._extras[FunctionToolExecutor._HANDOFF_CALL_COUNT_EXTRA_KEY]
+        == 2
+    )
+
+    third_results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="third",
+        image_urls=[],
+    ):
+        third_results.append(result)
+    assert len(third_results) == 1
+    assert "handoff_call_limit_reached" in third_results[0].content[0].text
+    assert (
+        event._extras[FunctionToolExecutor._HANDOFF_CALL_COUNT_EXTRA_KEY]
+        == 2
+    )
+    assert call_count["tool_loop"] == 2

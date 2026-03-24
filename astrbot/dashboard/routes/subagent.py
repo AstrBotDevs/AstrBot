@@ -4,9 +4,14 @@ from quart import jsonify, request
 
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
+from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 
 from .route import Response, Route, RouteContext
+
+DEFAULT_MAX_HANDOFF_CALLS_PER_RUN = int(
+    DEFAULT_CONFIG.get("subagent_orchestrator", {}).get("max_handoff_calls_per_run", 8)
+)
 
 
 class SubAgentRoute(Route):
@@ -36,7 +41,7 @@ class SubAgentRoute(Route):
                 data = {
                     "main_enable": False,
                     "remove_main_duplicate_tools": False,
-                    "max_handoff_calls_per_run": 8,
+                    "max_handoff_calls_per_run": DEFAULT_MAX_HANDOFF_CALLS_PER_RUN,
                     "agents": [],
                 }
 
@@ -51,7 +56,10 @@ class SubAgentRoute(Route):
             # Ensure required keys exist.
             data.setdefault("main_enable", False)
             data.setdefault("remove_main_duplicate_tools", False)
-            data.setdefault("max_handoff_calls_per_run", 8)
+            data.setdefault(
+                "max_handoff_calls_per_run",
+                DEFAULT_MAX_HANDOFF_CALLS_PER_RUN,
+            )
             data.setdefault("agents", [])
 
             # Backward/forward compatibility: ensure each agent contains provider_id.
