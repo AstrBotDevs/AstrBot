@@ -41,8 +41,8 @@ class OpenApiRoute(Route):
             "/v1/chat/sessions": ("GET", self.get_chat_sessions),
             "/v1/configs": ("GET", self.get_chat_configs),
             "/v1/file": [
-                ("POST", self.upload_file),
-                ("GET", self.get_file),
+                ("POST", self.openapi_upload_file),
+                ("GET", self.openapi_get_file),
             ],
             "/v1/im/message": ("POST", self.send_message),
             "/v1/im/bots": ("GET", self.get_bots),
@@ -537,10 +537,10 @@ class OpenApiRoute(Route):
         except Exception as e:
             logger.debug("Open API WS connection closed: %s", e)
 
-    async def upload_file(self):
+    async def openapi_upload_file(self):
         return await self.chat_route.post_file()
 
-    async def get_file(self):
+    async def openapi_get_file(self):
         return await self.chat_route.get_attachment()
 
     async def get_chat_sessions(self):
