@@ -88,7 +88,7 @@ class ExecuteShellTool(FunctionTool):
         return self._sessions[session_id]
 
     async def call(  # type: ignore[override]
-        self, context: ContextWrapper[TContext], **kwargs: Any
+        self, context: ContextWrapper[AstrAgentContext], **kwargs: Any
     ) -> ToolExecResult:
         """
         Execute a shell command for the session.

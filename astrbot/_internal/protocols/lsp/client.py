@@ -7,17 +7,15 @@ that provide language intelligence features (completions, diagnostics, etc.).
 
 from __future__ import annotations
 
+import asyncio
 import json
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import anyio
 from anyio.abc import ByteReceiveStream, ByteSendStream, Process
 
 from astrbot import logger
 from astrbot._internal.abc.lsp.base_astrbot_lsp_client import BaseAstrbotLspClient
-
-if TYPE_CHECKING:
-    from anyio.abc import TaskGroup
 
 log = logger
 
@@ -38,7 +36,7 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         self._pending_requests: dict[int, Any] = {}
         self._request_id = 0
         self._server_command: list[str] | None = None
-        self._task_group: TaskGroup | None = None
+        self._reader_task: asyncio.Task | None = None
 
     @property
     def connected(self) -> bool:
@@ -80,23 +78,20 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         self._connected = True
 
         # Start reading responses in background
-        # anyio.TaskGroup requires async with to properly start tasks
-        async with anyio.create_task_group() as tg:
-            self._task_group = tg
-            tg.start_soon(self._read_responses)
+        self._reader_task = asyncio.create_task(self._read_responses())
 
-            # Send initialize request
-            await self.send_request(
-                "initialize",
-                {
-                    "processId": None,
-                    "rootUri": workspace_uri,
-                    "capabilities": {},
-                },
-            )
+        # Send initialize request
+        await self.send_request(
+            "initialize",
+            {
+                "processId": None,
+                "rootUri": workspace_uri,
+                "capabilities": {},
+            },
+        )
 
-            # Send initialized notification
-            await self.send_notification("initialized", {})
+        # Send initialized notification
+        await self.send_notification("initialized", {})
 
         log.info(f"LSP client connected to server: {command[0]}")
 
@@ -206,7 +201,7 @@ class AstrbotLspClient(BaseAstrbotLspClient):
 
                 except anyio.EndOfStream:
                     break
-        except anyio.CancelledError:
+        except asyncio.CancelledError:
             pass
 
     async def _handle_notification(self, notification: dict[str, Any]) -> None:
@@ -218,9 +213,13 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         """Shutdown the LSP client."""
         self._connected = False
 
-        if self._task_group:
-            self._task_group.cancel_scope.cancel()
-            self._task_group = None
+        if self._reader_task:
+            self._reader_task.cancel()
+            try:
+                await self._reader_task
+            except asyncio.CancelledError:
+                pass
+            self._reader_task = None
 
         if self._server_process:
             try:

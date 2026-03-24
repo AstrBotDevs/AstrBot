@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from asyncio import Queue
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Coroutine, Protocol, cast
 
 from deprecated import deprecated
 
