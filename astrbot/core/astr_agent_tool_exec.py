@@ -78,12 +78,42 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return default
 
         try:
-            return get_extra(key, default)
-        except TypeError:
-            try:
+            signature = inspect.signature(get_extra)
+        except (TypeError, ValueError):
+            signature = None
+
+        if signature is not None:
+            positional_params = [
+                p
+                for p in signature.parameters.values()
+                if p.kind
+                in (
+                    inspect.Parameter.POSITIONAL_ONLY,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                )
+            ]
+            has_var_positional = any(
+                p.kind == inspect.Parameter.VAR_POSITIONAL
+                for p in signature.parameters.values()
+            )
+
+            if has_var_positional or len(positional_params) >= 2:
+                result = get_extra(key, default)
+                return default if result is None else result
+            if len(positional_params) >= 1:
                 result = get_extra(key)
-            except TypeError:
-                return default
+                return default if result is None else result
+            return default
+
+        try:
+            result = get_extra(key, default)
+            return default if result is None else result
+        except TypeError as e:
+            # Keep compatibility with legacy one-arg get_extra(key) call sites
+            # when signature introspection is unavailable.
+            if not cls._looks_like_call_signature_type_error(e):
+                raise
+            result = get_extra(key)
             return default if result is None else result
 
     @classmethod
@@ -96,6 +126,19 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return True
         except TypeError:
             return False
+
+    @classmethod
+    def _looks_like_call_signature_type_error(cls, exc: TypeError) -> bool:
+        msg = str(exc)
+        return any(
+            token in msg
+            for token in (
+                "positional argument",
+                "keyword argument",
+                "required positional argument",
+                "takes",
+            )
+        )
 
     @classmethod
     def _resolve_handoff_call_limit(
@@ -125,8 +168,22 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ) -> tuple[bool, int]:
         event = run_context.context.event
         max_handoff_calls = cls._resolve_handoff_call_limit(run_context)
+        try:
+            raw_handoff_count = cls._get_event_extra(
+                event,
+                cls._HANDOFF_CALL_COUNT_EXTRA_KEY,
+                0,
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to read handoff call counter `%s`: %s; reject delegation to fail closed.",
+                cls._HANDOFF_CALL_COUNT_EXTRA_KEY,
+                e,
+            )
+            return False, max_handoff_calls
+
         current_handoff_count = cls._coerce_int(
-            cls._get_event_extra(event, cls._HANDOFF_CALL_COUNT_EXTRA_KEY, 0),
+            raw_handoff_count,
             default=0,
             minimum=0,
             maximum=cls._MAX_HANDOFF_CALL_COUNT_SANITY_LIMIT,

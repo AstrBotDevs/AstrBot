@@ -572,6 +572,32 @@ def test_get_event_extra_returns_default_for_noncallable_get_extra():
     )
 
 
+def test_get_event_extra_supports_single_arg_getter_signature():
+    class _EventWithSingleArgGetter:
+        def __init__(self) -> None:
+            self._extras = {"present": "value"}
+
+        def get_extra(self, key: str):
+            return self._extras.get(key)
+
+    event = _EventWithSingleArgGetter()
+    assert FunctionToolExecutor._get_event_extra(event, "present", default=42) == "value"
+    assert FunctionToolExecutor._get_event_extra(event, "missing", default=42) == 42
+
+
+def test_get_event_extra_propagates_internal_type_error():
+    class _EventWithBrokenGetter:
+        def get_extra(self, _key: str, _default=None):
+            raise TypeError("internal get_extra failure")
+
+    with pytest.raises(TypeError, match="internal get_extra failure"):
+        FunctionToolExecutor._get_event_extra(
+            _EventWithBrokenGetter(),
+            "missing",
+            default=42,
+        )
+
+
 def test_set_event_extra_returns_false_for_noncallable_set_extra():
     event = SimpleNamespace(set_extra="not-callable")
     assert (
@@ -611,6 +637,65 @@ async def test_execute_handoff_rejects_when_call_counter_persist_fails():
         },
     )
     event = _EventWithBrokenSetter()
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert "handoff_call_limit_reached" in results[0].content[0].text
+    assert call_count["tool_loop"] == 0
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_rejects_when_call_counter_read_fails():
+    call_count = {"tool_loop": 0}
+
+    class _EventWithBrokenGetter:
+        def __init__(self) -> None:
+            self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
+            self.message_obj = SimpleNamespace(message=[])
+
+        def get_extra(self, _key: str, _default=None):
+            raise TypeError("internal get_extra failure")
+
+        def set_extra(self, _key: str, _value):
+            return None
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**_kwargs):
+        call_count["tool_loop"] += 1
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {
+            "provider_settings": {},
+            "subagent_orchestrator": {"max_handoff_calls_per_run": 8},
+        },
+    )
+    event = _EventWithBrokenGetter()
     run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
     tool = SimpleNamespace(
         name="transfer_to_subagent",
