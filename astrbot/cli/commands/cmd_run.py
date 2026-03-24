@@ -61,7 +61,6 @@ from astrbot.runtime_bootstrap import initialize_runtime_bootstrap
 if not (sys.version_info.major == 3 and sys.version_info.minor in (12, 13)):
     sys.exit(1)
 
-initialize_runtime_bootstrap()
 # Regular expression to find bash-like parameter expansions:
 # ${VAR:-default} or ${VAR}
 _PARAM_EXPAND_RE = re.compile(r"\$\{([^}:]+?)(:-([^}]*))?\}")
@@ -169,6 +168,7 @@ def run(
     debug: bool,
 ) -> None:
     """Run AstrBot"""
+    initialize_runtime_bootstrap()
     try:
         if debug:
             log_level = "DEBUG"
