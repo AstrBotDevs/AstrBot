@@ -703,3 +703,34 @@ async def test_execute_handoff_rejects_when_event_extra_exceeds_sanity_limit():
         event._extras[FunctionToolExecutor._HANDOFF_CALL_COUNT_EXTRA_KEY]
         == 10**12
     )
+
+
+def _build_run_context_for_handoff_limit(config: dict):
+    event = SimpleNamespace(
+        unified_msg_origin="webchat:FriendMessage:webchat!user!session",
+        message_obj=SimpleNamespace(message=[]),
+    )
+    context = SimpleNamespace(get_config=lambda **_kwargs: config)
+    return ContextWrapper(context=SimpleNamespace(event=event, context=context))
+
+
+@pytest.mark.parametrize(
+    ("config", "expected_limit"),
+    [
+        ({}, 8),
+        ({"subagent_orchestrator": None}, 8),
+        ({"subagent_orchestrator": "not-a-dict"}, 8),
+        ({"subagent_orchestrator": {"max_handoff_calls_per_run": 0}}, 1),
+        ({"subagent_orchestrator": {"max_handoff_calls_per_run": -3}}, 1),
+        ({"subagent_orchestrator": {"max_handoff_calls_per_run": 129}}, 128),
+        ({"subagent_orchestrator": {"max_handoff_calls_per_run": "abc"}}, 8),
+        ({"subagent_orchestrator": {"max_handoff_calls_per_run": "3.14"}}, 8),
+        ({"subagent_orchestrator": {"max_handoff_calls_per_run": "10"}}, 10),
+    ],
+)
+def test_resolve_handoff_call_limit_with_malformed_and_boundary_configs(
+    config: dict,
+    expected_limit: int,
+):
+    run_context = _build_run_context_for_handoff_limit(config)
+    assert FunctionToolExecutor._resolve_handoff_call_limit(run_context) == expected_limit
