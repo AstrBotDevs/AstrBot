@@ -1,6 +1,37 @@
 [package]
 name = "astrbot-core"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+
+[lib]
+name = "astrbot_core"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["python"]
+python = ["pyo3"]
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+thiserror = "2"
+async-trait = "0.1"
+
+pyo3 = { version = "0.24", features = ["full"], optional = true }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+
+[profile.dev]
+opt-level = 0
+debug = 1
+
+[profile.dev.package."*"]
+opt-level = 0
