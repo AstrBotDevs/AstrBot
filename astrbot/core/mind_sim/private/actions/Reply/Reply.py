@@ -155,7 +155,7 @@ class ReplyAction(Action):
             action_name=self.instance_id or self.name,
             type="completed",
             prompt=f"已回复: {reply_text}",
-            content=""
+            content="",
         )
 
         self.update_state(

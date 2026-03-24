@@ -235,6 +235,7 @@ class Action(ABC):
         子类可以重写此方法来清理资源。
         """
         pass
+
     def get_completion_output(self) -> ActionOutput | None:
         """获取完成后要发送的事件
 

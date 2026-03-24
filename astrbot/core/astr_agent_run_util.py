@@ -2,8 +2,8 @@ import asyncio
 import re
 import time
 import traceback
-from collections.abc import AsyncGenerator
-from typing import Callable, Any
+from collections.abc import AsyncGenerator, Callable
+from typing import Any
 
 from astrbot.core import logger
 from astrbot.core.agent.message import Message

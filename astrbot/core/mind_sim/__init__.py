@@ -69,5 +69,4 @@ __all__ = [
     "Decision",
     "MindEvent",
     "MindEventType",
-
 ]

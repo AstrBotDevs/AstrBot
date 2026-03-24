@@ -118,7 +118,9 @@ class InternalMindSubStage(Stage):
                 # AgentMindSubStage 请求 pipeline yield
                 # event.result 已由 AgentMindSubStage 设置好
                 done_event = mind_event.data.get("done_event")
-                logger.debug("[InternalMindSubStage] 收到 PIPELINE_YIELD，yield 给 pipeline")
+                logger.debug(
+                    "[InternalMindSubStage] 收到 PIPELINE_YIELD，yield 给 pipeline"
+                )
                 yield  # 传递给 pipeline 框架，RespondStage 处理 event.result
                 # pipeline yield 返回后，通知 AgentMindSubStage 继续
                 if done_event:
@@ -277,7 +279,9 @@ class InternalMindSubStage(Stage):
                 descriptions.append(f"[微信表情: {emoji_desc}]")
             elif isinstance(comp, File):
                 # 文件描述
-                file_name = getattr(comp, "name", None) or getattr(comp, "file", "未知文件")
+                file_name = getattr(comp, "name", None) or getattr(
+                    comp, "file", "未知文件"
+                )
                 file_size = getattr(comp, "size", None)
                 size_str = f" ({file_size} bytes)" if file_size else ""
                 descriptions.append(f"[文件: {file_name}{size_str}]")
@@ -295,7 +299,9 @@ class InternalMindSubStage(Stage):
             try:
                 caption_text = await self._describe_images(event, image_paths, persona)
                 if caption_text:
-                    descriptions.append(f"<image_caption>{caption_text}</image_caption>")
+                    descriptions.append(
+                        f"<image_caption>{caption_text}</image_caption>"
+                    )
             except Exception as e:
                 logger.warning(f"[InternalMindSubStage] 图片描述失败: {e}")
                 descriptions.append(f"[图片 x{len(image_paths)}]")

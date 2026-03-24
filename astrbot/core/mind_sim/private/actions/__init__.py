@@ -3,8 +3,6 @@
 包含私聊和群聊场景下的动作实现。
 """
 
-from typing import Type
-
 from astrbot.core.mind_sim.action import Action
 
 # 动作类导入

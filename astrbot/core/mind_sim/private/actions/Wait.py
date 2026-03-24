@@ -52,6 +52,7 @@ class WaitAction(Action):
                 rounds=5,
                 min_duration=30.0,
             )
+
     async def on_stop(self) -> None:
         """立即中断等待"""
         if self._stop_event:

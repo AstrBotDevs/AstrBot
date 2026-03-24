@@ -235,7 +235,7 @@ export default defineComponent({
             });
         };
 
-        const updateThinkingEnabled = (value: boolean) => {
+        const updateThinkingEnabled = (value: boolean | null) => {
             emit('update:modelValue', {
                 ...props.modelValue,
                 thinking_enabled: value

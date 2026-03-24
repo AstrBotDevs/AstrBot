@@ -37,8 +37,8 @@ class WhitelistCheckStage(Stage):
             return
 
         # if len(self.whitelist) == 0:
-            # 白名单为空，不检查,只要启动白名单就要检查
-            # return
+        # 白名单为空，不检查,只要启动白名单就要检查
+        # return
 
         if event.get_platform_name() == "webchat":
             # WebChat 豁免

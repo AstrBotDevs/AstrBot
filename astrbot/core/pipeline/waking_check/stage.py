@@ -50,6 +50,7 @@ async def _check_is_advanced_persona(
 
     return False
 
+
 UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
     "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "slack": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",

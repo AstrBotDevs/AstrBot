@@ -20,7 +20,8 @@ from astrbot.core.agent.message import Message
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
-    build_main_agent, MainAgentBuildResult,
+    MainAgentBuildResult,
+    build_main_agent,
 )
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -198,7 +199,6 @@ class AgentMindSubStage:
             注册失败的错误列表
         """
         errors = []
-        robot_config = persona_config.get("robot_config", {})
         llm_model_config = persona_config.get("llm_model_config", {})
 
         role_map = {
@@ -350,7 +350,9 @@ class AgentMindSubStage:
         from astrbot.core.mind_sim.messages import MindEvent
 
         if not self._mind_event_queue:
-            logger.warning("[AgentMindSubStage] 无 mind_event_queue，跳过 pipeline yield")
+            logger.warning(
+                "[AgentMindSubStage] 无 mind_event_queue，跳过 pipeline yield"
+            )
             return
 
         done_event = asyncio.Event()
@@ -376,7 +378,9 @@ class AgentMindSubStage:
         Returns:
             最终响应文本
         """
-        streaming_response = streaming if streaming is not None else self.streaming_response
+        streaming_response = (
+            streaming if streaming is not None else self.streaming_response
+        )
         use_max_step = max_step or self.max_step
 
         event = self.event
@@ -394,7 +398,7 @@ class AgentMindSubStage:
 
                 try:
                     # 4. 构建 Agent Runner
-                    build_result= await self._build_agent_runner(
+                    build_result = await self._build_agent_runner(
                         system_prompt=system_prompt,
                         user_prompt=prompt,
                         contexts=contexts,
@@ -449,7 +453,9 @@ class AgentMindSubStage:
 
                     # Live Mode（实时语音模式）
                     if action_type == "live":
-                        logger.info("[AgentMindSubStage] 检测到 Live Mode，启用 TTS 处理")
+                        logger.info(
+                            "[AgentMindSubStage] 检测到 Live Mode，启用 TTS 处理"
+                        )
 
                         tts_provider = self.plugin_context.get_using_tts_provider(
                             event.unified_msg_origin
@@ -565,7 +571,10 @@ class AgentMindSubStage:
                     )
 
                     # 普通模式保存历史记录
-                    if not (streaming_response and not stream_to_general) and action_type != "live":
+                    if (
+                        not (streaming_response and not stream_to_general)
+                        and action_type != "live"
+                    ):
                         if not event.is_stopped() or agent_runner.was_aborted():
                             await self._save_to_history(
                                 req,
@@ -589,7 +598,9 @@ class AgentMindSubStage:
 
         except Exception as e:
             logger.error(f"[AgentMindSubStage] LLM 调用失败: {e}")
-            custom_error_message = extract_persona_custom_error_message_from_event(event)
+            custom_error_message = extract_persona_custom_error_message_from_event(
+                event
+            )
             error_text = custom_error_message or f"LLM 调用失败: {e}"
             await event.send(MessageChain().message(error_text))
             return ""
@@ -608,7 +619,7 @@ class AgentMindSubStage:
 
         与 internal.py 的 _save_to_history 逻辑完全一致。
         """
-        return # 在这里暂时不保存
+        return  # 在这里暂时不保存
         # if not req or not req.conversation:
         #     return
         #

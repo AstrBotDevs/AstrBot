@@ -511,9 +511,7 @@ class ChatRoute(Route):
                             accumulated_reasoning = ""
                             agent_stats = {}
                             refs = {}
-                        elif (
-                            (streaming and msg_type == "complete") or not streaming
-                        ):
+                        elif (streaming and msg_type == "complete") or not streaming:
                             if (
                                 chain_type == "tool_call"
                                 or chain_type == "tool_call_result"

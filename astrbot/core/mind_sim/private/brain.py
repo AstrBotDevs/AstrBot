@@ -19,11 +19,7 @@ import random
 import re
 import time
 from collections.abc import AsyncGenerator
-from typing import Any, Optional
-
-from astrbot.core import logger
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-
+from typing import Any
 
 from astrbot.core import logger
 from astrbot.core.mind_sim.action import ActionExecutor
@@ -36,6 +32,7 @@ from astrbot.core.mind_sim.messages import (
     MindEvent,
     MindEventType,
 )
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from .actions import get_available_actions
 from .prompts import (
@@ -207,7 +204,7 @@ class PrivateBrain:
             logger.warning("Received None output")
             return
 
-        reason = output.prompt if hasattr(output, 'prompt') else ""
+        reason = output.prompt if hasattr(output, "prompt") else ""
 
         if isinstance(output, ActionOutput):
             # 根据输出类型转换为对应的 MindEvent
@@ -308,7 +305,9 @@ class PrivateBrain:
         self._interrupt_wait_pending = True
 
         # 触发思考
-        await self._schedule_think(f"以下是这一轮思考的新的用户消息: {message} ,你可以决定要不要回复这条消息 这是一条新消息新的！")
+        await self._schedule_think(
+            f"以下是这一轮思考的新的用户消息: {message} ,你可以决定要不要回复这条消息 这是一条新消息新的！"
+        )
 
     async def _schedule_think(self, prompt: str | None = None):
         """调度一次思考（节流机制：1秒内只触发一次，累积提示词）"""
@@ -425,7 +424,6 @@ class PrivateBrain:
                 if not self._think_requested:
                     break
 
-
         except asyncio.CancelledError:
             logger.info("[PrivateBrain] 思考被取消")
         except Exception as e:
@@ -434,12 +432,12 @@ class PrivateBrain:
             self._thinking = False
             # 检查是否应该发送 END 事件
             self._maybe_emit_end()
+
     async def _only_wait(self):
         # 检测是否只有 wait 动作在运行（连续等待）
         running_states = self.executor.get_running_states()
         is_only_wait = (
-                len(running_states) == 1
-                and running_states[0]["action_name"] == "wait"
+            len(running_states) == 1 and running_states[0]["action_name"] == "wait"
         )
 
         if is_only_wait:
@@ -461,14 +459,15 @@ class PrivateBrain:
         if self._consecutive_wait_count >= self._consecutive_wait_threshold:
             # 计算从第一次等待到现在的时间
             elapsed_time = (
-                time.time() - self._first_wait_time
-                if self._first_wait_time > 0
-                else 0
+                time.time() - self._first_wait_time if self._first_wait_time > 0 else 0
             )
 
             # 只有当连续等待次数达标且时间超过阈值时才提示
             if elapsed_time >= self._stuck_min_duration:
-                stuck_hint = STUCK_PROMPT + f"检测到连续等待，连续等待 {self._consecutive_wait_count} 次，持续 {int(elapsed_time)} 秒,没特别的不要超过5分钟"
+                stuck_hint = (
+                    STUCK_PROMPT
+                    + f"检测到连续等待，连续等待 {self._consecutive_wait_count} 次，持续 {int(elapsed_time)} 秒,没特别的不要超过5分钟"
+                )
                 logger.debug(
                     f"[PrivateBrain] 连续等待 {self._consecutive_wait_count} 次，"
                     f"持续 {int(elapsed_time)} 秒，添加结束提示"

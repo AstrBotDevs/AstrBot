@@ -305,7 +305,7 @@ class ChatSummarizer:
         )
 
         try:
-            response = await self.agent_mind.call_simple(prompt=prompt, role="fast", temperature=0.3)
+            response = await self.agent_mind.call_simple(prompt=prompt, role="fast")
 
             logger.debug(f"{self._log_prefix} 话题识别响应: {response[:200]}...")
 

@@ -484,7 +484,7 @@ export default defineComponent({
                         availableSkills.value = payload.filter(skill => skill.active !== false);
                     } else {
                         const skills = payload.skills || [];
-                        availableSkills.value = skills.filter(skill => skill.active !== false);
+                        availableSkills.value = skills.filter((skill: any) => skill.active !== false);
                     }
                 }
             } catch (err) {
@@ -507,7 +507,7 @@ export default defineComponent({
 
                     // 为每个 provider 获取模型列表
                     const providersWithModels = await Promise.all(
-                        providerList.map(async (provider) => {
+                        providerList.map(async (provider: any) => {
                             try {
                                 const modelResponse = await axios.get('/api/config/provider/model_list', {
                                     params: {
