@@ -78,7 +78,9 @@ class WebSocketManager:
                 async with self._lock:
                     self._connections.discard(conn)
 
-    async def send_to(self, websocket: WebSocket, message: str | dict[str, Any]) -> None:
+    async def send_to(
+        self, websocket: WebSocket, message: str | dict[str, Any]
+    ) -> None:
         """
         Send a message to a specific WebSocket.
 

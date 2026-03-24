@@ -107,7 +107,10 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
                         continue
 
                     content_length = header.get("content-length", 0)
-                    if content_length == 0 or len(buffer) < header_end + 1 + content_length:
+                    if (
+                        content_length == 0
+                        or len(buffer) < header_end + 1 + content_length
+                    ):
                         break
 
                     content = buffer[header_end + 1 : header_end + 1 + content_length]

@@ -83,25 +83,21 @@ async def main() -> None:
     result = await orchestrator.abp.call_star_tool(
         star_name="demo-star",
         tool_name="echo",
-        arguments={"message": "Hello from ABP!"}
+        arguments={"message": "Hello from ABP!"},
     )
     print(f"   - Result: {result}")
 
     # Test 2: Add tool
     print("\n   Test 2: add tool")
     result = await orchestrator.abp.call_star_tool(
-        star_name="demo-star",
-        tool_name="add",
-        arguments={"a": 10, "b": 25}
+        star_name="demo-star", tool_name="add", arguments={"a": 10, "b": 25}
     )
     print(f"   - Result: {result}")
 
     # Test 3: Status tool
     print("\n   Test 3: status tool")
     result = await orchestrator.abp.call_star_tool(
-        star_name="demo-star",
-        tool_name="status",
-        arguments={}
+        star_name="demo-star", tool_name="status", arguments={}
     )
     print(f"   - Result: {result}")
 

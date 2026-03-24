@@ -160,7 +160,9 @@ class AstrbotGateway(BaseAstrbotGateway):
 
         self._app.include_router(memory_router)
 
-    async def _handle_ws_message(self, message: dict[str, Any]) -> dict[str, Any] | None:
+    async def _handle_ws_message(
+        self, message: dict[str, Any]
+    ) -> dict[str, Any] | None:
         """
         Handle an incoming WebSocket message.
 
@@ -182,7 +184,10 @@ class AstrbotGateway(BaseAstrbotGateway):
         if msg_type == "get_stars":
             return {"type": "stars_list", "data": await self._list_stars()}
 
-        return {"type": "error", "data": {"message": f"Unknown message type: {msg_type}"}}
+        return {
+            "type": "error",
+            "data": {"message": f"Unknown message type: {msg_type}"},
+        }
 
     async def _handle_call_tool(self, data: dict[str, Any]) -> dict[str, Any]:
         """Handle a tool call request via WebSocket."""
@@ -191,10 +196,15 @@ class AstrbotGateway(BaseAstrbotGateway):
         arguments = data.get("arguments", {})
 
         if not star_name or not tool_name:
-            return {"type": "tool_result", "data": {"error": "Missing star or tool name"}}
+            return {
+                "type": "tool_result",
+                "data": {"error": "Missing star or tool name"},
+            }
 
         try:
-            result = await self.orchestrator.abp.call_star_tool(star_name, tool_name, arguments)
+            result = await self.orchestrator.abp.call_star_tool(
+                star_name, tool_name, arguments
+            )
             return {"type": "tool_result", "data": {"result": result}}
         except Exception as e:
             return {"type": "tool_result", "data": {"error": str(e)}}

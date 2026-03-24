@@ -17,6 +17,7 @@ async def test_bootstrap_components():
     try:
         from astrbot._internal.geteway.server import AstrbotGateway
         from astrbot._internal.runtime.orchestrator import AstrbotOrchestrator
+
         print("    ✓ All imports successful")
     except Exception as e:
         print(f"    ✗ Import failed: {e}")
@@ -65,6 +66,7 @@ async def test_bootstrap_components():
     except Exception as e:
         print(f"    ✗ ABP star test failed: {e}")
         import traceback
+
         traceback.print_exc()
 
     # Test 4: Create gateway
@@ -78,6 +80,7 @@ async def test_bootstrap_components():
     except Exception as e:
         print(f"    ✗ Gateway creation failed: {e}")
         import traceback
+
         traceback.print_exc()
 
     # Test 5: Check anyio usage in components

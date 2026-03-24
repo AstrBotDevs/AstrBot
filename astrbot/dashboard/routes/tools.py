@@ -271,7 +271,9 @@ class ToolsRoute(Route):
                         or is_rename
                     ):
                         try:
-                            await self.tool_mgr.disable_mcp_server(old_name, shutdown_timeout=10)
+                            await self.tool_mgr.disable_mcp_server(
+                                old_name, shutdown_timeout=10
+                            )
                         except TimeoutError as e:
                             return (
                                 Response()

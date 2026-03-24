@@ -176,15 +176,15 @@ def remove(name: str) -> None:
 
     plugin_path = plugin["local_path"]
 
-    click.confirm(
-        t("plugin_uninstall_confirm", name=name), default=False, abort=True
-    )
+    click.confirm(t("plugin_uninstall_confirm", name=name), default=False, abort=True)
 
     try:
         shutil.rmtree(plugin_path)
         click.echo(t("plugin_uninstall_success", name=name))
     except Exception as e:
-        raise click.ClickException(t("plugin_uninstall_failed_ex", name=name, error=str(e)))
+        raise click.ClickException(
+            t("plugin_uninstall_failed_ex", name=name, error=str(e))
+        )
 
 
 @plug.command()

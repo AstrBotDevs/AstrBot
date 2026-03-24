@@ -131,7 +131,9 @@ class ToolSet:
         """List all tools in this set."""
         return list(self._tools.values())
 
-    def openai_schema(self, omit_empty_parameter_field: bool = False) -> list[dict[str, Any]]:
+    def openai_schema(
+        self, omit_empty_parameter_field: bool = False
+    ) -> list[dict[str, Any]]:
         """Convert tools to OpenAI API function calling schema format."""
         result: list[dict[str, Any]] = []
         for tool in self._tools.values():

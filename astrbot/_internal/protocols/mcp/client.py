@@ -322,12 +322,15 @@ class McpClient(BaseAstrbotMcpClient):
             stdio_transport = await self.exit_stack.enter_async_context(
                 mcp.stdio_client(
                     server_params,
-                    errlog=cast(Any, LogPipe(
-                        level=logging.INFO,
-                        logger=logger,
-                        identifier=f"MCPServer-{name}",
-                        callback=callback,
-                    )),
+                    errlog=cast(
+                        Any,
+                        LogPipe(
+                            level=logging.INFO,
+                            logger=logger,
+                            identifier=f"MCPServer-{name}",
+                            callback=callback,
+                        ),
+                    ),
                 ),
             )
             self.process_pid = self._extract_stdio_process_pid(stdio_transport)

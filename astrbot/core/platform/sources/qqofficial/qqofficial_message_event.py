@@ -75,7 +75,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         # 先标记事件层“已执行发送操作”,避免异常路径遗漏
         await super().send_streaming(generator, use_fallback)
         # QQ C2C 流式协议:开始/中间分片使用 state=1,结束分片使用 state=10
-        stream_payload: dict[str, Any] = {"state": 1, "id": None, "index": 0, "reset": False}
+        stream_payload: dict[str, Any] = {
+            "state": 1,
+            "id": None,
+            "index": 0,
+            "reset": False,
+        }
         last_edit_time = 0  # 上次发送分片的时间
         throttle_interval = 1  # 分片间最短间隔 (秒)
         ret = None

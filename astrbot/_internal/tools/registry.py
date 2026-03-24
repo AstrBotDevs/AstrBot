@@ -117,7 +117,9 @@ class FunctionToolManager:
         """Initialize MCP clients (stub)."""
         pass
 
-    async def test_mcp_server_connection(self, config: dict[str, Any]) -> tuple[bool, str]:
+    async def test_mcp_server_connection(
+        self, config: dict[str, Any]
+    ) -> tuple[bool, str]:
         """Test MCP server connection (stub)."""
         return False, "Not implemented"
 
@@ -215,7 +217,9 @@ class FuncCall(FunctionToolManager):
         """Remove a tool by its name (alias for remove)."""
         self.remove(name)
 
-    def get_func_desc_openai_style(self, omit_empty_parameter_field: bool = False) -> list[dict[str, Any]]:
+    def get_func_desc_openai_style(
+        self, omit_empty_parameter_field: bool = False
+    ) -> list[dict[str, Any]]:
         """Get tools in OpenAI style (deprecated, use get_full_tool_set().openai_schema())."""
         tool_set = self.get_full_tool_set()
         return tool_set.openai_schema(omit_empty_parameter_field)
@@ -248,13 +252,16 @@ class FuncCall(FunctionToolManager):
         """Deactivate an LLM tool (stub implementation)."""
         return True
 
-    async def test_mcp_server_connection(self, config: dict[str, Any]) -> tuple[bool, str]:
+    async def test_mcp_server_connection(
+        self, config: dict[str, Any]
+    ) -> tuple[bool, str]:
         """Test MCP server connection (stub implementation)."""
         # Import the actual test function if available
         try:
             from astrbot._internal.protocols.mcp.client import (
                 _quick_test_mcp_connection,
             )
+
             success, message = await _quick_test_mcp_connection(config)
             if not success:
                 raise Exception(message)

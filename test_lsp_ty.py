@@ -15,7 +15,8 @@ async def test_lsp_ty_integration():
     # Start ty server as subprocess
     print("\n[1] Starting ty server...")
     ty_process = await asyncio.create_subprocess_exec(
-        "ty", "server",
+        "ty",
+        "server",
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -26,6 +27,7 @@ async def test_lsp_ty_integration():
     print("\n[2] Importing LSP client...")
     try:
         from astrbot._internal.protocols.lsp.client import AstrbotLspClient
+
         client = AstrbotLspClient()
         print("    ✓ LSP client created")
     except Exception as e:
@@ -38,11 +40,13 @@ async def test_lsp_ty_integration():
     try:
         await client.connect_to_server(
             command=["ty", "server"],
-            workspace_uri="file:///home/lightjunction/GITHUB/AstrBot"
+            workspace_uri="file:///home/lightjunction/GITHUB/AstrBot",
         )
         print("    ✓ Connected to ty server")
     except Exception as e:
-        print(f"    ⚠ Connection failed (expected if ty doesn't support external connections): {e}")
+        print(
+            f"    ⚠ Connection failed (expected if ty doesn't support external connections): {e}"
+        )
         # This is expected - ty server uses stdio but our client expects subprocess
 
     # Test 4: Send initialize request

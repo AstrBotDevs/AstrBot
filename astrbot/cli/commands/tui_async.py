@@ -318,9 +318,7 @@ class TUIClient:
 
         try:
             # Format umo for tui
-            umo = (
-                f"tui:FriendMessage:tui!{self.username}!{self.conversation_id}"
-            )
+            umo = f"tui:FriendMessage:tui!{self.username}!{self.conversation_id}"
 
             # Reset parser for new stream
             self._parser.reset()

@@ -191,12 +191,15 @@ class AstrBotConfigManager:
             raise ValueError("不能删除默认配置文件")
 
         # 从映射中移除
-        abconf_data = self.sp.get(
-            "abconf_mapping",
-            {},
-            scope="global",
-            scope_id="global",
-        ) or {}
+        abconf_data = (
+            self.sp.get(
+                "abconf_mapping",
+                {},
+                scope="global",
+                scope_id="global",
+            )
+            or {}
+        )
         if conf_id not in abconf_data:
             logger.warning(f"配置文件 {conf_id} 不存在于映射中")
             return False
@@ -242,12 +245,15 @@ class AstrBotConfigManager:
         if conf_id == "default":
             raise ValueError("不能更新默认配置文件的信息")
 
-        abconf_data = self.sp.get(
-            "abconf_mapping",
-            {},
-            scope="global",
-            scope_id="global",
-        ) or {}
+        abconf_data = (
+            self.sp.get(
+                "abconf_mapping",
+                {},
+                scope="global",
+                scope_id="global",
+            )
+            or {}
+        )
         if conf_id not in abconf_data:
             logger.warning(f"配置文件 {conf_id} 不存在于映射中")
             return False

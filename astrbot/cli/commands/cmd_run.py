@@ -338,7 +338,10 @@ def run(
                     from astrbot.core.initial_loader import InitialLoader
 
                     if (
-                        os.environ.get("ASTRBOT_DASHBOARD_ENABLE", os.environ.get("DASHBOARD_ENABLE"))
+                        os.environ.get(
+                            "ASTRBOT_DASHBOARD_ENABLE",
+                            os.environ.get("DASHBOARD_ENABLE"),
+                        )
                         == "True"
                     ):
                         await DashboardManager().ensure_installed(astrbot_root)
@@ -357,7 +360,9 @@ def run(
                         """Stream logs from LogBroker to stdout."""
                         while True:
                             try:
-                                log_entry = await asyncio.wait_for(log_queue.get(), timeout=0.5)
+                                log_entry = await asyncio.wait_for(
+                                    log_queue.get(), timeout=0.5
+                                )
                                 # Format: [LEVEL] message
                                 level = log_entry.get("level_name", "INFO")
                                 message = log_entry.get("message", "")
@@ -369,7 +374,12 @@ def run(
                                         "ERROR": "red",
                                         "CRITICAL": "red",
                                     }.get(level, "white")
-                                    click.secho(f"[{level}]", fg=level_color, bold=False, nl=False)
+                                    click.secho(
+                                        f"[{level}]",
+                                        fg=level_color,
+                                        bold=False,
+                                        nl=False,
+                                    )
                                     click.echo(f" {message}")
                             except asyncio.TimeoutError:
                                 continue

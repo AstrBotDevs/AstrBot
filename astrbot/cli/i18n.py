@@ -26,7 +26,6 @@ _TRANSLATIONS: dict[Language, dict[str, str]] = {
         "cli_version": "AstrBot CLI 版本: {version}",
         "cli_unknown_command": "未知命令: {command}",
         "cli_help_available": "使用 astrbot help --all 查看所有命令",
-
         # Dashboard commands
         "dashboard_bundled": "Dashboard 已打包在安装包中 - 跳过下载",
         "dashboard_not_installed": "Dashboard 未安装",
@@ -41,7 +40,6 @@ _TRANSLATIONS: dict[Language, dict[str, str]] = {
         "dashboard_download_failed": "Dashboard 下载失败: {error}",
         "dashboard_init_dir": "正在初始化 Dashboard 目录...",
         "dashboard_init_success": "Dashboard 初始化成功",
-
         # Plugin commands
         "plugin_installing": "正在安装插件: {name}",
         "plugin_install_success": "插件安装成功: {name}",
@@ -60,7 +58,6 @@ _TRANSLATIONS: dict[Language, dict[str, str]] = {
         "plugin_updating": "正在更新插件 {name}...",
         "plugin_search_no_result": "未找到匹配 '{query}' 的插件",
         "plugin_search_results": "搜索结果: '{query}'",
-
         # Config commands
         "config_show": "显示配置",
         "config_set_success": "配置项已更新: {key} = {value}",
@@ -70,7 +67,6 @@ _TRANSLATIONS: dict[Language, dict[str, str]] = {
         "config_get_not_found": "配置项未找到: {key}",
         "config_reset_confirm": "确定要重置所有配置吗?",
         "config_reset_success": "配置已重置",
-
         # Config validators
         "config_log_level_invalid": "日志级别必须是 DEBUG/INFO/WARNING/ERROR/CRITICAL 之一",
         "config_port_must_be_number": "端口必须是数字",
@@ -82,7 +78,6 @@ _TRANSLATIONS: dict[Language, dict[str, str]] = {
         "config_key_unsupported": "不支持的配置项: {key}",
         "config_key_unknown": "未知的配置项: {key}",
         "config_updated": "配置已更新: {key}",
-
         # Init command
         "init_creating": "正在创建配置目录...",
         "init_created": "配置目录已创建: {path}",
@@ -90,19 +85,16 @@ _TRANSLATIONS: dict[Language, dict[str, str]] = {
         "init_copied": "配置文件已复制",
         "init_success": "AstrBot 初始化完成!",
         "init_failed": "初始化失败: {error}",
-
         # Run command
         "run_starting": "正在启动 AstrBot...",
         "run_started": "AstrBot 已启动!",
         "run_backend_only": "以无界面模式启动",
         "run_failed": "启动失败: {error}",
         "run_stopped": "AstrBot 已停止",
-
         # TUI command
         "tui_starting": "正在启动 TUI...",
         "tui_started": "TUI 已启动",
         "tui_failed": "TUI 启动失败: {error}",
-
         # Common
         "yes": "是",
         "no": "否",
@@ -125,7 +117,6 @@ _TRANSLATIONS: dict[Language, dict[str, str]] = {
         "cli_version": "AstrBot CLI version: {version}",
         "cli_unknown_command": "Unknown command: {command}",
         "cli_help_available": "Use astrbot help --all to see all commands",
-
         # Dashboard commands
         "dashboard_bundled": "Dashboard is bundled with the package - skipping download",
         "dashboard_not_installed": "Dashboard is not installed",
@@ -140,7 +131,6 @@ _TRANSLATIONS: dict[Language, dict[str, str]] = {
         "dashboard_download_failed": "Failed to download dashboard: {error}",
         "dashboard_init_dir": "Initializing dashboard directory...",
         "dashboard_init_success": "Dashboard initialized successfully",
-
         # Plugin commands
         "plugin_installing": "Installing plugin: {name}",
         "plugin_install_success": "Plugin installed successfully: {name}",
@@ -159,7 +149,6 @@ _TRANSLATIONS: dict[Language, dict[str, str]] = {
         "plugin_updating": "Updating plugin {name}...",
         "plugin_search_no_result": "No plugins matching '{query}' found",
         "plugin_search_results": "Search results: '{query}'",
-
         # Config commands
         "config_show": "Show configuration",
         "config_set_success": "Configuration updated: {key} = {value}",
@@ -169,7 +158,6 @@ _TRANSLATIONS: dict[Language, dict[str, str]] = {
         "config_get_not_found": "Configuration key not found: {key}",
         "config_reset_confirm": "Reset all configuration?",
         "config_reset_success": "Configuration reset",
-
         # Config validators
         "config_log_level_invalid": "Log level must be one of DEBUG/INFO/WARNING/ERROR/CRITICAL",
         "config_port_must_be_number": "Port must be a number",
@@ -181,7 +169,6 @@ _TRANSLATIONS: dict[Language, dict[str, str]] = {
         "config_key_unsupported": "Unsupported config key: {key}",
         "config_key_unknown": "Unknown config key: {key}",
         "config_updated": "Config updated: {key}",
-
         # Init command
         "init_creating": "Creating config directory...",
         "init_created": "Config directory created: {path}",
@@ -189,19 +176,16 @@ _TRANSLATIONS: dict[Language, dict[str, str]] = {
         "init_copied": "Config files copied",
         "init_success": "AstrBot initialized successfully!",
         "init_failed": "Initialization failed: {error}",
-
         # Run command
         "run_starting": "Starting AstrBot...",
         "run_started": "AstrBot started!",
         "run_backend_only": "Starting in backend-only mode",
         "run_failed": "Failed to start: {error}",
         "run_stopped": "AstrBot stopped",
-
         # TUI command
         "tui_starting": "Starting TUI...",
         "tui_started": "TUI started",
         "tui_failed": "Failed to start TUI: {error}",
-
         # Common
         "yes": "Yes",
         "no": "No",

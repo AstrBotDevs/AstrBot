@@ -99,7 +99,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs: Any
     ) -> ToolExecResult:
-        session: str | MessageSession = kwargs.get("session") or context.context.event.unified_msg_origin
+        session: str | MessageSession = (
+            kwargs.get("session") or context.context.event.unified_msg_origin
+        )
         messages: list[dict[str, Any]] | None = kwargs.get("messages")
 
         if not isinstance(messages, list) or not messages:

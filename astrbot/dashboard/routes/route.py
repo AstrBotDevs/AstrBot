@@ -23,7 +23,9 @@ class Route:
             # 统一添加 /api 前缀
             full_path = f"/api{path}"
             endpoint = f"{self.__class__.__name__.lower()}_{func.__name__}"
-            self.app.add_url_rule(full_path, view_func=func, methods=[method], endpoint=endpoint)
+            self.app.add_url_rule(
+                full_path, view_func=func, methods=[method], endpoint=endpoint
+            )
 
         # 兼容字典和列表两种格式
         routes_to_register = (

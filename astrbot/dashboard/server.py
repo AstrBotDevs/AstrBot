@@ -476,14 +476,15 @@ class AstrBotDashboard:
     async def run(self) -> None:
         """Run dashboard server (blocking)"""
         if self._webui_fallback:
-            logger.warning("前端未内置或未初始化，回退到仅启动后端。请访问在线面板：dash.astrbot.men")
+            logger.warning(
+                "前端未内置或未初始化，回退到仅启动后端。请访问在线面板：dash.astrbot.men"
+            )
         elif not self.enable_webui:
             logger.warning("前端已禁用，请访问在线面板：dash.astrbot.men")
 
         dashboard_config = self.config.get("dashboard", {})
-        host_value = (
-            os.environ.get("ASTRBOT_HOST")
-            or dashboard_config.get("host", "0.0.0.0")
+        host_value = os.environ.get("ASTRBOT_HOST") or dashboard_config.get(
+            "host", "0.0.0.0"
         )
         host = _resolve_dashboard_value(host_value, field_name="host")
         if not isinstance(host, str) or not host:
@@ -494,7 +495,10 @@ class AstrBotDashboard:
         json_port = dashboard_config.get("port")
         if env_port is not None:
             port_value = env_port
-            logger.info("[Dashboard] Using port from ASTRBOT_PORT environment variable: %s", env_port)
+            logger.info(
+                "[Dashboard] Using port from ASTRBOT_PORT environment variable: %s",
+                env_port,
+            )
         elif json_port is not None:
             port_value = json_port
             logger.info("[Dashboard] Using port from cmd_config.json: %s", json_port)
@@ -542,19 +546,16 @@ class AstrBotDashboard:
         config.bind = binds
 
         if ssl_enable:
-            cert_file = (
-                os.environ.get("ASTRBOT_SSL_CERT")
-                or ssl_config.get("cert_file", "")
+            cert_file = os.environ.get("ASTRBOT_SSL_CERT") or ssl_config.get(
+                "cert_file", ""
             )
             cert_file = _resolve_dashboard_value(cert_file, field_name="ssl.cert_file")
-            key_file = (
-                os.environ.get("ASTRBOT_SSL_KEY")
-                or ssl_config.get("key_file", "")
+            key_file = os.environ.get("ASTRBOT_SSL_KEY") or ssl_config.get(
+                "key_file", ""
             )
             key_file = _resolve_dashboard_value(key_file, field_name="ssl.key_file")
-            ca_certs = (
-                os.environ.get("ASTRBOT_SSL_CA_CERTS")
-                or ssl_config.get("ca_certs", "")
+            ca_certs = os.environ.get("ASTRBOT_SSL_CA_CERTS") or ssl_config.get(
+                "ca_certs", ""
             )
             ca_certs = _resolve_dashboard_value(ca_certs, field_name="ssl.ca_certs")
 
