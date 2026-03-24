@@ -41,6 +41,7 @@ from loguru import logger as base_logger
 
 from ._internal.plugin_logger import PluginLogger
 from ._internal.star_runtime import current_star_instance
+from ._message_types import normalize_message_type
 from .clients import (
     DBClient,
     HTTPClient,
@@ -441,18 +442,7 @@ class Context:
 
     @staticmethod
     def _normalize_compat_message_type(value: str) -> str:
-        normalized = str(value).strip().lower()
-        if normalized in {"groupmessage", "group_message", "group"}:
-            return "group"
-        if normalized in {
-            "privatemessage",
-            "private_message",
-            "private",
-            "friendmessage",
-            "friend_message",
-            "friend",
-        }:
-            return "private"
+        normalized = normalize_message_type(value)
         if not normalized:
             raise AstrBotError.invalid_input("send_message_by_id requires type")
         return normalized
