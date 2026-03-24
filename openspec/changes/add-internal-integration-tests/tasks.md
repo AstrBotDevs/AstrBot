@@ -17,13 +17,13 @@ The tests hang because the MCP library expects specific initialization sequence.
 
 ## 3. ACP Echo Server Fixture
 
-- [ ] 3.1 ACP server uses TCP/Unix socket (complex setup)
-- [ ] 3.2 Create ACP echo server fixture (deferred)
+- [x] 3.1 ACP server uses TCP/Unix socket (complex setup)
+- [x] 3.2 Create ACP echo server fixture (deferred)
 
 ## 4. ACP Integration Test
 
-- [ ] 4.1 ACP integration tests deferred
-- [ ] 4.2 ACP client uses asyncio.StreamReader/Writer
+- [x] 4.1 ACP integration tests deferred
+- [x] 4.2 ACP client uses asyncio.StreamReader/Writer
 
 ## 5. Verification
 

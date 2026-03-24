@@ -17,6 +17,7 @@ from astrbot._internal.protocols.abp.client import AstrbotAbpClient
 from astrbot._internal.protocols.acp.client import AstrbotAcpClient
 from astrbot._internal.protocols.lsp.client import AstrbotLspClient
 from astrbot._internal.protocols.mcp.client import McpClient
+from astrbot._internal.stars import RuntimeStatusStar
 
 log = logger
 
@@ -41,6 +42,12 @@ class AstrbotOrchestrator(BaseAstrbotOrchestrator):
 
         self._running = False
         self._stars: dict[str, Any] = {}
+
+        # Auto-register RuntimeStatusStar
+        self._runtime_status_star = RuntimeStatusStar()
+        self._runtime_status_star.set_orchestrator(self)
+        self._stars["runtime-status-star"] = self._runtime_status_star
+        self.abp.register_star("runtime-status-star", self._runtime_status_star)
 
         log.debug("AstrbotOrchestrator initialized.")
 
