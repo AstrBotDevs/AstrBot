@@ -28,6 +28,7 @@ from astrbot.core.astr_main_agent_resources import (
     SEND_MESSAGE_TO_USER_TOOL,
 )
 from astrbot.core.cron.events import CronMessageEvent
+from astrbot.core.config.default import DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
     CommandResult,
@@ -45,7 +46,7 @@ from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     _HANDOFF_CALL_COUNT_EXTRA_KEY = "_subagent_handoff_call_count"
-    _DEFAULT_MAX_HANDOFF_CALLS_PER_RUN = 8
+    _DEFAULT_MAX_HANDOFF_CALLS_PER_RUN = DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
     _MAX_HANDOFF_CALL_COUNT_SANITY_LIMIT = 10_000
 
     @classmethod
@@ -108,16 +109,17 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         try:
             result = get_extra(key, default)
             return default if result is None else result
-        except TypeError as e:
+        except TypeError:
             # Keep compatibility with legacy one-arg get_extra(key) call sites
             # when signature introspection is unavailable.
-            if not cls._looks_like_call_signature_type_error(e):
-                raise
             result = get_extra(key)
             return default if result is None else result
 
     @classmethod
     def _set_event_extra(cls, event: T.Any, key: str, value: T.Any) -> bool:
+        if event is None:
+            return False
+
         set_extra = getattr(event, "set_extra", None)
         if set_extra is None or not callable(set_extra):
             return False
@@ -126,19 +128,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return True
         except TypeError:
             return False
-
-    @classmethod
-    def _looks_like_call_signature_type_error(cls, exc: TypeError) -> bool:
-        msg = str(exc)
-        return any(
-            token in msg
-            for token in (
-                "positional argument",
-                "keyword argument",
-                "required positional argument",
-                "takes",
-            )
-        )
 
     @classmethod
     def _resolve_handoff_call_limit(

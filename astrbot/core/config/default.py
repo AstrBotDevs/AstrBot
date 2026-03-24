@@ -50,6 +50,8 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
     "line",
 ]
 
+DEFAULT_MAX_HANDOFF_CALLS_PER_RUN = 8
+
 # 默认配置
 DEFAULT_CONFIG = {
     "config_version": 2,
@@ -190,7 +192,7 @@ DEFAULT_CONFIG = {
         "remove_main_duplicate_tools": False,
         # Limits total handoff tool calls in one agent run to prevent
         # runaway delegation loops.
-        "max_handoff_calls_per_run": 8,
+        "max_handoff_calls_per_run": DEFAULT_MAX_HANDOFF_CALLS_PER_RUN,
         "router_system_prompt": (
             "You are a task router. Your job is to chat naturally, recognize user intent, "
             "and delegate work to the most suitable subagent using transfer_to_* tools. "

@@ -5,6 +5,7 @@ import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.config.default import DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
 from astrbot.core.message.components import Image
 
 
@@ -602,6 +603,13 @@ def test_set_event_extra_returns_false_for_noncallable_set_extra():
     event = SimpleNamespace(set_extra="not-callable")
     assert (
         FunctionToolExecutor._set_event_extra(event, "key", "value") is False
+    )
+
+
+def test_handoff_default_limit_is_sourced_from_config_default():
+    assert (
+        FunctionToolExecutor._DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
+        == DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
     )
 
 

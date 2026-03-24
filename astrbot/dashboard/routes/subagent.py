@@ -4,14 +4,10 @@ from quart import jsonify, request
 
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
-from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.config.default import DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 
 from .route import Response, Route, RouteContext
-
-DEFAULT_MAX_HANDOFF_CALLS_PER_RUN = int(
-    DEFAULT_CONFIG.get("subagent_orchestrator", {}).get("max_handoff_calls_per_run", 8)
-)
 
 
 class SubAgentRoute(Route):
