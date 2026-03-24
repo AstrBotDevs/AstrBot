@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 import httpx
 from openai import AsyncOpenAI
 
@@ -27,7 +29,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         api_base = provider_config.get(
             "embedding_api_base", "https://api.openai.com/v1"
         ).strip()
-        if not api_base.endswith("/v1") and not api_base.endswith("/v1/"):
+        parsed = urlparse(api_base)
+        if not parsed.path or parsed.path == "/":
             api_base = api_base.rstrip("/") + "/v1"
         logger.info(f"[OpenAI Embedding] {provider_id} Using API Base: {api_base}")
         self.client = AsyncOpenAI(
