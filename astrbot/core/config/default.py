@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.21.0"
+VERSION = "4.22.0"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -173,6 +173,11 @@ DEFAULT_CONFIG = {
             "shipyard_neo_access_token": "",
             "shipyard_neo_profile": "python-default",
             "shipyard_neo_ttl": 3600,
+        },
+        "image_compress_enabled": True,
+        "image_compress_options": {
+            "max_size": 1280,
+            "quality": 95,
         },
     },
     # SubAgent orchestrator mode:
@@ -2451,17 +2456,17 @@ CONFIG_METADATA_2 = {
                     "mimo-tts-style-prompt": {
                         "description": "风格提示词",
                         "type": "string",
-                        "hint": "用于控制生成语音的说话风格、语气或情绪，例如温柔、活泼、沉稳等。可留空。",
+                        "hint": "会以 <style>...</style> 标签形式添加到待合成文本开头，用于控制语速、情绪、角色或风格，例如 开心、变快、孙悟空、悄悄话。可留空。",
                     },
                     "mimo-tts-dialect": {
                         "description": "方言",
                         "type": "string",
-                        "hint": "指定生成语音时使用的方言或口音，例如四川话、粤语口音等。可留空。",
+                        "hint": "会与风格提示词一起写入开头的 <style>...</style> 标签中，例如 东北话、四川话、河南话、粤语。可留空。",
                     },
                     "mimo-tts-seed-text": {
                         "description": "种子文本",
                         "type": "string",
-                        "hint": "用于引导音色和说话方式的参考文本，会影响生成语音的表达风格。",
+                        "hint": "作为可选的 user 消息发送，用于辅助调节语气和风格，不会拼接到待合成文本中。",
                     },
                     "fishaudio-tts-character": {
                         "description": "character",
@@ -3465,6 +3470,29 @@ CONFIG_METADATA_3 = {
                         "description": "用户提示词",
                         "type": "string",
                         "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。",
+                    },
+                    "provider_settings.image_compress_enabled": {
+                        "description": "启用图片压缩",
+                        "type": "bool",
+                        "hint": "启用后，发送给多模态模型前会先压缩本地大图片。",
+                    },
+                    "provider_settings.image_compress_options.max_size": {
+                        "description": "最大边长",
+                        "type": "int",
+                        "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。",
+                        "condition": {
+                            "provider_settings.image_compress_enabled": True,
+                        },
+                        "slider": {"min": 256, "max": 4096, "step": 64},
+                    },
+                    "provider_settings.image_compress_options.quality": {
+                        "description": "压缩质量",
+                        "type": "int",
+                        "hint": "JPEG 输出质量，范围为 1-100。值越高，画质越好，文件也越大。",
+                        "condition": {
+                            "provider_settings.image_compress_enabled": True,
+                        },
+                        "slider": {"min": 1, "max": 100, "step": 1},
                     },
                     "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
