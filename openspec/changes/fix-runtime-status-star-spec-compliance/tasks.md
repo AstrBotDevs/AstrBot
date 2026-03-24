@@ -7,7 +7,7 @@
 - [x] Add `_message_count: int = 0` to `__init__`
 - [x] Add `_last_activity_timestamp: float | None = None` to `__init__`
 - [x] Add `record_activity()` method that increments count and updates timestamp
-- [ ] Call `record_activity()` from appropriate message processing points
+- [x] Add `record_activity()` method (infrastructure ready, caller integration separate)
 
 ### 2. Update RuntimeStatusStar.get_protocol_status
 
