@@ -421,6 +421,8 @@ class ProviderAnthropic(Provider):
                         try:
                             if "input_json" in tool_info:
                                 tool_info["input"] = json.loads(tool_info["input_json"])
+                            else:
+                                tool_info["input"] = tool_info.get("input", {})
 
                             # 添加到最终结果
                             final_tool_calls.append(
@@ -442,7 +444,7 @@ class ProviderAnthropic(Provider):
                                 id=id,
                             )
                         except json.JSONDecodeError:
-                            # JSON 解析失败，跳过这个工具调用
+                            # JSON 解析失败，跳过这个工具调用，不 yield
                             logger.warning(f"工具调用参数 JSON 解析失败: {tool_info}")
 
                         # 清理缓冲区
