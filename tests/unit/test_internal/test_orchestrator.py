@@ -106,7 +106,9 @@ class TestAstrbotOrchestrator:
         await orchestrator.register_star("star-2", mock_star)
 
         result = await orchestrator.list_stars()
-        assert result == ["star-1", "star-2"]
+        # RuntimeStatusStar is auto-registered, so check membership instead of exact match
+        assert "star-1" in result
+        assert "star-2" in result
 
     @pytest.mark.asyncio
     async def test_shutdown_sequence(self, orchestrator):
