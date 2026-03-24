@@ -97,6 +97,48 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
+          }
+      },
+      "get": {
+        "tags": [
+          "Open API"
+        ],
+        "summary": "Get attachment file",
+        "description": "Get an uploaded attachment file by attachment_id.",
+        "security": [
+          {
+            "ApiKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Attachment ID returned by POST /api/v1/file."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
         }
       }
     },
