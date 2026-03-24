@@ -4,7 +4,6 @@ import asyncio
 import copy
 import datetime
 import json
-import logging
 import os
 import platform
 import zoneinfo
@@ -449,7 +448,6 @@ async def _ensure_persona_and_skills(
             for tool in so.handoffs:
                 agent = getattr(tool, "agent", None)
                 agent_name = getattr(agent, "name", None) if agent else None
-                logging.info(f"Agent {agent_name}")
                 if agent_name and agent_name.strip() in normalized_subagents:
                     req.func_tool.add_tool(tool)
 
