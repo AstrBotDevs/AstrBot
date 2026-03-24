@@ -7,6 +7,7 @@ import typing
 from dataclasses import dataclass
 from typing import Any, get_type_hints
 
+from astrbot_sdk._message_types import normalize_message_type
 from astrbot_sdk.events import MessageEvent as SdkMessageEvent
 from astrbot_sdk.protocol.descriptors import (
     CommandTrigger,
@@ -35,14 +36,12 @@ class TriggerMatch:
 class TriggerConverter:
     @staticmethod
     def _message_type_name(event: AstrMessageEvent) -> str:
-        explicit = str(event.get_message_type().value).lower()
-        if explicit in {"group", "private", "other"}:
-            return explicit
-        if event.get_group_id():
-            return "group"
-        if event.get_sender_id():
-            return "private"
-        return "other"
+        return normalize_message_type(
+            event.get_message_type(),
+            group_id=event.get_group_id() or None,
+            user_id=event.get_sender_id() or None,
+            empty_default="other",
+        )
 
     @staticmethod
     def _match_command_name(text: str, command_name: str) -> str | None:

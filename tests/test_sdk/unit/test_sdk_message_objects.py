@@ -56,7 +56,9 @@ from astrbot_sdk.message_components import (
     File,
     Image,
     Plain,
+    Reply,
     UnknownComponent,
+    component_to_payload,
     payloads_to_components,
 )
 from astrbot_sdk.message_result import EventResultType, MessageChain, MessageEventResult
@@ -355,6 +357,55 @@ def test_reply_component_roundtrip_keeps_chain_and_metadata() -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_plain_component_payload_paths_are_consistent() -> None:
+    component = Plain("  keep spacing  ", convert=False)
+
+    assert component.toDict() == {
+        "type": "text",
+        "data": {"text": "  keep spacing  "},
+    }
+    assert await component.to_dict() == component.toDict()
+    assert (
+        sdk_message_components.component_to_payload_sync(component)
+        == component.toDict()
+    )
+    assert await component_to_payload(component) == component.toDict()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_reply_component_payload_paths_are_consistent() -> None:
+    component = Reply(
+        id="reply-1",
+        sender_id="user-9",
+        sender_nickname="Tester",
+        message_str="quoted text",
+        chain=[Plain("quoted text", convert=False)],
+    )
+
+    expected = {
+        "type": "reply",
+        "data": {
+            "id": "reply-1",
+            "chain": [{"type": "text", "data": {"text": "quoted text"}}],
+            "sender_id": "user-9",
+            "sender_nickname": "Tester",
+            "time": 0,
+            "message_str": "quoted text",
+            "text": "",
+            "qq": 0,
+            "seq": 0,
+        },
+    }
+
+    assert component.toDict() == expected
+    assert await component.to_dict() == expected
+    assert sdk_message_components.component_to_payload_sync(component) == expected
+    assert await component_to_payload(component) == expected
+
+
+@pytest.mark.unit
 def test_event_converter_serializes_core_reply_chain() -> None:
     reply = CoreReply(
         id="reply-2",
@@ -479,6 +530,75 @@ def test_event_converter_normalizes_legacy_core_message_type_values() -> None:
     )
 
     assert payload["message_type"] == "private"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("group_id", "sender_id", "expected"),
+    [
+        ("group-1", "user-1", "group"),
+        ("", "user-1", "private"),
+        ("", "", "other"),
+    ],
+)
+def test_event_converter_message_type_falls_back_to_event_shape(
+    group_id: str,
+    sender_id: str,
+    expected: str,
+) -> None:
+    class _UnknownTypeEvent:
+        is_wake = False
+        is_at_or_wake_command = False
+
+        def get_message_type(self):
+            return SimpleNamespace(value="channel")
+
+        def get_message_str(self) -> str:
+            return "hello"
+
+        def get_sender_id(self) -> str:
+            return sender_id
+
+        def get_group_id(self) -> str:
+            return group_id
+
+        def get_platform_name(self) -> str:
+            return "demo"
+
+        def get_platform_id(self) -> str:
+            return "demo"
+
+        def get_self_id(self) -> str:
+            return "bot-1"
+
+        def get_sender_name(self) -> str:
+            return "Sender"
+
+        def is_admin(self) -> bool:
+            return False
+
+        def get_message_outline(self) -> str:
+            return "hello"
+
+        def get_extra(self, key: str | None = None, default=None):
+            del key, default
+            return {}
+
+        @property
+        def unified_msg_origin(self) -> str:
+            return "demo:channel:user-1"
+
+        def get_messages(self):
+            return [CorePlain(text="hello")]
+
+    payload = EventConverter.core_to_sdk(
+        _UnknownTypeEvent(),
+        dispatch_token="dispatch-1",
+        plugin_id="sdk-demo",
+        request_id="req-1",
+    )
+
+    assert payload["message_type"] == expected
 
 
 @pytest.mark.unit

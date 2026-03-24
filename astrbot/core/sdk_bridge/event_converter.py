@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+from astrbot_sdk._message_types import normalize_message_type
 from astrbot_sdk.message.components import component_to_payload_sync
 
 if TYPE_CHECKING:
@@ -15,22 +16,17 @@ class EventConverter:
     _DROP_VALUE = object()
 
     @staticmethod
-    def _sdk_message_type(value: Any) -> str:
-        normalized = str(getattr(value, "value", value) or "").strip().lower()
-        if normalized in {"group", "groupmessage", "group_message"}:
-            return "group"
-        if normalized in {
-            "private",
-            "privatemessage",
-            "private_message",
-            "friend",
-            "friendmessage",
-            "friend_message",
-        }:
-            return "private"
-        if normalized in {"other", "othermessage", "other_message"}:
-            return "other"
-        return normalized
+    def _sdk_message_type(
+        value: Any,
+        *,
+        group_id: str | None = None,
+        user_id: str | None = None,
+    ) -> str:
+        return normalize_message_type(
+            value,
+            group_id=group_id,
+            user_id=user_id,
+        )
 
     @classmethod
     def _sanitize_extra_value(cls, value: Any) -> Any:
@@ -73,7 +69,11 @@ class EventConverter:
         plugin_id: str,
         request_id: str,
     ) -> dict[str, Any]:
-        message_type = EventConverter._sdk_message_type(event.get_message_type())
+        message_type = EventConverter._sdk_message_type(
+            event.get_message_type(),
+            group_id=event.get_group_id() or None,
+            user_id=event.get_sender_id() or None,
+        )
         raw = {
             "dispatch_token": dispatch_token,
             "plugin_id": plugin_id,
