@@ -134,11 +134,17 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if current_handoff_count >= max_handoff_calls:
             return False, max_handoff_calls
 
-        cls._set_event_extra(
+        persisted = cls._set_event_extra(
             event,
             cls._HANDOFF_CALL_COUNT_EXTRA_KEY,
             current_handoff_count + 1,
         )
+        if not persisted:
+            logger.warning(
+                "Failed to persist handoff call counter `%s`; reject delegation to fail closed.",
+                cls._HANDOFF_CALL_COUNT_EXTRA_KEY,
+            )
+            return False, max_handoff_calls
         return True, max_handoff_calls
 
     @classmethod
