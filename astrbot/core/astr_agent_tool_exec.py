@@ -74,19 +74,22 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return default
 
         get_extra = getattr(event, "get_extra", None)
-        if get_extra is None:
+        if get_extra is None or not callable(get_extra):
             return default
 
         try:
             return get_extra(key, default)
         except TypeError:
-            result = get_extra(key)
+            try:
+                result = get_extra(key)
+            except TypeError:
+                return default
             return default if result is None else result
 
     @classmethod
     def _set_event_extra(cls, event: T.Any, key: str, value: T.Any) -> bool:
         set_extra = getattr(event, "set_extra", None)
-        if set_extra is None:
+        if set_extra is None or not callable(set_extra):
             return False
         try:
             set_extra(key, value)

@@ -559,3 +559,17 @@ async def test_execute_handoff_enforces_call_limit_across_multiple_calls():
         == 2
     )
     assert call_count["tool_loop"] == 2
+
+
+def test_get_event_extra_returns_default_for_noncallable_get_extra():
+    event = SimpleNamespace(get_extra="not-callable")
+    assert (
+        FunctionToolExecutor._get_event_extra(event, "missing", default=42) == 42
+    )
+
+
+def test_set_event_extra_returns_false_for_noncallable_set_extra():
+    event = SimpleNamespace(set_extra="not-callable")
+    assert (
+        FunctionToolExecutor._set_event_extra(event, "key", "value") is False
+    )
