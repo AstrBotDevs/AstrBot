@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 import types
 from asyncio import Queue
 from functools import partial
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
@@ -593,6 +594,31 @@ class _SystemEventSession:
     ) -> dict[str, object]:
         del request_id, args
         self.calls.append((handler_id, event_payload))
+        return {}
+
+
+class _OrderedSystemEventSession:
+    def __init__(
+        self,
+        call_order: list[str],
+        *,
+        fail_on: set[str] | None = None,
+    ) -> None:
+        self.call_order = call_order
+        self.fail_on = fail_on or set()
+
+    async def invoke_handler(
+        self,
+        handler_id: str,
+        event_payload: dict[str, object],
+        *,
+        request_id: str,
+        args: dict[str, object],
+    ) -> dict[str, object]:
+        del event_payload, request_id, args
+        self.call_order.append(handler_id)
+        if handler_id in self.fail_on:
+            raise RuntimeError(f"{handler_id} failed")
         return {}
 
 
@@ -1762,6 +1788,313 @@ async def test_sdk_bridge_stop_cleans_runtime_state() -> None:
     assert cleanup_task.cancelled() is True
     assert bridge._started is False
     assert bridge._stopping is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_reload_all_reloads_discovered_plugins_and_tears_down_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    plugin_a = types.SimpleNamespace(name="sdk-a")
+    plugin_b = types.SimpleNamespace(name="sdk-b")
+    issue = types.SimpleNamespace(
+        plugin_id="broken",
+        to_payload=lambda: {
+            "plugin_id": "broken",
+            "phase": "discovery",
+            "message": "broken plugin",
+        },
+    )
+    discovered = types.SimpleNamespace(plugins=[plugin_a, plugin_b], issues=[issue])
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.discover_plugins",
+        lambda _plugins_dir: discovered,
+    )
+    pruned: list[set[str]] = []
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.SkillManager",
+        lambda: types.SimpleNamespace(
+            prune_sdk_plugin_skills=lambda known: pruned.append(set(known))
+        ),
+    )
+    planned: list[list[object]] = []
+    bridge.env_manager.plan = lambda plugins: planned.append(list(plugins))  # type: ignore[method-assign]
+    bridge._teardown_plugin = AsyncMock()  # type: ignore[method-assign]
+    bridge._load_or_reload_plugin = AsyncMock()  # type: ignore[method-assign]
+    bridge._records = {
+        "sdk-old": types.SimpleNamespace(plugin_id="sdk-old"),
+        "sdk-a": types.SimpleNamespace(plugin_id="sdk-a"),
+    }
+
+    await bridge.reload_all(reset_restart_budget=True)
+
+    bridge._teardown_plugin.assert_awaited_once_with("sdk-old")
+    assert "sdk-old" not in bridge._records
+    assert planned == [[plugin_a, plugin_b]]
+    assert pruned == [{"sdk-a", "sdk-b"}]
+    assert bridge._discovery_issues == {
+        "broken": [
+            {"plugin_id": "broken", "phase": "discovery", "message": "broken plugin"}
+        ]
+    }
+    bridge._load_or_reload_plugin.assert_has_awaits(
+        [
+            call(plugin_a, load_order=0, reset_restart_budget=True),
+            call(plugin_b, load_order=1, reset_restart_budget=True),
+        ]
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_reload_plugin_updates_discovery_issues_and_loads_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    plugin_a = types.SimpleNamespace(name="sdk-a")
+    plugin_b = types.SimpleNamespace(name="sdk-b")
+    issue = types.SimpleNamespace(
+        plugin_id="broken",
+        to_payload=lambda: {"plugin_id": "broken", "message": "broken plugin"},
+    )
+    discovered = types.SimpleNamespace(plugins=[plugin_a, plugin_b], issues=[issue])
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.discover_plugins",
+        lambda _plugins_dir: discovered,
+    )
+    planned: list[list[object]] = []
+    bridge.env_manager.plan = lambda plugins: planned.append(list(plugins))  # type: ignore[method-assign]
+    bridge._load_or_reload_plugin = AsyncMock()  # type: ignore[method-assign]
+
+    await bridge.reload_plugin("sdk-b")
+
+    assert planned == [[plugin_a, plugin_b]]
+    assert bridge._discovery_issues == {
+        "broken": [{"plugin_id": "broken", "message": "broken plugin"}]
+    }
+    bridge._load_or_reload_plugin.assert_awaited_once_with(
+        plugin_b,
+        load_order=1,
+        reset_restart_budget=True,
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_reload_plugin_raises_for_unknown_plugin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    discovered = types.SimpleNamespace(plugins=[], issues=[])
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.discover_plugins",
+        lambda _plugins_dir: discovered,
+    )
+    bridge.env_manager.plan = lambda plugins: None  # type: ignore[method-assign]
+    bridge._load_or_reload_plugin = AsyncMock()  # type: ignore[method-assign]
+
+    with pytest.raises(ValueError, match="SDK plugin not found: missing"):
+        await bridge.reload_plugin("missing")
+
+    bridge._load_or_reload_plugin.assert_not_awaited()
+
+
+@pytest.mark.unit
+def test_sdk_bridge_match_waiter_plugins_returns_load_order_sorted_records() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    bridge._records = {
+        "sdk-b": types.SimpleNamespace(plugin_id="sdk-b", load_order=2),
+        "sdk-a": types.SimpleNamespace(plugin_id="sdk-a", load_order=1),
+        "sdk-c": types.SimpleNamespace(plugin_id="sdk-c", load_order=3),
+    }
+    bridge._session_waiters = {
+        "sdk-b": {"session-1"},
+        "sdk-a": {"session-1"},
+        "sdk-c": {"other-session"},
+    }
+
+    matches = bridge._match_waiter_plugins("session-1")
+
+    assert [record.plugin_id for record in matches] == ["sdk-a", "sdk-b"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_dispatch_system_event_isolates_failures_and_preserves_order() -> (
+    None
+):
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    call_order: list[str] = []
+    session_a = _OrderedSystemEventSession(call_order)
+    session_b = _OrderedSystemEventSession(
+        call_order,
+        fail_on={"sdk-b:main.first"},
+    )
+    bridge._records = {
+        "sdk-b": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-b",
+            plugin=types.SimpleNamespace(manifest_data={}),
+            load_order=1,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-b:main.first",
+                        trigger=EventTrigger(event_type="platform_loaded"),
+                        priority=10,
+                    ),
+                    declaration_order=0,
+                )
+            ],
+            session=session_b,
+        ),
+        "sdk-a": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-a",
+            plugin=types.SimpleNamespace(manifest_data={}),
+            load_order=0,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-a:main.high",
+                        trigger=EventTrigger(event_type="platform_loaded"),
+                        priority=20,
+                    ),
+                    declaration_order=1,
+                ),
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-a:main.low",
+                        trigger=EventTrigger(event_type="platform_loaded"),
+                        priority=10,
+                    ),
+                    declaration_order=0,
+                ),
+            ],
+            session=session_a,
+        ),
+    }
+
+    await bridge.dispatch_system_event(
+        "platform_loaded",
+        {"platform": "demo-platform", "platform_id": "demo-1"},
+    )
+
+    assert call_order == [
+        "sdk-a:main.high",
+        "sdk-a:main.low",
+        "sdk-b:main.first",
+    ]
+
+
+@pytest.mark.unit
+def test_sdk_bridge_list_plugins_skips_discovery_entry_for_loaded_plugin() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    bridge._discovery_issues = {
+        "sdk-demo": [{"plugin_id": "sdk-demo", "message": "discovery failed"}],
+        "broken": [{"plugin_id": "broken", "message": "still broken"}],
+    }
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            plugin=types.SimpleNamespace(
+                name="sdk-demo",
+                manifest_data={"display_name": "SDK Demo"},
+                plugin_dir=Path("."),
+            ),
+            plugin_id="sdk-demo",
+            load_order=0,
+            state="enabled",
+            unsupported_features=[],
+            handlers=[],
+            failure_reason="",
+            issues=[],
+        )
+    }
+
+    items = bridge.list_plugins()
+
+    assert [item["name"] for item in items] == ["sdk-demo", "broken"]
+
+
+@pytest.mark.unit
+def test_sdk_bridge_list_plugin_metadata_includes_legacy_sdk_and_discovery_entries() -> (
+    None
+):
+    legacy = types.SimpleNamespace(
+        name="legacy-demo",
+        display_name="Legacy Demo",
+        desc="legacy plugin",
+        author="tester",
+        version="1.0.0",
+        activated=True,
+        support_platforms=["qq"],
+        astrbot_version="4.0.0",
+    )
+    bridge = SdkPluginBridge(
+        types.SimpleNamespace(
+            get_all_stars=lambda: [legacy],
+            registered_web_apis=[],
+            cron_manager=object(),
+        )
+    )
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            plugin=types.SimpleNamespace(
+                name="sdk-demo",
+                manifest_data={
+                    "display_name": "SDK Demo",
+                    "description": "sdk plugin",
+                    "author": "tester",
+                    "version": "0.1.0",
+                    "support_platforms": ["telegram"],
+                },
+                plugin_dir=Path("."),
+            ),
+            plugin_id="sdk-demo",
+            load_order=0,
+            state="enabled",
+            issues=[],
+        )
+    }
+    bridge._discovery_issues = {
+        "broken": [{"plugin_id": "broken", "message": "broken plugin"}]
+    }
+
+    metadata = bridge.list_plugin_metadata()
+
+    assert [item["name"] for item in metadata] == [
+        "legacy-demo",
+        "sdk-demo",
+        "broken",
+    ]
+    assert metadata[0]["runtime_kind"] == "legacy"
+    assert metadata[1]["runtime_kind"] == "sdk"
+    assert metadata[2]["enabled"] is False
+
+
+@pytest.mark.unit
+def test_sdk_bridge_state_override_load_and_persist_boundaries(tmp_path: Path) -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    bridge.state_path = tmp_path / "state.json"
+
+    bridge.state_path.write_text("{invalid", encoding="utf-8")
+    assert bridge._load_state_overrides() == {}
+
+    bridge.state_path.write_text(
+        json.dumps({"plugins": {"sdk-demo": {"disabled": True, "note": "keep"}}}),
+        encoding="utf-8",
+    )
+    assert bridge._load_state_overrides() == {
+        "sdk-demo": {"disabled": True, "note": "keep"}
+    }
+
+    bridge._state_overrides = {"sdk-demo": {"disabled": True, "note": "keep"}}
+    bridge._set_disabled_override("sdk-demo", disabled=False)
+
+    assert bridge._state_overrides == {"sdk-demo": {"note": "keep"}}
+    persisted = json.loads(bridge.state_path.read_text(encoding="utf-8"))
+    assert persisted == {"plugins": {"sdk-demo": {"note": "keep"}}}
 
 
 @pytest.mark.unit
