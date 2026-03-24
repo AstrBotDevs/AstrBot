@@ -4,6 +4,7 @@ This module provides the FunctionTool base class used by MCP tools
 in the new internal architecture.
 """
 
+import copy
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -138,6 +139,43 @@ class ToolSet:
     def normalize(self) -> None:
         """Sort tools by name for deterministic serialization."""
         self._tools = dict(sorted(self._tools.items(), key=lambda x: x[0]))
+
+    def get_light_tool_set(self) -> "ToolSet":
+        """Return a light tool set with only name/description."""
+        light_tools = []
+        for tool in self.tools:
+            if hasattr(tool, "active") and not tool.active:
+                continue
+            light_tools.append(
+                FunctionTool(
+                    name=tool.name,
+                    description=tool.description,
+                    parameters={"type": "object", "properties": {}},
+                    handler=None,
+                )
+            )
+        return ToolSet("default", light_tools)
+
+    def get_param_only_tool_set(self) -> "ToolSet":
+        """Return a tool set with name/parameters only (no description)."""
+        param_tools = []
+        for tool in self.tools:
+            if hasattr(tool, "active") and not tool.active:
+                continue
+            params = (
+                copy.deepcopy(tool.parameters)
+                if tool.parameters
+                else {"type": "object", "properties": {}}
+            )
+            param_tools.append(
+                FunctionTool(
+                    name=tool.name,
+                    description="",
+                    parameters=params,
+                    handler=None,
+                )
+            )
+        return ToolSet("default", param_tools)
 
     @property
     def tools(self) -> list[FunctionTool]:
