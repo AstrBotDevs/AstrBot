@@ -219,13 +219,14 @@ async def handle_request(self, event, ctx: Context):
 | 事件名 | 常见可注入参数 | 是否可修改主链路 |
 |------|------|------|
 | `waiting_llm_request` | `MessageEvent`, `Context` | 间接可修改，例如切换当前对话 persona |
+| `agent_begin` | `MessageEvent`, `Context` | 否，适合在 Agent 真正开始执行时做准备工作 |
 | `llm_request` | `MessageEvent`, `Context`, `ProviderRequest` | 是，可直接修改 `ProviderRequest` |
-| `llm_response` | `MessageEvent`, `Context`, `LLMResponse` | 否，适合观察和提取回复内容 |
+| `agent_done` | `MessageEvent`, `Context`, `LLMResponse` | 否，适合观察和提取 Agent 最终回复 |
 | `decorating_result` | `MessageEvent`, `Context`, `MessageEventResult` | 是，可直接修改结果消息链 |
 | `after_message_sent` | `MessageEvent`, `Context` | 否，适合落库、记忆、统计 |
 | `calling_func_tool` | `MessageEvent`, `Context` | 否，可读取 `event.raw["tool_name"]` / `event.raw["tool_args"]` |
-| `using_llm_tool` | `MessageEvent`, `Context` | 否，可读取 `event.raw["tool_name"]` / `event.raw["tool_args"]` |
-| `llm_tool_respond` | `MessageEvent`, `Context` | 否，可读取 `event.raw["tool_name"]` / `event.raw["tool_result"]` |
+| `llm_tool_start` | `MessageEvent`, `Context` | 否，可读取 `event.raw["tool_name"]` / `event.raw["tool_args"]` |
+| `llm_tool_end` | `MessageEvent`, `Context` | 否，可读取 `event.raw["tool_name"]` / `event.raw["tool_result"]` |
 | `plugin_error` | `MessageEvent`, `Context` | 否，可读取 `event.raw["plugin_name"]` / `event.raw["error"]` |
 
 最小示例：
@@ -283,7 +284,7 @@ class PersonaSample(Star):
         if facts:
             request.system_prompt = (request.system_prompt or "") + "\n\n" + "\n".join(facts)
 
-    @on_event("llm_response")
+    @on_event("agent_done")
     async def capture_reply(
         self,
         event: MessageEvent,
@@ -319,14 +320,14 @@ class PersonaSample(Star):
 2. 不能与 `@rate_limit` 或 `@cooldown` 一起使用
 3. 不同平台的事件类型可能不同，需要查阅平台文档
 4. `llm_request` 和 `decorating_result` 注入的是可变对象，修改会回写到 AstrBot 主链路
-5. `llm_response` 主要用于观测和提取结果，不应用来替代主回复流程
+5. `agent_done` 主要用于观测和提取结果，不应用来替代主回复流程
 6. 请求范围内的 JSON-safe `event.set_extra()` 数据会在同一次请求的 SDK hooks 之间保留；非 JSON-safe 值只在当前 handler 内可见
 7. `after_message_sent` 会保留 `event.text` 作为原始用户输入；读取机器人实际发送内容时，优先使用 `event.get_sent_message_outline()` 和 `event.get_sent_messages()`
 
 #### 系统事件附加字段
 
-- `calling_func_tool` / `using_llm_tool`: `event.raw["tool_name"]`, `event.raw["tool_args"]`
-- `llm_tool_respond`: `event.raw["tool_name"]`, `event.raw["tool_args"]`, `event.raw["tool_result"]`
+- `calling_func_tool` / `llm_tool_start`: `event.raw["tool_name"]`, `event.raw["tool_args"]`
+- `llm_tool_end`: `event.raw["tool_name"]`, `event.raw["tool_args"]`, `event.raw["tool_result"]`
 - `plugin_error`: `event.raw["plugin_name"]`, `event.raw["handler_name"]`, `event.raw["error"]`, `event.raw["traceback"]`
 - `after_message_sent`: `event.get_sent_message_outline()`, `event.get_sent_messages()`
 

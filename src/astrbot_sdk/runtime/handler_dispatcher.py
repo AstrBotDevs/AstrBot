@@ -788,7 +788,8 @@ class HandlerDispatcher:
                 injected_payloads.provider_request.to_payload()
             )
         elif (
-            event_type == "llm_response" and injected_payloads.llm_response is not None
+            event_type in {"llm_response", "agent_done"}
+            and injected_payloads.llm_response is not None
         ):
             summary["llm_response"] = injected_payloads.llm_response.model_dump(
                 exclude_none=True
