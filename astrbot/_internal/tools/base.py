@@ -100,6 +100,10 @@ class ToolSet:
         """Add a tool to the set."""
         self._tools[tool.name] = tool
 
+    def add_tool(self, tool: FunctionTool) -> None:
+        """Add a tool to the set (alias for add())."""
+        self.add(tool)
+
     def remove(self, name: str) -> FunctionTool | None:
         """Remove and return a tool by name."""
         return self._tools.pop(name, None)
@@ -125,6 +129,11 @@ class ToolSet:
 
     def __len__(self) -> int:
         return len(self._tools)
+
+    def merge(self, other: "ToolSet") -> None:
+        """Merge another ToolSet into this one."""
+        for tool in other.tools:
+            self.add(tool)
 
     @property
     def tools(self) -> list[FunctionTool]:
