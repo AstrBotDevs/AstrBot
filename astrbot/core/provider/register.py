@@ -17,6 +17,8 @@ def register_provider_adapter(
     provider_type: ProviderType = ProviderType.CHAT_COMPLETION,
     default_config_tmpl: dict | None = None,
     provider_display_name: str | None = None,
+    i18n_resources: dict[str, dict] | None = None,
+    config_metadata: dict | None = None,
 ):
     """用于注册平台适配器的带参装饰器"""
 
@@ -44,6 +46,8 @@ def register_provider_adapter(
             cls_type=cls,
             default_config_tmpl=default_config_tmpl,
             provider_display_name=provider_display_name,
+            i18n_resources=i18n_resources,
+            config_metadata=config_metadata,
         )
         provider_registry.append(pm)
         provider_cls_map[provider_type_name] = pm
