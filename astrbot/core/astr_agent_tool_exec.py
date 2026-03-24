@@ -48,6 +48,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     _HANDOFF_CALL_COUNT_EXTRA_KEY = "_subagent_handoff_call_count"
     _DEFAULT_MAX_HANDOFF_CALLS_PER_RUN = DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
     _MAX_HANDOFF_CALL_COUNT_SANITY_LIMIT = 10_000
+    _GET_EXTRA_CALL_SHAPES_CACHE: dict[tuple[type, object], tuple[str, ...]] = {}
 
     @classmethod
     def _coerce_int(
@@ -78,40 +79,67 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if get_extra is None or not callable(get_extra):
             return default
 
+        call_shapes = cls._resolve_get_extra_call_shapes(event, get_extra)
+        for call_shape in call_shapes:
+            if call_shape == "args2":
+                result = get_extra(key, default)
+                return default if result is None else result
+            if call_shape == "args1":
+                result = get_extra(key)
+                return default if result is None else result
+            if call_shape == "kwargs2":
+                result = get_extra(key=key, default=default)
+                return default if result is None else result
+            if call_shape == "kwargs1":
+                result = get_extra(key=key)
+                return default if result is None else result
+
+        return default
+
+    @classmethod
+    def _resolve_get_extra_call_shapes(
+        cls,
+        event: T.Any,
+        get_extra: T.Callable[..., T.Any],
+    ) -> tuple[str, ...]:
+        get_extra_impl = getattr(get_extra, "__func__", get_extra)
+        cache_key = (type(event), get_extra_impl)
+        cached = cls._GET_EXTRA_CALL_SHAPES_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+
+        call_shapes = cls._infer_get_extra_call_shapes(get_extra)
+        cls._GET_EXTRA_CALL_SHAPES_CACHE[cache_key] = call_shapes
+        return call_shapes
+
+    @classmethod
+    def _infer_get_extra_call_shapes(
+        cls, get_extra: T.Callable[..., T.Any]
+    ) -> tuple[str, ...]:
         try:
             signature = inspect.signature(get_extra)
         except (TypeError, ValueError):
-            signature = None
+            return ("args2", "args1")
 
-        if signature is not None:
-            # Probe call shapes that can be bound by signature to support:
-            # - get_extra(key, default)
-            # - get_extra(key)
-            # - get_extra(*, key, default=None)
-            # - get_extra(*, key)
-            candidate_calls = (
-                ((key, default), {}),
-                ((key,), {}),
-                ((), {"key": key, "default": default}),
-                ((), {"key": key}),
-            )
-            for args, kwargs in candidate_calls:
-                try:
-                    signature.bind_partial(*args, **kwargs)
-                except TypeError:
-                    continue
-                result = get_extra(*args, **kwargs)
-                return default if result is None else result
-            return default
+        sentinel = object()
+        probes: tuple[tuple[str, tuple[tuple[T.Any, ...], dict[str, T.Any]]], ...] = (
+            ("args2", ((sentinel, sentinel), {})),
+            ("args1", ((sentinel,), {})),
+            ("kwargs2", ((), {"key": sentinel, "default": sentinel})),
+            ("kwargs1", ((), {"key": sentinel})),
+        )
 
-        try:
-            result = get_extra(key, default)
-            return default if result is None else result
-        except TypeError:
-            # Keep compatibility with legacy one-arg get_extra(key) call sites
-            # when signature introspection is unavailable.
-            result = get_extra(key)
-            return default if result is None else result
+        call_shapes: list[str] = []
+        for shape, (args, kwargs) in probes:
+            try:
+                signature.bind_partial(*args, **kwargs)
+            except TypeError:
+                continue
+            call_shapes.append(shape)
+
+        if not call_shapes:
+            return ("args2", "args1")
+        return tuple(call_shapes)
 
     @classmethod
     def _set_event_extra(cls, event: T.Any, key: str, value: T.Any) -> bool:
