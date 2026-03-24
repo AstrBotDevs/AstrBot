@@ -30,21 +30,28 @@ class CustomBuildHook(BuildHookInterface):
     PLUGIN_NAME = "custom"
 
     def initialize(self, version: str, build_data: dict) -> None:
-        # Only run when explicitly requested (e.g. during CI / release builds).
-        # This prevents `uv sync` / editable installs from triggering npm.
-        if os.environ.get("ASTRBOT_BUILD_DASHBOARD", "").strip() != "1":
-            return
-
         root = Path(self.root)
         dashboard_src = root / "dashboard"
         dist_src = dashboard_src / "dist"
         dist_target = root / "astrbot" / "dashboard" / "dist"
 
+        if os.environ.get("ASTRBOT_BUILD_DASHBOARD", "").strip() != "1":
+            # Ensure the target directory and a placeholder exist so the wheel
+            # build does not fail when artifacts = ["..."] is declared.
+            dist_target.mkdir(parents=True, exist_ok=True)
+            if not dist_target.exists() or not any(dist_target.iterdir()):
+                placeholder = dist_target / ".placeholder"
+                placeholder.write_text("# dashboard placeholder\n")
+            return
+
         if not dashboard_src.exists():
             logger.warning(
-                "[hatch_build] 'dashboard/' directory not found : skipping dashboard build.",
+                "[hatch_build] 'dashboard/' directory not found: skipping dashboard build.",
                 file=sys.stderr,
             )
+            dist_target.mkdir(parents=True, exist_ok=True)
+            placeholder = dist_target / ".placeholder"
+            placeholder.write_text("# dashboard placeholder\n")
             return
 
         # ── Install Node dependencies if node_modules is absent ─────────────
@@ -69,12 +76,15 @@ class CustomBuildHook(BuildHookInterface):
                 "[hatch_build] dashboard/dist not found after build: skipping copy.",
                 file=sys.stderr,
             )
+            dist_target.mkdir(parents=True, exist_ok=True)
+            placeholder = dist_target / ".placeholder"
+            placeholder.write_text("# dashboard placeholder\n")
             return
 
-        # ── Copy into the Python package tree ────────────────────────────────
+        # ── Copy into the Python package tree ───────────────────────────────
         if dist_target.exists():
             shutil.rmtree(dist_target)
         shutil.copytree(dist_src, dist_target)
         logger.info(
-            f"[hatch_build] Dashboard dist copied ￫ {dist_target.relative_to(root)}"
+            f"[hatch_build] Dashboard dist copied → {dist_target.relative_to(root)}"
         )
