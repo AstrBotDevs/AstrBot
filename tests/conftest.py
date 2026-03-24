@@ -15,13 +15,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 
-# 使用 tests/fixtures/helpers.py 中的共享工具函数,避免重复定义
-from tests.fixtures.helpers import create_mock_llm_response, create_mock_message_component
-
-# 将项目根目录添加到 sys.path
+# 将项目根目录添加到 sys.path（必须在导入前设置）
 PROJECT_ROOT = Path(__file__).parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+# 使用 tests/fixtures/helpers.py 中的共享工具函数,避免重复定义
+from tests.fixtures.helpers import create_mock_llm_response, create_mock_message_component
 
 # 设置测试环境变量
 os.environ.setdefault("TESTING", "true")
