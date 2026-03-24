@@ -712,15 +712,8 @@ export default {
                 const response = await axios.get('/api/subagent/config');
                 if (response.data.status === 'ok') {
                     const payload = response.data.data || [];
-                    this.subagentMainEnable = payload.main_enable;
-                    if (this.subagentMainEnable){
-                        if (Array.isArray(payload)) {
-                            this.availableSubagents = payload.filter(subagent => subagent.enabled !== false);
-                        } else {
-                            const subagents = payload.agents || [];
-                            this.availableSubagents = subagents.filter(subagent => subagent.enabled !== false);
-                        }
-                    }
+                    const subagents = payload.agents || [];
+                    this.availableSubagents = subagents.filter(subagent => subagent.enabled !== false);
                 } else {
                     this.$emit('error', response.data.message || 'Failed to load subagents');
                 }

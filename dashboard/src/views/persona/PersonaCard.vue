@@ -58,11 +58,11 @@
                     {{ persona.skills.length }} {{ tm('persona.skillsCount') }}
                 </v-chip>
                 <v-chip v-if="persona.subagents === null" size="small" color="success" variant="tonal"
-                    prepend-icon="mdi-lightning-bolt">
+                    prepend-icon="mdi-vector-link">
                     {{ tm('form.allSubagentsAvailable') }}
                 </v-chip>
                 <v-chip v-else-if="persona.subagents && persona.subagents.length > 0" size="small" color="primary"
-                    variant="tonal" prepend-icon="mdi-lightning-bolt">
+                    variant="tonal" prepend-icon="mdi-vector-link">
                     {{ persona.subagents.length }} {{ tm('persona.subagentsCount') }}
                 </v-chip>
             </div>
