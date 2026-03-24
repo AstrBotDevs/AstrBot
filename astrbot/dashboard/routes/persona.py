@@ -58,6 +58,7 @@ class PersonaRoute(Route):
                             "begin_dialogs": persona.begin_dialogs or [],
                             "tools": persona.tools,
                             "skills": persona.skills,
+                            "subagents": persona.subagents,
                             "custom_error_message": persona.custom_error_message,
                             "folder_id": persona.folder_id,
                             "sort_order": persona.sort_order,
@@ -99,6 +100,7 @@ class PersonaRoute(Route):
                         "begin_dialogs": persona.begin_dialogs or [],
                         "tools": persona.tools,
                         "skills": persona.skills,
+                        "subagents": persona.subagents,
                         "custom_error_message": persona.custom_error_message,
                         "folder_id": persona.folder_id,
                         "sort_order": persona.sort_order,
@@ -125,6 +127,7 @@ class PersonaRoute(Route):
             begin_dialogs = data.get("begin_dialogs", [])
             tools = data.get("tools")
             skills = data.get("skills")
+            subagents = data.get("subagents")
             custom_error_message = data.get("custom_error_message")
             folder_id = data.get("folder_id")  # None 表示根目录
             sort_order = data.get("sort_order", 0)
@@ -154,6 +157,7 @@ class PersonaRoute(Route):
                 begin_dialogs=begin_dialogs if begin_dialogs else None,
                 tools=tools if tools else None,
                 skills=skills if skills else None,
+                subagents=subagents if subagents else None,
                 custom_error_message=custom_error_message,
                 folder_id=folder_id,
                 sort_order=sort_order,
@@ -170,6 +174,7 @@ class PersonaRoute(Route):
                             "begin_dialogs": persona.begin_dialogs or [],
                             "tools": persona.tools or [],
                             "skills": persona.skills or [],
+                            "subagents": persona.subagents or [],
                             "custom_error_message": persona.custom_error_message,
                             "folder_id": persona.folder_id,
                             "sort_order": persona.sort_order,
@@ -201,6 +206,8 @@ class PersonaRoute(Route):
             tools = data.get("tools")
             has_skills = "skills" in data
             skills = data.get("skills")
+            has_subagents = "subagents" in data
+            subagents = data.get("subagents")
             has_custom_error_message = "custom_error_message" in data
             custom_error_message = data.get("custom_error_message")
 
@@ -232,6 +239,8 @@ class PersonaRoute(Route):
                 update_kwargs["tools"] = tools
             if has_skills:
                 update_kwargs["skills"] = skills
+            if has_subagents:
+                update_kwargs["subagents"] = subagents
             if has_custom_error_message:
                 update_kwargs["custom_error_message"] = custom_error_message
 

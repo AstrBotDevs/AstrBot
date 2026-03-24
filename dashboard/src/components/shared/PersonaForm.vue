@@ -265,6 +265,101 @@
                             </v-expansion-panel-text>
                         </v-expansion-panel>
 
+                        <!-- Subagents 选择面板 -->
+                        <v-expansion-panel value="subagents">
+                            <v-expansion-panel-title>
+                                <v-icon class="mr-2">mdi-vector-link</v-icon>
+                                {{ tm('form.subagents') }}
+                                <v-chip v-if="Array.isArray(personaForm.subagents) && personaForm.subagents.length > 0"
+                                    size="small" color="primary" variant="tonal" class="ml-2">
+                                    {{ personaForm.subagents.length }}
+                                </v-chip>
+                            </v-expansion-panel-title>
+
+                            <v-expansion-panel-text>
+                                <div class="mb-3">
+                                    <p class="text-body-2 text-medium-emphasis">
+                                        {{ tm('form.subagentsHelp') }}
+                                    </p>
+                                </div>
+
+                                <v-radio-group class="mt-2" v-model="subagentSelectValue" hide-details="true">
+                                    <v-radio :label="tm('form.subagentsAllAvailable')" value="0"></v-radio>
+                                    <v-radio :label="tm('form.subagentsSelectSpecific')" value="1"></v-radio>
+                                </v-radio-group>
+
+                                <div v-if="subagentSelectValue === '1'" class="mt-3 selected-config-area">
+                                    <v-text-field v-model="subagentSearch" :label="tm('form.searchSubagents')"
+                                        prepend-inner-icon="mdi-magnify" variant="outlined" density="compact"
+                                        hide-details clearable class="mb-3" />
+
+                                    <div v-if="filteredSubagents.length > 0" class="subagents-selection">
+                                        <v-virtual-scroll :items="filteredSubagents" height="240" item-height="48">
+                                            <template v-slot:default="{ item }">
+                                                <v-list-item :key="item.name" density="comfortable"
+                                                    @click="toggleSubagent(item.name)">
+                                                    <template v-slot:prepend>
+                                                        <v-checkbox-btn :model-value="isSubagentSelected(item.name)"
+                                                            @click.stop="toggleSubagent(item.name)" />
+                                                    </template>
+                                                    <v-list-item-title>
+                                                        {{ item.name }}
+                                                    </v-list-item-title>
+                                                    <v-list-item-subtitle v-if="item.public_description">
+                                                        {{ truncateText(item.public_description, 100) }}
+                                                    </v-list-item-subtitle>
+                                                </v-list-item>
+                                            </template>
+                                        </v-virtual-scroll>
+                                    </div>
+
+                                    <div v-else-if="!loadingSubagents && availableSubagents.length === 0"
+                                        class="text-center pa-4">
+                                        <v-icon size="48" color="grey-lighten-2"
+                                            class="mb-2">mdi-lightning-bolt</v-icon>
+                                        <p class="text-body-2 text-medium-emphasis">{{ tm('form.noSubagentsAvailable') }}
+                                        </p>
+                                    </div>
+
+                                    <div v-else-if="!loadingSubagents && filteredSubagents.length === 0"
+                                        class="text-center pa-4">
+                                        <v-icon size="48" color="grey-lighten-2" class="mb-2">mdi-magnify</v-icon>
+                                        <p class="text-body-2 text-medium-emphasis">{{ tm('form.noSubagentsFound') }}
+                                        </p>
+                                    </div>
+
+                                    <div v-if="loadingSubagents" class="text-center pa-4">
+                                        <v-progress-circular indeterminate color="primary" />
+                                        <p class="text-body-2 text-medium-emphasis mt-2">{{ tm('form.loadingSubagents') }}
+                                        </p>
+                                    </div>
+
+                                    <div class="mt-4">
+                                        <h4 class="text-subtitle-2 mb-2">
+                                            {{ tm('form.selectedSubagents') }}
+                                            <span v-if="personaForm.subagents === null" class="text-success">
+                                                ({{ tm('form.allSelected') }})
+                                            </span>
+                                            <span v-else-if="Array.isArray(personaForm.subagents)">
+                                                ({{ personaForm.subagents.length }})
+                                            </span>
+                                        </h4>
+                                        <div v-if="Array.isArray(personaForm.subagents) && personaForm.subagents.length > 0"
+                                            class="d-flex flex-wrap ga-1" style="max-height: 100px; overflow-y: auto;">
+                                            <v-chip v-for="subagentName in personaForm.subagents" :key="subagentName"
+                                                size="small" color="primary" variant="tonal" closable
+                                                @click:close="removeSubagent(subagentName)">
+                                                {{ subagentName }}
+                                            </v-chip>
+                                        </div>
+                                        <div v-else class="text-body-2 text-medium-emphasis">
+                                            {{ tm('form.noSubagentsSelected') }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </v-expansion-panel-text>
+                        </v-expansion-panel>
+
                         <!-- 预设对话面板 -->
                         <v-expansion-panel value="dialogs">
                             <v-expansion-panel-title>
@@ -367,6 +462,9 @@ export default {
             loadingTools: false,
             availableSkills: [],
             loadingSkills: false,
+            subagentMainEnable:false,
+            availableSubagents: [],
+            loadingSubagents: false,
             existingPersonaIds: [], // 已存在的人格ID列表
             personaForm: {
                 persona_id: '',
@@ -375,6 +473,7 @@ export default {
                 begin_dialogs: [],
                 tools: [],
                 skills: [],
+                subagents: [],
                 folder_id: null
             },
             personaIdRules: [
@@ -388,7 +487,9 @@ export default {
             ],
             toolSearch: '',
             skillSearch: '',
-            skillSelectValue: '0'
+            skillSelectValue: '0',
+            subagentSearch: '',
+            subagentSelectValue: '0'
         }
     },
 
@@ -422,6 +523,16 @@ export default {
                 (skill.description && skill.description.toLowerCase().includes(search))
             );
         },
+        filteredSubagents() {
+            if (!this.subagentSearch) {
+                return this.availableSubagents;
+            }
+            const search = this.subagentSearch.toLowerCase();
+            return this.availableSubagents.filter(subagent =>
+                subagent.name.toLowerCase().includes(search) ||
+                (subagent.public_description && subagent.public_description.toLowerCase().includes(search))
+            );
+        },
         folderDisplayName() {
             // 优先使用传入的文件夹名称
             if (this.currentFolderName) {
@@ -450,6 +561,7 @@ export default {
                 this.loadMcpServers();
                 this.loadTools();
                 this.loadSkills();
+                this.loadSubagents();
             }
         },
         editingPersona: {
@@ -484,6 +596,15 @@ export default {
                     this.personaForm.skills = [];
                 }
             }
+        },
+        subagentSelectValue(newValue) {
+            if (newValue === '0') {
+                this.personaForm.subagents = null;
+            } else if (newValue === '1') {
+                if (this.personaForm.subagents === null) {
+                    this.personaForm.subagents = [];
+                }
+            }
         }
     },
 
@@ -496,10 +617,12 @@ export default {
                 begin_dialogs: [],
                 tools: [],
                 skills: [],
+                subagents: [],
                 folder_id: this.currentFolderId
             };
             this.toolSelectValue = '0';
             this.skillSelectValue = '0';
+            this.subagentSelectValue = '0'
             this.expandedPanels = this.getDefaultExpandedPanels();
         },
 
@@ -511,11 +634,13 @@ export default {
                 begin_dialogs: [...(persona.begin_dialogs || [])],
                 tools: persona.tools === null ? null : [...(persona.tools || [])],
                 skills: persona.skills === null ? null : [...(persona.skills || [])],
+                subagents: persona.subagents === null ? null : [...(persona.subagents || [])],
                 folder_id: persona.folder_id
             };
             // 根据 tools 的值设置 toolSelectValue
             this.toolSelectValue = persona.tools === null ? '0' : '1';
             this.skillSelectValue = persona.skills === null ? '0' : '1';
+            this.subagentSelectValue = persona.subagents === null ? '0' : '1';
             this.expandedPanels = this.getDefaultExpandedPanels();
         },
 
@@ -578,6 +703,32 @@ export default {
                 this.availableSkills = [];
             } finally {
                 this.loadingSkills = false;
+            }
+        },
+
+        async loadSubagents(){
+            this.loadingSubagents = true;
+            try {
+                const response = await axios.get('/api/subagent/config');
+                if (response.data.status === 'ok') {
+                    const payload = response.data.data || [];
+                    this.subagentMainEnable = payload.main_enable;
+                    if (this.subagentMainEnable){
+                        if (Array.isArray(payload)) {
+                            this.availableSubagents = payload.filter(subagent => subagent.enabled !== false);
+                        } else {
+                            const subagents = payload.agents || [];
+                            this.availableSubagents = subagents.filter(subagent => subagent.enabled !== false);
+                        }
+                    }
+                } else {
+                    this.$emit('error', response.data.message || 'Failed to load subagents');
+                }
+            } catch (error) {
+                this.$emit('error', error.response?.data?.message || 'Failed to load subagents');
+                this.availableSubagents = [];
+            } finally {
+                this.loadingSubagents = false;
             }
         },
 
@@ -779,6 +930,38 @@ export default {
             }
         },
 
+        toggleSubagent(subagentName) {
+            if (this.personaForm.subagents === null) {
+                this.personaForm.subagents = this.availableSubagents.map(subagent => subagent.name)
+                    .filter(name => name !== subagentName);
+                this.subagentSelectValue = '1';
+            } else if (Array.isArray(this.personaForm.subagents)) {
+                const index = this.personaForm.subagents.indexOf(subagentName);
+                if (index !== -1) {
+                    this.personaForm.subagents.splice(index, 1);
+                } else {
+                    this.personaForm.subagents.push(subagentName);
+                }
+            } else {
+                this.personaForm.subagents = [subagentName];
+                this.subagentSelectValue = '1';
+            }
+        },
+
+        removeSubagent(subagentName) {
+            if (this.personaForm.subagents === null) {
+                this.personaForm.subagents = this.availableSubagents.map(subagent => subagent.name)
+                    .filter(name => name !== subagentName);
+                this.subagentSelectValue = '1';
+            } else if (Array.isArray(this.personaForm.subagents)) {
+                const index = this.personaForm.subagents.indexOf(subagentName);
+                if (index !== -1) {
+                    this.personaForm.subagents.splice(index, 1);
+                }
+            }
+        },
+
+
         truncateText(text, maxLength) {
             if (!text) return '';
             return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
@@ -805,6 +988,13 @@ export default {
                 return true;
             }
             return Array.isArray(this.personaForm.skills) && this.personaForm.skills.includes(skillName);
+        },
+
+        isSubagentSelected(subagentName) {
+            if (this.personaForm.subagents === null) {
+                return true;
+            }
+            return Array.isArray(this.personaForm.subagents) && this.personaForm.subagents.includes(subagentName);
         },
 
         isServerSelected(server) {
@@ -864,6 +1054,11 @@ export default {
     overflow-y: auto;
 }
 
+.subagents-selection {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
 .v-virtual-scroll {
     padding-bottom: 16px;
 }
@@ -893,7 +1088,8 @@ export default {
     }
 
     .tools-selection,
-    .skills-selection {
+    .skills-selection,
+    .subagents-selection{
         max-height: 38vh;
     }
 

@@ -52,6 +52,17 @@
     "allSkillsAvailable": "Use all available Skills",
     "noSkillsSelected": "No skills selected",
     "skillsRuntimeNoneWarning": "Computer Use runtime is set to None; Skills may not run correctly because no runtime is enabled.",
+    "subagents": "Subagents Selection",
+    "subagentsHelp": "Select available Subagents for this persona. Subagents can participate as auxiliary agents in task execution.",
+    "subagentsAllAvailable": "Use all Subagents by default",
+    "subagentsSelectSpecific": "Select specific Subagents",
+    "searchSubagents": "Search Subagents",
+    "selectedSubagents": "Selected Subagents",
+    "noSubagentsAvailable": "No Subagents available",
+    "noSubagentsFound": "No matching Subagents found",
+    "loadingSubagents": "Loading Subagents...",
+    "allSubagentsAvailable": "Use all available Subagents",
+    "noSubagentsSelected": "No Subagents selected",
     "createInFolder": "Will be created in \"{folder}\"",
     "rootFolder": "All Personas"
   },
@@ -88,6 +99,7 @@
     "personasTitle": "Personas",
     "toolsCount": "tools",
     "skillsCount": "skills",
+    "subagentsCount": "subagents",
     "contextMenu": {
       "moveTo": "Move to..."
     },

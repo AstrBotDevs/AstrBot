@@ -52,6 +52,17 @@
         "allSkillsAvailable": "Использовать все доступные навыки",
         "noSkillsSelected": "Навыки не выбраны",
         "skillsRuntimeNoneWarning": "Среда выполнения Computer Use не задана. Навыки могут не работать, так как нет активного окружения.",
+        "subagents": "Выбор Subagents",
+        "subagentsHelp": "Выберите доступных Subagents для этого персонажа. Subagents могут участвовать в выполнении задач в качестве вспомогательных агентов.",
+        "subagentsAllAvailable": "По умолчанию использовать всех Subagents",
+        "subagentsSelectSpecific": "Выбрать конкретных Subagents",
+        "searchSubagents": "Поиск Subagents",
+        "selectedSubagents": "Выбранные Subagents",
+        "noSubagentsAvailable": "Нет доступных Subagents",
+        "noSubagentsFound": "Совпадающие Subagents не найдены",
+        "loadingSubagents": "Загрузка Subagents...",
+        "allSubagentsAvailable": "Использовать всех доступных Subagents",
+        "noSubagentsSelected": "Не выбрано ни одного Subagents",
         "createInFolder": "Будет создан в папке «{folder}»",
         "rootFolder": "Все персонажи"
     },
@@ -88,6 +99,7 @@
         "personasTitle": "Персонаж",
         "toolsCount": "инстр.",
         "skillsCount": "навыков",
+        "subagentsCount": "subagents",
         "contextMenu": {
             "moveTo": "Переместить в..."
         },

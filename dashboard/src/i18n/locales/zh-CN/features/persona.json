@@ -52,6 +52,17 @@
     "allSkillsAvailable": "使用所有可用 Skills",
     "noSkillsSelected": "未选择任何 Skills",
     "skillsRuntimeNoneWarning": "Computer Use 运行环境为无，Skills 可能无法正确被 Agent 运行，因为没有启用运行环境。",
+    "subagents": "Subagents 选择",
+    "subagentsHelp": "为这个人格选择可用的 Subagents。Subagents 可以作为辅助代理参与任务执行。",
+    "subagentsAllAvailable": "默认使用全部 Subagents",
+    "subagentsSelectSpecific": "选择指定 Subagents",
+    "searchSubagents": "搜索 Subagents",
+    "selectedSubagents": "已选择的 Subagents",
+    "noSubagentsAvailable": "暂无可用 Subagents",
+    "noSubagentsFound": "未找到匹配的 Subagents",
+    "loadingSubagents": "正在加载 Subagents...",
+    "allSubagentsAvailable": "使用所有可用 Subagents",
+    "noSubagentsSelected": "未选择任何 Subagents",
     "createInFolder": "将在「{folder}」中创建",
     "rootFolder": "全部人格"
   },
@@ -88,6 +99,7 @@
     "personasTitle": "人格",
     "toolsCount": "个工具",
     "skillsCount": "个 Skills",
+    "subagentsCount": "个 Subagents",
     "contextMenu": {
       "moveTo": "移动到..."
     },

@@ -386,6 +386,23 @@ async def _ensure_persona_and_skills(
 
         assigned_tools: set[str] = set()
         agents = orch_cfg.get("agents", [])
+
+        # 1. 提取白名单
+        sub_agents_cfg = (persona or {}).get("subagents")
+        persona_subagents = (
+            {str(name).strip() for name in sub_agents_cfg if str(name).strip()}
+            if sub_agents_cfg is not None
+            else None
+        )
+
+        # 2. 过滤 agents
+        if persona_subagents is not None:
+            agents = [
+                agent
+                for agent in agents
+                if isinstance(agent, dict)
+                and str(agent.get("name", "")).strip() in persona_subagents
+            ]
         if isinstance(agents, list):
             for a in agents:
                 if not isinstance(a, dict):
@@ -421,8 +438,16 @@ async def _ensure_persona_and_skills(
             req.func_tool = ToolSet()
 
         # add subagent handoff tools
-        for tool in so.handoffs:
-            req.func_tool.add_tool(tool)
+        # 如果 sub_agents_cfg 为 None 或空列表，则默认放行所有 handoffs
+        if not sub_agents_cfg:
+            for tool in so.handoffs:
+                req.func_tool.add_tool(tool)
+        else:
+            for tool in so.handoffs:
+                # 去掉 "transfer_to_" 前缀再匹配
+                short_name = tool.name.replace("transfer_to_", "")
+                if short_name in sub_agents_cfg:
+                    req.func_tool.add_tool(tool)
 
         # check duplicates
         if remove_dup:
