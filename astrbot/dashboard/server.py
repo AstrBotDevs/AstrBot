@@ -6,6 +6,7 @@ import os
 import platform
 import re
 import socket
+import ssl
 from collections.abc import Callable
 from datetime import datetime
 from ipaddress import IPv4Address, IPv6Address, ip_address
@@ -584,7 +585,11 @@ class AstrBotDashboard:
             config.accesslog = "-"
             config.access_log_format = "%(h)s %(r)s %(s)s %(b)s %(D)s"
 
-        await serve(self.app, config, shutdown_trigger=self.shutdown_trigger)
+        try:
+            await serve(self.app, config, shutdown_trigger=self.shutdown_trigger)
+        except (ssl.SSLError, asyncio.CancelledError):
+            # Client disconnected abruptly — SSL shutdown errors are benign.
+            pass
 
     @staticmethod
     def _build_bind(host: str, port: int) -> str:
