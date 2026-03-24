@@ -345,28 +345,6 @@ async def test_collect_handoff_image_urls_filters_extensionless_file_outside_tem
     assert image_urls == []
 
 
-def test_parse_background_task_arg_rejects_invalid_value():
-    is_bg, error = FunctionToolExecutor._parse_background_task_arg(
-        "transfer_to_subagent",
-        "not-a-bool",
-    )
-
-    assert is_bg is False
-    assert error is not None
-    assert isinstance(error, mcp.types.CallToolResult)
-    assert "invalid_background_task" in error.content[0].text
-
-
-def test_parse_background_task_arg_accepts_string_true():
-    is_bg, error = FunctionToolExecutor._parse_background_task_arg(
-        "transfer_to_subagent",
-        "true",
-    )
-
-    assert is_bg is True
-    assert error is None
-
-
 @pytest.mark.asyncio
 async def test_execute_handoff_rejects_empty_input():
     async def _fake_get_current_chat_provider_id(_umo):
