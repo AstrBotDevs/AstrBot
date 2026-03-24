@@ -36,7 +36,13 @@ else:
 
 from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file, download_image_by_url, file_to_base64
+from astrbot.core.utils.io import (  # noqa: I001
+    download_audio_by_url,
+    download_file,
+    download_image_by_url,
+    file_to_base64,
+    save_temp_audio,
+)
 
 
 class ComponentType(str, Enum):
@@ -157,17 +163,12 @@ class Record(BaseMessageComponent):
         if self.file.startswith("file:///"):
             return self.file[8:]
         if self.file.startswith("http"):
-            file_path = await download_image_by_url(self.file)
+            file_path = await download_audio_by_url(self.file)
             return os.path.abspath(file_path)
         if self.file.startswith("base64://"):
             bs64_data = self.file.removeprefix("base64://")
-            image_bytes = base64.b64decode(bs64_data)
-            file_path = os.path.join(
-                get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.jpg"
-            )
-            with open(file_path, "wb") as f:
-                f.write(image_bytes)
-            return os.path.abspath(file_path)
+            audio_bytes = base64.b64decode(bs64_data)
+            return os.path.abspath(save_temp_audio(audio_bytes))
         if os.path.exists(self.file):
             return os.path.abspath(self.file)
         raise Exception(f"not a valid file: {self.file}")
@@ -185,7 +186,7 @@ class Record(BaseMessageComponent):
         if self.file.startswith("file:///"):
             bs64_data = file_to_base64(self.file[8:])
         elif self.file.startswith("http"):
-            file_path = await download_image_by_url(self.file)
+            file_path = await download_audio_by_url(self.file)
             bs64_data = file_to_base64(file_path)
         elif self.file.startswith("base64://"):
             bs64_data = self.file
