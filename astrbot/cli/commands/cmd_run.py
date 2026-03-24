@@ -7,7 +7,8 @@ from pathlib import Path
 import click
 from filelock import FileLock, Timeout
 
-from ..utils import check_astrbot_root, check_dashboard, get_astrbot_root
+from astrbot.cli.utils import DashboardManager
+from astrbot.core.utils.astrbot_path import get_astrbot_root
 
 
 async def run_astrbot(astrbot_root: Path) -> None:
@@ -15,7 +16,7 @@ async def run_astrbot(astrbot_root: Path) -> None:
     from astrbot.core import LogBroker, LogManager, db_helper, logger
     from astrbot.core.initial_loader import InitialLoader
 
-    await check_dashboard(astrbot_root / "data")
+    await DashboardManager().ensure_installed(astrbot_root)
 
     log_broker = LogBroker()
     LogManager.set_queue_handler(logger, log_broker)
@@ -33,9 +34,9 @@ def run(reload: bool, port: str) -> None:
     """Run AstrBot"""
     try:
         os.environ["ASTRBOT_CLI"] = "1"
-        astrbot_root = get_astrbot_root()
+        astrbot_root = Path(get_astrbot_root())
 
-        if not check_astrbot_root(astrbot_root):
+        if not (astrbot_root / "data").exists():
             raise click.ClickException(
                 f"{astrbot_root} is not a valid AstrBot root directory. Use 'astrbot init' to initialize",
             )
