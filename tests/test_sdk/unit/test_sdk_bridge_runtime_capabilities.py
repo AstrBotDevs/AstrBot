@@ -1,6 +1,7 @@
 # ruff: noqa: E402
 from __future__ import annotations
 
+import asyncio
 import sys
 import types
 from asyncio import Queue
@@ -538,6 +539,46 @@ class _RequestScopedHookSession:
         return {"sdk_local_extras": {}}
 
 
+class _ChainedExtrasHookSession:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object], str]] = []
+
+    async def invoke_handler(
+        self,
+        handler_id: str,
+        event_payload: dict[str, object],
+        *,
+        request_id: str,
+        args: dict[str, object],
+    ) -> dict[str, object]:
+        del args
+        self.calls.append((handler_id, event_payload, request_id))
+        if handler_id.endswith("first"):
+            return {"sdk_local_extras": {"stage": "first", "shared": "one"}}
+        if handler_id.endswith("second"):
+            return {"sdk_local_extras": {"stage": "second", "shared": "two"}}
+        return {}
+
+
+class _FailThenRecoverHookSession:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object], str]] = []
+
+    async def invoke_handler(
+        self,
+        handler_id: str,
+        event_payload: dict[str, object],
+        *,
+        request_id: str,
+        args: dict[str, object],
+    ) -> dict[str, object]:
+        del args
+        self.calls.append((handler_id, event_payload, request_id))
+        if handler_id.endswith("first"):
+            raise RuntimeError("first handler failed")
+        return {"sdk_local_extras": {"last_reply": "recovered"}}
+
+
 class _SystemEventSession:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
@@ -570,6 +611,21 @@ class _RequestScopeSession:
         del handler_id, event_payload, args
         self.request_ids.append(request_id)
         return {}
+
+
+class _CancelableSession:
+    def __init__(self, *, peer: object | None = None) -> None:
+        self.peer = peer
+        self.cancel = AsyncMock()
+        self.stop = AsyncMock()
+
+
+class _TemporaryClient:
+    def __init__(self) -> None:
+        self.cleaned = False
+
+    async def cleanup(self) -> None:
+        self.cleaned = True
 
 
 class _ScheduleDispatchSession:
@@ -1167,6 +1223,545 @@ async def test_sdk_bridge_persists_request_scoped_extras_and_sent_payloads() -> 
     assert second_payload["sent_messages"] == [
         {"type": "text", "data": {"text": "reply text"}}
     ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_chains_sdk_local_extras_across_matching_handlers() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    session = _ChainedExtrasHookSession()
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-demo",
+            load_order=0,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.first",
+                        trigger=EventTrigger(event_type="after_message_sent"),
+                    ),
+                    declaration_order=0,
+                ),
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.second",
+                        trigger=EventTrigger(event_type="after_message_sent"),
+                    ),
+                    declaration_order=1,
+                ),
+            ],
+            session=session,
+        )
+    }
+
+    event = _TypedHookFakeEvent()
+    event._extras = {"host": "value"}
+    bridge._request_overlays["dispatch-typed"] = bridge._ensure_request_overlay(
+        "dispatch-typed",
+        should_call_llm=False,
+    )
+
+    await bridge.dispatch_message_event(
+        "after_message_sent",
+        event,
+        {"message_outline": "reply text"},
+    )
+
+    assert [call[0] for call in session.calls] == [
+        "sdk-demo:main.first",
+        "sdk-demo:main.second",
+    ]
+    second_payload = session.calls[1][1]
+    assert second_payload["host_extras"] == {"host": "value"}
+    assert second_payload["sdk_local_extras"] == {"stage": "first", "shared": "one"}
+    assert second_payload["extras"] == {
+        "host": "value",
+        "stage": "first",
+        "shared": "one",
+    }
+    overlay = bridge.get_request_overlay_by_token("dispatch-typed")
+    assert overlay is not None
+    assert overlay.sdk_local_extras == {"stage": "second", "shared": "two"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_dispatch_message_event_isolates_handler_exceptions() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    session = _FailThenRecoverHookSession()
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-demo",
+            load_order=0,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.first",
+                        trigger=EventTrigger(event_type="agent_done"),
+                    ),
+                    declaration_order=0,
+                ),
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.second",
+                        trigger=EventTrigger(event_type="agent_done"),
+                    ),
+                    declaration_order=1,
+                ),
+            ],
+            session=session,
+        )
+    }
+
+    event = _TypedHookFakeEvent()
+    bridge._request_overlays["dispatch-typed"] = bridge._ensure_request_overlay(
+        "dispatch-typed",
+        should_call_llm=True,
+    )
+
+    await bridge.dispatch_message_event(
+        "agent_done",
+        event,
+        {"completion_text": "reply text"},
+    )
+
+    assert [call[0] for call in session.calls] == [
+        "sdk-demo:main.first",
+        "sdk-demo:main.second",
+    ]
+    overlay = bridge.get_request_overlay_by_token("dispatch-typed")
+    assert overlay is not None
+    assert overlay.sdk_local_extras == {"last_reply": "recovered"}
+    first_request_id = session.calls[0][2]
+    second_request_id = session.calls[1][2]
+    assert bridge.get_request_overlay_by_request_id(first_request_id) is not None
+    assert bridge.get_request_overlay_by_request_id(second_request_id) is not None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_close_request_overlay_cleans_all_request_scopes() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    session = _ChainedExtrasHookSession()
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-demo",
+            load_order=0,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.first",
+                        trigger=EventTrigger(event_type="after_message_sent"),
+                    ),
+                    declaration_order=0,
+                ),
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.second",
+                        trigger=EventTrigger(event_type="after_message_sent"),
+                    ),
+                    declaration_order=1,
+                ),
+            ],
+            session=session,
+        )
+    }
+
+    event = _TypedHookFakeEvent()
+    bridge._request_overlays["dispatch-typed"] = bridge._ensure_request_overlay(
+        "dispatch-typed",
+        should_call_llm=False,
+    )
+
+    await bridge.dispatch_message_event(
+        "after_message_sent",
+        event,
+        {"message_outline": "reply text"},
+    )
+
+    request_ids = [call[2] for call in session.calls]
+    assert len(request_ids) == 2
+    for request_id in request_ids:
+        assert bridge.get_request_overlay_by_request_id(request_id) is not None
+        assert bridge.resolve_request_session(request_id) is not None
+
+    bridge.close_request_overlay_for_event(event)
+
+    for request_id in request_ids:
+        assert bridge.get_request_overlay_by_request_id(request_id) is None
+        assert bridge.resolve_request_session(request_id) is None
+        assert request_id not in bridge._request_plugin_ids
+    assert bridge.get_request_context_by_token("dispatch-typed") is None
+
+
+@pytest.mark.unit
+def test_sdk_bridge_persist_sdk_local_extras_handles_invalid_payloads() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    overlay = bridge._ensure_request_overlay("dispatch-typed", should_call_llm=False)
+    overlay.sdk_local_extras = {"keep": "existing"}
+
+    bridge._persist_sdk_local_extras_from_handler(
+        overlay,
+        "invalid",
+        plugin_id="sdk-demo",
+        handler_id="sdk-demo:main.invalid",
+    )
+    assert overlay.sdk_local_extras == {"keep": "existing"}
+
+    bridge._persist_sdk_local_extras_from_handler(
+        overlay,
+        {
+            "valid": "value",
+            "invalid": object(),
+            "nested": [1, object(), {"safe": "ok", "drop": object()}],
+        },
+        plugin_id="sdk-demo",
+        handler_id="sdk-demo:main.normalize",
+    )
+    assert overlay.sdk_local_extras == {
+        "valid": "value",
+        "nested": [1, {"safe": "ok"}],
+    }
+
+    bridge._persist_sdk_local_extras_from_handler(
+        overlay,
+        None,
+        plugin_id="sdk-demo",
+        handler_id="sdk-demo:main.clear",
+    )
+    assert overlay.sdk_local_extras == {}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_cancel_plugin_requests_cancels_active_worker_tasks() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    session = _CancelableSession(peer=object())
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            plugin_id="sdk-demo",
+            session=session,
+        )
+    }
+    overlay = bridge._ensure_request_overlay("dispatch-typed", should_call_llm=True)
+    cleanup_task = overlay.cleanup_task
+    request_task = asyncio.create_task(asyncio.sleep(60))
+    bridge._plugin_requests = {
+        "sdk-demo": {
+            "req-1": types.SimpleNamespace(
+                request_id="req-1",
+                dispatch_token="dispatch-typed",
+                task=request_task,
+                logical_cancelled=False,
+            )
+        }
+    }
+    bridge._request_contexts["dispatch-typed"] = types.SimpleNamespace(
+        plugin_id="sdk-demo",
+        request_id="req-1",
+        dispatch_token="dispatch-typed",
+        dispatch_state=None,
+        cancelled=False,
+    )
+    bridge._track_request_scope(
+        dispatch_token="dispatch-typed",
+        request_id="req-1",
+        plugin_id="sdk-demo",
+    )
+
+    await bridge._cancel_plugin_requests("sdk-demo")
+    await asyncio.sleep(0)
+
+    session.cancel.assert_awaited_once_with("req-1")
+    assert request_task.cancelled() is True
+    assert bridge._plugin_requests == {}
+    assert bridge.get_request_overlay_by_token("dispatch-typed") is None
+    assert bridge.get_request_context_by_token("dispatch-typed") is None
+    if cleanup_task is not None:
+        assert cleanup_task.cancelled() is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_cancel_plugin_requests_marks_logical_cancel_without_worker() -> (
+    None
+):
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    session = _CancelableSession(peer=None)
+    inflight = types.SimpleNamespace(
+        request_id="req-1",
+        dispatch_token="dispatch-typed",
+        task=types.SimpleNamespace(done=lambda: False, cancel=MagicMock()),
+        logical_cancelled=False,
+    )
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            plugin_id="sdk-demo",
+            session=session,
+        )
+    }
+    bridge._plugin_requests = {"sdk-demo": {"req-1": inflight}}
+
+    await bridge._cancel_plugin_requests("sdk-demo")
+
+    session.cancel.assert_not_awaited()
+    inflight.task.cancel.assert_not_called()
+    assert inflight.logical_cancelled is True
+    assert bridge._plugin_requests == {}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_handle_worker_closed_retries_once() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    plugin = types.SimpleNamespace(name="sdk-demo")
+    record = types.SimpleNamespace(
+        plugin_id="sdk-demo",
+        plugin=plugin,
+        load_order=3,
+        session=object(),
+        state="enabled",
+        restart_attempted=False,
+    )
+    bridge._records = {"sdk-demo": record}
+    bridge._cancel_plugin_requests = AsyncMock()  # type: ignore[method-assign]
+    bridge._close_temporary_mcp_sessions = AsyncMock()  # type: ignore[method-assign]
+    bridge._shutdown_local_mcp_servers = AsyncMock()  # type: ignore[method-assign]
+    bridge._load_or_reload_plugin = AsyncMock()  # type: ignore[method-assign]
+
+    await bridge._handle_worker_closed("sdk-demo")
+
+    bridge._cancel_plugin_requests.assert_awaited_once_with("sdk-demo")
+    bridge._close_temporary_mcp_sessions.assert_awaited_once_with("sdk-demo")
+    bridge._shutdown_local_mcp_servers.assert_awaited_once_with(record)
+    bridge._load_or_reload_plugin.assert_awaited_once_with(
+        plugin,
+        load_order=3,
+        reset_restart_budget=False,
+    )
+    assert record.restart_attempted is True
+    assert record.session is None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", ["reloading", "disabled"])
+async def test_sdk_bridge_handle_worker_closed_skips_retry_for_non_running_states(
+    state: str,
+) -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    record = types.SimpleNamespace(
+        plugin_id="sdk-demo",
+        plugin=types.SimpleNamespace(name="sdk-demo"),
+        load_order=0,
+        session=object(),
+        state=state,
+        restart_attempted=False,
+    )
+    bridge._records = {"sdk-demo": record}
+    bridge._cancel_plugin_requests = AsyncMock()  # type: ignore[method-assign]
+    bridge._close_temporary_mcp_sessions = AsyncMock()  # type: ignore[method-assign]
+    bridge._shutdown_local_mcp_servers = AsyncMock()  # type: ignore[method-assign]
+    bridge._load_or_reload_plugin = AsyncMock()  # type: ignore[method-assign]
+
+    await bridge._handle_worker_closed("sdk-demo")
+
+    bridge._load_or_reload_plugin.assert_not_awaited()
+    assert record.session is None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_handle_worker_closed_marks_record_failed_after_retry() -> (
+    None
+):
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    record = types.SimpleNamespace(
+        plugin_id="sdk-demo",
+        plugin=types.SimpleNamespace(name="sdk-demo"),
+        load_order=0,
+        session=object(),
+        state="enabled",
+        restart_attempted=True,
+    )
+    bridge._records = {"sdk-demo": record}
+    bridge._http_routes = {"sdk-demo": [types.SimpleNamespace(route="/health")]}
+    bridge._session_waiters = {"sdk-demo": {"waiter"}}
+    bridge._cancel_plugin_requests = AsyncMock()  # type: ignore[method-assign]
+    bridge._close_temporary_mcp_sessions = AsyncMock()  # type: ignore[method-assign]
+    bridge._shutdown_local_mcp_servers = AsyncMock()  # type: ignore[method-assign]
+    bridge._unregister_schedule_jobs = AsyncMock()  # type: ignore[method-assign]
+    bridge._load_or_reload_plugin = AsyncMock()  # type: ignore[method-assign]
+
+    await bridge._handle_worker_closed("sdk-demo")
+
+    bridge._load_or_reload_plugin.assert_not_awaited()
+    bridge._unregister_schedule_jobs.assert_awaited_once_with("sdk-demo")
+    assert record.state == "failed"
+    assert "sdk-demo" not in bridge._http_routes
+    assert "sdk-demo" not in bridge._session_waiters
+
+
+@pytest.mark.unit
+def test_sdk_bridge_http_route_conflict_and_resolution() -> None:
+    star_context = _OverlayFakeStarContext()
+    star_context.registered_web_apis = [
+        ("/legacy", object(), ["GET"], "legacy route"),
+    ]
+    bridge = SdkPluginBridge(star_context)
+
+    with pytest.raises(AstrBotError, match="legacy plugin route"):
+        bridge.register_http_api(
+            plugin_id="sdk-demo",
+            route="/legacy",
+            methods=["GET"],
+            handler_capability="http.legacy",
+            description="legacy conflict",
+        )
+
+    bridge.register_http_api(
+        plugin_id="sdk-a",
+        route="health",
+        methods=["POST", "GET"],
+        handler_capability="http.health",
+        description="sdk health",
+    )
+    with pytest.raises(AstrBotError, match="SDK plugin route"):
+        bridge.register_http_api(
+            plugin_id="sdk-b",
+            route="/health",
+            methods=["GET"],
+            handler_capability="http.other",
+            description="sdk conflict",
+        )
+
+    record_a = types.SimpleNamespace(plugin_id="sdk-a", load_order=1)
+    bridge._records = {
+        "sdk-a": record_a,
+        "sdk-b": types.SimpleNamespace(plugin_id="sdk-b", load_order=2),
+    }
+
+    resolved = bridge._resolve_http_route("health", "get")
+    assert resolved is not None
+    resolved_record, resolved_route = resolved
+    assert resolved_record is record_a
+    assert resolved_route.route == "/health"
+    assert resolved_route.methods == ("GET", "POST")
+    assert bridge._resolve_http_route("/health", "DELETE") is None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_turn_off_plugin_disables_and_tears_down() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    bridge._persist_state_overrides = lambda: None
+    record = types.SimpleNamespace(
+        plugin_id="sdk-demo",
+        state="enabled",
+        failure_reason="boom",
+    )
+    bridge._records = {"sdk-demo": record}
+    bridge._cancel_plugin_requests = AsyncMock()  # type: ignore[method-assign]
+    bridge._teardown_plugin = AsyncMock()  # type: ignore[method-assign]
+
+    await bridge.turn_off_plugin("sdk-demo")
+
+    bridge._cancel_plugin_requests.assert_awaited_once_with("sdk-demo")
+    bridge._teardown_plugin.assert_awaited_once_with("sdk-demo")
+    assert record.state == "disabled"
+    assert record.failure_reason == ""
+    assert bridge._state_overrides["sdk-demo"]["disabled"] is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_turn_on_plugin_reloads_and_clears_disabled_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    bridge._persist_state_overrides = lambda: None
+    bridge._state_overrides = {"sdk-demo": {"disabled": True}}
+    plugin = types.SimpleNamespace(name="sdk-demo")
+    discovered = types.SimpleNamespace(plugins=[plugin], issues=[])
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.discover_plugins",
+        lambda _plugins_dir: discovered,
+    )
+    planned: list[list[object]] = []
+    bridge.env_manager.plan = lambda plugins: planned.append(list(plugins))  # type: ignore[method-assign]
+    bridge._load_or_reload_plugin = AsyncMock()  # type: ignore[method-assign]
+
+    await bridge.turn_on_plugin("sdk-demo")
+
+    assert planned == [[plugin]]
+    bridge._load_or_reload_plugin.assert_awaited_once_with(
+        plugin,
+        load_order=0,
+        reset_restart_budget=True,
+    )
+    assert bridge._state_overrides == {}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_stop_cleans_runtime_state() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    bridge._started = True
+    overlay = bridge._ensure_request_overlay("dispatch-typed", should_call_llm=True)
+    if overlay.cleanup_task is not None:
+        overlay.cleanup_task.cancel()
+    cleanup_task = asyncio.create_task(asyncio.sleep(60))
+    overlay.cleanup_task = cleanup_task
+    bridge._request_contexts["dispatch-typed"] = types.SimpleNamespace(cancelled=False)
+    bridge._request_id_to_token["req-1"] = "dispatch-typed"
+    bridge._request_plugin_ids["req-1"] = "sdk-demo"
+    bridge._plugin_requests = {
+        "sdk-demo": {
+            "req-1": types.SimpleNamespace(
+                request_id="req-1",
+                dispatch_token="dispatch-typed",
+                task=types.SimpleNamespace(done=lambda: True),
+                logical_cancelled=False,
+            )
+        }
+    }
+    session = _CancelableSession(peer=None)
+    record = types.SimpleNamespace(
+        plugin_id="sdk-demo",
+        session=session,
+        local_mcp_servers={},
+    )
+    bridge._records = {"sdk-demo": record}
+    bridge._http_routes = {"sdk-demo": [types.SimpleNamespace(route="/health")]}
+    bridge._session_waiters = {"sdk-demo": {"waiter"}}
+    bridge._schedule_job_ids = {"sdk-demo": {"job-1"}}
+    bridge._temporary_mcp_sessions = {
+        "temp-1": types.SimpleNamespace(
+            plugin_id="sdk-demo",
+            client=_TemporaryClient(),
+        )
+    }
+
+    await bridge.stop()
+    await asyncio.sleep(0)
+
+    session.stop.assert_awaited_once()
+    assert bridge._records == {}
+    assert bridge._request_contexts == {}
+    assert bridge._request_id_to_token == {}
+    assert bridge._request_plugin_ids == {}
+    assert bridge._request_overlays == {}
+    assert bridge._plugin_requests == {}
+    assert bridge._http_routes == {}
+    assert bridge._session_waiters == {}
+    assert bridge._schedule_job_ids == {}
+    assert bridge._temporary_mcp_sessions == {}
+    assert cleanup_task.cancelled() is True
+    assert bridge._started is False
+    assert bridge._stopping is False
 
 
 @pytest.mark.unit
