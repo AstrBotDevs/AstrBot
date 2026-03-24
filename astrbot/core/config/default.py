@@ -230,6 +230,7 @@ DEFAULT_CONFIG = {
     "t2i_endpoint": "",
     "t2i_use_file_service": False,
     "t2i_active_template": "base",
+    "github_token": "",
     "http_proxy": "",
     "no_proxy": ["localhost", "127.0.0.1", "::1", "10.*", "192.168.*"],
     "dashboard": {
@@ -2803,6 +2804,9 @@ CONFIG_METADATA_2 = {
                 "type": "list",
                 "items": {"type": "string"},
             },
+            "github_token": {
+                "type": "string",
+            },
             "http_proxy": {
                 "type": "string",
             },
@@ -4027,6 +4031,11 @@ CONFIG_METADATA_3_SYSTEM = {
                         "description": "时区",
                         "type": "string",
                         "hint": "时区设置。请填写 IANA 时区名称, 如 Asia/Shanghai, 为空时使用系统默认时区。所有时区请查看: https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab",
+                    },
+                    "github_token": {
+                        "description": "GitHub Token",
+                        "type": "string",
+                        "hint": "可选。用于访问 GitHub Releases API，避免未认证请求触发 rate limit exceeded。建议填写只读 token。",
                     },
                     "http_proxy": {
                         "description": "HTTP 代理",

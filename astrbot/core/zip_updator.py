@@ -4,6 +4,7 @@ import shutil
 import ssl
 import zipfile
 from typing import NoReturn
+from urllib.parse import urlparse
 
 import aiohttp
 import certifi
@@ -33,9 +34,17 @@ class ReleaseInfo:
 
 
 class RepoZipUpdator:
-    def __init__(self, repo_mirror: str = "") -> None:
+    def __init__(self, repo_mirror: str = "", github_token: str = "") -> None:
         self.repo_mirror = repo_mirror
         self.rm_on_error = on_error
+        self.github_token = github_token
+
+    def _build_request_headers(self, url: str) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        parsed_url = urlparse(url)
+        if self.github_token and parsed_url.netloc == "api.github.com":
+            headers["Authorization"] = f"token {self.github_token}"
+        return headers
 
     async def fetch_release_info(self, url: str, latest: bool = True) -> list:
         """请求版本信息。
@@ -48,10 +57,12 @@ class RepoZipUpdator:
             connector = aiohttp.TCPConnector(
                 ssl=ssl_context,
             )  # 新增：使用 TCPConnector 指定 SSL 上下文
+            headers = self._build_request_headers(url)
             async with (
                 aiohttp.ClientSession(
                     trust_env=True,
                     connector=connector,
+                    headers=headers,
                 ) as session,
                 session.get(url) as response,
             ):

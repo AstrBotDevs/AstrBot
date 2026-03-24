@@ -1052,6 +1052,10 @@
                 "description": "Часовой пояс",
                 "hint": "Например, Europe/Moscow."
             },
+            "github_token": {
+                "description": "GitHub Token",
+                "hint": "Optional. Used for GitHub Releases API requests to avoid unauthenticated rate limit exceeded errors. A read-only token is recommended."
+            },
             "http_proxy": {
                 "description": "HTTP прокси",
                 "hint": "Формат: http://user:pass@ip:port"

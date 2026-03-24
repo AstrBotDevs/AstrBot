@@ -1051,6 +1051,10 @@
         "description": "Timezone",
         "hint": "Timezone setting. Please enter an IANA timezone name, such as Asia/Shanghai. Uses system default timezone when empty. For all timezones, see: [https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab](https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab)"
       },
+      "github_token": {
+        "description": "GitHub Token",
+        "hint": "Optional. Used for GitHub Releases API requests to avoid unauthenticated rate limit exceeded errors. A read-only token is recommended."
+      },
       "http_proxy": {
         "description": "HTTP Proxy",
         "hint": "When enabled, proxy will be set by adding environment variables. Format: `http://ip:port`"

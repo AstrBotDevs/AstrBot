@@ -155,7 +155,8 @@ class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
         from .star_tools import StarTools
 
-        self.updator = PluginUpdator()
+        github_token = config.get("github_token", "")
+        self.updator = PluginUpdator(github_token=github_token)
 
         self.context = context
         self.context._star_manager = self  # type: ignore

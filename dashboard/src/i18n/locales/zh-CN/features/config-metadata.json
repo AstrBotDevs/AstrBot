@@ -1053,6 +1053,10 @@
         "description": "时区",
         "hint": "时区设置。请填写 IANA 时区名称, 如 Asia/Shanghai, 为空时使用系统默认时区。所有时区请查看: [https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab](https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab)"
       },
+      "github_token": {
+        "description": "GitHub Token",
+        "hint": "可选。用于访问 GitHub Releases API，避免未认证请求触发 rate limit exceeded。建议填写只读 token。"
+      },
       "http_proxy": {
         "description": "HTTP 代理",
         "hint": "启用后,会以添加环境变量的方式设置代理。格式为 `http://ip:port`"

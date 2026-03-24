@@ -78,6 +78,33 @@ def _build_reload_mock(events):
     return mock_reload
 
 
+def test_plugin_manager_passes_github_token_to_updator(monkeypatch):
+    captured = {}
+
+    class DummyUpdator:
+        def __init__(self, repo_mirror: str = "", github_token: str = ""):
+            captured["repo_mirror"] = repo_mirror
+            captured["github_token"] = github_token
+
+    class MockContext:
+        def get_all_stars(self):
+            return []
+
+    monkeypatch.setattr("astrbot.core.star.star_manager.PluginUpdator", DummyUpdator)
+    monkeypatch.setattr(
+        "astrbot.core.star.star_tools.StarTools.initialize",
+        lambda context: None,
+    )
+
+    pm = PluginManager(
+        cast(Any, MockContext()),
+        cast(Any, {"github_token": "ghp_test"}),
+    )
+
+    assert isinstance(pm.updator, DummyUpdator)
+    assert captured == {"repo_mirror": "", "github_token": "ghp_test"}
+
+
 def _build_dependency_install_mock(
     events,
     fail: bool,

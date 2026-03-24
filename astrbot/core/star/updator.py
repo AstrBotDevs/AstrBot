@@ -11,8 +11,8 @@ from ..updator import RepoZipUpdator
 
 
 class PluginUpdator(RepoZipUpdator):
-    def __init__(self, repo_mirror: str = "") -> None:
-        super().__init__(repo_mirror)
+    def __init__(self, repo_mirror: str = "", github_token: str = "") -> None:
+        super().__init__(repo_mirror, github_token=github_token)
         self.plugin_store_path = get_astrbot_plugin_path()
 
     def get_plugin_store_path(self) -> str:
