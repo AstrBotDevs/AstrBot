@@ -104,6 +104,10 @@ class ToolSet:
         """Remove and return a tool by name."""
         return self._tools.pop(name, None)
 
+    def remove_tool(self, name: str) -> None:
+        """Remove a tool by its name."""
+        self._tools.pop(name, None)
+
     def get(self, name: str) -> FunctionTool | None:
         """Get a tool by name."""
         return self._tools.get(name)
@@ -126,3 +130,23 @@ class ToolSet:
     def tools(self) -> list[FunctionTool]:
         """List all tools in this set."""
         return list(self._tools.values())
+
+    def openai_schema(self, omit_empty_parameter_field: bool = False) -> list[dict[str, Any]]:
+        """Convert tools to OpenAI API function calling schema format."""
+        result: list[dict[str, Any]] = []
+        for tool in self._tools.values():
+            func_def: dict[str, Any] = {
+                "type": "function",
+                "function": {"name": tool.name},
+            }
+            if tool.description:
+                func_def["function"]["description"] = tool.description
+
+            if tool.parameters is not None:
+                if (
+                    tool.parameters.get("properties")
+                ) or not omit_empty_parameter_field:
+                    func_def["function"]["parameters"] = tool.parameters
+
+            result.append(func_def)
+        return result
