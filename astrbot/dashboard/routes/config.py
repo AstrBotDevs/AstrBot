@@ -508,7 +508,7 @@ class ConfigRoute(Route):
         return Response().ok(message="更新 provider source 成功").__dict__
 
     async def get_provider_template(self):
-        config_schema, provider_i18n_translations = (
+        config_schema, provider_i18n_translations, provider_type_metadata = (
             self._build_provider_schema_with_i18n()
         )
         data = {
@@ -516,6 +516,7 @@ class ConfigRoute(Route):
             "providers": astrbot_config["provider"],
             "provider_sources": astrbot_config["provider_sources"],
             "provider_i18n_translations": provider_i18n_translations,
+            "provider_type_metadata": provider_type_metadata,
         }
         return Response().ok(data=data).__dict__
 
@@ -1445,28 +1446,19 @@ class ConfigRoute(Route):
                     f"{field_prefix}.template_schema",
                 )
 
-    def _inject_provider_metadata_with_i18n(
-        self, provider, metadata, provider_i18n_translations: dict
+    def _collect_provider_i18n_translations(
+        self, provider, provider_i18n_translations: dict
     ):
-        """Inject provider config metadata and collect runtime i18n resources."""
-        metadata["provider_group"]["metadata"]["provider"].setdefault("items", {})
-        provider_items_to_inject = copy.deepcopy(provider.config_metadata)
+        """Collect runtime i18n resources for a provider adapter."""
+        if not provider.i18n_resources:
+            return
 
-        if provider.i18n_resources:
-            i18n_prefix = f"provider_group.provider.{provider.type}"
+        for lang, lang_data in provider.i18n_resources.items():
+            provider_i18n_translations.setdefault(lang, {}).setdefault(
+                "provider_group", {}
+            ).setdefault("provider", {})[provider.type] = lang_data
 
-            for lang, lang_data in provider.i18n_resources.items():
-                provider_i18n_translations.setdefault(lang, {}).setdefault(
-                    "provider_group", {}
-                ).setdefault("provider", {})[provider.type] = lang_data
-
-            self._apply_dynamic_i18n_keys(provider_items_to_inject, i18n_prefix)
-
-        metadata["provider_group"]["metadata"]["provider"]["items"].update(
-            provider_items_to_inject
-        )
-
-    def _build_provider_schema_with_i18n(self) -> tuple[dict, dict]:
+    def _build_provider_schema_with_i18n(self) -> tuple[dict, dict, dict]:
         provider_metadata = ConfigMetadataI18n.convert_to_i18n_keys(
             {
                 "provider_group": {
@@ -1479,26 +1471,40 @@ class ConfigRoute(Route):
             }
         )
         provider_i18n_translations = {}
+        provider_type_metadata = {}
 
         provider_default_tmpl = provider_metadata["provider_group"]["metadata"][
             "provider"
         ]["config_template"]
         for provider in provider_registry:
+            self._collect_provider_i18n_translations(
+                provider, provider_i18n_translations
+            )
+
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = copy.deepcopy(
                     provider.default_config_tmpl
                 )
+                display_name = provider.provider_display_name or provider.type
+                if provider.i18n_resources:
+                    display_name = f"provider_group.provider.{provider.type}.name"
+                provider_default_tmpl[provider.type]["_display_name"] = display_name
 
             if provider.config_metadata:
-                self._inject_provider_metadata_with_i18n(
-                    provider,
-                    provider_metadata,
-                    provider_i18n_translations,
-                )
+                provider_items_to_inject = copy.deepcopy(provider.config_metadata)
+                if provider.i18n_resources:
+                    self._apply_dynamic_i18n_keys(
+                        provider_items_to_inject,
+                        f"provider_group.provider.{provider.type}",
+                    )
+                provider_type_metadata[provider.type] = {
+                    "items": provider_items_to_inject
+                }
 
         return (
             {"provider": provider_metadata["provider_group"]["metadata"]["provider"]},
             provider_i18n_translations,
+            provider_type_metadata,
         )
 
     async def _get_astrbot_config(self):
@@ -1550,7 +1556,11 @@ class ConfigRoute(Route):
             await asyncio.gather(*logo_registration_tasks, return_exceptions=True)
 
         # 服务提供商的默认配置模板注入
-        provider_schema, provider_i18n_translations = (
+        (
+            provider_schema,
+            provider_i18n_translations,
+            provider_type_metadata,
+        ) = (
             self._build_provider_schema_with_i18n()
         )
         metadata["provider_group"]["metadata"]["provider"] = provider_schema["provider"]
@@ -1560,6 +1570,7 @@ class ConfigRoute(Route):
             "config": config,
             "platform_i18n_translations": platform_i18n_translations,
             "provider_i18n_translations": provider_i18n_translations,
+            "provider_type_metadata": provider_type_metadata,
         }
 
     async def _get_plugin_config(self, plugin_name: str):

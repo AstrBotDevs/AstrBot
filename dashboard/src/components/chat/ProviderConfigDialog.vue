@@ -42,7 +42,7 @@
 
                 <!-- 基础配置 -->
                 <div class="mb-4">
-                  <AstrBotConfig v-if="basicSourceConfig" :iterable="basicSourceConfig" :metadata="configSchema"
+                  <AstrBotConfig v-if="basicSourceConfig" :iterable="basicSourceConfig" :metadata="providerSourceSchema"
                     metadataKey="provider" :is-editing="true" />
                 </div>
 
@@ -54,7 +54,7 @@
                     </v-expansion-panel-title>
                     <v-expansion-panel-text>
                       <AstrBotConfig v-if="advancedSourceConfig" :iterable="advancedSourceConfig"
-                        :metadata="configSchema" metadataKey="provider" :is-editing="true" />
+                        :metadata="providerSourceSchema" metadataKey="provider" :is-editing="true" />
                     </v-expansion-panel-text>
                   </v-expansion-panel>
                 </v-expansion-panels>
@@ -174,6 +174,7 @@ const {
   testingProviders,
   isSourceModified,
   configSchema,
+  providerSourceSchema,
   manualModelId,
   modelSearch,
   availableSourceTypes,

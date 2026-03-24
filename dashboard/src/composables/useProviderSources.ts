@@ -3,7 +3,7 @@ import axios from 'axios'
 import { getProviderIcon } from '@/utils/providerUtils'
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
 import { normalizeTextInput } from '@/utils/inputValue'
-import { mergeDynamicTranslations } from '@/i18n/composables'
+import { mergeDynamicTranslations, useModuleI18n } from '@/i18n/composables'
 
 export interface UseProviderSourcesOptions {
   defaultTab?: string
@@ -39,6 +39,7 @@ export function resolveDefaultTab(value?: string) {
 
 export function useProviderSources(options: UseProviderSourcesOptions) {
   const { tm, showMessage } = options
+  const { tm: tmConfigMetadata, getRaw } = useModuleI18n('features/config-metadata')
 
   const confirmDialog = useConfirmDialog()
 
@@ -63,6 +64,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const isSourceModified = ref(false)
   const configSchema = ref<Record<string, any>>({})
   const providerTemplates = ref<Record<string, any>>({})
+  const providerTypeMetadata = ref<Record<string, any>>({})
   const manualModelId = ref('')
   const modelSearch = ref('')
 
@@ -88,7 +90,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       if (template.provider_type === selectedProviderType.value) {
         types.push({
           value: templateName,
-          label: templateName,
+          label: getTemplateDisplayName(templateName, template),
           icon: getProviderIcon(template.provider)
         })
       }
@@ -238,6 +240,15 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     // 创建一个深拷贝以避免修改原始 schema
     const customSchema = JSON.parse(JSON.stringify(configSchema.value))
+    const providerType = editableProviderSource.value?.type || selectedProviderSource.value?.type
+    const typeSpecificMetadata = providerType ? providerTypeMetadata.value?.[providerType] : null
+
+    if (typeSpecificMetadata?.items) {
+      customSchema.provider.items = {
+        ...(customSchema.provider.items || {}),
+        ...typeSpecificMetadata.items
+      }
+    }
 
     // 为 provider source 的 id 字段添加自定义 hint
     if (customSchema.provider?.items?.id) {
@@ -273,6 +284,15 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   function resolveSourceIcon(source: any) {
     if (!source) return ''
     return getProviderIcon(source.provider) || ''
+  }
+
+  function translateConfigMetadataKey(value?: string) {
+    if (!value || typeof value !== 'string') return value || ''
+    return getRaw(value) ? tmConfigMetadata(value) : value
+  }
+
+  function getTemplateDisplayName(templateName: string, template: Record<string, any>) {
+    return translateConfigMetadataKey(template?._display_name) || templateName
   }
 
   function getSourceDisplayName(source: any) {
@@ -367,12 +387,28 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       source.ollama_disable_thinking = false
     }
 
+    const sourceType = source.type
+    const typeSpecificMetadata = sourceType ? providerTypeMetadata.value?.[sourceType] : null
+    if (typeSpecificMetadata?.items) {
+      for (const [key, itemMeta] of Object.entries(typeSpecificMetadata.items)) {
+        if (source[key] !== undefined) {
+          continue
+        }
+
+        if ((itemMeta as Record<string, any>)?.type === 'object') {
+          source[key] = {}
+        } else if ((itemMeta as Record<string, any>)?.type === 'list' || (itemMeta as Record<string, any>)?.type === 'template_list') {
+          source[key] = []
+        }
+      }
+    }
+
     return source
   }
 
   function extractSourceFieldsFromTemplate(template: Record<string, any>) {
     const sourceFields: Record<string, any> = {}
-    const excludeKeys = ['id', 'enable', 'model', 'provider_source_id', 'modalities', 'custom_extra_body']
+    const excludeKeys = ['id', 'enable', 'model', 'provider_source_id', 'modalities', 'custom_extra_body', '_display_name']
 
     for (const [key, value] of Object.entries(template)) {
       if (!excludeKeys.includes(key)) {
@@ -630,6 +666,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       const response = await axios.get('/api/config/provider/template')
       if (response.data.status === 'ok') {
         configSchema.value = response.data.data.config_schema || {}
+        providerTypeMetadata.value = response.data.data.provider_type_metadata || {}
         const providerI18n = response.data.data.provider_i18n_translations
         if (providerI18n && typeof providerI18n === 'object') {
           mergeDynamicTranslations('features.config-metadata', providerI18n)
@@ -676,6 +713,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     isSourceModified,
     configSchema,
     providerTemplates,
+    providerTypeMetadata,
     manualModelId,
     modelSearch,
 
