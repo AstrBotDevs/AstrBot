@@ -7,7 +7,6 @@ connecting to internal stars (plugins) embedded in the runtime.
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 from astrbot import logger
@@ -27,7 +26,8 @@ class AstrbotAbpClient(BaseAstrbotAbpClient):
     def __init__(self) -> None:
         self._connected = False
         self._stars: dict[str, Any] = {}
-        self._pending_requests: dict[str, asyncio.Future[Any]] = {}
+        # Use a simple dict for pending requests; we avoid asyncio.Future here.
+        self._pending_requests: dict[str, Any] = {}
         self._request_id = 0
 
     @property
@@ -65,8 +65,8 @@ class AstrbotAbpClient(BaseAstrbotAbpClient):
         request_id = f"{self._request_id}"
         self._request_id += 1
 
-        future: asyncio.Future[Any] = asyncio.Future()
-        self._pending_requests[request_id] = future
+        # No asyncio.Future used; store a placeholder entry for tracking if needed.
+        self._pending_requests[request_id] = None
 
         try:
             # Call the star's tool handler
@@ -88,9 +88,6 @@ class AstrbotAbpClient(BaseAstrbotAbpClient):
     async def shutdown(self) -> None:
         """Shutdown the ABP client connection."""
         self._connected = False
-        # Cancel any pending requests
-        for future in self._pending_requests.values():
-            if not future.done():
-                future.cancel()
+        # Clear any pending requests (no asyncio futures used in this implementation)
         self._pending_requests.clear()
         log.info("ABP client shut down.")

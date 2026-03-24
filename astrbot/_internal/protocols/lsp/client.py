@@ -7,7 +7,6 @@ that provide language intelligence features (completions, diagnostics, etc.).
 
 from __future__ import annotations
 
-import asyncio
 import json
 from typing import Any
 
@@ -36,7 +35,8 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         self._pending_requests: dict[int, Any] = {}
         self._request_id = 0
         self._server_command: list[str] | None = None
-        self._reader_task: asyncio.Task | None = None
+        # anyio TaskGroup handle for background readers
+        self._task_group: Any | None = None
 
     @property
     def connected(self) -> bool:
@@ -77,8 +77,11 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         self._server_command = command
         self._connected = True
 
-        # Start reading responses in background
-        self._reader_task = asyncio.create_task(self._read_responses())
+        # Start reading responses in background using anyio TaskGroup
+        # Create and enter a TaskGroup so the reader runs until we close it at shutdown.
+        self._task_group = anyio.create_task_group()
+        await self._task_group.__aenter__()
+        self._task_group.start_soon(self._read_responses)
 
         # Send initialize request
         await self.send_request(
@@ -201,7 +204,8 @@ class AstrbotLspClient(BaseAstrbotLspClient):
 
                 except anyio.EndOfStream:
                     break
-        except asyncio.CancelledError:
+        except anyio.get_cancelled_exc_class():
+            # Task was cancelled via the TaskGroup cancel/exit during shutdown
             pass
 
     async def _handle_notification(self, notification: dict[str, Any]) -> None:
@@ -213,13 +217,13 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         """Shutdown the LSP client."""
         self._connected = False
 
-        if self._reader_task:
-            self._reader_task.cancel()
+        if self._task_group:
             try:
-                await self._reader_task
-            except asyncio.CancelledError:
+                # Exit the TaskGroup, which cancels background tasks started within it
+                await self._task_group.__aexit__(None, None, None)
+            except anyio.get_cancelled_exc_class():
                 pass
-            self._reader_task = None
+            self._task_group = None
 
         if self._server_process:
             try:

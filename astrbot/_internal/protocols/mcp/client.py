@@ -16,7 +16,6 @@ from tenacity import (
     wait_exponential,
 )
 
-from astrbot import logger
 from astrbot._internal.abc.mcp.base_astrbot_mcp_client import (
     BaseAstrbotMcpClient,
     McpServerConfig,
@@ -24,7 +23,8 @@ from astrbot._internal.abc.mcp.base_astrbot_mcp_client import (
 )
 from astrbot.core.utils.log_pipe import LogPipe
 
-log = logger
+logger = logging.getLogger("astrbot")
+
 
 try:
     import anyio
@@ -42,6 +42,26 @@ except (ModuleNotFoundError, ImportError):
     logger.warning(
         "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
     )
+
+
+class TenacityLogger:
+    """Wraps a logging.Logger to satisfy tenacity's LoggerProtocol."""
+
+    __slots__ = ("_logger",)
+    _logger: logging.Logger
+
+    def __init__(self, logger: logging.Logger) -> None:
+        self._logger = logger
+
+    def log(
+        self,
+        level: int,
+        msg: str,
+        /,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        self._logger.log(level, msg, *args, **kwargs)
 
 
 def _prepare_config(config: dict) -> dict:
@@ -159,7 +179,7 @@ class McpClient(BaseAstrbotMcpClient):
         """
         # MCP client is initialized on-demand via connect_to_server
         # This is a no-op stub to satisfy BaseAstrbotMcpClient
-        log.debug("MCP client initialized.")
+        logger.debug("MCP client initialized.")
 
     @property
     def connected(self) -> bool:
@@ -424,7 +444,7 @@ class McpClient(BaseAstrbotMcpClient):
             retry=retry_if_exception_type(anyio.ClosedResourceError),
             stop=stop_after_attempt(2),
             wait=wait_exponential(multiplier=1, min=1, max=3),
-            before_sleep=cast(Any, before_sleep_log(logger, logging.WARNING)),
+            before_sleep=before_sleep_log(TenacityLogger(logger), logging.WARNING),
             reraise=True,
         )
         async def _call_with_retry():
