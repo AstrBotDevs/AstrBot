@@ -50,6 +50,14 @@ def test_parse_background_task_arg(value, expected_bool, expect_error):
         assert error is None
 
 
+def test_handoff_default_parameters_align_with_background_task_handling():
+    params = HandoffTool(agent=Agent(name="subagent")).parameters
+    assert params["required"] == ["input"]
+    assert params["additionalProperties"] is False
+    assert set(params["properties"]) == {"input", "image_urls", "background_task"}
+    assert params["properties"]["background_task"]["type"] == "boolean"
+
+
 @pytest.mark.asyncio
 async def test_execute_invalid_background_task_early_error(monkeypatch):
     call_count = {"handoff": 0, "handoff_bg": 0}
