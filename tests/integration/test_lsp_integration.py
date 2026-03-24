@@ -84,3 +84,19 @@ async def test_lsp_client_send_notification():
 
     finally:
         await client.shutdown()
+
+
+@pytest.mark.anyio
+async def test_lsp_client_send_request_not_connected():
+    """Test LSP client raises RuntimeError when sending request while not connected."""
+    client = AstrbotLspClient()
+    with pytest.raises(RuntimeError, match="LSP client not connected"):
+        await client.send_request("test", {})
+
+
+@pytest.mark.anyio
+async def test_lsp_client_send_notification_not_connected():
+    """Test LSP client raises RuntimeError when sending notification while not connected."""
+    client = AstrbotLspClient()
+    with pytest.raises(RuntimeError, match="LSP client not connected"):
+        await client.send_notification("test", {})
