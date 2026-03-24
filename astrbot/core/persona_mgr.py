@@ -13,6 +13,7 @@ DEFAULT_PERSONALITY = Personality(
     mood_imitation_dialogs=[],
     tools=None,
     skills=None,
+    subagents=None,
     custom_error_message=None,
     _begin_dialogs_processed=[],
     _mood_imitation_dialogs_processed="",
