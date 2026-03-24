@@ -48,6 +48,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     _HANDOFF_CALL_COUNT_EXTRA_KEY = "_subagent_handoff_call_count"
     _DEFAULT_MAX_HANDOFF_CALLS_PER_RUN = DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
     _MAX_HANDOFF_CALL_COUNT_SANITY_LIMIT = 10_000
+    _EVENT_EXTRA_ACCESSOR_CACHE: dict[
+        type,
+        T.Callable[[T.Any, str, T.Any], T.Any],
+    ] = {}
 
     @classmethod
     def _coerce_int(
@@ -74,38 +78,106 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if event is None:
             return default
 
-        get_extra = getattr(event, "get_extra", None)
-        if get_extra is None or not callable(get_extra):
-            return default
+        accessor = cls._resolve_event_extra_accessor(event)
+        return accessor(event, key, default)
 
-        call_variants = (
-            lambda: get_extra(key, default),
-            lambda: get_extra(key),
-            lambda: get_extra(key=key, default=default),
-            lambda: get_extra(key=key),
-        )
-        for call in call_variants:
-            try:
-                result = call()
-            except TypeError as e:
-                if cls._looks_like_call_signature_type_error(e):
-                    continue
-                raise
-            return default if result is None else result
-        return default
+    @staticmethod
+    def _signature_accepts_call(
+        signature: inspect.Signature,
+        *args: T.Any,
+        **kwargs: T.Any,
+    ) -> bool:
+        try:
+            signature.bind_partial(*args, **kwargs)
+        except TypeError:
+            return False
+        return True
 
     @classmethod
-    def _looks_like_call_signature_type_error(cls, exc: TypeError) -> bool:
-        msg = str(exc)
-        return any(
-            token in msg
-            for token in (
-                "positional argument",
-                "keyword argument",
-                "required positional argument",
-                "takes",
-            )
-        )
+    def _resolve_event_extra_accessor(
+        cls,
+        event: T.Any,
+    ) -> T.Callable[[T.Any, str, T.Any], T.Any]:
+        event_type = type(event)
+        cached_accessor = cls._EVENT_EXTRA_ACCESSOR_CACHE.get(event_type)
+        if cached_accessor is not None:
+            return cached_accessor
+
+        get_extra = getattr(event, "get_extra", None)
+        if get_extra is None or not callable(get_extra):
+            def _fallback_accessor(
+                _event: T.Any,
+                _key: str,
+                fallback_default: T.Any = None,
+            ) -> T.Any:
+                return fallback_default
+
+            cls._EVENT_EXTRA_ACCESSOR_CACHE[event_type] = _fallback_accessor
+            return _fallback_accessor
+
+        try:
+            signature = inspect.signature(get_extra)
+        except (TypeError, ValueError):
+            def _positional_two_accessor(
+                event_obj: T.Any,
+                lookup_key: str,
+                fallback_default: T.Any = None,
+            ) -> T.Any:
+                result = event_obj.get_extra(lookup_key, fallback_default)
+                return fallback_default if result is None else result
+
+            cls._EVENT_EXTRA_ACCESSOR_CACHE[event_type] = _positional_two_accessor
+            return _positional_two_accessor
+
+        if cls._signature_accepts_call(signature, "sentinel-key", None):
+            def accessor(
+                event_obj: T.Any,
+                lookup_key: str,
+                fallback_default: T.Any = None,
+            ) -> T.Any:
+                result = event_obj.get_extra(lookup_key, fallback_default)
+                return fallback_default if result is None else result
+        elif cls._signature_accepts_call(signature, "sentinel-key"):
+            def accessor(
+                event_obj: T.Any,
+                lookup_key: str,
+                fallback_default: T.Any = None,
+            ) -> T.Any:
+                result = event_obj.get_extra(lookup_key)
+                return fallback_default if result is None else result
+        elif cls._signature_accepts_call(
+            signature,
+            key="sentinel-key",
+            default=None,
+        ):
+            def accessor(
+                event_obj: T.Any,
+                lookup_key: str,
+                fallback_default: T.Any = None,
+            ) -> T.Any:
+                result = event_obj.get_extra(
+                    key=lookup_key,
+                    default=fallback_default,
+                )
+                return fallback_default if result is None else result
+        elif cls._signature_accepts_call(signature, key="sentinel-key"):
+            def accessor(
+                event_obj: T.Any,
+                lookup_key: str,
+                fallback_default: T.Any = None,
+            ) -> T.Any:
+                result = event_obj.get_extra(key=lookup_key)
+                return fallback_default if result is None else result
+        else:
+            def accessor(
+                _event: T.Any,
+                _key: str,
+                fallback_default: T.Any = None,
+            ) -> T.Any:
+                return fallback_default
+
+        cls._EVENT_EXTRA_ACCESSOR_CACHE[event_type] = accessor
+        return accessor
 
     @classmethod
     def _set_event_extra(cls, event: T.Any, key: str, value: T.Any) -> bool:
