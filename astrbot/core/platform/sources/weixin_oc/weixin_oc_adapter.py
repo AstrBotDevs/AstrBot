@@ -734,18 +734,25 @@ class WeixinOCAdapter(Platform):
         )
 
     async def _poll_inbound_updates(self) -> None:
-        data = await self.client.request_json(
-            "POST",
-            "ilink/bot/getupdates",
-            payload={
-                "base_info": {
-                    "channel_version": "astrbot",
+        try:
+            data = await self.client.request_json(
+                "POST",
+                "ilink/bot/getupdates",
+                payload={
+                    "base_info": {
+                        "channel_version": "astrbot",
+                    },
+                    "get_updates_buf": self._sync_buf,
                 },
-                "get_updates_buf": self._sync_buf,
-            },
-            token_required=True,
-            timeout_ms=self.long_poll_timeout_ms,
-        )
+                token_required=True,
+                timeout_ms=self.long_poll_timeout_ms,
+            )
+        except asyncio.TimeoutError:
+            logger.debug(
+                "weixin_oc(%s): inbound getupdates long-poll timeout",
+                self.meta().id,
+            )
+            return
         ret = int(data.get("ret") or 0)
         errcode = data.get("errcode", 0)
         if ret != 0 and ret is not None:
@@ -895,13 +902,7 @@ class WeixinOCAdapter(Platform):
                         await asyncio.sleep(self.qr_poll_interval)
                     continue
 
-                try:
-                    await self._poll_inbound_updates()
-                except asyncio.TimeoutError:
-                    logger.debug(
-                        "weixin_oc(%s): inbound getupdates long-poll timeout",
-                        self.meta().id,
-                    )
+                await self._poll_inbound_updates()
         except asyncio.CancelledError:
             raise
         except Exception as e:
