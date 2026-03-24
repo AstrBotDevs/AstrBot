@@ -75,7 +75,7 @@ dependencies = [
 ]
 [project.scripts]
 astrbot = "astrbot.cli.__main__:cli"
-astrbot-rs = "astrbot._internal.runtime._core:cli"
+astrbot-rs = "astrbot._internal.runtime.rust:cli"
 
 [dependency-groups]
 dev = [
