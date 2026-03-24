@@ -1731,7 +1731,9 @@ class SdkPluginBridge:
             "session_id": str((payload or {}).get("session_id", "")),
             "platform": str((payload or {}).get("platform", "")),
             "platform_id": str((payload or {}).get("platform_id", "")),
-            "message_type": str((payload or {}).get("message_type", "")),
+            "message_type": EventConverter._sdk_message_type(
+                (payload or {}).get("message_type", "")
+            ),
             "sender_name": str((payload or {}).get("sender_name", "")),
             "self_id": str((payload or {}).get("self_id", "")),
             "raw": {"event_type": event_type, **(payload or {})},

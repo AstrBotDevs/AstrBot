@@ -256,6 +256,34 @@ def test_payload_to_components_and_event_local_state() -> None:
 
 
 @pytest.mark.unit
+def test_message_event_normalizes_legacy_core_message_types() -> None:
+    private_event = MessageEvent.from_payload(
+        {
+            "text": "hello",
+            "session_id": "demo:FriendMessage:user-1",
+            "platform": "demo",
+            "platform_id": "demo",
+            "message_type": "FriendMessage",
+        }
+    )
+    group_event = MessageEvent.from_payload(
+        {
+            "text": "hello",
+            "session_id": "demo:GroupMessage:room-1",
+            "platform": "demo",
+            "platform_id": "demo",
+            "group_id": "room-1",
+            "message_type": "GroupMessage",
+        }
+    )
+
+    assert private_event.get_message_type() == "private"
+    assert private_event.is_private_chat() is True
+    assert group_event.get_message_type() == "group"
+    assert group_event.is_group_chat() is True
+
+
+@pytest.mark.unit
 def test_message_event_to_payload_drops_non_serializable_sdk_local_extras() -> None:
     event = MessageEvent.from_payload(
         {
@@ -394,6 +422,63 @@ def test_event_converter_serializes_core_reply_chain() -> None:
     assert reply_payload["data"]["chain"] == [
         {"type": "text", "data": {"text": "quoted core text"}}
     ]
+
+
+@pytest.mark.unit
+def test_event_converter_normalizes_legacy_core_message_type_values() -> None:
+    class _LegacyCoreEvent:
+        is_wake = False
+        is_at_or_wake_command = False
+
+        def get_message_type(self):
+            return SimpleNamespace(value="FriendMessage")
+
+        def get_message_str(self) -> str:
+            return "hello"
+
+        def get_sender_id(self) -> str:
+            return "user-1"
+
+        def get_group_id(self) -> str:
+            return ""
+
+        def get_platform_name(self) -> str:
+            return "demo"
+
+        def get_platform_id(self) -> str:
+            return "demo"
+
+        def get_self_id(self) -> str:
+            return "bot-1"
+
+        def get_sender_name(self) -> str:
+            return "Sender"
+
+        def is_admin(self) -> bool:
+            return False
+
+        def get_message_outline(self) -> str:
+            return "hello"
+
+        def get_extra(self, key: str | None = None, default=None):
+            del key, default
+            return {}
+
+        @property
+        def unified_msg_origin(self) -> str:
+            return "demo:FriendMessage:user-1"
+
+        def get_messages(self):
+            return [CorePlain(text="hello")]
+
+    payload = EventConverter.core_to_sdk(
+        _LegacyCoreEvent(),
+        dispatch_token="dispatch-1",
+        plugin_id="sdk-demo",
+        request_id="req-1",
+    )
+
+    assert payload["message_type"] == "private"
 
 
 @pytest.mark.unit

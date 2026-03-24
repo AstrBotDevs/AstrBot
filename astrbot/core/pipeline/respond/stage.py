@@ -327,6 +327,8 @@ class RespondStage(Stage):
 
         if self.sdk_plugin_bridge is not None:
             try:
+                from astrbot.core.sdk_bridge.event_converter import EventConverter
+
                 await self.sdk_plugin_bridge.dispatch_message_event(
                     "after_message_sent",
                     event,
@@ -334,7 +336,9 @@ class RespondStage(Stage):
                         "session_id": event.unified_msg_origin,
                         "platform": event.get_platform_name(),
                         "platform_id": event.get_platform_id(),
-                        "message_type": event.get_message_type().value,
+                        "message_type": EventConverter._sdk_message_type(
+                            event.get_message_type()
+                        ),
                         "sender_name": event.get_sender_name(),
                         "self_id": event.get_self_id(),
                         "message_outline": self._message_outline_for_sdk_event(

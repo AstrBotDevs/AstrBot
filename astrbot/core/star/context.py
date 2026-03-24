@@ -5,6 +5,7 @@ from asyncio import Queue
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Protocol
 
+from astrbot_sdk.message.components import component_to_payload_sync
 from deprecated import deprecated
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
@@ -22,6 +23,7 @@ from astrbot.core.provider.provider import (
     STTProvider,
     TTSProvider,
 )
+from astrbot.core.sdk_bridge.event_converter import EventConverter
 from astrbot.core.star.filter.platform_adapter_type import (
     ADAPTER_NAME_2_TYPE,
     PlatformAdapterType,
@@ -463,8 +465,6 @@ class Context:
             if platform.meta().id == session.platform_name:
                 await platform.send_by_session(session, message_chain)
                 if self.sdk_plugin_bridge is not None:
-                    from astrbot_sdk.message.components import component_to_payload_sync
-
                     try:
                         await self.sdk_plugin_bridge.dispatch_system_event(
                             "after_message_sent",
@@ -472,7 +472,9 @@ class Context:
                                 "session_id": str(session),
                                 "platform": platform.meta().name,
                                 "platform_id": platform.meta().id,
-                                "message_type": session.message_type.value,
+                                "message_type": EventConverter._sdk_message_type(
+                                    session.message_type
+                                ),
                                 "message_outline": message_chain.get_plain_text(
                                     with_other_comps_mark=True
                                 ),

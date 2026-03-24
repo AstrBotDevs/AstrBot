@@ -14,6 +14,24 @@ class EventConverter:
 
     _DROP_VALUE = object()
 
+    @staticmethod
+    def _sdk_message_type(value: Any) -> str:
+        normalized = str(getattr(value, "value", value) or "").strip().lower()
+        if normalized in {"group", "groupmessage", "group_message"}:
+            return "group"
+        if normalized in {
+            "private",
+            "privatemessage",
+            "private_message",
+            "friend",
+            "friendmessage",
+            "friend_message",
+        }:
+            return "private"
+        if normalized in {"other", "othermessage", "other_message"}:
+            return "other"
+        return normalized
+
     @classmethod
     def _sanitize_extra_value(cls, value: Any) -> Any:
         if value is None or isinstance(value, (str, int, float, bool)):
@@ -55,7 +73,7 @@ class EventConverter:
         plugin_id: str,
         request_id: str,
     ) -> dict[str, Any]:
-        message_type = event.get_message_type()
+        message_type = EventConverter._sdk_message_type(event.get_message_type())
         raw = {
             "dispatch_token": dispatch_token,
             "plugin_id": plugin_id,
@@ -70,7 +88,7 @@ class EventConverter:
             "platform_id": event.get_platform_id(),
             "session_id": event.unified_msg_origin,
             "self_id": event.get_self_id(),
-            "message_type": getattr(message_type, "value", None),
+            "message_type": message_type,
             "sender_name": event.get_sender_name(),
             "is_admin": event.is_admin(),
             "is_wake": event.is_wake,

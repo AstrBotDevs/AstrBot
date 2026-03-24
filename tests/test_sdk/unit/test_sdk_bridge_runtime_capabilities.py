@@ -2534,7 +2534,7 @@ async def test_core_context_send_message_populates_proactive_sent_fields() -> No
                 "session_id": "demo:FriendMessage:user-1",
                 "platform": "Demo Platform",
                 "platform_id": "demo",
-                "message_type": "FriendMessage",
+                "message_type": "private",
                 "message_outline": "hello proactive",
                 "sent_message_outline": "hello proactive",
                 "sent_messages": [
