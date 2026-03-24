@@ -27,6 +27,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         api_base = provider_config.get(
             "embedding_api_base", "https://api.openai.com/v1"
         ).strip()
+        if api_base and not api_base.endswith("/v1") and not api_base.endswith("/v1/"):
+            api_base = api_base.rstrip("/") + "/v1"
         logger.info(f"[OpenAI Embedding] {provider_id} Using API Base: {api_base}")
         self.client = AsyncOpenAI(
             api_key=provider_config.get("embedding_api_key"),
