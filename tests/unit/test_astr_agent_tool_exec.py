@@ -619,6 +619,21 @@ def test_set_event_extra_returns_false_for_noncallable_set_extra():
     )
 
 
+def test_set_event_extra_returns_false_for_setter_exception():
+    class _EventWithBrokenSetter:
+        def set_extra(self, _key: str, _value) -> None:
+            raise ValueError("broken setter")
+
+    assert (
+        FunctionToolExecutor._set_event_extra(
+            _EventWithBrokenSetter(),
+            "key",
+            "value",
+        )
+        is False
+    )
+
+
 def test_handoff_default_limit_is_sourced_from_config_default():
     assert (
         FunctionToolExecutor._DEFAULT_MAX_HANDOFF_CALLS_PER_RUN

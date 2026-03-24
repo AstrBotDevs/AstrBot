@@ -48,6 +48,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     _HANDOFF_CALL_COUNT_EXTRA_KEY = "_subagent_handoff_call_count"
     _DEFAULT_MAX_HANDOFF_CALLS_PER_RUN = DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
     _MAX_HANDOFF_CALL_COUNT_SANITY_LIMIT = 10_000
+    _GET_EXTRA_CALL_STYLE_CACHE: dict[type, str] = {}
 
     @classmethod
     def _coerce_int(
@@ -78,34 +79,62 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if get_extra is None or not callable(get_extra):
             return default
 
-        for call in (
-            lambda: get_extra(key, default),
-            lambda: get_extra(key),
-            lambda: get_extra(key=key, default=default),
-            lambda: get_extra(key=key),
-        ):
-            try:
-                result = call()
-            except TypeError as e:
-                if cls._looks_like_call_signature_type_error(e):
-                    continue
-                raise
-            return default if result is None else result
+        event_type = type(event)
+        style = cls._GET_EXTRA_CALL_STYLE_CACHE.get(event_type)
+        if style is None:
+            style = cls._detect_get_extra_call_style(get_extra)
+            cls._GET_EXTRA_CALL_STYLE_CACHE[event_type] = style
 
-        return default
+        if style == "args2":
+            result = get_extra(key, default)
+        elif style == "args1":
+            result = get_extra(key)
+        elif style == "kwargs2":
+            result = get_extra(key=key, default=default)
+        elif style == "kwargs1":
+            result = get_extra(key=key)
+        else:
+            return default
+
+        return default if result is None else result
 
     @classmethod
-    def _looks_like_call_signature_type_error(cls, exc: TypeError) -> bool:
-        msg = str(exc)
-        return any(
-            token in msg
-            for token in (
-                "positional argument",
-                "keyword argument",
-                "required positional argument",
-                "takes",
-            )
+    def _detect_get_extra_call_style(cls, get_extra: T.Callable[..., T.Any]) -> str:
+        try:
+            signature = inspect.signature(get_extra)
+        except (TypeError, ValueError):
+            return "args2"
+
+        params = tuple(signature.parameters.values())
+        has_var_positional = any(
+            p.kind == inspect.Parameter.VAR_POSITIONAL for p in params
         )
+        has_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params)
+        positional_count = sum(
+            p.kind
+            in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
+            for p in params
+        )
+        keyword_only_names = {
+            p.name for p in params if p.kind == inspect.Parameter.KEYWORD_ONLY
+        }
+
+        if has_var_positional or positional_count >= 2:
+            return "args2"
+        if positional_count >= 1:
+            return "args1"
+        if "key" in keyword_only_names and (
+            "default" in keyword_only_names or has_var_keyword
+        ):
+            return "kwargs2"
+        if "key" in keyword_only_names:
+            return "kwargs1"
+        if has_var_keyword:
+            return "kwargs2"
+        return "unsupported"
 
     @classmethod
     def _set_event_extra(cls, event: T.Any, key: str, value: T.Any) -> bool:
@@ -118,7 +147,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         try:
             set_extra(key, value)
             return True
-        except TypeError:
+        except Exception:
             return False
 
     @classmethod
