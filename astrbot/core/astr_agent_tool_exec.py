@@ -44,6 +44,71 @@ from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
+    _HANDOFF_CALL_COUNT_EXTRA_KEY = "_subagent_handoff_call_count"
+
+    @classmethod
+    def _coerce_int(
+        cls,
+        value: T.Any,
+        *,
+        default: int,
+        minimum: int,
+        maximum: int,
+    ) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return default
+        return max(minimum, min(maximum, parsed))
+
+    @classmethod
+    def _get_event_extra(
+        cls,
+        event: T.Any,
+        key: str,
+        default: T.Any = None,
+    ) -> T.Any:
+        if event is None or not hasattr(event, "get_extra"):
+            return default
+        try:
+            return event.get_extra(key, default)
+        except TypeError:
+            try:
+                result = event.get_extra(key)
+            except Exception:
+                return default
+            return default if result is None else result
+        except Exception:
+            return default
+
+    @classmethod
+    def _set_event_extra(cls, event: T.Any, key: str, value: T.Any) -> bool:
+        if event is None or not hasattr(event, "set_extra"):
+            return False
+        try:
+            event.set_extra(key, value)
+            return True
+        except Exception:
+            return False
+
+    @classmethod
+    def _resolve_handoff_call_limit(
+        cls,
+        run_context: ContextWrapper[AstrAgentContext],
+    ) -> int:
+        ctx = run_context.context.context
+        event = run_context.context.event
+        cfg = ctx.get_config(umo=event.unified_msg_origin)
+        subagent_cfg = cfg.get("subagent_orchestrator", {})
+        if not isinstance(subagent_cfg, dict):
+            return 8
+        return cls._coerce_int(
+            subagent_cfg.get("max_handoff_calls_per_run", 8),
+            default=8,
+            minimum=1,
+            maximum=128,
+        )
+
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:
@@ -246,6 +311,34 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ):
         tool_args = dict(tool_args)
         input_ = tool_args.get("input")
+        ctx = run_context.context.context
+        event = run_context.context.event
+        max_handoff_calls = cls._resolve_handoff_call_limit(run_context)
+        current_handoff_count = cls._coerce_int(
+            cls._get_event_extra(event, cls._HANDOFF_CALL_COUNT_EXTRA_KEY, 0),
+            default=0,
+            minimum=0,
+            maximum=10_000,
+        )
+        if current_handoff_count >= max_handoff_calls:
+            yield mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(
+                        type="text",
+                        text=(
+                            "error: handoff_call_limit_reached. "
+                            f"max_handoff_calls_per_run={max_handoff_calls}. "
+                            "Stop delegating and continue with current context."
+                        ),
+                    )
+                ]
+            )
+            return
+        cls._set_event_extra(
+            event,
+            cls._HANDOFF_CALL_COUNT_EXTRA_KEY,
+            current_handoff_count + 1,
+        )
         if image_urls_prepared:
             prepared_image_urls = tool_args.get("image_urls")
             if isinstance(prepared_image_urls, list):
@@ -266,8 +359,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         # Build handoff toolset from registered tools plus runtime computer tools.
         toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
 
-        ctx = run_context.context.context
-        event = run_context.context.event
         umo = event.unified_msg_origin
 
         # Use per-subagent provider override if configured; otherwise fall back

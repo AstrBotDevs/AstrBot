@@ -36,6 +36,7 @@ class SubAgentRoute(Route):
                 data = {
                     "main_enable": False,
                     "remove_main_duplicate_tools": False,
+                    "max_handoff_calls_per_run": 8,
                     "agents": [],
                 }
 
@@ -50,6 +51,7 @@ class SubAgentRoute(Route):
             # Ensure required keys exist.
             data.setdefault("main_enable", False)
             data.setdefault("remove_main_duplicate_tools", False)
+            data.setdefault("max_handoff_calls_per_run", 8)
             data.setdefault("agents", [])
 
             # Backward/forward compatibility: ensure each agent contains provider_id.
