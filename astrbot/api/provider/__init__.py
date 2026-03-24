@@ -25,5 +25,5 @@ __all__ = [
     "TTSProvider",
     "EmbeddingProvider",
     "RerankProvider",
-    "register_provider_adapter"
+    "register_provider_adapter",
 ]

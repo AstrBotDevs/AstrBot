@@ -1556,13 +1556,7 @@ class ConfigRoute(Route):
             await asyncio.gather(*logo_registration_tasks, return_exceptions=True)
 
         # 服务提供商的默认配置模板注入
-        (
-            provider_schema,
-            provider_i18n_translations,
-            provider_type_metadata,
-        ) = (
-            self._build_provider_schema_with_i18n()
-        )
+        provider_schema, provider_i18n_translations, provider_type_metadata = self._build_provider_schema_with_i18n()
         metadata["provider_group"]["metadata"]["provider"] = provider_schema["provider"]
 
         return {
