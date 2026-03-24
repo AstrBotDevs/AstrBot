@@ -143,6 +143,7 @@ class AstrbotOrchestrator(BaseAstrbotOrchestrator):
         """Record a message activity for stats tracking."""
         self._message_count += 1
         import time
+
         self._last_activity_timestamp = time.time()
 
     async def shutdown(self) -> None:

@@ -119,7 +119,9 @@ class RuntimeStatusStar:
             result["total_messages"] = getattr(self._orchestrator, "_message_count", 0)
             last_ts = getattr(self._orchestrator, "_last_activity_timestamp", None)
             if last_ts is not None:
-                result["last_activity"] = datetime.fromtimestamp(last_ts, tz=timezone.utc).isoformat()
+                result["last_activity"] = datetime.fromtimestamp(
+                    last_ts, tz=timezone.utc
+                ).isoformat()
             else:
                 result["last_activity"] = None
         return result
