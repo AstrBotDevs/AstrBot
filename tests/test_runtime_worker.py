@@ -70,6 +70,162 @@ async def test_plugin_worker_handle_cancel_fans_out_to_both_dispatchers() -> Non
     runtime.capability_dispatcher.cancel.assert_awaited_once_with("req-123")
 
 
+@pytest.mark.asyncio
+async def test_plugin_worker_start_initializes_metadata_and_handlers() -> None:
+    runtime = object.__new__(PluginWorkerRuntime)
+    runtime.plugin = _plugin_spec("alpha")
+    runtime.loaded_plugin = LoadedPlugin(
+        plugin=runtime.plugin,
+        handlers=[],
+        capabilities=[],
+        llm_tools=[],
+        agents=[],
+        instances=[],
+    )
+    runtime.issues = []
+    lifecycle_calls: list[str] = []
+
+    class _Peer:
+        def __init__(self) -> None:
+            self.started = False
+            self.stopped = False
+            self.initialize_calls: list[dict[str, object]] = []
+
+        async def start(self) -> None:
+            self.started = True
+
+        async def initialize(
+            self, handlers, *, provided_capabilities, metadata
+        ) -> None:
+            self.initialize_calls.append(
+                {
+                    "handlers": list(handlers),
+                    "provided_capabilities": list(provided_capabilities),
+                    "metadata": dict(metadata),
+                }
+            )
+
+        async def stop(self) -> None:
+            self.stopped = True
+
+    runtime.peer = _Peer()
+
+    async def fake_run_lifecycle(method_name: str) -> None:
+        lifecycle_calls.append(method_name)
+
+    runtime._run_lifecycle = fake_run_lifecycle  # type: ignore[method-assign]
+
+    await PluginWorkerRuntime.start(runtime)
+
+    assert runtime.peer.started is True
+    assert lifecycle_calls == ["on_start"]
+    assert runtime.peer.initialize_calls[0]["metadata"]["plugin_id"] == "alpha"
+    assert runtime.peer.initialize_calls[0]["metadata"]["loaded_plugins"] == ["alpha"]
+
+
+@pytest.mark.asyncio
+async def test_plugin_worker_start_runs_on_stop_when_initialize_fails() -> None:
+    runtime = object.__new__(PluginWorkerRuntime)
+    runtime.plugin = _plugin_spec("alpha")
+    runtime.loaded_plugin = LoadedPlugin(
+        plugin=runtime.plugin,
+        handlers=[],
+        capabilities=[],
+        llm_tools=[],
+        agents=[],
+        instances=[],
+    )
+    runtime.issues = []
+    lifecycle_calls: list[str] = []
+
+    class _Peer:
+        def __init__(self) -> None:
+            self.stopped = False
+
+        async def start(self) -> None:
+            return None
+
+        async def initialize(
+            self, handlers, *, provided_capabilities, metadata
+        ) -> None:
+            del handlers, provided_capabilities, metadata
+            raise RuntimeError("initialize failed")
+
+        async def stop(self) -> None:
+            self.stopped = True
+
+    runtime.peer = _Peer()
+
+    async def fake_run_lifecycle(method_name: str) -> None:
+        lifecycle_calls.append(method_name)
+
+    runtime._run_lifecycle = fake_run_lifecycle  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="initialize failed"):
+        await PluginWorkerRuntime.start(runtime)
+
+    assert lifecycle_calls == ["on_start", "on_stop"]
+    assert runtime.peer.stopped is True
+
+
+@pytest.mark.asyncio
+async def test_group_worker_start_raises_when_all_plugins_become_inactive() -> None:
+    runtime = object.__new__(GroupWorkerRuntime)
+    alpha = _plugin_spec("alpha")
+    runtime.group_id = "worker-group"
+    runtime._plugin_states = [
+        GroupPluginRuntimeState(
+            plugin=alpha,
+            loaded_plugin=LoadedPlugin(plugin=alpha, handlers=[], instances=[]),
+            lifecycle_context=Context(peer=SimpleNamespace(), plugin_id="alpha"),
+        )
+    ]
+    runtime._active_plugin_states = list(runtime._plugin_states)
+    runtime.skipped_plugins = {}
+    runtime.issues = []
+    refresh_snapshots: list[list[str]] = []
+
+    class _Peer:
+        def __init__(self) -> None:
+            self.started = False
+            self.stopped = False
+
+        async def start(self) -> None:
+            self.started = True
+
+        async def initialize(
+            self, handlers, *, provided_capabilities, metadata
+        ) -> None:
+            del handlers, provided_capabilities, metadata
+            raise AssertionError("initialize should not run without active plugins")
+
+        async def stop(self) -> None:
+            self.stopped = True
+
+    runtime.peer = _Peer()
+
+    def fake_refresh_dispatchers() -> None:
+        refresh_snapshots.append(
+            [state.plugin.name for state in runtime._active_plugin_states]
+        )
+
+    async def fake_run_lifecycle(state, method_name: str) -> None:
+        del state, method_name
+        raise RuntimeError("on_start failed")
+
+    runtime._refresh_dispatchers = fake_refresh_dispatchers  # type: ignore[method-assign]
+    runtime._run_lifecycle = fake_run_lifecycle  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="has no active plugins"):
+        await GroupWorkerRuntime.start(runtime)
+
+    assert runtime.peer.started is True
+    assert runtime.peer.stopped is True
+    assert runtime.skipped_plugins == {"alpha": "on_start failed"}
+    assert runtime.issues[0].phase == "lifecycle"
+    assert refresh_snapshots[-1] == []
+
+
 def test_group_worker_initialize_metadata_aggregates_runtime_state() -> None:
     class _RiskyPlugin:
         pass

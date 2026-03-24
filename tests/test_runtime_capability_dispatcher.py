@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 from typing import Any
 
 import pytest
@@ -182,3 +183,92 @@ async def test_registered_llm_tool_injects_event_and_normalizes_dict_result() ->
         "session": "session-42",
         "plugin": "tool-plugin",
     }
+
+
+def test_dynamic_llm_tool_registration_replaces_aliases_and_remove_cleans_all_keys() -> (
+    None
+):
+    peer = MockPeer(MockCapabilityRouter())
+    dispatcher = CapabilityDispatcher(
+        plugin_id="worker-group",
+        peer=peer,
+        capabilities=[],
+    )
+
+    async def first_tool() -> str:
+        return "first"
+
+    async def second_tool() -> str:
+        return "second"
+
+    dispatcher.add_dynamic_llm_tool(
+        plugin_id="plugin.alpha",
+        spec=LLMToolSpec.create(
+            name="echo",
+            description="Echo",
+            handler_ref="echo.ref",
+        ),
+        callable_obj=first_tool,
+    )
+    dispatcher.add_dynamic_llm_tool(
+        plugin_id="plugin.alpha",
+        spec=LLMToolSpec.create(
+            name="echo",
+            description="Echo updated",
+            handler_ref="echo.ref",
+        ),
+        callable_obj=second_tool,
+    )
+
+    loaded_by_name = dispatcher._llm_tools[("plugin.alpha", "echo")]
+    loaded_by_ref = dispatcher._llm_tools[("plugin.alpha", "echo.ref")]
+
+    assert loaded_by_name.callable is second_tool
+    assert loaded_by_ref.callable is second_tool
+    assert dispatcher.remove_llm_tool("plugin.alpha", "echo.ref") is True
+    assert ("plugin.alpha", "echo") not in dispatcher._llm_tools
+    assert ("plugin.alpha", "echo.ref") not in dispatcher._llm_tools
+
+
+@pytest.mark.asyncio
+async def test_capability_dispatcher_cancel_propagates_to_task_and_token() -> None:
+    peer = MockPeer(MockCapabilityRouter())
+    dispatcher = CapabilityDispatcher(
+        plugin_id="worker-group",
+        peer=peer,
+        capabilities=[],
+    )
+    cancel_token = CancelToken()
+    task = asyncio.create_task(asyncio.sleep(30))
+    dispatcher._active["req-cancel"] = (task, cancel_token)
+
+    await dispatcher.cancel("req-cancel")
+
+    assert cancel_token.cancelled is True
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+@pytest.mark.asyncio
+async def test_capability_dispatcher_stream_mode_rejects_non_stream_result() -> None:
+    peer = MockPeer(MockCapabilityRouter())
+
+    async def non_stream_capability(payload: dict[str, Any]) -> dict[str, Any]:
+        return {"payload": payload}
+
+    dispatcher = CapabilityDispatcher(
+        plugin_id="test-plugin",
+        peer=peer,
+        capabilities=[_build_loaded_capability(non_stream_capability)],
+    )
+
+    with pytest.raises(Exception, match="stream=true"):
+        await dispatcher.invoke(
+            InvokeMessage(
+                id="req-stream-invalid",
+                capability="test.echo",
+                input={"name": "alice"},
+                stream=True,
+            ),
+            CancelToken(),
+        )
