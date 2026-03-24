@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -76,24 +77,28 @@ class RuntimeStatusStar:
         """Get status of each protocol client."""
         if not self._orchestrator:
             return {
-                "lsp": {"connected": False},
-                "mcp": {"connected": False},
-                "acp": {"connected": False},
-                "abp": {"connected": False},
+                "lsp": {"connected": False, "name": "lsp-client"},
+                "mcp": {"connected": False, "name": "mcp-client"},
+                "acp": {"connected": False, "name": "acp-client"},
+                "abp": {"connected": False, "name": "abp-client"},
             }
 
         return {
             "lsp": {
                 "connected": getattr(self._orchestrator.lsp, "connected", False),
+                "name": "lsp-client",
             },
             "mcp": {
                 "connected": getattr(self._orchestrator.mcp, "connected", False),
+                "name": "mcp-client",
             },
             "acp": {
                 "connected": getattr(self._orchestrator.acp, "connected", False),
+                "name": "acp-client",
             },
             "abp": {
                 "connected": getattr(self._orchestrator.abp, "connected", False),
+                "name": "abp-client",
             },
         }
 
@@ -107,6 +112,14 @@ class RuntimeStatusStar:
 
     def _get_stats(self) -> dict[str, Any]:
         """Get message counts and metrics."""
-        return {
+        result = {
             "uptime_seconds": time.time() - self._start_time,
         }
+        if self._orchestrator:
+            result["total_messages"] = getattr(self._orchestrator, "_message_count", 0)
+            last_ts = getattr(self._orchestrator, "_last_activity_timestamp", None)
+            if last_ts is not None:
+                result["last_activity"] = datetime.fromtimestamp(last_ts, tz=timezone.utc).isoformat()
+            else:
+                result["last_activity"] = None
+        return result

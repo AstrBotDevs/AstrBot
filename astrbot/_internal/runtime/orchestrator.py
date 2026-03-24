@@ -42,6 +42,8 @@ class AstrbotOrchestrator(BaseAstrbotOrchestrator):
 
         self._running = False
         self._stars: dict[str, Any] = {}
+        self._message_count: int = 0
+        self._last_activity_timestamp: float | None = None
 
         # Auto-register RuntimeStatusStar
         self._runtime_status_star = RuntimeStatusStar()
@@ -136,6 +138,12 @@ class AstrbotOrchestrator(BaseAstrbotOrchestrator):
     async def list_stars(self) -> list[str]:
         """List all registered star names."""
         return list(self._stars.keys())
+
+    def record_activity(self) -> None:
+        """Record a message activity for stats tracking."""
+        self._message_count += 1
+        import time
+        self._last_activity_timestamp = time.time()
 
     async def shutdown(self) -> None:
         """

@@ -24,6 +24,8 @@ class TestRuntimeStatusStar:
         orchestrator.acp.connected = False
         orchestrator.abp.connected = True
         orchestrator.list_stars = AsyncMock(return_value=["star-a", "star-b"])
+        orchestrator._message_count = 42
+        orchestrator._last_activity_timestamp = 1710000000.0
         return orchestrator
 
     @pytest.fixture
@@ -73,6 +75,12 @@ class TestRuntimeStatusStar:
         assert result["acp"]["connected"] is False
         assert result["abp"]["connected"] is True
 
+        # Verify name field
+        assert result["lsp"]["name"] == "lsp-client"
+        assert result["mcp"]["name"] == "mcp-client"
+        assert result["acp"]["name"] == "acp-client"
+        assert result["abp"]["name"] == "abp-client"
+
     @pytest.mark.anyio
     async def test_get_protocol_status_no_orchestrator(self) -> None:
         """Test get_protocol_status when no orchestrator is set."""
@@ -111,12 +119,35 @@ class TestRuntimeStatusStar:
         assert isinstance(result, dict)
         assert "uptime_seconds" in result
         assert result["uptime_seconds"] >= 0
+        assert "total_messages" in result
+        assert result["total_messages"] == 42
+        assert "last_activity" in result
+        assert result["last_activity"] is not None
 
     @pytest.mark.anyio
     async def test_unknown_tool(self, star: RuntimeStatusStar) -> None:
         """Test that unknown tool raises ValueError."""
         with pytest.raises(ValueError, match="Unknown tool"):
             await star.call_tool("unknown_tool", {})
+
+    @pytest.mark.anyio
+    async def test_record_activity(self) -> None:
+        """Test orchestrator record_activity() increments message count."""
+        from astrbot._internal.runtime.orchestrator import AstrbotOrchestrator
+
+        orchestrator = AstrbotOrchestrator()
+        assert orchestrator._message_count == 0
+
+        orchestrator.record_activity()
+        assert orchestrator._message_count == 1
+
+        orchestrator.record_activity()
+        orchestrator.record_activity()
+        assert orchestrator._message_count == 3
+
+        assert orchestrator._last_activity_timestamp is not None
+
+        await orchestrator.shutdown()
 
     @pytest.mark.anyio
     async def test_star_name(self) -> None:

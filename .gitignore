@@ -69,3 +69,4 @@ GenieData/
 .env
 dashboard/warker.js
 dashboard/bun.lock
+.pua/
