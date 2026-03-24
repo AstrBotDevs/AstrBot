@@ -28,7 +28,7 @@
       <v-card-text class="pa-4" style="max-height: 400px; overflow-y: auto;">
         <!-- Regular key-value pairs (non-template) -->
         <div v-if="nonTemplatePairs.length > 0">
-          <div v-for="(pair, index) in nonTemplatePairs" :key="index" class="key-value-pair">
+          <div v-for="pair in nonTemplatePairs" :key="pair._id" class="key-value-pair">
             <v-row no-gutters align="center" class="mb-2">
               <v-col cols="4">
                 <v-text-field
@@ -222,9 +222,11 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
+import { useToast } from '@/utils/toast'
 
 const { t } = useI18n()
 const { tm, getRaw } = useModuleI18n('features/config-metadata')
+const { warning: toastWarning } = useToast()
 
 const props = defineProps({
   modelValue: {
@@ -259,6 +261,7 @@ const localKeyValuePairs = ref([])
 const originalKeyValuePairs = ref([])
 const newKey = ref('')
 const newValueType = ref('string')
+const nextPairId = ref(0)
 
 // Template schema support
 const templateSchema = computed(() => {
@@ -285,12 +288,26 @@ watch(() => props.modelValue, (newValue) => {
   // The dialog-based editing handles internal updates
 }, { immediate: true })
 
+function createPair({ key, value, type, slider, template, jsonError = '', _originalKey }) {
+  return {
+    _id: nextPairId.value++,
+    key,
+    value,
+    type,
+    slider,
+    template,
+    jsonError,
+    _originalKey
+  }
+}
+
 function initializeLocalKeyValuePairs() {
   localKeyValuePairs.value = []
+  nextPairId.value = 0
   for (const [key, value] of Object.entries(props.modelValue)) {
     let _type = (typeof value) === 'object' ? 'json':(typeof value)
-    let _value = _type === 'json'?JSON.stringify(value):value
-    
+    let _value = _type === 'json' ? JSON.stringify(value) : value
+
     // Check if this key has a template schema
     const template = templateSchema.value[key]
     if (template) {
@@ -301,20 +318,20 @@ function initializeLocalKeyValuePairs() {
         _value = template.default !== undefined ? template.default : _value
       }
     }
-    
-    localKeyValuePairs.value.push({
-      key: key,
+
+    localKeyValuePairs.value.push(createPair({
+      key,
       value: _value,
       type: _type,
       slider: template?.slider,
-      template: template
-    })
+      template
+    }))
   }
 }
 
 function openDialog() {
   initializeLocalKeyValuePairs()
-  originalKeyValuePairs.value = JSON.parse(JSON.stringify(localKeyValuePairs.value)) // Deep copy
+  originalKeyValuePairs.value = localKeyValuePairs.value.map(pair => ({ ...pair }))
   newKey.value = ''
   newValueType.value = 'string'
   dialog.value = true
@@ -325,7 +342,7 @@ function addKeyValuePair() {
   if (key !== '') {
     const isKeyExists = localKeyValuePairs.value.some(pair => pair.key === key)
     if (isKeyExists) {
-      alert(t('core.common.objectEditor.keyExists'))
+      toastWarning(t('core.common.objectEditor.keyExists'))
       return
     }
 
@@ -338,18 +355,18 @@ function addKeyValuePair() {
         defaultValue = false
         break
       case 'json':
-        defaultValue = "{}"
+        defaultValue = '{}'
         break
       default: // string
-        defaultValue = ""
+        defaultValue = ''
         break
     }
 
-    localKeyValuePairs.value.push({
-      key: key,
+    localKeyValuePairs.value.push(createPair({
+      key,
       value: defaultValue,
       type: newValueType.value
-    })
+    }))
     newKey.value = ''
   }
 }
@@ -377,7 +394,7 @@ function onKeyBlur(pair) {
 
   const isKeyExists = localKeyValuePairs.value.some(p => p !== pair && p.key === newKey)
   if (isKeyExists) {
-    alert(t('core.common.objectEditor.keyExists'))
+    toastWarning(t('core.common.objectEditor.keyExists'))
     pair.key = originalKey
     return
   }
@@ -412,20 +429,20 @@ function getTemplateValue(templateKey) {
 function updateTemplateValue(templateKey, newValue) {
   const existingIndex = localKeyValuePairs.value.findIndex(pair => pair.key === templateKey)
   const template = templateSchema.value[templateKey]
-  
+
   if (existingIndex >= 0) {
     // 更新现有值
     localKeyValuePairs.value[existingIndex].value = newValue
   } else {
     // 添加新字段
-    let valueType = template?.type || 'string'
-    localKeyValuePairs.value.push({
+    const valueType = template?.type || 'string'
+    localKeyValuePairs.value.push(createPair({
       key: templateKey,
       value: newValue,
       type: valueType,
       slider: template?.slider,
-      template: template
-    })
+      template
+    }))
   }
 }
 
@@ -446,10 +463,10 @@ function getDefaultValueForType(type) {
     case 'boolean':
       return false
     case 'json':
-      return "{}"
+      return '{}'
     case 'string':
     default:
-      return ""
+      return ''
   }
 }
 
@@ -473,7 +490,7 @@ function confirmDialog() {
       case 'bool':
       case 'boolean':
         // 布尔值通常由 v-switch 正确处理，但为保险起见可以显式转换
-        // 注意：在 JavaScript 中，只有严格的 false, 0, "", null, undefined, NaN 会被转换为 false
+        // 注意：在 JavaScript 中，只有严格的 false, 0, '', null, undefined, NaN 会被转换为 false
         // 这里直接赋值 pair.value 应该是安全的，因为 v-model 绑定的就是布尔值
         // convertedValue = Boolean(pair.value)
         break
@@ -494,7 +511,7 @@ function confirmDialog() {
 
 function cancelDialog() {
   // Reset to original state
-  localKeyValuePairs.value = JSON.parse(JSON.stringify(originalKeyValuePairs.value))
+  localKeyValuePairs.value = originalKeyValuePairs.value.map(pair => ({ ...pair }))
   dialog.value = false
 }
 
@@ -521,3 +538,4 @@ function getTemplateTitle(template, templateKey) {
   opacity: 0.8;
 }
 </style>
+
