@@ -335,6 +335,22 @@
           "description": "User Prompt",
           "hint": "You can use {{prompt}} as a placeholder for user input. If no placeholder is provided, it will be added before the user input."
         },
+        "image_compress_enabled": {
+          "description": "Enable image compression",
+          "hint": "When enabled, large local images are compressed before being sent to multimodal models."
+        },
+        "image_compress_options": {
+          "description": "Image compression settings",
+          "hint": "Control image resize limits, JPEG quality, and the minimum size threshold for compression.",
+          "max_size": {
+            "description": "Maximum edge length",
+            "hint": "Longest edge of the compressed image in pixels. Images larger than this are resized proportionally."
+          },
+          "quality": {
+            "description": "JPEG quality",
+            "hint": "JPEG output quality from 1 to 100. Higher values preserve more detail but produce larger files."
+          }
+        },
         "reachability_check": {
           "description": "Provider Reachability Check",
           "hint": "When running the /provider command, test provider connectivity in parallel. This actively pings models and may consume extra tokens."
@@ -532,6 +548,10 @@
         "description": "Telegram Command Auto Refresh Interval",
         "hint": "Telegram command auto-refresh interval in seconds."
       },
+      "telegram_polling_restart_delay": {
+        "description": "Telegram Polling Restart Delay",
+        "hint": "Waiting time in seconds when the polling loop needs to restart after unexpected exits. Defaults to 5s."
+      },
       "telegram_token": {
         "description": "Bot Token",
         "hint": "If you are in mainland China, set a proxy or change api_base in Other Settings."
@@ -613,6 +633,30 @@
       "only_use_webhook_url_to_send": {
         "description": "Send Replies via Webhook Only",
         "hint": "When enabled, all WeCom AI Bot replies are sent through msg_push_webhook_url. The message push webhook supports more message types (such as images, files, etc.). If you do not need the typing effect, it is strongly recommended to use this option. "
+      },
+      "weixin_oc_base_url": {
+        "description": "API Base URL",
+        "hint": "Default: https://ilinkai.weixin.qq.com"
+      },
+      "weixin_oc_bot_type": {
+        "description": "bot_type (QR login parameter)",
+        "hint": "Default: 3"
+      },
+      "weixin_oc_qr_poll_interval": {
+        "description": "QR status poll interval (seconds)",
+        "hint": "Polling interval in seconds for QR code status."
+      },
+      "weixin_oc_long_poll_timeout_ms": {
+        "description": "getUpdates long-poll timeout (ms)",
+        "hint": "Timeout parameter for polling messages."
+      },
+      "weixin_oc_api_timeout_ms": {
+        "description": "HTTP timeout (ms)",
+        "hint": "Generic API request timeout."
+      },
+      "weixin_oc_token": {
+        "description": "Token after login (optional)",
+        "hint": "Automatically written after QR login; can be filled manually for advanced scenarios."
       },
       "kook_bot_token": {
         "description": "Bot Token",
@@ -697,11 +741,11 @@
       "platform_settings": {
         "enable_id_white_list": {
           "description": "Enable Whitelist",
-          "hint": "When enabled, only sessions in the whitelist will be responded to."
+          "hint": "When enabled, only sessions in the whitelist will be responded to. If the whitelist is empty, the whitelist is disabled and all IDs are allowed."
         },
         "id_whitelist": {
           "description": "Whitelist ID List",
-          "hint": "Use /sid to get IDs."
+          "hint": "Use /sid to get IDs. If the list is empty, it means whitelist is disabled (all IDs are in the whitelist)."
         },
         "id_whitelist_log": {
           "description": "Output Logs",
@@ -1065,6 +1109,10 @@
         "description": "Custom request headers",
         "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."
       },
+      "ollama_disable_thinking": {
+        "description": "Disable thinking mode",
+        "hint": "Close Ollama thinking mode."
+      },
       "custom_extra_body": {
         "description": "Custom request body parameters",
         "hint": "Add extra parameters to requests, such as temperature, top_p, max_tokens, etc.",
@@ -1387,9 +1435,37 @@
         "description": "Timeout",
         "hint": "Timeout in seconds."
       },
+      "mimo-stt-system-prompt": {
+        "description": "System prompt",
+        "hint": "System prompt used to guide MiMo STT transcription behavior."
+      },
+      "mimo-stt-user-prompt": {
+        "description": "User prompt",
+        "hint": "Additional user prompt sent to MiMo STT to constrain the returned transcription format."
+      },
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS voice. OpenAI defaults: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'."
+      },
+      "mimo-tts-voice": {
+        "description": "Voice",
+        "hint": "MiMo TTS voice name. Supported values include 'mimo_default', 'default_en', and 'default_zh'."
+      },
+      "mimo-tts-format": {
+        "description": "Output format",
+        "hint": "Audio format generated by MiMo TTS. Supported values: 'wav', 'mp3', and 'pcm'."
+      },
+      "mimo-tts-style-prompt": {
+        "description": "Style prompt",
+        "hint": "Prepended to the synthesis target text as a <style>...</style> tag to control speed, emotion, character, or style, such as happy, faster, Sun Wukong, or whispering. Optional."
+      },
+      "mimo-tts-dialect": {
+        "description": "Dialect",
+        "hint": "Combined with the style prompt inside the leading <style>...</style> tag, for example Northeastern Mandarin, Sichuan dialect, Henan dialect, or Cantonese. Optional."
+      },
+      "mimo-tts-seed-text": {
+        "description": "Seed text",
+        "hint": "Sent as an optional user message to help guide tone and speaking style. It is not appended to the synthesis target text."
       },
       "fishaudio-tts-character": {
         "description": "character",

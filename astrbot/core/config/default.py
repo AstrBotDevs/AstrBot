@@ -5,8 +5,40 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.20.1"
+VERSION = "4.22.0"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
+PERSONAL_WECHAT_CONFIG_METADATA = {
+    "weixin_oc_base_url": {
+        "description": "Base URL",
+        "type": "string",
+        "hint": "默认值: https://ilinkai.weixin.qq.com",
+    },
+    "weixin_oc_bot_type": {
+        "description": "扫码参数 bot_type",
+        "type": "string",
+        "hint": "默认值: 3",
+    },
+    "weixin_oc_qr_poll_interval": {
+        "description": "二维码状态轮询间隔（秒）",
+        "type": "int",
+        "hint": "每隔多少秒轮询一次二维码状态。",
+    },
+    "weixin_oc_long_poll_timeout_ms": {
+        "description": "getUpdates 长轮询超时时间（毫秒）",
+        "type": "int",
+        "hint": "会话消息拉取接口超时参数。",
+    },
+    "weixin_oc_api_timeout_ms": {
+        "description": "HTTP 请求超时（毫秒）",
+        "type": "int",
+        "hint": "通用 API 请求超时参数。",
+    },
+    "weixin_oc_token": {
+        "description": "登录后 token（可留空）",
+        "type": "string",
+        "hint": "扫码登录成功后会自动写入；高级场景可手动填写。",
+    },
+}
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
     "qq_official_webhook",
@@ -117,7 +149,7 @@ DEFAULT_CONFIG = {
         "unsupported_streaming_strategy": "realtime_segmenting",
         "reachability_check": False,
         "max_agent_step": 30,
-        "tool_call_timeout": 60,
+        "tool_call_timeout": 120,
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
@@ -141,6 +173,11 @@ DEFAULT_CONFIG = {
             "shipyard_neo_access_token": "",
             "shipyard_neo_profile": "python-default",
             "shipyard_neo_ttl": 3600,
+        },
+        "image_compress_enabled": True,
+        "image_compress_options": {
+            "max_size": 1280,
+            "quality": 95,
         },
     },
     # SubAgent orchestrator mode:
@@ -364,6 +401,16 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6198,
                     },
+                    "个人微信": {
+                        "id": "weixin_personal",
+                        "type": "weixin_oc",
+                        "enable": False,
+                        "weixin_oc_base_url": "https://ilinkai.weixin.qq.com",
+                        "weixin_oc_bot_type": "3",
+                        "weixin_oc_qr_poll_interval": 1,
+                        "weixin_oc_long_poll_timeout_ms": 35_000,
+                        "weixin_oc_api_timeout_ms": 15_000,
+                    },
                     "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
@@ -396,6 +443,7 @@ CONFIG_METADATA_2 = {
                         "telegram_command_register": True,
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
+                        "telegram_polling_restart_delay": 5.0,
                     },
                     "Discord": {
                         "id": "discord",
@@ -686,6 +734,11 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "Telegram 命令自动刷新间隔，单位为秒。",
                     },
+                    "telegram_polling_restart_delay": {
+                        "description": "Telegram 轮询重启延迟",
+                        "type": "float",
+                        "hint": "当轮询意外结束尝试自动重启时的延迟时间，理论上越短恢复越快，但过短（<0.1s）可能导致死循环针对 API 服务器的请求阻断。单位为秒。默认为 5s。",
+                    },
                     "id": {
                         "description": "机器人名称",
                         "type": "string",
@@ -863,6 +916,7 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。",
                     },
+                    **PERSONAL_WECHAT_CONFIG_METADATA,
                     "webhook_uuid": {
                         "invisible": True,
                         "description": "Webhook UUID",
@@ -1068,7 +1122,7 @@ CONFIG_METADATA_2 = {
                 "type": "list",
                 # provider sources templates
                 "config_template": {
-                    "OpenAI": {
+                    "OpenAI Compatible": {
                         "id": "openai",
                         "provider": "openai",
                         "type": "openai_chat_completion",
@@ -1112,6 +1166,20 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.anthropic.com/v1",
                         "timeout": 120,
                         "proxy": "",
+                        "custom_headers": {},
+                        "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
+                    },
+                    "Kimi Coding Plan": {
+                        "id": "kimi-code",
+                        "provider": "kimi-code",
+                        "type": "kimi_code_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.kimi.com/coding/",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "Moonshot": {
@@ -1234,6 +1302,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "http://127.0.0.1:11434/v1",
                         "proxy": "",
                         "custom_headers": {},
+                        "ollama_disable_thinking": False,
                     },
                     "LM Studio": {
                         "id": "lm_studio",
@@ -1431,6 +1500,20 @@ CONFIG_METADATA_2 = {
                         "model": "whisper-1",
                         "proxy": "",
                     },
+                    "MiMo STT(API)": {
+                        "id": "mimo_stt",
+                        "provider": "mimo",
+                        "type": "mimo_stt_api",
+                        "provider_type": "speech_to_text",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.xiaomimimo.com/v1",
+                        "model": "mimo-v2-omni",
+                        "mimo-stt-system-prompt": "You are a speech transcription assistant. Transcribe the spoken content from the audio exactly and return only the transcription text.",
+                        "mimo-stt-user-prompt": "Please transcribe the content of the audio and return only the transcription text.",
+                        "timeout": "20",
+                        "proxy": "",
+                    },
                     "Whisper(Local)": {
                         "provider": "openai",
                         "type": "openai_whisper_selfhost",
@@ -1458,6 +1541,23 @@ CONFIG_METADATA_2 = {
                         "api_base": "",
                         "model": "tts-1",
                         "openai-tts-voice": "alloy",
+                        "timeout": "20",
+                        "proxy": "",
+                    },
+                    "MiMo TTS(API)": {
+                        "id": "mimo_tts",
+                        "type": "mimo_tts_api",
+                        "provider": "mimo",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.xiaomimimo.com/v1",
+                        "model": "mimo-v2-tts",
+                        "mimo-tts-voice": "mimo_default",
+                        "mimo-tts-format": "wav",
+                        "mimo-tts-style-prompt": "",
+                        "mimo-tts-dialect": "",
+                        "mimo-tts-seed-text": "Hello, MiMo, have you had lunch?",
                         "timeout": "20",
                         "proxy": "",
                     },
@@ -1762,6 +1862,11 @@ CONFIG_METADATA_2 = {
                         "type": "dict",
                         "items": {},
                         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。",
+                    },
+                    "ollama_disable_thinking": {
+                        "description": "关闭思考模式",
+                        "type": "bool",
+                        "hint": "关闭 Ollama 思考模式。",
                     },
                     "custom_extra_body": {
                         "description": "自定义请求体参数",
@@ -2309,10 +2414,45 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "超时时间，单位为秒。",
                     },
+                    "mimo-stt-system-prompt": {
+                        "description": "系统提示词",
+                        "type": "string",
+                        "hint": "用于指导 MiMo STT 转录行为的 system prompt。",
+                    },
+                    "mimo-stt-user-prompt": {
+                        "description": "用户提示词",
+                        "type": "string",
+                        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。",
+                    },
                     "openai-tts-voice": {
                         "description": "voice",
                         "type": "string",
                         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'",
+                    },
+                    "mimo-tts-voice": {
+                        "description": "音色",
+                        "type": "string",
+                        "hint": "MiMo TTS 的音色名称。可选值包括 'mimo_default'、'default_en'、'default_zh'。",
+                    },
+                    "mimo-tts-format": {
+                        "description": "输出格式",
+                        "type": "string",
+                        "hint": "MiMo TTS 生成音频的格式。支持 'wav'、'mp3'、'pcm'。",
+                    },
+                    "mimo-tts-style-prompt": {
+                        "description": "风格提示词",
+                        "type": "string",
+                        "hint": "会以 <style>...</style> 标签形式添加到待合成文本开头，用于控制语速、情绪、角色或风格，例如 开心、变快、孙悟空、悄悄话。可留空。",
+                    },
+                    "mimo-tts-dialect": {
+                        "description": "方言",
+                        "type": "string",
+                        "hint": "会与风格提示词一起写入开头的 <style>...</style> 标签中，例如 东北话、四川话、河南话、粤语。可留空。",
+                    },
+                    "mimo-tts-seed-text": {
+                        "description": "种子文本",
+                        "type": "string",
+                        "hint": "作为可选的 user 消息发送，用于辅助调节语气和风格，不会拼接到待合成文本中。",
                     },
                     "fishaudio-tts-character": {
                         "description": "character",
@@ -3317,6 +3457,29 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。",
                     },
+                    "provider_settings.image_compress_enabled": {
+                        "description": "启用图片压缩",
+                        "type": "bool",
+                        "hint": "启用后，发送给多模态模型前会先压缩本地大图片。",
+                    },
+                    "provider_settings.image_compress_options.max_size": {
+                        "description": "最大边长",
+                        "type": "int",
+                        "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。",
+                        "condition": {
+                            "provider_settings.image_compress_enabled": True,
+                        },
+                        "slider": {"min": 256, "max": 4096, "step": 64},
+                    },
+                    "provider_settings.image_compress_options.quality": {
+                        "description": "压缩质量",
+                        "type": "int",
+                        "hint": "JPEG 输出质量，范围为 1-100。值越高，画质越好，文件也越大。",
+                        "condition": {
+                            "provider_settings.image_compress_enabled": True,
+                        },
+                        "slider": {"min": 1, "max": 100, "step": 1},
+                    },
                     "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
                         "type": "bool",
@@ -3439,7 +3602,7 @@ CONFIG_METADATA_3 = {
                         "description": "白名单 ID 列表",
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "使用 /sid 获取 ID。",
+                        "hint": "使用 /sid 获取 ID。当白名单列表为空时，代表不启用白名单（即所有 ID 都在白名单内）。",
                     },
                     "platform_settings.id_whitelist_log": {
                         "description": "输出日志",
