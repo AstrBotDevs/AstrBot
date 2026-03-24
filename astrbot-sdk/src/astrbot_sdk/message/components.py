@@ -92,6 +92,28 @@ def _component_type_name(component: Any) -> str:
     return str(normalized or "unknown").lower()
 
 
+def _plain_payload(text: Any) -> dict[str, Any]:
+    return {"type": "text", "data": {"text": str(text)}}
+
+
+def _reply_payload_data(
+    component: Any,
+    *,
+    chain_payloads: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "id": getattr(component, "id", ""),
+        "chain": chain_payloads,
+        "sender_id": getattr(component, "sender_id", 0),
+        "sender_nickname": getattr(component, "sender_nickname", ""),
+        "time": getattr(component, "time", 0),
+        "message_str": getattr(component, "message_str", ""),
+        "text": getattr(component, "text", ""),
+        "qq": getattr(component, "qq", 0),
+        "seq": getattr(component, "seq", 0),
+    }
+
+
 def _resolve_media_kind(url: str, kind: str = "auto") -> str:
     normalized_kind = str(kind).strip().lower() or "auto"
     if normalized_kind != "auto":
@@ -159,10 +181,10 @@ class Plain(BaseMessageComponent):
         self.convert = convert
 
     def toDict(self) -> dict[str, Any]:
-        return {"type": "text", "data": {"text": self.text.strip()}}
+        return _plain_payload(self.text)
 
     async def to_dict(self) -> dict[str, Any]:
-        return {"type": "text", "data": {"text": self.text}}
+        return _plain_payload(self.text)
 
 
 class At(BaseMessageComponent):
@@ -198,33 +220,19 @@ class Reply(BaseMessageComponent):
     def toDict(self) -> dict[str, Any]:
         return {
             "type": "reply",
-            "data": {
-                "id": self.id,
-                "chain": _reply_chain_payloads_sync(self.chain),
-                "sender_id": self.sender_id,
-                "sender_nickname": self.sender_nickname,
-                "time": self.time,
-                "message_str": self.message_str,
-                "text": self.text,
-                "qq": self.qq,
-                "seq": self.seq,
-            },
+            "data": _reply_payload_data(
+                self,
+                chain_payloads=_reply_chain_payloads_sync(self.chain),
+            ),
         }
 
     async def to_dict(self) -> dict[str, Any]:
         return {
             "type": "reply",
-            "data": {
-                "id": self.id,
-                "chain": await _reply_chain_payloads(self.chain),
-                "sender_id": self.sender_id,
-                "sender_nickname": self.sender_nickname,
-                "time": self.time,
-                "message_str": self.message_str,
-                "text": self.text,
-                "qq": self.qq,
-                "seq": self.seq,
-            },
+            "data": _reply_payload_data(
+                self,
+                chain_payloads=await _reply_chain_payloads(self.chain),
+            ),
         }
 
 
@@ -522,21 +530,16 @@ def component_to_payload_sync(component: Any) -> dict[str, Any]:
     if isinstance(component, UnknownComponent):
         return component.toDict()
     if isinstance(component, Plain):
-        return {"type": "text", "data": {"text": component.text}}
+        return _plain_payload(component.text)
     if _component_type_name(component) == "reply":
         return {
             "type": "reply",
-            "data": {
-                "id": getattr(component, "id", ""),
-                "chain": _reply_chain_payloads_sync(getattr(component, "chain", [])),
-                "sender_id": getattr(component, "sender_id", 0),
-                "sender_nickname": getattr(component, "sender_nickname", ""),
-                "time": getattr(component, "time", 0),
-                "message_str": getattr(component, "message_str", ""),
-                "text": getattr(component, "text", ""),
-                "qq": getattr(component, "qq", 0),
-                "seq": getattr(component, "seq", 0),
-            },
+            "data": _reply_payload_data(
+                component,
+                chain_payloads=_reply_chain_payloads_sync(
+                    getattr(component, "chain", [])
+                ),
+            ),
         }
     to_dict = getattr(component, "toDict", None)
     if callable(to_dict):

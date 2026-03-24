@@ -32,6 +32,7 @@ from ._internal.testing_support import (
     RecordedSend,
     StdoutPlatformSink,
 )
+from ._message_types import normalize_message_type
 from .context import CancelToken
 from .context import Context as RuntimeContext
 from .errors import AstrBotError
@@ -724,14 +725,12 @@ class PluginHarness:
 
     @staticmethod
     def _message_type_name(event_payload: dict[str, Any]) -> str:
-        explicit = str(event_payload.get("message_type", "")).lower()
-        if explicit in {"group", "private", "other"}:
-            return explicit
-        if event_payload.get("group_id"):
-            return "group"
-        if event_payload.get("user_id"):
-            return "private"
-        return "other"
+        return normalize_message_type(
+            event_payload.get("message_type", ""),
+            group_id=str(event_payload.get("group_id", "")).strip() or None,
+            user_id=str(event_payload.get("user_id", "")).strip() or None,
+            empty_default="other",
+        )
 
     @staticmethod
     def _resolve_lifecycle_hook(instance: Any, method_name: str):
