@@ -7,6 +7,7 @@ from astrbot.core.star.session_llm_manager import SessionServiceManager
 from ...context import PipelineContext
 from ..stage import Stage
 from .agent_sub_stages.internal import InternalAgentSubStage
+from .agent_sub_stages.internal_mind import InternalMindSubStage
 from .agent_sub_stages.third_party import ThirdPartyAgentSubStage
 
 
@@ -27,9 +28,13 @@ class AgentRequestSubStage(Stage):
         agent_runner_type = self.config["provider_settings"]["agent_runner_type"]
         if agent_runner_type == "local":
             self.agent_sub_stage = InternalAgentSubStage()
+            self.mind_sub_stage = InternalMindSubStage()
         else:
             self.agent_sub_stage = ThirdPartyAgentSubStage()
+            self.mind_sub_stage = None
         await self.agent_sub_stage.initialize(ctx)
+        if self.mind_sub_stage:
+            await self.mind_sub_stage.initialize(ctx)
 
     async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None, None]:
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:

@@ -462,56 +462,10 @@ class ChatRoute(Route):
                         # 消息结束处理
                         if msg_type == "end":
                             break
-                        elif msg_type == "break":
-                            # 高级人格的分段消息，每个 break 保存一条独立消息
-                            if (
-                                chain_type == "tool_call"
-                                or chain_type == "tool_call_result"
-                            ):
-                                continue
-
-                            # 提取 web_search_tavily 引用
-                            try:
-                                refs = self._extract_web_search_refs(
-                                    accumulated_text,
-                                    accumulated_parts,
-                                )
-                            except Exception as e:
-                                logger.exception(
-                                    f"Failed to extract web search refs: {e}",
-                                    exc_info=True,
-                                )
-
-                            saved_record = await self._save_bot_message(
-                                webchat_conv_id,
-                                accumulated_text,
-                                accumulated_parts,
-                                accumulated_reasoning,
-                                agent_stats,
-                                refs,
-                            )
-                            # 发送保存的消息信息给前端
-                            if saved_record and not client_disconnected:
-                                saved_info = {
-                                    "type": "message_saved",
-                                    "data": {
-                                        "id": saved_record.id,
-                                        "created_at": to_utc_isoformat(
-                                            saved_record.created_at
-                                        ),
-                                    },
-                                }
-                                try:
-                                    yield f"data: {json.dumps(saved_info, ensure_ascii=False)}\n\n"
-                                except Exception:
-                                    pass
-                            # 清空累积的内容，准备下一条消息
-                            accumulated_parts = []
-                            accumulated_text = ""
-                            accumulated_reasoning = ""
-                            agent_stats = {}
-                            refs = {}
-                        elif (streaming and msg_type == "complete") or not streaming:
+                        elif (
+                            (streaming and msg_type == "complete") or not streaming
+                            # or msg_type == "break"
+                        ):
                             if (
                                 chain_type == "tool_call"
                                 or chain_type == "tool_call_result"
