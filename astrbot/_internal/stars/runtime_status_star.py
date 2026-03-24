@@ -112,7 +112,7 @@ class RuntimeStatusStar:
 
     def _get_stats(self) -> dict[str, Any]:
         """Get message counts and metrics."""
-        result = {
+        result: dict[str, Any] = {
             "uptime_seconds": time.time() - self._start_time,
         }
         if self._orchestrator:
