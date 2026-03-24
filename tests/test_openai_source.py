@@ -576,3 +576,38 @@ async def test_openai_embedding_provider_preserves_existing_v1_suffix():
         assert str(provider.client.base_url) == "https://example.com/openai/v1/"
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_embedding_provider_normalizes_trailing_slash_without_double_slash():
+    provider = _make_embedding_provider(
+        {"embedding_api_base": "https://example.com/openai/"}
+    )
+    try:
+        assert str(provider.client.base_url) == "https://example.com/openai/v1/"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_embedding_provider_falls_back_to_default_base_for_blank_config():
+    provider = _make_embedding_provider({"embedding_api_base": "   "})
+    try:
+        assert str(provider.client.base_url) == "https://api.openai.com/v1/"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_embedding_provider_preserves_versioned_or_specific_paths():
+    base_urls = [
+        "https://example.com/v1-beta",
+        "https://example.com/v1/embeddings",
+    ]
+
+    for base_url in base_urls:
+        provider = _make_embedding_provider({"embedding_api_base": base_url})
+        try:
+            assert str(provider.client.base_url) == f"{base_url.rstrip('/')}/"
+        finally:
+            await provider.terminate()

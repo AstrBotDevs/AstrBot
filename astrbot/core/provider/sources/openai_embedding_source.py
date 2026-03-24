@@ -1,3 +1,5 @@
+from urllib.parse import urlsplit, urlunsplit
+
 import httpx
 from openai import AsyncOpenAI
 
@@ -14,12 +16,28 @@ from ..register import register_provider_adapter
     provider_type=ProviderType.EMBEDDING,
 )
 class OpenAIEmbeddingProvider(EmbeddingProvider):
+    DEFAULT_EMBEDDING_API_BASE = "https://api.openai.com/v1"
+
     @staticmethod
     def _normalize_embedding_api_base(api_base: str) -> str:
+        """Normalize root-style embedding base URLs while avoiding path-specific ones.
+
+        Auto-append ``/v1`` only for host roots or single-segment paths such as
+        ``https://example.com`` or ``https://example.com/openai``. More specific
+        paths (for example ``/v1-beta`` or ``/v1/embeddings``) are preserved as-is.
+        """
         normalized_api_base = api_base.rstrip("/")
-        if not normalized_api_base.endswith("/v1"):
-            normalized_api_base = f"{normalized_api_base}/v1"
-        return normalized_api_base
+        parsed = urlsplit(normalized_api_base)
+        path_segments = [segment for segment in parsed.path.split("/") if segment]
+        has_version_segment = any(
+            len(segment) > 1 and segment.startswith("v") and segment[1].isdigit()
+            for segment in path_segments
+        )
+        if has_version_segment or len(path_segments) > 1:
+            return normalized_api_base
+
+        normalized_path = f"{parsed.path.rstrip('/')}/v1" if parsed.path else "/v1"
+        return urlunsplit(parsed._replace(path=normalized_path))
 
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
@@ -32,10 +50,12 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             logger.info(f"[OpenAI Embedding] {provider_id} Using proxy: {proxy}")
             http_client = httpx.AsyncClient(proxy=proxy)
         api_base = provider_config.get(
-            "embedding_api_base", "https://api.openai.com/v1"
+            "embedding_api_base", self.DEFAULT_EMBEDDING_API_BASE
         ).strip()
         if api_base:
             api_base = self._normalize_embedding_api_base(api_base)
+        else:
+            api_base = self.DEFAULT_EMBEDDING_API_BASE
         logger.info(f"[OpenAI Embedding] {provider_id} Using API Base: {api_base}")
         self.client = AsyncOpenAI(
             api_key=provider_config.get("embedding_api_key"),
