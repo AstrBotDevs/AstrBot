@@ -83,7 +83,9 @@ test('scanUsedIcons extracts mdi-* icon names from files', () => {
   assert.ok(icons instanceof Set);
   assert.ok(icons.has('mdi-home'));
   assert.ok(icons.has('mdi-close'));
-  assert.equal(icons.size, 2); // mdi-home deduplicated
+  assert.ok(icons.has('mdi-radiobox-blank'));
+  assert.ok(icons.has('mdi-radiobox-marked'));
+  assert.equal(icons.size, 4); // source icons + required radio icons
 
   rmSync(tmp, { recursive: true });
 });
@@ -101,12 +103,26 @@ test('scanUsedIcons excludes utility classes', () => {
   rmSync(tmp, { recursive: true });
 });
 
-test('scanUsedIcons returns empty set when no icons found', () => {
+test('scanUsedIcons includes required radio icons even when no mdi-* icons are found in source', () => {
   const tmp = makeTmpDir();
   writeFileSync(join(tmp, 'A.vue'), '<div>Hello</div>');
 
   const icons = scanUsedIcons(collectFiles(tmp, ['.vue']));
-  assert.equal(icons.size, 0);
+  assert.ok(icons.has('mdi-radiobox-blank'));
+  assert.ok(icons.has('mdi-radiobox-marked'));
+  assert.equal(icons.size, 2);
+
+  rmSync(tmp, { recursive: true });
+});
+
+test('scanUsedIcons deduplicates required radio icons when source already references them', () => {
+  const tmp = makeTmpDir();
+  writeFileSync(join(tmp, 'A.vue'), '<v-icon>mdi-radiobox-marked</v-icon><v-icon>mdi-home</v-icon>');
+
+  const icons = [...scanUsedIcons(collectFiles(tmp, ['.vue']))];
+  assert.equal(icons.filter(icon => icon === 'mdi-radiobox-marked').length, 1);
+  assert.ok(icons.includes('mdi-radiobox-blank'));
+  assert.ok(icons.includes('mdi-home'));
 
   rmSync(tmp, { recursive: true });
 });
