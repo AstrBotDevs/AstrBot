@@ -131,6 +131,23 @@ class ToolSet:
     def __len__(self) -> int:
         return len(self._tools)
 
+    def __bool__(self) -> bool:
+        return bool(self._tools)
+
+    def __repr__(self) -> str:
+        return f"ToolSet(namespace={self.namespace!r}, tools={self.list_tools()!r})"
+
+    def __str__(self) -> str:
+        return f"ToolSet({self.namespace}, {len(self)} tools)"
+
+    def names(self) -> list[str]:
+        """Get names of all tools in this set."""
+        return [tool.name for tool in self.tools]
+
+    def empty(self) -> bool:
+        """Check if the tool set is empty."""
+        return len(self) == 0
+
     def merge(self, other: "ToolSet") -> None:
         """Merge another ToolSet into this one."""
         for tool in other.tools:
@@ -203,3 +220,113 @@ class ToolSet:
 
             result.append(func_def)
         return result
+
+    def anthropic_schema(self) -> list[dict]:
+        """Convert tools to Anthropic API format."""
+        result = []
+        for tool in self.tools:
+            input_schema: dict[str, Any] = {"type": "object"}
+            if tool.parameters:
+                input_schema["properties"] = tool.parameters.get("properties", {})
+                input_schema["required"] = tool.parameters.get("required", [])
+            tool_def: dict[str, Any] = {"name": tool.name, "input_schema": input_schema}
+            if tool.description:
+                tool_def["description"] = tool.description
+            result.append(tool_def)
+        return result
+
+    def google_schema(self) -> dict:
+        """Convert tools to Google GenAI API format."""
+
+        def convert_schema(schema: dict) -> dict:
+            supported_types = {
+                "string",
+                "number",
+                "integer",
+                "boolean",
+                "array",
+                "object",
+                "null",
+            }
+            supported_formats = {
+                "string": {"enum", "date-time"},
+                "integer": {"int32", "int64"},
+                "number": {"float", "double"},
+            }
+
+            if "anyOf" in schema:
+                return {"anyOf": [convert_schema(s) for s in schema["anyOf"]]}
+
+            result = {}
+            origin_type = schema.get("type")
+            target_type = origin_type
+
+            if isinstance(origin_type, list):
+                target_type = next((t for t in origin_type if t != "null"), "string")
+
+            if target_type in supported_types:
+                result["type"] = target_type
+                if "format" in schema and schema["format"] in supported_formats.get(result["type"], set()):
+                    result["format"] = schema["format"]
+            else:
+                result["type"] = "null"
+
+            support_fields = {
+                "title",
+                "description",
+                "enum",
+                "minimum",
+                "maximum",
+                "maxItems",
+                "minItems",
+                "nullable",
+                "required",
+            }
+            result.update({k: schema[k] for k in support_fields if k in schema})
+
+            if "properties" in schema:
+                properties = {}
+                for key, value in schema["properties"].items():
+                    prop_value = convert_schema(value)
+                    if "default" in prop_value:
+                        del prop_value["default"]
+                    if "additionalProperties" in prop_value:
+                        del prop_value["additionalProperties"]
+                    properties[key] = prop_value
+                if properties:
+                    result["properties"] = properties
+
+            if target_type == "array":
+                items_schema = schema.get("items")
+                if isinstance(items_schema, dict):
+                    result["items"] = convert_schema(items_schema)
+                else:
+                    result["items"] = {"type": "string"}
+
+            return result
+
+        tools_list = []
+        for tool in self.tools:
+            d: dict[str, Any] = {"name": tool.name}
+            if tool.description:
+                d["description"] = tool.description
+            if tool.parameters:
+                d["parameters"] = convert_schema(tool.parameters)
+            tools_list.append(d)
+
+        declarations: dict[str, Any] = {}
+        if tools_list:
+            declarations["function_declarations"] = tools_list
+        return declarations
+
+    def get_func_desc_openai_style(self, omit_empty_parameter_field: bool = False):
+        """Get tools in OpenAI function calling style (deprecated)."""
+        return self.openai_schema(omit_empty_parameter_field)
+
+    def get_func_desc_anthropic_style(self):
+        """Get tools in Anthropic style (deprecated)."""
+        return self.anthropic_schema()
+
+    def get_func_desc_google_genai_style(self):
+        """Get tools in Google GenAI style (deprecated)."""
+        return self.google_schema()
