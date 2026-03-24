@@ -309,12 +309,8 @@ def set_config(key: str, value: str) -> None:
         _save_config(config)
 
         click.echo(f"Config updated: {key}")
-        if key == "dashboard.password":
-            click.echo("  Old value: ********")
-            click.echo("  New value: ********")
-        else:
-            click.echo(f"  Old value: {old_value}")
-            click.echo(f"  New value: {validated_value}")
+        click.echo(f"  Old value: {old_value}")
+        click.echo(f"  New value: {validated_value}")
     except KeyError:
         raise click.ClickException(f"Unknown config key: {key}")
     except click.ClickException:

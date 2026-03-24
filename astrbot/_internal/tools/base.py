@@ -135,6 +135,10 @@ class ToolSet:
         for tool in other.tools:
             self.add(tool)
 
+    def normalize(self) -> None:
+        """Sort tools by name for deterministic serialization."""
+        self._tools = dict(sorted(self._tools.items(), key=lambda x: x[0]))
+
     @property
     def tools(self) -> list[FunctionTool]:
         """List all tools in this set."""
