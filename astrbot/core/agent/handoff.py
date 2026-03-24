@@ -39,6 +39,8 @@ class HandoffTool(FunctionTool, Generic[TContext]):
     def default_parameters(self) -> dict:
         return {
             "type": "object",
+            "required": ["input"],
+            "additionalProperties": False,
             "properties": {
                 "input": {
                     "type": "string",

@@ -343,3 +343,118 @@ async def test_collect_handoff_image_urls_filters_extensionless_file_outside_tem
     )
 
     assert image_urls == []
+
+
+def test_parse_background_task_arg_rejects_invalid_value():
+    is_bg, error = FunctionToolExecutor._parse_background_task_arg(
+        "transfer_to_subagent",
+        "not-a-bool",
+    )
+
+    assert is_bg is False
+    assert error is not None
+    assert isinstance(error, mcp.types.CallToolResult)
+    assert "invalid_background_task" in error.content[0].text
+
+
+def test_parse_background_task_arg_accepts_string_true():
+    is_bg, error = FunctionToolExecutor._parse_background_task_arg(
+        "transfer_to_subagent",
+        "true",
+    )
+
+    assert is_bg is True
+    assert error is None
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_rejects_empty_input():
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**_kwargs):
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="   ",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert isinstance(results[0], mcp.types.CallToolResult)
+    text_content = results[0].content[0]
+    assert isinstance(text_content, mcp.types.TextContent)
+    assert "missing_or_empty_input" in text_content.text
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_falls_back_to_current_provider_when_configured_missing():
+    captured: dict = {}
+
+    class _DummyProviderManager:
+        async def get_provider_by_id(self, _provider_id: str):
+            return None
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "fallback-provider"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        provider_manager=_DummyProviderManager(),
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id="missing-provider-id",
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert captured["chat_provider_id"] == "fallback-provider"
