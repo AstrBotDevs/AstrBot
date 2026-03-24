@@ -324,6 +324,28 @@ def test_message_session_round_trip() -> None:
     assert str(session) == "demo-platform:group:room-7"
 
 
+@pytest.mark.unit
+def test_message_session_normalizes_legacy_message_type_aliases() -> None:
+    private_session = MessageSession.from_str("demo-platform:FriendMessage:user-1")
+    group_session = MessageSession(
+        platform_id="demo-platform",
+        message_type="GroupMessage",
+        session_id="room-7",
+    )
+    other_session = MessageSession(
+        platform_id="demo-platform",
+        message_type="channel",
+        session_id="thread-3",
+    )
+
+    assert private_session.message_type == "private"
+    assert str(private_session) == "demo-platform:private:user-1"
+    assert group_session.message_type == "group"
+    assert str(group_session) == "demo-platform:group:room-7"
+    assert other_session.message_type == "other"
+    assert str(other_session) == "demo-platform:other:thread-3"
+
+
 class _EventConverterProbe:
     def __init__(self) -> None:
         self.is_wake = False
