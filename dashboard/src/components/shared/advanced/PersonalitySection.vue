@@ -26,15 +26,15 @@
                         persistent-hint />
                 </v-col>
 
-                <!-- 识别规则 -->
-                <v-col cols="12" md="6">
-                    <v-textarea v-model="localConfig.recognition_rules"
-                        :label="tm('advancedPersona.personality.recognitionRules')"
-                        :hint="tm('advancedPersona.personality.recognitionRulesHint')"
-                        variant="outlined"
-                        rows="4"
-                        persistent-hint />
-                </v-col>
+<!--                &lt;!&ndash; 识别规则 &ndash;&gt;-->
+<!--                <v-col cols="12" md="6">-->
+<!--                    <v-textarea v-model="localConfig.recognition_rules"-->
+<!--                        :label="tm('advancedPersona.personality.recognitionRules')"-->
+<!--                        :hint="tm('advancedPersona.personality.recognitionRulesHint')"-->
+<!--                        variant="outlined"-->
+<!--                        rows="4"-->
+<!--                        persistent-hint />-->
+<!--                </v-col>-->
 
                 <!-- 心情标签 -->
                 <v-col cols="12" md="6">

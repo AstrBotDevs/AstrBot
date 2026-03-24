@@ -4,7 +4,7 @@
   },
   "buttons": {
     "create": "创建人格",
-    "createAdvanced": "高级人格（测试版）",
+    "createAdvanced": "思想人格",
     "createFirst": "创建第一个人格",
     "edit": "编辑",
     "delete": "删除",
@@ -146,9 +146,9 @@
   },
   "advancedPersona": {
     "back": "返回",
-    "createTitle": "创建高级人格",
-    "editTitle": "编辑高级人格",
-    "subtitle": "配置高级人格的详细设置",
+    "createTitle": "思想人格",
+    "editTitle": "编辑思想人格",
+    "subtitle": "配置思想人格的详细设置",
     "betaTag": "测试版",
     "basicInfo": "基础信息",
     "fillDefault": "填充麦麦默认配置",

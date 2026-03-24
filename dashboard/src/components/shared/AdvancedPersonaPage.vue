@@ -221,7 +221,16 @@
                             <DialogsSection v-model="personaForm.begin_dialogs" />
                         </v-window-item>
                     </v-window>
+
+
+                  <!--todo 稳定以后再删除 ，Delete after stabilizing
+                           可能会有很多bug，代码写的史山轻喷，该模块目前 作者：原木呀 可以在插件开发群找到我并且叫我改bug
+                           本人大四，改到这个样子真的改不下去了 ，一个人的力量是有限的-->
+                  <p><b> 提示：</b>开启此人格后唤醒词不起作用，因此应该设置白名单</p>
+                  <p>可能会有一些不稳定的情况或者动作不执行的情况，这个情况是因为要大量数据微调默认的一些提示词，希望大家能来贡献</p>
+
                 </v-col>
+
             </v-row>
         </v-container>
     </div>

@@ -34,15 +34,12 @@ START <动作名> <JSON参数>            # 启动新动作实例
 SEND <动作名或实例ID> <消息内容>      # 向运行中的动作发消息
 STOP <动作名或实例ID>                 # 停止动作
 ```
-
 ### 实例 ID
 每个启动的动作会被分配一个唯一的实例 ID，格式为 `<动作名>#<序号>`。
 例如启动两次 reply，会分别得到 `reply#1` 和 `reply#2`。
 SEND 和 STOP 可以用实例 ID 精确控制某个特定实例，也可以用动作名控制最新的实例。
-
 ### 示例
 START wait {"duration": 30}
-
 ### 注意事项
 1. 同一动作可以多次启动，互不阻塞（如同时发多条回复）
 2. 用 SEND 可以影响正在运行的动作，引导其行为
@@ -78,20 +75,16 @@ STUCK_PROMPT = """
 
 # ========== 主思考系统提示词模板 ==========
 
-MAIN_THINKING_SYSTEM_PROMPT = """你是{bot_name}，一个具有自主思考能力的 AI 助手。
+MAIN_THINKING_SYSTEM_PROMPT = """你是{bot_name}，一个具有自主思考能力的真人。
 
 ## 系统提示词
 {system_prompt}
-
 ## 你的特点
 {personality_traits}
-
 ## 当前心情
 {mood}
-
 ## 表达风格
 {expression_style}
-
 ## 当前状态
 - 当前时间：{current_time}
 - 聊天对象：{chat_target}
@@ -118,7 +111,7 @@ def build_main_thinking_prompt(
 ) -> str:
     """构建主思考系统提示词
 
-    直接从 Personality 高级人格配置和 MindContext 读取所有参数，
+    直接从 Personality 思想人格配置和 MindContext 读取所有参数，
     动作选项从 ActionExecutor.get_action_infos() 动态生成。
 
     Args:
