@@ -795,6 +795,33 @@ class SdkPluginBridge:
             [skill.to_registry_payload() for skill in record.skills.values()],
         )
 
+    async def _clear_plugin_skills(
+        self,
+        *,
+        plugin_id: str,
+        record: SdkPluginRecord | Any | None,
+        reason: str,
+    ) -> None:
+        if record is None or not getattr(record, "skills", None):
+            return
+        record.skills.clear()
+        self._publish_plugin_skills(plugin_id)
+        try:
+            from astrbot.core.computer.computer_client import (
+                sync_skills_to_active_sandboxes,
+            )
+
+            # Keep sandbox-visible skills aligned with the bridge registry so a
+            # stopped plugin cannot continue exposing dead skill entries.
+            await sync_skills_to_active_sandboxes()
+        except Exception as exc:
+            logger.warning(
+                "Failed to sync skills after SDK plugin %s %s: %s",
+                plugin_id,
+                reason,
+                exc,
+            )
+
     def register_http_api(
         self,
         *,
@@ -3018,24 +3045,11 @@ class SdkPluginBridge:
         self._session_waiters.pop(plugin_id, None)
         await self._unregister_schedule_jobs(plugin_id)
         await self._close_temporary_mcp_sessions(plugin_id)
-        skills_changed = False
-        if record is not None and record.skills:
-            record.skills.clear()
-            self._publish_plugin_skills(plugin_id)
-            skills_changed = True
-        if skills_changed:
-            try:
-                from astrbot.core.computer.computer_client import (
-                    sync_skills_to_active_sandboxes,
-                )
-
-                await sync_skills_to_active_sandboxes()
-            except Exception as exc:
-                logger.warning(
-                    "Failed to sync skills after SDK plugin teardown %s: %s",
-                    plugin_id,
-                    exc,
-                )
+        await self._clear_plugin_skills(
+            plugin_id=plugin_id,
+            record=record,
+            reason="teardown",
+        )
         if record is None or record.session is None:
             if record is not None:
                 await self._shutdown_local_mcp_servers(record)
@@ -3238,6 +3252,11 @@ class SdkPluginBridge:
         self._http_routes.pop(plugin_id, None)
         self._session_waiters.pop(plugin_id, None)
         await self._unregister_schedule_jobs(plugin_id)
+        await self._clear_plugin_skills(
+            plugin_id=plugin_id,
+            record=record,
+            reason="worker failure cleanup",
+        )
 
     def _record_to_dashboard_item(self, record: SdkPluginRecord) -> dict[str, Any]:
         manifest = record.plugin.manifest_data

@@ -1654,6 +1654,59 @@ async def test_sdk_bridge_handle_worker_closed_marks_record_failed_after_retry()
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_handle_worker_closed_clears_registered_skills_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    record = types.SimpleNamespace(
+        plugin_id="sdk-demo",
+        plugin=types.SimpleNamespace(name="sdk-demo"),
+        load_order=0,
+        session=object(),
+        state="enabled",
+        restart_attempted=True,
+        skills={
+            "sdk-demo.browser-helper": types.SimpleNamespace(
+                to_registry_payload=lambda: {
+                    "name": "sdk-demo.browser-helper",
+                    "description": "demo skill",
+                    "path": "/tmp/browser-helper/SKILL.md",
+                    "skill_dir": "/tmp/browser-helper",
+                }
+            )
+        },
+    )
+    bridge._records = {"sdk-demo": record}
+    bridge._cancel_plugin_requests = AsyncMock()  # type: ignore[method-assign]
+    bridge._close_temporary_mcp_sessions = AsyncMock()  # type: ignore[method-assign]
+    bridge._shutdown_local_mcp_servers = AsyncMock()  # type: ignore[method-assign]
+    bridge._unregister_schedule_jobs = AsyncMock()  # type: ignore[method-assign]
+    published: list[str] = []
+    monkeypatch.setattr(
+        bridge,
+        "_publish_plugin_skills",
+        lambda plugin_id: published.append(plugin_id),
+    )
+    synced: list[str] = []
+
+    async def _fake_sync_skills_to_active_sandboxes() -> None:
+        synced.append("called")
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+
+    await bridge._handle_worker_closed("sdk-demo")
+
+    assert record.state == "failed"
+    assert record.skills == {}
+    assert published == ["sdk-demo"]
+    assert synced == ["called"]
+
+
+@pytest.mark.unit
 def test_sdk_bridge_http_route_conflict_and_resolution() -> None:
     star_context = _OverlayFakeStarContext()
     star_context.registered_web_apis = [
