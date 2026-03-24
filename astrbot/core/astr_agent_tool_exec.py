@@ -94,10 +94,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             tool_name=tool_name,
             error_type="invalid_background_task",
             fix_hint=(
-                "`background_task` must be a boolean (`true` or `false`)."
+                "`background_task` must be a boolean (`true` or `false`) or a string "
+                "equivalent such as `\"1\"`/`\"0\"`, `\"yes\"`/`\"no\"`, or "
+                "`\"on\"`/`\"off\"`."
             ),
             action_hint=(
-                "Retry the same handoff with `background_task` as a boolean value."
+                "Retry the same handoff with `background_task` set to a boolean or one "
+                "of the supported string equivalents (`\"true\"`, `\"false\"`, "
+                "`\"1\"`, `\"0\"`, `\"yes\"`, `\"no\"`, `\"on\"`, `\"off\"`)."
             ),
         )
 
