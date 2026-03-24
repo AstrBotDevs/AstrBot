@@ -33,6 +33,12 @@ const UTILITY_CLASSES = new Set([
     "mdi-18px", "mdi-24px", "mdi-36px", "mdi-48px", "mdi-subset",
 ]);
 
+// Icons used indirectly by Vuetify internals, so they won't appear in src/ static scans.
+const REQUIRED_ICONS = new Set([
+    "mdi-radiobox-blank",
+    "mdi-radiobox-marked",
+]);
+
 // Regex to match individual icon class definitions in MDI CSS
 export const ICON_CLASS_PATTERN = /\.(mdi-[a-z][a-z0-9-]*)::before\s*\{\s*content:\s*"\\([0-9A-Fa-f]+)"\s*;?\s*}/g;
 
@@ -53,7 +59,7 @@ export function* collectFiles(dir, exts) {
 /** Scan source files and return a Set of used mdi-* icon names. */
 export function scanUsedIcons(sourceFiles) {
     const iconPattern = /mdi-[a-z][a-z0-9-]*/g;
-    const usedIcons = new Set();
+    const usedIcons = new Set(REQUIRED_ICONS);
     for (const file of sourceFiles) {
         const content = readFileSync(file, "utf-8");
         for (const match of content.matchAll(iconPattern)) {
