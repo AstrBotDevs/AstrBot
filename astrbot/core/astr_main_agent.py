@@ -4,6 +4,7 @@ import asyncio
 import copy
 import datetime
 import json
+import logging
 import os
 import platform
 import zoneinfo
@@ -446,14 +447,10 @@ async def _ensure_persona_and_skills(
         else:
             # 只允许指向归一化白名单中的 subagents 的 handoff
             for tool in so.handoffs:
-                short_name = (
-                    (getattr(tool, "name", None) or "")
-                    .replace("transfer_to_", "")
-                    .strip()
-                )
-                if (
-                    short_name in normalized_subagents
-                ):  # normalized_subagents 可能是空集合则禁用所有 handoffs
+                agent = getattr(tool, "agent", None)
+                agent_name = getattr(agent, "name", None) if agent else None
+                logging.info(f"Agent {agent_name}")
+                if agent_name and agent_name.strip() in normalized_subagents:
                     req.func_tool.add_tool(tool)
 
         # check duplicates
