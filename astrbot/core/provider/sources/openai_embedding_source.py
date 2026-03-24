@@ -26,17 +26,17 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         ``https://example.com`` or ``https://example.com/openai``. More specific
         paths (for example ``/v1-beta`` or ``/v1/embeddings``) are preserved as-is.
         """
-        normalized_api_base = api_base.rstrip("/")
-        parsed = urlsplit(normalized_api_base)
-        path_segments = [segment for segment in parsed.path.split("/") if segment]
+        parsed = urlsplit(api_base)
+        normalized_path = parsed.path.rstrip("/") if parsed.path else ""
+        path_segments = [segment for segment in normalized_path.split("/") if segment]
         has_version_segment = any(
             len(segment) > 1 and segment.startswith("v") and segment[1].isdigit()
             for segment in path_segments
         )
         if has_version_segment or len(path_segments) > 1:
-            return normalized_api_base
+            return urlunsplit(parsed._replace(path=normalized_path))
 
-        normalized_path = f"{parsed.path.rstrip('/')}/v1" if parsed.path else "/v1"
+        normalized_path = f"{normalized_path}/v1" if normalized_path else "/v1"
         return urlunsplit(parsed._replace(path=normalized_path))
 
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:

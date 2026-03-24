@@ -611,3 +611,17 @@ async def test_openai_embedding_provider_preserves_versioned_or_specific_paths()
             assert str(provider.client.base_url) == f"{base_url.rstrip('/')}/"
         finally:
             await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_embedding_provider_preserves_query_and_fragment_when_normalizing_path():
+    provider = _make_embedding_provider(
+        {"embedding_api_base": "https://example.com/openai/?next=/foo/#frag/"}
+    )
+    try:
+        assert (
+            str(provider.client.base_url)
+            == "https://example.com/openai/v1?next=/foo/#frag/"
+        )
+    finally:
+        await provider.terminate()
