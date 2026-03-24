@@ -139,6 +139,20 @@ Send a plain text input directly while using `ct=live`. The server will still ro
 }
 ```
 
+You can also send message parts and use attachment IDs (same segment format as other APIs), e.g. image/file references:
+
+```json
+{
+  "t": "text_input",
+  "message": [
+    { "type": "plain", "text": "参考这张图" },
+    { "type": "image", "attachment_id": "att_1234567890" }
+  ]
+}
+```
+
+Attachment-based inputs are accepted only when `ct=live`; this is converted to the same internal message format as chat mode and then processed by the live pipeline.
+
 #### `interrupt`
 
 Interrupt the current model or TTS response.
@@ -228,6 +242,19 @@ One TTS audio chunk, Base64 encoded.
 {
   "t": "response",
   "data": "<base64_audio_bytes>"
+}
+```
+
+Attachment results can also be returned as attachment events when produced by the model:
+
+```json
+{
+  "t": "image",
+  "data": {
+    "attachment_id": "att_1234567890",
+    "filename": "abc.jpg",
+    "type": "image"
+  }
 }
 ```
 

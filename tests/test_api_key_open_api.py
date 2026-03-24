@@ -767,3 +767,61 @@ async def test_open_file_upload_requires_file_and_can_upload(
     assert isinstance(upload_data["data"]["attachment_id"], str)
     assert upload_data["data"]["filename"] == "openapi_test.txt"
     assert upload_data["data"]["type"] == "file"
+
+
+@pytest.mark.asyncio
+async def test_open_file_get_by_attachment_id_returns_content(
+    app: Quart,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+    raw_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["file"],
+        name_prefix="file-get-scope-key",
+    )
+
+    upload_res = await test_client.post(
+        "/api/v1/file",
+        files={
+            "file": FileStorage(
+                stream=BytesIO(b"openapi-get-content"),
+                filename="openapi_get.txt",
+                content_type="text/plain",
+            )
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    assert upload_res.status_code == 200
+    upload_data = await upload_res.get_json()
+    attachment_id = upload_data["data"]["attachment_id"]
+
+    get_res = await test_client.get(
+        f"/api/v1/file?attachment_id={attachment_id}",
+        headers={"X-API-Key": raw_key},
+    )
+    assert get_res.status_code == 200
+    assert await get_res.get_data() == b"openapi-get-content"
+
+
+@pytest.mark.asyncio
+async def test_open_file_get_attachment_id_missing_returns_error(
+    app: Quart,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+    raw_key, _ = await _create_api_key(
+        app,
+        authenticated_header,
+        scopes=["file"],
+        name_prefix="file-get-missing-key",
+    )
+
+    missing_res = await test_client.get(
+        "/api/v1/file",
+        headers={"X-API-Key": raw_key},
+    )
+    missing_data = await missing_res.get_json()
+    assert missing_data["status"] == "error"
+    assert missing_data["message"] == "Missing key: attachment_id"

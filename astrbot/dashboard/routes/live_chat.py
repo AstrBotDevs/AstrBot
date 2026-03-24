@@ -694,6 +694,34 @@ class LiveChatRoute(Route):
             strict=False,
         )
 
+    @staticmethod
+    def _format_live_input_preview(message_parts: list[dict]) -> str:
+        plain_texts = [
+            str(part.get("text", "")).strip()
+            for part in message_parts
+            if part.get("type") == "plain"
+            and isinstance(part.get("text"), str)
+            and str(part.get("text", "")).strip()
+        ]
+        if plain_texts:
+            return "\n".join(plain_texts)
+
+        media_counts: dict[str, int] = {}
+        for part in message_parts:
+            part_type = part.get("type")
+            if part_type in {"image", "record", "file", "video"}:
+                media_type = str(part_type)
+                media_counts[media_type] = media_counts.get(media_type, 0) + 1
+
+        if not media_counts:
+            return ""
+
+        snippets = [
+            f"{count} {media_type}"
+            for media_type, count in sorted(media_counts.items())
+        ]
+        return "[attachment] " + ", ".join(snippets)
+
     async def _handle_message(self, session: LiveChatSession, message: dict) -> None:
         """处理 WebSocket 消息"""
         msg_type = message.get("t")  # 使用 t 代替 type
@@ -758,10 +786,32 @@ class LiveChatRoute(Route):
                 return
 
             user_text = message.get("text")
-            if not isinstance(user_text, str):
-                user_text = message.get("message")
+            user_message = message.get("message")
+            message_parts = None
+            if isinstance(user_message, list):
+                message_parts = await self._build_chat_message_parts(user_message)
+                if not message_parts or not webchat_message_parts_have_content(
+                    message_parts
+                ):
+                    await websocket.send_json(
+                        {
+                            "t": "error",
+                            "data": "message must include plain text or attachment_id media",
+                            "code": "INVALID_MESSAGE_FORMAT",
+                        }
+                    )
+                    return
+                if isinstance(user_text, str):
+                    user_text = user_text.strip()
+                else:
+                    user_text = ""
+            elif isinstance(user_text, str):
+                user_text = user_text.strip()
 
-            if not isinstance(user_text, str) or not user_text.strip():
+            if not isinstance(user_text, str):
+                user_text = message.get("text")
+
+            if (not user_text or not str(user_text).strip()) and message_parts is None:
                 await websocket.send_json(
                     {
                         "t": "error",
@@ -771,12 +821,37 @@ class LiveChatRoute(Route):
                 )
                 return
 
-            await self._process_live_user_text(
-                session,
-                user_text=user_text.strip(),
-                initial_metrics={"input_type": "text"},
-                processing_start_time=time.time(),
-            )
+            if message_parts is None and (
+                not isinstance(user_text, str) or not user_text.strip()
+            ):
+                await websocket.send_json(
+                    {
+                        "t": "error",
+                        "data": "message must be non-empty text",
+                        "code": "INVALID_MESSAGE_FORMAT",
+                    }
+                )
+                return
+            if message_parts is not None and not user_text:
+                user_text = self._format_live_input_preview(message_parts)
+                if not user_text:
+                    await websocket.send_json(
+                        {
+                            "t": "error",
+                            "data": "message must include plain text or attachment_id media",
+                            "code": "INVALID_MESSAGE_FORMAT",
+                        }
+                    )
+                    return
+
+            if user_text:
+                await self._process_live_user_text(
+                    session,
+                    user_text=user_text.strip(),
+                    user_message_parts=message_parts,
+                    initial_metrics={"input_type": "text"},
+                    processing_start_time=time.time(),
+                )
 
         elif msg_type == "interrupt":
             # 用户打断
@@ -787,10 +862,27 @@ class LiveChatRoute(Route):
         self,
         session: LiveChatSession,
         user_text: str,
+        user_message_parts: list[dict] | None = None,
         initial_metrics: dict[str, Any] | None = None,
         processing_start_time: float | None = None,
     ) -> None:
         """处理 Live 用户文本：走 run_live_agent pipeline 并回传流式 TTS."""
+        payload_message = (
+            user_message_parts
+            if user_message_parts is not None
+            else [{"type": "plain", "text": user_text}]
+        )
+        if not payload_message:
+            await websocket.send_json(
+                {"t": "error", "data": "Message content is empty"}
+            )
+            return
+        display_user_text = (
+            user_text
+            if user_message_parts is None or user_text
+            else self._format_live_input_preview(user_message_parts)
+        )
+
         try:
             if initial_metrics:
                 await websocket.send_json({"t": "metrics", "data": initial_metrics})
@@ -802,7 +894,10 @@ class LiveChatRoute(Route):
             await websocket.send_json(
                 {
                     "t": "user_msg",
-                    "data": {"text": user_text, "ts": int(time.time() * 1000)},
+                    "data": {
+                        "text": display_user_text,
+                        "ts": int(time.time() * 1000),
+                    },
                 }
             )
 
@@ -814,7 +909,7 @@ class LiveChatRoute(Route):
             message_id = str(uuid.uuid4())
             payload = {
                 "message_id": message_id,
-                "message": [{"type": "plain", "text": user_text}],  # 直接发送文本
+                "message": payload_message,
                 "action_type": "live",  # 标记为 live mode
             }
 
@@ -833,7 +928,7 @@ class LiveChatRoute(Route):
                         logger.info("[Live Chat] 检测到用户打断")
                         await websocket.send_json({"t": "stop_play"})
                         await self._save_interrupted_message(
-                            session, user_text, bot_text
+                            session, display_user_text, bot_text
                         )
                         while not back_queue.empty():
                             try:
@@ -897,6 +992,18 @@ class LiveChatRoute(Route):
                             )
                         continue
 
+                    if result_chain_type in ["tool_call", "tool_call_result"]:
+                        await websocket.send_json(
+                            {
+                                "t": result_chain_type,
+                                "data": data,
+                                "chain_type": result_chain_type,
+                                "streaming": result_streaming,
+                                "message_id": message_id,
+                            }
+                        )
+                        continue
+
                     if result_type == "plain":
                         if (
                             result_streaming
@@ -910,6 +1017,47 @@ class LiveChatRoute(Route):
                                 }
                             )
                         bot_text += data
+
+                    elif result_type in ["image", "record", "file", "video"]:
+                        filename = str(data)
+                        part = None
+                        if result_type == "image":
+                            filename = filename.replace("[IMAGE]", "")
+                        elif result_type == "record":
+                            filename = filename.replace("[RECORD]", "")
+                        elif result_type == "file":
+                            filename = filename.replace("[FILE]", "")
+                        else:
+                            filename = filename.replace("[VIDEO]", "")
+
+                        if filename:
+                            part = await self._create_attachment_from_file(
+                                filename=filename,
+                                attach_type=result_type,
+                            )
+
+                        if part is not None:
+                            await websocket.send_json(
+                                {
+                                    "t": result_type,
+                                    "data": {
+                                        "attachment_id": part.get("attachment_id"),
+                                        "filename": part.get("filename"),
+                                        "type": part.get("type", result_type),
+                                    },
+                                    "message_id": message_id,
+                                    "chain_type": result_type,
+                                    "streaming": result_streaming,
+                                }
+                            )
+                        elif str(data):
+                            await websocket.send_json(
+                                {
+                                    "t": result_type,
+                                    "data": {"raw": str(data)},
+                                    "message_id": message_id,
+                                }
+                            )
 
                     elif result_type == "audio_chunk":
                         if not audio_playing:

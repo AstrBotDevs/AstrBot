@@ -50,6 +50,51 @@
       }
     },
     "/api/v1/file": {
+      "get": {
+        "tags": [
+          "Open API"
+        ],
+        "summary": "Get attachment file",
+        "description": "Download an attachment by attachment_id.",
+        "security": [
+          {
+            "ApiKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Attachment ID returned by upload API."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attachment binary content.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "Attachment not found"
+          }
+        }
+      },
       "post": {
         "tags": [
           "Open API"
