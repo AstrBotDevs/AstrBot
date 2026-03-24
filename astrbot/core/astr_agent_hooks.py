@@ -29,6 +29,24 @@ def _sdk_safe_payload(value: Any) -> Any:
 
 
 class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
+    async def on_agent_begin(
+        self,
+        run_context: ContextWrapper[AstrAgentContext],
+    ) -> None:
+        sdk_plugin_bridge = getattr(
+            run_context.context.context, "sdk_plugin_bridge", None
+        )
+        if sdk_plugin_bridge is not None:
+            try:
+                await sdk_plugin_bridge.dispatch_message_event(
+                    "agent_begin",
+                    run_context.context.event,
+                )
+            except Exception as exc:
+                from astrbot.core import logger
+
+                logger.warning("SDK agent_begin dispatch failed: %s", exc)
+
     async def on_agent_done(self, run_context, llm_response) -> None:
         # 执行事件钩子
         if llm_response and llm_response.reasoning_content:
@@ -48,7 +66,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         if sdk_plugin_bridge is not None:
             try:
                 await sdk_plugin_bridge.dispatch_message_event(
-                    "llm_response",
+                    "agent_done",
                     run_context.context.event,
                     {
                         "completion_text": (
@@ -65,7 +83,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             except Exception as exc:
                 from astrbot.core import logger
 
-                logger.warning("SDK llm_response dispatch failed: %s", exc)
+                logger.warning("SDK agent_done dispatch failed: %s", exc)
 
     async def on_tool_start(
         self,
@@ -85,7 +103,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         if sdk_plugin_bridge is not None:
             try:
                 await sdk_plugin_bridge.dispatch_message_event(
-                    "using_llm_tool",
+                    "llm_tool_start",
                     run_context.context.event,
                     {
                         "tool_name": tool.name,
@@ -95,7 +113,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             except Exception as exc:
                 from astrbot.core import logger
 
-                logger.warning("SDK using_llm_tool dispatch failed: %s", exc)
+                logger.warning("SDK llm_tool_start dispatch failed: %s", exc)
 
     async def on_tool_end(
         self,
@@ -118,7 +136,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         if sdk_plugin_bridge is not None:
             try:
                 await sdk_plugin_bridge.dispatch_message_event(
-                    "llm_tool_respond",
+                    "llm_tool_end",
                     run_context.context.event,
                     {
                         "tool_name": tool.name,
@@ -129,7 +147,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             except Exception as exc:
                 from astrbot.core import logger
 
-                logger.warning("SDK llm_tool_respond dispatch failed: %s", exc)
+                logger.warning("SDK llm_tool_end dispatch failed: %s", exc)
 
         # special handle web_search_tavily
         platform_name = run_context.context.event.get_platform_name()

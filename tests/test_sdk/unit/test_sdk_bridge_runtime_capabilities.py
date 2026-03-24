@@ -6,6 +6,7 @@ import types
 from asyncio import Queue
 from functools import partial
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -68,6 +69,8 @@ from astrbot_sdk.protocol.descriptors import (
 )
 from astrbot_sdk.testing import MockContext
 
+from astrbot.core.cron.manager import CronJobManager
+from astrbot.core.db.po import CronJob
 from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -901,6 +904,117 @@ async def test_schedule_runner_ignores_scheduler_payload_kwargs() -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_cron_manager_replays_interval_payload_to_sdk_schedule_runner() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    captured: list[dict[str, object]] = []
+
+    async def _capture_invoke_schedule_handler(**kwargs: object) -> None:
+        captured.append(dict(kwargs))
+
+    bridge._invoke_schedule_handler = _capture_invoke_schedule_handler  # type: ignore[method-assign]
+    cron_manager = CronJobManager(MagicMock())
+    cron_manager._basic_handlers["sdk-schedule-job"] = bridge._build_schedule_runner(
+        plugin_id="sdk-demo",
+        handler_id="sdk-demo:main.tick",
+        trigger=ScheduleTrigger(interval_seconds=60),
+    )
+    job = CronJob(
+        job_id="sdk-schedule-job",
+        name="sdk schedule",
+        job_type="basic",
+        payload={"interval_seconds": 60},
+        enabled=True,
+        persistent=False,
+        run_once=False,
+    )
+
+    await cron_manager._run_basic_job(job)
+
+    assert captured == [
+        {
+            "plugin_id": "sdk-demo",
+            "handler_id": "sdk-demo:main.tick",
+            "trigger": ScheduleTrigger(interval_seconds=60),
+        }
+    ]
+
+
+@pytest.mark.unit
+def test_build_schedule_payload_exposes_interval_metadata() -> None:
+    payload = SdkPluginBridge._build_schedule_payload(
+        plugin_id="sdk-demo",
+        handler_id="sdk-demo:main.tick",
+        trigger=ScheduleTrigger(interval_seconds=60),
+    )
+
+    assert payload["event_type"] == "schedule"
+    assert payload["text"] == ""
+    assert payload["schedule"] == {
+        "schedule_id": "sdk-demo:sdk-demo:main.tick",
+        "plugin_id": "sdk-demo",
+        "handler_id": "sdk-demo:main.tick",
+        "trigger_kind": "interval",
+        "cron": None,
+        "interval_seconds": 60,
+        "scheduled_at": payload["schedule"]["scheduled_at"],
+    }
+    assert isinstance(payload["schedule"]["scheduled_at"], str)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_register_schedule_handlers_passes_trigger_config_to_cron_manager() -> (
+    None
+):
+    cron_manager = types.SimpleNamespace(
+        add_basic_job=AsyncMock(
+            side_effect=[
+                types.SimpleNamespace(job_id="job-interval"),
+                types.SimpleNamespace(job_id="job-cron"),
+            ]
+        )
+    )
+    star_context = _OverlayFakeStarContext()
+    star_context.cron_manager = cron_manager
+    bridge = SdkPluginBridge(star_context)
+    record = types.SimpleNamespace(
+        plugin_id="sdk-demo",
+        handlers=[
+            types.SimpleNamespace(
+                handler_id="sdk-demo:main.interval",
+                descriptor=HandlerDescriptor(
+                    id="sdk-demo:main.interval",
+                    trigger=ScheduleTrigger(interval_seconds=60),
+                ),
+            ),
+            types.SimpleNamespace(
+                handler_id="sdk-demo:main.cron",
+                descriptor=HandlerDescriptor(
+                    id="sdk-demo:main.cron",
+                    trigger=ScheduleTrigger(cron="0 9 * * *"),
+                ),
+            ),
+        ],
+    )
+
+    await bridge._register_schedule_handlers(record)
+
+    assert cron_manager.add_basic_job.await_count == 2
+    first_call = cron_manager.add_basic_job.await_args_list[0].kwargs
+    second_call = cron_manager.add_basic_job.await_args_list[1].kwargs
+    assert first_call["name"] == "sdk-demo:sdk-demo:main.interval"
+    assert first_call["interval_seconds"] == 60
+    assert first_call["cron_expression"] is None
+    assert callable(first_call["handler"])
+    assert second_call["name"] == "sdk-demo:sdk-demo:main.cron"
+    assert second_call["cron_expression"] == "0 9 * * *"
+    assert second_call["interval_seconds"] is None
+    assert callable(second_call["handler"])
+    assert bridge._schedule_job_ids["sdk-demo"] == {"job-interval", "job-cron"}
+
+
+@pytest.mark.unit
 def test_unregister_http_api_empty_methods_remove_entire_route() -> None:
     bridge = SdkPluginBridge(_OverlayFakeStarContext())
     bridge.register_http_api(
@@ -1003,7 +1117,7 @@ async def test_sdk_bridge_persists_request_scoped_extras_and_sent_payloads() -> 
                 types.SimpleNamespace(
                     descriptor=HandlerDescriptor(
                         id="sdk-demo:main.capture_reply",
-                        trigger=EventTrigger(event_type="llm_response"),
+                        trigger=EventTrigger(event_type="agent_done"),
                     ),
                     declaration_order=0,
                 ),
@@ -1027,7 +1141,7 @@ async def test_sdk_bridge_persists_request_scoped_extras_and_sent_payloads() -> 
     )
 
     await bridge.dispatch_message_event(
-        "llm_response", event, {"completion_text": "reply text"}
+        "agent_done", event, {"completion_text": "reply text"}
     )
     await bridge.dispatch_message_event(
         "after_message_sent",
@@ -1053,6 +1167,103 @@ async def test_sdk_bridge_persists_request_scoped_extras_and_sent_payloads() -> 
     assert second_payload["sent_messages"] == [
         {"type": "text", "data": {"text": "reply text"}}
     ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_dispatch_message_event_supports_agent_begin() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    session = _SystemEventSession()
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-demo",
+            load_order=0,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.on_agent_begin",
+                        trigger=EventTrigger(event_type="agent_begin"),
+                    ),
+                    declaration_order=0,
+                )
+            ],
+            session=session,
+        )
+    }
+
+    event = _TypedHookFakeEvent()
+    bridge._request_overlays["dispatch-typed"] = bridge._ensure_request_overlay(
+        "dispatch-typed",
+        should_call_llm=True,
+    )
+
+    await bridge.dispatch_message_event("agent_begin", event)
+
+    assert [call[0] for call in session.calls] == ["sdk-demo:main.on_agent_begin"]
+    payload = session.calls[0][1]
+    assert payload["event_type"] == "agent_begin"
+    assert payload["raw"]["event_type"] == "agent_begin"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("event_type", "payload"),
+    [
+        (
+            "llm_tool_start",
+            {"tool_name": "search_docs", "tool_args": {"query": "sdk"}},
+        ),
+        (
+            "llm_tool_end",
+            {
+                "tool_name": "search_docs",
+                "tool_args": {"query": "sdk"},
+                "tool_result": {"content": [{"type": "text", "text": "matched"}]},
+            },
+        ),
+    ],
+)
+async def test_sdk_bridge_dispatch_message_event_supports_llm_tool_events(
+    event_type: str,
+    payload: dict[str, object],
+) -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    session = _SystemEventSession()
+    bridge._records = {
+        "sdk-demo": types.SimpleNamespace(
+            state="enabled",
+            plugin_id="sdk-demo",
+            load_order=0,
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id=f"sdk-demo:main.{event_type}",
+                        trigger=EventTrigger(event_type=event_type),
+                    ),
+                    declaration_order=0,
+                )
+            ],
+            session=session,
+        )
+    }
+
+    event = _TypedHookFakeEvent()
+    bridge._request_overlays["dispatch-typed"] = bridge._ensure_request_overlay(
+        "dispatch-typed",
+        should_call_llm=True,
+    )
+
+    await bridge.dispatch_message_event(event_type, event, payload)
+
+    assert [call[0] for call in session.calls] == [f"sdk-demo:main.{event_type}"]
+    sent_payload = session.calls[0][1]
+    assert sent_payload["event_type"] == event_type
+    assert sent_payload["raw"]["event_type"] == event_type
+    for key, value in payload.items():
+        assert sent_payload[key] == value
+        assert sent_payload["raw"][key] == value
 
 
 @pytest.mark.unit
