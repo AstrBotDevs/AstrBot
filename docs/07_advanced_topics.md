@@ -202,19 +202,26 @@ async def batch_db_handler(self, event: MessageEvent, ctx: Context):
 使用流式 API 处理大数据：
 
 ```python
+from astrbot_sdk.message_components import Plain
+
 @on_command("stream")
 async def stream_handler(self, event: MessageEvent, ctx: Context):
-    # 流式 LLM 响应
-    message = await event.reply("正在生成...")
-    
-    full_text = ""
-    async for chunk in ctx.llm.stream_chat("写一个很长的故事"):
-        full_text += chunk
-        # 每 100 个字符更新一次
-        if len(full_text) % 100 < 10:
-            await message.edit(full_text + "...")
-    
-    await message.edit(full_text)
+    """流式 LLM 响应示例"""
+
+    async def generate_chunks():
+        """生成器函数，产生流式内容"""
+        async for chunk in ctx.llm.stream_chat("写一个很长的故事"):
+            yield chunk
+
+    # 使用 send_streaming 实现流式响应
+    supported = await event.send_streaming(generate_chunks())
+
+    if not supported:
+        # 平台不支持流式，回退到普通发送
+        full_text = ""
+        async for chunk in ctx.llm.stream_chat("写一个很长的故事"):
+            full_text += chunk
+        await event.reply(full_text)
 ```
 
 ### 5. 懒加载
@@ -345,7 +352,7 @@ class MyPlugin(Star):
 
 ## 架构设计模式
 
-### 1. 分层架构
+### 1. 分层架构(不强制要求喵)
 
 ```
 my_plugin/
@@ -367,7 +374,7 @@ my_plugin/
     └── helpers.py
 ```
 
-### 2. 依赖注入
+### 2. 依赖注入(九分棒的写法)
 
 ```python
 class UserService:
@@ -502,36 +509,37 @@ async def advanced_llm(self, event: MessageEvent, ctx: Context):
         prompt="生成内容",
         system_prompt="你是一个助手",
         temperature=0.7,
-        max_tokens=2000
+        tool_names=["search", "calculate"],  # 工具名称
+        max_steps=10,  # 工具循环最大步数
     )
-    
+
     # 使用工具循环 Agent
-    response = await ctx.tool_loop_agent(
-        request=request,
-        tool_names=["search", "calculate"]
-    )
-    
+    response = await ctx.tool_loop_agent(request=request)
+
     await event.reply(response.text)
 ```
 
 ### 4. 会话管理
 
-```python
-from astrbot_sdk.conversation import ConversationSession
+使用 `@conversation_command` 装饰器创建交互式对话流程：
 
-@on_command("conversation")
-async def conversation_handler(self, event: MessageEvent, ctx: Context):
-    # 创建会话
-    session = ConversationSession(
-        session_id=event.session_id,
-        conversation_id="conv_123"
-    )
-    
-    # 使用会话上下文
-    async with session:
-        await session.send("开始对话")
-        response = await session.receive()
-        await session.send(f"收到: {response}")
+```python
+from astrbot_sdk import Star, MessageEvent, Context, ConversationSession
+from astrbot_sdk.decorators import conversation_command
+
+class MyPlugin(Star):
+    @conversation_command("survey", timeout=120)
+    async def survey(self, event: MessageEvent, ctx: Context, session: ConversationSession):
+        """交互式调查问卷"""
+        # ask() 返回 MessageEvent，通过 .text 获取文本内容
+        name_event = await session.ask("请输入您的姓名：")
+        name = name_event.text
+
+        age_event = await session.ask(f"{name}，请输入您的年龄：")
+        age = age_event.text
+
+        await session.reply(f"感谢参与！姓名：{name}，年龄：{age}")
+        session.end()  # 结束对话
 ```
 
 ---

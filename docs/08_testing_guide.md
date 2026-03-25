@@ -39,24 +39,46 @@
 pip install pytest pytest-asyncio pytest-cov
 ```
 
+### 核心测试组件
+
+SDK 提供以下测试组件（从 `astrbot_sdk.testing` 导入）：
+
+| 组件 | 用途 |
+|------|------|
+| `PluginHarness` | 插件测试运行器 |
+| `LocalRuntimeConfig` | 本地运行时配置 |
+| `SDKTestEnvironment` | 测试环境管理 |
+| `InMemoryDB` | 内存数据库模拟 |
+| `InMemoryMemory` | 内存记忆存储模拟 |
+| `MockLLMClient` | LLM 客户端模拟 |
+| `MockContext` | Context 模拟 |
+| `MockMessageEvent` | 消息事件模拟 |
+| `RecordedSend` | 发送记录 |
+
 ### 配置 pytest
 
 ```python
 # conftest.py
 import pytest
-from astrbot_sdk.testing import PluginTestHarness
+from pathlib import Path
+from astrbot_sdk.testing import PluginHarness, SDKTestEnvironment
 
 @pytest.fixture
-async def harness():
+async def test_env(tmp_path):
+    """提供测试环境"""
+    env = SDKTestEnvironment(root=tmp_path)
+    yield env
+
+@pytest.fixture
+async def harness(test_env):
     """提供测试 harness"""
-    h = PluginTestHarness()
-    yield h
-    await h.cleanup()
+    plugin_dir = test_env.plugin_dir("my_plugin")
+    # 创建最小插件结构（如果需要）
+    # ...
 
-@pytest.fixture
-async def plugin(harness):
-    """加载插件"""
-    return await harness.load_plugin("my_plugin.main:MyPlugin")
+    h = PluginHarness.from_plugin_dir(plugin_dir)
+    async with h:
+        yield h
 ```
 
 ---
@@ -67,21 +89,23 @@ async def plugin(harness):
 
 ```python
 import pytest
-from astrbot_sdk.testing import PluginTestHarness
+from pathlib import Path
+from astrbot_sdk.testing import PluginHarness
 
 @pytest.mark.asyncio
 async def test_hello_command():
     """测试 hello 命令"""
-    harness = PluginTestHarness()
-    plugin = await harness.load_plugin("my_plugin.main:MyPlugin")
-    
-    # 模拟命令调用
-    result = await harness.simulate_command("/hello")
-    
-    # 验证结果
-    assert result.text == "Hello, World!"
-    
-    await harness.cleanup()
+    # 使用 from_plugin_dir 创建 harness
+    plugin_dir = Path("path/to/my_plugin")
+
+    async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
+        # dispatch_text 发送消息并返回发送记录列表
+        sent = await harness.dispatch_text("/hello")
+
+        # 验证结果 - sent 是 list[RecordedSend]
+        assert len(sent) >= 1
+        # RecordedSend 有 .text, .image_url, .chain 等属性
+        assert "Hello" in sent[0].text
 ```
 
 ### 测试消息处理器
@@ -90,40 +114,43 @@ async def test_hello_command():
 @pytest.mark.asyncio
 async def test_message_handler():
     """测试消息处理器"""
-    harness = PluginTestHarness()
-    plugin = await harness.load_plugin("my_plugin.main:MyPlugin")
-    
-    # 模拟消息
-    result = await harness.simulate_message(
-        text="你好",
-        user_id="12345",
-        session_id="session_1"
-    )
-    
-    # 验证响应
-    assert "你好" in result.text
-    
-    await harness.cleanup()
+    plugin_dir = Path("path/to/my_plugin")
+
+    async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
+        # dispatch_text 可指定更多参数
+        sent = await harness.dispatch_text(
+            "你好",
+            user_id="12345",
+            session_id="session_1",
+            platform="qq"
+        )
+
+        # 验证响应
+        assert len(sent) >= 1
+        assert "你好" in sent[0].text
 ```
 
-### 测试装饰器
+### 测试装饰器行为
 
 ```python
+from astrbot_sdk.errors import AstrBotError, ErrorCodes
+
 @pytest.mark.asyncio
 async def test_rate_limit():
     """测试速率限制"""
-    harness = PluginTestHarness()
-    plugin = await harness.load_plugin("my_plugin.main:MyPlugin")
-    
-    # 第一次调用应该成功
-    result1 = await harness.simulate_command("/limited")
-    assert result1.success
-    
-    # 快速第二次调用应该被限制
-    result2 = await harness.simulate_command("/limited")
-    assert result2.error.code == "rate_limited"
-    
-    await harness.cleanup()
+    plugin_dir = Path("path/to/my_plugin")
+
+    async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
+        # 第一次调用应该成功
+        sent1 = await harness.dispatch_text("/limited")
+        assert len(sent1) >= 1
+
+        # 快速第二次调用应该被限制
+        with pytest.raises(AstrBotError) as exc_info:
+            await harness.dispatch_text("/limited")
+
+        # 验证错误码
+        assert exc_info.value.code == ErrorCodes.RATE_LIMITED
 ```
 
 ---
@@ -132,55 +159,85 @@ async def test_rate_limit():
 
 ### 测试数据库操作
 
+使用 `InMemoryDB` 进行数据库模拟：
+
 ```python
+from astrbot_sdk.testing import InMemoryDB
+
 @pytest.mark.asyncio
 async def test_database_operations():
     """测试数据库操作"""
-    harness = PluginTestHarness()
-    plugin = await harness.load_plugin("my_plugin.main:MyPlugin")
-    
-    # 模拟事件以获取 ctx
-    event = harness.create_mock_event(text="test")
-    
+    # 创建内存存储
+    store = {}
+    db = InMemoryDB(store)
+
     # 设置数据
-    await plugin.save_user_data(
-        event,
-        event.ctx,
-        user_id="123",
-        data={"name": "Alice"}
-    )
-    
+    db.set("user:123", {"name": "Alice"})
+
     # 读取数据
-    data = await plugin.get_user_data(
-        event,
-        event.ctx,
-        user_id="123"
-    )
-    
+    data = db.get("user:123")
     assert data["name"] == "Alice"
-    
-    await harness.cleanup()
+
+    # 列出键
+    keys = db.list("user:")
+    assert "user:123" in keys
+
+    # 删除数据
+    db.delete("user:123")
+    assert db.get("user:123") is None
+```
+
+### 测试记忆存储
+
+使用 `InMemoryMemory` 进行记忆模拟：
+
+```python
+from astrbot_sdk.testing import InMemoryMemory
+
+def test_memory_operations():
+    """测试记忆存储"""
+    store = {}
+    memory = InMemoryMemory(store)
+
+    # 保存记忆
+    memory.save("user_pref", {"theme": "dark", "lang": "zh"})
+
+    # 获取记忆
+    pref = memory.get("user_pref")
+    assert pref["theme"] == "dark"
+
+    # 搜索记忆
+    results = memory.search("dark")
+    assert len(results) >= 1
+    assert results[0]["key"] == "user_pref"
+
+    # 删除记忆
+    memory.delete("user_pref")
+    assert memory.get("user_pref") is None
 ```
 
 ### 测试 LLM 调用
 
+使用 `MockLLMClient` 模拟 LLM 响应（通过 `MockContext`）：
+
 ```python
+from astrbot_sdk.testing import MockContext
+
 @pytest.mark.asyncio
 async def test_llm_integration():
     """测试 LLM 调用"""
-    harness = PluginTestHarness()
-    
-    # 配置 mock LLM 响应
-    harness.mock_llm_response("模拟的 LLM 回复")
-    
-    plugin = await harness.load_plugin("my_plugin.main:MyPlugin")
-    
-    # 调用需要 LLM 的命令
-    result = await harness.simulate_command("/ask 问题")
-    
-    assert "模拟的 LLM 回复" in result.text
-    
-    await harness.cleanup()
+    # 创建 mock context（包含 mock LLM 客户端）
+    ctx = MockContext()
+
+    # 设置 mock 响应
+    ctx.llm.mock_response("这是模拟的 LLM 回复")
+
+    # 调用 chat
+    response = await ctx.llm.chat("你好")
+    assert response == "这是模拟的 LLM 回复"
+
+    # 也可以设置流式响应
+    ctx.llm.mock_stream_response("流式响应内容")
 ```
 
 ### 测试平台发送
@@ -189,88 +246,106 @@ async def test_llm_integration():
 @pytest.mark.asyncio
 async def test_platform_send():
     """测试平台消息发送"""
-    harness = PluginTestHarness()
-    plugin = await harness.load_plugin("my_plugin.main:MyPlugin")
-    
-    # 模拟命令
-    await harness.simulate_command("/broadcast 大家好")
-    
-    # 验证发送记录
-    sent_messages = harness.get_sent_messages()
-    assert len(sent_messages) >= 1
-    assert "大家好" in sent_messages[0].text
-    
-    await harness.cleanup()
+    plugin_dir = Path("path/to/my_plugin")
+
+    async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
+        # 模拟命令
+        await harness.dispatch_text("/broadcast 大家好")
+
+        # 使用 sent_messages 属性获取发送记录
+        messages = harness.sent_messages
+
+        # 验证发送记录
+        assert len(messages) >= 1
+        assert "大家好" in messages[0].text
+
+        # 清空发送记录（用于下一个测试）
+        harness.clear_sent_messages()
+
+        # 验证已清空
+        assert len(harness.sent_messages) == 0
+```
+
+### 测试 Capability 调用
+
+```python
+@pytest.mark.asyncio
+async def test_capability_invocation():
+    """测试 Capability 调用"""
+    plugin_dir = Path("path/to/my_plugin")
+
+    async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
+        # 直接调用 capability
+        result = await harness.invoke_capability(
+            "my_plugin.custom_capability",
+            {"param": "value"}
+        )
+
+        # 验证结果
+        assert result["status"] == "success"
 ```
 
 ---
 
 ## Mock 使用
 
-### Mock Context
+### MockContext
 
 ```python
-from unittest.mock import AsyncMock, MagicMock
-from astrbot_sdk import Context
+from astrbot_sdk.testing import MockContext
 
 @pytest.fixture
 def mock_ctx():
     """创建 mock Context"""
-    ctx = MagicMock(spec=Context)
-    
-    # Mock LLM 客户端
-    ctx.llm = AsyncMock()
-    ctx.llm.chat.return_value = "Mocked response"
-    
-    # Mock DB 客户端
-    ctx.db = AsyncMock()
-    ctx.db.get.return_value = {"key": "value"}
-    
-    # Mock Logger
-    ctx.logger = MagicMock()
-    
+    ctx = MockContext()
+
+    # 配置 mock LLM 响应
+    ctx.llm.mock_response("Mocked response")
+
     return ctx
 
 @pytest.mark.asyncio
 async def test_with_mock_ctx(mock_ctx):
     """使用 mock Context 测试"""
-    plugin = MyPlugin()
-    
-    result = await plugin.some_method(mock_ctx)
-    
-    # 验证调用
-    mock_ctx.llm.chat.assert_called_once()
-    assert result == "expected"
+    # 调用需要 LLM 的方法
+    response = await mock_ctx.llm.chat("test")
+
+    # 验证
+    assert response == "Mocked response"
+
+    # 使用 platform.assert_sent 验证发送
+    mock_ctx.platform.assert_sent("Mocked response")
 ```
 
-### Mock 事件
+### MockMessageEvent
 
 ```python
-from astrbot_sdk import MessageEvent
+from astrbot_sdk.testing import MockMessageEvent, MockContext
 
 @pytest.fixture
 def mock_event():
     """创建 mock 事件"""
-    event = MagicMock(spec=MessageEvent)
-    event.text = "测试消息"
-    event.user_id = "12345"
-    event.session_id = "session_1"
-    event.platform = "qq"
-    
-    # Mock 回复方法
-    event.reply = AsyncMock()
-    
+    event = MockMessageEvent(
+        text="测试消息",
+        user_id="12345",
+        session_id="session_1",
+        platform="qq"
+    )
     return event
 
 @pytest.mark.asyncio
-async def test_with_mock_event(mock_event, mock_ctx):
+async def test_with_mock_event(mock_event):
     """使用 mock 事件测试"""
-    plugin = MyPlugin()
-    
-    await plugin.handle_message(mock_event, mock_ctx)
-    
-    # 验证回复
-    mock_event.reply.assert_called_once()
+    # 验证事件属性
+    assert mock_event.text == "测试消息"
+    assert mock_event.user_id == "12345"
+
+    # 调用 reply（MockMessageEvent 会记录到 replies 列表）
+    await mock_event.reply("回复内容")
+
+    # 验证 replies 列表
+    assert len(mock_event.replies) == 1
+    assert "回复内容" in mock_event.replies[0]
 ```
 
 ### Mock 时间
@@ -278,14 +353,18 @@ async def test_with_mock_event(mock_event, mock_ctx):
 ```python
 import time
 from unittest.mock import patch
+from astrbot_sdk.testing import MockClock
 
-@pytest.mark.asyncio
-async def test_with_mock_time():
+def test_with_mock_time():
     """使用 mock 时间测试"""
-    with patch('time.time', return_value=1234567890):
-        result = await plugin.time_sensitive_operation()
-        
-    assert result.timestamp == 1234567890
+    clock = MockClock(now=1234567890.0)
+
+    # 获取当前时间
+    assert clock.time() == 1234567890.0
+
+    # 推进时间
+    clock.advance(60.0)
+    assert clock.time() == 1234567950.0
 ```
 
 ### Mock 外部 API
@@ -305,9 +384,9 @@ async def test_external_api():
             payload={'result': 'success'},
             status=200
         )
-        
+
         result = await plugin.fetch_external_data()
-        
+
         assert result['result'] == 'success'
 ```
 
@@ -360,6 +439,8 @@ def test_user():
 ```python
 # conftest.py
 import pytest
+from pathlib import Path
+from astrbot_sdk.testing import PluginHarness, SDKTestEnvironment
 
 @pytest.fixture
 def sample_user_data():
@@ -371,18 +452,42 @@ def sample_user_data():
     }
 
 @pytest.fixture
-async def initialized_plugin():
-    """提供已初始化的插件"""
-    plugin = MyPlugin()
-    harness = PluginTestHarness()
-    await plugin.on_start(harness.create_mock_ctx())
-    yield plugin
-    await plugin.on_stop(None)
+async def harness_with_plugin(tmp_path):
+    """提供已启动的 harness"""
+    env = SDKTestEnvironment(root=tmp_path)
+    plugin_dir = env.plugin_dir("test_plugin")
+
+    # 创建最小插件结构
+    (plugin_dir / "plugin.yaml").write_text("""
+_schema_version: 2
+name: test_plugin
+version: 1.0.0
+author: test
+desc: Test plugin
+components:
+  - class: main:TestPlugin
+""")
+
+    (plugin_dir / "main.py").write_text("""
+from astrbot_sdk import Star, MessageEvent, Context
+from astrbot_sdk.decorators import on_command
+
+class TestPlugin(Star):
+    @on_command("hello")
+    async def hello(self, event: MessageEvent, ctx: Context):
+        await event.reply("Hello!")
+""")
+
+    harness = PluginHarness.from_plugin_dir(plugin_dir)
+    async with harness:
+        yield harness
 
 # 测试中使用
-def test_with_fixture(sample_user_data, initialized_plugin):
-    result = initialized_plugin.process_user(sample_user_data)
-    assert result.success
+@pytest.mark.asyncio
+async def test_with_fixture(sample_user_data, harness_with_plugin):
+    sent = await harness_with_plugin.dispatch_text("/hello")
+    assert len(sent) >= 1
+    assert "Hello" in sent[0].text
 ```
 
 ### 4. 参数化测试
@@ -400,16 +505,14 @@ def test_capitalize(input, expected):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("command,expected_response", [
-    ("/help", "可用命令..."),
-    ("/about", "关于信息..."),
-    ("/version", "版本号..."),
+    ("/help", "可用命令"),
+    ("/about", "关于"),
+    ("/version", "版本"),
 ])
-async def test_commands(command, expected_response):
-    harness = PluginTestHarness()
-    plugin = await harness.load_plugin("my_plugin.main:MyPlugin")
-    
-    result = await harness.simulate_command(command)
-    assert expected_response in result.text
+async def test_commands(harness_with_plugin, command, expected_response):
+    sent = await harness_with_plugin.dispatch_text(command)
+    assert len(sent) >= 1
+    assert expected_response in sent[0].text
 ```
 
 ### 5. 测试隔离
@@ -457,7 +560,7 @@ async def test_async_exception():
     """测试异常"""
     with pytest.raises(ValueError) as exc_info:
         await function_that_raises()
-    
+
     assert "expected error" in str(exc_info.value)
 ```
 
@@ -475,7 +578,7 @@ pytest --cov=my_plugin --cov-fail-under=80
 # .coveragerc
 [run]
 source = my_plugin
-omit = 
+omit =
     */tests/*
     */venv/*
     */__pycache__/*
@@ -497,30 +600,50 @@ exclude_lines =
 # test_utils.py
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
+from astrbot_sdk.testing import PluginHarness, SDKTestEnvironment
 
 async def run_with_timeout(coro, timeout=5):
     """带超时运行协程"""
     return await asyncio.wait_for(coro, timeout=timeout)
 
 @asynccontextmanager
-async def temporary_database():
-    """临时数据库上下文"""
-    db = await create_test_db()
-    try:
-        yield db
-    finally:
-        await db.cleanup()
+async def temporary_harness(plugin_dir: Path):
+    """临时 harness 上下文"""
+    harness = PluginHarness.from_plugin_dir(plugin_dir)
+    async with harness:
+        yield harness
 
-def create_test_event(**kwargs):
-    """创建测试事件"""
-    defaults = {
-        "text": "test",
-        "user_id": "12345",
-        "session_id": "test_session",
-        "platform": "qq",
-    }
-    defaults.update(kwargs)
-    return MockEvent(**defaults)
+def create_minimal_plugin(
+    plugin_dir: Path,
+    name: str = "test_plugin",
+    code: str = ""
+) -> Path:
+    """创建最小插件结构"""
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+
+    (plugin_dir / "plugin.yaml").write_text(f"""
+_schema_version: 2
+name: {name}
+version: 1.0.0
+author: test
+desc: Test plugin
+components:
+  - class: main:TestPlugin
+""")
+
+    default_code = """
+from astrbot_sdk import Star, MessageEvent, Context
+from astrbot_sdk.decorators import on_command
+
+class TestPlugin(Star):
+    @on_command("test")
+    async def test(self, event: MessageEvent, ctx: Context):
+        await event.reply("Test!")
+"""
+    (plugin_dir / "main.py").write_text(code or default_code)
+
+    return plugin_dir
 ```
 
 ---
@@ -538,24 +661,24 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v3
-    
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.12'
-    
+
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
-    
+
     - name: Run tests
       run: |
         pytest --cov=my_plugin --cov-report=xml
-    
+
     - name: Upload coverage
       uses: codecov/codecov-action@v3
 ```
@@ -572,10 +695,10 @@ import pdb
 
 def test_with_debug():
     result = some_function()
-    
+
     # 设置断点
     pdb.set_trace()
-    
+
     assert result.success
 ```
 

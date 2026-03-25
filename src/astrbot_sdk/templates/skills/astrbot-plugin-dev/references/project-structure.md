@@ -44,12 +44,13 @@ All commands support two entrypoints. If `astrbot-sdk` is not on PATH, use `pyth
 
 | Command | Purpose |
 |---------|---------|
-| `astrbot-sdk init <name>` | Scaffold new plugin |
-| `astrbot-sdk validate --plugin-dir <dir>` | Validate structure, imports, handler discovery |
-| `astrbot-sdk dev --local --plugin-dir <dir> --event-text "..."` | Single-shot local test |
-| `astrbot-sdk dev --local --plugin-dir <dir> --interactive` | Interactive local test |
-| `astrbot-sdk dev --local --plugin-dir <dir> --watch --event-text "..."` | Watch mode with auto-reload |
-| `astrbot-sdk build --plugin-dir <dir>` | Package into distributable zip |
+| `astr init <name>` | Scaffold new plugin |
+| `astr validate --plugin-dir <dir>` | Validate structure, imports, handler discovery |
+| `astr dev --local --plugin-dir <dir> --event-text "..."` | Single-shot local test |
+| `astr dev --local --plugin-dir <dir> --interactive` | Interactive local test |
+| `astr dev --local --plugin-dir <dir> --watch --event-text "..."` | Watch mode with auto-reload |
+| `astr build --plugin-dir <dir>` | Package into distributable zip |
+**astrbot-sdk 有别名 astr**
 
 ### init
 

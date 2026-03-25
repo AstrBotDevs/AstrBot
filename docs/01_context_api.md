@@ -22,12 +22,14 @@
 - [Knowledge Base 客户端 (ctx.kbs / ctx.kb_manager)](#knowledge-base-客户端)
 - [Message History 客户端 (ctx.message_history / ctx.message_history_manager)](#message-history-客户端)
 - [HTTP 客户端 (ctx.http)](#http-客户端)
+- [MCP 客户端 (ctx.mcp / ctx.mcp_manager)](#mcp-客户端)
 - [Metadata 客户端 (ctx.metadata)](#metadata-客户端)
 - [Registry 客户端 (ctx.registry)](#registry-客户端)
 - [Skills 客户端 (ctx.skills)](#skills-客户端)
 - [Session 管理客户端 (ctx.session_plugins / ctx.session_services)](#session-管理客户端)
 - [LLM Tool 管理方法](#llm-tool-管理方法)
 - [系统工具方法](#系统工具方法)
+- [高级上下文方法](#高级上下文方法)
 
 ---
 
@@ -42,6 +44,7 @@ class Context:
     plugin_id: str                     # 当前插件 ID
     logger: PluginLogger               # 绑定了插件 ID 的日志器
     cancel_token: CancelToken          # 取消令牌，用于处理请求取消
+    request_id: str | None             # 当前请求作用域 ID（如有）
 ```
 
 ### 客户端属性
@@ -62,11 +65,16 @@ ctx.kbs: KnowledgeBaseManagerClient   # 知识库管理客户端
 ctx.message_history: MessageHistoryManagerClient  # 消息历史管理客户端
 ctx.message_history_manager: MessageHistoryManagerClient  # ctx.message_history 的别名
 ctx.http: HTTPClient                  # HTTP 客户端
+ctx.mcp: MCPManagerClient             # MCP 管理客户端
+ctx.mcp_manager: MCPManagerClient     # ctx.mcp 的别名
 ctx.metadata: MetadataClient          # 元数据客户端
 ctx.registry: RegistryClient          # 能力注册客户端
 ctx.skills: SkillClient               # 技能客户端
 ctx.session_plugins: SessionPluginManager  # 会话插件管理器
 ctx.session_services: SessionServiceManager  # 会话服务管理器
+ctx.persona_manager: PersonaManagerClient   # ctx.personas 的别名
+ctx.conversation_manager: ConversationManagerClient  # ctx.conversations 的别名
+ctx.kb_manager: KnowledgeBaseManagerClient  # ctx.kbs 的别名
 ```
 
 ---
@@ -116,7 +124,7 @@ await ctx.cancel_token.wait()
 
 发送聊天请求并返回文本响应。
 
-```python
+```
 async def chat(
     prompt: str,
     *,
@@ -551,6 +559,21 @@ async for change in ctx.provider_manager.watch_changes():
     print(f"{change.provider_id}: {change.provider_type} @ {change.umo}")
 ```
 
+如果你只是想声明式地监听 Provider 切换，而不是手动拉一个监听流，
+可以优先使用 `@on_provider_change(...)` 装饰器，让运行时自动订阅和清理。
+注意当前底层仍依赖 `provider.manager.watch_changes`，因此这条装饰器在现阶段也应视为
+`reserved/system` 插件能力：
+
+```python
+from astrbot_sdk import Star, on_provider_change
+
+
+class ProviderWatcher(Star):
+    @on_provider_change(provider_types=["embedding"])
+    async def handle_change(self, provider_id: str, provider_type, umo: str | None):
+        print(provider_id, provider_type, umo)
+```
+
 ---
 
 ## Personas 客户端
@@ -778,26 +801,53 @@ await ctx.message_history.delete_all(session)
 文档示例建议统一使用以 `/` 开头、没有重复斜杠的规范化路径。`ctx.http.unregister_api(route)`
 在不传 `methods` 时会移除当前插件在该路由下注册的全部方法。
 
+如果路由和 handler 在插件定义阶段就固定了，优先考虑使用
+`@http_api(...) + @provide_capability(...)` 的声明式写法。它会在插件启动时自动注册，
+插件卸载时自动清理；`ctx.http.register_api()` 更适合运行时动态增删路由。
+
 ### register_api()
 
 注册 Web API 端点。
 
 ```python
-from astrbot_sdk.decorators import provide_capability
+from astrbot_sdk import Context, Star, provide_capability
 
-@provide_capability(
-    name="my_plugin.http_handler",
-    description="处理 HTTP 请求"
-)
-async def handle_http_request(request_id: str, payload: dict, cancel_token):
-    return {"status": 200, "body": {"result": "ok"}}
 
-await ctx.http.register_api(
-    route="/my-api",
-    handler=handle_http_request,
-    methods=["GET", "POST"]
-)
+class HttpPlugin(Star):
+    @provide_capability(
+        name="my_plugin.http_handler",
+        description="处理 HTTP 请求",
+    )
+    async def handle_http_request(self, request_id: str, payload: dict, cancel_token):
+        return {"status": 200, "body": {"result": "ok"}}
+
+    async def setup_api(self, ctx: Context) -> None:
+        await ctx.http.register_api(
+            route="/my-api",
+            handler=self.handle_http_request,
+            methods=["GET", "POST"],
+        )
 ```
+
+对应的声明式写法：
+
+```python
+from astrbot_sdk import Star, http_api, provide_capability
+
+
+class HttpPlugin(Star):
+    @http_api(route="/my-api", methods=["GET", "POST"], description="我的 API")
+    @provide_capability(
+        "my_plugin.http_handler",
+        description="处理 HTTP 请求",
+    )
+    async def handle_http_request(self, request_id: str, payload: dict, cancel_token):
+        return {"status": 200, "body": {"result": "ok"}}
+```
+
+`register_api()` 二选一支持：
+- 直接传 `handler_capability="my_plugin.http_handler"`
+- 传已经用 `@provide_capability(...)` 标记过的 `handler=...`
 
 ### unregister_api()
 
@@ -815,6 +865,84 @@ await ctx.http.unregister_api("/my-api")
 apis = await ctx.http.list_apis()
 for api in apis:
     print(f"{api['route']}: {api['methods']}")
+```
+
+---
+
+## MCP 客户端
+
+`ctx.mcp` 与 `ctx.mcp_manager` 指向同一个 MCP 管理客户端。它既支持管理本地 MCP 服务，
+也支持注册全局 MCP 服务和临时打开 MCP session。
+
+如果 MCP 服务定义在插件类上且生命周期固定，可以优先用 `@mcp_server(...)` 声明；
+若 `scope="global"`，还必须同时显式标注 `@acknowledge_global_mcp_risk`。
+
+### list_servers() / get_server() / enable_server() / disable_server()
+
+管理本地 MCP 服务。
+
+```python
+servers = await ctx.mcp.list_servers()
+server = await ctx.mcp.get_server("local-devtools")
+
+if server and not server.active:
+    await ctx.mcp.enable_server(server.name)
+```
+
+### wait_until_ready()
+
+等待某个本地 MCP 服务可用。
+
+```python
+ready = await ctx.mcp.wait_until_ready("local-devtools", timeout=10)
+print(ready.name, ready.running)
+```
+
+### session()
+
+临时打开 MCP session，并在退出 `async with` 时自动关闭。
+
+```python
+async with ctx.mcp.session(
+    name="local-devtools",
+    config={"mock_tools": ["inspect"]},
+    timeout=10,
+) as session:
+    tools = await session.list_tools()
+    result = await session.call_tool("inspect", {"target": "project"})
+```
+
+### register_global_server() / list_global_servers() / unregister_global_server()
+
+管理全局 MCP 服务。
+
+```python
+server = await ctx.mcp.register_global_server(
+    "shared-inspector",
+    {"mock_tools": ["inspect"]},
+    timeout=10,
+)
+print(server.name, server.scope)
+
+global_servers = await ctx.mcp.list_global_servers()
+await ctx.mcp.unregister_global_server("shared-inspector")
+```
+
+对应的声明式写法：
+
+```python
+from astrbot_sdk import Star, acknowledge_global_mcp_risk, mcp_server
+
+
+@acknowledge_global_mcp_risk
+@mcp_server(
+    name="shared-inspector",
+    scope="global",
+    config={"mock_tools": ["inspect"]},
+    timeout=10,
+)
+class MCPPlugin(Star):
+    pass
 ```
 
 ---
@@ -910,6 +1038,9 @@ await ctx.registry.clear_handler_whitelist()
 
 技能注册客户端，用于注册和管理技能。
 
+如果技能声明在插件类定义里就是固定的，优先用 `@register_skill(...)` 声明式注册；
+`ctx.skills.register()` 或 `ctx.register_skill()` 更适合运行时动态增删。
+
 ### register()
 
 注册一个技能。
@@ -921,6 +1052,17 @@ skill = await ctx.skills.register(
     description="我的技能描述"
 )
 print(f"技能已注册: {skill.name}")
+```
+
+对应的声明式写法：
+
+```python
+from astrbot_sdk import Star, register_skill
+
+
+@register_skill(name="my_skill", path="skills/demo.py", description="我的技能描述")
+class MyPlugin(Star):
+    pass
 ```
 
 ### unregister()
@@ -1010,6 +1152,18 @@ if await ctx.session_services.should_process_tts_request(event):
 
 ## LLM Tool 管理方法
 
+如果工具在插件代码中是静态定义的，优先用 `@register_llm_tool(...)` 装饰器；
+它会在插件装载时自动注册。这个装饰器应标在插件类方法上，让运行时能扫描到；
+`ctx.register_llm_tool()` 更适合运行时按条件动态创建工具。
+
+### get_llm_tool_manager()
+
+获取底层 `LLMToolManager`。
+
+```python
+manager = ctx.get_llm_tool_manager()
+```
+
 ### register_llm_tool()
 
 注册可执行的 LLM 工具。
@@ -1031,6 +1185,19 @@ await ctx.register_llm_tool(
     func_obj=search_weather,
     active=True
 )
+```
+
+对应的声明式写法：
+
+```python
+from astrbot_sdk import Star
+from astrbot_sdk.decorators import register_llm_tool
+
+
+class MyPlugin(Star):
+    @register_llm_tool(name="search_weather", description="搜索天气信息")
+    async def search_weather(self, location: str) -> str:
+        return f"{location} 今天晴天"
 ```
 
 ### add_llm_tools()
@@ -1056,6 +1223,14 @@ await ctx.add_llm_tools(tool_spec)
 ```python
 await ctx.activate_llm_tool("my_tool")
 await ctx.deactivate_llm_tool("my_tool")
+```
+
+### unregister_llm_tool()
+
+取消注册一个动态 LLM 工具。
+
+```python
+await ctx.unregister_llm_tool("my_tool")
 ```
 
 ---
@@ -1124,6 +1299,98 @@ async def background_work():
 task = await ctx.register_task(background_work(), "定时任务")
 ```
 
+如果这是插件生命周期内常驻的后台任务，而不是某个 handler 临时派生出来的 follow-up work，
+优先考虑 `@background_task(...)` 装饰器。它会在插件启动时自动启动，停用时自动取消：
+
+```python
+from astrbot_sdk import Context, Star, background_task
+
+
+class MyPlugin(Star):
+    @background_task(description="同步缓存")
+    async def sync_cache(self, ctx: Context) -> None:
+        while True:
+            await asyncio.sleep(60)
+            ctx.logger.info("sync once")
+```
+
+`ctx.register_task()` 更适合在 handler 内部启动一个应当脱离当前请求继续运行的异步任务。
+
+### register_skill() / unregister_skill()
+
+`Context` 也提供了对 `ctx.skills.register()` / `ctx.skills.unregister()` 的薄封装。
+
+```python
+registration = await ctx.register_skill(
+    name="my_skill",
+    path="skills/demo.py",
+    description="动态注册技能",
+)
+
+removed = await ctx.unregister_skill("my_skill")
+print(registration.name, removed)
+```
+
+---
+
+## 高级上下文方法
+
+### tool_loop_agent()
+
+运行一次带工具循环的 Agent 请求，返回完整 `LLMResponse`。
+
+```python
+from astrbot_sdk.llm.entities import ProviderRequest
+
+response = await ctx.tool_loop_agent(
+    request=ProviderRequest(
+        prompt="帮我先搜索再总结",
+        system_prompt="你是一个严谨的助手",
+    )
+)
+print(response.text)
+```
+
+### register_commands()
+
+只允许在 `astrbot_loaded` 或 `platform_loaded` 事件中动态注册命令。
+`ignore_prefix=True` 在当前 SDK 运行时中不支持。
+
+```python
+from astrbot_sdk import Context, Star
+from astrbot_sdk.decorators import on_event
+
+
+class MyPlugin(Star):
+    @on_event("astrbot_loaded")
+    async def on_loaded(self, event, ctx: Context):
+        await ctx.register_commands(
+            command_name="status",
+            handler_full_name="my_plugin.status_handler",
+            desc="查看状态",
+            priority=10,
+        )
+```
+
+### list_platforms() / get_platform() / get_platform_inst()
+
+读取平台兼容层对象，便于主动下行消息和查看平台状态。
+
+```python
+for platform in await ctx.list_platforms():
+    print(platform.id, platform.type, platform.status)
+
+qq = await ctx.get_platform("qq")
+inst = await ctx.get_platform_inst("qq-main")
+```
+
+兼容层对象常用方法：
+- `await platform.send("session_id", "消息")`
+- `await platform.send_by_id("user123", "消息", message_type="private")`
+- `await platform.refresh()`
+- `await platform.clear_errors()`
+- `stats = await platform.get_stats()`
+
 ---
 
 ## 常见使用模式
@@ -1131,32 +1398,41 @@ task = await ctx.register_task(background_work(), "定时任务")
 ### 1. 基本对话流程
 
 ```python
+from astrbot_sdk import Context, MessageEvent, Star
 from astrbot_sdk.decorators import on_message
 
-@on_message()
-async def handle_message(event: MessageEvent, ctx: Context):
-    reply = await ctx.llm.chat(event.message_content)
-    await ctx.platform.send(event.session_id, reply)
+
+class MyPlugin(Star):
+    @on_message()
+    async def handle_message(self, event: MessageEvent, ctx: Context):
+        reply = await ctx.llm.chat(event.message_content)
+        await ctx.platform.send(event.session_id, reply)
 ```
 
 ### 2. 带历史的对话
 
 ```python
-@on_message()
-async def handle_message(event: MessageEvent, ctx: Context):
-    # 从 memory 获取历史
-    history_data = await ctx.memory.get(f"history:{event.session_id}")
-    history = history_data.get("messages", []) if history_data else []
+from astrbot_sdk import Context, MessageEvent, Star
+from astrbot_sdk.clients.llm import ChatMessage
+from astrbot_sdk.decorators import on_message
 
-    # 对话
-    reply = await ctx.llm.chat(event.message_content, history=history)
 
-    # 保存新消息到历史
-    history.append(ChatMessage(role="user", content=event.message_content))
-    history.append(ChatMessage(role="assistant", content=reply))
-    await ctx.memory.save(f"history:{event.session_id}", {"messages": history})
+class MyPlugin(Star):
+    @on_message()
+    async def handle_message(self, event: MessageEvent, ctx: Context):
+        # 从 memory 获取历史
+        history_data = await ctx.memory.get(f"history:{event.session_id}")
+        history = history_data.get("messages", []) if history_data else []
 
-    await ctx.platform.send(event.session_id, reply)
+        # 对话
+        reply = await ctx.llm.chat(event.message_content, history=history)
+
+        # 保存新消息到历史
+        history.append(ChatMessage(role="user", content=event.message_content))
+        history.append(ChatMessage(role="assistant", content=reply))
+        await ctx.memory.save(f"history:{event.session_id}", {"messages": history})
+
+        await ctx.platform.send(event.session_id, reply)
 ```
 
 如果你需要保留原始消息组件、发送者信息、分页读取或按时间清理，请改用
@@ -1165,18 +1441,23 @@ async def handle_message(event: MessageEvent, ctx: Context):
 ### 3. 使用数据库持久化
 
 ```python
-@on_message()
-async def handle_message(event: MessageEvent, ctx: Context):
-    # 获取用户配置
-    config = await ctx.db.get(f"user_config:{event.sender_id}")
+from astrbot_sdk import Context, MessageEvent, Star
+from astrbot_sdk.decorators import on_message
 
-    if not config:
-        config = {"theme": "light", "lang": "zh"}
-        await ctx.db.set(f"user_config:{event.sender_id}", config)
 
-    # 使用配置
-    reply = f"你的主题设置是: {config['theme']}"
-    await ctx.platform.send(event.session_id, reply)
+class MyPlugin(Star):
+    @on_message()
+    async def handle_message(self, event: MessageEvent, ctx: Context):
+        # 获取用户配置
+        config = await ctx.db.get(f"user_config:{event.sender_id}")
+
+        if not config:
+            config = {"theme": "light", "lang": "zh"}
+            await ctx.db.set(f"user_config:{event.sender_id}", config)
+
+        # 使用配置
+        reply = f"你的主题设置是: {config['theme']}"
+        await ctx.platform.send(event.session_id, reply)
 ```
 
 ---
@@ -1191,10 +1472,15 @@ async def handle_message(event: MessageEvent, ctx: Context):
 
 4. **错误处理**：所有远程调用都可能失败，建议使用 try-except 处理
 
-5. **Memory vs DB**：
+5. **Memory vs DB vs MessageHistory**：
    - Memory: 语义搜索，适合 AI 上下文
    - DB: 精确匹配，适合结构化数据
+   - MessageHistory: 精确保存原始消息组件、发送者和元数据
 
-6. **文件操作**：使用 `ctx.files` 注册文件令牌，不要直接传递本地路径
+6. **声明式优先**：固定的 HTTP 路由、LLM Tool、技能注册、Provider 变更监听、插件级后台任务、MCP 服务，优先考虑对应装饰器；需要运行时动态增删时再使用 `Context` 方法。
 
-7. **平台标识**：使用 UMO（统一消息来源标识）格式：`"platform:instance:session_id"`
+7. **文件操作**：使用 `ctx.files` 注册文件令牌，不要直接传递本地路径
+
+8. **平台标识**：使用 UMO（统一消息来源标识）格式：`"platform:instance:session_id"`
+
+9. **MCP 全局服务**：全局 MCP 服务会影响整个运行时，使用声明式 `@mcp_server(scope="global")` 时必须同时显式确认风险。
