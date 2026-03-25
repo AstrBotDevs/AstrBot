@@ -64,6 +64,17 @@ class InternalAgentSubStage(Stage):
             self.tool_schema_mode = "full"
         if isinstance(self.max_step, bool):  # workaround: #2622
             self.max_step = 30
+        self.repeat_reply_guard_threshold: int = settings.get(
+            "repeat_reply_guard_threshold", 3
+        )
+        if isinstance(self.repeat_reply_guard_threshold, bool):
+            self.repeat_reply_guard_threshold = 3
+        try:
+            self.repeat_reply_guard_threshold = int(self.repeat_reply_guard_threshold)
+        except (TypeError, ValueError):
+            self.repeat_reply_guard_threshold = 3
+        if self.repeat_reply_guard_threshold < 0:
+            self.repeat_reply_guard_threshold = 0
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
         self.show_tool_call_result: bool = settings.get("show_tool_call_result", False)
         self.show_reasoning = settings.get("display_reasoning_text", False)
@@ -274,6 +285,7 @@ class InternalAgentSubStage(Stage):
                                     self.show_tool_use,
                                     self.show_tool_call_result,
                                     show_reasoning=self.show_reasoning,
+                                    repeat_reply_guard_threshold=self.repeat_reply_guard_threshold,
                                 ),
                             ),
                         )
@@ -304,6 +316,7 @@ class InternalAgentSubStage(Stage):
                                     self.show_tool_use,
                                     self.show_tool_call_result,
                                     show_reasoning=self.show_reasoning,
+                                    repeat_reply_guard_threshold=self.repeat_reply_guard_threshold,
                                 ),
                             ),
                         )
@@ -334,6 +347,7 @@ class InternalAgentSubStage(Stage):
                             self.show_tool_call_result,
                             stream_to_general,
                             show_reasoning=self.show_reasoning,
+                            repeat_reply_guard_threshold=self.repeat_reply_guard_threshold,
                         ):
                             yield
 

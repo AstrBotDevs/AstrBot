@@ -87,6 +87,21 @@ def _build_tool_result_status_message(
     return status_msg
 
 
+def _normalize_repeat_reply_guard_threshold(value: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, parsed)
+
+
+def _build_chain_signature(msg_chain: MessageChain) -> str:
+    signature = msg_chain.get_plain_text(with_other_comps_mark=True).strip()
+    if not signature:
+        return ""
+    return re.sub(r"\s+", " ", signature)
+
+
 async def run_agent(
     agent_runner: AgentRunner,
     max_step: int = 30,
@@ -94,10 +109,16 @@ async def run_agent(
     show_tool_call_result: bool = False,
     stream_to_general: bool = False,
     show_reasoning: bool = False,
+    repeat_reply_guard_threshold: int = 3,
 ) -> AsyncGenerator[MessageChain | None, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.context.event
     tool_name_by_call_id: dict[str, str] = {}
+    guard_threshold = _normalize_repeat_reply_guard_threshold(
+        repeat_reply_guard_threshold
+    )
+    guard_last_signature = ""
+    guard_repeat_count = 0
     while step_idx < max_step + 1:
         step_idx += 1
 
@@ -192,6 +213,38 @@ async def run_agent(
                         )
                         await astr_event.send(chain)
                     continue
+
+                if resp.type == "llm_result" and guard_threshold > 0:
+                    chain_signature = _build_chain_signature(resp.data["chain"])
+                    if chain_signature:
+                        if chain_signature == guard_last_signature:
+                            guard_repeat_count += 1
+                        else:
+                            guard_last_signature = chain_signature
+                            guard_repeat_count = 1
+
+                        if guard_repeat_count >= guard_threshold:
+                            logger.warning(
+                                "Agent repeated identical llm_result %d times; forcing convergence. threshold=%d",
+                                guard_repeat_count,
+                                guard_threshold,
+                            )
+                            if not agent_runner.done():
+                                if agent_runner.req:
+                                    agent_runner.req.func_tool = None
+                                agent_runner.run_context.messages.append(
+                                    Message(
+                                        role="user",
+                                        content=(
+                                            "检测到你连续多次输出相同回复。"
+                                            "请停止重复，基于已有信息给出最终答复，"
+                                            "不要再次调用工具。"
+                                        ),
+                                    )
+                                )
+                                # Jump to the same convergence path as max-step limit.
+                                step_idx = max_step
+                            continue
 
                 if stream_to_general and resp.type == "streaming_delta":
                     continue
@@ -288,6 +341,7 @@ async def run_live_agent(
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
     show_reasoning: bool = False,
+    repeat_reply_guard_threshold: int = 3,
 ) -> AsyncGenerator[MessageChain | None, None]:
     """Live Mode 的 Agent 运行器，支持流式 TTS
 
@@ -311,6 +365,7 @@ async def run_live_agent(
             show_tool_call_result=show_tool_call_result,
             stream_to_general=False,
             show_reasoning=show_reasoning,
+            repeat_reply_guard_threshold=repeat_reply_guard_threshold,
         ):
             yield chain
         return
@@ -343,6 +398,7 @@ async def run_live_agent(
             show_tool_use,
             show_tool_call_result,
             show_reasoning,
+            repeat_reply_guard_threshold,
         )
     )
 
@@ -430,6 +486,7 @@ async def _run_agent_feeder(
     show_tool_use: bool,
     show_tool_call_result: bool,
     show_reasoning: bool,
+    repeat_reply_guard_threshold: int,
 ) -> None:
     """运行 Agent 并将文本输出分句放入队列"""
     buffer = ""
@@ -441,6 +498,7 @@ async def _run_agent_feeder(
             show_tool_call_result=show_tool_call_result,
             stream_to_general=False,
             show_reasoning=show_reasoning,
+            repeat_reply_guard_threshold=repeat_reply_guard_threshold,
         ):
             if chain is None:
                 continue

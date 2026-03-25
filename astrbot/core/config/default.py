@@ -149,6 +149,7 @@ DEFAULT_CONFIG = {
         "unsupported_streaming_strategy": "realtime_segmenting",
         "reachability_check": False,
         "max_agent_step": 30,
+        "repeat_reply_guard_threshold": 3,
         "tool_call_timeout": 120,
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
@@ -2685,6 +2686,9 @@ CONFIG_METADATA_2 = {
                     "max_agent_step": {
                         "type": "int",
                     },
+                    "repeat_reply_guard_threshold": {
+                        "type": "int",
+                    },
                     "tool_call_timeout": {
                         "type": "int",
                     },
@@ -3426,6 +3430,14 @@ CONFIG_METADATA_3 = {
                     "provider_settings.max_agent_step": {
                         "description": "工具调用轮数上限",
                         "type": "int",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.repeat_reply_guard_threshold": {
+                        "description": "连续相同回复拦截阈值",
+                        "type": "int",
+                        "hint": "同一轮 Agent 运行中连续出现相同回复达到该次数时，将触发防循环收敛。设置为 0 可关闭。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
