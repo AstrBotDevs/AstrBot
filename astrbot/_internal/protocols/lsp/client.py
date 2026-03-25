@@ -50,7 +50,8 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         self._reader_task = None
         if reader_task is asyncio.current_task():
             return
-        reader_task.cancel()
+        if not reader_task.done():
+            reader_task.cancel()
         try:
             await reader_task
         except asyncio.CancelledError:
@@ -61,20 +62,6 @@ class AstrbotLspClient(BaseAstrbotLspClient):
     def _handle_reader_task_done(self, task: asyncio.Task[None]) -> None:
         if self._reader_task is task:
             self._reader_task = None
-
-        try:
-            exception = task.exception()
-        except asyncio.CancelledError:
-            return
-
-        if exception is None:
-            if self._connected:
-                self._connected = False
-                log.warning("LSP reader task exited unexpectedly")
-            return
-
-        self._connected = False
-        log.error("LSP reader task failed", exc_info=exception)
 
     async def connect(self) -> None:
         """
@@ -237,9 +224,17 @@ class AstrbotLspClient(BaseAstrbotLspClient):
 
                 except anyio.EndOfStream:
                     break
-        except anyio.get_cancelled_exc_class():
-            # Task was cancelled via the TaskGroup cancel/exit during shutdown
-            pass
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            if self._connected:
+                self._connected = False
+            log.error("LSP reader task failed", exc_info=exc)
+            return
+        else:
+            if self._connected:
+                self._connected = False
+                log.warning("LSP reader task exited unexpectedly")
 
     async def _handle_notification(self, notification: dict[str, Any]) -> None:
         """Handle incoming LSP notifications."""

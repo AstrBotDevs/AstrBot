@@ -5,43 +5,49 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from anyio.abc import ByteReceiveStream
 
 from astrbot._internal.protocols.lsp.client import AstrbotLspClient
 
 
+class FakeReader(ByteReceiveStream):
+    def __init__(self, receive_mock: AsyncMock) -> None:
+        self._receive_mock = receive_mock
+
+    async def receive(self, max_bytes: int = 65536) -> bytes:
+        del max_bytes
+        return await self._receive_mock()
+
+    async def aclose(self) -> None:
+        return None
+
+
 @pytest.mark.asyncio
-async def test_lsp_reader_task_failure_marks_client_disconnected_and_logs():
-    """Test reader task failures update connection state and are logged."""
+async def test_lsp_read_responses_failure_disconnects_and_logs():
+    """Test reader failures are handled inside _read_responses."""
     client = AstrbotLspClient()
-    fake_process = SimpleNamespace(stdout=MagicMock(), stdin=MagicMock())
+    client._connected = True
+    client._reader = FakeReader(AsyncMock(side_effect=RuntimeError("reader crashed")))
 
-    with (
-        patch(
-            "astrbot._internal.protocols.lsp.client.anyio.open_process",
-            AsyncMock(return_value=fake_process),
-        ),
-        patch.object(
-            client,
-            "_read_responses",
-            AsyncMock(side_effect=RuntimeError("reader crashed")),
-        ),
-        patch.object(client, "send_request", AsyncMock(return_value={})),
-        patch.object(client, "send_notification", AsyncMock()),
-        patch("astrbot._internal.protocols.lsp.client.log") as mock_log,
-    ):
-        await client.connect_to_server(["python", "fake_lsp.py"], "file:///tmp")
+    with patch("astrbot._internal.protocols.lsp.client.log") as mock_log:
+        await client._read_responses()
 
-        for _ in range(100):
-            if client.connected is False and mock_log.error.called:
-                break
-            await asyncio.sleep(0.01)
-        else:
-            pytest.fail(
-                "Timed out waiting for LSP reader task failure to disconnect client and log error"
-            )
+    assert client.connected is False
+    mock_log.error.assert_called_once()
 
-        assert client.connected is False
-        mock_log.error.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_lsp_read_responses_unexpected_exit_disconnects_and_warns():
+    """Test non-cancelled reader exit updates connection state."""
+    client = AstrbotLspClient()
+    client._connected = True
+    client._reader = FakeReader(AsyncMock(return_value=b""))
+
+    with patch("astrbot._internal.protocols.lsp.client.log") as mock_log:
+        await client._read_responses()
+
+    assert client.connected is False
+    mock_log.warning.assert_called_once()
 
 
 @pytest.mark.asyncio
