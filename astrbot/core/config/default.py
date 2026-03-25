@@ -1558,7 +1558,7 @@ CONFIG_METADATA_2 = {
                         "mimo-tts-style-prompt": "",
                         "mimo-tts-dialect": "",
                         "mimo-tts-seed-text": "Hello, MiMo, have you had lunch?",
-                        "timeout": "20",
+                        "timeout": "60",
                         "proxy": "",
                     },
                     "Genie TTS": {

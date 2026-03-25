@@ -17,6 +17,7 @@ DEFAULT_MIMO_API_BASE = "https://api.xiaomimimo.com/v1"
 DEFAULT_MIMO_TTS_MODEL = "mimo-v2-tts"
 DEFAULT_MIMO_TTS_VOICE = "mimo_default"
 DEFAULT_MIMO_TTS_SEED_TEXT = "Hello, MiMo, have you had lunch?"
+DEFAULT_MIMO_TTS_TIMEOUT = 60
 DEFAULT_MIMO_STT_MODEL = "mimo-v2-omni"
 DEFAULT_MIMO_STT_SYSTEM_PROMPT = (
     "You are a speech transcription assistant. "

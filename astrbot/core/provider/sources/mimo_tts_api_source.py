@@ -8,6 +8,7 @@ from .mimo_api_common import (
     DEFAULT_MIMO_API_BASE,
     DEFAULT_MIMO_TTS_MODEL,
     DEFAULT_MIMO_TTS_SEED_TEXT,
+    DEFAULT_MIMO_TTS_TIMEOUT,
     DEFAULT_MIMO_TTS_VOICE,
     MiMoAPIError,
     build_api_url,
@@ -33,7 +34,13 @@ class ProviderMiMoTTSAPI(TTSProvider):
         self.chosen_api_key = provider_config.get("api_key", "")
         self.api_base = provider_config.get("api_base", DEFAULT_MIMO_API_BASE)
         self.proxy = provider_config.get("proxy", "")
-        self.timeout = normalize_timeout(provider_config.get("timeout", 20))
+        timeout = normalize_timeout(
+            provider_config.get("timeout", DEFAULT_MIMO_TTS_TIMEOUT)
+        )
+        # MiMo TTS often needs longer than the legacy 20s default for large outputs.
+        if timeout in (None, 20):
+            timeout = DEFAULT_MIMO_TTS_TIMEOUT
+        self.timeout = timeout
         self.voice = provider_config.get("mimo-tts-voice", DEFAULT_MIMO_TTS_VOICE)
         self.audio_format = provider_config.get("mimo-tts-format", "wav")
         self.style_prompt = provider_config.get("mimo-tts-style-prompt", "")

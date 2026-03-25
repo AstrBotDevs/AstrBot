@@ -136,6 +136,22 @@ def test_mimo_headers_use_single_authorization_method():
     }
 
 
+def test_mimo_tts_raises_legacy_default_timeout_to_60_seconds():
+    provider = _make_tts_provider({"timeout": "20"})
+    try:
+        assert provider.timeout == 60
+    finally:
+        asyncio.run(provider.terminate())
+
+
+def test_mimo_tts_preserves_explicit_custom_timeout():
+    provider = _make_tts_provider({"timeout": 90})
+    try:
+        assert provider.timeout == 90
+    finally:
+        asyncio.run(provider.terminate())
+
+
 @pytest.mark.asyncio
 async def test_mimo_tts_get_audio_handles_empty_choices():
     provider = _make_tts_provider()
