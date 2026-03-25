@@ -32,6 +32,20 @@ from .route import (
 )
 
 
+class _QueueTimeoutSentinel:
+    pass
+
+
+_QUEUE_TIMEOUT = _QueueTimeoutSentinel()
+
+
+class _ReceiveTimeoutSentinel:
+    pass
+
+
+_RECEIVE_TIMEOUT = _ReceiveTimeoutSentinel()
+
+
 class LiveChatSession:
     """Live Chat 会话管理器"""
 
@@ -151,6 +165,40 @@ class LiveChatRoute(Route):
         )
         return False
 
+    async def _recv_ws_json_guarded(
+        self,
+        *,
+        wait_timeout: float = 1.0,
+    ) -> dict[str, Any] | _ReceiveTimeoutSentinel | None:
+        if not await self._ensure_runtime_ready():
+            return None
+        try:
+            message = await asyncio.wait_for(
+                websocket.receive_json(),
+                timeout=wait_timeout,
+            )
+        except asyncio.TimeoutError:
+            return _RECEIVE_TIMEOUT
+        if not await self._ensure_runtime_ready():
+            return None
+        return message
+
+    async def _guarded_queue_get(
+        self,
+        back_queue: asyncio.Queue,
+        *,
+        wait_timeout: float,
+    ) -> dict[str, Any] | _QueueTimeoutSentinel | None:
+        if not await self._ensure_runtime_ready():
+            return None
+        try:
+            result = await asyncio.wait_for(back_queue.get(), timeout=wait_timeout)
+        except asyncio.TimeoutError:
+            return _QUEUE_TIMEOUT
+        if not await self._ensure_runtime_ready():
+            return None
+        return result
+
     async def _unified_ws_loop(self, force_ct: str | None = None) -> None:
         """统一 WebSocket 循环"""
         # WebSocket 不能通过 header 传递 token,需要从 query 参数获取
@@ -182,10 +230,10 @@ class LiveChatRoute(Route):
 
         try:
             while True:
-                if not await self._ensure_runtime_ready():
-                    return
-                message = await websocket.receive_json()
-                if not await self._ensure_runtime_ready():
+                message = await self._recv_ws_json_guarded()
+                if isinstance(message, _ReceiveTimeoutSentinel):
+                    continue
+                if message is None:
                     return
                 ct = force_ct or message.get("ct", "live")
                 if ct == "chat":
@@ -310,7 +358,11 @@ class LiveChatRoute(Route):
         )
         try:
             while True:
-                result = await back_queue.get()
+                result = await self._guarded_queue_get(back_queue, wait_timeout=1)
+                if isinstance(result, _QueueTimeoutSentinel):
+                    continue
+                if result is None:
+                    break
                 if not result:
                     continue
                 await self._send_chat_payload(session, {"ct": "chat", **result})
@@ -513,12 +565,10 @@ class LiveChatRoute(Route):
                     session.should_interrupt = False
                     break
 
-                try:
-                    result = await asyncio.wait_for(back_queue.get(), timeout=1)
-                except asyncio.TimeoutError:
+                result = await self._guarded_queue_get(back_queue, wait_timeout=1)
+                if isinstance(result, _QueueTimeoutSentinel):
                     continue
-
-                if not await self._ensure_runtime_ready():
+                if result is None:
                     break
 
                 if not result:
@@ -817,12 +867,13 @@ class LiveChatRoute(Route):
                                 break
                         break
 
-                    try:
-                        result = await asyncio.wait_for(back_queue.get(), timeout=0.5)
-                    except asyncio.TimeoutError:
+                    result = await self._guarded_queue_get(
+                        back_queue,
+                        wait_timeout=0.5,
+                    )
+                    if isinstance(result, _QueueTimeoutSentinel):
                         continue
-
-                    if not await self._ensure_runtime_ready():
+                    if result is None:
                         break
 
                     if not result:

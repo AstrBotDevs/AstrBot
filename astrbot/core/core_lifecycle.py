@@ -118,6 +118,18 @@ class AstrBotCoreLifecycle:
                 del os.environ["no_proxy"]
             logger.debug("HTTP proxy cleared")
 
+    @property
+    def core_initialized(self) -> bool:
+        return self.lifecycle_state is not LifecycleState.CREATED
+
+    @property
+    def runtime_ready(self) -> bool:
+        return self.lifecycle_state is LifecycleState.RUNTIME_READY
+
+    @property
+    def runtime_failed(self) -> bool:
+        return self.lifecycle_state is LifecycleState.RUNTIME_FAILED
+
     async def _init_or_reload_subagent_orchestrator(self) -> None:
         """Create (if needed) and reload the subagent orchestrator from config.
 
@@ -141,11 +153,17 @@ class AstrBotCoreLifecycle:
             logger.error(f"Subagent orchestrator init failed: {e}", exc_info=True)
 
     def _set_lifecycle_state(self, state: LifecycleState) -> None:
-        """Update the lifecycle state and compatibility flags together."""
+        """Update lifecycle state and keep readiness events in sync."""
         self.lifecycle_state = state
-        self.core_initialized = state is not LifecycleState.CREATED
-        self.runtime_failed = state is LifecycleState.RUNTIME_FAILED
-        self.runtime_ready = state is LifecycleState.RUNTIME_READY
+        if state is LifecycleState.RUNTIME_READY:
+            self.runtime_ready_event.set()
+            self.runtime_failed_event.clear()
+        elif state is LifecycleState.RUNTIME_FAILED:
+            self.runtime_ready_event.clear()
+            self.runtime_failed_event.set()
+        else:
+            self.runtime_ready_event.clear()
+            self.runtime_failed_event.clear()
 
     def _clear_runtime_failure_for_retry(self) -> None:
         if self.lifecycle_state is LifecycleState.RUNTIME_FAILED:
@@ -194,19 +212,14 @@ class AstrBotCoreLifecycle:
     def _reset_runtime_bootstrap_state(self) -> None:
         self.runtime_bootstrap_task = None
         self.runtime_bootstrap_error = None
-        self.runtime_ready_event.clear()
-        self.runtime_failed_event.clear()
 
     def _interrupt_runtime_bootstrap_waiters(self) -> None:
         self._runtime_wait_interrupted = True
         self.runtime_bootstrap_error = None
         self.runtime_failed_event.set()
 
-    async def _consume_runtime_bootstrap_task(
-        self,
-        task: asyncio.Task[None] | None = None,
-    ) -> None:
-        task = task or self.runtime_bootstrap_task
+    async def _consume_completed_bootstrap_task(self) -> None:
+        task = self.runtime_bootstrap_task
         if task is None or not task.done():
             return
         try:
@@ -217,67 +230,35 @@ class AstrBotCoreLifecycle:
             pass
 
     async def _wait_for_runtime_ready(self) -> bool:
-        if self.runtime_ready or self.runtime_ready_event.is_set():
+        if self.runtime_ready:
             return True
         if self._runtime_wait_interrupted:
-            self.runtime_failed_event.clear()
             return False
         if self.runtime_failed or self.runtime_bootstrap_error is not None:
-            if self.runtime_bootstrap_task is not None:
-                await self._consume_runtime_bootstrap_task(self.runtime_bootstrap_task)
+            await self._consume_completed_bootstrap_task()
             return False
+
         runtime_bootstrap_task = self.runtime_bootstrap_task
         if runtime_bootstrap_task is None:
             raise RuntimeError(
                 "runtime bootstrap task was not scheduled before start",
             )
-        if self.runtime_failed_event.is_set():
-            await self._consume_runtime_bootstrap_task(runtime_bootstrap_task)
-            if self._runtime_wait_interrupted:
-                self.runtime_failed_event.clear()
-            return False
 
-        ready_wait = asyncio.create_task(self.runtime_ready_event.wait())
-        failed_wait = asyncio.create_task(self.runtime_failed_event.wait())
-        done: set[asyncio.Task[Any]] = set()
-        pending: set[asyncio.Task[Any]] = set()
         try:
-            done, pending = await asyncio.wait(
-                {runtime_bootstrap_task, ready_wait, failed_wait},
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-        finally:
-            for task in pending:
-                if task is runtime_bootstrap_task:
-                    continue
-                task.cancel()
-            pending_waiters = [
-                task for task in pending if task is not runtime_bootstrap_task
-            ]
-            if pending_waiters:
-                await asyncio.gather(*pending_waiters, return_exceptions=True)
-
-        for task in done:
-            if task is runtime_bootstrap_task:
-                continue
-            task.result()
-
-        if runtime_bootstrap_task in done:
-            await self._consume_runtime_bootstrap_task(runtime_bootstrap_task)
-
-        if self.runtime_ready or self.runtime_ready_event.is_set():
-            return True
+            await runtime_bootstrap_task
+        except asyncio.CancelledError:
+            return False
+        except BaseException as exc:
+            if self.runtime_bootstrap_error is None:
+                self.runtime_bootstrap_error = exc
+            if not self.runtime_failed:
+                self._set_lifecycle_state(LifecycleState.RUNTIME_FAILED)
+            return False
 
         if self._runtime_wait_interrupted:
-            self.runtime_failed_event.clear()
             return False
 
-        if self.runtime_bootstrap_task is None and self.runtime_bootstrap_error is None:
-            self.runtime_failed_event.clear()
-            return False
-
-        await self._consume_runtime_bootstrap_task(runtime_bootstrap_task)
-        return False
+        return self.runtime_ready
 
     def _collect_runtime_bootstrap_task(self) -> list[asyncio.Task]:
         task = self.runtime_bootstrap_task
@@ -347,22 +328,9 @@ class AstrBotCoreLifecycle:
         self.curr_tasks = []
         self.start_time = 0
 
-    def _require_scheduler_dependencies(
-        self,
-    ) -> tuple[AstrBotConfigManager, PluginManager]:
-        if self.astrbot_config_mgr is None or self.plugin_manager is None:
-            raise RuntimeError("initialize_core must complete before scheduler setup")
-        return self.astrbot_config_mgr, self.plugin_manager
-
-    def _require_config_manager(self) -> AstrBotConfigManager:
-        if self.astrbot_config_mgr is None:
-            raise RuntimeError("initialize_core must complete before scheduler setup")
-        return self.astrbot_config_mgr
-
-    def _require_plugin_manager(self) -> PluginManager:
-        if self.plugin_manager is None:
-            raise RuntimeError("initialize_core must complete before scheduler setup")
-        return self.plugin_manager
+    def _require_core_ready(self) -> None:
+        if not self.core_initialized:
+            raise RuntimeError("initialize_core must complete before this operation")
 
     def _require_platform_manager(self) -> PlatformManager:
         if self.platform_manager is None:
@@ -535,18 +503,15 @@ class AstrBotCoreLifecycle:
             self.metadata_update_task = asyncio.create_task(update_llm_metadata())
 
             self._set_lifecycle_state(LifecycleState.RUNTIME_READY)
-            self.runtime_ready_event.set()
         except asyncio.CancelledError:
             await self._cleanup_partial_runtime_bootstrap()
             self._set_lifecycle_state(LifecycleState.CORE_READY)
             self.runtime_bootstrap_error = None
-            self.runtime_failed_event.clear()
             raise
         except BaseException as exc:
             await self._cleanup_partial_runtime_bootstrap()
             self._set_lifecycle_state(LifecycleState.RUNTIME_FAILED)
             self.runtime_bootstrap_error = exc
-            self.runtime_failed_event.set()
             raise
 
     async def initialize(self) -> None:
@@ -656,14 +621,10 @@ class AstrBotCoreLifecycle:
         # 同时运行curr_tasks中的所有任务
         await asyncio.gather(*self.curr_tasks, return_exceptions=True)
 
-    async def stop(self) -> None:
-        """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器."""
+    async def _shutdown_runtime(self) -> None:
         self.runtime_request_ready = False
-        if self.temp_dir_cleaner:
-            await self.temp_dir_cleaner.stop()
-
-        # 请求停止所有正在运行的异步任务
         self._interrupt_runtime_bootstrap_waiters()
+
         tasks_to_wait = self._cancel_current_tasks()
         await self._await_tasks(self._collect_metadata_update_task())
         runtime_bootstrap_tasks = self._collect_runtime_bootstrap_task()
@@ -691,34 +652,21 @@ class AstrBotCoreLifecycle:
             await self.kb_manager.terminate()
         if self.dashboard_shutdown_event:
             self.dashboard_shutdown_event.set()
+
         self._clear_runtime_artifacts()
         self._set_lifecycle_state(LifecycleState.CREATED)
         self._reset_runtime_bootstrap_state()
-
-        # 再次遍历curr_tasks等待每个任务真正结束
         await self._await_tasks(tasks_to_wait)
+
+    async def stop(self) -> None:
+        """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器."""
+        if self.temp_dir_cleaner:
+            await self.temp_dir_cleaner.stop()
+        await self._shutdown_runtime()
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
-        self.runtime_request_ready = False
-        self._interrupt_runtime_bootstrap_waiters()
-        tasks_to_wait = self._cancel_current_tasks()
-        await self._await_tasks(self._collect_metadata_update_task())
-        runtime_bootstrap_tasks = self._collect_runtime_bootstrap_task()
-        await self._await_tasks(runtime_bootstrap_tasks)
-        tasks_to_wait.extend(runtime_bootstrap_tasks)
-        if self.provider_manager:
-            await self.provider_manager.terminate()
-        if self.platform_manager:
-            await self.platform_manager.terminate()
-        if self.kb_manager:
-            await self.kb_manager.terminate()
-        if self.dashboard_shutdown_event:
-            self.dashboard_shutdown_event.set()
-        await self._await_tasks(tasks_to_wait)
-        self._clear_runtime_artifacts()
-        self._set_lifecycle_state(LifecycleState.CREATED)
-        self._reset_runtime_bootstrap_state()
+        await self._shutdown_runtime()
         if self.astrbot_updator is None:
             return
         threading.Thread(
@@ -748,7 +696,11 @@ class AstrBotCoreLifecycle:
 
         """
         mapping = {}
-        astrbot_config_mgr, plugin_manager = self._require_scheduler_dependencies()
+        self._require_core_ready()
+        assert self.astrbot_config_mgr is not None
+        assert self.plugin_manager is not None
+        astrbot_config_mgr = self.astrbot_config_mgr
+        plugin_manager = self.plugin_manager
         for conf_id, ab_config in astrbot_config_mgr.confs.items():
             scheduler = PipelineScheduler(
                 PipelineContext(ab_config, plugin_manager, conf_id),
@@ -764,11 +716,14 @@ class AstrBotCoreLifecycle:
             dict[str, PipelineScheduler]: 平台 ID 到流水线调度器的映射
 
         """
-        astrbot_config_mgr = self._require_config_manager()
+        self._require_core_ready()
+        assert self.astrbot_config_mgr is not None
+        astrbot_config_mgr = self.astrbot_config_mgr
         ab_config = astrbot_config_mgr.confs.get(conf_id)
         if not ab_config:
             raise ValueError(f"配置文件 {conf_id} 不存在")
-        plugin_manager = self._require_plugin_manager()
+        assert self.plugin_manager is not None
+        plugin_manager = self.plugin_manager
         scheduler = PipelineScheduler(
             PipelineContext(ab_config, plugin_manager, conf_id),
         )

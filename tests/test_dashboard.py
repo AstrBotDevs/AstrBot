@@ -24,7 +24,11 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.pip_installer import PipInstallError
-from astrbot.dashboard.routes.live_chat import LiveChatRoute
+from astrbot.dashboard.routes.live_chat import (
+    LiveChatRoute,
+    LiveChatSession,
+    _ReceiveTimeoutSentinel,
+)
 from astrbot.dashboard.routes.open_api import OpenApiRoute
 from astrbot.dashboard.routes.plugin import PluginRoute
 from astrbot.dashboard.server import AstrBotDashboard, _expand_env_placeholders
@@ -957,6 +961,80 @@ async def test_live_chat_ws_closes_when_runtime_stops_mid_session(
 
     route._handle_message.assert_awaited_once()
     fake_websocket.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_live_chat_recv_guard_polls_until_runtime_stops(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    route = LiveChatRoute.__new__(LiveChatRoute)
+    route.core_lifecycle = core_lifecycle_td
+
+    fake_websocket = MagicMock()
+    fake_websocket.close = AsyncMock()
+    fake_websocket.receive_json = AsyncMock(
+        side_effect=AssertionError("receive_json should be wrapped by wait_for")
+    )
+    monkeypatch.setattr("astrbot.dashboard.routes.live_chat.websocket", fake_websocket)
+
+    _restore_runtime_ready(core_lifecycle_td)
+
+    async def fake_wait_for(awaitable, **kwargs):
+        del kwargs
+        if hasattr(awaitable, "close"):
+            awaitable.close()
+        core_lifecycle_td.runtime_request_ready = False
+        raise asyncio.TimeoutError
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.live_chat.asyncio.wait_for",
+        fake_wait_for,
+    )
+
+    first = await route._recv_ws_json_guarded(wait_timeout=0.01)
+    assert isinstance(first, _ReceiveTimeoutSentinel)
+
+    second = await route._recv_ws_json_guarded(wait_timeout=0.01)
+    assert second is None
+    fake_websocket.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_live_chat_subscription_stops_forwarding_when_runtime_stops(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    route = LiveChatRoute.__new__(LiveChatRoute)
+    route.core_lifecycle = core_lifecycle_td
+    route._send_chat_payload = AsyncMock(
+        side_effect=AssertionError("subscription should not forward after runtime stop")
+    )
+
+    session = LiveChatSession("session", "astrbot")
+    session.chat_subscriptions["chat-session"] = "request-id"
+    session.chat_subscription_tasks["chat-session"] = MagicMock()
+
+    fake_queue = MagicMock()
+    fake_queue.get = AsyncMock(
+        side_effect=[{"type": "plain", "data": "hello"}, asyncio.CancelledError()]
+    )
+    remove_back_queue = MagicMock()
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.live_chat.webchat_queue_mgr.get_or_create_back_queue",
+        MagicMock(return_value=fake_queue),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.live_chat.webchat_queue_mgr.remove_back_queue",
+        remove_back_queue,
+    )
+
+    core_lifecycle_td.runtime_request_ready = False
+
+    await route._forward_chat_subscription(session, "chat-session", "request-id")
+
+    route._send_chat_payload.assert_not_awaited()
+    remove_back_queue.assert_called_once_with("request-id")
 
 
 @pytest.mark.asyncio
