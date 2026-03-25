@@ -99,6 +99,8 @@ class botClient(Client):
 
 @register_platform_adapter("qq_official", "QQ 机器人官方 API 适配器")
 class QQOfficialPlatformAdapter(Platform):
+    STARTUP_RETRY_DELAY_SECONDS = 5
+
     def __init__(
         self,
         platform_config: dict,
@@ -123,18 +125,47 @@ class QQOfficialPlatformAdapter(Platform):
                 public_guild_messages=True,
                 direct_message=guild_dm,
             )
-        self.client = botClient(
-            intents=self.intents,
-            bot_log=False,
-            timeout=20,
-        )
-
-        self.client.set_platform(self)
+        self._shutdown_event = asyncio.Event()
+        self.client = self._create_client()
 
         self._session_last_message_id: dict[str, str] = {}
         self._session_scene: dict[str, str] = {}
 
         self.test_mode = os.environ.get("TEST_MODE", "off") == "on"
+
+    def _create_client(self) -> botClient:
+        client = botClient(
+            intents=self.intents,
+            bot_log=False,
+            timeout=20,
+        )
+        client.set_platform(self)
+        return client
+
+    @staticmethod
+    def _should_retry_startup_error(error: Exception) -> bool:
+        if isinstance(error, (asyncio.TimeoutError, ConnectionError, OSError)):
+            return True
+        if isinstance(error, TypeError):
+            error_msg = str(error)
+            return "NoneType" in error_msg and "subscriptable" in error_msg
+        return False
+
+    async def _close_client(self) -> None:
+        try:
+            await self.client.close()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning(
+                "qq_official(%s): close client failed during recovery: %s",
+                self.meta().id,
+                e,
+            )
+
+    async def _recreate_client(self) -> None:
+        await self._close_client()
+        self.client = self._create_client()
 
     async def send_by_session(
         self,
@@ -500,12 +531,48 @@ class QQOfficialPlatformAdapter(Platform):
         abm.self_id = "qq_official"
         return abm
 
-    def run(self):
-        return self.client.start(appid=self.appid, secret=self.secret)
+    async def run(self) -> None:
+        try:
+            while not self._shutdown_event.is_set():
+                try:
+                    await self.client.start(appid=self.appid, secret=self.secret)
+                    if self._shutdown_event.is_set():
+                        break
+                    logger.warning(
+                        "qq_official(%s): client stopped unexpectedly, restarting in %ss",
+                        self.meta().id,
+                        self.STARTUP_RETRY_DELAY_SECONDS,
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    if not self._should_retry_startup_error(e):
+                        raise
+                    if self._shutdown_event.is_set():
+                        break
+                    logger.warning(
+                        "qq_official(%s): startup failed, retrying in %ss: %s",
+                        self.meta().id,
+                        self.STARTUP_RETRY_DELAY_SECONDS,
+                        e,
+                    )
+
+                await self._recreate_client()
+
+                try:
+                    await asyncio.wait_for(
+                        self._shutdown_event.wait(),
+                        timeout=self.STARTUP_RETRY_DELAY_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    continue
+        finally:
+            await self._close_client()
 
     def get_client(self) -> botClient:
         return self.client
 
     async def terminate(self) -> None:
-        await self.client.close()
+        self._shutdown_event.set()
+        await self._close_client()
         logger.info("QQ 官方机器人接口 适配器已被优雅地关闭")
