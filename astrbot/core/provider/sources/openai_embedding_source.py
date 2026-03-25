@@ -83,8 +83,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             )
             if not isinstance(embedding, list):
                 raise TypeError(
-                    "Unexpected embedding item type: "
-                    f"{type(item).__name__}"
+                    f"Unexpected embedding item type: {type(item).__name__}"
                 )
             vectors.append([float(value) for value in embedding])
 
