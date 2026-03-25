@@ -21,8 +21,8 @@ from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
-from quart_cors import cors
 from quart.typing import ResponseReturnValue
+from quart_cors import cors
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
@@ -63,7 +63,7 @@ from .routes import (
     UpdateRoute,
 )
 from .routes.api_key import ALL_OPEN_API_SCOPES
-from .routes.route import runtime_loading_response
+from .routes.route import is_runtime_request_ready, runtime_loading_response
 
 # Static assets shipped inside the wheel (built during `hatch build`).
 _BUNDLED_DIST = Path(__file__).parent / "dist"
@@ -131,6 +131,24 @@ class AstrBotDashboard:
         "/api/stat/start-time",
         "/api/backup/download",
     )
+    RUNTIME_BYPASS_ENDPOINT_PREFIXES = (
+        "/api/auth/login",
+        "/api/file",
+        "/api/stat/version",
+        "/api/stat/runtime-status",
+        "/api/stat/start-time",
+        "/api/stat/restart-core",
+        "/api/stat/changelog",
+        "/api/stat/changelog/list",
+        "/api/stat/first-notice",
+        "/api/backup/download",
+    )
+    RUNTIME_FAILED_RECOVERY_ENDPOINT_PREFIXES = (
+        "/api/config/",
+        "/api/plugin/reload-failed",
+        "/api/plugin/uninstall-failed",
+        "/api/plugin/source/get-failed-plugins",
+    )
 
     def __init__(
         self,
@@ -184,8 +202,8 @@ class AstrBotDashboard:
 
         if self.enable_webui and not (Path(self.data_path) / "index.html").exists():
             logger.warning(
-                f"前端未内置或未初始化 (index.html missing in {self.data_path})，"
-                "回退到仅启动后端。请访问在线面板：dash.astrbot.men"
+                f"前端未内置或未初始化 (index.html missing in {self.data_path}), "
+                "回退到仅启动后端. 请访问在线面板: dash.astrbot.men"
             )
             self.enable_webui = False
             self._webui_fallback = True
@@ -235,7 +253,7 @@ class AstrBotDashboard:
         @self.app.route("/")
         async def index():
             if not self.enable_webui:
-                return "前端未启用，请访问在线面板：dash.astrbot.men"
+                return "前端未启用, 请访问在线面板: dash.astrbot.men"
             try:
                 return await self.app.send_static_file("index.html")
             except werkzeug.exceptions.NotFound:
@@ -245,7 +263,7 @@ class AstrBotDashboard:
         @self.app.errorhandler(404)
         async def not_found(e):
             if not self.enable_webui:
-                return "前端未启用，请访问在线面板：dash.astrbot.men"
+                return "前端未启用, 请访问在线面板: dash.astrbot.men"
             if request.path.startswith("/api/"):
                 return jsonify(Response().error("Not Found").to_json()), 404
             try:
@@ -343,9 +361,26 @@ class AstrBotDashboard:
     async def guarded_srv_plug_route(
         self, subpath: str, *args, **kwargs
     ) -> ResponseReturnValue:
-        if not self.core_lifecycle.runtime_ready:
+        if not is_runtime_request_ready(self.core_lifecycle):
             return runtime_loading_response(self.core_lifecycle)
         return await self.srv_plug_route(subpath, *args, **kwargs)
+
+    def _should_bypass_runtime_guard(self, path: str) -> bool:
+        return any(
+            path.startswith(prefix)
+            for prefix in self.RUNTIME_BYPASS_ENDPOINT_PREFIXES
+        )
+
+    def _should_allow_failed_runtime_recovery(self, path: str) -> bool:
+        if not (
+            self.core_lifecycle.runtime_failed
+            or self.core_lifecycle.runtime_bootstrap_error is not None
+        ):
+            return False
+        return any(
+            path.startswith(prefix)
+            for prefix in self.RUNTIME_FAILED_RECOVERY_ENDPOINT_PREFIXES
+        )
 
     async def auth_middleware(self):
         # 放行CORS预检请求
@@ -385,9 +420,27 @@ class AstrBotDashboard:
             g.api_key_scopes = scopes
             g.username = f"api_key:{api_key.key_id}"
             await self.db.touch_api_key(api_key.key_id)
+            if not self._should_bypass_runtime_guard(
+                request.path
+            ) and not self._should_allow_failed_runtime_recovery(
+                request.path
+            ) and not is_runtime_request_ready(self.core_lifecycle):
+                return runtime_loading_response(
+                    self.core_lifecycle,
+                    include_failure_details=False,
+                )
             return None
 
         if any(request.path.startswith(p) for p in self.ALLOWED_ENDPOINT_PREFIXES):
+            if not self._should_bypass_runtime_guard(
+                request.path
+            ) and not self._should_allow_failed_runtime_recovery(
+                request.path
+            ) and not is_runtime_request_ready(self.core_lifecycle):
+                return runtime_loading_response(
+                    self.core_lifecycle,
+                    include_failure_details=False,
+                )
             return None
 
         token = request.headers.get("Authorization")
@@ -406,6 +459,13 @@ class AstrBotDashboard:
             return self._unauthorized("Token 过期")
         except jwt.PyJWTError:
             return self._unauthorized("Token 无效")
+
+        if not self._should_bypass_runtime_guard(
+            request.path
+        ) and not self._should_allow_failed_runtime_recovery(
+            request.path
+        ) and not is_runtime_request_ready(self.core_lifecycle):
+            return runtime_loading_response(self.core_lifecycle)
 
     @staticmethod
     def _unauthorized(msg: str):
@@ -497,10 +557,10 @@ class AstrBotDashboard:
         """Run dashboard server (blocking)"""
         if self._webui_fallback:
             logger.warning(
-                "前端未内置或未初始化，回退到仅启动后端。请访问在线面板：dash.astrbot.men"
+                "前端未内置或未初始化, 回退到仅启动后端. 请访问在线面板: dash.astrbot.men"
             )
         elif not self.enable_webui:
-            logger.warning("前端已禁用，请访问在线面板：dash.astrbot.men")
+            logger.warning("前端已禁用, 请访问在线面板: dash.astrbot.men")
 
         dashboard_config = self.config.get("dashboard", {})
         host_value = os.environ.get("ASTRBOT_HOST") or dashboard_config.get(

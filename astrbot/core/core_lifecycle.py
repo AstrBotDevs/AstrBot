@@ -89,11 +89,13 @@ class AstrBotCoreLifecycle:
         self.event_bus: EventBus | None = None
         self.dashboard_shutdown_event: asyncio.Event | None = None
         self.curr_tasks: list[asyncio.Task] = []
+        self.metadata_update_task: asyncio.Task[None] | None = None
         self.start_time = 0
         self.runtime_bootstrap_task: asyncio.Task[None] | None = None
         self.runtime_bootstrap_error: BaseException | None = None
         self.runtime_ready_event = asyncio.Event()
         self.runtime_failed_event = asyncio.Event()
+        self.runtime_request_ready = False
         self._runtime_wait_interrupted = False
         self._set_lifecycle_state(LifecycleState.CREATED)
 
@@ -155,6 +157,23 @@ class AstrBotCoreLifecycle:
             "reset_runtime_registrations",
         ):
             self.star_context.reset_runtime_registrations()
+        if self.plugin_manager is not None and hasattr(
+            self.plugin_manager,
+            "cleanup_loaded_plugins",
+        ):
+            try:
+                cleanup_loaded_plugins = getattr(
+                    self.plugin_manager,
+                    "cleanup_loaded_plugins",
+                )
+                result = cleanup_loaded_plugins()
+                if inspect.isawaitable(result):
+                    await result
+            except Exception as exc:
+                logger.warning(
+                    f"Failed to clean up loaded plugin state: {exc}",
+                    exc_info=True,
+                )
         for manager in (self.platform_manager, self.kb_manager, self.provider_manager):
             if manager is None:
                 continue
@@ -303,6 +322,10 @@ class AstrBotCoreLifecycle:
         return tasks_to_wait
 
     def _clear_runtime_artifacts(self) -> None:
+        if self.metadata_update_task is not None and not self.metadata_update_task.done():
+            self.metadata_update_task.cancel()
+        self.metadata_update_task = None
+        self.runtime_request_ready = False
         self.event_bus = None
         self.pipeline_scheduler_mapping = {}
         self.curr_tasks = []
@@ -493,7 +516,7 @@ class AstrBotCoreLifecycle:
             # 根据配置实例化各个平台适配器
             await platform_manager.initialize()
 
-            asyncio.create_task(update_llm_metadata())
+            self.metadata_update_task = asyncio.create_task(update_llm_metadata())
 
             self._set_lifecycle_state(LifecycleState.RUNTIME_READY)
             self.runtime_ready_event.set()
@@ -517,6 +540,7 @@ class AstrBotCoreLifecycle:
         """
         await self.initialize_core()
         await self.bootstrap_runtime()
+        self.runtime_request_ready = True
 
     def _load(self) -> None:
         """加载事件总线和任务并初始化."""
@@ -611,18 +635,29 @@ class AstrBotCoreLifecycle:
             except BaseException:
                 logger.error(traceback.format_exc())
 
+        self.runtime_request_ready = True
+
         # 同时运行curr_tasks中的所有任务
         await asyncio.gather(*self.curr_tasks, return_exceptions=True)
 
     async def stop(self) -> None:
         """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器."""
+        self.runtime_request_ready = False
         if self.temp_dir_cleaner:
             await self.temp_dir_cleaner.stop()
 
         # 请求停止所有正在运行的异步任务
         self._interrupt_runtime_bootstrap_waiters()
         tasks_to_wait = self._cancel_current_tasks()
-        tasks_to_wait.extend(self._collect_runtime_bootstrap_task())
+        runtime_bootstrap_tasks = self._collect_runtime_bootstrap_task()
+        for task in runtime_bootstrap_tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.error(f"任务 {task.get_name()} 发生错误: {e}")
+        tasks_to_wait.extend(runtime_bootstrap_tasks)
 
         if self.cron_manager:
             await self.cron_manager.shutdown()
@@ -660,9 +695,18 @@ class AstrBotCoreLifecycle:
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
+        self.runtime_request_ready = False
         self._interrupt_runtime_bootstrap_waiters()
         tasks_to_wait = self._cancel_current_tasks()
-        tasks_to_wait.extend(self._collect_runtime_bootstrap_task())
+        runtime_bootstrap_tasks = self._collect_runtime_bootstrap_task()
+        for task in runtime_bootstrap_tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.error(f"任务 {task.get_name()} 发生错误: {e}")
+        tasks_to_wait.extend(runtime_bootstrap_tasks)
         if self.provider_manager:
             await self.provider_manager.terminate()
         if self.platform_manager:

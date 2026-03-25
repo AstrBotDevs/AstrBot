@@ -784,6 +784,8 @@ class TestAstrBotCoreLifecycleInitialize:
         provider_manager = mocks["provider_manager"]
         platform_manager = mocks["platform_manager"]
         kb_manager = mocks["kb_manager"]
+        plugin_manager = mocks["plugin_manager"]
+        plugin_manager.cleanup_loaded_plugins = AsyncMock()
         mocks["provider_manager"].terminate = AsyncMock()
         mocks["platform_manager"].terminate = AsyncMock()
         mocks["kb_manager"].terminate = AsyncMock()
@@ -810,6 +812,7 @@ class TestAstrBotCoreLifecycleInitialize:
         assert lifecycle.event_bus is None
         assert lifecycle.pipeline_scheduler_mapping == {}
         assert lifecycle.start_time == 0
+        plugin_manager.cleanup_loaded_plugins.assert_awaited_once()
         provider_manager.terminate.assert_awaited_once()
         platform_manager.terminate.assert_awaited_once()
         kb_manager.terminate.assert_awaited_once()
@@ -1610,6 +1613,58 @@ class TestAstrBotCoreLifecycleStopAdditional:
         assert lifecycle.runtime_failed_event.is_set() is False
         assert lifecycle.runtime_bootstrap_error is None
 
+    @pytest.mark.asyncio
+    async def test_stop_waits_for_bootstrap_cleanup_before_manager_termination(
+        self, mock_log_broker, mock_db, mock_astrbot_config
+    ):
+        """Test stop awaits cancelled bootstrap cleanup before manager teardown."""
+        lifecycle = await build_inflight_runtime_bootstrap_lifecycle(
+            mock_log_broker,
+            mock_db,
+            mock_astrbot_config,
+        )
+        cleanup_finished = asyncio.Event()
+
+        async def cleanup_partial_runtime_bootstrap() -> None:
+            cleanup_finished.set()
+
+        async def terminate_provider() -> None:
+            assert cleanup_finished.is_set()
+
+        lifecycle._cleanup_partial_runtime_bootstrap = AsyncMock(
+            side_effect=cleanup_partial_runtime_bootstrap,
+        )
+        assert lifecycle.provider_manager is not None
+        lifecycle.provider_manager.terminate = AsyncMock(side_effect=terminate_provider)
+
+        await lifecycle.stop()
+
+    @pytest.mark.asyncio
+    async def test_stop_clears_runtime_request_ready_before_manager_termination(
+        self, mock_log_broker, mock_db
+    ):
+        """Test stop blocks new request traffic before tearing managers down."""
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle.temp_dir_cleaner = None
+        lifecycle.cron_manager = None
+        lifecycle.plugin_manager = MagicMock()
+        lifecycle.plugin_manager.context = MagicMock()
+        lifecycle.plugin_manager.context.get_all_stars = MagicMock(return_value=[])
+        lifecycle.platform_manager = MagicMock()
+        lifecycle.platform_manager.terminate = AsyncMock()
+        lifecycle.kb_manager = MagicMock()
+        lifecycle.kb_manager.terminate = AsyncMock()
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+        lifecycle.runtime_request_ready = True
+
+        async def terminate_provider() -> None:
+            assert lifecycle.runtime_request_ready is False
+
+        lifecycle.provider_manager = MagicMock()
+        lifecycle.provider_manager.terminate = AsyncMock(side_effect=terminate_provider)
+
+        await lifecycle.stop()
+
 
 class TestAstrBotCoreLifecycleRestart:
     """Tests for AstrBotCoreLifecycle.restart method."""
@@ -1703,6 +1758,62 @@ class TestAstrBotCoreLifecycleRestart:
         assert lifecycle.runtime_failed_event.is_set() is False
         assert lifecycle.runtime_bootstrap_error is None
 
+    @pytest.mark.asyncio
+    async def test_restart_waits_for_bootstrap_cleanup_before_manager_termination(
+        self, mock_log_broker, mock_db, mock_astrbot_config
+    ):
+        """Test restart awaits cancelled bootstrap cleanup before manager teardown."""
+        lifecycle = await build_inflight_runtime_bootstrap_lifecycle(
+            mock_log_broker,
+            mock_db,
+            mock_astrbot_config,
+        )
+        cleanup_finished = asyncio.Event()
+
+        async def cleanup_partial_runtime_bootstrap() -> None:
+            cleanup_finished.set()
+
+        async def terminate_provider() -> None:
+            assert cleanup_finished.is_set()
+
+        lifecycle._cleanup_partial_runtime_bootstrap = AsyncMock(
+            side_effect=cleanup_partial_runtime_bootstrap,
+        )
+        assert lifecycle.provider_manager is not None
+        lifecycle.provider_manager.terminate = AsyncMock(side_effect=terminate_provider)
+
+        with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
+            await lifecycle.restart()
+
+        mock_thread.assert_called_once()
+        mock_thread.return_value.start.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_restart_clears_runtime_request_ready_before_manager_termination(
+        self, mock_log_broker, mock_db
+    ):
+        """Test restart blocks new request traffic before tearing managers down."""
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle.platform_manager = MagicMock()
+        lifecycle.platform_manager.terminate = AsyncMock()
+        lifecycle.kb_manager = MagicMock()
+        lifecycle.kb_manager.terminate = AsyncMock()
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+        lifecycle.astrbot_updator = MagicMock()
+        lifecycle.runtime_request_ready = True
+
+        async def terminate_provider() -> None:
+            assert lifecycle.runtime_request_ready is False
+
+        lifecycle.provider_manager = MagicMock()
+        lifecycle.provider_manager.terminate = AsyncMock(side_effect=terminate_provider)
+
+        with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
+            await lifecycle.restart()
+
+        mock_thread.assert_called_once()
+        mock_thread.return_value.start.assert_called_once()
+
 
 class TestAstrBotCoreLifecycleLoadPipelineScheduler:
     """Tests for AstrBotCoreLifecycle.load_pipeline_scheduler method."""
@@ -1794,5 +1905,5 @@ class TestAstrBotCoreLifecycleLoadPipelineScheduler:
 
         lifecycle.astrbot_config_mgr = mock_astrbot_config_mgr
 
-        with pytest.raises(ValueError, match="配置文件 .* 不存在"):
+        with pytest.raises(ValueError, match=r"配置文件 .* 不存在"):
             await lifecycle.reload_pipeline_scheduler("nonexistent")

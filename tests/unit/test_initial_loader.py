@@ -104,3 +104,68 @@ async def test_initial_loader_start_returns_without_partial_start_when_initializ
     lifecycle.bootstrap_runtime.assert_not_called()
     lifecycle.start.assert_not_called()
     assert lifecycle.runtime_bootstrap_task is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("failing_component", "expected_order"),
+    [
+        ("core", ["initialize_core", "bootstrap_runtime", "core_start", "dashboard_run"]),
+        (
+            "dashboard",
+            ["initialize_core", "bootstrap_runtime", "core_start", "dashboard_run"],
+        ),
+    ],
+)
+async def test_initial_loader_start_stops_lifecycle_when_runtime_task_raises(
+    failing_component: str,
+    expected_order: list[str],
+):
+    """Test InitialLoader.start stops lifecycle if a runtime task crashes."""
+    loader = InitialLoader(MagicMock(), MagicMock())
+    call_order: list[str] = []
+    runtime_error = RuntimeError(f"{failing_component} failed")
+
+    lifecycle = MagicMock()
+    lifecycle.dashboard_shutdown_event = asyncio.Event()
+    lifecycle.runtime_bootstrap_task = None
+    lifecycle.stop = AsyncMock()
+
+    async def initialize_core() -> None:
+        call_order.append("initialize_core")
+
+    async def bootstrap_runtime() -> None:
+        call_order.append("bootstrap_runtime")
+
+    async def start_core() -> None:
+        call_order.append("core_start")
+        if failing_component == "core":
+            raise runtime_error
+
+    async def run_dashboard() -> None:
+        call_order.append("dashboard_run")
+        if failing_component == "dashboard":
+            raise runtime_error
+
+    lifecycle.initialize_core = AsyncMock(side_effect=initialize_core)
+    lifecycle.bootstrap_runtime = AsyncMock(side_effect=bootstrap_runtime)
+    lifecycle.start = AsyncMock(side_effect=start_core)
+
+    dashboard = MagicMock()
+    dashboard.run = AsyncMock(side_effect=run_dashboard)
+
+    with (
+        patch(
+            "astrbot.core.initial_loader.AstrBotCoreLifecycle",
+            return_value=lifecycle,
+        ),
+        patch(
+            "astrbot.core.initial_loader.AstrBotDashboard",
+            return_value=dashboard,
+        ),
+    ):
+        with pytest.raises(RuntimeError, match=f"{failing_component} failed"):
+            await loader.start()
+
+    lifecycle.stop.assert_awaited_once()
+    assert call_order == expected_order

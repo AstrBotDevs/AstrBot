@@ -14,6 +14,18 @@ RUNTIME_LOADING_MESSAGE = "Runtime is still loading. Please try again shortly."
 RUNTIME_FAILED_MESSAGE = "Runtime bootstrap failed. Please check logs and retry."
 
 
+def is_runtime_request_ready(core_lifecycle: "AstrBotCoreLifecycle") -> bool:
+    return getattr(core_lifecycle, "runtime_request_ready", core_lifecycle.runtime_ready)
+
+
+def get_runtime_guard_message(core_lifecycle: "AstrBotCoreLifecycle") -> str:
+    failed = (
+        core_lifecycle.runtime_failed
+        or core_lifecycle.runtime_bootstrap_error is not None
+    )
+    return RUNTIME_FAILED_MESSAGE if failed else RUNTIME_LOADING_MESSAGE
+
+
 def build_runtime_status_data(
     core_lifecycle: "AstrBotCoreLifecycle",
     *,
@@ -24,7 +36,7 @@ def build_runtime_status_data(
         failure_message = str(core_lifecycle.runtime_bootstrap_error)
     return {
         "state": core_lifecycle.lifecycle_state.value,
-        "ready": core_lifecycle.runtime_ready,
+        "ready": is_runtime_request_ready(core_lifecycle),
         "failed": core_lifecycle.runtime_failed,
         "failure_message": failure_message,
     }
@@ -36,11 +48,7 @@ def runtime_status_response(
     *,
     include_failure_details: bool = True,
 ):
-    failed = (
-        core_lifecycle.runtime_failed
-        or core_lifecycle.runtime_bootstrap_error is not None
-    )
-    message = RUNTIME_FAILED_MESSAGE if failed else RUNTIME_LOADING_MESSAGE
+    message = get_runtime_guard_message(core_lifecycle)
     response = jsonify(
         Response(
             status="error",
@@ -71,7 +79,7 @@ def runtime_loading_response(
 def guard_runtime_ready(core_lifecycle: "AstrBotCoreLifecycle", handler):
     @wraps(handler)
     async def wrapped(*args: Any, **kwargs: Any):
-        if not core_lifecycle.runtime_ready:
+        if not is_runtime_request_ready(core_lifecycle):
             return runtime_status_response(core_lifecycle)
         return await handler(*args, **kwargs)
 

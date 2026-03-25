@@ -64,3 +64,6 @@ class InitialLoader:
         except asyncio.CancelledError:
             logger.info("🌈 正在关闭 AstrBot...")
             await core_lifecycle.stop()
+        except Exception:
+            await core_lifecycle.stop()
+            raise

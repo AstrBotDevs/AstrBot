@@ -9,8 +9,9 @@ import uuid
 import zipfile
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import anyio
 import pytest
 import pytest_asyncio
 from quart import Quart
@@ -23,6 +24,8 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.pip_installer import PipInstallError
+from astrbot.dashboard.routes.live_chat import LiveChatRoute
+from astrbot.dashboard.routes.open_api import OpenApiRoute
 from astrbot.dashboard.routes.plugin import PluginRoute
 from astrbot.dashboard.server import AstrBotDashboard, _expand_env_placeholders
 from tests.fixtures.helpers import (
@@ -155,6 +158,7 @@ def _set_runtime_loading(core_lifecycle: AstrBotCoreLifecycle) -> None:
     core_lifecycle.runtime_ready_event.clear()
     core_lifecycle.runtime_failed_event.clear()
     core_lifecycle.runtime_bootstrap_error = None
+    core_lifecycle.runtime_request_ready = False
 
 
 def _restore_runtime_ready(core_lifecycle: AstrBotCoreLifecycle) -> None:
@@ -162,6 +166,7 @@ def _restore_runtime_ready(core_lifecycle: AstrBotCoreLifecycle) -> None:
     core_lifecycle.runtime_ready_event.set()
     core_lifecycle.runtime_failed_event.clear()
     core_lifecycle.runtime_bootstrap_error = None
+    core_lifecycle.runtime_request_ready = True
 
 
 def _set_runtime_failed(
@@ -172,6 +177,15 @@ def _set_runtime_failed(
     core_lifecycle.runtime_ready_event.clear()
     core_lifecycle.runtime_failed_event.set()
     core_lifecycle.runtime_bootstrap_error = RuntimeError(message)
+    core_lifecycle.runtime_request_ready = False
+
+
+def _set_runtime_starting(core_lifecycle: AstrBotCoreLifecycle) -> None:
+    core_lifecycle._set_lifecycle_state(LifecycleState.RUNTIME_READY)
+    core_lifecycle.runtime_ready_event.set()
+    core_lifecycle.runtime_failed_event.clear()
+    core_lifecycle.runtime_bootstrap_error = None
+    core_lifecycle.runtime_request_ready = False
 
 
 def _assert_runtime_loading_response(
@@ -715,6 +729,237 @@ async def test_stat_endpoints_return_failure_aware_503_after_bootstrap_failure(
 
 
 @pytest.mark.asyncio
+async def test_runtime_dependent_dashboard_route_returns_503_while_runtime_starting(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+
+    _set_runtime_starting(core_lifecycle_td)
+    try:
+        response = await test_client.get(
+            "/api/config/get",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 503
+        data = await response.get_json()
+        _assert_runtime_loading_response(data, state=LifecycleState.RUNTIME_READY)
+    finally:
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
+async def test_openapi_configs_returns_503_while_runtime_loading(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+
+    create_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": f"runtime-guard-{uuid.uuid4().hex[:8]}", "scopes": ["config"]},
+        headers=authenticated_header,
+    )
+    assert create_res.status_code == 200
+    create_data = await create_res.get_json()
+    api_key = create_data["data"]["api_key"]
+
+    assert core_lifecycle_td.astrbot_config_mgr is not None
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_config_mgr,
+        "get_conf_list",
+        MagicMock(side_effect=AssertionError("config list should not be read")),
+    )
+
+    _set_runtime_loading(core_lifecycle_td)
+    try:
+        response = await test_client.get(
+            "/api/v1/configs",
+            headers={"X-API-Key": api_key},
+        )
+        assert response.status_code == 503
+        data = await response.get_json()
+        _assert_runtime_loading_response(data)
+    finally:
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
+async def test_openapi_failure_response_hides_bootstrap_error_details(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+
+    create_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": f"runtime-failed-{uuid.uuid4().hex[:8]}", "scopes": ["config"]},
+        headers=authenticated_header,
+    )
+    assert create_res.status_code == 200
+    create_data = await create_res.get_json()
+    api_key = create_data["data"]["api_key"]
+
+    _set_runtime_failed(core_lifecycle_td, "provider secret exploded")
+    try:
+        response = await test_client.get(
+            "/api/v1/configs",
+            headers={"X-API-Key": api_key},
+        )
+        assert response.status_code == 503
+        data = await response.get_json()
+        _assert_runtime_failed_response(data, None)
+    finally:
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
+async def test_openapi_chat_ws_closes_while_runtime_loading(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    route = OpenApiRoute.__new__(OpenApiRoute)
+    route.core_lifecycle = core_lifecycle_td
+    route._authenticate_chat_ws_api_key = AsyncMock(return_value=(True, None))
+    route._send_chat_ws_error = AsyncMock()
+
+    fake_websocket = MagicMock()
+    fake_websocket.receive_json = AsyncMock(
+        side_effect=AssertionError("websocket should not consume messages")
+    )
+    fake_websocket.close = AsyncMock()
+    monkeypatch.setattr("astrbot.dashboard.routes.open_api.websocket", fake_websocket)
+
+    _set_runtime_loading(core_lifecycle_td)
+    try:
+        await route.chat_ws()
+        route._send_chat_ws_error.assert_awaited_once()
+        fake_websocket.close.assert_awaited_once()
+        fake_websocket.receive_json.assert_not_awaited()
+    finally:
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
+async def test_openapi_chat_ws_closes_when_runtime_stops_mid_session(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    route = OpenApiRoute.__new__(OpenApiRoute)
+    route.core_lifecycle = core_lifecycle_td
+    route._authenticate_chat_ws_api_key = AsyncMock(return_value=(True, None))
+    route._send_chat_ws_error = AsyncMock()
+
+    _restore_runtime_ready(core_lifecycle_td)
+
+    fake_websocket = MagicMock()
+    fake_websocket.send_json = AsyncMock()
+    fake_websocket.close = AsyncMock()
+    receive_calls = 0
+
+    async def receive_json():
+        nonlocal receive_calls
+        receive_calls += 1
+        if receive_calls > 1:
+            raise AssertionError("websocket should close before next receive")
+        core_lifecycle_td.runtime_request_ready = False
+        return {"t": "ping"}
+
+    fake_websocket.receive_json = AsyncMock(side_effect=receive_json)
+    monkeypatch.setattr("astrbot.dashboard.routes.open_api.websocket", fake_websocket)
+
+    await route.chat_ws()
+
+    route._send_chat_ws_error.assert_awaited_once()
+    fake_websocket.send_json.assert_not_awaited()
+    fake_websocket.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_live_chat_ws_closes_while_runtime_loading(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+    tmp_path,
+):
+    route = LiveChatRoute.__new__(LiveChatRoute)
+    route.core_lifecycle = core_lifecycle_td
+    route.db = MagicMock()
+    route.plugin_manager = core_lifecycle_td.plugin_manager
+    route.platform_history_mgr = core_lifecycle_td.platform_message_history_manager
+    route.sessions = {}
+    route.config = core_lifecycle_td.astrbot_config
+    route.attachments_dir = str(tmp_path / "attachments")
+    route.legacy_img_dir = str(tmp_path / "legacy")
+
+    fake_websocket = MagicMock()
+    fake_websocket.args = {"token": "test-token"}
+    fake_websocket.receive_json = AsyncMock(
+        side_effect=AssertionError("live chat websocket should not consume messages")
+    )
+    fake_websocket.close = AsyncMock()
+    monkeypatch.setattr("astrbot.dashboard.routes.live_chat.websocket", fake_websocket)
+
+    _set_runtime_loading(core_lifecycle_td)
+    try:
+        with patch(
+            "astrbot.dashboard.routes.live_chat.jwt.decode",
+            return_value={"username": "astrbot"},
+        ):
+            await route._unified_ws_loop(force_ct="live")
+        fake_websocket.close.assert_awaited_once()
+        fake_websocket.receive_json.assert_not_awaited()
+    finally:
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
+async def test_live_chat_ws_closes_when_runtime_stops_mid_session(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+    tmp_path,
+):
+    route = LiveChatRoute.__new__(LiveChatRoute)
+    route.core_lifecycle = core_lifecycle_td
+    route.db = MagicMock()
+    route.plugin_manager = core_lifecycle_td.plugin_manager
+    route.platform_history_mgr = core_lifecycle_td.platform_message_history_manager
+    route.sessions = {}
+    route.config = core_lifecycle_td.astrbot_config
+    route.attachments_dir = str(tmp_path / "attachments")
+    route.legacy_img_dir = str(tmp_path / "legacy")
+    route._handle_message = AsyncMock(
+        side_effect=lambda *_args, **_kwargs: setattr(
+            core_lifecycle_td,
+            "runtime_request_ready",
+            False,
+        )
+    )
+
+    _restore_runtime_ready(core_lifecycle_td)
+
+    fake_websocket = MagicMock()
+    fake_websocket.args = {"token": "test-token"}
+    fake_websocket.close = AsyncMock()
+    fake_websocket.receive_json = AsyncMock(
+        side_effect=[{}, AssertionError("live chat websocket should close before next receive")]
+    )
+    monkeypatch.setattr("astrbot.dashboard.routes.live_chat.websocket", fake_websocket)
+
+    with patch(
+        "astrbot.dashboard.routes.live_chat.jwt.decode",
+        return_value={"username": "astrbot"},
+    ):
+        await route._unified_ws_loop(force_ct="live")
+
+    route._handle_message.assert_awaited_once()
+    fake_websocket.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_public_start_time_failure_response_does_not_leak_bootstrap_error(
     app: Quart,
     core_lifecycle_td: AstrBotCoreLifecycle,
@@ -736,6 +981,103 @@ async def test_public_start_time_failure_response_does_not_leak_bootstrap_error(
                 "failure_message": None,
             },
         }
+    finally:
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
+async def test_public_webhook_failure_response_does_not_leak_bootstrap_error(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+
+    _set_runtime_failed(core_lifecycle_td, "provider webhook secret leaked")
+    try:
+        response = await test_client.post("/api/platform/webhook/test-webhook")
+        assert response.status_code == 503
+        data = await response.get_json()
+        _assert_runtime_failed_response(data, None)
+    finally:
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
+async def test_config_routes_remain_available_after_runtime_bootstrap_failure(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+
+    _set_runtime_failed(core_lifecycle_td, "broken provider config")
+    try:
+        response = await test_client.get(
+            "/api/config/get",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+    finally:
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "path", "request_kwargs_factory", "setup_recovery"),
+    [
+        (
+            "get",
+            "/api/plugin/source/get-failed-plugins",
+            lambda: {},
+            lambda pm: pm.failed_plugin_dict.update(
+                {"broken-plugin": {"error": "boom"}}
+            ),
+        ),
+        (
+            "post",
+            "/api/plugin/reload-failed",
+            lambda: {"json": {"dir_name": "broken-plugin"}},
+            lambda pm: setattr(
+                pm,
+                "reload_failed_plugin",
+                AsyncMock(return_value=(True, None)),
+            ),
+        ),
+        (
+            "post",
+            "/api/plugin/uninstall-failed",
+            lambda: {"json": {"dir_name": "broken-plugin"}},
+            lambda pm: setattr(pm, "uninstall_failed_plugin", AsyncMock()),
+        ),
+    ],
+    ids=["get-failed-plugins", "reload-failed", "uninstall-failed"],
+)
+async def test_failed_plugin_recovery_routes_remain_available_after_bootstrap_failure(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    method: str,
+    path: str,
+    request_kwargs_factory,
+    setup_recovery,
+):
+    test_client = app.test_client()
+    plugin_manager = core_lifecycle_td.plugin_manager
+    assert plugin_manager is not None
+
+    setup_recovery(plugin_manager)
+    _set_runtime_failed(core_lifecycle_td, "plugin bootstrap failed")
+    try:
+        response = await getattr(test_client, method)(
+            path,
+            headers=authenticated_header,
+            **request_kwargs_factory(),
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
     finally:
         _restore_runtime_ready(core_lifecycle_td)
 
@@ -891,19 +1233,13 @@ async def test_plugin_api_returns_503_while_runtime_loading(
     [
         ("get", "/api/plugin/get", lambda: {}, "context.get_all_stars"),
         (
-            "get",
-            "/api/plugin/source/get-failed-plugins",
-            lambda: {},
-            None,
-        ),
-        (
             "post",
             "/api/plugin/install",
             lambda: {"json": {"url": "https://example.com/plugin"}},
             "install_plugin",
         ),
     ],
-    ids=["get", "get-failed-plugins", "install"],
+    ids=["get", "install"],
 )
 async def test_plugin_api_returns_failed_response_after_runtime_bootstrap_failure(
     app: Quart,
@@ -1617,7 +1953,7 @@ async def test_do_update(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
-    assert os.path.exists(release_path)
+    assert await anyio.Path(release_path).exists()
 
 
 @pytest.mark.asyncio

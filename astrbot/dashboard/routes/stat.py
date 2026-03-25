@@ -27,6 +27,7 @@ from .route import (
     Route,
     RouteContext,
     build_runtime_status_data,
+    is_runtime_request_ready,
     runtime_loading_response,
 )
 
@@ -98,7 +99,7 @@ class StatRoute(Route):
         )
 
     async def get_start_time(self):
-        if not self.core_lifecycle.runtime_ready:
+        if not is_runtime_request_ready(self.core_lifecycle):
             return runtime_loading_response(
                 self.core_lifecycle,
                 include_failure_details=False,
@@ -115,7 +116,7 @@ class StatRoute(Route):
         except Exception:
             logger.error("获取存储占用失败", exc_info=True)
             return (
-                Response().error("获取存储占用失败，请查看后端日志了解详情。").__dict__
+                Response().error("获取存储占用失败, 请查看后端日志了解详情。").__dict__
             )
 
     async def cleanup_storage(self):
@@ -131,10 +132,10 @@ class StatRoute(Route):
             return Response().error(str(e)).__dict__
         except Exception:
             logger.error("清理存储失败", exc_info=True)
-            return Response().error("清理存储失败，请查看后端日志了解详情。").__dict__
+            return Response().error("清理存储失败, 请查看后端日志了解详情。").__dict__
 
     async def get_stat(self):
-        if not self.core_lifecycle.runtime_ready:
+        if not is_runtime_request_ready(self.core_lifecycle):
             return runtime_loading_response(self.core_lifecycle)
         offset_sec = request.args.get("offset_sec", 86400)
         offset_sec = int(offset_sec)

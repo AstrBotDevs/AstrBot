@@ -24,7 +24,12 @@ from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queu
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
-from .route import Route, RouteContext
+from .route import (
+    Route,
+    RouteContext,
+    get_runtime_guard_message,
+    is_runtime_request_ready,
+)
 
 
 class LiveChatSession:
@@ -157,6 +162,13 @@ class LiveChatRoute(Route):
             await websocket.close(1008, "Invalid token")
             return
 
+        if not is_runtime_request_ready(self.core_lifecycle):
+            await websocket.close(
+                1013,
+                get_runtime_guard_message(self.core_lifecycle),
+            )
+            return
+
         session_id = f"webchat_live!{username}!{uuid.uuid4()}"
         live_session = LiveChatSession(session_id, username)
         self.sessions[session_id] = live_session
@@ -165,7 +177,19 @@ class LiveChatRoute(Route):
 
         try:
             while True:
+                if not is_runtime_request_ready(self.core_lifecycle):
+                    await websocket.close(
+                        1013,
+                        get_runtime_guard_message(self.core_lifecycle),
+                    )
+                    return
                 message = await websocket.receive_json()
+                if not is_runtime_request_ready(self.core_lifecycle):
+                    await websocket.close(
+                        1013,
+                        get_runtime_guard_message(self.core_lifecycle),
+                    )
+                    return
                 ct = force_ct or message.get("ct", "live")
                 if ct == "chat":
                     await self._handle_chat_message(live_session, message)
@@ -486,6 +510,12 @@ class LiveChatRoute(Route):
             refs = {}
 
             while True:
+                if not is_runtime_request_ready(self.core_lifecycle):
+                    await websocket.close(
+                        1013,
+                        get_runtime_guard_message(self.core_lifecycle),
+                    )
+                    break
                 if session.should_interrupt:
                     session.should_interrupt = False
                     break
@@ -494,6 +524,13 @@ class LiveChatRoute(Route):
                     result = await asyncio.wait_for(back_queue.get(), timeout=1)
                 except asyncio.TimeoutError:
                     continue
+
+                if not is_runtime_request_ready(self.core_lifecycle):
+                    await websocket.close(
+                        1013,
+                        get_runtime_guard_message(self.core_lifecycle),
+                    )
+                    break
 
                 if not result:
                     continue
@@ -773,6 +810,12 @@ class LiveChatRoute(Route):
 
             try:
                 while True:
+                    if not is_runtime_request_ready(self.core_lifecycle):
+                        await websocket.close(
+                            1013,
+                            get_runtime_guard_message(self.core_lifecycle),
+                        )
+                        break
                     if session.should_interrupt:
                         # 用户打断,停止处理
                         logger.info("[Live Chat] 检测到用户打断")
@@ -793,6 +836,13 @@ class LiveChatRoute(Route):
                         result = await asyncio.wait_for(back_queue.get(), timeout=0.5)
                     except asyncio.TimeoutError:
                         continue
+
+                    if not is_runtime_request_ready(self.core_lifecycle):
+                        await websocket.close(
+                            1013,
+                            get_runtime_guard_message(self.core_lifecycle),
+                        )
+                        break
 
                     if not result:
                         continue

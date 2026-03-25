@@ -43,14 +43,11 @@ RUNTIME_GUARDED_PLUGIN_PATHS = {
     "/plugin/update",
     "/plugin/update-all",
     "/plugin/uninstall",
-    "/plugin/uninstall-failed",
     "/plugin/off",
     "/plugin/on",
-    "/plugin/reload-failed",
     "/plugin/reload",
     "/plugin/readme",
     "/plugin/changelog",
-    "/plugin/source/get-failed-plugins",
 }
 
 
