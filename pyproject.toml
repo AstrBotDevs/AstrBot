@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.20.1"
+version = "4.22.0"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -39,6 +39,7 @@ dependencies = [
   "pydantic>=2.12.5",
   "pydub>=0.25.1",
   "pyjwt>=2.10.1",
+  "qrcode>=8.2",
   "python-telegram-bot>=22.6",
   "qq-botpy>=1.2.1",
   "quart>=0.20.0",

@@ -210,6 +210,26 @@ class ProviderOpenAIOfficial(Provider):
 
         self.reasoning_key = "reasoning_content"
 
+    def _ollama_disable_thinking_enabled(self) -> bool:
+        value = self.provider_config.get("ollama_disable_thinking", False)
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    def _apply_provider_specific_extra_body_overrides(
+        self, extra_body: dict[str, Any]
+    ) -> None:
+        if self.provider_config.get("provider") != "ollama":
+            return
+        if not self._ollama_disable_thinking_enabled():
+            return
+
+        # Ollama's OpenAI-compatible endpoint reliably maps reasoning_effort=none
+        # to think=false, while direct think=false passthrough is not stable.
+        extra_body.pop("reasoning", None)
+        extra_body.pop("think", None)
+        extra_body["reasoning_effort"] = "none"
+
     async def get_models(self):
         try:
             models_str = []
@@ -245,6 +265,7 @@ class ProviderOpenAIOfficial(Provider):
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
+        self._apply_provider_specific_extra_body_overrides(extra_body)
 
         model = payloads.get("model", "").lower()
 
@@ -295,6 +316,7 @@ class ProviderOpenAIOfficial(Provider):
                 to_del.append(key)
         for key in to_del:
             del payloads[key]
+        self._apply_provider_specific_extra_body_overrides(extra_body)
 
         stream = await self.client.chat.completions.create(
             **payloads,
@@ -307,22 +329,24 @@ class ProviderOpenAIOfficial(Provider):
         state = ChatCompletionStreamState()
 
         async for chunk in stream:
-            # Fix for #6661: Add missing 'index' field to tool_call deltas
-            # Gemini and some OpenAI-compatible proxies omit this field
-            if chunk.choices:
-                for choice in chunk.choices:
-                    if choice.delta and choice.delta.tool_calls:
-                        for idx, tc in enumerate(choice.delta.tool_calls):
-                            if not hasattr(tc, "index") or tc.index is None:
-                                tc.index = idx
-            try:
-                state.handle_chunk(chunk)
-            except Exception as e:
-                logger.warning("Saving chunk state error: " + str(e))
             if not chunk.choices:
                 continue
             choice = chunk.choices[0]
             delta = choice.delta
+
+            if dtcs := delta.tool_calls:
+                for idx, tc in enumerate(dtcs):
+                    # siliconflow workaround
+                    if tc.function and tc.function.arguments:
+                        tc.type = "function"
+                    # Fix for #6661: Add missing 'index' field to tool_call deltas
+                    # Gemini and some OpenAI-compatible proxies omit this field
+                    if not hasattr(tc, "index") or tc.index is None:
+                        tc.index = idx
+            try:
+                state.handle_chunk(chunk)
+            except Exception as e:
+                logger.error("Saving chunk state error: " + str(e))
             # logger.debug(f"chunk delta: {delta}")
             # handle the content delta
             reasoning = self._extract_reasoning_content(chunk)
@@ -378,6 +402,9 @@ class ProviderOpenAIOfficial(Provider):
         cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
         prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
         completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+        cached = cached or 0
+        prompt_tokens = prompt_tokens or 0
+        completion_tokens = completion_tokens or 0
         return TokenUsage(
             input_other=prompt_tokens - cached,
             input_cached=cached,
