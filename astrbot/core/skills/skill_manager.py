@@ -27,7 +27,7 @@ SANDBOX_SKILLS_ROOT = "skills"
 SANDBOX_WORKSPACE_ROOT = "/workspace"
 _SANDBOX_SKILLS_CACHE_VERSION = 1
 
-_SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_SKILL_NAME_RE = re.compile(r"^[\w.-]+$")
 
 
 def _default_sandbox_skill_path(name: str) -> str:
