@@ -54,6 +54,5 @@ plugins/.venv/
 .vscode/
 *.iml
 uv.lock
-/astrBot/
 plugins/
 .serena/
