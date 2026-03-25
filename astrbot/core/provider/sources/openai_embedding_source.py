@@ -1,3 +1,6 @@
+import json
+from typing import Any
+
 import httpx
 from openai import AsyncOpenAI
 
@@ -44,7 +47,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             model=self.model,
             **kwargs,
         )
-        return embedding.data[0].embedding
+        return self._normalize_embedding_response(embedding)[0]
 
     async def get_embeddings(self, text: list[str]) -> list[list[float]]:
         """批量获取文本的嵌入"""
@@ -54,7 +57,36 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             model=self.model,
             **kwargs,
         )
-        return [item.embedding for item in embeddings.data]
+        return self._normalize_embedding_response(embeddings)
+
+    @staticmethod
+    def _normalize_embedding_response(response: Any) -> list[list[float]]:
+        if isinstance(response, str):
+            response = json.loads(response)
+
+        data = response.get("data") if isinstance(response, dict) else getattr(
+            response, "data", None
+        )
+        if not isinstance(data, list):
+            raise TypeError(
+                f"Unexpected embedding response type: {type(response).__name__}"
+            )
+
+        vectors: list[list[float]] = []
+        for item in data:
+            embedding = item.get("embedding") if isinstance(item, dict) else getattr(
+                item, "embedding", None
+            )
+            if not isinstance(embedding, list):
+                raise TypeError(
+                    "Unexpected embedding item type: "
+                    f"{type(item).__name__}"
+                )
+            vectors.append([float(value) for value in embedding])
+
+        if not vectors:
+            raise ValueError("Embedding response did not include any vectors")
+        return vectors
 
     def _embedding_kwargs(self) -> dict:
         """构建嵌入请求的可选参数"""
