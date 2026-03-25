@@ -30,6 +30,11 @@ _SANDBOX_SKILLS_CACHE_VERSION = 1
 _SKILL_NAME_RE = re.compile(r"^[\w.-]+$")
 
 
+def _normalize_skill_name(name: str | None) -> str:
+    raw = str(name or "")
+    return re.sub(r"\s+", "_", raw.strip())
+
+
 def _default_sandbox_skill_path(name: str) -> str:
     return f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{name}/SKILL.md"
 
@@ -562,13 +567,17 @@ class SkillManager:
 
             archive_skill_name = None
             if skill_name_hint is not None:
-                archive_skill_name = skill_name_hint.strip()
-                if archive_skill_name and not _SKILL_NAME_RE.match(archive_skill_name):
+                archive_skill_name = _normalize_skill_name(skill_name_hint)
+                if archive_skill_name and not _SKILL_NAME_RE.fullmatch(
+                    archive_skill_name
+                ):
                     raise ValueError("Invalid skill name.")
 
             if root_mode:
-                archive_hint = (archive_skill_name or zip_path_obj.stem).strip()
-                if not archive_hint or not _SKILL_NAME_RE.match(archive_hint):
+                archive_hint = _normalize_skill_name(
+                    archive_skill_name or zip_path_obj.stem
+                )
+                if not archive_hint or not _SKILL_NAME_RE.fullmatch(archive_hint):
                     raise ValueError("Invalid skill name.")
                 skill_name = archive_hint
             else:
@@ -580,16 +589,17 @@ class SkillManager:
                         "Zip archive must contain a single top-level folder."
                     )
                 archive_root_name = next(iter(top_dirs))
-                if archive_root_name in {".", "..", ""} or not _SKILL_NAME_RE.match(
-                    archive_root_name
+                archive_root_name_normalized = _normalize_skill_name(archive_root_name)
+                if archive_root_name in {".", "..", ""} or not _SKILL_NAME_RE.fullmatch(
+                    archive_root_name_normalized
                 ):
                     raise ValueError("Invalid skill folder name.")
                 if archive_skill_name:
-                    if not _SKILL_NAME_RE.match(archive_skill_name):
+                    if not _SKILL_NAME_RE.fullmatch(archive_skill_name):
                         raise ValueError("Invalid skill name.")
                     skill_name = archive_skill_name
                 else:
-                    skill_name = archive_root_name
+                    skill_name = archive_root_name_normalized
 
             for name in names:
                 if not name:
@@ -620,7 +630,9 @@ class SkillManager:
                     if not member_name or _is_ignored_zip_entry(member_name):
                         continue
                     zf.extract(member, tmp_dir)
-                src_dir = Path(tmp_dir) if root_mode else Path(tmp_dir) / archive_root_name
+                src_dir = (
+                    Path(tmp_dir) if root_mode else Path(tmp_dir) / archive_root_name
+                )
                 normalized_path = _normalize_skill_markdown_path(src_dir)
                 if normalized_path is None:
                     raise ValueError("SKILL.md not found in the skill folder.")
