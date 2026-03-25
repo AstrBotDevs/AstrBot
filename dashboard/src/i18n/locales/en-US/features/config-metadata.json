@@ -440,6 +440,10 @@
         "description": "Verification Token",
         "hint": "Token for verifying Lark callback requests."
       },
+      "lark_auto_thread": {
+        "description": "Auto-create Thread",
+        "hint": "When enabled, the bot will automatically create a thread for each reply, isolating conversation context per thread."
+      },
       "misskey_allow_insecure_downloads": {
         "description": "Allow Insecure Downloads (Disable SSL Verification)",
         "hint": "If remote servers have certificate issues, SSL verification will be disabled as a fallback. Use only when necessary due to security risks."

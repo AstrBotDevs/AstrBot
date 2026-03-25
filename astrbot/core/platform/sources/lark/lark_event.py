@@ -48,9 +48,11 @@ class LarkMessageEvent(AstrMessageEvent):
         platform_meta,
         session_id,
         bot: lark.Client,
+        should_reply_in_thread: bool = False,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
+        self.should_reply_in_thread = should_reply_in_thread
 
     @staticmethod
     async def _send_im_message(
@@ -61,6 +63,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        reply_in_thread: bool = False,
     ) -> bool:
         """发送飞书 IM 消息的通用辅助函数
 
@@ -71,6 +74,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id: 回复的消息ID（用于回复消息）
             receive_id: 接收者ID（用于主动发送）
             receive_id_type: 接收者ID类型（用于主动发送）
+            reply_in_thread: 是否在话题中回复
 
         Returns:
             是否发送成功
@@ -88,7 +92,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     .content(content)
                     .msg_type(msg_type)
                     .uuid(str(uuid.uuid4()))
-                    .reply_in_thread(False)
+                    .reply_in_thread(reply_in_thread)
                     .build()
                 )
                 .build()
@@ -367,6 +371,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        reply_in_thread: bool = False,
     ) -> bool:
         if lark_client.cardkit is None:
             logger.error("[Lark] API Client cardkit 模块未初始化，无法发送卡片")
@@ -405,6 +410,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id=reply_message_id,
             receive_id=receive_id,
             receive_id_type=receive_id_type,
+            reply_in_thread=reply_in_thread,
         )
 
     @staticmethod
@@ -415,6 +421,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        reply_in_thread: bool = False,
     ) -> bool:
         if not reasoning_content:
             return True
@@ -428,6 +435,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id=reply_message_id,
             receive_id=receive_id,
             receive_id_type=receive_id_type,
+            reply_in_thread=reply_in_thread,
         )
 
     @staticmethod
@@ -437,6 +445,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        reply_in_thread: bool = False,
     ) -> None:
         """通用的消息链发送方法
 
@@ -446,6 +455,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id: 回复的消息ID（用于回复消息）
             receive_id: 接收者ID（用于主动发送）
             receive_id_type: 接收者ID类型，如 'open_id', 'chat_id'（用于主动发送）
+            reply_in_thread: 是否在话题中回复
         """
         if lark_client.im is None:
             logger.error("[Lark] API Client im 模块未初始化")
@@ -486,6 +496,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 reply_message_id=reply_message_id,
                 receive_id=receive_id,
                 receive_id_type=receive_id_type,
+                reply_in_thread=reply_in_thread,
             ):
                 return
 
@@ -520,6 +531,7 @@ class LarkMessageEvent(AstrMessageEvent):
                         reply_message_id=reply_message_id,
                         receive_id=receive_id,
                         receive_id_type=receive_id_type,
+                        reply_in_thread=reply_in_thread,
                     )
 
             # 维持组件顺序：遇到折叠面板标记先 flush 当前普通内容并发送卡片
@@ -539,6 +551,7 @@ class LarkMessageEvent(AstrMessageEvent):
                                 reply_message_id=reply_message_id,
                                 receive_id=receive_id,
                                 receive_id_type=receive_id_type,
+                                reply_in_thread=reply_in_thread,
                             )
                             if not success:
                                 buffered_components.append(
@@ -554,17 +567,32 @@ class LarkMessageEvent(AstrMessageEvent):
         # 发送附件
         for file_comp in file_components:
             await LarkMessageEvent._send_file_message(
-                file_comp, lark_client, reply_message_id, receive_id, receive_id_type
+                file_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
+                reply_in_thread=reply_in_thread,
             )
 
         for audio_comp in audio_components:
             await LarkMessageEvent._send_audio_message(
-                audio_comp, lark_client, reply_message_id, receive_id, receive_id_type
+                audio_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
+                reply_in_thread=reply_in_thread,
             )
 
         for media_comp in media_components:
             await LarkMessageEvent._send_media_message(
-                media_comp, lark_client, reply_message_id, receive_id, receive_id_type
+                media_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
+                reply_in_thread=reply_in_thread,
             )
 
     async def send(self, message: MessageChain) -> None:
@@ -573,6 +601,7 @@ class LarkMessageEvent(AstrMessageEvent):
             message,
             self.bot,
             reply_message_id=self.message_obj.message_id,
+            reply_in_thread=self.should_reply_in_thread,
         )
         await super().send(message)
 
@@ -583,6 +612,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        reply_in_thread: bool = False,
     ) -> None:
         """发送文件消息
 
@@ -608,6 +638,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id=reply_message_id,
             receive_id=receive_id,
             receive_id_type=receive_id_type,
+            reply_in_thread=reply_in_thread,
         )
 
     @staticmethod
@@ -617,6 +648,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        reply_in_thread: bool = False,
     ) -> None:
         """发送音频消息
 
@@ -681,6 +713,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id=reply_message_id,
             receive_id=receive_id,
             receive_id_type=receive_id_type,
+            reply_in_thread=reply_in_thread,
         )
 
     @staticmethod
@@ -690,6 +723,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        reply_in_thread: bool = False,
     ) -> None:
         """发送视频消息
 
@@ -754,6 +788,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id=reply_message_id,
             receive_id=receive_id,
             receive_id_type=receive_id_type,
+            reply_in_thread=reply_in_thread,
         )
 
     async def react(self, emoji: str) -> None:
@@ -845,6 +880,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        reply_in_thread: bool = False,
     ) -> bool:
         """将卡片实体作为 interactive 消息发送。"""
         content = json.dumps(
@@ -858,6 +894,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id=reply_message_id,
             receive_id=receive_id,
             receive_id_type=receive_id_type,
+            reply_in_thread=reply_in_thread,
         )
 
     async def _update_streaming_text(
@@ -960,6 +997,10 @@ class LarkMessageEvent(AstrMessageEvent):
         使用解耦发送循环，LLM token 到达时只更新 buffer 并唤醒发送协程，
         发送频率由网络 RTT 自然限流。
         """
+        # 非话题消息：通过 reply_in_thread=True 创建新话题，同时使用流式卡片
+        if self.should_reply_in_thread:
+            logger.info("[Lark] 非话题消息，将通过 reply_in_thread=True 创建新话题")
+
         # Lazy-init: card & sender loop created on first text token
         card_id = None
         sequence = 0
@@ -1054,6 +1095,7 @@ class LarkMessageEvent(AstrMessageEvent):
                             sent = await self._send_card_message(
                                 card_id,
                                 reply_message_id=self.message_obj.message_id,
+                                reply_in_thread=self.should_reply_in_thread,
                             )
                             if not sent:
                                 logger.error(

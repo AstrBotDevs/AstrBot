@@ -33,6 +33,14 @@ from .lark_event import LarkMessageEvent
 from .server import LarkWebhookServer
 
 
+def _strip_session_suffix(session_id: str) -> str:
+    """从 session_id 中提取真实的会话 ID，去除 %thread% / %root% 后缀。"""
+    for _suffix in ("%thread%", "%root%"):
+        if _suffix in session_id:
+            return session_id.split(_suffix)[0]
+    return session_id
+
+
 @register_platform_adapter(
     "lark", "飞书机器人官方 API 适配器", support_streaming_message=True
 )
@@ -469,12 +477,10 @@ class LarkPlatformAdapter(Platform):
     ) -> None:
         if session.message_type == MessageType.GROUP_MESSAGE:
             id_type = "chat_id"
-            receive_id = session.session_id
-            if "%" in receive_id:
-                receive_id = receive_id.split("%")[1]
+            receive_id = _strip_session_suffix(session.session_id)
         else:
             id_type = "open_id"
-            receive_id = session.session_id
+            receive_id = _strip_session_suffix(session.session_id)
 
         # 复用 LarkMessageEvent 中的通用发送逻辑
         await LarkMessageEvent.send_message_chain(
@@ -580,20 +586,45 @@ class LarkPlatformAdapter(Platform):
             user_id=event.event.sender.sender_id.open_id,
             nickname=event.event.sender.sender_id.open_id[:8],
         )
+        # 构建 session_id：按话题/回复链隔离上下文
         if abm.type == MessageType.GROUP_MESSAGE:
-            abm.session_id = abm.group_id
+            base_id = abm.group_id or ""
+            if message.thread_id:
+                # 话题群中的消息，按 thread_id 隔离
+                abm.session_id = f"{base_id}%thread%{message.thread_id}"
+            elif message.root_id:
+                # 群聊中的回复链，按 root_id 隔离
+                abm.session_id = f"{base_id}%root%{message.root_id}"
+            else:
+                abm.session_id = base_id
         else:
-            abm.session_id = abm.sender.user_id
+            base_id = abm.sender.user_id
+            if message.thread_id:
+                abm.session_id = f"{base_id}%thread%{message.thread_id}"
+            elif message.root_id:
+                # 单聊中的回复链，按 root_id 隔离
+                abm.session_id = f"{base_id}%root%{message.root_id}"
+            else:
+                abm.session_id = base_id
 
-        await self.handle_msg(abm)
+        # 判断是否需要通过 reply_in_thread 创建新话题
+        # 读取配置开关，默认关闭
+        auto_thread = self.config.get("lark_auto_thread", False)
+        # 没有已存在的 thread_id 且开关开启时，需要 reply_in_thread=True 创建话题
+        # 已在话题中的消息回复自然在话题内，无需 reply_in_thread
+        _should_reply_in_thread = auto_thread and not bool(message.thread_id)
+        await self.handle_msg(abm, should_reply_in_thread=_should_reply_in_thread)
 
-    async def handle_msg(self, abm: AstrBotMessage) -> None:
+    async def handle_msg(
+        self, abm: AstrBotMessage, should_reply_in_thread: bool = False
+    ) -> None:
         event = LarkMessageEvent(
             message_str=abm.message_str,
             message_obj=abm,
             platform_meta=self.meta(),
             session_id=abm.session_id,
             bot=self.lark_api,
+            should_reply_in_thread=should_reply_in_thread,
         )
 
         self._event_queue.put_nowait(event)
