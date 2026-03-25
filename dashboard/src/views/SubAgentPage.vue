@@ -435,6 +435,15 @@ async function handleImportFile(event: Event) {
       toast(tm('messages.importInvalidJson'), 'error')
       return
     }
+
+    const obj = parsed as Record<string, unknown>
+    const hasExpectedTopLevelKey =
+      'agents' in obj || 'main_enable' in obj || 'enable' in obj
+    if (!hasExpectedTopLevelKey) {
+      toast(tm('messages.importInvalidJson'), 'error')
+      return
+    }
+
     cfg.value = normalizeConfig(parsed)
     toast(tm('messages.importSuccess'), 'success')
   } catch (e: unknown) {
