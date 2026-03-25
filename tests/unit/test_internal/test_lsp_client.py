@@ -30,8 +30,15 @@ async def test_lsp_reader_task_failure_marks_client_disconnected_and_logs():
         patch("astrbot._internal.protocols.lsp.client.log") as mock_log,
     ):
         await client.connect_to_server(["python", "fake_lsp.py"], "file:///tmp")
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
+
+        for _ in range(100):
+            if client.connected is False and mock_log.error.called:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            pytest.fail(
+                "Timed out waiting for LSP reader task failure to disconnect client and log error"
+            )
 
         assert client.connected is False
         mock_log.error.assert_called_once()

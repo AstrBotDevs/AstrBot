@@ -55,8 +55,8 @@ class AstrbotLspClient(BaseAstrbotLspClient):
             await reader_task
         except asyncio.CancelledError:
             pass
-        except Exception:
-            pass
+        except Exception as exc:
+            log.debug("Ignoring failed LSP reader task during teardown", exc_info=exc)
 
     def _handle_reader_task_done(self, task: asyncio.Task[None]) -> None:
         if self._reader_task is task:
