@@ -448,8 +448,10 @@ async def _ensure_persona_and_skills(
             for tool in so.handoffs:
                 agent = getattr(tool, "agent", None)
                 agent_name = getattr(agent, "name", None) if agent else None
-                if agent_name and agent_name.strip() in normalized_subagents:
-                    req.func_tool.add_tool(tool)
+                if agent_name is not None:
+                    name_norm = str(agent_name).strip()
+                    if name_norm and name_norm in normalized_subagents:
+                        req.func_tool.add_tool(tool)
 
         # check duplicates
         if remove_dup:

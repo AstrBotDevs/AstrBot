@@ -462,7 +462,6 @@ export default {
             loadingTools: false,
             availableSkills: [],
             loadingSkills: false,
-            subagentMainEnable:false,
             availableSubagents: [],
             loadingSubagents: false,
             existingPersonaIds: [], // 已存在的人格ID列表
