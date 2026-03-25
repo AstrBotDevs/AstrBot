@@ -490,7 +490,7 @@ persona_mgr = self.context.persona_manager
 - __Arguments__
   - `persona_id: str` – 待删除的人格 ID
 - __Raises__
-  `Valueable` – 若 `persona_id` 不存在
+  `ValueError` – 若 `persona_id` 不存在
 
 #### `get_default_persona_v3`
 

@@ -46,9 +46,16 @@ async def test_lsp_connect_to_server_cancels_previous_reader_task_before_restart
     """Test reconnect tears down an existing reader task before replacing it."""
     client = AstrbotLspClient()
     fake_process = SimpleNamespace(stdout=MagicMock(), stdin=MagicMock())
+    first_reader_cancelled = asyncio.Event()
+    first_reader_started = asyncio.Event()
 
     async def first_reader() -> None:
-        await asyncio.Event().wait()
+        first_reader_started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            first_reader_cancelled.set()
+            raise
 
     with (
         patch(
@@ -60,13 +67,29 @@ async def test_lsp_connect_to_server_cancels_previous_reader_task_before_restart
     ):
         client._read_responses = first_reader  # type: ignore[method-assign]
         await client.connect_to_server(["python", "first_lsp.py"], "file:///tmp")
-        first_task = client._reader_task
-        assert first_task is not None
+        await asyncio.wait_for(first_reader_started.wait(), timeout=1)
+        assert client.connected is True
 
         second_reader = AsyncMock(return_value=None)
         client._read_responses = second_reader  # type: ignore[method-assign]
         await client.connect_to_server(["python", "second_lsp.py"], "file:///tmp")
+        await asyncio.sleep(0)
 
-        assert first_task.cancelled() is True
-        assert client._reader_task is not None
-        assert client._reader_task is not first_task
+        assert first_reader_cancelled.is_set() is True
+        assert client.connected is True
+
+
+@pytest.mark.asyncio
+async def test_lsp_stop_reader_task_does_not_await_current_task():
+    """Test stopping the reader from within itself does not self-await."""
+    client = AstrbotLspClient()
+    done = asyncio.Event()
+
+    async def stop_self() -> None:
+        client._reader_task = asyncio.current_task()
+        await client._stop_reader_task()
+        done.set()
+
+    task = asyncio.create_task(stop_self())
+    await asyncio.wait_for(done.wait(), timeout=1)
+    await task
