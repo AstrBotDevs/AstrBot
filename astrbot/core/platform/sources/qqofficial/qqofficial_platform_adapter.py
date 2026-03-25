@@ -238,6 +238,9 @@ class QQOfficialPlatformAdapter(Platform):
                 )
 
         elif session.message_type == MessageType.FRIEND_MESSAGE:
+            # 参考 https://bot.q.qq.com/wiki/develop/pythonsdk/api/message/post_message.html
+            # msg_id 缺失时认为是主动推送，而似乎至少在私聊上主动推送是没有被限制的，这里直接移除 msg_id 可以避免越权或 msg_id 不可用的bug
+            payload.pop("msg_id", None)
             payload["msg_seq"] = random.randint(1, 10000)
             if image_base64:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_image(
@@ -268,9 +271,6 @@ class QQOfficialPlatformAdapter(Platform):
                 if media:
                     payload["media"] = media
                     payload["msg_type"] = 7
-                    # QQ API rejects msg_id for media (video/file) messages sent
-                    # via the proactive tool-call path; remove it to avoid 越权 error.
-                    payload.pop("msg_id", None)
             if file_source:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
                     send_helper,
@@ -282,7 +282,6 @@ class QQOfficialPlatformAdapter(Platform):
                 if media:
                     payload["media"] = media
                     payload["msg_type"] = 7
-                    payload.pop("msg_id", None)
 
             ret = await QQOfficialMessageEvent.post_c2c_message(
                 send_helper,

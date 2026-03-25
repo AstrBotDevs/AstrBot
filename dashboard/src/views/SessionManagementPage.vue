@@ -1,261 +1,109 @@
 ﻿<template>
   <div class="session-management-page">
-    <v-container
-      fluid
-      class="pa-0"
-    >
+    <v-container fluid class="pa-0">
       <v-card flat>
         <v-card-title class="d-flex align-center py-3 px-4">
           <span class="text-h4">{{ tm('customRules.title') }}</span>
-          <v-btn
-            icon="mdi-information-outline"
-            size="small"
-            variant="text"
-            href="https://astrbot.app/use/custom-rules.html"
-            target="_blank"
-          />
-          <v-chip
-            size="small"
-            class="ml-1"
-          >
-            {{ totalItems }} {{ tm('customRules.rulesCount') }}
-          </v-chip>
-          <v-row
-            class="me-4 ms-4"
-            dense
-          >
-            <v-text-field
-              v-model="searchQuery"
-              prepend-inner-icon="mdi-magnify"
-              :label="tm('search.placeholder')"
-              hide-details
-              clearable
-              variant="solo-filled"
-              flat
-              class="me-4"
-              density="compact"
-            />
+          <v-btn icon="mdi-information-outline" size="small" variant="text" href="https://astrbot.app/use/custom-rules.html" target="_blank"></v-btn>
+          <v-chip size="small" class="ml-1">{{ totalItems }} {{ tm('customRules.rulesCount') }}</v-chip>
+          <v-row class="me-4 ms-4" dense>
+            <v-text-field v-model="searchQuery" prepend-inner-icon="mdi-magnify" :label="tm('search.placeholder')"
+              hide-details clearable variant="solo-filled" flat class="me-4" density="compact"></v-text-field>
           </v-row>
-          <v-btn
-            v-if="selectedItems.length > 0"
-            color="error"
-            prepend-icon="mdi-delete"
-            variant="tonal"
-            class="mr-2"
-            size="small"
-            @click="confirmBatchDelete"
-          >
+          <v-btn v-if="selectedItems.length > 0" color="error" prepend-icon="mdi-delete" variant="tonal"
+            @click="confirmBatchDelete" class="mr-2" size="small">
             {{ tm('buttons.batchDelete') }} ({{ selectedItems.length }})
           </v-btn>
-          <v-btn
-            color="success"
-            prepend-icon="mdi-plus"
-            variant="tonal"
-            class="mr-2"
-            size="small"
-            @click="openAddRuleDialog"
-          >
+          <v-btn color="success" prepend-icon="mdi-plus" variant="tonal" @click="openAddRuleDialog" class="mr-2"
+            size="small">
             {{ tm('buttons.addRule') }}
           </v-btn>
-          <v-btn
-            color="primary"
-            prepend-icon="mdi-refresh"
-            variant="tonal"
-            :loading="loading"
-            size="small"
-            @click="refreshData"
-          >
+          <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="refreshData" :loading="loading"
+            size="small">
             {{ tm('buttons.refresh') }}
           </v-btn>
         </v-card-title>
 
-        <v-divider />
+        <v-divider></v-divider>
 
         <v-card-text class="pa-0">
-          <v-data-table-server
-            v-model:items-per-page="itemsPerPage"
-            v-model:page="currentPage"
-            v-model="selectedItems"
-            :headers="headers"
-            :items="filteredRulesList"
-            :loading="loading"
-            :items-length="totalItems"
-            class="elevation-0"
-            style="font-size: 12px;"
-            show-select
-            item-value="umo"
-            return-object
-            @update:options="onTableOptionsUpdate"
-          >
+          <v-data-table-server :headers="headers" :items="filteredRulesList" :loading="loading"
+            :items-length="totalItems" v-model:items-per-page="itemsPerPage" v-model:page="currentPage"
+            @update:options="onTableOptionsUpdate" class="elevation-0" style="font-size: 12px;" v-model="selectedItems"
+            show-select item-value="umo" return-object>
+
             <!-- UMO 信息 -->
-            <template #item.umo_info="{ item }">
+            <template v-slot:item.umo_info="{ item }">
               <div>
                 <div class="d-flex align-center">
-                  <v-chip
-                    size="x-small"
-                    :color="getPlatformColor(item.platform)"
-                    class="mr-2"
-                  >
+                  <v-chip size="x-small" :color="getPlatformColor(item.platform)" class="mr-2">
                     {{ item.platform || 'unknown' }}
                   </v-chip>
-                  <span
-                    class="text-truncate"
-                    style="max-width: 300px;"
-                  >{{ item.umo }}</span>
-                  <div
-                    v-if="item.rules?.session_service_config?.custom_name || true"
-                    class="d-flex align-center"
-                  >
-                    <span
-                      v-if="item.rules?.session_service_config?.custom_name"
-                      class="ml-2"
-                      style="color: gray; font-size: 10px;"
-                    >
+                  <span class="text-truncate" style="max-width: 300px;">{{ item.umo }}</span>
+                  <div class="d-flex align-center" v-if="item.rules?.session_service_config?.custom_name || true">
+                    <span class="ml-2" style="color: gray; font-size: 10px;"
+                      v-if="item.rules?.session_service_config?.custom_name">
                       ({{ item.rules?.session_service_config?.custom_name }})
                     </span>
-                    <v-btn
-                      icon
-                      size="x-small"
-                      variant="text"
-                      class="ml-1"
-                      @click.stop="openQuickEditName(item)"
-                    >
-                      <v-icon
-                        size="small"
-                        color="grey"
-                      >
-                        mdi-pencil-outline
-                      </v-icon>
-                      <v-tooltip
-                        activator="parent"
-                        location="top"
-                      >
-                        {{ tm('buttons.editCustomName') }}
-                      </v-tooltip>
+                    <v-btn icon size="x-small" variant="text" class="ml-1" @click.stop="openQuickEditName(item)">
+                      <v-icon size="small" color="grey">mdi-pencil-outline</v-icon>
+                      <v-tooltip activator="parent" location="top">{{ tm('buttons.editCustomName') }}</v-tooltip>
                     </v-btn>
                   </div>
                   <v-tooltip location="top">
-                    <template #activator="{ props }">
-                      <v-icon
-                        v-bind="props"
-                        size="small"
-                        class="ml-1"
-                      >
-                        mdi-information-outline
-                      </v-icon>
+                    <template v-slot:activator="{ props }">
+                      <v-icon v-bind="props" size="small" class="ml-1">mdi-information-outline</v-icon>
                     </template>
                     <div>
                       <p>UMO: {{ item.umo }}</p>
-                      <p v-if="item.platform">
-                        平台: {{ item.platform }}
-                      </p>
-                      <p v-if="item.message_type">
-                        消息类型: {{ item.message_type }}
-                      </p>
-                      <p v-if="item.session_id">
-                        会话 ID: {{ item.session_id }}
-                      </p>
+                      <p v-if="item.platform">平台: {{ item.platform }}</p>
+                      <p v-if="item.message_type">消息类型: {{ item.message_type }}</p>
+                      <p v-if="item.session_id">会话 ID: {{ item.session_id }}</p>
                     </div>
                   </v-tooltip>
                 </div>
+
               </div>
             </template>
 
             <!-- 规则概览 -->
-            <template #item.rules_overview="{ item }">
+            <template v-slot:item.rules_overview="{ item }">
               <div class="d-flex flex-wrap ga-1">
-                <v-chip
-                  v-if="item.rules.session_service_config"
-                  size="x-small"
-                  color="primary"
-                  variant="outlined"
-                >
+                <v-chip v-if="item.rules.session_service_config" size="x-small" color="primary" variant="outlined">
                   {{ tm('customRules.serviceConfig') }}
                 </v-chip>
-                <v-chip
-                  v-if="item.rules.session_plugin_config"
-                  size="x-small"
-                  color="secondary"
-                  variant="outlined"
-                >
+                <v-chip v-if="item.rules.session_plugin_config" size="x-small" color="secondary" variant="outlined">
                   {{ tm('customRules.pluginConfig') }}
                 </v-chip>
-                <v-chip
-                  v-if="item.rules.kb_config"
-                  size="x-small"
-                  color="info"
-                  variant="outlined"
-                >
+                <v-chip v-if="item.rules.kb_config" size="x-small" color="info" variant="outlined">
                   {{ tm('customRules.kbConfig') }}
                 </v-chip>
-                <v-chip
-                  v-if="hasProviderConfig(item.rules)"
-                  size="x-small"
-                  color="warning"
-                  variant="outlined"
-                >
+                <v-chip v-if="hasProviderConfig(item.rules)" size="x-small" color="warning" variant="outlined">
                   {{ tm('customRules.providerConfig') }}
                 </v-chip>
               </div>
             </template>
 
             <!-- 操作按钮 -->
-            <template #item.actions="{ item }">
-              <v-btn
-                size="small"
-                variant="tonal"
-                color="primary"
-                class="mr-1"
-                @click="openRuleEditor(item)"
-              >
+            <template v-slot:item.actions="{ item }">
+              <v-btn size="small" variant="tonal" color="primary" @click="openRuleEditor(item)" class="mr-1">
                 <v-icon>mdi-pencil</v-icon>
-                <v-tooltip
-                  activator="parent"
-                  location="top"
-                >
-                  {{ tm('buttons.editRule') }}
-                </v-tooltip>
+                <v-tooltip activator="parent" location="top">{{ tm('buttons.editRule') }}</v-tooltip>
               </v-btn>
-              <v-btn
-                size="small"
-                variant="tonal"
-                color="error"
-                @click="confirmDeleteRules(item)"
-              >
+              <v-btn size="small" variant="tonal" color="error" @click="confirmDeleteRules(item)">
                 <v-icon>mdi-delete</v-icon>
-                <v-tooltip
-                  activator="parent"
-                  location="top"
-                >
-                  {{ tm('buttons.deleteAllRules') }}
-                </v-tooltip>
+                <v-tooltip activator="parent" location="top">{{ tm('buttons.deleteAllRules') }}</v-tooltip>
               </v-btn>
             </template>
 
             <!-- 空状态 -->
-            <template #no-data>
+            <template v-slot:no-data>
               <div class="text-center py-8">
-                <v-icon
-                  size="64"
-                  color="grey-400"
-                >
-                  mdi-file-document-edit-outline
-                </v-icon>
-                <div class="text-h6 mt-4 text-grey-600">
-                  {{ tm('customRules.noRules') }}
-                </div>
-                <div class="text-body-2 text-grey-500">
-                  {{ tm('customRules.noRulesDesc') }}
-                </div>
-                <v-btn
-                  color="primary"
-                  variant="tonal"
-                  class="mt-4"
-                  @click="openAddRuleDialog"
-                >
-                  <v-icon start>
-                    mdi-plus
-                  </v-icon>
+                <v-icon size="64" color="grey-400">mdi-file-document-edit-outline</v-icon>
+                <div class="text-h6 mt-4 text-grey-600">{{ tm('customRules.noRules') }}</div>
+                <div class="text-body-2 text-grey-500">{{ tm('customRules.noRulesDesc') }}</div>
+                <v-btn color="primary" variant="tonal" class="mt-4" @click="openAddRuleDialog">
+                  <v-icon start>mdi-plus</v-icon>
                   {{ tm('buttons.addRule') }}
                 </v-btn>
               </div>
@@ -264,112 +112,40 @@
         </v-card-text>
       </v-card>
       <!-- 批量操作面板 -->
-      <v-card
-        flat
-        class="mt-4"
-      >
+      <v-card flat class="mt-4">
         <v-card-title class="d-flex align-center py-3 px-4">
           <span class="text-h6">{{ tm('batchOperations.title') }}</span>
-          <v-chip
-            size="small"
-            class="ml-2"
-            color="info"
-            variant="outlined"
-          >
+          <v-chip size="small" class="ml-2" color="info" variant="outlined">
             {{ tm('batchOperations.hint') }}
           </v-chip>
         </v-card-title>
         <v-card-text>
           <v-row dense>
-            <v-col
-              cols="12"
-              md="6"
-              lg="3"
-            >
-              <v-select
-                v-model="batchScope"
-                :items="batchScopeOptions"
-                item-title="label"
-                item-value="value"
-                :label="tm('batchOperations.scope')"
-                hide-details
-                variant="solo-filled"
-                flat
-                density="comfortable"
-              />
+            <v-col cols="12" md="6" lg="3">
+              <v-select v-model="batchScope" :items="batchScopeOptions" item-title="label" item-value="value"
+                :label="tm('batchOperations.scope')" hide-details variant="solo-filled" flat density="comfortable">
+              </v-select>
             </v-col>
-            <v-col
-              cols="12"
-              md="6"
-              lg="3"
-            >
-              <v-select
-                v-model="batchLlmStatus"
-                :items="statusOptions"
-                item-title="label"
-                item-value="value"
-                :label="tm('batchOperations.llmStatus')"
-                hide-details
-                clearable
-                variant="solo-filled"
-                flat
-                density="comfortable"
-              />
+            <v-col cols="12" md="6" lg="3">
+              <v-select v-model="batchLlmStatus" :items="statusOptions" item-title="label" item-value="value"
+                :label="tm('batchOperations.llmStatus')" hide-details clearable variant="solo-filled" flat density="comfortable">
+              </v-select>
             </v-col>
-            <v-col
-              cols="12"
-              md="6"
-              lg="3"
-            >
-              <v-select
-                v-model="batchTtsStatus"
-                :items="statusOptions"
-                item-title="label"
-                item-value="value"
-                :label="tm('batchOperations.ttsStatus')"
-                hide-details
-                clearable
-                variant="solo-filled"
-                flat
-                density="comfortable"
-              />
+            <v-col cols="12" md="6" lg="3">
+              <v-select v-model="batchTtsStatus" :items="statusOptions" item-title="label" item-value="value"
+                :label="tm('batchOperations.ttsStatus')" hide-details clearable variant="solo-filled" flat density="comfortable">
+              </v-select>
             </v-col>
-            <v-col
-              cols="12"
-              md="6"
-              lg="3"
-            >
-              <v-select
-                v-model="batchChatProvider"
-                :items="chatProviderOptions"
-                item-title="label"
-                item-value="value"
-                :label="tm('batchOperations.chatProvider')"
-                hide-details
-                clearable
-                variant="solo-filled"
-                flat
-                density="comfortable"
-              />
+            <v-col cols="12" md="6" lg="3">
+              <v-select v-model="batchChatProvider" :items="batchChatProviderOptions" item-title="label" item-value="value"
+                :label="tm('batchOperations.chatProvider')" hide-details clearable variant="solo-filled" flat density="comfortable">
+              </v-select>
             </v-col>
           </v-row>
-          <v-row
-            dense
-            class="mt-3"
-          >
-            <v-col
-              cols="12"
-              class="d-flex justify-end"
-            >
-              <v-btn
-                color="primary"
-                variant="tonal"
-                size="large"
-                :disabled="!canApplyBatch"
-                :loading="batchUpdating"
-                prepend-icon="mdi-check-all"
-                @click="applyBatchChanges"
-              >
+          <v-row dense class="mt-3">
+            <v-col cols="12" class="d-flex justify-end">
+              <v-btn color="primary" variant="tonal" size="large" @click="applyBatchChanges"
+                :disabled="!canApplyBatch" :loading="batchUpdating" prepend-icon="mdi-check-all">
                 {{ tm('batchOperations.apply') }}
               </v-btn>
             </v-col>
@@ -378,98 +154,43 @@
       </v-card>
 
       <!-- 分组管理面板 -->
-      <v-card
-        flat
-        class="mt-4"
-      >
+      <v-card flat class="mt-4">
         <v-card-title class="d-flex align-center py-3 px-4">
           <span class="text-h6">{{ tm('groups.title') }}</span>
-          <v-chip
-            size="small"
-            class="ml-2"
-            color="secondary"
-            variant="outlined"
-          >
+          <v-chip size="small" class="ml-2" color="secondary" variant="outlined">
             {{ tm('groups.count', { count: groups.length }) }}
           </v-chip>
-          <v-spacer />
-          <v-btn
-            v-if="selectedItems.length > 0 && groups.length > 0"
-            color="info"
-            variant="tonal"
-            size="small"
-            class="mr-2"
-          >
-            <v-icon start>
-              mdi-folder-plus
-            </v-icon>
+          <v-spacer></v-spacer>
+          <v-btn v-if="selectedItems.length > 0 && groups.length > 0" color="info" variant="tonal" size="small" class="mr-2">
+            <v-icon start>mdi-folder-plus</v-icon>
             {{ tm('groups.addToGroup') }}
             <v-menu activator="parent">
               <v-list density="compact">
-                <v-list-item
-                  v-for="g in groups"
-                  :key="g.id"
-                  @click="addSelectedToGroup(g.id)"
-                >
+                <v-list-item v-for="g in groups" :key="g.id" @click="addSelectedToGroup(g.id)">
                   <v-list-item-title>{{ tm('groups.customGroupOption', { name: g.name, count: g.umo_count }) }}</v-list-item-title>
                 </v-list-item>
               </v-list>
             </v-menu>
           </v-btn>
-          <v-btn
-            color="success"
-            variant="tonal"
-            size="small"
-            prepend-icon="mdi-folder-plus"
-            @click="openCreateGroupDialog"
-          >
+          <v-btn color="success" variant="tonal" size="small" @click="openCreateGroupDialog" prepend-icon="mdi-folder-plus">
             {{ tm('groups.create') }}
           </v-btn>
         </v-card-title>
         <v-card-text v-if="groups.length > 0">
           <v-row dense>
-            <v-col
-              v-for="group in groups"
-              :key="group.id"
-              cols="12"
-              sm="6"
-              md="4"
-              lg="3"
-            >
-              <v-card
-                variant="outlined"
-                class="pa-3"
-              >
+            <v-col v-for="group in groups" :key="group.id" cols="12" sm="6" md="4" lg="3">
+              <v-card variant="outlined" class="pa-3">
                 <div class="d-flex align-center justify-space-between">
                   <div>
-                    <div class="font-weight-bold">
-                      {{ group.name }}
-                    </div>
-                    <div class="text-caption text-grey">
-                      {{ tm('groups.sessionsCount', { count: group.umo_count }) }}
-                    </div>
+                    <div class="font-weight-bold">{{ group.name }}</div>
+                    <div class="text-caption text-grey">{{ tm('groups.sessionsCount', { count: group.umo_count }) }}</div>
                   </div>
                   <div>
-                    <v-btn
-                      icon
-                      size="small"
-                      variant="text"
-                      @click="openEditGroupDialog(group)"
-                    >
-                      <v-icon size="small">
-                        mdi-pencil
-                      </v-icon>
+                    <v-btn icon size="small" variant="text" @click="openEditGroupDialog(group)">
+                      <v-icon size="small">mdi-pencil</v-icon>
                     </v-btn>
-                    <v-btn
-                      icon
-                      size="small"
-                      variant="text"
-                      color="error"
-                      @click="deleteGroup(group)"
-                    >
-                      <v-icon size="small">
-                        mdi-delete
-                      </v-icon>
+                    <v-btn icon size="small" variant="text" color="error" @click="deleteGroup(group)">
+                      <v-icon size="small">mdi-delete</v-icon>
                     </v-btn>
                   </div>
                 </div>
@@ -477,234 +198,98 @@
             </v-col>
           </v-row>
         </v-card-text>
-        <v-card-text
-          v-else
-          class="text-center text-grey py-6"
-        >
+        <v-card-text v-else class="text-center text-grey py-6">
           {{ tm('groups.empty') }}
         </v-card-text>
       </v-card>
 
       <!-- 分组编辑对话框 -->
-      <v-dialog
-        v-model="groupDialog"
-        max-width="800"
-        @after-enter="loadAvailableUmos"
-      >
+      <v-dialog v-model="groupDialog" max-width="800" @after-enter="loadAvailableUmos">
         <v-card>
           <v-card-title class="py-3 px-4">
             {{ groupDialogMode === 'create' ? tm('groups.create') : tm('groups.edit') }}
           </v-card-title>
           <v-card-text>
-            <v-text-field
-              v-model="editingGroup.name"
-              :label="tm('groups.name')"
-              variant="outlined"
-              hide-details
-              class="mb-4"
-            />
+            <v-text-field v-model="editingGroup.name" :label="tm('groups.name')" variant="outlined" hide-details class="mb-4"></v-text-field>
             <v-row dense>
               <!-- 左侧：可选会话 -->
               <v-col cols="5">
-                <div class="text-subtitle-2 mb-2">
-                  {{ tm('groups.availableSessions', { count: unselectedUmos.length }) }}
-                </div>
-                <v-text-field
-                  v-model="groupMemberSearch"
-                  :placeholder="tm('groups.searchPlaceholder')"
-                  variant="outlined"
-                  density="compact"
-                  hide-details
-                  class="mb-2"
-                  clearable
-                  prepend-inner-icon="mdi-magnify"
-                />
-                <v-list
-                  density="compact"
-                  class="transfer-list"
-                  lines="one"
-                >
-                  <v-list-item
-                    v-for="umo in filteredUnselectedUmos"
-                    :key="umo"
-                    class="transfer-item"
-                    @click="addToGroup(umo)"
-                  >
-                    <template #prepend>
-                      <v-icon
-                        size="small"
-                        color="grey"
-                      >
-                        mdi-plus
-                      </v-icon>
+                <div class="text-subtitle-2 mb-2">{{ tm('groups.availableSessions', { count: unselectedUmos.length }) }}</div>
+                <v-text-field v-model="groupMemberSearch" :placeholder="tm('groups.searchPlaceholder')" variant="outlined" density="compact" hide-details class="mb-2" clearable prepend-inner-icon="mdi-magnify"></v-text-field>
+                <v-list density="compact" class="transfer-list" lines="one">
+                  <v-list-item v-for="umo in filteredUnselectedUmos" :key="umo" @click="addToGroup(umo)" class="transfer-item">
+                    <template v-slot:prepend>
+                      <v-icon size="small" color="grey">mdi-plus</v-icon>
                     </template>
-                    <v-list-item-title class="text-caption">
-                      {{ formatUmoShort(umo) }}
-                    </v-list-item-title>
+                    <v-list-item-title class="text-caption">{{ formatUmoShort(umo) }}</v-list-item-title>
                   </v-list-item>
                   <v-list-item v-if="filteredUnselectedUmos.length === 0 && !loadingUmos">
-                    <v-list-item-title class="text-caption text-grey text-center">
-                      {{ tm('groups.noMatch') }}
-                    </v-list-item-title>
+                    <v-list-item-title class="text-caption text-grey text-center">{{ tm('groups.noMatch') }}</v-list-item-title>
                   </v-list-item>
                   <v-list-item v-if="loadingUmos">
-                    <v-list-item-title class="text-center">
-                      <v-progress-circular
-                        indeterminate
-                        size="20"
-                      />
-                    </v-list-item-title>
+                    <v-list-item-title class="text-center"><v-progress-circular indeterminate size="20"></v-progress-circular></v-list-item-title>
                   </v-list-item>
                 </v-list>
               </v-col>
               <!-- 中间：操作按钮 -->
-              <v-col
-                cols="2"
-                class="d-flex flex-column align-center justify-center"
-              >
-                <v-btn
-                  icon
-                  size="small"
-                  variant="tonal"
-                  color="primary"
-                  class="mb-2"
-                  :disabled="unselectedUmos.length === 0"
-                  @click="addAllToGroup"
-                >
+              <v-col cols="2" class="d-flex flex-column align-center justify-center">
+                <v-btn icon size="small" variant="tonal" color="primary" class="mb-2" @click="addAllToGroup" :disabled="unselectedUmos.length === 0">
                   <v-icon>mdi-chevron-double-right</v-icon>
                 </v-btn>
-                <v-btn
-                  icon
-                  size="small"
-                  variant="tonal"
-                  color="error"
-                  :disabled="editingGroup.umos.length === 0"
-                  @click="removeAllFromGroup"
-                >
+                <v-btn icon size="small" variant="tonal" color="error" @click="removeAllFromGroup" :disabled="editingGroup.umos.length === 0">
                   <v-icon>mdi-chevron-double-left</v-icon>
                 </v-btn>
               </v-col>
               <!-- 右侧：已选会话 -->
               <v-col cols="5">
-                <div class="text-subtitle-2 mb-2">
-                  {{ tm('groups.selectedSessions', { count: editingGroup.umos.length }) }}
-                </div>
-                <v-text-field
-                  v-model="groupSelectedSearch"
-                  :placeholder="tm('groups.searchPlaceholder')"
-                  variant="outlined"
-                  density="compact"
-                  hide-details
-                  class="mb-2"
-                  clearable
-                  prepend-inner-icon="mdi-magnify"
-                />
-                <v-list
-                  density="compact"
-                  class="transfer-list"
-                  lines="one"
-                >
-                  <v-list-item
-                    v-for="umo in filteredSelectedUmos"
-                    :key="umo"
-                    class="transfer-item"
-                    @click="removeFromGroup(umo)"
-                  >
-                    <template #prepend>
-                      <v-icon
-                        size="small"
-                        color="error"
-                      >
-                        mdi-minus
-                      </v-icon>
+                <div class="text-subtitle-2 mb-2">{{ tm('groups.selectedSessions', { count: editingGroup.umos.length }) }}</div>
+                <v-text-field v-model="groupSelectedSearch" :placeholder="tm('groups.searchPlaceholder')" variant="outlined" density="compact" hide-details class="mb-2" clearable prepend-inner-icon="mdi-magnify"></v-text-field>
+                <v-list density="compact" class="transfer-list" lines="one">
+                  <v-list-item v-for="umo in filteredSelectedUmos" :key="umo" @click="removeFromGroup(umo)" class="transfer-item">
+                    <template v-slot:prepend>
+                      <v-icon size="small" color="error">mdi-minus</v-icon>
                     </template>
-                    <v-list-item-title class="text-caption">
-                      {{ formatUmoShort(umo) }}
-                    </v-list-item-title>
+                    <v-list-item-title class="text-caption">{{ formatUmoShort(umo) }}</v-list-item-title>
                   </v-list-item>
                   <v-list-item v-if="editingGroup.umos.length === 0">
-                    <v-list-item-title class="text-caption text-grey text-center">
-                      {{ tm('groups.noMembers') }}
-                    </v-list-item-title>
+                    <v-list-item-title class="text-caption text-grey text-center">{{ tm('groups.noMembers') }}</v-list-item-title>
                   </v-list-item>
                 </v-list>
               </v-col>
             </v-row>
           </v-card-text>
           <v-card-actions class="px-4 pb-4">
-            <v-spacer />
-            <v-btn
-              variant="text"
-              @click="groupDialog = false"
-            >
-              {{ tm('buttons.cancel') }}
-            </v-btn>
-            <v-btn
-              color="primary"
-              variant="tonal"
-              @click="saveGroup"
-            >
-              {{ tm('buttons.save') }}
-            </v-btn>
+            <v-spacer></v-spacer>
+            <v-btn variant="text" @click="groupDialog = false">{{ tm('buttons.cancel') }}</v-btn>
+            <v-btn color="primary" variant="tonal" @click="saveGroup">{{ tm('buttons.save') }}</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
 
       <!-- 添加规则对话框 - 选择 UMO -->
-      <v-dialog
-        v-model="addRuleDialog"
-        max-width="600"
-      >
+      <v-dialog v-model="addRuleDialog" max-width="600">
         <v-card>
-          <v-card-title
-            class="py-3 px-4"
-            style="display: flex; align-items: center;"
-          >
+          <v-card-title class="py-3 px-4" style="display: flex; align-items: center;">
             <span>{{ tm('addRule.title') }}</span>
-            <v-spacer />
-            <v-btn
-              icon
-              variant="text"
-              @click="addRuleDialog = false"
-            >
+            <v-spacer></v-spacer>
+            <v-btn icon variant="text" @click="addRuleDialog = false">
               <v-icon>mdi-close</v-icon>
             </v-btn>
           </v-card-title>
 
           <v-card-text class="pa-4">
-            <v-alert
-              type="info"
-              variant="tonal"
-              class="mb-4"
-            >
+            <v-alert type="info" variant="tonal" class="mb-4">
               {{ tm('addRule.description') }}
             </v-alert>
 
-            <v-autocomplete
-              v-model="selectedNewUmo"
-              :items="availableUmos"
-              :loading="loadingUmos"
-              :label="tm('addRule.selectUmo')"
-              variant="outlined"
-              clearable
-              :no-data-text="tm('addRule.noUmos')"
-            />
+            <v-autocomplete v-model="selectedNewUmo" :items="availableUmos" :loading="loadingUmos"
+              :label="tm('addRule.selectUmo')" variant="outlined" clearable :no-data-text="tm('addRule.noUmos')" />
           </v-card-text>
 
           <v-card-actions class="px-4 pb-4">
-            <v-spacer />
-            <v-btn
-              variant="text"
-              @click="addRuleDialog = false"
-            >
-              {{ tm('buttons.cancel') }}
-            </v-btn>
-            <v-btn
-              color="primary"
-              variant="tonal"
-              :disabled="!selectedNewUmo"
-              @click="createNewRule"
-            >
+            <v-spacer></v-spacer>
+            <v-btn variant="text" @click="addRuleDialog = false">{{ tm('buttons.cancel') }}</v-btn>
+            <v-btn color="primary" variant="tonal" @click="createNewRule" :disabled="!selectedNewUmo">
               {{ tm('buttons.next') }}
             </v-btn>
           </v-card-actions>
@@ -712,316 +297,154 @@
       </v-dialog>
 
       <!-- 规则编辑对话框 -->
-      <v-dialog
-        v-model="ruleDialog"
-        max-width="550"
-        scrollable
-      >
-        <v-card
-          v-if="selectedUmo"
-          class="d-flex flex-column"
-          height="600"
-        >
+      <v-dialog v-model="ruleDialog" max-width="550" scrollable>
+        <v-card v-if="selectedUmo" class="d-flex flex-column" height="600">
           <v-card-title class="py-3 px-6 d-flex align-center border-b">
             <span>{{ tm('ruleEditor.title') }}</span>
-            <v-chip
-              size="x-small"
-              class="ml-2 font-weight-regular"
-              variant="outlined"
-            >
+            <v-chip size="x-small" class="ml-2 font-weight-regular" variant="outlined">
               {{ selectedUmo.umo }}
             </v-chip>
-            <v-spacer />
-            <v-btn
-              icon="mdi-close"
-              variant="text"
-              @click="closeRuleEditor"
-            />
+            <v-spacer></v-spacer>
+            <v-btn icon="mdi-close" variant="text" @click="closeRuleEditor"></v-btn>
           </v-card-title>
 
           <v-card-text class="pa-0 overflow-y-auto">
             <div class="px-6 py-4">
               <!-- Service Config Section -->
               <div class="d-flex align-center mb-4">
-                <h3 class="font-weight-bold mb-0">
-                  {{ tm('ruleEditor.serviceConfig.title') }}
-                </h3>
+                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.serviceConfig.title') }}</h3>
               </div>
 
               <v-row dense>
                 <v-col cols="12">
-                  <v-checkbox
-                    v-model="serviceConfig.session_enabled"
-                    :label="tm('ruleEditor.serviceConfig.sessionEnabled')"
-                    color="success"
-                    hide-details
-                    class="mb-2"
-                  />
+                  <v-checkbox v-model="serviceConfig.session_enabled"
+                    :label="tm('ruleEditor.serviceConfig.sessionEnabled')" color="success" hide-details class="mb-2" />
                 </v-col>
-                <v-col
-                  cols="12"
-                  md="6"
-                >
-                  <v-checkbox
-                    v-model="serviceConfig.llm_enabled"
-                    :label="tm('ruleEditor.serviceConfig.llmEnabled')"
-                    color="primary"
-                    hide-details
-                  />
+                <v-col cols="12" md="6">
+                  <v-checkbox v-model="serviceConfig.llm_enabled" :label="tm('ruleEditor.serviceConfig.llmEnabled')"
+                    color="primary" hide-details />
                 </v-col>
-                <v-col
-                  cols="12"
-                  md="6"
-                >
-                  <v-checkbox
-                    v-model="serviceConfig.tts_enabled"
-                    :label="tm('ruleEditor.serviceConfig.ttsEnabled')"
-                    color="secondary"
-                    hide-details
-                  />
+                <v-col cols="12" md="6">
+                  <v-checkbox v-model="serviceConfig.tts_enabled" :label="tm('ruleEditor.serviceConfig.ttsEnabled')"
+                    color="secondary" hide-details />
                 </v-col>
-                <v-col
-                  cols="12"
-                  class="mt-2"
-                >
-                  <v-text-field
-                    v-model="serviceConfig.custom_name"
-                    :label="tm('ruleEditor.serviceConfig.customName')"
-                    variant="outlined"
-                    hide-details
-                    clearable
-                  />
+                <v-col cols="12" class="mt-2">
+                  <v-text-field v-model="serviceConfig.custom_name" :label="tm('ruleEditor.serviceConfig.customName')"
+                    variant="outlined" hide-details clearable />
                 </v-col>
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn
-                  color="primary"
-                  variant="tonal"
-                  size="small"
-                  :loading="saving"
-                  prepend-icon="mdi-content-save"
-                  @click="saveServiceConfig"
-                >
+                <v-btn color="primary" variant="tonal" size="small" @click="saveServiceConfig" :loading="saving"
+                  prepend-icon="mdi-content-save">
                   {{ tm('buttons.save') }}
                 </v-btn>
               </div>
 
               <!-- Provider Config Section -->
               <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">
-                  {{ tm('ruleEditor.providerConfig.title') }}
-                </h3>
+                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.providerConfig.title') }}</h3>
               </div>
 
               <v-row dense>
                 <v-col cols="12">
-                  <v-select
-                    v-model="providerConfig.chat_completion"
-                    :items="chatProviderOptions"
-                    item-title="label"
-                    item-value="value"
-                    :label="tm('ruleEditor.providerConfig.chatProvider')"
-                    variant="outlined"
-                    hide-details
-                    class="mb-2"
-                  />
+                  <v-select v-model="providerConfig.chat_completion" :items="chatProviderOptions" item-title="label"
+                    item-value="value" :label="tm('ruleEditor.providerConfig.chatProvider')" variant="outlined"
+                    hide-details class="mb-2" />
                 </v-col>
                 <v-col cols="12">
-                  <v-select
-                    v-model="providerConfig.speech_to_text"
-                    :items="sttProviderOptions"
-                    item-title="label"
-                    item-value="value"
-                    :label="tm('ruleEditor.providerConfig.sttProvider')"
-                    variant="outlined"
-                    hide-details
-                    :disabled="availableSttProviders.length === 0"
-                    class="mb-2"
-                  />
+                  <v-select v-model="providerConfig.speech_to_text" :items="sttProviderOptions" item-title="label"
+                    item-value="value" :label="tm('ruleEditor.providerConfig.sttProvider')" variant="outlined"
+                    hide-details :disabled="availableSttProviders.length === 0" class="mb-2" />
                 </v-col>
                 <v-col cols="12">
-                  <v-select
-                    v-model="providerConfig.text_to_speech"
-                    :items="ttsProviderOptions"
-                    item-title="label"
-                    item-value="value"
-                    :label="tm('ruleEditor.providerConfig.ttsProvider')"
-                    variant="outlined"
-                    hide-details
-                    :disabled="availableTtsProviders.length === 0"
-                  />
+                  <v-select v-model="providerConfig.text_to_speech" :items="ttsProviderOptions" item-title="label"
+                    item-value="value" :label="tm('ruleEditor.providerConfig.ttsProvider')" variant="outlined"
+                    hide-details :disabled="availableTtsProviders.length === 0" />
                 </v-col>
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn
-                  color="primary"
-                  variant="tonal"
-                  size="small"
-                  :loading="saving"
-                  prepend-icon="mdi-content-save"
-                  @click="saveProviderConfig"
-                >
+                <v-btn color="primary" variant="tonal" size="small" @click="saveProviderConfig" :loading="saving"
+                  prepend-icon="mdi-content-save">
                   {{ tm('buttons.save') }}
                 </v-btn>
               </div>
 
               <!-- Persona Config Section -->
               <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">
-                  {{ tm('ruleEditor.personaConfig.title') }}
-                </h3>
+                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.personaConfig.title') }}</h3>
               </div>
 
               <v-row dense>
                 <v-col cols="12">
-                  <v-select
-                    v-model="serviceConfig.persona_id"
-                    :items="personaOptions"
-                    item-title="label"
-                    item-value="value"
-                    :label="tm('ruleEditor.personaConfig.selectPersona')"
-                    variant="outlined"
-                    hide-details
-                    clearable
-                  />
+                  <v-select v-model="serviceConfig.persona_id" :items="personaOptions" item-title="label"
+                    item-value="value" :label="tm('ruleEditor.personaConfig.selectPersona')" variant="outlined"
+                    hide-details clearable />
                 </v-col>
                 <v-col cols="12">
-                  <v-alert
-                    type="info"
-                    variant="tonal"
-                    class="mt-2"
-                    icon="mdi-information-outline"
-                  >
+                  <v-alert type="info" variant="tonal" class="mt-2" icon="mdi-information-outline">
                     {{ tm('ruleEditor.personaConfig.hint') }}
                   </v-alert>
                 </v-col>
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn
-                  color="primary"
-                  variant="tonal"
-                  size="small"
-                  :loading="saving"
-                  prepend-icon="mdi-content-save"
-                  @click="saveServiceConfig"
-                >
+                <v-btn color="primary" variant="tonal" size="small" @click="saveServiceConfig" :loading="saving"
+                  prepend-icon="mdi-content-save">
                   {{ tm('buttons.save') }}
                 </v-btn>
               </div>
 
               <!-- Plugin Config Section -->
               <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">
-                  {{ tm('ruleEditor.pluginConfig.title') }}
-                </h3>
+                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.pluginConfig.title') }}</h3>
               </div>
 
               <v-row dense>
                 <v-col cols="12">
-                  <v-select
-                    v-model="pluginConfig.disabled_plugins"
-                    :items="pluginOptions"
-                    item-title="label"
-                    item-value="value"
-                    :label="tm('ruleEditor.pluginConfig.disabledPlugins')"
-                    variant="outlined"
-                    hide-details
-                    multiple
-                    chips
-                    closable-chips
-                    clearable
-                  />
+                  <v-select v-model="pluginConfig.disabled_plugins" :items="pluginOptions" item-title="label"
+                    item-value="value" :label="tm('ruleEditor.pluginConfig.disabledPlugins')" variant="outlined"
+                    hide-details multiple chips closable-chips clearable />
                 </v-col>
                 <v-col cols="12">
-                  <v-alert
-                    type="info"
-                    variant="tonal"
-                    class="mt-2"
-                    icon="mdi-information-outline"
-                  >
+                  <v-alert type="info" variant="tonal" class="mt-2" icon="mdi-information-outline">
                     {{ tm('ruleEditor.pluginConfig.hint') }}
                   </v-alert>
                 </v-col>
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn
-                  color="primary"
-                  variant="tonal"
-                  size="small"
-                  :loading="saving"
-                  prepend-icon="mdi-content-save"
-                  @click="savePluginConfig"
-                >
+                <v-btn color="primary" variant="tonal" size="small" @click="savePluginConfig" :loading="saving"
+                  prepend-icon="mdi-content-save">
                   {{ tm('buttons.save') }}
                 </v-btn>
               </div>
 
               <!-- KB Config Section -->
               <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">
-                  {{ tm('ruleEditor.kbConfig.title') }}
-                </h3>
+                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.kbConfig.title') }}</h3>
               </div>
 
               <v-row dense>
                 <v-col cols="12">
-                  <v-select
-                    v-model="kbConfig.kb_ids"
-                    :items="kbOptions"
-                    item-title="label"
-                    item-value="value"
-                    :disabled="availableKbs.length === 0"
-                    :label="tm('ruleEditor.kbConfig.selectKbs')"
-                    variant="outlined"
-                    hide-details
-                    multiple
-                    chips
-                    closable-chips
-                    clearable
-                  />
+                  <v-select v-model="kbConfig.kb_ids" :items="kbOptions" item-title="label" item-value="value" :disabled="availableKbs.length === 0"
+                    :label="tm('ruleEditor.kbConfig.selectKbs')" variant="outlined" hide-details multiple chips
+                    closable-chips clearable />
                 </v-col>
-                <v-col
-                  cols="12"
-                  md="6"
-                >
-                  <v-text-field
-                    v-model.number="kbConfig.top_k"
-                    :label="tm('ruleEditor.kbConfig.topK')"
-                    variant="outlined"
-                    hide-details
-                    type="number"
-                    min="1"
-                    max="20"
-                    class="mt-3"
-                  />
+                <v-col cols="12" md="6">
+                  <v-text-field v-model.number="kbConfig.top_k" :label="tm('ruleEditor.kbConfig.topK')"
+                    variant="outlined" hide-details type="number" min="1" max="20" class="mt-3"/>
                 </v-col>
-                <v-col
-                  cols="12"
-                  md="6"
-                >
-                  <v-checkbox
-                    v-model="kbConfig.enable_rerank"
-                    :label="tm('ruleEditor.kbConfig.enableRerank')"
-                    color="primary"
-                    hide-details
-                    class="mt-3"
-                  />
+                <v-col cols="12" md="6">
+                  <v-checkbox v-model="kbConfig.enable_rerank" :label="tm('ruleEditor.kbConfig.enableRerank')"
+                    color="primary" hide-details class="mt-3"/>
                 </v-col>
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn
-                  color="primary"
-                  variant="tonal"
-                  size="small"
-                  :loading="saving"
-                  prepend-icon="mdi-content-save"
-                  @click="saveKbConfig"
-                >
+                <v-btn color="primary" variant="tonal" size="small" @click="saveKbConfig" :loading="saving"
+                  prepend-icon="mdi-content-save">
                   {{ tm('buttons.save') }}
                 </v-btn>
               </div>
@@ -1031,80 +454,39 @@
       </v-dialog>
 
       <!-- 确认删除对话框 -->
-      <v-dialog
-        v-model="deleteDialog"
-        max-width="400"
-      >
+      <v-dialog v-model="deleteDialog" max-width="400">
         <v-card>
-          <v-card-title class="text-h6">
-            {{ tm('deleteConfirm.title') }}
-          </v-card-title>
+          <v-card-title class="text-h6">{{ tm('deleteConfirm.title') }}</v-card-title>
           <v-card-text>
             {{ tm('deleteConfirm.message') }}
             <br><br>
             <code>{{ deleteTarget?.umo }}</code>
           </v-card-text>
           <v-card-actions>
-            <v-spacer />
-            <v-btn
-              variant="text"
-              @click="deleteDialog = false"
-            >
-              {{ tm('buttons.cancel') }}
-            </v-btn>
-            <v-btn
-              color="error"
-              variant="tonal"
-              :loading="deleting"
-              @click="deleteAllRules"
-            >
-              {{ tm('buttons.delete')
-              }}
-            </v-btn>
+            <v-spacer></v-spacer>
+            <v-btn variant="text" @click="deleteDialog = false">{{ tm('buttons.cancel') }}</v-btn>
+            <v-btn color="error" variant="tonal" @click="deleteAllRules" :loading="deleting">{{ tm('buttons.delete')
+            }}</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
 
       <!-- 批量删除确认对话框 -->
-      <v-dialog
-        v-model="batchDeleteDialog"
-        max-width="500"
-      >
+      <v-dialog v-model="batchDeleteDialog" max-width="500">
         <v-card>
-          <v-card-title class="text-h6">
-            {{ tm('batchDeleteConfirm.title') }}
-          </v-card-title>
+          <v-card-title class="text-h6">{{ tm('batchDeleteConfirm.title') }}</v-card-title>
           <v-card-text>
             {{ tm('batchDeleteConfirm.message', { count: selectedItems.length }) }}
-            <div
-              class="mt-3"
-              style="max-height: 200px; overflow-y: auto;"
-            >
-              <v-chip
-                v-for="item in selectedItems"
-                :key="item.umo"
-                size="small"
-                class="ma-1"
-                variant="outlined"
-              >
+            <div class="mt-3" style="max-height: 200px; overflow-y: auto;">
+              <v-chip v-for="item in selectedItems" :key="item.umo" size="small" class="ma-1" variant="outlined">
                 {{ item.rules?.session_service_config?.custom_name || item.umo }}
               </v-chip>
             </div>
           </v-card-text>
           <v-card-actions>
-            <v-spacer />
-            <v-btn
-              variant="text"
-              @click="batchDeleteDialog = false"
-            >
-              {{ tm('buttons.cancel') }}
-            </v-btn>
-            <v-btn
-              color="error"
-              variant="tonal"
-              :loading="deleting"
-              @click="batchDeleteRules"
-            >
+            <v-spacer></v-spacer>
+            <v-btn variant="text" @click="batchDeleteDialog = false">{{ tm('buttons.cancel') }}</v-btn>
+            <v-btn color="error" variant="tonal" @click="batchDeleteRules" :loading="deleting">
               {{ tm('buttons.delete') }}
             </v-btn>
           </v-card-actions>
@@ -1112,50 +494,22 @@
       </v-dialog>
 
       <!-- 提示信息 -->
-      <v-snackbar
-        v-model="snackbar"
-        :timeout="3000"
-        elevation="24"
-        :color="snackbarColor"
-        location="top"
-      >
+      <v-snackbar v-model="snackbar" :timeout="3000" elevation="24" :color="snackbarColor" location="top">
         {{ snackbarText }}
       </v-snackbar>
 
       <!-- 快速编辑备注名对话框 -->
-      <v-dialog
-        v-model="quickEditNameDialog"
-        max-width="400"
-      >
+      <v-dialog v-model="quickEditNameDialog" max-width="400">
         <v-card>
-          <v-card-title class="py-3 px-4">
-            {{ tm('quickEditName.title') }}
-          </v-card-title>
+          <v-card-title class="py-3 px-4">{{ tm('quickEditName.title') }}</v-card-title>
           <v-card-text class="pa-4">
-            <v-text-field
-              v-model="quickEditNameValue"
-              :label="tm('ruleEditor.serviceConfig.customName')"
-              variant="outlined"
-              hide-details
-              clearable
-              autofocus
-              @keyup.enter="saveQuickEditName"
-            />
+            <v-text-field v-model="quickEditNameValue" :label="tm('ruleEditor.serviceConfig.customName')"
+              variant="outlined" hide-details clearable autofocus @keyup.enter="saveQuickEditName" />
           </v-card-text>
           <v-card-actions class="px-4 pb-4">
-            <v-spacer />
-            <v-btn
-              variant="text"
-              @click="quickEditNameDialog = false"
-            >
-              {{ tm('buttons.cancel') }}
-            </v-btn>
-            <v-btn
-              color="primary"
-              variant="tonal"
-              :loading="saving"
-              @click="saveQuickEditName"
-            >
+            <v-spacer></v-spacer>
+            <v-btn variant="text" @click="quickEditNameDialog = false">{{ tm('buttons.cancel') }}</v-btn>
+            <v-btn color="primary" variant="tonal" @click="saveQuickEditName" :loading="saving">
               {{ tm('buttons.save') }}
             </v-btn>
           </v-card-actions>
@@ -1166,12 +520,14 @@
 </template>
 
 <script>
-import axios from '@/utils/request'
+import axios from 'axios'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog
 } from '@/utils/confirmDialog'
+
+const FOLLOW_CONFIG_VALUE = '__astrbot_follow_config__'
 
 export default {
   name: 'SessionManagementPage',
@@ -1230,9 +586,9 @@ export default {
 
       // Provider 配置
       providerConfig: {
-        chat_completion: null,
-        speech_to_text: null,
-        text_to_speech: null,
+        chat_completion: FOLLOW_CONFIG_VALUE,
+        speech_to_text: FOLLOW_CONFIG_VALUE,
+        text_to_speech: FOLLOW_CONFIG_VALUE,
       },
 
       // 插件配置
@@ -1317,7 +673,7 @@ export default {
 
     chatProviderOptions() {
       return [
-        { label: this.tm('provider.followConfig'), value: null },
+        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
         ...this.availableChatProviders.map(p => ({
           label: `${p.name} (${p.model})`,
           value: p.id
@@ -1327,7 +683,7 @@ export default {
 
     sttProviderOptions() {
       return [
-        { label: this.tm('provider.followConfig'), value: null },
+        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
         ...this.availableSttProviders.map(p => ({
           label: `${p.name} (${p.model})`,
           value: p.id
@@ -1337,7 +693,27 @@ export default {
 
     ttsProviderOptions() {
       return [
-        { label: this.tm('provider.followConfig'), value: null },
+        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
+        ...this.availableTtsProviders.map(p => ({
+          label: `${p.name} (${p.model})`,
+          value: p.id
+        }))
+      ]
+    },
+
+    batchChatProviderOptions() {
+      return [
+        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
+        ...this.availableChatProviders.map(p => ({
+          label: `${p.name} (${p.model})`,
+          value: p.id
+        }))
+      ]
+    },
+
+    batchTtsProviderOptions() {
+      return [
+        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
         ...this.availableTtsProviders.map(p => ({
           label: `${p.name} (${p.model})`,
           value: p.id
@@ -1560,9 +936,9 @@ export default {
 
       // 初始化 Provider 配置
       this.providerConfig = {
-        chat_completion: this.editingRules['provider_perf_chat_completion'] || null,
-        speech_to_text: this.editingRules['provider_perf_speech_to_text'] || null,
-        text_to_speech: this.editingRules['provider_perf_text_to_speech'] || null,
+        chat_completion: this.editingRules['provider_perf_chat_completion'] || FOLLOW_CONFIG_VALUE,
+        speech_to_text: this.editingRules['provider_perf_speech_to_text'] || FOLLOW_CONFIG_VALUE,
+        text_to_speech: this.editingRules['provider_perf_text_to_speech'] || FOLLOW_CONFIG_VALUE,
       }
 
       // 初始化插件配置
@@ -1643,7 +1019,7 @@ export default {
 
         for (const type of providerTypes) {
           const value = this.providerConfig[type]
-          if (value) {
+          if (value && value !== FOLLOW_CONFIG_VALUE) {
             // 有值时更新
             updateTasks.push(
               axios.post('/api/session/update-rule', {
@@ -1653,7 +1029,7 @@ export default {
               })
             )
           } else if (this.editingRules[`provider_perf_${type}`]) {
-            // 选择了"跟随配置文件"（null）且之前有配置，则删除
+            // 选择了"跟随配置文件" (__astrbot_follow_config__) 且之前有配置，则删除
             deleteTasks.push(
               axios.post('/api/session/delete-rule', {
                 umo: this.selectedUmo.umo,
@@ -1681,9 +1057,10 @@ export default {
             this.rulesList.push(item)
           }
           for (const type of providerTypes) {
-            if (this.providerConfig[type]) {
-              item.rules[`provider_perf_${type}`] = this.providerConfig[type]
-              this.editingRules[`provider_perf_${type}`] = this.providerConfig[type]
+            const val = this.providerConfig[type]
+            if (val && val !== FOLLOW_CONFIG_VALUE) {
+              item.rules[`provider_perf_${type}`] = val
+              this.editingRules[`provider_perf_${type}`] = val
             } else {
               // 删除本地数据
               delete item.rules[`provider_perf_${type}`]
@@ -2000,23 +1377,41 @@ export default {
         }
 
         if (this.batchChatProvider !== null) {
-          tasks.push(axios.post('/api/session/batch-update-provider', {
-            scope,
-            umos,
-            group_id: groupId,
-            provider_type: 'chat_completion',
-            provider_id: this.batchChatProvider || null
-          }))
+          if (this.batchChatProvider === FOLLOW_CONFIG_VALUE) {
+            tasks.push(axios.post('/api/session/batch-delete-rule', {
+              scope,
+              umos,
+              group_id: groupId,
+              rule_key: 'provider_perf_chat_completion'
+            }))
+          } else {
+            tasks.push(axios.post('/api/session/batch-update-provider', {
+              scope,
+              umos,
+              group_id: groupId,
+              provider_type: 'chat_completion',
+              provider_id: this.batchChatProvider
+            }))
+          }
         }
 
         if (this.batchTtsProvider !== null) {
-          tasks.push(axios.post('/api/session/batch-update-provider', {
-            scope,
-            umos,
-            group_id: groupId,
-            provider_type: 'text_to_speech',
-            provider_id: this.batchTtsProvider || null
-          }))
+          if (this.batchTtsProvider === FOLLOW_CONFIG_VALUE) {
+            tasks.push(axios.post('/api/session/batch-delete-rule', {
+              scope,
+              umos,
+              group_id: groupId,
+              rule_key: 'provider_perf_text_to_speech'
+            }))
+          } else {
+            tasks.push(axios.post('/api/session/batch-update-provider', {
+              scope,
+              umos,
+              group_id: groupId,
+              provider_type: 'text_to_speech',
+              provider_id: this.batchTtsProvider
+            }))
+          }
         }
 
         if (tasks.length === 0) {

@@ -1249,7 +1249,7 @@
         "description": "API Base URL"
       },
       "openai_embedding": {
-        "hint": "OpenAI Embedding automatically appends /v1 at request time."
+        "hint": "If testing fails, try adding /v1 at the end to be compatible with some OpenAI API versions."
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding does not require manually adding /v1beta."

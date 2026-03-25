@@ -39,6 +39,16 @@ const emit = defineEmits([
 const handlePinnedImgError = (e) => {
   e.target.src = defaultPluginIcon;
 };
+
+const authorDisplay = computed(() => {
+  const p = props.plugin || {};
+  if (typeof p.author === 'string' && p.author.trim()) return p.author;
+  if (Array.isArray(p.authors) && p.authors.length) return p.authors.join(', ');
+  if (typeof p.author_name === 'string' && p.author_name.trim()) return p.author_name;
+  if (typeof p.owner === 'string' && p.owner.trim()) return p.owner;
+  if (p.author && typeof p.author === 'object' && p.author.name) return p.author.name;
+  return '';
+});
 </script>
 
 <template>
@@ -65,119 +75,71 @@ const handlePinnedImgError = (e) => {
             :src="(typeof plugin.logo === 'string' && plugin.logo.trim()) ? plugin.logo : defaultPluginIcon"
             :alt="plugin.name"
             @error="handlePinnedImgError"
-          >
+          />
         </v-avatar>
       </template>
 
       <v-card>
-        <v-card-text
-          class="d-flex"
-          style="gap:8px; padding:12px;"
-        >
-          <v-tooltip
-            location="top"
-            :text="tm('buttons.viewDocs')"
-          >
+        <v-card-title class="d-flex" style="gap:8px; padding:12px; align-items:center;">
+          <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+            <v-avatar size="40" class="pinned-avatar" style="width:40px; height:40px;">
+              <img
+                :src="(typeof plugin.logo === 'string' && plugin.logo.trim()) ? plugin.logo : defaultPluginIcon"
+                :alt="plugin.name"
+                @error="handlePinnedImgError"
+              />
+            </v-avatar>
+            <div style="min-width:0; overflow:hidden;">
+              <div style="font-weight:600; font-size:0.95rem; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">{{ plugin.display_name || plugin.name }}</div>
+              <div style="font-size:0.8rem; color:var(--v-theme-on-surface); opacity:0.8; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">{{ authorDisplay || (plugin.author || '') }}</div>
+            </div>
+          </div>
+        </v-card-title>
+        <v-divider></v-divider>
+        <v-card-text class="d-flex" style="gap:8px; padding:12px;">
+          <v-tooltip location="top" :text="tm('buttons.viewDocs')">
             <template #activator="{ props: a }">
-              <v-btn
-                v-bind="a"
-                icon
-                size="small"
-                variant="tonal"
-                color="info"
-                @click.stop="$emit('view-readme', plugin)"
-              >
+              <v-btn v-bind="a" icon size="small" variant="tonal" color="info" @click.stop="$emit('view-readme', plugin)">
                 <v-icon>mdi-book-open-page-variant</v-icon>
               </v-btn>
             </template>
           </v-tooltip>
 
-          <v-tooltip
-            location="top"
-            :text="tm('card.actions.pluginConfig')"
-          >
+          <v-tooltip location="top" :text="tm('card.actions.pluginConfig')">
             <template #activator="{ props: a }">
-              <v-btn
-                v-bind="a"
-                icon
-                size="small"
-                variant="tonal"
-                color="primary"
-                @click.stop="$emit('open-config', plugin.name)"
-              >
+              <v-btn v-bind="a" icon size="small" variant="tonal" color="primary" @click.stop="$emit('open-config', plugin.name)">
                 <v-icon>mdi-cog</v-icon>
               </v-btn>
             </template>
           </v-tooltip>
 
-          <v-tooltip
-            location="top"
-            :text="tm('card.actions.reloadPlugin')"
-          >
+          <v-tooltip location="top" :text="tm('card.actions.reloadPlugin')">
             <template #activator="{ props: a }">
-              <v-btn
-                v-bind="a"
-                icon
-                size="small"
-                variant="tonal"
-                color="primary"
-                @click.stop="$emit('reload', plugin.name)"
-              >
+              <v-btn v-bind="a" icon size="small" variant="tonal" color="primary" @click.stop="$emit('reload', plugin.name)">
                 <v-icon>mdi-refresh</v-icon>
               </v-btn>
             </template>
           </v-tooltip>
 
-          <v-tooltip
-            location="top"
-            :text="tm('buttons.update')"
-          >
+          <v-tooltip location="top" :text="tm('buttons.update')">
             <template #activator="{ props: a }">
-              <v-btn
-                v-bind="a"
-                icon
-                size="small"
-                variant="tonal"
-                color="warning"
-                @click.stop="$emit('update', plugin.name)"
-              >
+              <v-btn v-bind="a" icon size="small" variant="tonal" color="warning" @click.stop="$emit('update', plugin.name)">
                 <v-icon>mdi-update</v-icon>
               </v-btn>
             </template>
           </v-tooltip>
 
-          <v-tooltip
-            location="top"
-            :text="tm('buttons.viewInfo')"
-          >
+          <v-tooltip location="top" :text="tm('buttons.viewInfo')">
             <template #activator="{ props: a }">
-              <v-btn
-                v-bind="a"
-                icon
-                size="small"
-                variant="tonal"
-                color="secondary"
-                @click.stop="$emit('show-info', plugin)"
-              >
+              <v-btn v-bind="a" icon size="small" variant="tonal" color="secondary" @click.stop="$emit('show-info', plugin)">
                 <v-icon>mdi-information</v-icon>
               </v-btn>
             </template>
           </v-tooltip>
 
-          <v-tooltip
-            location="top"
-            :text="tm('buttons.uninstall')"
-          >
+          <v-tooltip location="top" :text="tm('buttons.uninstall')">
             <template #activator="{ props: a }">
-              <v-btn
-                v-if="!plugin.reserved"
-                v-bind="a"
-                icon
-                size="small"
-                variant="tonal"
-                color="error"
-                @click.stop="$emit('uninstall', plugin.name)"
-              >
+              <v-btn v-bind="a" icon size="small" variant="tonal" color="error" @click.stop="$emit('uninstall', plugin.name)" v-if="!plugin.reserved">
                 <v-icon>mdi-delete</v-icon>
               </v-btn>
             </template>
@@ -191,13 +153,11 @@ const handlePinnedImgError = (e) => {
       size="small"
       class="pinned-pin-btn"
       :color="isPinned ? 'primary' : 'secondary'"
+      @click.stop="$emit('toggle-pin', plugin)"
       :title="isPinned ? tm('buttons.unpin') : tm('buttons.pin')"
       style="position:absolute; top:6px; right:6px; min-width:22px; width:22px; height:22px;"
-      @click.stop="$emit('toggle-pin', plugin)"
     >
-      <v-icon size="14">
-        {{ isPinned ? 'mdi-pin' : 'mdi-pin-outline' }}
-      </v-icon>
+      <v-icon size="14">{{ isPinned ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
     </v-btn>
   </div>
 </template>

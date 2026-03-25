@@ -68,6 +68,17 @@ const astrbotVersionRequirement = computed(() => {
     : "";
 });
 
+// 作者显示（兼容多种字段名）
+const authorDisplay = computed(() => {
+  const ext = props.extension || {};
+  if (typeof ext.author === 'string' && ext.author.trim()) return ext.author;
+  if (Array.isArray(ext.authors) && ext.authors.length) return ext.authors.join(', ');
+  if (typeof ext.author_name === 'string' && ext.author_name.trim()) return ext.author_name;
+  if (typeof ext.owner === 'string' && ext.owner.trim()) return ext.owner;
+  if (ext.author && typeof ext.author === 'object' && ext.author.name) return ext.author.name;
+  return '';
+});
+
 const logoLoadFailed = ref(false);
 
 const logoSrc = computed(() => {
@@ -377,6 +388,10 @@ const viewChangelog = () => {
                   {{ tag === "danger" ? tm("tags.danger") : tag }}
                 </v-chip>
                 <PluginPlatformChip :platforms="supportPlatforms" />
+                <v-chip v-if="authorDisplay" color="info" label size="small">
+                  <v-icon icon="mdi-account" start></v-icon>
+                  {{ authorDisplay }}
+                </v-chip>
                 <v-chip
                   v-if="astrbotVersionRequirement"
                   color="secondary"

@@ -51,19 +51,19 @@ class SessionManagementRoute(Route):
     async def _get_umo_rules(
         self, page: int = 1, page_size: int = 10, search: str = ""
     ) -> tuple[dict, int]:
-        """获取所有带有自定义规则的 umo 及其规则内容(支持分页和搜索)｡
+        """获取所有带有自定义规则的 umo 及其规则内容（支持分页和搜索）。
 
-        如果某个 umo 在 preference 中有以下字段,则表示有自定义规则:
+        如果某个 umo 在 preference 中有以下字段，则表示有自定义规则：
 
-        1. session_service_config (包含了 是否启用这个umo, 这个umo是否启用 llm, 这个umo是否启用tts, umo自定义名称｡)
+        1. session_service_config (包含了 是否启用这个umo, 这个umo是否启用 llm, 这个umo是否启用tts, umo自定义名称。)
         2. session_plugin_config (包含了 这个 umo 的 plugin set)
         3. provider_perf_{ProviderType.value} (包含了这个 umo 所选择使用的 provider 信息)
         4. kb_config (包含了这个 umo 的知识库相关配置)
 
         Args:
-            page: 页码,从 1 开始
+            page: 页码，从 1 开始
             page_size: 每页数量
-            search: 搜索关键词,匹配 umo 或 custom_name
+            search: 搜索关键词，匹配 umo 或 custom_name
 
         Returns:
             tuple[dict, int]: (umo_rules, total) - 分页后的 umo 规则和总数
@@ -118,14 +118,14 @@ class SessionManagementRoute(Route):
         return paginated_rules, total
 
     async def list_session_rule(self):
-        """获取所有自定义的规则(支持分页和搜索)
+        """获取所有自定义的规则（支持分页和搜索）
 
-        返回已配置规则的 umo 列表及其规则内容,以及可用的 personas 和 providers
+        返回已配置规则的 umo 列表及其规则内容，以及可用的 personas 和 providers
 
         Query 参数:
-            page: 页码,默认为 1
-            page_size: 每页数量,默认为 10
-            search: 搜索关键词,匹配 umo 或 custom_name
+            page: 页码，默认为 1
+            page_size: 每页数量，默认为 10
+            search: 搜索关键词，匹配 umo 或 custom_name
         """
         try:
             # 获取分页和搜索参数
@@ -196,7 +196,7 @@ class SessionManagementRoute(Route):
                 for p in provider_manager.tts_provider_insts
             ]
 
-            # 获取可用的插件列表(排除 reserved 的系统插件)
+            # 获取可用的插件列表（排除 reserved 的系统插件）
             plugin_manager = self.core_lifecycle.plugin_manager
             available_plugins = [
                 {
@@ -255,7 +255,7 @@ class SessionManagementRoute(Route):
         {
             "umo": "平台:消息类型:会话ID",
             "rule_key": "session_service_config" | "session_plugin_config" | "kb_config" | "provider_perf_xxx",
-            "rule_value": {...}  // 规则值,具体结构根据 rule_key 不同而不同
+            "rule_value": {...}  // 规则值，具体结构根据 rule_key 不同而不同
         }
         """
         try:
@@ -294,7 +294,7 @@ class SessionManagementRoute(Route):
         请求体:
         {
             "umo": "平台:消息类型:会话ID",
-            "rule_key": "session_service_config" | "session_plugin_config" | ... (可选,不传则删除所有规则)
+            "rule_key": "session_service_config" | "session_plugin_config" | ... (可选，不传则删除所有规则)
         }
         """
         try:
@@ -328,37 +328,87 @@ class SessionManagementRoute(Route):
 
         请求体:
         {
-            "umos": ["平台:消息类型:会话ID", ...]  // umo 列表
+            "umos": ["平台:消息类型:会话ID", ...],  // 可选
+            "scope": "all" | "group" | "private" | "custom_group",  // 可选，批量范围
+            "group_id": "分组ID",  // 当 scope 为 custom_group 时必填
+            "rule_key": "session_service_config" | ... (可选，不传则删除所有规则)
         }
         """
+
         try:
             data = await request.get_json()
             umos = data.get("umos", [])
+            scope = data.get("scope", "")
+            group_id = data.get("group_id", "")
+            rule_key = data.get("rule_key")
+
+            # 如果指定了 scope，获取符合条件的所有 umo
+            if scope and not umos:
+                # 如果是自定义分组
+                if scope == "custom_group":
+                    if not group_id:
+                        return Response().error("请指定分组 ID").__dict__
+                    groups = self._get_groups()
+                    if group_id not in groups:
+                        return Response().error(f"分组 '{group_id}' 不存在").__dict__
+                    umos = groups[group_id].get("umos", [])
+                else:
+                    async with self.db_helper.get_db() as session:
+                        session: AsyncSession
+                        result = await session.execute(
+                            select(ConversationV2.user_id).distinct()
+                        )
+                        all_umos = [row[0] for row in result.fetchall()]
+
+                    if scope == "group":
+                        umos = [
+                            u
+                            for u in all_umos
+                            if ":group:" in u.lower() or ":groupmessage:" in u.lower()
+                        ]
+                    elif scope == "private":
+                        umos = [
+                            u
+                            for u in all_umos
+                            if ":private:" in u.lower() or ":friend" in u.lower()
+                        ]
+                    elif scope == "all":
+                        umos = all_umos
 
             if not umos:
-                return Response().error("缺少必要参数: umos").__dict__
+                return Response().error("缺少必要参数: umos 或有效的 scope").__dict__
 
             if not isinstance(umos, list):
                 return Response().error("参数 umos 必须是数组").__dict__
 
+            if rule_key and rule_key not in AVAILABLE_SESSION_RULE_KEYS:
+                return Response().error(f"不支持的规则键: {rule_key}").__dict__
+
             # 批量删除
-            deleted_count = 0
+            success_count = 0
             failed_umos = []
             for umo in umos:
                 try:
-                    await sp.clear_async("umo", umo)
-                    deleted_count += 1
+                    if rule_key:
+                        await sp.session_remove(umo, rule_key)
+                    else:
+                        await sp.clear_async("umo", umo)
+                    success_count += 1
                 except Exception as e:
                     logger.error(f"删除 umo {umo} 的规则失败: {e!s}")
                     failed_umos.append(umo)
+
+            message = f"已删除 {success_count} 条规则"
+            if rule_key:
+                message = f"已删除 {success_count} 条 {rule_key} 规则"
 
             if failed_umos:
                 return (
                     Response()
                     .ok(
                         {
-                            "message": f"已删除 {deleted_count} 条规则,{len(failed_umos)} 条删除失败",
-                            "deleted_count": deleted_count,
+                            "message": f"{message}，{len(failed_umos)} 条删除失败",
+                            "success_count": success_count,
                             "failed_umos": failed_umos,
                         }
                     )
@@ -369,8 +419,8 @@ class SessionManagementRoute(Route):
                     Response()
                     .ok(
                         {
-                            "message": f"已删除 {deleted_count} 条规则",
-                            "deleted_count": deleted_count,
+                            "message": message,
+                            "success_count": success_count,
                         }
                     )
                     .__dict__
@@ -380,9 +430,9 @@ class SessionManagementRoute(Route):
             return Response().error(f"批量删除会话规则失败: {e!s}").__dict__
 
     async def list_umos(self):
-        """列出所有有对话记录的 umo,从 Conversations 表中找
+        """列出所有有对话记录的 umo，从 Conversations 表中找
 
-        仅返回 umo 字符串列表,用于用户在创建规则时选择 umo
+        仅返回 umo 字符串列表，用于用户在创建规则时选择 umo
         """
         try:
             # 从 Conversation 表获取所有 distinct user_id (即 umo)
@@ -401,11 +451,11 @@ class SessionManagementRoute(Route):
             return Response().error(f"获取 UMO 列表失败: {e!s}").__dict__
 
     async def list_all_umos_with_status(self):
-        """获取所有有对话记录的 UMO 及其服务状态(支持分页､搜索､筛选)
+        """获取所有有对话记录的 UMO 及其服务状态（支持分页、搜索、筛选）
 
         Query 参数:
-            page: 页码,默认为 1
-            page_size: 每页数量,默认为 20
+            page: 页码，默认为 1
+            page_size: 每页数量，默认为 20
             search: 搜索关键词
             message_type: 筛选消息类型 (group/private/all)
             platform: 筛选平台
@@ -560,10 +610,10 @@ class SessionManagementRoute(Route):
 
         请求体:
         {
-            "umos": ["平台:消息类型:会话ID", ...],  // 可选,如果不传则根据 scope 筛选
-            "scope": "all" | "group" | "private" | "custom_group",  // 可选,批量范围
+            "umos": ["平台:消息类型:会话ID", ...],  // 可选，如果不传则根据 scope 筛选
+            "scope": "all" | "group" | "private" | "custom_group",  // 可选，批量范围
             "group_id": "分组ID",  // 当 scope 为 custom_group 时必填
-            "llm_enabled": true/false/null,  // 可选,null表示不修改
+            "llm_enabled": true/false/null,  // 可选，null表示不修改
             "tts_enabled": true/false/null,  // 可选
             "session_enabled": true/false/null  // 可选
         }
@@ -581,7 +631,7 @@ class SessionManagementRoute(Route):
             if llm_enabled is None and tts_enabled is None and session_enabled is None:
                 return Response().error("至少需要指定一个要修改的状态").__dict__
 
-            # 如果指定了 scope,获取符合条件的所有 umo
+            # 如果指定了 scope，获取符合条件的所有 umo
             if scope and not umos:
                 # 如果是自定义分组
                 if scope == "custom_group":
@@ -713,7 +763,7 @@ class SessionManagementRoute(Route):
 
             provider_type_enum = provider_type_map[provider_type]
 
-            # 如果指定了 scope,获取符合条件的所有 umo
+            # 如果指定了 scope，获取符合条件的所有 umo
             group_id = data.get("group_id", "")
             if scope and not umos:
                 # 如果是自定义分组
@@ -797,7 +847,7 @@ class SessionManagementRoute(Route):
         """获取所有分组列表"""
         try:
             groups = self._get_groups()
-            # 转换为列表格式,方便前端使用
+            # 转换为列表格式，方便前端使用
             groups_list = []
             for group_id, group_data in groups.items():
                 groups_list.append(
@@ -857,7 +907,7 @@ class SessionManagementRoute(Route):
             return Response().error(f"创建分组失败: {e!s}").__dict__
 
     async def update_group(self):
-        """更新分组(改名､增删成员)"""
+        """更新分组（改名、增删成员）"""
         try:
             data = await request.json
             group_id = data.get("id")

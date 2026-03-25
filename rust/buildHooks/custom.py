@@ -77,10 +77,15 @@ def copy_dashboard_dist():
 
     if not dist_src.exists():
         print("[maturin-hook] No dashboard/dist found after build")
+        # Remove broken symlink if present so placeholder can be created
+        if dist_target.is_symlink() and not dist_target.exists():
+            dist_target.unlink()
         return False
 
-    # Remove existing target
-    if dist_target.exists():
+    # Remove existing target (symlink or directory)
+    if dist_target.is_symlink():
+        dist_target.unlink()
+    elif dist_target.exists():
         shutil.rmtree(dist_target)
 
     # Copy dist
@@ -93,6 +98,11 @@ def generate_placeholder():
     """Generate placeholder if no dashboard."""
     root = get_root()
     dist_target = get_dashboard_target()
+
+    # Remove broken symlink if present so we can create a real directory
+    if dist_target.is_symlink() and not dist_target.exists():
+        dist_target.unlink()
+
     dist_target.mkdir(parents=True, exist_ok=True)
 
     placeholder = dist_target / ".placeholder"
@@ -149,6 +159,8 @@ def pre_build_hook(ctx):
         print("[maturin-hook] Building dashboard...")
         if build_dashboard():
             copy_dashboard_dist()
+        else:
+            generate_placeholder()
     else:
         print("[maturin-hook] Skipping dashboard build (ASTRBOT_BUILD_DASHBOARD != 1)")
         generate_placeholder()

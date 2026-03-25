@@ -1251,7 +1251,7 @@
         "description": "API Base URL"
       },
       "openai_embedding": {
-        "hint": "OpenAI Embedding 会在请求时自动补上 /v1。"
+        "hint": "如果测试不通过，可以尝试添加 /v1 在末尾以兼容部分 OpenAI API 版本。"
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding 无需手动添加 /v1beta。"

@@ -1246,7 +1246,7 @@
                 "description": "Адрес прокси-сервера"
             },
             "openai_embedding": {
-                "hint": "OpenAI Embedding автоматически добавляет /v1 при запросе."
+                "hint": "Если тест не проходит, попробуйте добавить /v1 в конец embedding_api_base для совместимости с некоторыми версиями OpenAI API."
             },
             "gemini_embedding": {
                 "hint": "Gemini Embedding не требует ручного добавления /v1beta."

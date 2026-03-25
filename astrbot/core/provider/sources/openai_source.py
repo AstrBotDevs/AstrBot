@@ -335,11 +335,15 @@ class ProviderOpenAIOfficial(Provider):
             choice = chunk.choices[0]
             delta = choice.delta
 
-            # siliconflow workaround
             if dtcs := delta.tool_calls:
-                for tc in dtcs:
+                for idx, tc in enumerate(dtcs):
+                    # siliconflow workaround
                     if tc.function and tc.function.arguments:
                         tc.type = "function"
+                    # Fix for #6661: Add missing 'index' field to tool_call deltas
+                    # Gemini and some OpenAI-compatible proxies omit this field
+                    if not hasattr(tc, "index") or tc.index is None:
+                        tc.index = idx
             try:
                 state.handle_chunk(chunk)
             except Exception as e:
