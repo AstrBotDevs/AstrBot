@@ -31,14 +31,25 @@ async def test_lsp_reader_task_failure_marks_client_disconnected_and_logs():
     ):
         await client.connect_to_server(["python", "fake_lsp.py"], "file:///tmp")
         await asyncio.sleep(0)
-
-        reader_task = client._reader_task
-        assert reader_task is not None
-        _ = reader_task.exception()
         await asyncio.sleep(0)
 
         assert client.connected is False
         mock_log.error.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_lsp_stop_reader_task_swallows_failed_reader_exceptions():
+    """Test reader teardown does not re-raise prior reader failures."""
+    client = AstrbotLspClient()
+
+    async def fail_reader() -> None:
+        raise RuntimeError("reader crashed")
+
+    client._reader_task = asyncio.create_task(fail_reader())
+    await asyncio.sleep(0)
+
+    await client._stop_reader_task()
+    assert client._reader_task is None
 
 
 @pytest.mark.asyncio

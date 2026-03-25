@@ -48,10 +48,14 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         if reader_task is None:
             return
         self._reader_task = None
+        if reader_task is asyncio.current_task():
+            return
         reader_task.cancel()
         try:
             await reader_task
         except asyncio.CancelledError:
+            pass
+        except Exception:
             pass
 
     def _handle_reader_task_done(self, task: asyncio.Task[None]) -> None:
