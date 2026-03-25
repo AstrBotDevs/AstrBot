@@ -6,7 +6,7 @@ import time
 
 
 def main() -> None:
-    time.sleep(60)
+    time.sleep(5)
 
 
 if __name__ == "__main__":
