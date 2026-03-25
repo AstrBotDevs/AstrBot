@@ -450,79 +450,64 @@ const pinnedPlugins = computed(() => {
     </v-row>
 
             
-    <v-card
-      v-if="failedPluginItems.length > 0"
-      class="mb-4 rounded-lg"
-      variant="tonal"
-      @click="toggleShowReserved"
-    >
-      <v-icon>
-        {{
-          showReserved ? "mdi-eye-off" : "mdi-eye"
-        }}
-      </v-icon>
-      {{
-        showReserved
-          ? tm("buttons.hideSystemPlugins")
-          : tm("buttons.showSystemPlugins")
-      }}
-      </v-btn>
+<v-card
+  v-if="failedPluginItems.length > 0"
+  class="mb-4 rounded-lg"
+  variant="tonal"
+  @click="toggleShowReserved"
+>
+  <v-icon>
+    {{ showReserved ? "mdi-eye-off" : "mdi-eye" }}
+  </v-icon>
+  {{
+    showReserved
+      ? tm("buttons.hideSystemPlugins")
+      : tm("buttons.showSystemPlugins")
+  }}
+</v-card>
 
-      <v-btn
-        color="warning"
-        variant="tonal"
-        :disabled="updatableExtensions.length === 0"
-        :loading="updatingAll"
-        @click="showUpdateAllConfirm"
-      >
-        <v-icon>mdi-update</v-icon>
-        {{ tm("buttons.updateAll") }}
-      </v-btn>
-      </div>
+<v-btn
+  color="warning"
+  variant="tonal"
+  :disabled="updatableExtensions.length === 0"
+  :loading="updatingAll"
+  @click="showUpdateAllConfirm"
+>
+  <v-icon>mdi-update</v-icon>
+  {{ tm("buttons.updateAll") }}
+</v-btn>
 
-      <div class="installed-toolbar__controls">
-        <v-btn-toggle
-          v-model="installedStatusFilter"
-          mandatory
-          divided
-          density="compact"
-          color="primary"
-          class="installed-status-toggle"
-        >
-          <v-btn
-            value="all"
-            prepend-icon="mdi-filter-variant"
-          >
-            {{ tm("filters.all") }}
-          </v-btn>
-          <v-btn
-            value="enabled"
-            prepend-icon="mdi-play-circle-outline"
-          >
-            {{ tm("status.enabled") }}
-          </v-btn>
-          <v-btn
-            value="disabled"
-            prepend-icon="mdi-pause-circle-outline"
-          >
-            {{ tm("status.disabled") }}
-          </v-btn>
-        </v-btn-toggle>
+<div class="installed-toolbar__controls">
+  <v-btn-toggle
+    v-model="installedStatusFilter"
+    mandatory
+    divided
+    density="compact"
+    color="primary"
+    class="installed-status-toggle"
+  >
+    <v-btn value="all" prepend-icon="mdi-filter-variant">
+      {{ tm("filters.all") }}
+    </v-btn>
+    <v-btn value="enabled" prepend-icon="mdi-play-circle-outline">
+      {{ tm("status.enabled") }}
+    </v-btn>
+    <v-btn value="disabled" prepend-icon="mdi-pause-circle-outline">
+      {{ tm("status.disabled") }}
+    </v-btn>
+  </v-btn-toggle>
 
-        <PluginSortControl
-          v-model="installedSortBy"
-          :items="installedSortItems"
-          :label="tm('sort.by')"
-          :order="installedSortOrder"
-          :ascending-label="tm('sort.ascending')"
-          :descending-label="tm('sort.descending')"
-          :show-order="installedSortUsesOrder"
-          @update:order="installedSortOrder = $event"
-        />
-      </div>
-      </div>
-      </v-col>
-      </v-row>
+  <PluginSortControl
+    v-model="installedSortBy"
+    :items="installedSortItems"
+    :label="tm('sort.by')"
+    :order="installedSortOrder"
+    :ascending-label="tm('sort.ascending')"
+    :descending-label="tm('sort.descending')"
+    :show-order="installedSortUsesOrder"
+    @update:order="installedSortOrder = $event"
+  />
+</div>
 
       <v-card
         v-if="failedPluginItems.length > 0"
