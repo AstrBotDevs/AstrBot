@@ -19,6 +19,10 @@ from astrbot.core.persona_error_reply import (
 )
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.repeat_reply_guard import (
+    DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD,
+    normalize_repeat_reply_guard_threshold,
+)
 
 AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
@@ -87,14 +91,6 @@ def _build_tool_result_status_message(
     return status_msg
 
 
-def _normalize_repeat_reply_guard_threshold(value: int) -> int:
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        return 0
-    return max(0, parsed)
-
-
 def _build_chain_signature(msg_chain: MessageChain) -> str:
     signature = msg_chain.get_plain_text(with_other_comps_mark=True).strip()
     if not signature:
@@ -109,12 +105,12 @@ async def run_agent(
     show_tool_call_result: bool = False,
     stream_to_general: bool = False,
     show_reasoning: bool = False,
-    repeat_reply_guard_threshold: int = 3,
+    repeat_reply_guard_threshold: int = DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD,
 ) -> AsyncGenerator[MessageChain | None, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.context.event
     tool_name_by_call_id: dict[str, str] = {}
-    guard_threshold = _normalize_repeat_reply_guard_threshold(
+    guard_threshold = normalize_repeat_reply_guard_threshold(
         repeat_reply_guard_threshold
     )
     guard_last_signature = ""
@@ -341,7 +337,7 @@ async def run_live_agent(
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
     show_reasoning: bool = False,
-    repeat_reply_guard_threshold: int = 3,
+    repeat_reply_guard_threshold: int = DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD,
 ) -> AsyncGenerator[MessageChain | None, None]:
     """Live Mode 的 Agent 运行器，支持流式 TTS
 

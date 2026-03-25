@@ -3,6 +3,7 @@
 import os
 from typing import Any, TypedDict
 
+from astrbot.core.repeat_reply_guard import DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 VERSION = "4.22.0"
@@ -149,7 +150,7 @@ DEFAULT_CONFIG = {
         "unsupported_streaming_strategy": "realtime_segmenting",
         "reachability_check": False,
         "max_agent_step": 30,
-        "repeat_reply_guard_threshold": 3,
+        "repeat_reply_guard_threshold": DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD,
         "tool_call_timeout": 120,
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
