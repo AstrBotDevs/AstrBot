@@ -64,8 +64,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         if isinstance(response, str):
             response = json.loads(response)
 
-        data = response.get("data") if isinstance(response, dict) else getattr(
-            response, "data", None
+        data = response and (
+            response.get("data")
+            if isinstance(response, dict)
+            else getattr(response, "data", None)
         )
         if not isinstance(data, list):
             raise TypeError(
@@ -74,8 +76,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
         vectors: list[list[float]] = []
         for item in data:
-            embedding = item.get("embedding") if isinstance(item, dict) else getattr(
-                item, "embedding", None
+            embedding = item and (
+                item.get("embedding")
+                if isinstance(item, dict)
+                else getattr(item, "embedding", None)
             )
             if not isinstance(embedding, list):
                 raise TypeError(

@@ -73,3 +73,27 @@ async def test_get_embedding_rejects_empty_vectors():
             await provider.get_embedding("astrbot")
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_get_embedding_rejects_none_response():
+    provider = _make_provider()
+    provider.client.embeddings.create.return_value = None
+
+    try:
+        with pytest.raises(TypeError, match="Unexpected embedding response type"):
+            await provider.get_embedding("astrbot")
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_get_embeddings_rejects_none_item():
+    provider = _make_provider()
+    provider.client.embeddings.create.return_value = {"data": [None]}
+
+    try:
+        with pytest.raises(TypeError, match="Unexpected embedding item type"):
+            await provider.get_embeddings(["astrbot"])
+    finally:
+        await provider.terminate()
