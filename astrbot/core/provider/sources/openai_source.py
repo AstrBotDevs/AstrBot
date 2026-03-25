@@ -549,7 +549,7 @@ class ProviderOpenAIOfficial(Provider):
                     # 工具集未提供
                     # Should be unreachable
                     raise Exception("工具集未提供")
-                for tool in tools.func_list:
+                for tool in tools.list_tools():
                     if (
                         tool_call.type == "function"
                         and tool.name == tool_call.function.name

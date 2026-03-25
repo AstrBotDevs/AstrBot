@@ -21,6 +21,42 @@ const toast = useToast();
 const serverConfigDialog = ref(false);
 const apiUrl = ref(apiStore.apiBaseUrl);
 
+// URL parameter handling for shareable config
+function applyUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+  const apiUrlParam = params.get("api_url");
+  const usernameParam = params.get("username");
+  if (apiUrlParam) {
+    apiUrl.value = apiUrlParam;
+    const validationError = getApiBaseUrlValidationError(apiUrlParam);
+    if (!validationError) {
+      apiStore.setApiBaseUrl(apiUrlParam);
+    }
+  }
+  if (usernameParam) {
+    window.dispatchEvent(
+      new CustomEvent("astrbot-url-param-username", {
+        detail: { username: usernameParam },
+      })
+    );
+  }
+}
+
+function getShareableUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("api_url", apiUrl.value);
+  return url.toString();
+}
+
+async function copyShareableUrl() {
+  try {
+    await navigator.clipboard.writeText(getShareableUrl());
+    toast.success(t("linkCopied"));
+  } catch {
+    toast.error(t("linkCopyFailed"));
+  }
+}
+
 const showAddPreset = ref(false);
 const newPresetName = ref("");
 const newPresetUrl = ref("");
@@ -58,6 +94,9 @@ function toggleTheme() {
 }
 
 onMounted(() => {
+  // 应用URL参数（用于分享预设配置）
+  applyUrlParams();
+
   // 检查用户是否已登录，如果已登录则重定向
   if (authStore.has_token()) {
     router.push(authStore.returnUrl || "/");
@@ -257,6 +296,17 @@ onMounted(() => {
             variant="outlined"
             density="compact"
           />
+
+          <v-btn
+            variant="tonal"
+            size="small"
+            block
+            class="mt-2"
+            prepend-icon="mdi-share-variant"
+            @click="copyShareableUrl"
+          >
+            {{ t("shareLink") }}
+          </v-btn>
         </v-card-text>
         <v-card-actions>
           <v-spacer />

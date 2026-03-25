@@ -101,7 +101,7 @@ const canEditPermission = (cmd: CommandItem): boolean => cmd.supports_permission
     <v-data-table
       :headers="commandHeaders"
       :items="items"
-      item-value="command_key"
+      item-key="handler_full_name"
       hover
       :row-props="getRowProps"
       :loading="props.loading"
@@ -201,14 +201,6 @@ const canEditPermission = (cmd: CommandItem): boolean => cmd.supports_permission
             </v-list-item>
           </v-list>
         </v-menu>
-        <v-chip
-          v-else
-          :color="getPermissionColor(item.permission)"
-          size="small"
-          class="font-weight-medium"
-        >
-          {{ getPermissionLabel(item.permission) }}
-        </v-chip>
       </template>
 
       <template #item.enabled="{ item }">

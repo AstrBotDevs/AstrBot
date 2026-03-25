@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { useAuthStore } from "@/stores/auth";
 import { Form } from "vee-validate";
 import { useModuleI18n } from "@/i18n/composables";
@@ -10,6 +10,27 @@ const show1 = ref(false);
 const password = ref("");
 const username = ref("");
 const loading = ref(false);
+
+// 从URL参数读取用户名
+const params = new URLSearchParams(window.location.search);
+const usernameParam = params.get("username");
+if (usernameParam) {
+  username.value = usernameParam;
+}
+
+// 监听从LoginPage传来的用户名参数
+function handleUsernameParam(event: Event) {
+  const customEvent = event as CustomEvent<{ username: string }>;
+  username.value = customEvent.detail.username;
+}
+
+onMounted(() => {
+  window.addEventListener("astrbot-url-param-username", handleUsernameParam);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("astrbot-url-param-username", handleUsernameParam);
+});
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 async function validate(_values: any, { setErrors }: any) {
