@@ -438,7 +438,7 @@ persona_mgr = self.context.persona_manager
 - **Returns**
   `Personality` – Default persona object in v3 format
 
-::: details Persona / Personality 类型定义
+::: details Persona / Personality type definitions
 
 ```py
 
