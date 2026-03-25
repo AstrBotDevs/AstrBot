@@ -392,22 +392,30 @@ function toPersistedConfig(source: SubAgentConfig) {
 }
 
 function exportConfig() {
+  let url: string | null = null
+  let link: HTMLAnchorElement | null = null
+
   try {
     const payload = toPersistedConfig(cfg.value)
     const json = JSON.stringify(payload, null, 2)
     const blob = new Blob([json], { type: 'application/json;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
+    url = URL.createObjectURL(blob)
+    link = document.createElement('a')
     const date = new Date().toISOString().slice(0, 10)
     link.href = url
     link.download = `subagent-config-${date}.json`
     document.body.appendChild(link)
     link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
     toast(tm('messages.exportSuccess'), 'success')
   } catch (e: unknown) {
     toast(tm('messages.exportFailed'), 'error')
+  } finally {
+    if (link?.parentNode) {
+      link.parentNode.removeChild(link)
+    }
+    if (url) {
+      URL.revokeObjectURL(url)
+    }
   }
 }
 
