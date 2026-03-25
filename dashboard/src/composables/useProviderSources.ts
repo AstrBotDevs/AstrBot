@@ -1,8 +1,9 @@
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import axios from 'axios'
 import { getProviderIcon } from '@/utils/providerUtils'
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
 import { normalizeTextInput } from '@/utils/inputValue'
+import { mergeDynamicTranslations } from '@/i18n/composables'
 
 export interface UseProviderSourcesOptions {
   defaultTab?: string
@@ -43,6 +44,16 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   async function askForConfirmation(message: string) {
     return askForConfirmationDialog(message, confirmDialog)
+  }
+
+  function applyProviderDynamicI18n(providerI18nTranslations?: Record<string, any>) {
+    if (providerI18nTranslations && typeof providerI18nTranslations === 'object') {
+      mergeDynamicTranslations('features.config-metadata', providerI18nTranslations)
+    }
+  }
+
+  function handleLocaleChange() {
+    void loadProviderTemplate()
   }
 
   // ===== State =====
@@ -628,6 +639,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     try {
       const response = await axios.get('/api/config/provider/template')
       if (response.data.status === 'ok') {
+        applyProviderDynamicI18n(response.data.data.provider_i18n_translations)
         configSchema.value = response.data.data.config_schema || {}
         if (configSchema.value.provider?.config_template) {
           providerTemplates.value = configSchema.value.provider.config_template
@@ -645,7 +657,12 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   onMounted(async () => {
+    window.addEventListener('astrbot-locale-changed', handleLocaleChange)
     await loadProviderTemplate()
+  })
+
+  onBeforeUnmount(() => {
+    window.removeEventListener('astrbot-locale-changed', handleLocaleChange)
   })
 
   return {
