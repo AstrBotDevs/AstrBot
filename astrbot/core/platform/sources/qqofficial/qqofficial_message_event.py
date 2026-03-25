@@ -22,6 +22,7 @@ from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_image_by_url, file_to_base64
+from astrbot.core.utils.media_utils import convert_audio_to_wav
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 
 
@@ -608,7 +609,19 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         temp_dir,
                         f"qqofficial_{uuid.uuid4()}.silk",
                     )
+                    converted_record_wav_path = None
                     try:
+                        if not QQOfficialMessageEvent._is_wav_audio_file(
+                            record_wav_path
+                        ):
+                            converted_record_wav_path = os.path.join(
+                                temp_dir,
+                                f"qqofficial_{uuid.uuid4()}.wav",
+                            )
+                            record_wav_path = await convert_audio_to_wav(
+                                record_wav_path,
+                                converted_record_wav_path,
+                            )
                         duration = await wav_to_tencent_silk(
                             record_wav_path,
                             record_tecent_silk_path,
@@ -621,6 +634,16 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     except Exception as e:
                         logger.error(f"处理语音时出错: {e}")
                         record_file_path = None
+                    finally:
+                        if converted_record_wav_path and os.path.exists(
+                            converted_record_wav_path
+                        ):
+                            try:
+                                os.remove(converted_record_wav_path)
+                            except OSError as e:
+                                logger.warning(
+                                    f"[QQOfficial] failed to remove converted audio file: {e}"
+                                )
             elif isinstance(i, Video) and not video_file_source:
                 if i.file.startswith("file:///"):
                     video_file_source = i.file[8:]
@@ -648,3 +671,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             file_source,
             file_name,
         )
+
+    @staticmethod
+    def _is_wav_audio_file(file_path: str) -> bool:
+        try:
+            with open(file_path, "rb") as f:
+                header = f.read(12)
+        except OSError:
+            return False
+        return len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WAVE"
