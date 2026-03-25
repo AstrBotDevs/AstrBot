@@ -39,12 +39,11 @@ class RepoZipUpdator:
         self.rm_on_error = on_error
         self.github_token = github_token
 
-    def _build_request_headers(self, url: str) -> dict[str, str]:
-        headers: dict[str, str] = {}
+    def _build_request_headers(self, url: str) -> dict[str, str] | None:
         parsed_url = urlparse(url)
         if self.github_token and parsed_url.netloc == "api.github.com":
-            headers["Authorization"] = f"token {self.github_token}"
-        return headers
+            return {"Authorization": f"Bearer {self.github_token}"}
+        return None
 
     async def fetch_release_info(self, url: str, latest: bool = True) -> list:
         """请求版本信息。

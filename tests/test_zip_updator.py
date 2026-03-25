@@ -64,6 +64,6 @@ async def test_fetch_release_info_only_sends_github_token_to_github_api(monkeypa
     assert github_releases[0]["tag_name"] == "v1.0.0"
     assert mirror_releases[0]["tag_name"] == "v1.0.0"
     assert seen_headers == [
-        {"Authorization": "token ghp_test"},
-        {},
+        {"Authorization": "Bearer ghp_test"},
+        None,
     ]

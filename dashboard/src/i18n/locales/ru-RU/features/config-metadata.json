@@ -1054,7 +1054,7 @@
             },
             "github_token": {
                 "description": "GitHub Token",
-                "hint": "Optional. Used for GitHub Releases API requests to avoid unauthenticated rate limit exceeded errors. A read-only token is recommended."
+                "hint": "Необязательно. Используется для запросов к GitHub Releases API, чтобы избежать превышения лимита неаутентифицированных запросов. Рекомендуется использовать токен только для чтения."
             },
             "http_proxy": {
                 "description": "HTTP прокси",
