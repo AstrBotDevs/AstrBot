@@ -117,6 +117,7 @@ class MyPlugin(Star):
 - `on_start()` 里只做初始化、能力注册和轻量状态恢复
 - 需要长期保存的应是配置值、句柄、任务引用，不要把 `ctx` 实例长期挂到 `self`
 - 如果要和 AstrBot 原生 persona / conversation 协作，优先在这里校验或创建所需资源
+- 在 `on_start()` 开头调用 `await super().on_start(ctx)` 以确保 `initialize()` 先被执行
 
 **示例：**
 
@@ -124,6 +125,7 @@ class MyPlugin(Star):
 class MyPlugin(Star):
     async def on_start(self, ctx: Any | None = None) -> None:
         """插件启动时调用"""
+        # 调用父类方法（内部会调用 initialize()）
         await super().on_start(ctx)
 
         # 加载配置
@@ -158,7 +160,7 @@ class MyPlugin(Star):
 **最佳实践：**
 - 在 `on_stop()` 中释放 `on_start()` 注册的任务、监听器和外部资源
 - 把需要持久化的状态尽量提前落库，不要把关键保存逻辑完全依赖在进程退出瞬间
-- 始终把收到的 `ctx` 继续传给 `super().on_stop(ctx)`，不要手动丢掉它
+- 在 `on_stop()` 末尾调用 `await super().on_stop(ctx)` 以确保 `terminate()` 被执行
 
 **示例：**
 
@@ -169,7 +171,7 @@ class MyPlugin(Star):
         # 保存状态
         await self.put_kv_data("last_shutdown", time.time())
 
-        # 确保 terminate 被调用
+        # 调用父类方法（内部会调用 terminate()）
         await super().on_stop(ctx)
 ```
 
@@ -293,6 +295,7 @@ astrbot_version: ">=4.13.0,<5.0.0"
 插件元数据 dataclass，描述插件的基本信息。
 
 ```python
+from dataclasses import dataclass, field
 from astrbot_sdk import StarMetadata
 
 @dataclass
@@ -303,8 +306,8 @@ class StarMetadata:
     author: str                    # 作者
     version: str                   # 版本号
     enabled: bool = True           # 是否启用
-    support_platforms: list[str]   # 支持的平台列表
-    astrbot_version: str | None    # 兼容的 AstrBot 版本范围
+    support_platforms: list[str] = field(default_factory=list)  # 支持的平台列表
+    astrbot_version: str | None = None  # 兼容的 AstrBot 版本范围
 ```
 
 **使用示例：**
@@ -431,12 +434,13 @@ class MyPlugin(Star):
     """插件类"""
 
     async def initialize(self) -> None:
-        """初始化"""
+        """初始化（不依赖 Context）"""
         self._cache = {}
         self._counter = 0
 
     async def on_start(self, ctx) -> None:
         """启动时调用"""
+        # 调用父类方法（内部会调用 initialize()）
         await super().on_start(ctx)
 
         # 加载配置
@@ -457,8 +461,10 @@ class MyPlugin(Star):
         """停止时调用"""
         # 保存状态
         await self.put_kv_data("counter", self._counter)
-        await super().on_stop(ctx)
         ctx.logger.info(f"{ctx.plugin_id} stopped")
+
+        # 调用父类方法（内部会调用 terminate()）
+        await super().on_stop(ctx)
 
     @on_command("hello", aliases=["hi"])
     async def hello(self, event: MessageEvent, ctx: Context) -> None:
@@ -475,6 +481,9 @@ class MyPlugin(Star):
 ```python
 class MyPlugin(Star):
     async def on_start(self, ctx):
+        # 调用父类方法（内部会调用 initialize()）
+        await super().on_start(ctx)
+
         # 获取配置
         config = await ctx.metadata.get_plugin_config()
 
@@ -495,14 +504,20 @@ class MyPlugin(Star):
 ```python
 class MyPlugin(Star):
     async def on_start(self, ctx):
+        # 调用父类方法（内部会调用 initialize()）
+        await super().on_start(ctx)
+
         # 加载状态
         self.last_update = await self.get_kv_data("last_update", 0)
         self.user_data = await self.get_kv_data("users", {})
 
-    async def save_state(self):
+    async def on_stop(self, ctx):
         # 保存状态
         await self.put_kv_data("last_update", time.time())
         await self.put_kv_data("users", self.user_data)
+
+        # 调用父类方法（内部会调用 terminate()）
+        await super().on_stop(ctx)
 ```
 
 ### 5. 资源清理
@@ -510,6 +525,9 @@ class MyPlugin(Star):
 ```python
 class MyPlugin(Star):
     async def on_start(self, ctx):
+        # 调用父类方法（内部会调用 initialize()）
+        await super().on_start(ctx)
+
         # 创建需要清理的资源
         self._session = aiohttp.ClientSession()
         self._task = asyncio.create_task(self.background_task())
@@ -525,4 +543,7 @@ class MyPlugin(Star):
 
         if hasattr(self, '_session'):
             await self._session.close()
+
+        # 调用父类方法（内部会调用 terminate()）
+        await super().on_stop(ctx)
 ```

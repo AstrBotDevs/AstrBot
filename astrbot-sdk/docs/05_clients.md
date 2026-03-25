@@ -77,7 +77,7 @@ for item in results:
 
 #### save()
 
-保存记忆。
+保存记忆。支持可选的 TTL（过期时间）。
 
 ```python
 await ctx.memory.save("user_pref", {"theme": "dark", "lang": "zh"})
@@ -85,6 +85,9 @@ await ctx.memory.save(
     "profile:alice",
     {"name": "Alice", "embedding_text": "Alice 喜欢蓝色和海边"},
 )
+
+# 带过期时间（秒）
+await ctx.memory.save("session_temp", {"state": "waiting"}, ttl_seconds=3600)
 ```
 
 #### get()
@@ -95,16 +98,29 @@ await ctx.memory.save(
 pref = await ctx.memory.get("user_pref")
 ```
 
-#### save_with_ttl()
+#### exists()
 
-保存带过期时间的记忆。
+检查键是否存在。
 
 ```python
-await ctx.memory.save_with_ttl(
-    "session_temp",
-    {"state": "waiting"},
-    ttl_seconds=3600
-)
+if await ctx.memory.exists("user_pref"):
+    print("配置存在")
+```
+
+#### list()
+
+列出键。
+
+```python
+keys = await ctx.memory.list("user_")
+```
+
+#### count()
+
+统计条目数。
+
+```python
+total = await ctx.memory.count()
 ```
 
 #### delete()
@@ -113,6 +129,15 @@ await ctx.memory.save_with_ttl(
 
 ```python
 await ctx.memory.delete("old_note")
+```
+
+#### delete_many()
+
+批量删除记忆。
+
+```python
+deleted = await ctx.memory.delete_many(["old1", "old2", "old3"])
+print(f"删除了 {deleted} 条记忆")
 ```
 
 #### stats()
@@ -234,6 +259,21 @@ await ctx.platform.send_by_id(
 )
 ```
 
+#### send_by_session()
+
+通过 MessageSession 对象发送。
+
+```python
+from astrbot_sdk import MessageSession
+
+session = MessageSession(
+    platform_id="qq",
+    message_type="group",
+    session_id="group:123456"
+)
+await ctx.platform.send_by_session(session, "Hello")
+```
+
 #### get_members()
 
 获取群成员。
@@ -289,9 +329,11 @@ from astrbot_sdk.decorators import provide_capability
 
 #### register_api()
 
-注册 API。
+注册 API。需要先使用 `@provide_capability` 声明处理函数。
 
 ```python
+from astrbot_sdk.decorators import provide_capability
+
 @provide_capability(
     name="my_plugin.http_handler",
     description="处理 HTTP 请求"
@@ -299,9 +341,17 @@ from astrbot_sdk.decorators import provide_capability
 async def handle_http_request(request_id: str, payload: dict, cancel_token):
     return {"status": 200, "body": {"result": "ok"}}
 
+# 方式 1：传入 handler 参数（推荐）
 await ctx.http.register_api(
     route="/my-api",
     handler=handle_http_request,
+    methods=["GET", "POST"]
+)
+
+# 方式 2：传入 handler_capability 字符串
+await ctx.http.register_api(
+    route="/my-api",
+    handler_capability="my_plugin.http_handler",
     methods=["GET", "POST"]
 )
 ```
@@ -369,6 +419,14 @@ config = await ctx.metadata.get_plugin_config()
 api_key = config.get("api_key")
 ```
 
+#### save_plugin_config()
+
+保存配置。
+
+```python
+await ctx.metadata.save_plugin_config({"api_key": "new_key", "debug": True})
+```
+
 ---
 
 ## 8. 其他客户端与管理器
@@ -381,6 +439,9 @@ api_key = config.get("api_key")
 - [ConversationManagerClient](./api/clients.md#conversationmanagerclient---对话管理客户端): 管理会话内的多轮对话；在 `Context` 中可通过 `ctx.conversations` 或 `ctx.conversation_manager` 访问。
 - [MessageHistoryManagerClient](./api/clients.md#messagehistorymanagerclient---消息历史管理客户端): 按 `MessageSession` 精确保存消息组件、发送者和元数据；在 `Context` 中可通过 `ctx.message_history` 或 `ctx.message_history_manager` 访问。
 - [KnowledgeBaseManagerClient](./api/clients.md#knowledgebasemanagerclient---知识库管理客户端): 管理知识库、文档和检索；在 `Context` 中可通过 `ctx.kbs` 或 `ctx.kb_manager` 访问。
+- [MCPManagerClient](./api/clients.md#mcpmanagerclient---mcp-管理客户端): 管理 MCP 服务器（本地/全局），创建临时会话并调用工具；在 `Context` 中可通过 `ctx.mcp` 或 `ctx.mcp_manager` 访问。
+- [PermissionClient](./api/clients.md#permissionclient---权限查询客户端): 查询用户角色和管理员列表；在 `Context` 中可通过 `ctx.permission` 访问。
+- [PermissionManagerClient](./api/clients.md#permissionmanagerclient---权限管理客户端): 添加/移除管理员；在 `Context` 中可通过 `ctx.permission_manager` 访问。
 - [RegistryClient](./api/clients.md#registryclient---handler-注册表客户端): 查询 handler 元数据，并管理 handler 白名单。
 - [SkillClient](./api/clients.md#skillclient---技能注册客户端): 在运行时注册、注销和列出插件技能目录。
 - [SessionPluginManager](./api/clients.md#sessionpluginmanager---会话插件管理器): 按会话检查插件启用状态并过滤 handler。

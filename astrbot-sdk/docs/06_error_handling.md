@@ -146,6 +146,48 @@ raise AstrBotError.protocol_version_mismatch("协议版本不匹配: v4 vs v5")
 - `retryable`: False
 - 需要升级 SDK 或 Core
 
+#### 7. protocol_error - 协议错误
+
+**场景**：协议解析或通信错误
+
+```python
+raise AstrBotError.protocol_error("无效的消息格式")
+```
+
+**属性**：
+- `retryable`: False
+- 检查通信双方的协议实现
+
+#### 8. rate_limited - 速率限制
+
+**场景**：触发速率限制
+
+```python
+raise AstrBotError.rate_limited(
+    hint="操作过于频繁，请 60 秒后再试",
+    details={"retry_after": 60}
+)
+```
+
+**属性**：
+- `retryable`: False
+- 等待速率窗口结束后可重试
+
+#### 9. cooldown_active - 冷却中
+
+**场景**：触发冷却时间
+
+```python
+raise AstrBotError.cooldown_active(
+    hint="命令冷却中，请 30 秒后再试",
+    details={"remaining_seconds": 30}
+)
+```
+
+**属性**：
+- `retryable`: False
+- 等待冷却结束后可重试
+
 ---
 
 ## 错误码参考
@@ -194,7 +236,7 @@ from astrbot_sdk.conversation import ConversationClosed
 async def demo_handler(self, event, ctx, session):
     try:
         # 处理对话...
-        session.close()  # 关闭会话
+        session.end()  # 结束会话
     except ConversationClosed:
         await event.reply("对话已结束")
 ```
@@ -251,16 +293,22 @@ async def risky_handler(self, event: MessageEvent, ctx: Context):
 ### 模式 2：分层错误处理
 
 ```python
+import aiohttp
+
 async def fetch_data(ctx: Context, url: str) -> dict:
     """获取数据，处理网络错误"""
     try:
-        return await ctx.http.get(url)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                return await response.json()
     except AstrBotError as e:
         if e.code == ErrorCodes.NETWORK_ERROR:
             # 网络错误可以重试
             ctx.logger.warning(f"网络错误，重试: {e}")
             await asyncio.sleep(1)
-            return await ctx.http.get(url)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    return await response.json()
         raise
 
 @on_command("data")
@@ -306,13 +354,14 @@ class MyPlugin(Star):
 from astrbot_sdk.errors import AstrBotError, ErrorCodes
 
 async def with_retry(
+    ctx,
     operation,
     max_retries: int = 3,
     delay: float = 1.0
 ):
     """带重试的操作"""
     last_error = None
-    
+
     for attempt in range(max_retries):
         try:
             return await operation()
@@ -320,11 +369,11 @@ async def with_retry(
             last_error = e
             if not e.retryable:
                 raise  # 不可重试错误直接抛出
-            
+
             ctx.logger.warning(f"第 {attempt + 1} 次尝试失败: {e}")
             if attempt < max_retries - 1:
                 await asyncio.sleep(delay * (attempt + 1))  # 指数退避
-    
+
     raise last_error
 
 # 使用
@@ -332,6 +381,7 @@ async def with_retry(
 async def fetch_handler(self, event: MessageEvent, ctx: Context):
     try:
         result = await with_retry(
+            ctx,
             lambda: ctx.llm.chat("生成内容"),
             max_retries=3
         )
