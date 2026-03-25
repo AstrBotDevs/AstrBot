@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
+    QQOfficialGatewayUnavailableError,
     QQOfficialPlatformAdapter,
 )
 
@@ -23,7 +24,9 @@ def _platform_config() -> dict:
 async def test_qqofficial_run_retries_after_gateway_timeout(monkeypatch):
     first_client = SimpleNamespace(
         start=AsyncMock(
-            side_effect=TypeError("'NoneType' object is not subscriptable")
+            side_effect=QQOfficialGatewayUnavailableError(
+                "gateway metadata unavailable during qq_official startup"
+            )
         ),
         close=AsyncMock(),
     )
@@ -75,6 +78,21 @@ async def test_qqofficial_run_reraises_non_retryable_error(monkeypatch):
 
     client.start.assert_awaited_once_with(appid="appid", secret="secret")
     client.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_qqofficial_bot_login_raises_gateway_error_when_metadata_missing():
+    adapter = QQOfficialPlatformAdapter(_platform_config(), {}, asyncio.Queue())
+    adapter.client.http = SimpleNamespace(login=AsyncMock(return_value=SimpleNamespace()))
+    adapter.client.api = SimpleNamespace(get_ws_url=AsyncMock(return_value=None))
+
+    with pytest.raises(
+        QQOfficialGatewayUnavailableError,
+        match="gateway metadata unavailable",
+    ):
+        await adapter.client._bot_login(SimpleNamespace())
+
+    await adapter.terminate()
 
 
 @pytest.mark.asyncio

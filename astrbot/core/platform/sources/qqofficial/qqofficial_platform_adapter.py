@@ -11,6 +11,7 @@ from typing import Any, cast
 import botpy
 import botpy.message
 from botpy import Client
+from botpy.client import ConnectionSession, Robot, Token
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -34,9 +35,42 @@ for handler in logging.root.handlers[:]:
 
 
 # QQ 机器人官方框架
+class QQOfficialGatewayUnavailableError(RuntimeError):
+    """botpy returned no usable gateway metadata during startup."""
+
+
 class botClient(Client):
     def set_platform(self, platform: QQOfficialPlatformAdapter) -> None:
         self.platform = platform
+
+    async def _bot_login(self, token: Token) -> None:
+        user = await self.http.login(token)
+
+        # botpy may return None here after a transient /gateway/bot timeout.
+        self._ws_ap = await self.api.get_ws_url()
+        session_limit = (
+            self._ws_ap.get("session_start_limit")
+            if isinstance(self._ws_ap, dict)
+            else None
+        )
+        max_concurrency = (
+            session_limit.get("max_concurrency")
+            if isinstance(session_limit, dict)
+            else None
+        )
+        if not isinstance(max_concurrency, int):
+            raise QQOfficialGatewayUnavailableError(
+                "gateway metadata unavailable during qq_official startup"
+            )
+
+        self._connection = ConnectionSession(
+            max_async=max_concurrency,
+            connect=self.bot_connect,
+            dispatch=self.ws_dispatch,
+            loop=self.loop,
+            api=self.api,
+        )
+        self._connection.state.robot = Robot(user)
 
     # 收到群消息
     async def on_group_at_message_create(
@@ -144,14 +178,17 @@ class QQOfficialPlatformAdapter(Platform):
 
     @staticmethod
     def _should_retry_startup_error(error: Exception) -> bool:
-        if isinstance(error, (asyncio.TimeoutError, ConnectionError, OSError)):
-            return True
-        if isinstance(error, TypeError):
-            error_msg = str(error)
-            return "NoneType" in error_msg and "subscriptable" in error_msg
-        return False
+        return isinstance(
+            error,
+            (
+                asyncio.TimeoutError,
+                ConnectionError,
+                OSError,
+                QQOfficialGatewayUnavailableError,
+            ),
+        )
 
-    async def _close_client(self) -> None:
+    async def _restart_client(self) -> None:
         try:
             await self.client.close()
         except asyncio.CancelledError:
@@ -162,10 +199,17 @@ class QQOfficialPlatformAdapter(Platform):
                 self.meta().id,
                 e,
             )
-
-    async def _recreate_client(self) -> None:
-        await self._close_client()
         self.client = self._create_client()
+
+    async def _sleep_until_retry_or_shutdown(self) -> bool:
+        try:
+            await asyncio.wait_for(
+                self._shutdown_event.wait(),
+                timeout=self.STARTUP_RETRY_DELAY_SECONDS,
+            )
+            return False
+        except asyncio.TimeoutError:
+            return True
 
     async def send_by_session(
         self,
@@ -557,22 +601,34 @@ class QQOfficialPlatformAdapter(Platform):
                         e,
                     )
 
-                await self._recreate_client()
-
-                try:
-                    await asyncio.wait_for(
-                        self._shutdown_event.wait(),
-                        timeout=self.STARTUP_RETRY_DELAY_SECONDS,
-                    )
-                except asyncio.TimeoutError:
-                    continue
+                await self._restart_client()
+                if not await self._sleep_until_retry_or_shutdown():
+                    break
         finally:
-            await self._close_client()
+            try:
+                await self.client.close()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.warning(
+                    "qq_official(%s): close client failed during shutdown: %s",
+                    self.meta().id,
+                    e,
+                )
 
     def get_client(self) -> botClient:
         return self.client
 
     async def terminate(self) -> None:
         self._shutdown_event.set()
-        await self._close_client()
+        try:
+            await self.client.close()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning(
+                "qq_official(%s): close client failed during shutdown: %s",
+                self.meta().id,
+                e,
+            )
         logger.info("QQ 官方机器人接口 适配器已被优雅地关闭")
