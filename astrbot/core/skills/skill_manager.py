@@ -30,16 +30,6 @@ _SANDBOX_SKILLS_CACHE_VERSION = 1
 _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
-def _normalize_archive_skill_name(name: str) -> str:
-    normalized = re.sub(r"[^A-Za-z0-9._-]", "-", name.strip())
-    normalized = normalized.strip("._-")
-    if not normalized:
-        normalized = "skill"
-    if not _SKILL_NAME_RE.match(normalized):
-        raise ValueError("Invalid skill name.")
-    return normalized
-
-
 def _default_sandbox_skill_path(name: str) -> str:
     return f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{name}/SKILL.md"
 
@@ -564,22 +554,23 @@ class SkillManager:
                 raise ValueError("Zip archive is empty.")
 
             has_root_skill_md = any(
-                PurePosixPath(name).name == "SKILL.md" and len(PurePosixPath(name).parts) == 1
+                len(parts := PurePosixPath(name).parts) == 1
+                and parts[0] in {"SKILL.md", "skill.md"}
                 for name in file_names
             )
-            has_root_legacy_skill_md = any(
-                PurePosixPath(name).name == "skill.md" and len(PurePosixPath(name).parts) == 1
-                for name in file_names
-            )
-            root_mode = has_root_skill_md or has_root_legacy_skill_md
+            root_mode = has_root_skill_md
 
             archive_skill_name = None
-            if skill_name_hint:
-                archive_skill_name = _normalize_archive_skill_name(skill_name_hint)
+            if skill_name_hint is not None:
+                archive_skill_name = skill_name_hint.strip()
+                if archive_skill_name and not _SKILL_NAME_RE.match(archive_skill_name):
+                    raise ValueError("Invalid skill name.")
 
             if root_mode:
                 archive_hint = (archive_skill_name or zip_path_obj.stem).strip()
-                skill_name = _normalize_archive_skill_name(archive_hint)
+                if not archive_hint or not _SKILL_NAME_RE.match(archive_hint):
+                    raise ValueError("Invalid skill name.")
+                skill_name = archive_hint
             else:
                 top_dirs = {
                     PurePosixPath(name).parts[0] for name in file_names if name.strip()
@@ -594,6 +585,8 @@ class SkillManager:
                 ):
                     raise ValueError("Invalid skill folder name.")
                 if archive_skill_name:
+                    if not _SKILL_NAME_RE.match(archive_skill_name):
+                        raise ValueError("Invalid skill name.")
                     skill_name = archive_skill_name
                 else:
                     skill_name = archive_root_name
