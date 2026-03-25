@@ -6,6 +6,8 @@ import uuid
 from typing import cast
 
 import aiofiles
+import aiofiles.os
+import aiofiles.ospath
 import botpy
 import botpy.errors
 import botpy.message
@@ -611,7 +613,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     )
                     converted_record_wav_path = None
                     try:
-                        if not QQOfficialMessageEvent._is_wav_audio_file(
+                        if not await QQOfficialMessageEvent._is_wav_audio_file(
                             record_wav_path
                         ):
                             converted_record_wav_path = os.path.join(
@@ -635,11 +637,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         logger.error(f"处理语音时出错: {e}")
                         record_file_path = None
                     finally:
-                        if converted_record_wav_path and os.path.exists(
+                        if converted_record_wav_path and await aiofiles.ospath.exists(
                             converted_record_wav_path
                         ):
                             try:
-                                os.remove(converted_record_wav_path)
+                                await aiofiles.os.remove(converted_record_wav_path)
                             except OSError as e:
                                 logger.warning(
                                     f"[QQOfficial] failed to remove converted audio file: {e}"
@@ -673,10 +675,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         )
 
     @staticmethod
-    def _is_wav_audio_file(file_path: str) -> bool:
+    async def _is_wav_audio_file(file_path: str) -> bool:
         try:
-            with open(file_path, "rb") as f:
-                header = f.read(12)
+            async with aiofiles.open(file_path, "rb") as f:
+                header = await f.read(12)
         except OSError:
             return False
         return len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WAVE"
