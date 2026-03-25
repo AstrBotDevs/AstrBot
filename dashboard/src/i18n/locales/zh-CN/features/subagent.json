@@ -7,6 +7,8 @@
   "actions": {
     "refresh": "刷新",
     "save": "保存",
+    "import": "导入 JSON",
+    "export": "导出 JSON",
     "add": "新增 SubAgent",
     "delete": "删除",
     "close": "关闭"
@@ -49,6 +51,11 @@
   "messages": {
     "loadConfigFailed": "获取配置失败",
     "loadPersonaFailed": "获取 Persona 列表失败",
+    "importSuccess": "配置导入成功",
+    "importFailed": "导入配置失败",
+    "importInvalidJson": "导入文件不是有效的 JSON 对象",
+    "exportSuccess": "配置导出成功",
+    "exportFailed": "导出配置失败",
     "nameMissing": "存在未填写名称的 SubAgent",
     "nameInvalid": "SubAgent 名称不合法：仅允许英文小写字母/数字/下划线，且需以字母开头",
     "nameDuplicate": "SubAgent 名称重复：{name}",

@@ -17,6 +17,22 @@
         <v-btn
           variant="text"
           color="primary"
+          prepend-icon="mdi-download"
+          @click="exportConfig"
+        >
+          {{ tm('actions.export') }}
+        </v-btn>
+        <v-btn
+          variant="text"
+          color="primary"
+          prepend-icon="mdi-upload"
+          @click="openImportDialog"
+        >
+          {{ tm('actions.import') }}
+        </v-btn>
+        <v-btn
+          variant="text"
+          color="primary"
           prepend-icon="mdi-refresh"
           :loading="loading"
           @click="reload"
@@ -244,6 +260,14 @@
          <v-btn variant="text" @click="snackbar.show = false">{{ tm('actions.close') }}</v-btn>
       </template>
     </v-snackbar>
+
+    <input
+      ref="importFileInputRef"
+      type="file"
+      accept="application/json,.json"
+      style="display: none;"
+      @change="handleImportFile"
+    />
   </div>
 </template>
 
@@ -275,6 +299,7 @@ const { tm } = useModuleI18n('features/subagent')
 
 const loading = ref(false)
 const saving = ref(false)
+const importFileInputRef = ref<HTMLInputElement | null>(null)
 
 const snackbar = ref({
   show: false,
@@ -297,7 +322,7 @@ const mainStateDescription = computed(() =>
 )
 
 function normalizeConfig(raw: any): SubAgentConfig {
-  const main_enable = !!raw?.main_enable
+  const main_enable = raw?.main_enable !== undefined ? !!raw.main_enable : !!raw?.enable
   const remove_main_duplicate_tools = !!raw?.remove_main_duplicate_tools
   const agentsRaw = Array.isArray(raw?.agents) ? raw.agents : []
 
@@ -352,6 +377,65 @@ function removeAgent(idx: number) {
   cfg.value.agents.splice(idx, 1)
 }
 
+function toPersistedConfig(source: SubAgentConfig) {
+  return {
+    main_enable: !!source.main_enable,
+    remove_main_duplicate_tools: !!source.remove_main_duplicate_tools,
+    agents: source.agents.map((a) => ({
+      name: (a.name || '').trim(),
+      persona_id: (a.persona_id || '').trim(),
+      public_description: a.public_description || '',
+      enabled: a.enabled !== false,
+      provider_id: a.provider_id
+    }))
+  }
+}
+
+function exportConfig() {
+  try {
+    const payload = toPersistedConfig(cfg.value)
+    const json = JSON.stringify(payload, null, 2)
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const date = new Date().toISOString().slice(0, 10)
+    link.href = url
+    link.download = `subagent-config-${date}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    toast(tm('messages.exportSuccess'), 'success')
+  } catch (e: unknown) {
+    toast(tm('messages.exportFailed'), 'error')
+  }
+}
+
+function openImportDialog() {
+  importFileInputRef.value?.click()
+}
+
+async function handleImportFile(event: Event) {
+  const target = event.target as HTMLInputElement | null
+  const file = target?.files?.[0]
+  if (!file) return
+
+  try {
+    const text = await file.text()
+    const parsed = JSON.parse(text) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      toast(tm('messages.importInvalidJson'), 'error')
+      return
+    }
+    cfg.value = normalizeConfig(parsed)
+    toast(tm('messages.importSuccess'), 'success')
+  } catch (e: unknown) {
+    toast(tm('messages.importFailed'), 'error')
+  } finally {
+    if (target) target.value = ''
+  }
+}
+
 function validateBeforeSave(): boolean {
   const nameRe = /^[a-z][a-z0-9_]{0,63}$/
   const seen = new Set<string>()
@@ -382,17 +466,7 @@ async function save() {
   if (!validateBeforeSave()) return
   saving.value = true
   try {
-    const payload = {
-      main_enable: cfg.value.main_enable,
-      remove_main_duplicate_tools: cfg.value.remove_main_duplicate_tools,
-      agents: cfg.value.agents.map((a) => ({
-        name: a.name,
-        persona_id: a.persona_id,
-        public_description: a.public_description,
-        enabled: a.enabled,
-        provider_id: a.provider_id
-      }))
-    }
+    const payload = toPersistedConfig(cfg.value)
 
     const res = await axios.post('/api/subagent/config', payload)
     if (res.data.status === 'ok') {
