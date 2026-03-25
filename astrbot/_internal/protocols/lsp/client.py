@@ -43,7 +43,21 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         """True if connected to an LSP server."""
         return self._connected
 
+    async def _stop_reader_task(self) -> None:
+        reader_task = self._reader_task
+        if reader_task is None:
+            return
+        self._reader_task = None
+        reader_task.cancel()
+        try:
+            await reader_task
+        except asyncio.CancelledError:
+            pass
+
     def _handle_reader_task_done(self, task: asyncio.Task[None]) -> None:
+        if self._reader_task is task:
+            self._reader_task = None
+
         try:
             exception = task.exception()
         except asyncio.CancelledError:
@@ -56,10 +70,7 @@ class AstrbotLspClient(BaseAstrbotLspClient):
             return
 
         self._connected = False
-        log.error(
-            "LSP reader task failed",
-            exc_info=(type(exception), exception, exception.__traceback__),
-        )
+        log.error("LSP reader task failed", exc_info=exception)
 
     async def connect(self) -> None:
         """
@@ -83,6 +94,8 @@ class AstrbotLspClient(BaseAstrbotLspClient):
             workspace_uri: Root URI of the workspace to serve
         """
         log.debug(f"Starting LSP server: {' '.join(command)}")
+
+        await self._stop_reader_task()
 
         self._server_process = await anyio.open_process(
             command,
@@ -233,13 +246,7 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         """Shutdown the LSP client."""
         self._connected = False
 
-        if self._reader_task:
-            self._reader_task.cancel()
-            try:
-                await self._reader_task
-            except asyncio.CancelledError:
-                pass
-            self._reader_task = None
+        await self._stop_reader_task()
 
         if self._server_process:
             try:

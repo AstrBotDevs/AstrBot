@@ -39,3 +39,34 @@ async def test_lsp_reader_task_failure_marks_client_disconnected_and_logs():
 
         assert client.connected is False
         mock_log.error.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_lsp_connect_to_server_cancels_previous_reader_task_before_restart():
+    """Test reconnect tears down an existing reader task before replacing it."""
+    client = AstrbotLspClient()
+    fake_process = SimpleNamespace(stdout=MagicMock(), stdin=MagicMock())
+
+    async def first_reader() -> None:
+        await asyncio.Event().wait()
+
+    with (
+        patch(
+            "astrbot._internal.protocols.lsp.client.anyio.open_process",
+            AsyncMock(return_value=fake_process),
+        ),
+        patch.object(client, "send_request", AsyncMock(return_value={})),
+        patch.object(client, "send_notification", AsyncMock()),
+    ):
+        client._read_responses = first_reader  # type: ignore[method-assign]
+        await client.connect_to_server(["python", "first_lsp.py"], "file:///tmp")
+        first_task = client._reader_task
+        assert first_task is not None
+
+        second_reader = AsyncMock(return_value=None)
+        client._read_responses = second_reader  # type: ignore[method-assign]
+        await client.connect_to_server(["python", "second_lsp.py"], "file:///tmp")
+
+        assert first_task.cancelled() is True
+        assert client._reader_task is not None
+        assert client._reader_task is not first_task
