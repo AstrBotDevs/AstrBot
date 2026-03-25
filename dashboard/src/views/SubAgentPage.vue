@@ -385,7 +385,7 @@ function toPersistedConfig(source: SubAgentConfig) {
       name: (a.name || '').trim(),
       persona_id: (a.persona_id || '').trim(),
       public_description: a.public_description || '',
-      enabled: a.enabled !== false,
+      enabled: a.enabled,
       provider_id: a.provider_id
     }))
   }
