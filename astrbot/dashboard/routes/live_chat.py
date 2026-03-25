@@ -142,6 +142,15 @@ class LiveChatRoute(Route):
         """Unified Chat WebSocket 处理器(支持 ct=live/chat)"""
         await self._unified_ws_loop(force_ct=None)
 
+    async def _ensure_runtime_ready(self) -> bool:
+        if is_runtime_request_ready(self.core_lifecycle):
+            return True
+        await websocket.close(
+            1013,
+            get_runtime_guard_message(self.core_lifecycle),
+        )
+        return False
+
     async def _unified_ws_loop(self, force_ct: str | None = None) -> None:
         """统一 WebSocket 循环"""
         # WebSocket 不能通过 header 传递 token,需要从 query 参数获取
@@ -162,11 +171,7 @@ class LiveChatRoute(Route):
             await websocket.close(1008, "Invalid token")
             return
 
-        if not is_runtime_request_ready(self.core_lifecycle):
-            await websocket.close(
-                1013,
-                get_runtime_guard_message(self.core_lifecycle),
-            )
+        if not await self._ensure_runtime_ready():
             return
 
         session_id = f"webchat_live!{username}!{uuid.uuid4()}"
@@ -177,18 +182,10 @@ class LiveChatRoute(Route):
 
         try:
             while True:
-                if not is_runtime_request_ready(self.core_lifecycle):
-                    await websocket.close(
-                        1013,
-                        get_runtime_guard_message(self.core_lifecycle),
-                    )
+                if not await self._ensure_runtime_ready():
                     return
                 message = await websocket.receive_json()
-                if not is_runtime_request_ready(self.core_lifecycle):
-                    await websocket.close(
-                        1013,
-                        get_runtime_guard_message(self.core_lifecycle),
-                    )
+                if not await self._ensure_runtime_ready():
                     return
                 ct = force_ct or message.get("ct", "live")
                 if ct == "chat":
@@ -510,11 +507,7 @@ class LiveChatRoute(Route):
             refs = {}
 
             while True:
-                if not is_runtime_request_ready(self.core_lifecycle):
-                    await websocket.close(
-                        1013,
-                        get_runtime_guard_message(self.core_lifecycle),
-                    )
+                if not await self._ensure_runtime_ready():
                     break
                 if session.should_interrupt:
                     session.should_interrupt = False
@@ -525,11 +518,7 @@ class LiveChatRoute(Route):
                 except asyncio.TimeoutError:
                     continue
 
-                if not is_runtime_request_ready(self.core_lifecycle):
-                    await websocket.close(
-                        1013,
-                        get_runtime_guard_message(self.core_lifecycle),
-                    )
+                if not await self._ensure_runtime_ready():
                     break
 
                 if not result:
@@ -810,11 +799,7 @@ class LiveChatRoute(Route):
 
             try:
                 while True:
-                    if not is_runtime_request_ready(self.core_lifecycle):
-                        await websocket.close(
-                            1013,
-                            get_runtime_guard_message(self.core_lifecycle),
-                        )
+                    if not await self._ensure_runtime_ready():
                         break
                     if session.should_interrupt:
                         # 用户打断,停止处理
@@ -837,11 +822,7 @@ class LiveChatRoute(Route):
                     except asyncio.TimeoutError:
                         continue
 
-                    if not is_runtime_request_ready(self.core_lifecycle):
-                        await websocket.close(
-                            1013,
-                            get_runtime_guard_message(self.core_lifecycle),
-                        )
+                    if not await self._ensure_runtime_ready():
                         break
 
                     if not result:

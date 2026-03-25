@@ -250,6 +250,14 @@ class OpenApiRoute(Route):
             }
         )
 
+    async def _ensure_runtime_ready(self) -> bool:
+        if is_runtime_request_ready(self.core_lifecycle):
+            return True
+        message = get_runtime_guard_message(self.core_lifecycle)
+        await self._send_chat_ws_error(message, "RUNTIME_NOT_READY")
+        await websocket.close(1013, message)
+        return False
+
     async def _update_session_config_route(
         self,
         *,
@@ -376,20 +384,14 @@ class OpenApiRoute(Route):
             agent_stats = {}
             refs = {}
             while True:
-                if not is_runtime_request_ready(self.core_lifecycle):
-                    message = get_runtime_guard_message(self.core_lifecycle)
-                    await self._send_chat_ws_error(message, "RUNTIME_NOT_READY")
-                    await websocket.close(1013, message)
+                if not await self._ensure_runtime_ready():
                     return
                 try:
                     result = await asyncio.wait_for(back_queue.get(), timeout=1)
                 except asyncio.TimeoutError:
                     continue
 
-                if not is_runtime_request_ready(self.core_lifecycle):
-                    message = get_runtime_guard_message(self.core_lifecycle)
-                    await self._send_chat_ws_error(message, "RUNTIME_NOT_READY")
-                    await websocket.close(1013, message)
+                if not await self._ensure_runtime_ready():
                     return
 
                 if not result:
@@ -529,27 +531,15 @@ class OpenApiRoute(Route):
             await websocket.close(1008, auth_err or "Unauthorized")
             return
 
-        if not is_runtime_request_ready(self.core_lifecycle):
-            message = get_runtime_guard_message(self.core_lifecycle)
-            await self._send_chat_ws_error(message, "RUNTIME_NOT_READY")
-            await websocket.close(1013, message)
+        if not await self._ensure_runtime_ready():
             return
 
         try:
             while True:
-                if not is_runtime_request_ready(self.core_lifecycle):
-                    message = get_runtime_guard_message(self.core_lifecycle)
-                    await self._send_chat_ws_error(message, "RUNTIME_NOT_READY")
-                    await websocket.close(1013, message)
+                if not await self._ensure_runtime_ready():
                     return
                 message = await websocket.receive_json()
-                if not is_runtime_request_ready(self.core_lifecycle):
-                    message_text = get_runtime_guard_message(self.core_lifecycle)
-                    await self._send_chat_ws_error(
-                        message_text,
-                        "RUNTIME_NOT_READY",
-                    )
-                    await websocket.close(1013, message_text)
+                if not await self._ensure_runtime_ready():
                     return
                 if not isinstance(message, dict):
                     await self._send_chat_ws_error(

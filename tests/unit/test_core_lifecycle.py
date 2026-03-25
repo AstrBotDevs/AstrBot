@@ -98,7 +98,13 @@ def build_initialize_test_mocks():
         return None
 
     mocks["update_llm_metadata"] = update_llm_metadata
-    mocks["create_task"] = MagicMock(return_value=MagicMock())
+
+    def discard_task(coro, *args, **kwargs):
+        del args, kwargs
+        coro.close()
+        return MagicMock()
+
+    mocks["create_task"] = MagicMock(side_effect=discard_task)
     mocks["init_subagent_orchestrator"] = AsyncMock()
 
     return mocks
@@ -1665,6 +1671,42 @@ class TestAstrBotCoreLifecycleStopAdditional:
 
         await lifecycle.stop()
 
+    @pytest.mark.asyncio
+    async def test_stop_awaits_metadata_update_task_before_manager_termination(
+        self, mock_log_broker, mock_db
+    ):
+        """Test stop waits for metadata task cancellation before teardown."""
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle.temp_dir_cleaner = None
+        lifecycle.cron_manager = None
+        lifecycle.plugin_manager = MagicMock()
+        lifecycle.plugin_manager.context = MagicMock()
+        lifecycle.plugin_manager.context.get_all_stars = MagicMock(return_value=[])
+        lifecycle.platform_manager = MagicMock()
+        lifecycle.platform_manager.terminate = AsyncMock()
+        lifecycle.kb_manager = MagicMock()
+        lifecycle.kb_manager.terminate = AsyncMock()
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+
+        cleanup_finished = asyncio.Event()
+
+        async def metadata_update() -> None:
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cleanup_finished.set()
+                raise
+
+        async def terminate_provider() -> None:
+            assert cleanup_finished.is_set()
+
+        lifecycle.provider_manager = MagicMock()
+        lifecycle.provider_manager.terminate = AsyncMock(side_effect=terminate_provider)
+        lifecycle.metadata_update_task = asyncio.create_task(metadata_update())
+        await asyncio.sleep(0)
+
+        await lifecycle.stop()
+
 
 class TestAstrBotCoreLifecycleRestart:
     """Tests for AstrBotCoreLifecycle.restart method."""
@@ -1807,6 +1849,42 @@ class TestAstrBotCoreLifecycleRestart:
 
         lifecycle.provider_manager = MagicMock()
         lifecycle.provider_manager.terminate = AsyncMock(side_effect=terminate_provider)
+
+        with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
+            await lifecycle.restart()
+
+        mock_thread.assert_called_once()
+        mock_thread.return_value.start.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_restart_awaits_metadata_update_task_before_manager_termination(
+        self, mock_log_broker, mock_db
+    ):
+        """Test restart waits for metadata task cancellation before teardown."""
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle.platform_manager = MagicMock()
+        lifecycle.platform_manager.terminate = AsyncMock()
+        lifecycle.kb_manager = MagicMock()
+        lifecycle.kb_manager.terminate = AsyncMock()
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+        lifecycle.astrbot_updator = MagicMock()
+
+        cleanup_finished = asyncio.Event()
+
+        async def metadata_update() -> None:
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cleanup_finished.set()
+                raise
+
+        async def terminate_provider() -> None:
+            assert cleanup_finished.is_set()
+
+        lifecycle.provider_manager = MagicMock()
+        lifecycle.provider_manager.terminate = AsyncMock(side_effect=terminate_provider)
+        lifecycle.metadata_update_task = asyncio.create_task(metadata_update())
+        await asyncio.sleep(0)
 
         with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
             await lifecycle.restart()

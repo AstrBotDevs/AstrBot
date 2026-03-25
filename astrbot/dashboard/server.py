@@ -68,6 +68,36 @@ from .routes.route import is_runtime_request_ready, runtime_loading_response
 # Static assets shipped inside the wheel (built during `hatch build`).
 _BUNDLED_DIST = Path(__file__).parent / "dist"
 
+_PUBLIC_ALLOWED_ENDPOINT_PREFIXES = (
+    "/api/auth/login",
+    "/api/file",
+    "/api/platform/webhook",
+    "/api/stat/start-time",
+    "/api/backup/download",
+)
+_RUNTIME_EXTRA_BYPASS_ENDPOINT_PREFIXES = (
+    "/api/stat/version",
+    "/api/stat/runtime-status",
+    "/api/stat/restart-core",
+    "/api/stat/changelog",
+    "/api/stat/changelog/list",
+    "/api/stat/first-notice",
+)
+_RUNTIME_BYPASS_ENDPOINT_PREFIXES = (
+    tuple(
+        prefix
+        for prefix in _PUBLIC_ALLOWED_ENDPOINT_PREFIXES
+        if prefix != "/api/platform/webhook"
+    )
+    + _RUNTIME_EXTRA_BYPASS_ENDPOINT_PREFIXES
+)
+_RUNTIME_FAILED_RECOVERY_ENDPOINT_PREFIXES = (
+    "/api/config/",
+    "/api/plugin/reload-failed",
+    "/api/plugin/uninstall-failed",
+    "/api/plugin/source/get-failed-plugins",
+)
+
 
 APP: Quart
 _ENV_PLACEHOLDER_RE = re.compile(
@@ -124,30 +154,10 @@ class AstrBotJSONProvider(DefaultJSONProvider):
 class AstrBotDashboard:
     """AstrBot Web Dashboard"""
 
-    ALLOWED_ENDPOINT_PREFIXES = (
-        "/api/auth/login",
-        "/api/file",
-        "/api/platform/webhook",
-        "/api/stat/start-time",
-        "/api/backup/download",
-    )
-    RUNTIME_BYPASS_ENDPOINT_PREFIXES = (
-        "/api/auth/login",
-        "/api/file",
-        "/api/stat/version",
-        "/api/stat/runtime-status",
-        "/api/stat/start-time",
-        "/api/stat/restart-core",
-        "/api/stat/changelog",
-        "/api/stat/changelog/list",
-        "/api/stat/first-notice",
-        "/api/backup/download",
-    )
+    ALLOWED_ENDPOINT_PREFIXES = _PUBLIC_ALLOWED_ENDPOINT_PREFIXES
+    RUNTIME_BYPASS_ENDPOINT_PREFIXES = _RUNTIME_BYPASS_ENDPOINT_PREFIXES
     RUNTIME_FAILED_RECOVERY_ENDPOINT_PREFIXES = (
-        "/api/config/",
-        "/api/plugin/reload-failed",
-        "/api/plugin/uninstall-failed",
-        "/api/plugin/source/get-failed-plugins",
+        _RUNTIME_FAILED_RECOVERY_ENDPOINT_PREFIXES
     )
 
     def __init__(
@@ -361,8 +371,9 @@ class AstrBotDashboard:
     async def guarded_srv_plug_route(
         self, subpath: str, *args, **kwargs
     ) -> ResponseReturnValue:
-        if not is_runtime_request_ready(self.core_lifecycle):
-            return runtime_loading_response(self.core_lifecycle)
+        guard_resp = self._maybe_runtime_guard(request.path)
+        if guard_resp is not None:
+            return guard_resp
         return await self.srv_plug_route(subpath, *args, **kwargs)
 
     def _should_bypass_runtime_guard(self, path: str) -> bool:
@@ -381,6 +392,23 @@ class AstrBotDashboard:
             path.startswith(prefix)
             for prefix in self.RUNTIME_FAILED_RECOVERY_ENDPOINT_PREFIXES
         )
+
+    def _maybe_runtime_guard(
+        self,
+        path: str,
+        *,
+        include_failure_details: bool = True,
+    ) -> ResponseReturnValue | None:
+        if self._should_bypass_runtime_guard(path):
+            return None
+        if self._should_allow_failed_runtime_recovery(path):
+            return None
+        if not is_runtime_request_ready(self.core_lifecycle):
+            return runtime_loading_response(
+                self.core_lifecycle,
+                include_failure_details=include_failure_details,
+            )
+        return None
 
     async def auth_middleware(self):
         # 放行CORS预检请求
@@ -420,27 +448,21 @@ class AstrBotDashboard:
             g.api_key_scopes = scopes
             g.username = f"api_key:{api_key.key_id}"
             await self.db.touch_api_key(api_key.key_id)
-            if not self._should_bypass_runtime_guard(
-                request.path
-            ) and not self._should_allow_failed_runtime_recovery(
-                request.path
-            ) and not is_runtime_request_ready(self.core_lifecycle):
-                return runtime_loading_response(
-                    self.core_lifecycle,
-                    include_failure_details=False,
-                )
+            guard_resp = self._maybe_runtime_guard(
+                request.path,
+                include_failure_details=False,
+            )
+            if guard_resp is not None:
+                return guard_resp
             return None
 
         if any(request.path.startswith(p) for p in self.ALLOWED_ENDPOINT_PREFIXES):
-            if not self._should_bypass_runtime_guard(
-                request.path
-            ) and not self._should_allow_failed_runtime_recovery(
-                request.path
-            ) and not is_runtime_request_ready(self.core_lifecycle):
-                return runtime_loading_response(
-                    self.core_lifecycle,
-                    include_failure_details=False,
-                )
+            guard_resp = self._maybe_runtime_guard(
+                request.path,
+                include_failure_details=False,
+            )
+            if guard_resp is not None:
+                return guard_resp
             return None
 
         token = request.headers.get("Authorization")
@@ -460,12 +482,9 @@ class AstrBotDashboard:
         except jwt.PyJWTError:
             return self._unauthorized("Token 无效")
 
-        if not self._should_bypass_runtime_guard(
-            request.path
-        ) and not self._should_allow_failed_runtime_recovery(
-            request.path
-        ) and not is_runtime_request_ready(self.core_lifecycle):
-            return runtime_loading_response(self.core_lifecycle)
+        guard_resp = self._maybe_runtime_guard(request.path)
+        if guard_resp is not None:
+            return guard_resp
 
     @staticmethod
     def _unauthorized(msg: str):
@@ -473,11 +492,15 @@ class AstrBotDashboard:
         r.status_code = 401
         return r
 
+    def _get_plugin_handler(self, subpath: str, method: str) -> Callable | None:
+        handler = self._plugin_route_map.get((f"/{subpath}", method))
+        if handler is not None:
+            return handler
+        self._init_plugin_route_index()
+        return self._plugin_route_map.get((f"/{subpath}", method))
+
     async def srv_plug_route(self, subpath: str, *args, **kwargs):
-        handler = self._plugin_route_map.get((f"/{subpath}", request.method))
-        if not handler:
-            self._init_plugin_route_index()
-            handler = self._plugin_route_map.get((f"/{subpath}", request.method))
+        handler = self._get_plugin_handler(subpath, request.method)
         if not handler:
             return jsonify(Response().error("未找到该路由").to_json())
 
