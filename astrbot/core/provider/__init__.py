@@ -1,17 +1,17 @@
 from .entities import ProviderMetaData
 from .provider import (
-    Provider,
-    STTProvider,
-    STTProvider,
     EmbeddingProvider,
+    Provider,
     RerankProvider,
+    STTProvider,
+    TTSProvider,
 )
 
 __all__ = [
     "Provider",
     "ProviderMetaData",
     "STTProvider",
-    "STTProvider",
     "EmbeddingProvider",
     "RerankProvider",
+    "TTSProvider",
 ]
