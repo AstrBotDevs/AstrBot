@@ -11,12 +11,15 @@ from typing import Any
 
 import anyio
 
+from astrbot import logger
 from astrbot._internal.abc.base_astrbot_orchestrator import BaseAstrbotOrchestrator
 from astrbot._internal.protocols.abp.client import AstrbotAbpClient
 from astrbot._internal.protocols.acp.client import AstrbotAcpClient
 from astrbot._internal.protocols.lsp.client import AstrbotLspClient
 from astrbot._internal.protocols.mcp.client import McpClient
 from astrbot._internal.stars import RuntimeStatusStar
+
+log = logger
 
 
 class AstrbotOrchestrator(BaseAstrbotOrchestrator):

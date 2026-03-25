@@ -30,10 +30,31 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_temp_path,
 )
 
-from .route import Response, Route, RouteContext
+from .route import Response, Route, RouteContext, guard_runtime_ready
 
 PLUGIN_UPDATE_CONCURRENCY = (
     3  # limit concurrent updates to avoid overwhelming plugin sources
+)
+
+PLUGIN_ROUTE_DEFINITIONS = (
+    ("/plugin/get", "GET", "get_plugins", True),
+    ("/plugin/check-compat", "POST", "check_plugin_compatibility", False),
+    ("/plugin/install", "POST", "install_plugin", True),
+    ("/plugin/install-upload", "POST", "install_plugin_upload", True),
+    ("/plugin/update", "POST", "update_plugin", True),
+    ("/plugin/update-all", "POST", "update_all_plugins", True),
+    ("/plugin/uninstall", "POST", "uninstall_plugin", True),
+    ("/plugin/uninstall-failed", "POST", "uninstall_failed_plugin", False),
+    ("/plugin/market_list", "GET", "get_online_plugins", False),
+    ("/plugin/off", "POST", "off_plugin", True),
+    ("/plugin/on", "POST", "on_plugin", True),
+    ("/plugin/reload-failed", "POST", "reload_failed_plugins", False),
+    ("/plugin/reload", "POST", "reload_plugins", True),
+    ("/plugin/readme", "GET", "get_plugin_readme", True),
+    ("/plugin/changelog", "GET", "get_plugin_changelog", True),
+    ("/plugin/source/get", "GET", "get_custom_source", False),
+    ("/plugin/source/save", "POST", "save_custom_source", False),
+    ("/plugin/source/get-failed-plugins", "GET", "get_failed_plugins", False),
 )
 
 
@@ -52,28 +73,18 @@ class PluginRoute(Route):
         plugin_manager: PluginManager,
     ) -> None:
         super().__init__(context)
-        self.routes = {
-            "/plugin/get": ("GET", self.get_plugins),
-            "/plugin/check-compat": ("POST", self.check_plugin_compatibility),
-            "/plugin/install": ("POST", self.install_plugin),
-            "/plugin/install-upload": ("POST", self.install_plugin_upload),
-            "/plugin/update": ("POST", self.update_plugin),
-            "/plugin/update-all": ("POST", self.update_all_plugins),
-            "/plugin/uninstall": ("POST", self.uninstall_plugin),
-            "/plugin/uninstall-failed": ("POST", self.uninstall_failed_plugin),
-            "/plugin/market_list": ("GET", self.get_online_plugins),
-            "/plugin/off": ("POST", self.off_plugin),
-            "/plugin/on": ("POST", self.on_plugin),
-            "/plugin/reload-failed": ("POST", self.reload_failed_plugins),
-            "/plugin/reload": ("POST", self.reload_plugins),
-            "/plugin/readme": ("GET", self.get_plugin_readme),
-            "/plugin/changelog": ("GET", self.get_plugin_changelog),
-            "/plugin/source/get": ("GET", self.get_custom_source),
-            "/plugin/source/save": ("POST", self.save_custom_source),
-            "/plugin/source/get-failed-plugins": ("GET", self.get_failed_plugins),
-        }
         self.core_lifecycle = core_lifecycle
         self.plugin_manager = plugin_manager
+        self._guard_runtime_ready = lambda handler: guard_runtime_ready(
+            self.core_lifecycle,
+            handler,
+        )
+        self.routes = {}
+        for path, method, handler_name, requires_runtime in PLUGIN_ROUTE_DEFINITIONS:
+            handler = getattr(self, handler_name)
+            if requires_runtime:
+                handler = self._guard_runtime_ready(handler)
+            self.routes[path] = (method, handler)
         self.register_routes()
 
         self.translated_event_type = {

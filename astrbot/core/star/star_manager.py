@@ -108,9 +108,9 @@ async def _temporary_filtered_requirements_file(
         try:
             yield filtered_requirements_path
         finally:
-            if filtered_requirements_path and os.path.exists(
+            if filtered_requirements_path and await anyio.Path(
                 filtered_requirements_path
-            ):
+            ).exists():
                 try:
                     await to_thread.run_sync(os.remove, filtered_requirements_path)
                 except OSError as exc:
@@ -741,6 +741,24 @@ class PluginManager:
             result = await self.load(specified_module_path)
 
             return result
+
+    async def cleanup_loaded_plugins(self) -> None:
+        """Terminate and unbind all currently loaded plugins without reloading."""
+        async with self._pm_lock:
+            for smd in list(star_registry):
+                try:
+                    await self._terminate_plugin(smd)
+                except Exception as e:
+                    logger.warning(traceback.format_exc())
+                    logger.warning(
+                        f"插件 {smd.name} 未被正常终止: {e!s}, 可能会导致该插件运行不正常｡",
+                    )
+                if smd.name and smd.module_path:
+                    await self._unbind_plugin(smd.name, smd.module_path)
+
+            star_handlers_registry.clear()
+            star_map.clear()
+            star_registry.clear()
 
     async def load(
         self,

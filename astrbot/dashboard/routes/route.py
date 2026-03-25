@@ -1,8 +1,89 @@
 from dataclasses import dataclass
+from functools import wraps
+from typing import TYPE_CHECKING, Any
 
-from quart import Quart
+from quart import Quart, jsonify
 
 from astrbot.core.config.astrbot_config import AstrBotConfig
+
+if TYPE_CHECKING:
+    from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+
+
+RUNTIME_LOADING_MESSAGE = "Runtime is still loading. Please try again shortly."
+RUNTIME_FAILED_MESSAGE = "Runtime bootstrap failed. Please check logs and retry."
+
+
+def is_runtime_request_ready(core_lifecycle: "AstrBotCoreLifecycle") -> bool:
+    return getattr(core_lifecycle, "runtime_request_ready", core_lifecycle.runtime_ready)
+
+
+def get_runtime_guard_message(core_lifecycle: "AstrBotCoreLifecycle") -> str:
+    failed = (
+        core_lifecycle.runtime_failed
+        or core_lifecycle.runtime_bootstrap_error is not None
+    )
+    return RUNTIME_FAILED_MESSAGE if failed else RUNTIME_LOADING_MESSAGE
+
+
+def build_runtime_status_data(
+    core_lifecycle: "AstrBotCoreLifecycle",
+    *,
+    include_failure_details: bool = True,
+) -> dict[str, str | bool | None]:
+    failure_message = None
+    if include_failure_details and core_lifecycle.runtime_bootstrap_error is not None:
+        failure_message = str(core_lifecycle.runtime_bootstrap_error)
+    return {
+        "state": core_lifecycle.lifecycle_state.value,
+        "ready": is_runtime_request_ready(core_lifecycle),
+        "failed": core_lifecycle.runtime_failed,
+        "failure_message": failure_message,
+    }
+
+
+def runtime_status_response(
+    core_lifecycle: "AstrBotCoreLifecycle",
+    status_code: int = 503,
+    *,
+    include_failure_details: bool = True,
+):
+    message = get_runtime_guard_message(core_lifecycle)
+    response = jsonify(
+        Response(
+            status="error",
+            message=message,
+            data=build_runtime_status_data(
+                core_lifecycle,
+                include_failure_details=include_failure_details,
+            ),
+        ).__dict__
+    )
+    response.status_code = status_code
+    return response
+
+
+def runtime_loading_response(
+    core_lifecycle: "AstrBotCoreLifecycle",
+    status_code: int = 503,
+    *,
+    include_failure_details: bool = True,
+):
+    return runtime_status_response(
+        core_lifecycle,
+        status_code=status_code,
+        include_failure_details=include_failure_details,
+    )
+
+
+def guard_runtime_ready(core_lifecycle: "AstrBotCoreLifecycle", handler):
+    @wraps(handler)
+    async def wrapped(*args: Any, **kwargs: Any):
+        if not is_runtime_request_ready(core_lifecycle):
+            return runtime_status_response(core_lifecycle)
+        return await handler(*args, **kwargs)
+
+    return wrapped
 
 
 @dataclass

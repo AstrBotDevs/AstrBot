@@ -24,7 +24,26 @@ from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queu
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
-from .route import Route, RouteContext
+from .route import (
+    Route,
+    RouteContext,
+    get_runtime_guard_message,
+    is_runtime_request_ready,
+)
+
+
+class _QueueTimeoutSentinel:
+    pass
+
+
+_QUEUE_TIMEOUT = _QueueTimeoutSentinel()
+
+
+class _ReceiveTimeoutSentinel:
+    pass
+
+
+_RECEIVE_TIMEOUT = _ReceiveTimeoutSentinel()
 
 
 class LiveChatSession:
@@ -137,6 +156,49 @@ class LiveChatRoute(Route):
         """Unified Chat WebSocket 处理器(支持 ct=live/chat)"""
         await self._unified_ws_loop(force_ct=None)
 
+    async def _ensure_runtime_ready(self) -> bool:
+        if is_runtime_request_ready(self.core_lifecycle):
+            return True
+        await websocket.close(
+            1013,
+            get_runtime_guard_message(self.core_lifecycle),
+        )
+        return False
+
+    async def _recv_ws_json_guarded(
+        self,
+        *,
+        wait_timeout: float = 1.0,
+    ) -> dict[str, Any] | _ReceiveTimeoutSentinel | None:
+        if not await self._ensure_runtime_ready():
+            return None
+        try:
+            message = await asyncio.wait_for(
+                websocket.receive_json(),
+                timeout=wait_timeout,
+            )
+        except asyncio.TimeoutError:
+            return _RECEIVE_TIMEOUT
+        if not await self._ensure_runtime_ready():
+            return None
+        return message
+
+    async def _guarded_queue_get(
+        self,
+        back_queue: asyncio.Queue,
+        *,
+        wait_timeout: float,
+    ) -> dict[str, Any] | _QueueTimeoutSentinel | None:
+        if not await self._ensure_runtime_ready():
+            return None
+        try:
+            result = await asyncio.wait_for(back_queue.get(), timeout=wait_timeout)
+        except asyncio.TimeoutError:
+            return _QUEUE_TIMEOUT
+        if not await self._ensure_runtime_ready():
+            return None
+        return result
+
     async def _unified_ws_loop(self, force_ct: str | None = None) -> None:
         """统一 WebSocket 循环"""
         # WebSocket 不能通过 header 传递 token,需要从 query 参数获取
@@ -157,6 +219,9 @@ class LiveChatRoute(Route):
             await websocket.close(1008, "Invalid token")
             return
 
+        if not await self._ensure_runtime_ready():
+            return
+
         session_id = f"webchat_live!{username}!{uuid.uuid4()}"
         live_session = LiveChatSession(session_id, username)
         self.sessions[session_id] = live_session
@@ -165,7 +230,11 @@ class LiveChatRoute(Route):
 
         try:
             while True:
-                message = await websocket.receive_json()
+                message = await self._recv_ws_json_guarded()
+                if isinstance(message, _ReceiveTimeoutSentinel):
+                    continue
+                if message is None:
+                    return
                 ct = force_ct or message.get("ct", "live")
                 if ct == "chat":
                     await self._handle_chat_message(live_session, message)
@@ -289,7 +358,11 @@ class LiveChatRoute(Route):
         )
         try:
             while True:
-                result = await back_queue.get()
+                result = await self._guarded_queue_get(back_queue, wait_timeout=1)
+                if isinstance(result, _QueueTimeoutSentinel):
+                    continue
+                if result is None:
+                    break
                 if not result:
                     continue
                 await self._send_chat_payload(session, {"ct": "chat", **result})
@@ -486,14 +559,17 @@ class LiveChatRoute(Route):
             refs = {}
 
             while True:
+                if not await self._ensure_runtime_ready():
+                    break
                 if session.should_interrupt:
                     session.should_interrupt = False
                     break
 
-                try:
-                    result = await asyncio.wait_for(back_queue.get(), timeout=1)
-                except asyncio.TimeoutError:
+                result = await self._guarded_queue_get(back_queue, wait_timeout=1)
+                if isinstance(result, _QueueTimeoutSentinel):
                     continue
+                if result is None:
+                    break
 
                 if not result:
                     continue
@@ -773,6 +849,8 @@ class LiveChatRoute(Route):
 
             try:
                 while True:
+                    if not await self._ensure_runtime_ready():
+                        break
                     if session.should_interrupt:
                         # 用户打断,停止处理
                         logger.info("[Live Chat] 检测到用户打断")
@@ -789,10 +867,14 @@ class LiveChatRoute(Route):
                                 break
                         break
 
-                    try:
-                        result = await asyncio.wait_for(back_queue.get(), timeout=0.5)
-                    except asyncio.TimeoutError:
+                    result = await self._guarded_queue_get(
+                        back_queue,
+                        wait_timeout=0.5,
+                    )
+                    if isinstance(result, _QueueTimeoutSentinel):
                         continue
+                    if result is None:
+                        break
 
                     if not result:
                         continue

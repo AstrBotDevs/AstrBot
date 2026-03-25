@@ -84,6 +84,8 @@ class Context:
         cron_manager: CronJobManager,
         subagent_orchestrator: SubAgentOrchestrator | None = None,
     ) -> None:
+        self.registered_web_apis = []
+        self._register_tasks = []
         self._event_queue = event_queue
         """事件队列｡消息平台通过事件队列传递消息事件｡"""
         self._config = config
@@ -109,9 +111,15 @@ class Context:
         self.subagent_orchestrator = subagent_orchestrator
 
         # Register built-in tools so they appear in WebUI and can be
-        # assigned to subagents.  Done here (not at module-import time)
+        # assigned to subagents. Done here (not at module-import time)
         # to avoid circular imports.
         self.provider_manager.llm_tools.register_internal_tools()
+
+    def reset_runtime_registrations(self) -> None:
+        if self.registered_web_apis is not None:
+            self.registered_web_apis.clear()
+        if self._register_tasks is not None:
+            self._register_tasks.clear()
 
     async def llm_generate(
         self,

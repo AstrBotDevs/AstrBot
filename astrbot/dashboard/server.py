@@ -21,6 +21,7 @@ from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
+from quart.typing import ResponseReturnValue
 from quart_cors import cors
 
 from astrbot.core import logger
@@ -62,9 +63,40 @@ from .routes import (
     UpdateRoute,
 )
 from .routes.api_key import ALL_OPEN_API_SCOPES
+from .routes.route import is_runtime_request_ready, runtime_loading_response
 
 # Static assets shipped inside the wheel (built during `hatch build`).
 _BUNDLED_DIST = Path(__file__).parent / "dist"
+
+_PUBLIC_ALLOWED_ENDPOINT_PREFIXES = (
+    "/api/auth/login",
+    "/api/file",
+    "/api/platform/webhook",
+    "/api/stat/start-time",
+    "/api/backup/download",
+)
+_RUNTIME_EXTRA_BYPASS_ENDPOINT_PREFIXES = (
+    "/api/stat/version",
+    "/api/stat/runtime-status",
+    "/api/stat/restart-core",
+    "/api/stat/changelog",
+    "/api/stat/changelog/list",
+    "/api/stat/first-notice",
+)
+_RUNTIME_BYPASS_ENDPOINT_PREFIXES = (
+    tuple(
+        prefix
+        for prefix in _PUBLIC_ALLOWED_ENDPOINT_PREFIXES
+        if prefix != "/api/platform/webhook"
+    )
+    + _RUNTIME_EXTRA_BYPASS_ENDPOINT_PREFIXES
+)
+_RUNTIME_FAILED_RECOVERY_ENDPOINT_PREFIXES = (
+    "/api/config/",
+    "/api/plugin/reload-failed",
+    "/api/plugin/uninstall-failed",
+    "/api/plugin/source/get-failed-plugins",
+)
 
 
 APP: Quart
@@ -122,12 +154,10 @@ class AstrBotJSONProvider(DefaultJSONProvider):
 class AstrBotDashboard:
     """AstrBot Web Dashboard"""
 
-    ALLOWED_ENDPOINT_PREFIXES = (
-        "/api/auth/login",
-        "/api/file",
-        "/api/platform/webhook",
-        "/api/stat/start-time",
-        "/api/backup/download",
+    ALLOWED_ENDPOINT_PREFIXES = _PUBLIC_ALLOWED_ENDPOINT_PREFIXES
+    RUNTIME_BYPASS_ENDPOINT_PREFIXES = _RUNTIME_BYPASS_ENDPOINT_PREFIXES
+    RUNTIME_FAILED_RECOVERY_ENDPOINT_PREFIXES = (
+        _RUNTIME_FAILED_RECOVERY_ENDPOINT_PREFIXES
     )
 
     def __init__(
@@ -182,8 +212,8 @@ class AstrBotDashboard:
 
         if self.enable_webui and not (Path(self.data_path) / "index.html").exists():
             logger.warning(
-                f"前端未内置或未初始化 (index.html missing in {self.data_path})，"
-                "回退到仅启动后端。请访问在线面板：dash.astrbot.men"
+                f"前端未内置或未初始化 (index.html missing in {self.data_path}), "
+                "回退到仅启动后端. 请访问在线面板: dash.astrbot.men"
             )
             self.enable_webui = False
             self._webui_fallback = True
@@ -233,7 +263,7 @@ class AstrBotDashboard:
         @self.app.route("/")
         async def index():
             if not self.enable_webui:
-                return "前端未启用，请访问在线面板：dash.astrbot.men"
+                return "前端未启用, 请访问在线面板: dash.astrbot.men"
             try:
                 return await self.app.send_static_file("index.html")
             except werkzeug.exceptions.NotFound:
@@ -243,7 +273,7 @@ class AstrBotDashboard:
         @self.app.errorhandler(404)
         async def not_found(e):
             if not self.enable_webui:
-                return "前端未启用，请访问在线面板：dash.astrbot.men"
+                return "前端未启用, 请访问在线面板: dash.astrbot.men"
             if request.path.startswith("/api/"):
                 return jsonify(Response().error("Not Found").to_json()), 404
             try:
@@ -263,13 +293,14 @@ class AstrBotDashboard:
         logging.getLogger(self.app.name).removeHandler(default_handler)
 
     def _init_routes(self, db: BaseDatabase):
-        UpdateRoute(
-            self.context, self.core_lifecycle.astrbot_updator, self.core_lifecycle
-        )
+        astrbot_updator = self.core_lifecycle.astrbot_updator
+        plugin_manager = self.core_lifecycle.plugin_manager
+        assert astrbot_updator is not None
+        assert plugin_manager is not None
+
+        UpdateRoute(self.context, astrbot_updator, self.core_lifecycle)
         StatRoute(self.context, db, self.core_lifecycle)
-        PluginRoute(
-            self.context, self.core_lifecycle, self.core_lifecycle.plugin_manager
-        )
+        PluginRoute(self.context, self.core_lifecycle, plugin_manager)
 
         self.command_route = CommandRoute(self.context)
         self.cr = ConfigRoute(self.context, self.core_lifecycle)
@@ -308,21 +339,24 @@ class AstrBotDashboard:
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
-            view_func=self.srv_plug_route,
+            view_func=self.guarded_srv_plug_route,
             methods=["GET", "POST"],
         )
 
     def _init_plugin_route_index(self):
         """将插件路由索引,避免 O(n) 查找"""
         self._plugin_route_map: dict[tuple[str, str], Callable] = {}
-        if self.core_lifecycle.star_context.registered_web_apis is None:
-            self.core_lifecycle.star_context.registered_web_apis = []
+        star_context = self.core_lifecycle.star_context
+        if star_context is None:
+            return
+        if star_context.registered_web_apis is None:
+            star_context.registered_web_apis = []
         for (
             route,
             handler,
             methods,
             _,
-        ) in self.core_lifecycle.star_context.registered_web_apis:
+        ) in star_context.registered_web_apis:
             for method in methods:
                 self._plugin_route_map[(route, method)] = handler
 
@@ -333,6 +367,48 @@ class AstrBotDashboard:
             self.config.save_config()
             logger.info("Initialized random JWT secret for dashboard.")
         self._jwt_secret = dashboard_cfg["jwt_secret"]
+
+    async def guarded_srv_plug_route(
+        self, subpath: str, *args, **kwargs
+    ) -> ResponseReturnValue:
+        guard_resp = self._maybe_runtime_guard(request.path)
+        if guard_resp is not None:
+            return guard_resp
+        return await self.srv_plug_route(subpath, *args, **kwargs)
+
+    def _should_bypass_runtime_guard(self, path: str) -> bool:
+        return any(
+            path.startswith(prefix)
+            for prefix in self.RUNTIME_BYPASS_ENDPOINT_PREFIXES
+        )
+
+    def _should_allow_failed_runtime_recovery(self, path: str) -> bool:
+        if not (
+            self.core_lifecycle.runtime_failed
+            or self.core_lifecycle.runtime_bootstrap_error is not None
+        ):
+            return False
+        return any(
+            path.startswith(prefix)
+            for prefix in self.RUNTIME_FAILED_RECOVERY_ENDPOINT_PREFIXES
+        )
+
+    def _maybe_runtime_guard(
+        self,
+        path: str,
+        *,
+        include_failure_details: bool = True,
+    ) -> ResponseReturnValue | None:
+        if self._should_bypass_runtime_guard(path):
+            return None
+        if self._should_allow_failed_runtime_recovery(path):
+            return None
+        if not is_runtime_request_ready(self.core_lifecycle):
+            return runtime_loading_response(
+                self.core_lifecycle,
+                include_failure_details=include_failure_details,
+            )
+        return None
 
     async def auth_middleware(self):
         # 放行CORS预检请求
@@ -372,9 +448,21 @@ class AstrBotDashboard:
             g.api_key_scopes = scopes
             g.username = f"api_key:{api_key.key_id}"
             await self.db.touch_api_key(api_key.key_id)
+            guard_resp = self._maybe_runtime_guard(
+                request.path,
+                include_failure_details=False,
+            )
+            if guard_resp is not None:
+                return guard_resp
             return None
 
         if any(request.path.startswith(p) for p in self.ALLOWED_ENDPOINT_PREFIXES):
+            guard_resp = self._maybe_runtime_guard(
+                request.path,
+                include_failure_details=False,
+            )
+            if guard_resp is not None:
+                return guard_resp
             return None
 
         token = request.headers.get("Authorization")
@@ -394,14 +482,25 @@ class AstrBotDashboard:
         except jwt.PyJWTError:
             return self._unauthorized("Token 无效")
 
+        guard_resp = self._maybe_runtime_guard(request.path)
+        if guard_resp is not None:
+            return guard_resp
+
     @staticmethod
     def _unauthorized(msg: str):
         r = jsonify(Response().error(msg).to_json())
         r.status_code = 401
         return r
 
+    def _get_plugin_handler(self, subpath: str, method: str) -> Callable | None:
+        handler = self._plugin_route_map.get((f"/{subpath}", method))
+        if handler is not None:
+            return handler
+        self._init_plugin_route_index()
+        return self._plugin_route_map.get((f"/{subpath}", method))
+
     async def srv_plug_route(self, subpath: str, *args, **kwargs):
-        handler = self._plugin_route_map.get((f"/{subpath}", request.method))
+        handler = self._get_plugin_handler(subpath, request.method)
         if not handler:
             return jsonify(Response().error("未找到该路由").to_json())
 
@@ -481,10 +580,10 @@ class AstrBotDashboard:
         """Run dashboard server (blocking)"""
         if self._webui_fallback:
             logger.warning(
-                "前端未内置或未初始化，回退到仅启动后端。请访问在线面板：dash.astrbot.men"
+                "前端未内置或未初始化, 回退到仅启动后端. 请访问在线面板: dash.astrbot.men"
             )
         elif not self.enable_webui:
-            logger.warning("前端已禁用，请访问在线面板：dash.astrbot.men")
+            logger.warning("前端已禁用, 请访问在线面板: dash.astrbot.men")
 
         dashboard_config = self.config.get("dashboard", {})
         host_value = os.environ.get("ASTRBOT_HOST") or dashboard_config.get(
