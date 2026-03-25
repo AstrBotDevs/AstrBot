@@ -619,8 +619,7 @@ class ProviderOpenAIOfficial(Provider):
                     context_query.extend(tcr.to_openai_messages())
 
         model = model or self.get_model()
-        payloads = {"messages": context_query, "model": model}
-        payloads.update(kwargs)
+        payloads = {**kwargs, "messages": context_query, "model": model}
 
         self._finally_convert_payload(payloads)
 

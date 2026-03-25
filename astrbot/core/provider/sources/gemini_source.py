@@ -757,8 +757,7 @@ class ProviderGoogleGenAI(Provider):
 
         model = model or self.get_model()
 
-        payloads = {"messages": context_query, "model": model}
-        payloads.update(kwargs)
+        payloads = {**kwargs, "messages": context_query, "model": model}
 
         retry = 10
         keys = self.api_keys.copy()
@@ -813,8 +812,7 @@ class ProviderGoogleGenAI(Provider):
 
         model = model or self.get_model()
 
-        payloads = {"messages": context_query, "model": model}
-        payloads.update(kwargs)
+        payloads = {**kwargs, "messages": context_query, "model": model}
 
         retry = 10
         keys = self.api_keys.copy()
