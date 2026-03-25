@@ -43,6 +43,24 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         """True if connected to an LSP server."""
         return self._connected
 
+    def _handle_reader_task_done(self, task: asyncio.Task[None]) -> None:
+        try:
+            exception = task.exception()
+        except asyncio.CancelledError:
+            return
+
+        if exception is None:
+            if self._connected:
+                self._connected = False
+                log.warning("LSP reader task exited unexpectedly")
+            return
+
+        self._connected = False
+        log.error(
+            "LSP reader task failed",
+            exc_info=(type(exception), exception, exception.__traceback__),
+        )
+
     async def connect(self) -> None:
         """
         Connect to configured LSP servers.
@@ -79,6 +97,7 @@ class AstrbotLspClient(BaseAstrbotLspClient):
 
         # Start reading responses in the background.
         self._reader_task = asyncio.create_task(self._read_responses())
+        self._reader_task.add_done_callback(self._handle_reader_task_done)
 
         # Send initialize request
         await self.send_request(

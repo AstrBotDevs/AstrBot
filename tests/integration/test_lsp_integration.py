@@ -11,11 +11,13 @@ from pathlib import Path
 
 import anyio
 import pytest
+from anyio.lowlevel import checkpoint
 
 from astrbot._internal.protocols.lsp.client import AstrbotLspClient
 
 TEST_DIR = Path(__file__).resolve().parent
 SERVER_PATH = TEST_DIR / "fixtures" / "echo_lsp_server.py"
+HANGING_SERVER_PATH = TEST_DIR / "fixtures" / "hanging_lsp_server.py"
 
 
 @pytest.mark.anyio
@@ -115,3 +117,22 @@ async def test_lsp_client_connect_does_not_corrupt_anyio_cancel_scope():
     finally:
         with anyio.fail_after(5):
             await client.shutdown()
+
+
+@pytest.mark.anyio
+async def test_lsp_client_connect_timeout_does_not_corrupt_anyio_cancel_scope():
+    """Test timeout-driven cancellation leaves later fail_after scopes usable."""
+    client = AstrbotLspClient()
+
+    with pytest.raises(TimeoutError):
+        with anyio.fail_after(0.1):
+            await client.connect_to_server(
+                command=[sys.executable, str(HANGING_SERVER_PATH)],
+                workspace_uri="file:///tmp",
+            )
+
+    with anyio.fail_after(5):
+        await client.shutdown()
+
+    with anyio.fail_after(1):
+        await checkpoint()
