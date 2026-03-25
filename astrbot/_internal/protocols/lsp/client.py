@@ -59,10 +59,6 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         except Exception as exc:
             log.debug("Ignoring failed LSP reader task during teardown", exc_info=exc)
 
-    def _handle_reader_task_done(self, task: asyncio.Task[None]) -> None:
-        if self._reader_task is task:
-            self._reader_task = None
-
     async def connect(self) -> None:
         """
         Connect to configured LSP servers.
@@ -101,7 +97,6 @@ class AstrbotLspClient(BaseAstrbotLspClient):
 
         # Start reading responses in the background.
         self._reader_task = asyncio.create_task(self._read_responses())
-        self._reader_task.add_done_callback(self._handle_reader_task_done)
 
         # Send initialize request
         await self.send_request(
@@ -235,6 +230,9 @@ class AstrbotLspClient(BaseAstrbotLspClient):
             if self._connected:
                 self._connected = False
                 log.warning("LSP reader task exited unexpectedly")
+        finally:
+            if self._reader_task is asyncio.current_task():
+                self._reader_task = None
 
     async def _handle_notification(self, notification: dict[str, Any]) -> None:
         """Handle incoming LSP notifications."""

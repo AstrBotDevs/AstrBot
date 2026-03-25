@@ -51,6 +51,21 @@ async def test_lsp_read_responses_unexpected_exit_disconnects_and_warns():
 
 
 @pytest.mark.asyncio
+async def test_lsp_read_responses_clears_reader_task_reference_on_exit():
+    """Test _read_responses clears the stored task reference when it exits."""
+    client = AstrbotLspClient()
+    client._connected = True
+    client._reader = FakeReader(AsyncMock(return_value=b""))
+
+    task = asyncio.create_task(client._read_responses())
+    client._reader_task = task
+
+    await task
+
+    assert client._reader_task is None
+
+
+@pytest.mark.asyncio
 async def test_lsp_stop_reader_task_swallows_failed_reader_exceptions():
     """Test reader teardown does not re-raise prior reader failures."""
     client = AstrbotLspClient()
