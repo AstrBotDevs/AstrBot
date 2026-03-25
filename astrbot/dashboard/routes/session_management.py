@@ -328,37 +328,87 @@ class SessionManagementRoute(Route):
 
         请求体:
         {
-            "umos": ["平台:消息类型:会话ID", ...]  // umo 列表
+            "umos": ["平台:消息类型:会话ID", ...],  // 可选
+            "scope": "all" | "group" | "private" | "custom_group",  // 可选，批量范围
+            "group_id": "分组ID",  // 当 scope 为 custom_group 时必填
+            "rule_key": "session_service_config" | ... (可选，不传则删除所有规则)
         }
         """
+
         try:
             data = await request.get_json()
             umos = data.get("umos", [])
+            scope = data.get("scope", "")
+            group_id = data.get("group_id", "")
+            rule_key = data.get("rule_key")
+
+            # 如果指定了 scope，获取符合条件的所有 umo
+            if scope and not umos:
+                # 如果是自定义分组
+                if scope == "custom_group":
+                    if not group_id:
+                        return Response().error("请指定分组 ID").__dict__
+                    groups = self._get_groups()
+                    if group_id not in groups:
+                        return Response().error(f"分组 '{group_id}' 不存在").__dict__
+                    umos = groups[group_id].get("umos", [])
+                else:
+                    async with self.db_helper.get_db() as session:
+                        session: AsyncSession
+                        result = await session.execute(
+                            select(ConversationV2.user_id).distinct()
+                        )
+                        all_umos = [row[0] for row in result.fetchall()]
+
+                    if scope == "group":
+                        umos = [
+                            u
+                            for u in all_umos
+                            if ":group:" in u.lower() or ":groupmessage:" in u.lower()
+                        ]
+                    elif scope == "private":
+                        umos = [
+                            u
+                            for u in all_umos
+                            if ":private:" in u.lower() or ":friend" in u.lower()
+                        ]
+                    elif scope == "all":
+                        umos = all_umos
 
             if not umos:
-                return Response().error("缺少必要参数: umos").__dict__
+                return Response().error("缺少必要参数: umos 或有效的 scope").__dict__
 
             if not isinstance(umos, list):
                 return Response().error("参数 umos 必须是数组").__dict__
 
+            if rule_key and rule_key not in AVAILABLE_SESSION_RULE_KEYS:
+                return Response().error(f"不支持的规则键: {rule_key}").__dict__
+
             # 批量删除
-            deleted_count = 0
+            success_count = 0
             failed_umos = []
             for umo in umos:
                 try:
-                    await sp.clear_async("umo", umo)
-                    deleted_count += 1
+                    if rule_key:
+                        await sp.session_remove(umo, rule_key)
+                    else:
+                        await sp.clear_async("umo", umo)
+                    success_count += 1
                 except Exception as e:
                     logger.error(f"删除 umo {umo} 的规则失败: {e!s}")
                     failed_umos.append(umo)
+
+            message = f"已删除 {success_count} 条规则"
+            if rule_key:
+                message = f"已删除 {success_count} 条 {rule_key} 规则"
 
             if failed_umos:
                 return (
                     Response()
                     .ok(
                         {
-                            "message": f"已删除 {deleted_count} 条规则，{len(failed_umos)} 条删除失败",
-                            "deleted_count": deleted_count,
+                            "message": f"{message}，{len(failed_umos)} 条删除失败",
+                            "success_count": success_count,
                             "failed_umos": failed_umos,
                         }
                     )
@@ -369,8 +419,8 @@ class SessionManagementRoute(Route):
                     Response()
                     .ok(
                         {
-                            "message": f"已删除 {deleted_count} 条规则",
-                            "deleted_count": deleted_count,
+                            "message": message,
+                            "success_count": success_count,
                         }
                     )
                     .__dict__
