@@ -8,19 +8,11 @@ from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 
 from ..computer_client import get_booter
+from .permissions import check_admin_permission
 
 
 def _to_json(data: Any) -> str:
     return json.dumps(data, ensure_ascii=False, default=str)
-
-
-def _ensure_admin(context: ContextWrapper[AstrAgentContext]) -> str | None:
-    if context.context.event.role != "admin":
-        return (
-            "error: Permission denied. Browser and skill lifecycle tools are only allowed "
-            "for admin users."
-        )
-    return None
 
 
 async def _get_browser_component(context: ContextWrapper[AstrAgentContext]) -> Any:
@@ -77,7 +69,7 @@ class BrowserExecTool(FunctionTool):
         learn: bool = False,
         include_trace: bool = False,
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
+        if err := check_admin_permission(context, "Using browser tools"):
             return err
         try:
             browser = await _get_browser_component(context)
@@ -140,7 +132,7 @@ class BrowserBatchExecTool(FunctionTool):
         learn: bool = False,
         include_trace: bool = False,
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
+        if err := check_admin_permission(context, "Using browser tools"):
             return err
         try:
             browser = await _get_browser_component(context)
@@ -187,7 +179,7 @@ class RunBrowserSkillTool(FunctionTool):
         description: str | None = None,
         tags: str | None = None,
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
+        if err := check_admin_permission(context, "Using browser tools"):
             return err
         try:
             browser = await _get_browser_component(context)
