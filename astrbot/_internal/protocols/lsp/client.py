@@ -7,6 +7,7 @@ that provide language intelligence features (completions, diagnostics, etc.).
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -35,13 +36,28 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         self._pending_requests: dict[int, Any] = {}
         self._request_id = 0
         self._server_command: list[str] | None = None
-        # anyio TaskGroup handle for background readers
-        self._task_group: Any | None = None
+        self._reader_task: asyncio.Task[None] | None = None
 
     @property
     def connected(self) -> bool:
         """True if connected to an LSP server."""
         return self._connected
+
+    async def _stop_reader_task(self) -> None:
+        reader_task = self._reader_task
+        if reader_task is None:
+            return
+        self._reader_task = None
+        if reader_task is asyncio.current_task():
+            return
+        if not reader_task.done():
+            reader_task.cancel()
+        try:
+            await reader_task
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            log.debug("Ignoring failed LSP reader task during teardown", exc_info=exc)
 
     async def connect(self) -> None:
         """
@@ -66,6 +82,8 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         """
         log.debug(f"Starting LSP server: {' '.join(command)}")
 
+        await self._stop_reader_task()
+
         self._server_process = await anyio.open_process(
             command,
             stdin=-1,
@@ -77,11 +95,8 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         self._server_command = command
         self._connected = True
 
-        # Start reading responses in background using anyio TaskGroup
-        # Create and enter a TaskGroup so the reader runs until we close it at shutdown.
-        self._task_group = anyio.create_task_group()
-        await self._task_group.__aenter__()
-        self._task_group.start_soon(self._read_responses)
+        # Start reading responses in the background.
+        self._reader_task = asyncio.create_task(self._read_responses())
 
         # Send initialize request
         await self.send_request(
@@ -204,9 +219,20 @@ class AstrbotLspClient(BaseAstrbotLspClient):
 
                 except anyio.EndOfStream:
                     break
-        except anyio.get_cancelled_exc_class():
-            # Task was cancelled via the TaskGroup cancel/exit during shutdown
-            pass
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            if self._connected:
+                self._connected = False
+            log.error("LSP reader task failed", exc_info=exc)
+            return
+        else:
+            if self._connected:
+                self._connected = False
+                log.warning("LSP reader task exited unexpectedly")
+        finally:
+            if self._reader_task is asyncio.current_task():
+                self._reader_task = None
 
     async def _handle_notification(self, notification: dict[str, Any]) -> None:
         """Handle incoming LSP notifications."""
@@ -217,13 +243,7 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         """Shutdown the LSP client."""
         self._connected = False
 
-        if self._task_group:
-            try:
-                # Exit the TaskGroup, which cancels background tasks started within it
-                await self._task_group.__aexit__(None, None, None)
-            except anyio.get_cancelled_exc_class():
-                pass
-            self._task_group = None
+        await self._stop_reader_task()
 
         if self._server_process:
             try:

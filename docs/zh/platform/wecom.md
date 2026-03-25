@@ -22,7 +22,7 @@ AstrBot 支持接入企业微信应用和微信客服。
 
 1. 进入 AstrBot 的管理面板
 2. 点击左边栏 `机器人`
-3. 然后在右边的界面中，点击 `+ 创建机器人` 
+3. 然后在右边的界面中，点击 `+ 创建机器人`
 4. 选择 `wecom`
 
 这将弹出一个对话框。接下来，不要关闭页面，转移到下一步。
@@ -145,4 +145,4 @@ linux 用户可以使用 `apt install ffmpeg` 安装。
 
 windows 用户可以在 [ffmpeg 官网](https://ffmpeg.org/download.html) 下载安装。
 
-mac 用户可以使用 `brew install ffmpeg` 安装。   
+mac 用户可以使用 `brew install ffmpeg` 安装。

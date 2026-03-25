@@ -13,7 +13,7 @@
 | File         | Yes     | Yes  | Supports external links                            |
 | Card (JSON)  | Yes     | Yes  | See [Kook Docs - Card Messages]                    |
 
-Proactive message push: Supported  
+Proactive message push: Supported
 Message receiving mode: WebSocket
 
 ## Create a Bot on Kook

@@ -13,7 +13,7 @@
 Slack 支持两种接入方式：`Webhook` 与 `Socket`。如果您没有公网服务器并且消息业务量的规模较小，我们建议您使用 `socket` 方式。如果您有公网服务器（或者有一定的技术背景，了解如何设置 Tunnel，如 Cloudflare Tunnel），可以选择 `webhook` 方式。`socket` 方式部署相对简单。
 
 1. 创建 [Slack](https://slack.com/signin) 账号和一个工作区（Workspace）。
-2. 前往 [应用后台](https://api.slack.com/apps)，点击「Create New App」->「From Scratch」，输入 `应用名称` 和要添加到的工作区，然后点击「Create App」。  
+2. 前往 [应用后台](https://api.slack.com/apps)，点击「Create New App」->「From Scratch」，输入 `应用名称` 和要添加到的工作区，然后点击「Create App」。
 3. （仅 Webhook 需要）获取 `Signing Secret`，在左边栏 Basic Information 页下，找到 App Credentials 的 `Signing Secret`，点击 Show 并且复制到平台适配器配置的 signing_secret 处。
 
 ![image](https://files.astrbot.app/docs/source/images/slack/image.png)
