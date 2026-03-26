@@ -421,8 +421,6 @@ class ProviderAnthropic(Provider):
                         try:
                             if "input_json" in tool_info:
                                 tool_info["input"] = json.loads(tool_info["input_json"])
-                            else:
-                                tool_info["input"] = tool_info.get("input", {})
 
                             # 添加到最终结果
                             final_tool_calls.append(
