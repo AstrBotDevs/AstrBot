@@ -40,6 +40,9 @@ async def _poll_webchat_stream_result(back_queue, username: str):
     try:
         result = await asyncio.wait_for(back_queue.get(), timeout=1)
     except asyncio.TimeoutError:
+        # Return a sentinel so the caller can send an SSE heartbeat to
+        # keep the connection alive during long-running operations (e.g.
+        # context compression with reasoning models).  See #6938.
         return None, False
     except asyncio.CancelledError:
         logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
@@ -364,6 +367,11 @@ class ChatRoute(Route):
                             client_disconnected = True
                             break
                         if not result:
+                            # Send an SSE comment as keep-alive so the client
+                            # doesn't time out during slow backend ops like
+                            # context compression with reasoning models (#6938).
+                            if not client_disconnected:
+                                yield ": heartbeat\n\n"
                             continue
 
                         if (
