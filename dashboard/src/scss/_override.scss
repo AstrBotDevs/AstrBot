@@ -37,7 +37,7 @@ html {
 
 pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Helvetica Neue", monospace;
-  color: #111827;
+  color: var(--astrbot-code-color);
 }
 
 
