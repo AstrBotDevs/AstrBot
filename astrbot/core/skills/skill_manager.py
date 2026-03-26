@@ -24,7 +24,6 @@ SKILLS_CONFIG_FILENAME = "skills.json"
 SANDBOX_SKILLS_CACHE_FILENAME = "sandbox_skills_cache.json"
 DEFAULT_SKILLS_CONFIG: dict[str, dict] = {"skills": {}}
 SANDBOX_SKILLS_ROOT = "skills"
-SANDBOX_WORKSPACE_ROOT = "/workspace"
 _SANDBOX_SKILLS_CACHE_VERSION = 1
 
 _SKILL_NAME_RE = re.compile(r"^[\w.-]+$")
@@ -36,7 +35,7 @@ def _normalize_skill_name(name: str | None) -> str:
 
 
 def _default_sandbox_skill_path(name: str) -> str:
-    return f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{name}/SKILL.md"
+    return f"{SANDBOX_SKILLS_ROOT}/{name}/SKILL.md"
 
 
 def _normalize_cached_sandbox_skill_path(name: str, path: str) -> str:
@@ -253,8 +252,8 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
         "explain why you chose not to.\n"
         "3. **Mandatory grounding** — Before executing any skill you MUST "
         "first read its `SKILL.md` by running a shell command compatible "
-        "with the current runtime shell and using the **absolute path** "
-        f"shown above (e.g. `{example_command}`). "
+        "with the current runtime shell and using the path shown above "
+        f"(e.g. `{example_command}`). "
         "Never rely on memory or assumptions about a skill's content.\n"
         "4. **Progressive disclosure** — Load only what is directly "
         "referenced from `SKILL.md`:\n"
