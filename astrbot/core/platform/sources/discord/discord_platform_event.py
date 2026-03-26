@@ -280,6 +280,15 @@ class DiscordPlatformEvent(AstrMessageEvent):
         except Exception as e:
             logger.error(f"[Discord] 添加反应失败: {e}")
 
+    async def remove_react(self, emoji: str) -> None:
+        """移除 bot 在原消息上的表情回应"""
+        try:
+            raw = self.message_obj.raw_message
+            if hasattr(raw, "remove_reaction") and self.client.user:
+                await cast(discord.Message, raw).remove_reaction(emoji, self.client.user)
+        except Exception as e:
+            logger.warning(f"[Discord] 移除反应失败: {e}")
+
     def is_slash_command(self) -> bool:
         """判断是否为斜杠命令"""
         return (
