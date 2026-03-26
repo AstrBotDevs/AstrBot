@@ -56,6 +56,8 @@ BUILD_EXCLUDED_DIRS = {
     "dist",
 }
 BUILD_EXCLUDED_FILES = {
+    "AGENTS.md",
+    "CLAUDE.md",
     ".astrbot-worker-state.json",
 }
 WATCH_POLL_INTERVAL_SECONDS = 0.5
@@ -72,6 +74,8 @@ INIT_AGENT_DISPLAY_NAMES = {
     "opencode": "OpenCode",
 }
 INIT_SKILL_TEMPLATE_NAME = "astrbot-plugin-dev"
+INIT_PROJECT_NOTE_TEMPLATE_DIR = ("templates", "project_notes")
+INIT_PROJECT_NOTE_TEMPLATE_NAMES = ("AGENTS.md", "CLAUDE.md")
 
 
 class _CliPluginValidationError(RuntimeError):
@@ -866,6 +870,27 @@ def _render_init_agent_templates(
         )
 
 
+def _render_init_project_notes(*, target_dir: Path) -> None:
+    template_root = resources.files("astrbot_sdk").joinpath(
+        *INIT_PROJECT_NOTE_TEMPLATE_DIR
+    )
+    if not template_root.is_dir():
+        raise _CliPluginValidationError("未找到项目级说明模板：AGENTS.md / CLAUDE.md")
+
+    for template_name in INIT_PROJECT_NOTE_TEMPLATE_NAMES:
+        template_path = template_root.joinpath(template_name)
+        if not template_path.is_file():
+            raise _CliPluginValidationError(
+                f"未找到项目级说明模板文件：{template_name}"
+            )
+        # Keep these notes as packaged resources so `astr init` behaves the same
+        # from a repo checkout, an sdist, and an installed wheel.
+        (target_dir / template_name).write_text(
+            template_path.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+
+
 def _ensure_plugin_dir_exists(plugin_dir: Path) -> Path:
     resolved = plugin_dir.resolve()
     if not resolved.exists() or not resolved.is_dir():
@@ -987,6 +1012,7 @@ def _init_plugin(name: str | None, agents: tuple[str, ...] = ()) -> None:
         _render_init_test_py(plugin_name=plugin_name),
         encoding="utf-8",
     )
+    _render_init_project_notes(target_dir=target_dir)
     _render_init_agent_templates(
         target_dir=target_dir,
         plugin_name=plugin_name,

@@ -8,8 +8,9 @@ via `git subtree`.
 - Vendored snapshots keep the runtime SDK plus the minimal testing helpers
   (`testing.py`, `_testing_support.py`, `_internal/testing_support.py`) because
   AstrBot and SDK-generated test templates still depend on them.
-- Vendored snapshots exclude developer skill templates and markdown reference
-  assets that are not needed by the subtree consumer.
+- Vendored snapshots exclude agent skill templates and markdown reference
+  assets that are not needed by the subtree consumer, but retain the default
+  `AGENTS.md` / `CLAUDE.md` project-note templates used by `astr init`.
 - `vendor/pyproject.toml` keeps src-layout package discovery, but strips
   test/dev-only sections so the subtree stays runtime-focused.
 - Do not edit vendored files directly inside the AstrBot main repository.
