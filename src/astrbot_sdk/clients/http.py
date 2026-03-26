@@ -19,7 +19,7 @@
     # 插件声明处理 HTTP 请求的 capability
     @provide_capability(
         name="my_plugin.http_handler",
-        description="处理 /my-api 的 HTTP 请求",
+        description="处理 /my_plugin/api 的 HTTP 请求",
         input_schema={...},
         output_schema={...}
     )
@@ -28,7 +28,7 @@
 
     # 注册路由 → capability 映射
     await ctx.http.register_api(
-        route="/my-api",
+        route="/my_plugin/api",
         methods=["GET", "POST"],
         handler_capability="my_plugin.http_handler",
         description="我的 API"
@@ -99,7 +99,7 @@ class HTTPClient:
         """注册 Web API 端点。
 
         Args:
-            route: API 路由路径（如 "/my-api"）
+            route: API 路由路径（必须使用 "/{plugin_id}" 或 "/{plugin_id}/..."）
             handler_capability: 处理此路由的 capability 名称
             handler: 使用 @provide_capability 标记的方法引用
             methods: HTTP 方法列表，默认 ["GET"]
@@ -107,7 +107,7 @@ class HTTPClient:
 
         示例:
             await ctx.http.register_api(
-                route="/my-api",
+                route="/my_plugin/api",
                 handler_capability="my_plugin.http_handler",
                 methods=["GET", "POST"],
                 description="我的 API"
@@ -137,7 +137,7 @@ class HTTPClient:
             methods: HTTP 方法列表，None 表示所有方法
 
         示例:
-            await ctx.http.unregister_api("/my-api")
+            await ctx.http.unregister_api("/my_plugin/api")
         """
         if methods is None:
             methods = []

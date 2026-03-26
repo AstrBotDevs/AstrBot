@@ -1079,7 +1079,7 @@ def provide_capability(
     支持使用 JSON Schema 或 pydantic 模型定义输入输出。
 
     Args:
-        name: capability 名称（不能使用保留命名空间）
+        name: capability 名称（不能使用保留命名空间，且运行时必须以当前 plugin_id 为前缀）
         description: 能力描述
         input_schema: 输入 JSON Schema
         output_schema: 输出 JSON Schema

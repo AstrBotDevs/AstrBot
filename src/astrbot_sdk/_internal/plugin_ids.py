@@ -48,6 +48,26 @@ def validate_plugin_id(plugin_id: str) -> str:
     return normalized
 
 
+def plugin_capability_prefix(plugin_id: str) -> str:
+    return f"{validate_plugin_id(plugin_id)}."
+
+
+def capability_belongs_to_plugin(capability_name: str, plugin_id: str) -> bool:
+    return str(capability_name).strip().startswith(plugin_capability_prefix(plugin_id))
+
+
+def plugin_http_route_root(plugin_id: str) -> str:
+    return f"/{validate_plugin_id(plugin_id)}"
+
+
+def http_route_belongs_to_plugin(route: str, plugin_id: str) -> bool:
+    normalized_route = str(route).strip()
+    route_root = plugin_http_route_root(plugin_id)
+    return normalized_route == route_root or normalized_route.startswith(
+        f"{route_root}/"
+    )
+
+
 def resolve_plugin_data_dir(root: Path, plugin_id: str) -> Path:
     normalized = validate_plugin_id(plugin_id)
     resolved_root = root.resolve()

@@ -70,7 +70,11 @@ import yaml
 
 from .._internal.command_model import resolve_command_model_param
 from .._internal.injected_params import is_framework_injected_parameter
-from .._internal.plugin_ids import validate_plugin_id
+from .._internal.plugin_ids import (
+    capability_belongs_to_plugin,
+    plugin_capability_prefix,
+    validate_plugin_id,
+)
 from .._internal.typing_utils import unwrap_optional
 from ..decorators import (
     ConversationMeta,
@@ -221,6 +225,37 @@ def _iter_discoverable_names(instance: Any) -> list[str]:
     known_names = set(handler_names)
     extra_names = sorted(name for name in dir(instance) if name not in known_names)
     return [*handler_names, *extra_names]
+
+
+def _validate_loaded_capability_namespace(
+    plugin: PluginSpec,
+    *,
+    resolved_component: _ResolvedComponent,
+    attribute_name: str,
+    capability_name: str,
+) -> None:
+    if capability_belongs_to_plugin(capability_name, plugin.name):
+        return
+    expected_prefix = plugin_capability_prefix(plugin.name)
+    raise ValueError(
+        f"{_component_context(plugin, class_path=resolved_component.class_path, index=resolved_component.index)} "
+        f"方法 {attribute_name!r} 导出的 capability {capability_name!r} 必须使用当前插件名前缀 "
+        f"{expected_prefix!r}，例如 {expected_prefix}<action>"
+    )
+
+
+def _register_loaded_capability_name(
+    seen_capability_sources: dict[str, str],
+    *,
+    capability_name: str,
+    source_ref: str,
+) -> None:
+    existing_source = seen_capability_sources.get(capability_name)
+    if existing_source is not None:
+        raise ValueError(
+            f"capability {capability_name!r} 重复定义：{existing_source} 与 {source_ref}"
+        )
+    seen_capability_sources[capability_name] = source_ref
 
 
 def _is_injected_parameter(annotation: Any, parameter_name: str) -> bool:
@@ -890,6 +925,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
     llm_tools: list[LoadedLLMTool] = []
     agents: list[LoadedAgent] = []
     seen_agents: set[str] = set()
+    seen_capability_sources: dict[str, str] = {}
 
     for resolved_component in _plugin_component_classes(plugin):
         component_cls = resolved_component.cls
@@ -930,6 +966,18 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                 continue
             if capability is not None:
                 bound, meta = capability
+                capability_name = meta.descriptor.name
+                _validate_loaded_capability_namespace(
+                    plugin,
+                    resolved_component=resolved_component,
+                    attribute_name=name,
+                    capability_name=capability_name,
+                )
+                _register_loaded_capability_name(
+                    seen_capability_sources,
+                    capability_name=capability_name,
+                    source_ref=f"{resolved_component.class_path}.{name}",
+                )
                 capabilities.append(
                     LoadedCapability(
                         descriptor=meta.descriptor.model_copy(deep=True),

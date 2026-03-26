@@ -3,6 +3,12 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ...._internal.plugin_ids import (
+    capability_belongs_to_plugin,
+    http_route_belongs_to_plugin,
+    plugin_capability_prefix,
+    plugin_http_route_root,
+)
 from ....errors import AstrBotError
 from ..bridge_base import CapabilityRouterBridgeBase
 
@@ -32,6 +38,31 @@ def _validate_route(route: str, capability_name: str) -> None:
         )
 
 
+def _validate_plugin_route_namespace(route: str, plugin_id: str) -> None:
+    if http_route_belongs_to_plugin(route, plugin_id):
+        return
+    route_root = plugin_http_route_root(plugin_id)
+    raise AstrBotError.invalid_input(
+        "http.register_api 要求 route 使用当前插件的公开命名空间前缀："
+        f" route={route!r}, plugin_id={plugin_id!r}, expected={route_root!r} "
+        f"或 {route_root + '/...'}"
+    )
+
+
+def _validate_handler_capability_namespace(
+    handler_capability: str,
+    plugin_id: str,
+) -> None:
+    if capability_belongs_to_plugin(handler_capability, plugin_id):
+        return
+    expected_prefix = plugin_capability_prefix(plugin_id)
+    raise AstrBotError.invalid_input(
+        "http.register_api 要求 handler_capability 属于当前插件："
+        f" capability={handler_capability!r}, plugin_id={plugin_id!r}, "
+        f"expected_prefix={expected_prefix!r}"
+    )
+
+
 class HttpCapabilityMixin(CapabilityRouterBridgeBase):
     async def _http_register_api(
         self, _request_id: str, payload: dict[str, Any], _token
@@ -51,6 +82,8 @@ class HttpCapabilityMixin(CapabilityRouterBridgeBase):
             )
         _validate_route(route, "http.register_api")
         plugin_name = self._require_caller_plugin_id("http.register_api")
+        _validate_plugin_route_namespace(route, plugin_name)
+        _validate_handler_capability_namespace(handler_capability, plugin_name)
         methods = sorted({method.upper() for method in methods_payload if method})
         entry: dict[str, Any] = {
             "route": route,
