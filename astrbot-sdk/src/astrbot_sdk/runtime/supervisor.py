@@ -8,14 +8,14 @@
         |
         +-- WorkerSession (插件 A) -- StdioTransport -- PluginWorkerRuntime (子进程)
         |
-        +-- WorkerSession (插件 B) -- StdioTransport -- PluginWorkerRuntime (子进程)
+        +-- WorkerSession (插件 B, 插件 C) -- StdioTransport -- GroupWorkerRuntime (子进程)
         |
-        +-- WorkerSession (插件 C) -- StdioTransport -- PluginWorkerRuntime (子进程)
+        +-- WorkerSession (插件 D) -- StdioTransport -- PluginWorkerRuntime (子进程)
 
 核心类：
     SupervisorRuntime: 监管者运行时
         - 发现并加载所有插件
-        - 为每个插件启动 Worker 进程
+        - 为单个插件或兼容插件组启动 Worker 进程
         - 聚合所有 handler 并向 Core 注册
         - 路由 Core 的调用请求到对应 Worker
         - 处理 Worker 进程崩溃和重连
@@ -45,6 +45,10 @@ from typing import IO, Any, cast
 
 from loguru import logger
 
+from .._internal.plugin_ids import (
+    capability_belongs_to_plugin,
+    plugin_capability_prefix,
+)
 from ..errors import AstrBotError
 from ..protocol.descriptors import CapabilityDescriptor
 from ..protocol.messages import EventMessage, InitializeOutput, PeerInfo
@@ -533,60 +537,25 @@ class SupervisorRuntime:
         session: WorkerSession,
         plugin_name: str,
     ) -> None:
-        """注册插件 capability，处理命名冲突。
-
-        当 capability 名称冲突时：
-        - 如果是保留命名空间（handler/system/internal），跳过并警告
-        - 否则，使用插件名作为前缀重新命名，例如：
-          - 插件 'my_plugin' 注册 'demo.echo' 冲突
-          - 自动重命名为 'my_plugin.demo.echo'
-        """
+        """注册插件 capability。"""
         capability_name = descriptor.name
-
-        if not self.capability_router.contains(capability_name):
-            # 无冲突，直接注册
-            self._do_register_capability(
-                descriptor, session, capability_name, plugin_name
+        if not capability_belongs_to_plugin(capability_name, plugin_name):
+            expected_prefix = plugin_capability_prefix(plugin_name)
+            raise ValueError(
+                "插件导出的 capability 必须使用 plugin_id 作为公开命名空间前缀："
+                f" plugin={plugin_name!r}, capability={capability_name!r}, "
+                f"expected_prefix={expected_prefix!r}"
             )
-            return
-
-        # 检查是否在保留命名空间内
-        if capability_name.startswith(("handler.", "system.", "internal.")):
-            logger.warning(
-                "Capability '{}' 在保留命名空间内，跳过插件 '{}' 的注册。"
-                "保留命名空间不允许插件覆盖。",
-                capability_name,
-                plugin_name,
+        # Worker 侧 loader 已经做过命名空间校验；这里若还能撞名，说明协议数据
+        # 与本地路由状态不一致，继续静默改名只会掩盖问题。
+        if self.capability_router.contains(capability_name):
+            existing_plugin = self._capability_sources.get(capability_name, "<unknown>")
+            raise RuntimeError(
+                "duplicate capability registration detected after worker load validation: "
+                f"{capability_name!r} already registered by {existing_plugin!r}, "
+                f"cannot register again for {plugin_name!r}"
             )
-            return
-
-        # 尝试添加插件前缀解决冲突
-        prefixed_name = f"{plugin_name}.{capability_name}"
-        if self.capability_router.contains(prefixed_name):
-            logger.warning(
-                "Capability '{}' 和 '{}.{}' 均已存在，"
-                "跳过插件 '{}' 的注册。请考虑使用更唯一的命名。",
-                capability_name,
-                plugin_name,
-                capability_name,
-                plugin_name,
-            )
-            return
-
-        # 使用前缀名称注册
-        prefixed_descriptor = descriptor.model_copy(deep=True)
-        prefixed_descriptor.name = prefixed_name
-        logger.info(
-            "Capability '{}' 与已注册能力冲突，自动重命名为 '{}' (插件: {})。",
-            capability_name,
-            prefixed_name,
-            plugin_name,
-        )
-        self._do_register_capability(
-            prefixed_descriptor, session, prefixed_name, plugin_name
-        )
-        # 记录原始名称到前缀名称的映射，便于调试
-        self._capability_sources[f"_original:{prefixed_name}"] = capability_name
+        self._do_register_capability(descriptor, session, capability_name, plugin_name)
 
     def _do_register_capability(
         self,
