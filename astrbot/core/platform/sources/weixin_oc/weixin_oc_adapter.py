@@ -371,7 +371,11 @@ class WeixinOCAdapter(Platform):
             except asyncio.CancelledError:
                 pass
             except Exception:
-                pass
+                logger.warning(
+                    "weixin_oc(%s): ignored error from cancelled typing task",
+                    self.meta().id,
+                    exc_info=True,
+                )
 
     async def stop_typing(self, user_id: str, owner_id: str) -> None:
         state = self._typing_states.get(user_id)

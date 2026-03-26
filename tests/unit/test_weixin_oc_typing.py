@@ -419,6 +419,46 @@ async def test_start_typing_cancels_inflight_cancel_task(adapter):
 
 
 @pytest.mark.asyncio
+async def test_start_typing_logs_ignored_cancel_task_errors(adapter):
+    stop_event = asyncio.Event()
+    adapter._ensure_typing_ticket = AsyncMock(return_value="ticket-1")
+    state = adapter._get_typing_state("user-1")
+
+    async def fake_send_typing_state(_user_id, _ticket, *, cancel):
+        return None
+
+    async def fake_cancel_task():
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError as exc:
+            raise RuntimeError("cancel failed") from exc
+
+    async def fake_keepalive(_user_id):
+        await stop_event.wait()
+
+    adapter._send_typing_state = fake_send_typing_state
+    adapter._typing_keepalive_loop = fake_keepalive
+    state.cancel_task = asyncio.create_task(fake_cancel_task())
+    await asyncio.sleep(0)
+
+    with patch(
+        "astrbot.core.platform.sources.weixin_oc.weixin_oc_adapter.logger.warning"
+    ) as warning_mock:
+        await adapter.start_typing("user-1", "owner-a")
+
+    warning_mock.assert_called_once_with(
+        "weixin_oc(%s): ignored error from cancelled typing task",
+        adapter.meta().id,
+        exc_info=True,
+    )
+
+    stop_event.set()
+    await adapter.stop_typing("user-1", "owner-a")
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
 async def test_cleanup_typing_tasks_sends_final_cancel(adapter):
     adapter._send_typing_state = AsyncMock()
 

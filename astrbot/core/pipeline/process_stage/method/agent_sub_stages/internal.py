@@ -182,8 +182,8 @@ class InternalAgentSubStage(Stage):
             try:
                 typing_requested = True
                 await event.send_typing()
-            except Exception as e:
-                logger.warning("send_typing failed: %s", e)
+            except Exception:
+                logger.warning("send_typing failed", exc_info=True)
             await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
@@ -385,8 +385,8 @@ class InternalAgentSubStage(Stage):
             if typing_requested and not event.platform_meta.support_streaming_message:
                 try:
                     await event.stop_typing()
-                except Exception as e:
-                    logger.warning("stop_typing failed: %s", e)
+                except Exception:
+                    logger.warning("stop_typing failed", exc_info=True)
             if follow_up_capture:
                 await finalize_follow_up_capture(
                     follow_up_capture,

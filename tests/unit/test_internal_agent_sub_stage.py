@@ -133,6 +133,7 @@ async def test_process_swallows_send_typing_error_and_still_releases(stage, even
     obj = await stage()
 
     with (
+        patch.object(internal_module.logger, "warning") as warning_mock,
         patch.object(internal_module, "try_capture_follow_up", return_value=None),
         patch.object(internal_module, "call_event_hook", AsyncMock(return_value=False)),
         patch.object(internal_module.session_lock_manager, "acquire_lock", fake_lock),
@@ -142,6 +143,7 @@ async def test_process_swallows_send_typing_error_and_still_releases(stage, even
 
     assert results == []
     event.stop_typing.assert_awaited_once()
+    warning_mock.assert_called_once_with("send_typing failed", exc_info=True)
 
 
 @pytest.mark.asyncio
@@ -285,6 +287,7 @@ async def test_process_swallows_stop_typing_error(stage, event):
     obj = await stage()
 
     with (
+        patch.object(internal_module.logger, "warning") as warning_mock,
         patch.object(internal_module, "try_capture_follow_up", return_value=None),
         patch.object(internal_module, "call_event_hook", AsyncMock(return_value=False)),
         patch.object(internal_module.session_lock_manager, "acquire_lock", fake_lock),
@@ -295,3 +298,4 @@ async def test_process_swallows_stop_typing_error(stage, event):
     assert results == []
     event.send_typing.assert_awaited_once()
     event.stop_typing.assert_awaited_once()
+    warning_mock.assert_called_once_with("stop_typing failed", exc_info=True)
