@@ -173,7 +173,8 @@ async def test_context_memory_save_requires_dict_value(tmp_path, monkeypatch):
     runtime = build_roundtrip_runtime(monkeypatch, tmp_path=tmp_path)
     ctx = runtime.make_context("plugin-a")
 
-    with pytest.raises(AstrBotError, match="requires an object value"):
+    # SDK 客户端在本地验证时会抛出 TypeError
+    with pytest.raises(TypeError, match="dict"):
         await ctx.memory.save("key", "not-a-dict")
 
 
