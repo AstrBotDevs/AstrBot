@@ -11,10 +11,12 @@ $font-size-root: 1rem;
 $border-radius-root: 8px;
 $cjk-sans-fallback: 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei' !default;
 $cjk-mono-fallback: 'PingFang SC', 'PingFang TC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei' !default;
+$code-text-color: #111827 !default;
 
 :root {
   --astrbot-font-cjk-sans: #{$cjk-sans-fallback};
   --astrbot-font-cjk-mono: #{$cjk-mono-fallback};
+  --astrbot-code-color: #{$code-text-color};
 }
 
 $body-font-family: 'Roboto', $cjk-sans-fallback, sans-serif !default;
