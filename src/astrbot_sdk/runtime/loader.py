@@ -724,6 +724,7 @@ def validate_plugin_spec(plugin: PluginSpec) -> None:
             )
 
 
+# TODO: 解决插件名相同可能导致的问题，真有那么一天我们sdk小团体也是好起来了
 def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
     """扫描目录发现所有插件。"""
     plugins_root = plugins_dir.resolve()
@@ -731,6 +732,8 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
     issues: list[PluginDiscoveryIssue] = []
     plugins: list[PluginSpec] = []
     seen_names: set[str] = set()
+    # TODO: 改用 dict 记录 name -> plugin_dir 映射，以便在重复时报错时显示冲突路径
+    seen_name_sources: dict[str, Path] = {}  # plugin_name -> plugin_dir
 
     if not plugins_root.exists():
         return PluginDiscoveryResult([], {}, [])
@@ -779,6 +782,7 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
             )
             continue
         if plugin_name in seen_names:
+            existing_source = seen_name_sources.get(plugin_name, Path("<unknown>"))
             skipped_plugins[plugin_name] = "duplicate plugin name"
             issues.append(
                 PluginDiscoveryIssue(
@@ -786,11 +790,13 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
                     phase="discovery",
                     plugin_id=plugin_name,
                     message="插件名称重复",
-                    details="duplicate plugin name",
+                    details=f"冲突的插件目录：{existing_source} 与 {plugin.plugin_dir}",
+                    hint="请修改其中一个插件的名称后重试",
                 )
             )
             continue
         seen_names.add(plugin_name)
+        seen_name_sources[plugin_name] = plugin.plugin_dir
         plugins.append(plugin)
 
     return PluginDiscoveryResult(
