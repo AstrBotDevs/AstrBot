@@ -21,7 +21,11 @@ from astrbot.core.agent.message import ContentPart, ImageURLPart, Message, TextP
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
-from astrbot.core.utils.io import download_image_by_url, image_source_to_data_uri
+from astrbot.core.utils.io import (
+    download_image_by_url,
+    image_source_to_data_uri,
+    is_http_or_https_url,
+)
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
     is_connection_error,
@@ -925,13 +929,10 @@ class ProviderOpenAIOfficial(Provider):
         async def resolve_image_part(image_url: str) -> dict | None:
             image_source = (
                 await download_image_by_url(image_url)
-                if image_url.startswith("http")
+                if is_http_or_https_url(image_url)
                 else image_url
             )
             image_data = await self.encode_image_bs64(image_source)
-            if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
-                return None
             return {
                 "type": "image_url",
                 "image_url": {"url": image_data},

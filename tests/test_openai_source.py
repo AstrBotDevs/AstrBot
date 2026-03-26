@@ -654,3 +654,33 @@ async def test_openai_assemble_context_extra_image_file_uri_mime(tmp_path: Path)
         assert image_part["image_url"]["url"].startswith("data:image/png;base64,")
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_assemble_context_uppercase_https_image_url(
+    tmp_path: Path, monkeypatch
+):
+    provider = _make_provider()
+    png_path = tmp_path / "remote.png"
+    png_path.write_bytes(PNG_BYTES)
+
+    async def fake_download(url: str) -> str:
+        assert url == "HTTPS://example.com/asset.png"
+        return str(png_path)
+
+    monkeypatch.setattr(
+        "astrbot.core.provider.sources.openai_source.download_image_by_url",
+        fake_download,
+    )
+    try:
+        assembled = await provider.assemble_context(
+            text="hello",
+            image_urls=["HTTPS://example.com/asset.png"],
+        )
+
+        image_part = next(
+            part for part in assembled["content"] if part.get("type") == "image_url"
+        )
+        assert image_part["image_url"]["url"].startswith("data:image/png;base64,")
+    finally:
+        await provider.terminate()

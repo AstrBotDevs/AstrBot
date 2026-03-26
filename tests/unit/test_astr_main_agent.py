@@ -755,6 +755,37 @@ class TestProviderRequestAssembleContextImage:
         assert image_urls[1].startswith("data:image/webp;base64,")
         assert image_urls[2].startswith("data:image/png;base64,")
 
+    @pytest.mark.asyncio
+    async def test_provider_request_assemble_context_uppercase_https_image_url(
+        self, tmp_path, monkeypatch
+    ):
+        png_path = tmp_path / "request-upper.png"
+        png_path.write_bytes(PNG_BYTES)
+
+        async def fake_download(url: str) -> str:
+            assert url == "HTTPS://example.com/request.png"
+            return str(png_path)
+
+        monkeypatch.setattr(
+            "astrbot.core.provider.entities.download_image_by_url",
+            fake_download,
+        )
+
+        req = ProviderRequest(
+            prompt="Hello",
+            image_urls=["HTTPS://example.com/request.png"],
+        )
+
+        assembled = await req.assemble_context()
+        assert isinstance(assembled["content"], list)
+        image_urls = [
+            part["image_url"]["url"]
+            for part in assembled["content"]
+            if part.get("type") == "image_url"
+        ]
+        assert len(image_urls) == 1
+        assert image_urls[0].startswith("data:image/png;base64,")
+
 
 class TestSanitizeContextByModalities:
     """Tests for _sanitize_context_by_modalities function."""

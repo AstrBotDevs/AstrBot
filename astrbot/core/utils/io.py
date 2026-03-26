@@ -211,6 +211,11 @@ def file_to_base64(file_path: str) -> str:
 DEFAULT_IMAGE_MIME_TYPE = "image/jpeg"
 
 
+def is_http_or_https_url(source: str) -> bool:
+    """Return whether source is a HTTP(S) URL (case-insensitive)."""
+    return urlsplit(source).scheme.lower() in ("http", "https")
+
+
 def detect_image_mime_type(data: bytes) -> str:
     """根据图片二进制数据的 magic bytes 检测 MIME 类型。"""
     if data[:8] == b"\x89PNG\r\n\x1a\n":
@@ -242,7 +247,7 @@ def image_source_to_data_uri(image_source: str) -> tuple[str, str]:
             )
         return image_source, mime_type
 
-    if lower_source.startswith(("http://", "https://")):
+    if is_http_or_https_url(image_source):
         raise ValueError(
             "Remote image URL is not supported in image_source_to_data_uri; download the file before calling this helper.",
         )

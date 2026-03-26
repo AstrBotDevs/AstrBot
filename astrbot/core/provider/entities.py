@@ -10,7 +10,6 @@ from google.genai.types import GenerateContentResponse
 from openai.types.chat.chat_completion import ChatCompletion
 
 import astrbot.core.message.components as Comp
-from astrbot import logger
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
     ContentPart,
@@ -20,7 +19,11 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.utils.io import download_image_by_url, image_source_to_data_uri
+from astrbot.core.utils.io import (
+    download_image_by_url,
+    image_source_to_data_uri,
+    is_http_or_https_url,
+)
 
 
 class ProviderType(enum.Enum):
@@ -188,13 +191,10 @@ class ProviderRequest:
             for image_url in self.image_urls:
                 image_source = (
                     await download_image_by_url(image_url)
-                    if image_url.startswith("http")
+                    if is_http_or_https_url(image_url)
                     else image_url
                 )
                 image_data = await self._encode_image_bs64(image_source)
-                if not image_data:
-                    logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
-                    continue
                 content_blocks.append(
                     {"type": "image_url", "image_url": {"url": image_data}},
                 )
