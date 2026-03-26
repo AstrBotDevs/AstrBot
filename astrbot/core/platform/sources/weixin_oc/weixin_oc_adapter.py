@@ -895,7 +895,13 @@ class WeixinOCAdapter(Platform):
                         await asyncio.sleep(self.qr_poll_interval)
                     continue
 
-                await self._poll_inbound_updates()
+                try:
+                    await self._poll_inbound_updates()
+                except asyncio.TimeoutError:
+                    logger.debug(
+                        "weixin_oc(%s): inbound long-poll timeout",
+                        self.meta().id,
+                    )
         except asyncio.CancelledError:
             raise
         except Exception as e:

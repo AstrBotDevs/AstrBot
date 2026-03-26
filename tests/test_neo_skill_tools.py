@@ -54,8 +54,21 @@ def test_promote_stable_sync_failure_auto_rolls_back(monkeypatch):
         _fake_sync_release,
     )
 
-    event = SimpleNamespace(role="admin", unified_msg_origin="session-1")
-    astr_ctx = SimpleNamespace(context=SimpleNamespace(), event=event)
+    event = SimpleNamespace(
+        role="admin",
+        unified_msg_origin="session-1",
+        get_sender_id=lambda: "admin-user",
+    )
+    astr_ctx = SimpleNamespace(
+        context=SimpleNamespace(
+            get_config=lambda umo: {  # noqa: ARG005
+                "provider_settings": {
+                    "computer_use_require_admin": True,
+                }
+            }
+        ),
+        event=event,
+    )
     run_ctx = ContextWrapper(context=astr_ctx)
 
     tool = PromoteSkillCandidateTool()
