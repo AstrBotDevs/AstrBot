@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 237 icons */
+/* Auto-generated MDI subset – 248 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -118,6 +118,10 @@
 
 .mdi-bug::before {
   content: "\F00E4";
+}
+
+.mdi-cached::before {
+  content: "\F00E8";
 }
 
 .mdi-calendar::before {
@@ -362,6 +366,10 @@
 
 .mdi-eye-outline::before {
   content: "\F06D0";
+}
+
+.mdi-eyedropper::before {
+  content: "\F020A";
 }
 
 .mdi-file::before {
@@ -620,6 +628,14 @@
   content: "\F035C";
 }
 
+.mdi-menu-down::before {
+  content: "\F035D";
+}
+
+.mdi-menu-right::before {
+  content: "\F035F";
+}
+
 .mdi-message-off-outline::before {
   content: "\F164E";
 }
@@ -642,6 +658,10 @@
 
 .mdi-minus::before {
   content: "\F0374";
+}
+
+.mdi-minus-box::before {
+  content: "\F0375";
 }
 
 .mdi-note-text-outline::before {
@@ -674,6 +694,18 @@
 
 .mdi-package-variant::before {
   content: "\F03D6";
+}
+
+.mdi-page-first::before {
+  content: "\F0600";
+}
+
+.mdi-page-last::before {
+  content: "\F0601";
+}
+
+.mdi-paperclip::before {
+  content: "\F03E2";
 }
 
 .mdi-pause::before {
@@ -848,6 +880,14 @@
   content: "\F1C55";
 }
 
+.mdi-star-half-full::before {
+  content: "\F04D0";
+}
+
+.mdi-star-outline::before {
+  content: "\F04D2";
+}
+
 .mdi-stop::before {
   content: "\F04DB";
 }
@@ -902,6 +942,10 @@
 
 .mdi-trash-can-outline::before {
   content: "\F0A7A";
+}
+
+.mdi-unfold-more-horizontal::before {
+  content: "\F054F";
 }
 
 .mdi-update::before {
