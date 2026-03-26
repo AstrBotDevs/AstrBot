@@ -12,7 +12,11 @@ from astrbot_sdk.context import CancelToken
 from astrbot_sdk.errors import AstrBotError, ErrorCodes
 from astrbot_sdk.protocol.messages import InvokeMessage
 from astrbot_sdk.runtime.handler_dispatcher import HandlerDispatcher
-from astrbot_sdk.runtime.loader import load_plugin, load_plugin_spec, validate_plugin_spec
+from astrbot_sdk.runtime.loader import (
+    load_plugin,
+    load_plugin_spec,
+    validate_plugin_spec,
+)
 from astrbot_sdk.testing import PluginHarness
 
 
@@ -584,8 +588,12 @@ async def test_register_llm_tool_and_register_agent_flow_through_runtime_capabil
         assert harness.lifecycle_context is not None
         assert harness.capability_dispatcher is not None
 
-        registered_tools = await harness.lifecycle_context.get_llm_tool_manager().list_registered()
-        active_tools = await harness.lifecycle_context.get_llm_tool_manager().list_active()
+        registered_tools = (
+            await harness.lifecycle_context.get_llm_tool_manager().list_registered()
+        )
+        active_tools = (
+            await harness.lifecycle_context.get_llm_tool_manager().list_active()
+        )
 
         assert [tool.name for tool in registered_tools] == ["get_weather"]
         assert [tool.name for tool in active_tools] == ["get_weather"]
@@ -622,10 +630,14 @@ async def test_register_llm_tool_and_register_agent_flow_through_runtime_capabil
             "session": "demo:private:tool-session",
         }
 
-        no_tool_loop = await harness.lifecycle_context.tool_loop_agent(prompt="forecast")
+        no_tool_loop = await harness.lifecycle_context.tool_loop_agent(
+            prompt="forecast"
+        )
         assert "tools=get_weather" in no_tool_loop.text
 
-        assert await harness.lifecycle_context.deactivate_llm_tool("get_weather") is True
+        assert (
+            await harness.lifecycle_context.deactivate_llm_tool("get_weather") is True
+        )
         without_active_tool = await harness.lifecycle_context.tool_loop_agent(
             prompt="forecast"
         )
@@ -637,7 +649,9 @@ async def test_register_llm_tool_and_register_agent_flow_through_runtime_capabil
         )
         assert "tools=get_weather" in with_active_tool.text
 
-        agent_list = await harness.lifecycle_context._proxy.call("agent.registry.list", {})
+        agent_list = await harness.lifecycle_context._proxy.call(
+            "agent.registry.list", {}
+        )
         agent_get = await harness.lifecycle_context._proxy.call(
             "agent.registry.get",
             {"name": "helper_agent"},

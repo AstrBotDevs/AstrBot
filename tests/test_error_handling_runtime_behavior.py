@@ -213,9 +213,7 @@ async def test_error_handling_runtime_limiter_errors_surface_real_metadata_and_r
         assert rate_exc.value.code == ErrorCodes.RATE_LIMITED
         assert harness.sent_messages[-1].text is not None
         assert harness.sent_messages[-1].text.startswith("rate:")
-        rate_details = harness.router.db_store[
-            "limiter_error_plugin:last:rate_limited"
-        ]
+        rate_details = harness.router.db_store["limiter_error_plugin:last:rate_limited"]
         assert rate_details["handler_id"].endswith(".rate")
         assert rate_details["remaining_seconds"] > 0
 
@@ -236,8 +234,9 @@ async def test_error_handling_runtime_limiter_errors_surface_real_metadata_and_r
 
 
 @pytest.mark.asyncio
-async def test_error_handling_runtime_conversation_replaced_and_closed_are_observable(
-) -> None:
+async def test_error_handling_runtime_conversation_replaced_and_closed_are_observable() -> (
+    None
+):
     peer = MockPeer(MockCapabilityRouter())
 
     class ConversationOwner(Star):
@@ -332,8 +331,7 @@ async def test_error_handling_runtime_conversation_replaced_and_closed_are_obser
 
 
 @pytest.mark.asyncio
-async def test_error_handling_runtime_on_error_failure_does_not_recurse(
-) -> None:
+async def test_error_handling_runtime_on_error_failure_does_not_recurse() -> None:
     peer = MockPeer(MockCapabilityRouter())
 
     class OnErrorFailureOwner(Star):

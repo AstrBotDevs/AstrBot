@@ -56,7 +56,7 @@ def _write_testing_guide_plugin(plugin_dir: Path) -> Path:
                 "",
                 '    @on_message(keywords=["你好"])',
                 "    async def greet(self, event: MessageEvent, ctx: Context) -> None:",
-                '        await event.reply(f\"你好 {event.user_id} via {event.platform}\")',
+                '        await event.reply(f"你好 {event.user_id} via {event.platform}")',
                 "",
                 '    @rate_limit(1, 60, behavior="error")',
                 '    @on_command("limited")',
@@ -280,7 +280,9 @@ def test_testing_guide_inmemory_db_and_memory_behave_as_documented() -> None:
     db.set("user:123", {"name": "Alice"})
     assert db.get("user:123") == {"name": "Alice"}
     assert db.list("user:") == ["user:123"]
-    assert db.get_many(["user:123"]) == [{"key": "user:123", "value": {"name": "Alice"}}]
+    assert db.get_many(["user:123"]) == [
+        {"key": "user:123", "value": {"name": "Alice"}}
+    ]
     db.set_many([{"key": "user:456", "value": {"name": "Bob"}}])
     assert db.get("user:456") == {"name": "Bob"}
     db.delete("user:123")
@@ -393,4 +395,3 @@ async def test_testing_guide_async_patterns_and_helper_functions(
 
     with pytest.raises(ValueError, match="expected error"):
         await function_that_raises()
-
