@@ -8,7 +8,7 @@ import re
 from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 from urllib.parse import unquote, urlparse
 
 import httpx
@@ -139,25 +139,17 @@ class ProviderOpenAIOfficial(Provider):
                     return True
         return False
 
-    @staticmethod
-    def _get_error_info(error: Exception) -> tuple[str | None, str | None]:
-        body = getattr(error, "body", None)
-        if not isinstance(body, dict):
-            return None, None
-
-        err_obj = body.get("error")
-        if not isinstance(err_obj, dict):
-            return None, None
-
-        code = err_obj.get("code")
-        message = err_obj.get("message")
-        return (
-            code.lower() if isinstance(code, str) else None,
-            message.lower() if isinstance(message, str) else None,
-        )
-
     def _is_invalid_attachment_error(self, error: Exception) -> bool:
-        code, message = self._get_error_info(error)
+        body = getattr(error, "body", None)
+        code = None
+        message = None
+        if isinstance(body, dict):
+            err_obj = body.get("error")
+            if isinstance(err_obj, dict):
+                raw_code = err_obj.get("code")
+                raw_message = err_obj.get("message")
+                code = raw_code.lower() if isinstance(raw_code, str) else None
+                message = raw_message.lower() if isinstance(raw_message, str) else None
 
         candidates = [
             candidate.lower()
@@ -183,28 +175,6 @@ class ProviderOpenAIOfficial(Provider):
             "BMP": "image/bmp",
         }.get(str(image_format or "").upper(), "image/jpeg")
 
-    @staticmethod
-    def _read_file_bytes(
-        image_path: str,
-        *,
-        suppress_errors: bool = True,
-    ) -> bytes | None:
-        try:
-            return Path(image_path).read_bytes()
-        except OSError:
-            if not suppress_errors:
-                raise
-            return None
-
-    @staticmethod
-    def _detect_image_format(image_bytes: bytes) -> str | None:
-        try:
-            with PILImage.open(BytesIO(image_bytes)) as image:
-                image.verify()
-                return str(image.format or "").upper()
-        except (OSError, UnidentifiedImageError):
-            return None
-
     @classmethod
     def _encode_image_file_to_data_url(
         cls,
@@ -213,15 +183,18 @@ class ProviderOpenAIOfficial(Provider):
         suppress_errors: bool = True,
         raise_on_invalid_image: bool = False,
     ) -> str | None:
-        image_bytes = cls._read_file_bytes(
-            image_path,
-            suppress_errors=suppress_errors,
-        )
-        if image_bytes is None:
+        try:
+            image_bytes = Path(image_path).read_bytes()
+        except OSError:
+            if not suppress_errors:
+                raise
             return None
 
-        image_format = cls._detect_image_format(image_bytes)
-        if image_format is None:
+        try:
+            with PILImage.open(BytesIO(image_bytes)) as image:
+                image.verify()
+                image_format = str(image.format or "").upper()
+        except (OSError, UnidentifiedImageError):
             if raise_on_invalid_image:
                 raise ValueError(f"Invalid image file: {image_path}")
             return None
@@ -232,6 +205,11 @@ class ProviderOpenAIOfficial(Provider):
 
     @staticmethod
     def _file_uri_to_path(file_uri: str) -> str:
+        """Normalize file URIs to paths.
+
+        `file://localhost/...` and drive-letter forms are treated as local paths.
+        Other non-empty hosts are preserved as UNC-style paths.
+        """
         parsed = urlparse(file_uri)
         if parsed.scheme != "file":
             return file_uri
@@ -251,16 +229,26 @@ class ProviderOpenAIOfficial(Provider):
             return self._file_uri_to_path(image_url)
         return image_url
 
-    async def _load_image_data(self, image_url: str) -> str | None:
-        if image_url.startswith("base64://"):
-            return await self.encode_image_bs64(image_url)
+    async def _image_ref_to_data_url(
+        self,
+        image_ref: str,
+        *,
+        suppress_errors: bool = True,
+        raise_on_invalid_image: bool = False,
+    ) -> str | None:
+        if image_ref.startswith("base64://"):
+            return image_ref.replace("base64://", "data:image/jpeg;base64,")
 
-        if image_url.startswith("http"):
-            image_path = await download_image_by_url(image_url)
+        if image_ref.startswith("http"):
+            image_path = await download_image_by_url(image_ref)
         else:
-            image_path = self._normalize_image_path(image_url)
+            image_path = self._normalize_image_path(image_ref)
 
-        return self._encode_image_file_to_data_url(image_path)
+        return self._encode_image_file_to_data_url(
+            image_path,
+            suppress_errors=suppress_errors,
+            raise_on_invalid_image=raise_on_invalid_image,
+        )
 
     async def _resolve_image_part(
         self,
@@ -271,7 +259,7 @@ class ProviderOpenAIOfficial(Provider):
         if image_url.startswith("data:"):
             image_payload = {"url": image_url}
         else:
-            image_data = await self._load_image_data(image_url)
+            image_data = await self._image_ref_to_data_url(image_url)
             if not image_data:
                 logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                 return None
@@ -284,6 +272,25 @@ class ProviderOpenAIOfficial(Provider):
             "image_url": image_payload,
         }
 
+    def _extract_image_part_info(self, part: dict) -> tuple[str | None, str | None]:
+        if not isinstance(part, dict) or part.get("type") != "image_url":
+            return None, None
+
+        image_url_data = part.get("image_url")
+        if not isinstance(image_url_data, dict):
+            logger.warning("图片内容块格式无效，将保留原始内容。")
+            return None, None
+
+        url = image_url_data.get("url")
+        if not isinstance(url, str) or not url:
+            logger.warning("图片内容块缺少有效 URL，将保留原始内容。")
+            return None, None
+
+        image_detail = image_url_data.get("detail")
+        if not isinstance(image_detail, str):
+            image_detail = None
+        return url, image_detail
+
     async def _materialize_context_image_parts(self, context_query: list[dict]) -> None:
         for message in context_query:
             content = message.get("content")
@@ -293,25 +300,10 @@ class ProviderOpenAIOfficial(Provider):
             new_content: list[dict] = []
             content_changed = False
             for part in content:
-                if not isinstance(part, dict) or part.get("type") != "image_url":
+                url, image_detail = self._extract_image_part_info(part)
+                if not url:
                     new_content.append(part)
                     continue
-
-                image_url_data = part.get("image_url")
-                if not isinstance(image_url_data, dict):
-                    logger.warning("图片内容块格式无效，将保留原始内容。")
-                    new_content.append(part)
-                    continue
-
-                url = image_url_data.get("url")
-                if not isinstance(url, str) or not url:
-                    logger.warning("图片内容块缺少有效 URL，将保留原始内容。")
-                    new_content.append(part)
-                    continue
-
-                image_detail = image_url_data.get("detail")
-                if not isinstance(image_detail, str):
-                    image_detail = None
 
                 try:
                     resolved_part = await self._resolve_image_part(
@@ -1182,15 +1174,14 @@ class ProviderOpenAIOfficial(Provider):
 
     async def encode_image_bs64(self, image_url: str) -> str:
         """将图片转换为 base64"""
-        if image_url.startswith("base64://"):
-            return image_url.replace("base64://", "data:image/jpeg;base64,")
-        image_path = self._normalize_image_path(image_url)
-        image_data = self._encode_image_file_to_data_url(
-            image_path,
+        image_data = await self._image_ref_to_data_url(
+            image_url,
             suppress_errors=False,
             raise_on_invalid_image=True,
         )
-        return cast(str, image_data)
+        if image_data is None:
+            raise RuntimeError(f"Failed to encode image data: {image_url}")
+        return image_data
 
     async def terminate(self):
         if self.client:

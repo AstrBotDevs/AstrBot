@@ -593,7 +593,7 @@ async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeyp
             assert url == "https://example.com/quoted.png"
             return "/tmp/quoted.png"
 
-        def fake_encode(image_path: str) -> str:
+        def fake_encode(image_path: str, **_kwargs) -> str:
             assert image_path == "/tmp/quoted.png"
             return "data:image/png;base64,abcd"
 
@@ -665,6 +665,40 @@ async def test_prepare_chat_payload_skips_materialization_for_text_only_context(
         )
 
         assert payloads["messages"] == [{"role": "user", "content": "hello"}]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_prepare_chat_payload_skips_materialization_for_text_only_parts(
+    monkeypatch,
+):
+    provider = _make_provider()
+    try:
+
+        async def fail_if_called(_context_query):
+            raise AssertionError("materialization should be skipped")
+
+        monkeypatch.setattr(
+            provider, "_materialize_context_image_parts", fail_if_called
+        )
+
+        payloads, _ = await provider._prepare_chat_payload(
+            prompt=None,
+            contexts=[
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "hello"}],
+                }
+            ],
+        )
+
+        assert payloads["messages"] == [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "hello"}],
+            }
+        ]
     finally:
         await provider.terminate()
 
@@ -765,6 +799,17 @@ async def test_file_uri_to_path_preserves_windows_netloc_drive_letter():
 
 
 @pytest.mark.asyncio
+async def test_file_uri_to_path_preserves_remote_netloc_as_unc_path():
+    provider = _make_provider()
+    try:
+        assert provider._file_uri_to_path("file://server/share/quoted-image.png") == (
+            "//server/share/quoted-image.png"
+        )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_resolve_image_part_rejects_invalid_local_file(tmp_path):
     provider = _make_provider()
     try:
@@ -813,6 +858,17 @@ async def test_encode_image_bs64_invalid_file_raises(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_encode_image_bs64_supports_base64_scheme():
+    provider = _make_provider()
+    try:
+        image_data = await provider.encode_image_bs64("base64://abcd")
+
+        assert image_data == "data:image/jpeg;base64,abcd"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_encode_image_bs64_supports_file_uri(tmp_path):
     provider = _make_provider()
     try:
@@ -822,6 +878,18 @@ async def test_encode_image_bs64_supports_file_uri(tmp_path):
         image_data = await provider.encode_image_bs64(image_path.as_uri())
 
         assert image_data.startswith("data:image/png;base64,")
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_resolve_image_part_supports_base64_scheme():
+    provider = _make_provider()
+    try:
+        assert await provider._resolve_image_part("base64://abcd") == {
+            "type": "image_url",
+            "image_url": {"url": "data:image/jpeg;base64,abcd"},
+        }
     finally:
         await provider.terminate()
 
@@ -875,7 +943,11 @@ async def test_prepare_chat_payload_keeps_original_context_image_when_materializ
             "astrbot.core.provider.sources.openai_source.download_image_by_url",
             fake_download,
         )
-        monkeypatch.setattr(provider, "_encode_image_file_to_data_url", lambda _: None)
+        monkeypatch.setattr(
+            provider,
+            "_encode_image_file_to_data_url",
+            lambda _image_path, **_kwargs: None,
+        )
 
         payloads, _ = await provider._prepare_chat_payload(
             prompt=None,
