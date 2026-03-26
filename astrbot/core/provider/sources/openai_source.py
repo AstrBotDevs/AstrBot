@@ -812,7 +812,8 @@ class ProviderOpenAIOfficial(Provider):
             context_query = await self._materialize_context_image_parts(context_query)
 
         model = model or self.get_model()
-        payloads = {**kwargs, "messages": context_query, "model": model}
+
+        payloads = {"messages": context_query, "model": model}
 
         self._finally_convert_payload(payloads)
 
