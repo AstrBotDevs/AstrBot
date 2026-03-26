@@ -186,6 +186,27 @@ async def test_core_bridge_permission_reads_and_mutates_single_admin_source() ->
             request_id="reserved-no-event-request",
         )
 
+    added_without_event = await _call(
+        bridge,
+        "permission.manager.add_admin",
+        {"user_id": "alice", "_caller_is_admin": True},
+        request_id="reserved-no-event-request",
+    )
+    removed_without_event = await _call(
+        bridge,
+        "permission.manager.remove_admin",
+        {"user_id": "alice", "_caller_is_admin": True},
+        request_id="reserved-no-event-request",
+    )
+
+    with pytest.raises(AstrBotError, match="admin privileges"):
+        await _call(
+            bridge,
+            "permission.manager.add_admin",
+            {"user_id": "alice", "_caller_is_admin": True},
+            request_id="reserved-viewer-request",
+        )
+
     added = await _call(
         bridge,
         "permission.manager.add_admin",
@@ -211,9 +232,11 @@ async def test_core_bridge_permission_reads_and_mutates_single_admin_source() ->
         request_id="reserved-admin-request",
     )
 
+    assert added_without_event == {"changed": True}
+    assert removed_without_event == {"changed": True}
     assert added == {"changed": True}
     assert added_again == {"changed": False}
     assert removed == {"changed": True}
     assert removed_again == {"changed": False}
     assert config["admins_id"] == ["root", "maintainer"]
-    assert config.save_calls == 2
+    assert config.save_calls == 4

@@ -82,6 +82,8 @@ class PermissionCapabilityMixin(CapabilityMixinHost):
         if request_context is None or bool(
             getattr(request_context, "cancelled", False)
         ):
+            if bool(payload.get("_caller_is_admin", False)):
+                return
             raise AstrBotError.invalid_input(
                 f"{capability_name} requires an active event context"
             )
@@ -90,6 +92,9 @@ class PermissionCapabilityMixin(CapabilityMixinHost):
             raise AstrBotError.invalid_input(
                 f"{capability_name} requires an active event context"
             )
+        # Prefer the authenticated event context whenever one is available.
+        # The payload hint is only a fallback for proactive calls that were
+        # created from an admin-triggered flow but no longer have a live event.
         if not bool(event.is_admin()):
             raise AstrBotError.invalid_input(
                 f"{capability_name} requires admin privileges"
