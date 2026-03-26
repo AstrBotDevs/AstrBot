@@ -155,6 +155,58 @@
 
 ---
 
+## API 服务器配置 / API Server
+
+### `ASTRBOT_API_ENABLE`
+
+| 属性 | 值 |
+|------|-----|
+| 说明 | 启用 HTTP API 服务器 |
+| 类型 | boolean |
+| 默认 | `true` |
+
+### `ASTRBOT_API_TIMEOUT`
+
+| 属性 | 值 |
+|------|-----|
+| 说明 | API 请求超时时间（秒） |
+| 类型 | integer |
+| 默认 | `60` |
+
+### `ASTRBOT_API_MAX_BODY_SIZE`
+
+| 属性 | 值 |
+|------|-----|
+| 说明 | API 最大请求体大小（MB） |
+| 类型 | integer |
+| 默认 | `100` |
+
+### `ASTRBOT_API_KEY`
+
+| 属性 | 值 |
+|------|-----|
+| 说明 | 默认 API Key（用于开发环境） |
+| 类型 | string |
+| 注意 | 建议通过 secrets.yaml 配置 |
+
+### `ASTRBOT_CALLBACK_API_BASE`
+
+| 属性 | 值 |
+|------|-----|
+| 说明 | Webhook 回调基础 URL |
+| 类型 | url |
+| 示例 | `https://your-server.com/callback` |
+
+### `ASTRBOT_CALLBACK_SECRET`
+
+| 属性 | 值 |
+|------|-----|
+| 说明 | Webhook 回调签名密钥 |
+| 类型 | string |
+| 注意 | 用于验证回调请求签名 |
+
+---
+
 ## SSL/TLS 配置
 
 ### `ASTRBOT_SSL_ENABLE`
@@ -268,6 +320,67 @@
 
 ---
 
+## GPG 安全配置 / GPG Security
+
+### `ASTRBOT_GPG_ENABLE`
+
+| 属性 | 值 |
+|------|-----|
+| 说明 | 启用 GPG 配置签名与验签功能 |
+| 类型 | boolean |
+| 默认 | `false` |
+
+### `ASTRBOT_GPG_VERIFY_MODE`
+
+| 属性 | 值 |
+|------|-----|
+| 说明 | 验签模式 |
+| 类型 | enum |
+| 默认 | `warn` |
+| 可选值 | `none` (不验签), `warn` (仅警告), `enforce` (阻止启动) |
+
+### `ASTRBOT_GPG_TRUSTED_KEYS`
+
+| 属性 | 值 |
+|------|-----|
+| 说明 | 信任的 GPG 公钥指纹列表（逗号分隔） |
+| 类型 | string |
+| 示例 | `ABCDEF1234567890...,FEDCBA0987654321...` |
+
+### `ASTRBOT_GPG_SIGNED_CONFIGS`
+
+| 属性 | 值 |
+|------|-----|
+| 说明 | 需要验签的配置文件列表（逗号分隔） |
+| 类型 | string |
+| 示例 | `secrets.yaml,agent.yaml,platform.yaml` |
+
+### `ASTRBOT_GPG_GNUPG_HOME`
+
+| 属性 | 值 |
+|------|-----|
+| 说明 | GPG 主目录路径（默认使用系统配置） |
+| 类型 | path |
+| 示例 | `/home/user/.gnupg` |
+
+### `ASTRBOT_GPG_PRIVATE_KEY`
+
+| 属性 | 值 |
+|------|-----|
+| 说明 | GPG 私钥（ASCII Armor 格式），用于签名 |
+| 类型 | string |
+| 注意 | 建议通过 secrets.yaml 配置，优先使用环境变量 |
+
+### `ASTRBOT_GPG_PASSPHRASE`
+
+| 属性 | 值 |
+|------|-----|
+| 说明 | GPG 私钥密码短语 |
+| 类型 | string |
+| 注意 | 建议通过 secrets.yaml 配置，优先使用环境变量 |
+
+---
+
 ## 命名规范
 
 ### 前缀规则
@@ -276,6 +389,7 @@
 |------|------|
 | `ASTRBOT_` | AstrBot 核心配置 |
 | `ASTRBOT_SSL_` | SSL/TLS 配置 |
+| `ASTRBOT_GPG_` | GPG 安全配置 |
 | `ASTRBOT_INSTANCE_` | 实例相关 |
 | `http_proxy`, `https_proxy`, `no_proxy` | 标准代理变量（无前缀） |
 

@@ -42,6 +42,7 @@ AstrBot 遵循 [XDG Base Directory Specification](https://specifications.freedes
 ```
 /var/lib/astrbot/
 ├── config/                    # 配置文件
+│   └── mcp_servers.json        # MCP 服务器配置
 ├── data/                      # 插件、skills 等
 │   ├── plugins/
 │   ├── plugin_data/
@@ -61,6 +62,36 @@ AstrBot 遵循 [XDG Base Directory Specification](https://specifications.freedes
 ├── astrbot.sock               # Unix Socket
 └── pid                        # PID 文件
 ```
+
+### MCP 服务器配置
+
+MCP 服务器配置位于 `config/mcp_servers.json`：
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"],
+      "env": {}
+    },
+    "http-server": {
+      "url": "http://localhost:3000/mcp",
+      "transport": "sse"
+    }
+  }
+}
+```
+
+**配置字段**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `command` | string | 启动命令（stdio 传输） |
+| `args` | array | 命令参数 |
+| `env` | object | 环境变量 |
+| `url` | string | 服务器 URL（HTTP 传输） |
+| `transport` | string | 传输类型：`stdio` / `sse` / `streamable_http` |
 
 ## 平台差异
 
@@ -86,7 +117,6 @@ AstrBot 遵循 [XDG Base Directory Specification](https://specifications.freedes
 ```
 $XDG_DATA_HOME/astrbot/
 ├── data/                      # 应用数据
-│   ├── config/               # 配置文件
 │   ├── plugins/              # 插件目录
 │   ├── plugin_data/          # 插件数据
 │   ├── skills/               # Skills 目录
@@ -101,7 +131,8 @@ $XDG_DATA_HOME/astrbot/
 
 $XDG_CONFIG_HOME/astrbot/
 ├── .env                      # 环境变量
-└── config.yaml               # 主配置文件
+├── config.yaml               # 主配置文件
+└── mcp_servers.json          # MCP 服务器配置
 ```
 
 ## 路径映射
@@ -282,6 +313,47 @@ $XDG_DATA_HOME/astrbot/<instance_name>/
 ## 环境变量
 
 所有平台统一使用 `ASTRBOT_*` 环境变量覆盖默认路径，优先级最高。
+
+## 与 Claude Code 目录对比
+
+Claude Code 使用 `~/.claude/` 作为根目录，**不遵循 XDG 规范**：
+
+```
+~/.claude/                          # Claude Code 根目录
+├── backups/                        # 备份
+├── cache/                          # 缓存
+├── downloads/                       # 下载
+├── file-history/                   # 文件历史
+├── paste-cache/                    # 粘贴缓存
+├── plans/                          # 计划
+├── plugins/                        # 插件
+├── projects/                       # 项目会话
+├── session-env/                    # 会话环境
+├── sessions/                       # 会话
+├── shell-snapshots/                # Shell 快照
+├── skills/                         # Skills
+├── tasks/                          # 任务
+├── teams/                          # 团队
+├── history.jsonl                   # 对话历史
+├── settings.json                   # 设置
+└── settings.local.json             # 本地设置
+```
+
+### 关键差异
+
+| 维度 | Claude Code | AstrBot |
+|------|-------------|---------|
+| 规范 | 非标准（固定 `~/.claude/`） | XDG 规范 |
+| 配置 | 根目录直接放配置文件 | 分离到 `$XDG_CONFIG_HOME/` |
+| 缓存 | 根目录下 `cache/` | `$XDG_CACHE_HOME/` |
+| 数据 | 根目录直接放数据文件 | 分离到 `$XDG_DATA_HOME/` |
+| 会话 | `sessions/`, `session-env/` | `$XDG_STATE_HOME/` |
+| 项目 | `projects/` | 内嵌在数据目录 |
+
+### 设计哲学
+
+- **Claude Code**：简单直接，所有内容在 `~/.claude/` 下
+- **AstrBot**：遵循 XDG，数据分类清晰（配置/数据/缓存/状态分离）
 
 ## 已知限制
 
