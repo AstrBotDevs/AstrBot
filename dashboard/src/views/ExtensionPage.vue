@@ -385,6 +385,7 @@ const {
   <v-snackbar
     :timeout="2000"
     elevation="24"
+    location="top center"
     :color="snack_success"
     v-model="snack_show"
   >
