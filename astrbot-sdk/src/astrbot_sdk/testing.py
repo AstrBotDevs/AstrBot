@@ -360,12 +360,16 @@ class PluginHarness:
         if not matches:
             raise AstrBotError.invalid_input("未找到匹配的 handler")
         for loaded, args in matches:
-            await self._invoke_handler(
+            result = await self._invoke_handler(
                 loaded,
                 event_payload,
                 args=args,
                 request_id=request_id,
             )
+            # Mirror the runtime dispatcher contract: once a handler explicitly
+            # stops the event, later matches in the same dispatch should not run.
+            if bool(result.get("stop", False)):
+                break
         return self.platform_sink.records[start_index:]
 
     async def invoke_capability(
@@ -437,7 +441,7 @@ class PluginHarness:
         *,
         args: dict[str, Any],
         request_id: str | None = None,
-    ) -> None:
+    ) -> dict[str, Any]:
         assert self.dispatcher is not None
         message = InvokeMessage(
             id=request_id or self._next_request_id("msg"),
@@ -449,7 +453,8 @@ class PluginHarness:
             },
         )
         try:
-            await self.dispatcher.invoke(message, CancelToken())
+            result = await self.dispatcher.invoke(message, CancelToken())
+            return dict(result)
         except AstrBotError:
             raise
         except Exception as exc:  # pragma: no cover - 由 CLI/集成测试覆盖
@@ -460,7 +465,7 @@ class PluginHarness:
         event_payload: dict[str, Any],
         *,
         request_id: str | None = None,
-    ) -> None:
+    ) -> dict[str, Any]:
         assert self.dispatcher is not None
         message = InvokeMessage(
             id=request_id or self._next_request_id("msg"),
@@ -472,7 +477,8 @@ class PluginHarness:
             },
         )
         try:
-            await self.dispatcher.invoke(message, CancelToken())
+            result = await self.dispatcher.invoke(message, CancelToken())
+            return dict(result)
         except AstrBotError:
             raise
         except Exception as exc:  # pragma: no cover - 由 CLI/集成测试覆盖
@@ -601,6 +607,13 @@ class PluginHarness:
                 str(event_payload.get("event_type") or event_payload.get("type"))
                 == "schedule"
             ):
+                schedule_payload = event_payload.get("schedule")
+                if isinstance(schedule_payload, dict):
+                    target_handler_id = str(
+                        schedule_payload.get("handler_id", "")
+                    ).strip()
+                    if target_handler_id and target_handler_id != loaded.descriptor.id:
+                        return None
                 return {}
             return None
         return None

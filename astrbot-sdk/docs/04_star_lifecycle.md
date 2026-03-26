@@ -414,6 +414,7 @@ class MyPlugin(Star):
 my_plugin/
 ├── plugin.yaml          # 插件配置
 ├── main.py              # 主入口
+├── _conf_schema.json    # 配置 schema（启用 get_plugin_config 的前提）
 ├── handlers/            # 处理器模块
 ├── utils/               # 工具函数
 ├── requirements.txt     # 可选的 Python 依赖
@@ -498,6 +499,8 @@ class MyPlugin(Star):
 
         self.api_key = config["api_key"]
 ```
+
+说明：`ctx.metadata.get_plugin_config()` 读取的是按 `_conf_schema.json` 归一化后的配置；如果插件没有提供 `_conf_schema.json`，运行时会返回空配置字典而不是直接读取任意 JSON 文件。
 
 ### 4. 数据持久化
 
