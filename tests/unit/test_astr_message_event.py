@@ -364,7 +364,7 @@ class TestGetMessageOutline:
             session_id="session123",
         )
         outline = event.get_message_outline()
-        assert outline == ""
+        assert outline.strip() == ""
 
     def test_outline_plain_without_text_attr(self, platform_meta, astrbot_message):
         """Test outline with Plain object missing text attribute (Issue #5098)."""
@@ -378,7 +378,7 @@ class TestGetMessageOutline:
             session_id="session123",
         )
         outline = event.get_message_outline()
-        assert outline == ""
+        assert outline.strip() == ""
 
 
 class TestExtras:

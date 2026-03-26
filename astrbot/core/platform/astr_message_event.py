@@ -144,8 +144,7 @@ class AstrMessageEvent(abc.ABC):
         parts = []
         for i in chain:
             if isinstance(i, Plain):
-                text = getattr(i, "text", None)
-                parts.append(text if text else "")
+                parts.append(getattr(i, "text", None) or "")
             elif isinstance(i, Image):
                 parts.append("[图片]")
             elif isinstance(i, Face):
