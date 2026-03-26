@@ -224,6 +224,33 @@ async def test_send_typing_state_raises_on_nonzero_ret(adapter):
 
 
 @pytest.mark.asyncio
+async def test_cancel_task_safely_logs_task_errors(adapter):
+    async def failing_task():
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError as exc:
+            raise RuntimeError("task wait failed") from exc
+
+    task = asyncio.create_task(failing_task())
+    await asyncio.sleep(0)
+
+    with patch(
+        "astrbot.core.platform.sources.weixin_oc.weixin_oc_adapter.logger.warning"
+    ) as warning_mock:
+        await adapter._cancel_task_safely(
+            task,
+            log_message="weixin_oc(%s): typing cleanup failed",
+            log_args=(adapter.meta().id,),
+        )
+
+    warning_mock.assert_called_once_with(
+        "weixin_oc(%s): typing cleanup failed",
+        adapter.meta().id,
+        exc_info=True,
+    )
+
+
+@pytest.mark.asyncio
 async def test_start_typing_same_owner_is_idempotent(adapter):
     stop_event = asyncio.Event()
     adapter._send_typing_state = AsyncMock()

@@ -164,6 +164,25 @@ class WeixinOCAdapter(Platform):
             return False
         return bool(self._context_tokens.get(user_id))
 
+    async def _cancel_task_safely(
+        self,
+        task: asyncio.Task | None,
+        *,
+        log_message: str | None = None,
+        log_args: tuple[Any, ...] = (),
+    ) -> None:
+        if task is None or task.done():
+            return
+
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            if log_message is not None:
+                logger.warning(log_message, *log_args, exc_info=True)
+
     async def _ensure_typing_ticket(
         self,
         user_id: str,
@@ -366,16 +385,11 @@ class WeixinOCAdapter(Platform):
             state.keepalive_task = task
 
         if cancel_task is not None:
-            try:
-                await cancel_task
-            except asyncio.CancelledError:
-                pass
-            except Exception:
-                logger.warning(
-                    "weixin_oc(%s): ignored error from cancelled typing task",
-                    self.meta().id,
-                    exc_info=True,
-                )
+            await self._cancel_task_safely(
+                cancel_task,
+                log_message="weixin_oc(%s): ignored error from cancelled typing task",
+                log_args=(self.meta().id,),
+            )
 
     async def stop_typing(self, user_id: str, owner_id: str) -> None:
         state = self._typing_states.get(user_id)
@@ -384,12 +398,9 @@ class WeixinOCAdapter(Platform):
 
         task: asyncio.Task | None = None
         async with state.lock:
-            if owner_id in state.owners:
-                state.owners.remove(owner_id)
-            elif state.owners:
+            if owner_id not in state.owners:
                 return
-            else:
-                return
+            state.owners.remove(owner_id)
 
             if state.owners:
                 return
@@ -397,19 +408,11 @@ class WeixinOCAdapter(Platform):
             task = state.keepalive_task
             state.keepalive_task = None
 
-        if task is not None and not task.done():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-            except Exception as e:
-                logger.warning(
-                    "weixin_oc(%s): typing keepalive stop failed for %s: %s",
-                    self.meta().id,
-                    user_id,
-                    e,
-                )
+        await self._cancel_task_safely(
+            task,
+            log_message="weixin_oc(%s): typing keepalive stop failed for %s",
+            log_args=(self.meta().id, user_id),
+        )
 
         async with state.lock:
             if state.owners:
@@ -442,14 +445,11 @@ class WeixinOCAdapter(Platform):
                 state.cancel_task = None
 
         for task in tasks:
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-            except Exception as e:
-                logger.warning(
-                    "weixin_oc(%s): typing cleanup failed: %s", self.meta().id, e
-                )
+            await self._cancel_task_safely(
+                task,
+                log_message="weixin_oc(%s): typing cleanup failed",
+                log_args=(self.meta().id,),
+            )
 
         for user_id, ticket in cancels:
             try:
