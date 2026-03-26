@@ -798,6 +798,9 @@
             "emojis": {
               "description": "Emoji List (Lark Emoji Enum Names)",
               "hint": "Emoji enum names reference: [https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce](https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce)"
+            },
+            "auto_remove": {
+              "description": "[Lark] Auto-remove emoji after processing"
             }
           }
         },
@@ -809,6 +812,9 @@
             "emojis": {
               "description": "Emoji List (Unicode)",
               "hint": "Telegram only supports a fixed reaction set, reference: [https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)"
+            },
+            "auto_remove": {
+              "description": "[Telegram] Auto-remove emoji after processing"
             }
           }
         },
@@ -820,6 +826,9 @@
             "emojis": {
               "description": "Emoji List (Unicode or Custom Emoji Name)",
               "hint": "Enter Unicode emoji symbols, e.g., 👍, 🤔, ⏳"
+            },
+            "auto_remove": {
+              "description": "[Discord] Auto-remove emoji after processing"
             }
           }
         }
