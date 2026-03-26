@@ -8,7 +8,7 @@ import re
 from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import unquote, urlparse
 
 import httpx
@@ -206,13 +206,24 @@ class ProviderOpenAIOfficial(Provider):
             return None
 
     @classmethod
-    def _encode_image_file_to_data_url(cls, image_path: str) -> str | None:
-        image_bytes = cls._read_file_bytes(image_path)
+    def _encode_image_file_to_data_url(
+        cls,
+        image_path: str,
+        *,
+        suppress_errors: bool = True,
+        raise_on_invalid_image: bool = False,
+    ) -> str | None:
+        image_bytes = cls._read_file_bytes(
+            image_path,
+            suppress_errors=suppress_errors,
+        )
         if image_bytes is None:
             return None
 
         image_format = cls._detect_image_format(image_bytes)
         if image_format is None:
+            if raise_on_invalid_image:
+                raise ValueError(f"Invalid image file: {image_path}")
             return None
 
         mime_type = cls._image_format_to_mime_type(image_format)
@@ -235,16 +246,19 @@ class ProviderOpenAIOfficial(Provider):
             path = f"//{netloc}{path}"
         return str(Path(path))
 
+    def _normalize_image_path(self, image_url: str) -> str:
+        if image_url.startswith("file://"):
+            return self._file_uri_to_path(image_url)
+        return image_url
+
     async def _load_image_data(self, image_url: str) -> str | None:
         if image_url.startswith("base64://"):
             return await self.encode_image_bs64(image_url)
 
         if image_url.startswith("http"):
             image_path = await download_image_by_url(image_url)
-        elif image_url.startswith("file://"):
-            image_path = self._file_uri_to_path(image_url)
         else:
-            image_path = image_url
+            image_path = self._normalize_image_path(image_url)
 
         return self._encode_image_file_to_data_url(image_path)
 
@@ -803,7 +817,8 @@ class ProviderOpenAIOfficial(Provider):
                 for tcr in tool_calls_result:
                     context_query.extend(tcr.to_openai_messages())
 
-        await self._materialize_context_image_parts(context_query)
+        if self._context_contains_image(context_query):
+            await self._materialize_context_image_parts(context_query)
 
         model = model or self.get_model()
 
@@ -1169,16 +1184,13 @@ class ProviderOpenAIOfficial(Provider):
         """将图片转换为 base64"""
         if image_url.startswith("base64://"):
             return image_url.replace("base64://", "data:image/jpeg;base64,")
-        image_bytes = self._read_file_bytes(image_url, suppress_errors=False)
-        if image_bytes is None:
-            raise FileNotFoundError(image_url)
-
-        image_format = self._detect_image_format(image_bytes)
-        if image_format is None:
-            raise ValueError(f"Invalid image file: {image_url}")
-        mime_type = self._image_format_to_mime_type(image_format)
-        image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
-        return f"data:{mime_type};base64,{image_bs64}"
+        image_path = self._normalize_image_path(image_url)
+        image_data = self._encode_image_file_to_data_url(
+            image_path,
+            suppress_errors=False,
+            raise_on_invalid_image=True,
+        )
+        return cast(str, image_data)
 
     async def terminate(self):
         if self.client:

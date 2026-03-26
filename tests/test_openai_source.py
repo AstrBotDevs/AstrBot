@@ -646,6 +646,30 @@ async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_prepare_chat_payload_skips_materialization_for_text_only_context(
+    monkeypatch,
+):
+    provider = _make_provider()
+    try:
+
+        async def fail_if_called(_context_query):
+            raise AssertionError("materialization should be skipped")
+
+        monkeypatch.setattr(
+            provider, "_materialize_context_image_parts", fail_if_called
+        )
+
+        payloads, _ = await provider._prepare_chat_payload(
+            prompt=None,
+            contexts=[{"role": "user", "content": "hello"}],
+        )
+
+        assert payloads["messages"] == [{"role": "user", "content": "hello"}]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_prepare_chat_payload_materializes_context_http_image_urls_with_detected_mime(
     monkeypatch, tmp_path
 ):
@@ -784,6 +808,20 @@ async def test_encode_image_bs64_invalid_file_raises(tmp_path):
 
         with pytest.raises(ValueError, match="Invalid image file"):
             await provider.encode_image_bs64(str(invalid_file))
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_encode_image_bs64_supports_file_uri(tmp_path):
+    provider = _make_provider()
+    try:
+        image_path = tmp_path / "quoted-image.png"
+        PILImage.new("RGBA", (1, 1), (255, 0, 0, 255)).save(image_path)
+
+        image_data = await provider.encode_image_bs64(image_path.as_uri())
+
+        assert image_data.startswith("data:image/png;base64,")
     finally:
         await provider.terminate()
 
