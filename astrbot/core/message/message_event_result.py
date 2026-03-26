@@ -27,6 +27,9 @@ class MessageChain:
 
     chain: list[BaseMessageComponent] = field(default_factory=list)
     use_t2i_: bool | None = None  # None 为跟随用户设置
+    use_markdown_: bool | None = (
+        None  # 是否使用 Markdown 发送消息。None 跟随平台默认，True 强制 Markdown，False 强制纯文本。
+    )
     type: str | None = None
     """消息链承载的消息的类型。可选，用于让消息平台区分不同业务场景的消息链。"""
 
@@ -116,6 +119,18 @@ class MessageChain:
 
         """
         self.use_t2i_ = use_t2i
+        return self
+
+    def use_markdown(self, use: bool | None = True):
+        """设置是否使用 Markdown 发送消息。
+
+        仅对支持 Markdown 的平台生效（如 QQ Official），不支持的平台会忽略此字段。
+
+        Args:
+            use: True 强制使用 Markdown，False 强制纯文本，None 跟随平台默认行为。
+
+        """
+        self.use_markdown_ = use
         return self
 
     def get_plain_text(self, with_other_comps_mark: bool = False) -> str:
