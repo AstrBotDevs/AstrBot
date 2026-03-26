@@ -1,4 +1,0 @@
-interface:
-  display_name: "AstrBot Plugin Dev ({{ agent_display_name }})"
-  short_description: "Use AstrBot SDK to design, build, test, and package plugins."
-  default_prompt: "Use ${{ skill_dir_name }} to design and implement an AstrBot SDK v4 plugin from the user request."
