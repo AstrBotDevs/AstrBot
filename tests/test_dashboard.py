@@ -1094,6 +1094,89 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
 
 
 @pytest.mark.asyncio
+async def test_batch_upload_skills_accepts_rootless_skill_archive(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+    tmp_path,
+):
+    data_dir = tmp_path / "data"
+    skills_dir = tmp_path / "skills"
+    temp_dir = tmp_path / "temp"
+    data_dir.mkdir()
+    skills_dir.mkdir()
+    temp_dir.mkdir()
+
+    async def _fake_sync_skills_to_active_sandboxes():
+        return
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
+        lambda: str(skills_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "SKILL.md",
+            "---\nname: rootless-skill\ndescription: Rootless demo skill\n---\n",
+        )
+        zf.writestr("assets/config.json", '{"enabled": true}')
+        zf.writestr("prompts/system.txt", "hello")
+    archive.seek(0)
+
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/skills/batch-upload",
+        headers=authenticated_header,
+        files={
+            "files": FileStorage(
+                stream=archive,
+                filename="rootless-skill.zip",
+                content_type="application/zip",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["succeeded"] == [
+        {"filename": "rootless-skill.zip", "name": "rootless-skill"}
+    ]
+    assert skills_dir.joinpath("rootless-skill", "SKILL.md").exists()
+    assert (
+        skills_dir.joinpath("rootless-skill", "assets", "config.json").read_text(
+            encoding="utf-8"
+        )
+        == '{"enabled": true}'
+    )
+    assert (
+        skills_dir.joinpath("rootless-skill", "prompts", "system.txt").read_text(
+            encoding="utf-8"
+        )
+        == "hello"
+    )
+
+
+@pytest.mark.asyncio
 async def test_batch_upload_skills_partial_success(
     app: Quart,
     authenticated_header: dict,

@@ -35,6 +35,9 @@ def _normalize_skill_name(name: str | None) -> str:
     return re.sub(r"\s+", "_", raw.strip())
 
 
+_SKILL_MARKDOWN_FILENAMES = {"SKILL.md", "skill.md"}
+
+
 def _default_sandbox_skill_path(name: str) -> str:
     return f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{name}/SKILL.md"
 
@@ -64,6 +67,30 @@ def _is_ignored_zip_entry(name: str) -> bool:
     return parts[0] == "__MACOSX"
 
 
+def _normalize_zip_entry_path(name: str) -> PurePosixPath | None:
+    normalized = str(name or "").replace("\\", "/")
+    if not normalized:
+        return None
+    if normalized.startswith("/") or re.match(r"^[A-Za-z]:", normalized):
+        raise ValueError("Zip archive contains absolute paths.")
+
+    parts: list[str] = []
+    for part in PurePosixPath(normalized).parts:
+        if part in {"", "."}:
+            continue
+        if part == "..":
+            raise ValueError("Zip archive contains invalid relative paths.")
+        parts.append(part)
+
+    if not parts:
+        return None
+
+    path = PurePosixPath(*parts)
+    if _is_ignored_zip_entry(str(path)):
+        return None
+    return path
+
+
 def _normalize_skill_markdown_path(skill_dir: Path) -> Path | None:
     """Return the canonical `SKILL.md` path for a skill directory.
 
@@ -85,6 +112,39 @@ def _normalize_skill_markdown_path(skill_dir: Path) -> Path | None:
     except OSError:
         return legacy
     return canonical
+
+
+def _parse_skill_frontmatter(text: str) -> dict:
+    if not text.startswith("---"):
+        return {}
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+
+    end_idx = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            end_idx = i
+            break
+    if end_idx is None:
+        return {}
+
+    frontmatter = "\n".join(lines[1:end_idx])
+    try:
+        payload = yaml.safe_load(frontmatter) or {}
+    except yaml.YAMLError:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return payload
+
+
+def _parse_frontmatter_name(text: str) -> str:
+    payload = _parse_skill_frontmatter(text)
+    name = payload.get("name", "")
+    if not isinstance(name, str):
+        return ""
+    return name.strip()
 
 
 @dataclass
@@ -110,31 +170,92 @@ def _parse_frontmatter_description(text: str) -> str:
         description: What this skill does and when to use it.
         ---
     """
-    if not text.startswith("---"):
-        return ""
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return ""
-    end_idx = None
-    for i in range(1, len(lines)):
-        if lines[i].strip() == "---":
-            end_idx = i
-            break
-    if end_idx is None:
-        return ""
-
-    frontmatter = "\n".join(lines[1:end_idx])
-    try:
-        payload = yaml.safe_load(frontmatter) or {}
-    except yaml.YAMLError:
-        return ""
-    if not isinstance(payload, dict):
-        return ""
-
+    payload = _parse_skill_frontmatter(text)
     description = payload.get("description", "")
     if not isinstance(description, str):
         return ""
     return description.strip()
+
+
+def _path_is_ancestor_or_same(ancestor: PurePosixPath, path: PurePosixPath) -> bool:
+    ancestor_parts = ancestor.parts
+    path_parts = path.parts
+    if len(ancestor_parts) > len(path_parts):
+        return False
+    return path_parts[: len(ancestor_parts)] == ancestor_parts
+
+
+def _discover_skill_root_from_archive(
+    file_paths: list[PurePosixPath],
+) -> PurePosixPath:
+    candidate_dirs = {
+        path.parent for path in file_paths if path.name in _SKILL_MARKDOWN_FILENAMES
+    }
+    if not candidate_dirs:
+        raise ValueError("SKILL.md not found in the zip archive.")
+
+    ordered_candidates = sorted(
+        candidate_dirs, key=lambda path: (len(path.parts), str(path))
+    )
+    shallowest_depth = len(ordered_candidates[0].parts)
+    shallowest_candidates = [
+        path for path in ordered_candidates if len(path.parts) == shallowest_depth
+    ]
+    if len(shallowest_candidates) != 1:
+        raise ValueError(
+            "Multiple skill roots found in the zip archive. Please upload one skill per zip."
+        )
+
+    skill_root = shallowest_candidates[0]
+    for candidate in ordered_candidates[1:]:
+        if not _path_is_ancestor_or_same(skill_root, candidate):
+            raise ValueError(
+                "Multiple skill roots found in the zip archive. Please upload one skill per zip."
+            )
+    return skill_root
+
+
+def _infer_skill_name(
+    skill_root_rel: PurePosixPath,
+    skill_md_path: Path,
+    zip_path: Path,
+    skill_name_hint: str | None = None,
+) -> str:
+    candidates: list[str] = []
+    if skill_root_rel.parts:
+        candidates.append(skill_root_rel.name)
+
+    try:
+        skill_text = skill_md_path.read_text(encoding="utf-8")
+    except OSError:
+        skill_text = ""
+
+    frontmatter_name = _parse_frontmatter_name(skill_text)
+    if frontmatter_name:
+        candidates.append(frontmatter_name)
+
+    if skill_name_hint:
+        candidates.append(skill_name_hint)
+
+    zip_stem = zip_path.stem.strip()
+    if zip_stem:
+        candidates.append(zip_stem)
+
+    for candidate in candidates:
+        normalized_candidate = _normalize_skill_name(candidate)
+        if normalized_candidate and _SKILL_NAME_RE.fullmatch(normalized_candidate):
+            return normalized_candidate
+
+    sanitized_zip_stem = _normalize_skill_name(
+        re.sub(r"[^\w.-]+", "-", zip_path.stem).strip("._-")
+    )
+    if sanitized_zip_stem and _SKILL_NAME_RE.fullmatch(sanitized_zip_stem):
+        return sanitized_zip_stem
+
+    raise ValueError(
+        "Unable to determine a valid skill name. Add a valid `name` to SKILL.md "
+        "or package the skill inside a valid folder."
+    )
 
 
 # Regex for sanitizing paths used in prompt examples — only allow
@@ -549,102 +670,58 @@ class SkillManager:
             raise ValueError("Uploaded file is not a valid zip archive.")
 
         with zipfile.ZipFile(zip_path) as zf:
-            names = [
-                name
-                for name in (entry.replace("\\", "/") for entry in zf.namelist())
-                if name and not _is_ignored_zip_entry(name)
-            ]
-            file_names = [name for name in names if name and not name.endswith("/")]
-            if not file_names:
+            validated_members: list[tuple[zipfile.ZipInfo, PurePosixPath]] = []
+            file_paths: list[PurePosixPath] = []
+
+            for member in zf.infolist():
+                normalized_path = _normalize_zip_entry_path(member.filename)
+                if normalized_path is None:
+                    continue
+                validated_members.append((member, normalized_path))
+                if not member.is_dir():
+                    file_paths.append(normalized_path)
+
+            if not file_paths:
                 raise ValueError("Zip archive is empty.")
 
-            has_root_skill_md = any(
-                len(parts := PurePosixPath(name).parts) == 1
-                and parts[0] in {"SKILL.md", "skill.md"}
-                for name in file_names
-            )
-            root_mode = has_root_skill_md
-
-            archive_skill_name = None
-            if skill_name_hint is not None:
-                archive_skill_name = _normalize_skill_name(skill_name_hint)
-                if archive_skill_name and not _SKILL_NAME_RE.fullmatch(
-                    archive_skill_name
-                ):
-                    raise ValueError("Invalid skill name.")
-
-            if root_mode:
-                archive_hint = _normalize_skill_name(
-                    archive_skill_name or zip_path_obj.stem
-                )
-                if not archive_hint or not _SKILL_NAME_RE.fullmatch(archive_hint):
-                    raise ValueError("Invalid skill name.")
-                skill_name = archive_hint
-            else:
-                top_dirs = {
-                    PurePosixPath(name).parts[0] for name in file_names if name.strip()
-                }
-                if len(top_dirs) != 1:
-                    raise ValueError(
-                        "Zip archive must contain a single top-level folder."
-                    )
-                archive_root_name = next(iter(top_dirs))
-                archive_root_name_normalized = _normalize_skill_name(archive_root_name)
-                if archive_root_name in {".", "..", ""} or not _SKILL_NAME_RE.fullmatch(
-                    archive_root_name_normalized
-                ):
-                    raise ValueError("Invalid skill folder name.")
-                if archive_skill_name:
-                    if not _SKILL_NAME_RE.fullmatch(archive_skill_name):
-                        raise ValueError("Invalid skill name.")
-                    skill_name = archive_skill_name
-                else:
-                    skill_name = archive_root_name_normalized
-
-            for name in names:
-                if not name:
-                    continue
-                if name.startswith("/") or re.match(r"^[A-Za-z]:", name):
-                    raise ValueError("Zip archive contains absolute paths.")
-                parts = PurePosixPath(name).parts
-                if ".." in parts:
-                    raise ValueError("Zip archive contains invalid relative paths.")
-                if (not root_mode) and parts and parts[0] != archive_root_name:
-                    raise ValueError(
-                        "Zip archive contains unexpected top-level entries."
-                    )
-
-            if root_mode:
-                if "SKILL.md" not in file_names and "skill.md" not in file_names:
-                    raise ValueError("SKILL.md not found in the skill folder.")
-            else:
-                if (
-                    f"{archive_root_name}/SKILL.md" not in file_names
-                    and f"{archive_root_name}/skill.md" not in file_names
-                ):
-                    raise ValueError("SKILL.md not found in the skill folder.")
+            skill_root_rel = _discover_skill_root_from_archive(file_paths)
 
             with tempfile.TemporaryDirectory(dir=get_astrbot_temp_path()) as tmp_dir:
-                for member in zf.infolist():
-                    member_name = member.filename.replace("\\", "/")
-                    if not member_name or _is_ignored_zip_entry(member_name):
-                        continue
+                extraction_root = Path(tmp_dir)
+                for member, _normalized_path in validated_members:
                     zf.extract(member, tmp_dir)
+
                 src_dir = (
-                    Path(tmp_dir) if root_mode else Path(tmp_dir) / archive_root_name
+                    extraction_root
+                    if not skill_root_rel.parts
+                    else extraction_root.joinpath(*skill_root_rel.parts)
                 )
-                normalized_path = _normalize_skill_markdown_path(src_dir)
-                if normalized_path is None:
-                    raise ValueError("SKILL.md not found in the skill folder.")
-                _normalize_skill_markdown_path(src_dir)
+                skill_md_path = _normalize_skill_markdown_path(src_dir)
                 if not src_dir.exists():
                     raise ValueError("Skill folder not found after extraction.")
+                if skill_md_path is None:
+                    raise ValueError("SKILL.md not found in the skill package.")
+
+                skill_name = _infer_skill_name(
+                    skill_root_rel,
+                    skill_md_path,
+                    zip_path_obj,
+                    skill_name_hint=skill_name_hint,
+                )
                 dest_dir = Path(self.skills_root) / skill_name
                 if dest_dir.exists():
                     if not overwrite:
                         raise FileExistsError("Skill already exists.")
                     shutil.rmtree(dest_dir)
-                shutil.move(str(src_dir), str(dest_dir))
+
+                if skill_root_rel.parts:
+                    shutil.move(str(src_dir), str(dest_dir))
+                else:
+                    dest_dir.mkdir(parents=True, exist_ok=False)
+                    for child in extraction_root.iterdir():
+                        if child.name == "__MACOSX":
+                            continue
+                        shutil.move(str(child), str(dest_dir / child.name))
 
         self.set_skill_active(skill_name, True)
         return skill_name
