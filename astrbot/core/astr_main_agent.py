@@ -916,7 +916,7 @@ async def _handle_webchat(
                     chunk_text = resp.completion_text
                     if chunk_text:
                         full_text += chunk_text
-            if last_resp and last_resp.completion_text:
+            if last_resp and not last_resp.is_chunk:
                 return last_resp
             if full_text:
                 return LLMResponse("assistant", completion_text=full_text)
