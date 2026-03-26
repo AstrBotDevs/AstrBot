@@ -890,8 +890,8 @@ async def test_materialize_context_image_parts_returns_new_messages(monkeypatch)
 
         assert materialized is not context_query
         assert materialized[0] is not context_query[0]
-        assert materialized[0]["metadata"] is not context_query[0]["metadata"]
-        assert materialized[0]["content"][0] is not context_query[0]["content"][0]
+        assert materialized[0]["metadata"] is context_query[0]["metadata"]
+        assert materialized[0]["content"][0] is context_query[0]["content"][0]
         assert (
             materialized[0]["content"][1]["image_url"]["url"]
             == "data:image/png;base64,abcd"

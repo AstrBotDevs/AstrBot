@@ -151,19 +151,22 @@ class ProviderOpenAIOfficial(Provider):
                 code = raw_code.lower() if isinstance(raw_code, str) else None
                 message = raw_message.lower() if isinstance(raw_message, str) else None
 
-        parts: list[str] = []
-        if code:
-            parts.append(code)
-        if message:
-            parts.append(message)
-        parts.extend(map(str, self._extract_error_text_candidates(error)))
+        if code == "invalid_attachment":
+            return True
 
-        error_text = " ".join(part.lower() for part in parts if part)
+        text_sources: list[str] = []
+        if message:
+            text_sources.append(message)
+        if code:
+            text_sources.append(code)
+        text_sources.extend(map(str, self._extract_error_text_candidates(error)))
+
+        error_text = " ".join(text.lower() for text in text_sources if text)
         if "invalid_attachment" in error_text:
             return True
         if "download attachment" in error_text and "404" in error_text:
             return True
-        return code == "invalid_attachment"
+        return False
 
     @classmethod
     def _encode_image_file_to_data_url(
@@ -281,46 +284,40 @@ class ProviderOpenAIOfficial(Provider):
             image_detail = None
         return url, image_detail
 
+    async def _transform_content_part(self, part: dict) -> dict:
+        url, image_detail = self._extract_image_part_info(part)
+        if not url:
+            return part
+
+        try:
+            resolved_part = await self._resolve_image_part(
+                url, image_detail=image_detail
+            )
+        except Exception as exc:
+            logger.warning(
+                "图片 %s 预处理失败，将保留原始内容。错误: %s",
+                url,
+                exc,
+            )
+            return part
+
+        return resolved_part or part
+
+    async def _materialize_message_image_parts(self, message: dict) -> dict:
+        content = message.get("content")
+        if not isinstance(content, list):
+            return {**message}
+
+        new_content = [await self._transform_content_part(part) for part in content]
+        return {**message, "content": new_content}
+
     async def _materialize_context_image_parts(
         self, context_query: list[dict]
     ) -> list[dict]:
-        new_messages: list[dict] = []
-        for message in context_query:
-            content = message.get("content")
-            if not isinstance(content, list):
-                new_messages.append(copy.deepcopy(message))
-                continue
-
-            new_content: list[dict] = []
-            for part in content:
-                url, image_detail = self._extract_image_part_info(part)
-                if not url:
-                    new_content.append(copy.deepcopy(part))
-                    continue
-
-                try:
-                    resolved_part = await self._resolve_image_part(
-                        url, image_detail=image_detail
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "图片 %s 预处理失败，将保留原始内容。错误: %s",
-                        url,
-                        exc,
-                    )
-                    new_content.append(copy.deepcopy(part))
-                    continue
-
-                if resolved_part is None:
-                    new_content.append(copy.deepcopy(part))
-                    continue
-
-                new_content.append(resolved_part)
-            new_message = copy.deepcopy(message)
-            new_message["content"] = new_content
-            new_messages.append(new_message)
-
-        return new_messages
+        return [
+            await self._materialize_message_image_parts(message)
+            for message in context_query
+        ]
 
     async def _fallback_to_text_only_and_retry(
         self,
