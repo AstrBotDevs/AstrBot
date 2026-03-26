@@ -387,6 +387,7 @@ const {
     elevation="24"
     :color="snack_success"
     v-model="snack_show"
+    location="bottom center"
   >
     {{ snack_message }}
   </v-snackbar>
