@@ -228,6 +228,7 @@ const {
           variant="text"
           prepend-icon="mdi-book-open-variant"
           href="https://docs.astrbot.app/dev/star/plugin-new.html"
+          rel="noopener noreferrer"
           target="_blank"
           color="primary"
           class="text-none"
