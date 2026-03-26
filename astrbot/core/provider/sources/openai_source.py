@@ -141,8 +141,8 @@ class ProviderOpenAIOfficial(Provider):
 
     def _is_invalid_attachment_error(self, error: Exception) -> bool:
         body = getattr(error, "body", None)
-        code = None
-        message = None
+        code: str | None = None
+        message: str | None = None
         if isinstance(body, dict):
             err_obj = body.get("error")
             if isinstance(err_obj, dict):
@@ -151,29 +151,19 @@ class ProviderOpenAIOfficial(Provider):
                 code = raw_code.lower() if isinstance(raw_code, str) else None
                 message = raw_message.lower() if isinstance(raw_message, str) else None
 
-        candidates = [
-            candidate.lower()
-            for candidate in self._extract_error_text_candidates(error)
-        ]
+        parts: list[str] = []
+        if code:
+            parts.append(code)
         if message:
-            candidates.append(message)
+            parts.append(message)
+        parts.extend(map(str, self._extract_error_text_candidates(error)))
 
-        for candidate in candidates:
-            if "invalid_attachment" in candidate:
-                return True
-            if "download attachment" in candidate and "404" in candidate:
-                return True
+        error_text = " ".join(part.lower() for part in parts if part)
+        if "invalid_attachment" in error_text:
+            return True
+        if "download attachment" in error_text and "404" in error_text:
+            return True
         return code == "invalid_attachment"
-
-    @staticmethod
-    def _image_format_to_mime_type(image_format: str | None) -> str:
-        return {
-            "JPEG": "image/jpeg",
-            "PNG": "image/png",
-            "GIF": "image/gif",
-            "WEBP": "image/webp",
-            "BMP": "image/bmp",
-        }.get(str(image_format or "").upper(), "image/jpeg")
 
     @classmethod
     def _encode_image_file_to_data_url(
@@ -199,7 +189,13 @@ class ProviderOpenAIOfficial(Provider):
                 raise ValueError(f"Invalid image file: {image_path}")
             return None
 
-        mime_type = cls._image_format_to_mime_type(image_format)
+        mime_type = {
+            "JPEG": "image/jpeg",
+            "PNG": "image/png",
+            "GIF": "image/gif",
+            "WEBP": "image/webp",
+            "BMP": "image/bmp",
+        }.get(image_format, "image/jpeg")
         image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
         return f"data:{mime_type};base64,{image_bs64}"
 
@@ -224,11 +220,6 @@ class ProviderOpenAIOfficial(Provider):
             path = f"//{netloc}{path}"
         return str(Path(path))
 
-    def _normalize_image_path(self, image_url: str) -> str:
-        if image_url.startswith("file://"):
-            return self._file_uri_to_path(image_url)
-        return image_url
-
     async def _image_ref_to_data_url(
         self,
         image_ref: str,
@@ -241,14 +232,33 @@ class ProviderOpenAIOfficial(Provider):
 
         if image_ref.startswith("http"):
             image_path = await download_image_by_url(image_ref)
+        elif image_ref.startswith("file://"):
+            image_path = self._file_uri_to_path(image_ref)
         else:
-            image_path = self._normalize_image_path(image_ref)
+            image_path = image_ref
 
         return self._encode_image_file_to_data_url(
             image_path,
             suppress_errors=suppress_errors,
             raise_on_invalid_image=raise_on_invalid_image,
         )
+
+    async def _image_ref_to_data_url_safe(self, image_ref: str) -> str | None:
+        return await self._image_ref_to_data_url(
+            image_ref,
+            suppress_errors=True,
+            raise_on_invalid_image=False,
+        )
+
+    async def _image_ref_to_data_url_strict(self, image_ref: str) -> str:
+        image_data = await self._image_ref_to_data_url(
+            image_ref,
+            suppress_errors=False,
+            raise_on_invalid_image=True,
+        )
+        if image_data is None:
+            raise RuntimeError(f"Failed to encode image data: {image_ref}")
+        return image_data
 
     async def _resolve_image_part(
         self,
@@ -259,7 +269,7 @@ class ProviderOpenAIOfficial(Provider):
         if image_url.startswith("data:"):
             image_payload = {"url": image_url}
         else:
-            image_data = await self._image_ref_to_data_url(image_url)
+            image_data = await self._image_ref_to_data_url_safe(image_url)
             if not image_data:
                 logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                 return None
@@ -298,7 +308,6 @@ class ProviderOpenAIOfficial(Provider):
                 continue
 
             new_content: list[dict] = []
-            content_changed = False
             for part in content:
                 url, image_detail = self._extract_image_part_info(part)
                 if not url:
@@ -323,11 +332,6 @@ class ProviderOpenAIOfficial(Provider):
                     continue
 
                 new_content.append(resolved_part)
-                if resolved_part != part:
-                    content_changed = True
-
-            if not content_changed:
-                continue
             message["content"] = new_content
 
     async def _fallback_to_text_only_and_retry(
@@ -1174,14 +1178,7 @@ class ProviderOpenAIOfficial(Provider):
 
     async def encode_image_bs64(self, image_url: str) -> str:
         """将图片转换为 base64"""
-        image_data = await self._image_ref_to_data_url(
-            image_url,
-            suppress_errors=False,
-            raise_on_invalid_image=True,
-        )
-        if image_data is None:
-            raise RuntimeError(f"Failed to encode image data: {image_url}")
-        return image_data
+        return await self._image_ref_to_data_url_strict(image_url)
 
     async def terminate(self):
         if self.client:
