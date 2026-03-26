@@ -1,4 +1,3 @@
-import base64
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,6 +7,13 @@ from openai.types.chat.chat_completion import ChatCompletion
 from astrbot.core.agent.message import ImageURLPart
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
+from tests.fixtures.image_samples import (
+    GIF_BASE64,
+    PNG_BASE64,
+    PNG_BYTES,
+    WEBP_BASE64,
+    WEBP_BYTES,
+)
 
 
 class _ErrorWithBody(Exception):
@@ -20,14 +26,6 @@ class _ErrorWithResponse(Exception):
     def __init__(self, message: str, response_text: str):
         super().__init__(message)
         self.response = SimpleNamespace(text=response_text)
-
-
-PNG_BYTES = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
-GIF_BYTES = b"GIF89a\x01\x00\x01\x00\x80\x00\x00"
-WEBP_BYTES = b"RIFF\x0c\x00\x00\x00WEBPVP8 "
-PNG_BASE64 = base64.b64encode(PNG_BYTES).decode("utf-8")
-GIF_BASE64 = base64.b64encode(GIF_BYTES).decode("utf-8")
-WEBP_BASE64 = base64.b64encode(WEBP_BYTES).decode("utf-8")
 
 
 def _make_provider(overrides: dict | None = None) -> ProviderOpenAIOfficial:

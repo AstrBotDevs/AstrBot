@@ -189,9 +189,6 @@ class ProviderRequest:
                 if image_url.startswith("http"):
                     image_path = await download_image_by_url(image_url)
                     image_data = await self._encode_image_bs64(image_path)
-                elif image_url.startswith("file:///"):
-                    image_path = image_url.replace("file:///", "")
-                    image_data = await self._encode_image_bs64(image_path)
                 else:
                     image_data = await self._encode_image_bs64(image_url)
                 if not image_data:

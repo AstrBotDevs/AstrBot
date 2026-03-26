@@ -1,12 +1,14 @@
-import base64
 from pathlib import Path
 
 from astrbot.core.utils.io import detect_image_mime_type, image_source_to_data_uri
-
-PNG_BYTES = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
-GIF_BYTES = b"GIF89a\x01\x00\x01\x00\x80\x00\x00"
-WEBP_BYTES = b"RIFF\x0c\x00\x00\x00WEBPVP8 "
-JPEG_BYTES = b"\xff\xd8\xff\xe0\x00\x10JFIF"
+from tests.fixtures.image_samples import (
+    GIF_BASE64,
+    GIF_BYTES,
+    JPEG_BYTES,
+    PNG_BASE64,
+    PNG_BYTES,
+    WEBP_BYTES,
+)
 
 
 def test_detect_image_mime_type_known_formats():
@@ -21,15 +23,14 @@ def test_detect_image_mime_type_unknown_fallback_jpeg():
 
 
 def test_image_source_to_data_uri_passthrough_data_uri():
-    data_uri = f"data:image/png;base64,{base64.b64encode(PNG_BYTES).decode('utf-8')}"
+    data_uri = f"data:image/png;base64,{PNG_BASE64}"
     encoded, mime_type = image_source_to_data_uri(data_uri)
     assert encoded == data_uri
     assert mime_type == "image/png"
 
 
 def test_image_source_to_data_uri_detects_base64_mime():
-    raw = base64.b64encode(GIF_BYTES).decode("utf-8")
-    encoded, mime_type = image_source_to_data_uri(f"base64://{raw}")
+    encoded, mime_type = image_source_to_data_uri(f"base64://{GIF_BASE64}")
     assert encoded.startswith("data:image/gif;base64,")
     assert mime_type == "image/gif"
 
@@ -47,3 +48,12 @@ def test_image_source_to_data_uri_detects_local_file_mime(tmp_path: Path):
     encoded, mime_type = image_source_to_data_uri(str(webp_path))
     assert encoded.startswith("data:image/webp;base64,")
     assert mime_type == "image/webp"
+
+
+def test_image_source_to_data_uri_detects_file_uri_mime(tmp_path: Path):
+    png_path = tmp_path / "uri-image.png"
+    png_path.write_bytes(PNG_BYTES)
+
+    encoded, mime_type = image_source_to_data_uri(f"file:///{png_path.as_posix()}")
+    assert encoded == f"data:image/png;base64,{PNG_BASE64}"
+    assert mime_type == "image/png"

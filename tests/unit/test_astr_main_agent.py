@@ -1,6 +1,5 @@
 """Tests for astr_main_agent module."""
 
-import base64
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -15,6 +14,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
+from tests.fixtures.image_samples import PNG_BASE64, PNG_BYTES, WEBP_BYTES
 
 
 @pytest.fixture
@@ -729,14 +729,16 @@ class TestProviderRequestAssembleContextImage:
     ):
         png_path = tmp_path / "request.png"
         webp_path = tmp_path / "request.webp"
-        png_path.write_bytes(base64.b64decode("iVBORw0KGgo="))
-        webp_path.write_bytes(b"RIFF\x0c\x00\x00\x00WEBPVP8 ")
+        png_path.write_bytes(PNG_BYTES)
+        webp_path.write_bytes(WEBP_BYTES)
+        base64_url = f"base64://{PNG_BASE64}"
 
         req = ProviderRequest(
             prompt="Hello",
             image_urls=[
                 str(png_path),
                 f"file:///{webp_path.as_posix()}",
+                base64_url,
             ],
         )
 
@@ -748,9 +750,10 @@ class TestProviderRequestAssembleContextImage:
             for part in assembled["content"]
             if part.get("type") == "image_url"
         ]
-        assert len(image_urls) == 2
+        assert len(image_urls) == 3
         assert image_urls[0].startswith("data:image/png;base64,")
         assert image_urls[1].startswith("data:image/webp;base64,")
+        assert image_urls[2].startswith("data:image/png;base64,")
 
 
 class TestSanitizeContextByModalities:

@@ -8,6 +8,8 @@ import time
 import uuid
 import zipfile
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
+from urllib.request import url2pathname
 
 import aiohttp
 import certifi
@@ -241,6 +243,14 @@ def image_source_to_data_uri(image_source: str) -> tuple[str, str]:
         except Exception:
             mime_type = "image/jpeg"
         return f"data:{mime_type};base64,{raw_base64}", mime_type
+
+    if lower_source.startswith("file://"):
+        parsed = urlsplit(image_source)
+        if parsed.netloc and parsed.netloc != "localhost":
+            raw_path = f"//{parsed.netloc}{parsed.path}"
+        else:
+            raw_path = parsed.path
+        image_source = url2pathname(unquote(raw_path))
 
     with open(image_source, "rb") as f:
         image_bytes = f.read()
