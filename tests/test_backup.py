@@ -14,6 +14,7 @@ from astrbot.core.backup import (
     KB_METADATA_MODELS,
     MAIN_DB_MODELS,
     ImportPreCheckResult,
+    get_backup_directories,
 )
 from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import (
@@ -239,6 +240,45 @@ class TestAstrBotExporter:
             assert "manifest.json" in namelist
             assert "databases/main_db.json" in namelist
             assert "config/cmd_config.json" in namelist
+
+    @pytest.mark.asyncio
+    async def test_export_all_includes_sdk_plugins_directory(
+        self,
+        mock_main_db,
+        temp_backup_dir,
+        tmp_path,
+        monkeypatch,
+    ):
+        """测试导出会覆盖 data/sdk_plugins 目录"""
+        data_dir = tmp_path / "data"
+        sdk_plugin_dir = data_dir / "sdk_plugins" / "demo_sdk_plugin"
+        sdk_plugin_dir.mkdir(parents=True)
+        (sdk_plugin_dir / "main.py").write_text("print('sdk plugin')", encoding="utf-8")
+        config_path = data_dir / "cmd_config.json"
+        config_path.write_text(json.dumps({"test": "config"}), encoding="utf-8")
+        monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+
+        session = AsyncMock()
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = []
+        session.execute = AsyncMock(return_value=result)
+        mock_main_db.get_db.return_value = AsyncMock(
+            __aenter__=AsyncMock(return_value=session),
+            __aexit__=AsyncMock(return_value=None),
+        )
+
+        exporter = AstrBotExporter(
+            main_db=mock_main_db,
+            kb_manager=None,
+            config_path=str(config_path),
+        )
+
+        zip_path = await exporter.export_all(output_dir=str(temp_backup_dir))
+
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            assert (
+                "directories/sdk_plugins/demo_sdk_plugin/main.py" in zf.namelist()
+            )
 
 
 class TestAstrBotImporter:
@@ -1035,6 +1075,15 @@ class TestModelMappings:
         ]
         for table in expected_tables:
             assert table in KB_METADATA_MODELS, f"Missing table: {table}"
+
+    def test_backup_directories_include_sdk_plugins(self, tmp_path, monkeypatch):
+        """测试备份目录清单覆盖 sdk_plugins 目录"""
+        monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+
+        directories = get_backup_directories()
+
+        assert "sdk_plugins" in directories
+        assert directories["sdk_plugins"] == str(tmp_path / "data" / "sdk_plugins")
 
 
 class TestBackupIntegration:

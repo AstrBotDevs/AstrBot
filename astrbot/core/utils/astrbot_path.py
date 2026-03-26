@@ -5,6 +5,7 @@
 数据目录路径：固定为根目录下的 data 目录
 配置文件路径：固定为数据目录下的 config 目录
 插件目录路径：固定为数据目录下的 plugins 目录
+SDK 插件目录路径：固定为数据目录下的 sdk_plugins 目录
 插件数据目录路径：固定为数据目录下的 plugin_data 目录
 T2I 模板目录路径：固定为数据目录下的 t2i_templates 目录
 WebChat 数据目录路径：固定为数据目录下的 webchat 目录
@@ -47,6 +48,11 @@ def get_astrbot_config_path() -> str:
 def get_astrbot_plugin_path() -> str:
     """获取Astrbot插件目录路径"""
     return os.path.realpath(os.path.join(get_astrbot_data_path(), "plugins"))
+
+
+def get_astrbot_sdk_plugins_path() -> str:
+    """获取Astrbot SDK 插件目录路径"""
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "sdk_plugins"))
 
 
 def get_astrbot_plugin_data_path() -> str:

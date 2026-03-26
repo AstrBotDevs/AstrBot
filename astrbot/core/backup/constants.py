@@ -26,6 +26,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_plugin_data_path,
     get_astrbot_plugin_path,
+    get_astrbot_sdk_plugins_path,
     get_astrbot_t2i_templates_path,
     get_astrbot_temp_path,
     get_astrbot_webchat_path,
@@ -67,6 +68,7 @@ def get_backup_directories() -> dict[str, str]:
     """
     return {
         "plugins": get_astrbot_plugin_path(),  # 插件本体
+        "sdk_plugins": get_astrbot_sdk_plugins_path(),  # SDK 插件本体
         "plugin_data": get_astrbot_plugin_data_path(),  # 插件数据
         "config": get_astrbot_config_path(),  # 配置目录
         "t2i_templates": get_astrbot_t2i_templates_path(),  # T2I 模板
