@@ -225,10 +225,13 @@ pre-commit install
 
 ### QQ Groups
 
+- Group 12: 916228568 (New)
 - Group 9: 1076659624 (New)
 - Group 10: 1078079676 (New)
+- Group 11: 704659519 (Full)
 - Group 1: 322154837
 - Group 3: 630166526
+- Group 4: 1077826412
 - Group 5: 822130018
 - Group 6: 753075035
 - Group 7: 743746109
