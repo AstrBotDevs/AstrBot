@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import logging
+import mimetypes
 import os
 import socket
 from datetime import datetime
@@ -44,6 +45,13 @@ class _AddrWithPort(Protocol):
 APP: Quart
 
 
+def _ensure_static_asset_mime_types() -> None:
+    # Override platform-specific mappings so module scripts are always served
+    # with a JavaScript MIME type, especially on Windows hosts.
+    mimetypes.add_type("application/javascript", ".js")
+    mimetypes.add_type("application/javascript", ".mjs")
+
+
 def _parse_env_bool(value: str | None, default: bool) -> bool:
     if value is None:
         return default
@@ -68,6 +76,7 @@ class AstrBotDashboard:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
         self.db = db
+        _ensure_static_asset_mime_types()
 
         # Path priority:
         # 1. Explicit webui_dir argument
