@@ -41,7 +41,7 @@ class PreAckEmojiManager:
         cfg = self._get_cfg(platform)
         emojis = cfg.get("emojis") or []
 
-        if not cfg.get("enable", False) or not emojis or not event.is_at_or_wake_command:
+        if not cfg.get("enable", False) or not emojis:
             return None
 
         emoji = random.choice(emojis)

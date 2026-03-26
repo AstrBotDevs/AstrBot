@@ -66,16 +66,6 @@ class TestPreAckEmojiAddEmoji:
         event.react.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_not_wake_command_does_not_react(self):
-        """非 at/唤醒消息不贴表情"""
-        cfg = _make_config("telegram")
-        mgr = PreAckEmojiManager(cfg)
-        event = _make_event("telegram", is_wake=False)
-        result = await mgr.add_emoji(event)
-        assert result is None
-        event.react.assert_not_called()
-
-    @pytest.mark.asyncio
     async def test_emoji_chosen_from_config_list(self):
         """选出的 emoji 在配置列表内"""
         emojis = ["👍", "✍️", "🤔"]
