@@ -145,6 +145,8 @@ class MainAgentBuildConfig:
     """Maximum number of images injected from quoted-message fallback extraction."""
     enhanced_subagent: dict = field(default_factory=dict)
     """Log level for enhanced SubAgent: info or debug."""
+
+
 @dataclass(slots=True)
 class MainAgentBuildResult:
     agent_runner: AgentRunner
@@ -939,7 +941,7 @@ def _apply_enhanced_subagent_tools(
     2. Register dynamic SubAgent management tools
     3. Register session's transfer_to_xxx tools
     """
-    if not config.enhanced_subagent.get('enabled', False):
+    if not config.enhanced_subagent.get("enabled", False):
         return
 
     if req.func_tool is None:
@@ -957,6 +959,7 @@ def _apply_enhanced_subagent_tools(
             DynamicSubAgentManager,
         )
         from astrbot.core.subagent_logger import SubAgentLogger
+
         # Register dynamic SubAgent management tools
         req.func_tool.add_tool(CREATE_DYNAMIC_SUBAGENT_TOOL)
         req.func_tool.add_tool(CLEANUP_DYNAMIC_SUBAGENT_TOOL)
@@ -967,20 +970,26 @@ def _apply_enhanced_subagent_tools(
         req.func_tool.add_tool(SEND_PUBLIC_CONTEXT_TOOL)
 
         # Configure logger
-        SubAgentLogger.configure(level=config.enhanced_subagent.get('log_level'))
+        SubAgentLogger.configure(level=config.enhanced_subagent.get("log_level"))
 
         # Configure DynamicSubAgentManager with settings
-        shared_context_enabled = config.enhanced_subagent.get('shared_context_enabled', False)
+        shared_context_enabled = config.enhanced_subagent.get(
+            "shared_context_enabled", False
+        )
         DynamicSubAgentManager.configure(
-            max_subagent_count=config.enhanced_subagent.get('max_subagent_count'),
-            auto_cleanup_per_turn=config.enhanced_subagent.get('auto_cleanup_per_turn'),
+            max_subagent_count=config.enhanced_subagent.get("max_subagent_count"),
+            auto_cleanup_per_turn=config.enhanced_subagent.get("auto_cleanup_per_turn"),
             shared_context_enabled=shared_context_enabled,
-            shared_context_maxlen=config.enhanced_subagent.get('shared_context_maxlen', 200)
+            shared_context_maxlen=config.enhanced_subagent.get(
+                "shared_context_maxlen", 200
+            ),
         )
 
         # Enable shared context if configured
         if shared_context_enabled:
-            DynamicSubAgentManager.set_shared_context_enabled(event.unified_msg_origin, True)
+            DynamicSubAgentManager.set_shared_context_enabled(
+                event.unified_msg_origin, True
+            )
 
         # Inject enhanced system prompt
         enhanced_prompt = DynamicSubAgentManager.ENHANCED_SUBAGENT_SYSTEM_PROMPT
@@ -995,19 +1004,23 @@ def _apply_enhanced_subagent_tools(
                     req.func_tool.add_tool(tool)
         # Register dynamically created handoff tools
         session_id = event.unified_msg_origin
-        dynamic_handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(session_id)
+        dynamic_handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(
+            session_id
+        )
         for handoff in dynamic_handoffs:
             req.func_tool.add_tool(handoff)
 
-        # Check if we should cleanup subagents from previous turn
-        # This is done at the START of a new turn to clean up from previous turn
+            # Check if we should cleanup subagents from previous turn
+            # This is done at the START of a new turn to clean up from previous turn
             try:
                 DynamicSubAgentManager.cleanup_session_turn_start(session_id)
             except Exception as e:
                 from astrbot import logger
+
                 logger.warning(f"[EnhancedSubAgent] Cleanup failed: {e}")
     except ImportError as e:
         from astrbot import logger
+
         logger.warning(f"[EnhancedSubAgent] Cannot import module: {e}")
 
 

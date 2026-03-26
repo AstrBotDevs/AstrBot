@@ -202,7 +202,7 @@ DEFAULT_CONFIG = {
         "max_subagent_count": 3,
         "auto_cleanup_per_turn": True,
         "shared_context_enabled": False,
-        "shared_context_maxlen": 200
+        "shared_context_maxlen": 200,
     },
     "provider_stt_settings": {
         "enable": False,

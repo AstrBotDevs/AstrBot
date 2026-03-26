@@ -4,16 +4,12 @@ Provides logging capabilities for dynamic subagents
 """
 
 from __future__ import annotations
-import json
 import logging
-import traceback
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any
-
 from astrbot import logger as base_logger
 
 
@@ -71,9 +67,15 @@ class SubAgentLogger:
     EVENT_CLEANUP = "cleanup"
 
     @classmethod
-    def configure(cls, level: str = "info", mode: str = "console", log_dir: str | None = None) -> None:
+    def configure(
+        cls, level: str = "info", mode: str = "console", log_dir: str | None = None
+    ) -> None:
         cls._log_level = LogLevel.DEBUG if level == "debug" else LogLevel.INFO
-        mode_map = {"console": LogMode.CONSOLE_ONLY, "file": LogMode.FILE_ONLY, "both": LogMode.BOTH}
+        mode_map = {
+            "console": LogMode.CONSOLE_ONLY,
+            "file": LogMode.FILE_ONLY,
+            "both": LogMode.BOTH,
+        }
         cls._log_mode = mode_map.get(mode.lower(), LogMode.CONSOLE_ONLY)
         if log_dir:
             cls._log_dir = Path(log_dir)
@@ -86,19 +88,20 @@ class SubAgentLogger:
             return
         try:
             cls._log_dir.mkdir(parents=True, exist_ok=True)
-            log_file = cls._log_dir / f"subagent_{datetime.now().strftime('%Y%m%d')}.log"
+            log_file = (
+                cls._log_dir / f"subagent_{datetime.now().strftime('%Y%m%d')}.log"
+            )
 
             # 使用 RotatingFileHandler 自动轮转
             cls._file_handler = RotatingFileHandler(
                 log_file,
                 maxBytes=10 * 1024 * 1024,  # 10MB
                 backupCount=5,
-                encoding="utf-8"
+                encoding="utf-8",
             )
 
             formatter = logging.Formatter(
-                "%(asctime)s [%(levelname)s] %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S"
+                "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
             )
             cls._file_handler.setFormatter(formatter)
 
@@ -115,8 +118,16 @@ class SubAgentLogger:
         return True
 
     @classmethod
-    def log(cls, session_id: str, event_type: str, message: str, level: str = "info",
-            agent_name: str | None = None, details: dict | None = None, error_trace: str | None = None) -> None:
+    def log(
+        cls,
+        session_id: str,
+        event_type: str,
+        message: str,
+        level: str = "info",
+        agent_name: str | None = None,
+        details: dict | None = None,
+        error_trace: str | None = None,
+    ) -> None:
         if not cls.should_log(level):
             return
         entry = SubAgentLogEntry(
@@ -137,15 +148,36 @@ class SubAgentLogger:
         log_func(log_msg)
 
     @classmethod
-    def info(cls, session_id: str, event_type: str, message: str, agent_name: str | None = None, details: dict | None = None) -> None:
+    def info(
+        cls,
+        session_id: str,
+        event_type: str,
+        message: str,
+        agent_name: str | None = None,
+        details: dict | None = None,
+    ) -> None:
         cls.log(session_id, event_type, message, "info", agent_name, details)
 
     @classmethod
-    def debug(cls, session_id: str, event_type: str, message: str, agent_name: str | None = None, details: dict | None = None) -> None:
+    def debug(
+        cls,
+        session_id: str,
+        event_type: str,
+        message: str,
+        agent_name: str | None = None,
+        details: dict | None = None,
+    ) -> None:
         cls.log(session_id, event_type, message, "debug", agent_name, details)
 
     @classmethod
-    def error(cls, session_id: str, event_type: str, message: str, agent_name: str | None = None, details: dict | None = None) -> None:
+    def error(
+        cls,
+        session_id: str,
+        event_type: str,
+        message: str,
+        agent_name: str | None = None,
+        details: dict | None = None,
+    ) -> None:
         cls.log(session_id, event_type, message, "error", agent_name, details)
 
     @classmethod
@@ -158,17 +190,47 @@ class SubAgentLogger:
             cls._file_handler.close()
 
 
-def log_agent_create(session_id: str, agent_name: str, details: dict | None = None) -> None:
-    SubAgentLogger.info(session_id, SubAgentLogger.EVENT_CREATE, f"Agent created: {agent_name}", agent_name, details)
+def log_agent_create(
+    session_id: str, agent_name: str, details: dict | None = None
+) -> None:
+    SubAgentLogger.info(
+        session_id,
+        SubAgentLogger.EVENT_CREATE,
+        f"Agent created: {agent_name}",
+        agent_name,
+        details,
+    )
+
 
 def log_agent_start(session_id: str, agent_name: str, task: str) -> None:
-    SubAgentLogger.info(session_id, SubAgentLogger.EVENT_START, f"Agent started: {task[:80]}...", agent_name)
+    SubAgentLogger.info(
+        session_id,
+        SubAgentLogger.EVENT_START,
+        f"Agent started: {task[:80]}...",
+        agent_name,
+    )
+
 
 def log_agent_end(session_id: str, agent_name: str, result: str) -> None:
-    SubAgentLogger.info(session_id, SubAgentLogger.EVENT_END, "Agent completed", agent_name, {"result": str(result)[:200]})
+    SubAgentLogger.info(
+        session_id,
+        SubAgentLogger.EVENT_END,
+        "Agent completed",
+        agent_name,
+        {"result": str(result)[:200]},
+    )
+
 
 def log_agent_error(session_id: str, agent_name: str, error: str) -> None:
-    SubAgentLogger.error(session_id, SubAgentLogger.EVENT_ERROR, f"Agent error: {error}", agent_name)
+    SubAgentLogger.error(
+        session_id, SubAgentLogger.EVENT_ERROR, f"Agent error: {error}", agent_name
+    )
+
 
 def log_cleanup(session_id: str, agent_name: str) -> None:
-    SubAgentLogger.info(session_id, SubAgentLogger.EVENT_CLEANUP, f"Agent cleaned: {agent_name}", agent_name)
+    SubAgentLogger.info(
+        session_id,
+        SubAgentLogger.EVENT_CLEANUP,
+        f"Agent cleaned: {agent_name}",
+        agent_name,
+    )
