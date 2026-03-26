@@ -253,11 +253,11 @@ def image_source_to_data_uri(image_source: str) -> tuple[str, str]:
             "Remote image URL is not supported in image_source_to_data_uri; download the file before calling this helper.",
         )
 
-    if image_source.startswith("base64://"):
-        raw_base64 = image_source.removeprefix("base64://")
+    if lower_source.startswith("base64://"):
+        raw_base64 = image_source[len("base64://") :]
         mime_type = DEFAULT_IMAGE_MIME_TYPE
         try:
-            image_bytes = base64.b64decode(raw_base64)
+            image_bytes = base64.b64decode(raw_base64, validate=True)
         except (binascii.Error, ValueError) as exc:
             logger.debug(
                 "Failed to decode base64 image source, fallback to %s: %s",

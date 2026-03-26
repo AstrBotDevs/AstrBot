@@ -552,10 +552,12 @@ async def test_openai_encode_image_bs64_detects_base64_mime():
     provider = _make_provider()
     try:
         png_data = await provider.encode_image_bs64(f"base64://{PNG_BASE64}")
+        png_data_upper = await provider.encode_image_bs64(f"BASE64://{PNG_BASE64}")
         gif_data = await provider.encode_image_bs64(f"base64://{GIF_BASE64}")
         webp_data = await provider.encode_image_bs64(f"base64://{WEBP_BASE64}")
 
         assert png_data.startswith("data:image/png;base64,")
+        assert png_data_upper.startswith("data:image/png;base64,")
         assert gif_data.startswith("data:image/gif;base64,")
         assert webp_data.startswith("data:image/webp;base64,")
     finally:
