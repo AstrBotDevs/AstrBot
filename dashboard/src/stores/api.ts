@@ -6,8 +6,7 @@ export type ApiPreset = {
   url: string;
 };
 
-export const useApiStore = defineStore({
-  id: "api",
+export const useApiStore = defineStore("api", {
   state: () => ({
     // 优先从 localStorage 读取用户手动设置的地址
     apiBaseUrl: getApiBaseUrl() || localStorage.getItem("apiBaseUrl") || "",

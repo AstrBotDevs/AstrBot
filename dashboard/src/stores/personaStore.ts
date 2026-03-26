@@ -43,8 +43,7 @@ export interface ReorderItem {
   sort_order: number;
 }
 
-export const usePersonaStore = defineStore({
-  id: 'persona',
+export const usePersonaStore = defineStore('persona', {
   state: () => ({
     folderTree: [] as FolderTreeNode[],
     currentFolderId: null as string | null,

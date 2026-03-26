@@ -2,8 +2,7 @@ import { defineStore } from "pinia";
 import config from "@/config";
 import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
 
-export const useCustomizerStore = defineStore({
-  id: "customizer",
+export const useCustomizerStore = defineStore("customizer", {
   state: () => ({
     Sidebar_drawer: config.Sidebar_drawer,
     Customizer_drawer: config.Customizer_drawer,
