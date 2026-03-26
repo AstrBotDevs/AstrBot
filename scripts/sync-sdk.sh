@@ -1,14 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-remote_name="${1:-sdk-remote}"
-remote_branch="${2:-vendor-branch}"
-prefix="${3:-astrbot-sdk}"
-
 fail() {
   echo "$1" >&2
   exit 1
 }
+
+no_wait="${ASTRBOT_SYNC_SDK_NO_WAIT:-0}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-wait)
+      no_wait="1"
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      fail "Unknown option: $1"
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+remote_name="${1:-sdk-remote}"
+remote_branch="${2:-vendor-branch}"
+prefix="${3:-astrbot-sdk}"
 
 run_git() {
   git "$@" || fail "git $* failed."
@@ -53,6 +74,30 @@ assert_remote_path() {
 
   test_git_object_path "$revision" "$path" || fail "Remote snapshot '$revision' is missing '$path'. $reason"
 }
+
+should_wait_before_exit() {
+  [[ "$no_wait" != "1" ]] || return 1
+  [[ -t 0 && -t 1 ]] || return 1
+}
+
+wait_before_exit() {
+  local exit_code="$1"
+
+  if ! should_wait_before_exit; then
+    return
+  fi
+
+  echo
+  if [[ "$exit_code" -eq 0 ]]; then
+    printf 'Press any key to close this window...'
+  else
+    printf 'Script exited with code %s. Press any key to close this window...' "$exit_code"
+  fi
+  IFS= read -r -n 1 -s _
+  echo
+}
+
+trap 'wait_before_exit "$?"' EXIT
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || fail "This script must run inside a git repository."
 cd "$repo_root"

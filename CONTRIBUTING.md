@@ -46,63 +46,6 @@ ruff check .
 
 如果您使用 VSCode，可以安装 `Ruff` 插件。
 
-##### Vendored SDK 同步
-
-`astrbot-sdk/` 是主仓库中的 vendored SDK 副本。它只能通过手动执行 subtree 同步来升级，不能直接在主仓库里修改 vendored 内容。
-
-建议在以下场景执行同步：
-
-- SDK 仓库的 `sdk-remote/vendor-branch` 已经准备好给主仓库消费的新版本。
-- 主仓库明确需要升级 vendored SDK，而不是临时试验或本地调试。
-
-首次接入（本地还没有 `sdk-remote` 时）：
-
-```powershell
-git remote add sdk-remote https://github.com/united-pooh/astrbot-sdk.git
-pwsh -File .\scripts\sync-sdk.ps1
-```
-
-```bash
-git remote add sdk-remote https://github.com/united-pooh/astrbot-sdk.git
-bash ./scripts/sync-sdk.sh
-```
-
-后续更新：
-
-```powershell
-pwsh -File .\scripts\sync-sdk.ps1
-```
-
-```bash
-bash ./scripts/sync-sdk.sh
-```
-
-脚本会：
-
-- 先 `git fetch sdk-remote vendor-branch`
-- 校验远端分支是否仍然包含主仓库当前需要的 SDK 包布局
-- 使用 `git subtree pull --prefix=astrbot-sdk sdk-remote vendor-branch --squash` 执行同步
-
-如果 `vendor-branch` 不包含 `pyproject.toml` 或 `src/astrbot_sdk/` 等关键路径，脚本会直接失败并提示原因，而不是把不兼容的快照同步进来。
-
-同步后请至少执行以下检查：
-
-```powershell
-git status --short
-Get-ChildItem .\astrbot-sdk
-Test-Path .\astrbot-sdk\pyproject.toml
-Test-Path .\astrbot-sdk\src\astrbot_sdk\__init__.py
-uv sync
-```
-
-```bash
-git status --short
-ls ./astrbot-sdk
-test -e ./astrbot-sdk/pyproject.toml
-test -e ./astrbot-sdk/src/astrbot_sdk/__init__.py
-uv sync
-```
-
 ##### PR 功能完整性验证（推荐）
 
 如果您希望在本地做一套接近 CI 的完整验证，可使用：
@@ -170,63 +113,6 @@ We use Ruff as our code formatter and static analysis tool. Before submitting yo
 ```bash
 ruff format .
 ruff check .
-```
-
-##### Vendored SDK Sync
-
-`astrbot-sdk/` is a vendored SDK copy inside the main repository. Upgrade it only through the manual subtree sync flow; do not edit vendored files in place inside this repository.
-
-Run the sync only when:
-
-- `sdk-remote/vendor-branch` has been prepared as the SDK version intended for the main repository.
-- the main repository explicitly wants to upgrade the vendored SDK.
-
-First-time setup (when `sdk-remote` is not configured locally yet):
-
-```powershell
-git remote add sdk-remote https://github.com/united-pooh/astrbot-sdk.git
-pwsh -File .\scripts\sync-sdk.ps1
-```
-
-```bash
-git remote add sdk-remote https://github.com/united-pooh/astrbot-sdk.git
-bash ./scripts/sync-sdk.sh
-```
-
-Subsequent updates:
-
-```powershell
-pwsh -File .\scripts\sync-sdk.ps1
-```
-
-```bash
-bash ./scripts/sync-sdk.sh
-```
-
-The script will:
-
-- `git fetch sdk-remote vendor-branch`
-- verify that the remote branch still exposes the SDK package layout required by the main repository
-- run `git subtree pull --prefix=astrbot-sdk sdk-remote vendor-branch --squash`
-
-If `vendor-branch` is missing critical paths such as `pyproject.toml` or `src/astrbot_sdk/`, the script fails fast instead of syncing an incompatible snapshot.
-
-After syncing, validate the directory layout with:
-
-```powershell
-git status --short
-Get-ChildItem .\astrbot-sdk
-Test-Path .\astrbot-sdk\pyproject.toml
-Test-Path .\astrbot-sdk\src\astrbot_sdk\__init__.py
-uv sync
-```
-
-```bash
-git status --short
-ls ./astrbot-sdk
-test -e ./astrbot-sdk/pyproject.toml
-test -e ./astrbot-sdk/src/astrbot_sdk/__init__.py
-uv sync
 ```
 
 ##### PR completeness checks (recommended)
