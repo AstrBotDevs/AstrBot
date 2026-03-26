@@ -1,4 +1,5 @@
 import base64
+import binascii
 import logging
 import os
 import shutil
@@ -257,9 +258,15 @@ def image_source_to_data_uri(image_source: str) -> tuple[str, str]:
         mime_type = DEFAULT_IMAGE_MIME_TYPE
         try:
             image_bytes = base64.b64decode(raw_base64)
-            mime_type = detect_image_mime_type(image_bytes)
-        except Exception:
-            pass
+        except (binascii.Error, ValueError) as exc:
+            logger.debug(
+                "Failed to decode base64 image source, fallback to %s: %s",
+                DEFAULT_IMAGE_MIME_TYPE,
+                exc,
+            )
+            return f"data:{mime_type};base64,{raw_base64}", mime_type
+
+        mime_type = detect_image_mime_type(image_bytes)
         return f"data:{mime_type};base64,{raw_base64}", mime_type
 
     if lower_source.startswith("file://"):
