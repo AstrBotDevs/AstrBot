@@ -59,8 +59,8 @@ class TestSplitUmo:
 
     def test_non_string_returns_none(self):
         """UMO that is not a string returns None."""
-        assert UmopConfigRouter._split_umo(None) is None
-        assert UmopConfigRouter._split_umo(123) is None
+        assert UmopConfigRouter._split_umo(None) is None # type: ignore 故意这样测试的
+        assert UmopConfigRouter._split_umo(123) is None # type: ignore 故意这样测试的
 
     def test_four_parts_returns_three(self):
         """UMO with four parts splits to three (last keeps colon)."""

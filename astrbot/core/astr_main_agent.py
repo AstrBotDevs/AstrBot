@@ -1268,7 +1268,7 @@ async def build_main_agent(
         # Internal tools (source='internal') bypass this check — they are
         # not user-togglable in the WebUI, so legacy entries must not block them.
         _inactivated: set[str] = set(
-            sp.get("inactivated_llm_tools", [], scope="global", scope_id="global")
+            str(sp.get("inactivated_llm_tools", [], scope="global", scope_id="global"))
         )
         for _tp in config.tool_providers:
             _tp_tools = _tp.get_tools(_provider_ctx)

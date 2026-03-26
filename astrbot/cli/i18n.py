@@ -91,10 +91,6 @@ _TRANSLATIONS: dict[Language, dict[str, str]] = {
         "run_backend_only": "以无界面模式启动",
         "run_failed": "启动失败: {error}",
         "run_stopped": "AstrBot 已停止",
-        # TUI command
-        "tui_starting": "正在启动 TUI...",
-        "tui_started": "TUI 已启动",
-        "tui_failed": "TUI 启动失败: {error}",
         # Common
         "yes": "是",
         "no": "否",
@@ -182,10 +178,6 @@ _TRANSLATIONS: dict[Language, dict[str, str]] = {
         "run_backend_only": "Starting in backend-only mode",
         "run_failed": "Failed to start: {error}",
         "run_stopped": "AstrBot stopped",
-        # TUI command
-        "tui_starting": "Starting TUI...",
-        "tui_started": "TUI started",
-        "tui_failed": "Failed to start TUI: {error}",
         # Common
         "yes": "Yes",
         "no": "No",
