@@ -69,13 +69,12 @@ dependencies = [
   "anyio>=4.12.1",
   "argon2-cffi>=23.1.0",
   "plumbum>=1.10.0",
-  "textual>=8.1.1",
   "openai-agents>=0.12.5",
   "fastapi>=0.135.1",
 ]
 [project.scripts]
-astrbot = "astrbot.cli.__main__:cli"
-astrbot-rs = "astrbot._internal.runtime.rust:cli"
+astrbot = "astrbot:cli"
+astrbot-rs = "astrbot:cli_rs"
 
 [dependency-groups]
 dev = [
@@ -91,7 +90,7 @@ dev = [
 
 
 [tool.ruff]
-exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests"]
+exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests", "tests/**", "**/tests/**"]
 line-length = 88
 target-version = "py310"
 
@@ -122,7 +121,7 @@ pythonVersion = "3.10"
 reportMissingTypeStubs = false
 reportMissingImports = false
 include = ["astrbot"]
-exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
+exclude = ["dashboard", "node_modules", "dist", "data", "tests", "tests/**", "**/tests/**"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -131,7 +130,7 @@ allow-direct-references = true
 #:schema strict = false
 [tool.maturin]
 manifest-path = "rust/Cargo.toml"
-module-name = "astrbot._internal.runtime.rust._core"
+module-name = "astrbot.rust._core"
 build-hook = "buildHooks.custom:pre_build_hook"
 
 [build-system]
