@@ -3,21 +3,20 @@ from __future__ import annotations
 import asyncio
 import locale
 import os
+import shlex
 import shutil
 import subprocess
-import shlex
 import sys
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
-from astrbot.api import logger
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_temp_path,
 )
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
+
 
 def _decode_shell_output(output: bytes | None) -> str:
     if output is None:
@@ -53,7 +52,7 @@ class BwrapConfig:
 def build_bwrap_cmd(config: BwrapConfig, script_cmd: list[str]) -> list[str]:
     """Helper to build a bubblewrap command."""
     cmd = ["bwrap"]
-    
+
     if not config.share_net:
         cmd.append("--unshare-net")
 
@@ -61,7 +60,7 @@ def build_bwrap_cmd(config: BwrapConfig, script_cmd: list[str]) -> list[str]:
     for path in config.ro_binds:
         if os.path.exists(path):
             cmd.extend(["--ro-bind", path, path])
-            
+
     for path in config.rw_binds:
         # Avoid bind mounting dangerous host paths
         if path == "/" or path.startswith("/root"):
@@ -81,7 +80,7 @@ def build_bwrap_cmd(config: BwrapConfig, script_cmd: list[str]) -> list[str]:
         "--dev", "/dev",
         "--bind", config.workspace_dir, config.workspace_dir,
     ])
-            
+
     cmd.extend(["--"])
     cmd.extend(script_cmd)
     return cmd
@@ -89,7 +88,7 @@ def build_bwrap_cmd(config: BwrapConfig, script_cmd: list[str]) -> list[str]:
 @dataclass
 class BwrapShellComponent(ShellComponent):
     config: BwrapConfig
-    
+
     async def exec(
         self,
         command: str,
@@ -99,19 +98,19 @@ class BwrapShellComponent(ShellComponent):
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
-        
+
         def _run() -> dict[str, Any]:
             run_env = os.environ.copy()
             if env:
                 run_env.update({str(k): str(v) for k, v in env.items()})
-                
+
             working_dir = cwd if cwd else self.config.workspace_dir
-            
+
             # Use /bin/sh -c to run the evaluated command
             # The command must be run inside bwrap
             script_cmd = ["/bin/sh", "-c", command] if shell else shlex.split(command)
             bwrap_cmd = build_bwrap_cmd(self.config, script_cmd)
-            
+
             if background:
                 proc = subprocess.Popen(
                     bwrap_cmd,
@@ -121,7 +120,7 @@ class BwrapShellComponent(ShellComponent):
                     stderr=subprocess.DEVNULL,
                 )
                 return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
-                
+
             result = subprocess.run(
                 bwrap_cmd,
                 cwd=working_dir,
@@ -140,7 +139,7 @@ class BwrapShellComponent(ShellComponent):
 @dataclass
 class BwrapPythonComponent(PythonComponent):
     config: BwrapConfig
-    
+
     async def exec(
         self,
         code: str,
@@ -175,14 +174,14 @@ class BwrapPythonComponent(PythonComponent):
                     "stderr": str(e),
                     "exit_code": 1,
                 }
-                
+
         return await asyncio.to_thread(_run)
 
 @dataclass
 class HostBackedFileSystemComponent(FileSystemComponent):
     """File operations happen safely on host mapping to workspace, making I/O extremely fast."""
     workspace_dir: str
-    
+
     def _safe_path(self, path: str) -> str:
         # Simply maps it. In a stricter implementation, we could verify it's inside workspace_dir.
         # But for this implementation, we trust the agent or restrict to workspace_dir.
@@ -201,7 +200,7 @@ class HostBackedFileSystemComponent(FileSystemComponent):
     async def read_file(self, path: str, encoding: str = "utf-8") -> dict[str, Any]:
         p = self._safe_path(path)
         try:
-            with open(p, "r", encoding=encoding) as f:
+            with open(p, encoding=encoding) as f:
                 content = f.read()
             return {"success": True, "content": content}
         except Exception as e:
@@ -266,7 +265,7 @@ class BwrapBooter(ComputerBooter):
     async def boot(self, session_id: str) -> None:
         workspace_dir = os.path.join(get_astrbot_temp_path(), f"sandbox_workspace_{session_id}")
         os.makedirs(workspace_dir, exist_ok=True)
-        
+
         self.config = BwrapConfig(
             workspace_dir=os.path.abspath(workspace_dir),
             rw_binds=self._rw_binds,
@@ -275,19 +274,19 @@ class BwrapBooter(ComputerBooter):
         self._fs = HostBackedFileSystemComponent(self.config.workspace_dir)
         self._python = BwrapPythonComponent(self.config)
         self._shell = BwrapShellComponent(self.config)
-        if not await self.available(): 
+        if not await self.available():
             raise RuntimeError(
             "BubbleWrap sandbox unavailable on current machine for no bwrap executable.")
         test_shl = await self._shell.exec(command = "ls > /dev/null")
         if test_shl["exit_code"] != 0:
             raise RuntimeError(
-            '''BubbleWrap sandbox fails to exec test shell command "ls > /dev/null" with stderr:
-{}'''.format(test_shl["stderr"]))
+            """BubbleWrap sandbox fails to exec test shell command "ls > /dev/null" with stderr:
+{}""".format(test_shl["stderr"]))
         test_py = await self._python.exec(code = "print('Yes')")
         if test_py["exit_code"] != 0:
             raise RuntimeError(
-            '''BubbleWrap sandbox fails to exec test python code "print('Yes')" with stderr:
-{}'''.format(test_py["stderr"]))
+            """BubbleWrap sandbox fails to exec test python code "print('Yes')" with stderr:
+{}""".format(test_py["stderr"]))
 
     async def shutdown(self) -> None:
         if self.config and os.path.exists(self.config.workspace_dir):
