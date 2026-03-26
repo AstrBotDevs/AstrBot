@@ -535,7 +535,7 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id_type=receive_id_type,
         )
 
-    async def react(self, emoji: str) -> None:
+    async def react(self, emoji: str) -> str | None:
         if self.bot.im is None:
             logger.error("[Lark] API Client im 模块未初始化，无法发送表情")
             return

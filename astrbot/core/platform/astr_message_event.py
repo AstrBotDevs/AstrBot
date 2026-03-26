@@ -451,12 +451,16 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
-    async def react(self, emoji: str) -> None:
+    async def react(self, emoji: str) -> str | None:
         """对消息添加表情回应。
 
         默认实现为发送一条包含该表情的消息。
-        注意：此实现并不一定符合所有平台的原生“表情回应”行为。
+        注意：此实现并不一定符合所有平台的原生"表情回应"行为。
         如需支持平台原生的消息反应功能，请在对应平台的子类中重写本方法。
+
+        Returns:
+            平台特定的 reaction 标识符(如飞书的 reaction_id)，用于后续撤回。
+            大多数平台返回 None。
         """
         await self.send(MessageChain([Plain(emoji)]))
 
