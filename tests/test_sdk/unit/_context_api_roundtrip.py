@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 import types
 import uuid
@@ -245,6 +246,9 @@ class FakePluginBridge:
             "version": str(metadata.get("version", "1.0.0")),
             "enabled": bool(metadata.get("enabled", True)),
             "reserved": bool(metadata.get("reserved", False)),
+            "acknowledge_global_mcp_risk": bool(
+                metadata.get("acknowledge_global_mcp_risk", False)
+            ),
             "support_platforms": list(metadata.get("support_platforms", [])),
         }
         self._plugin_configs.setdefault(plugin_id, dict(config or {}))
@@ -531,6 +535,70 @@ class FakePluginBridge:
 
     def list_registered_skills(self, plugin_id: str) -> list[dict[str, str]]:
         return [dict(item) for item in self._skill_records.get(plugin_id, [])]
+
+    def acknowledges_global_mcp_risk(self, plugin_id: str) -> bool:
+        metadata = self._plugin_metadata.get(str(plugin_id), {})
+        return bool(metadata.get("acknowledge_global_mcp_risk", False))
+
+    def remove_plugin(self, plugin_id: str) -> None:
+        normalized_plugin_id = str(plugin_id)
+        self._plugin_metadata.pop(normalized_plugin_id, None)
+        self._plugin_configs.pop(normalized_plugin_id, None)
+        self._skill_records.pop(normalized_plugin_id, None)
+        self._handlers_by_plugin.pop(normalized_plugin_id, None)
+        self.http_routes.pop(normalized_plugin_id, None)
+        self._latest_request_context_by_plugin.pop(normalized_plugin_id, None)
+        request_ids = [
+            request_id
+            for request_id in self._request_contexts
+            if self.resolve_request_plugin_id(request_id) == normalized_plugin_id
+        ]
+        for request_id in request_ids:
+            request_context = self._request_contexts.pop(request_id, None)
+            self._request_overlays.pop(request_id, None)
+            if request_context is None:
+                continue
+            self._request_contexts_by_token.pop(request_context.dispatch_token, None)
+
+
+class FakeFunctionToolManager:
+    def __init__(self) -> None:
+        self.func_list: list[object] = []
+        self._config: dict[str, Any] = {"mcpServers": {}}
+        self.mcp_server_runtime_view: dict[str, Any] = {}
+
+    def load_mcp_config(self) -> dict[str, Any]:
+        return json.loads(json.dumps(self._config))
+
+    def save_mcp_config(self, config: dict[str, Any]) -> bool:
+        self._config = json.loads(json.dumps(config))
+        return True
+
+    async def enable_mcp_server(
+        self,
+        name: str,
+        config: dict[str, Any],
+        *_args,
+        **_kwargs,
+    ) -> None:
+        tools = [
+            SimpleNamespace(name=str(tool_name))
+            for tool_name in config.get("mock_tools", [f"{name}_tool"])
+            if str(tool_name).strip()
+        ]
+        self.mcp_server_runtime_view[str(name)] = SimpleNamespace(
+            client=SimpleNamespace(tools=tools, server_errlogs=[]),
+        )
+
+    async def disable_mcp_server(
+        self,
+        name: str | None = None,
+        **_kwargs,
+    ) -> None:
+        if name is None:
+            self.mcp_server_runtime_view.clear()
+            return
+        self.mcp_server_runtime_view.pop(str(name), None)
 
 
 @dataclass(slots=True)
@@ -892,12 +960,14 @@ class FakeStarContext:
         self,
         *,
         plugin_bridge: FakePluginBridge,
+        func_tool_manager: FakeFunctionToolManager,
         provider_manager: FakeProviderManager,
         platforms: list[FakePlatform],
         config: FakeConfig,
         message_history_manager: FakeMessageHistoryManager,
     ) -> None:
         self._plugin_bridge = plugin_bridge
+        self._func_tool_manager = func_tool_manager
         self.provider_manager = provider_manager
         self.platform_manager = SimpleNamespace(get_insts=lambda: list(platforms))
         self._config = config
@@ -921,6 +991,9 @@ class FakeStarContext:
 
     def get_config(self) -> FakeConfig:
         return self._config
+
+    def get_llm_tool_manager(self) -> FakeFunctionToolManager:
+        return self._func_tool_manager
 
     def get_all_stars(self) -> list[Any]:
         return [
@@ -1028,6 +1101,7 @@ class RoundTripRuntime:
     bridge: CoreCapabilityBridge
     peer: BridgeBackedPeer
     plugin_bridge: FakePluginBridge
+    func_tool_manager: FakeFunctionToolManager
     runtime_sp: FakeRuntimeSP
     star_context: FakeStarContext
     provider_manager: FakeProviderManager
@@ -1114,11 +1188,13 @@ def build_roundtrip_runtime(
     file_token_service = FakeFileTokenService()
     config = FakeConfig()
     plugin_bridge = FakePluginBridge()
+    func_tool_manager = FakeFunctionToolManager()
     chat_provider = FakeChatProvider("chat-provider-a", model="gpt-roundtrip")
     provider_manager = FakeProviderManager(chat_provider)
     message_history_manager = FakeMessageHistoryManager()
     star_context = FakeStarContext(
         plugin_bridge=plugin_bridge,
+        func_tool_manager=func_tool_manager,
         provider_manager=provider_manager,
         platforms=[FakePlatform()],
         config=config,
@@ -1156,6 +1232,7 @@ def build_roundtrip_runtime(
         bridge=bridge,
         peer=peer,
         plugin_bridge=plugin_bridge,
+        func_tool_manager=func_tool_manager,
         runtime_sp=runtime_sp,
         star_context=star_context,
         provider_manager=provider_manager,
