@@ -993,6 +993,27 @@ def _init_plugin(name: str | None, agents: tuple[str, ...] = ()) -> None:
         display_name=display_name,
         agents=agents,
     )
+
+    import subprocess
+
+    try:
+        process = subprocess.run(
+            ["git", "init", str(target_dir)],
+            capture_output=True,
+            text=True,
+        )
+        if process.returncode != 0:
+            stderr = process.stderr.strip()
+            raise RuntimeError(
+                f"Git 初始化失败（退出码 {process.returncode}）"
+                + (f": {stderr}" if stderr else "")
+            )
+        click.echo(f"Git 仓库已初始化: {target_dir}")
+    except FileNotFoundError:
+        click.echo("警告: 未找到 git 命令，请先安装 git 后手动执行 git init")
+    except RuntimeError as e:
+        click.echo(f"警告: {e}")
+
     click.echo(f"已创建插件：{target_dir}")
     if agents:
         generated_paths = ", ".join(

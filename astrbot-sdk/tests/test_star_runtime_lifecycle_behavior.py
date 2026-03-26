@@ -385,7 +385,10 @@ async def test_star_custom_on_error_and_handler_local_error_handling_behave_at_r
         with pytest.raises(RuntimeError, match="bad custom"):
             await harness.dispatch_text("custom_value")
         assert harness.sent_messages[-1].text == "参数错误：bad custom"
-        assert harness.router.db_store["error_runtime_plugin:on_error_type"] == "ValueError"
+        assert (
+            harness.router.db_store["error_runtime_plugin:on_error_type"]
+            == "ValueError"
+        )
 
         with pytest.raises(AstrBotError, match="未找到能力：unknown_capability"):
             await harness.dispatch_text("custom_astr")
