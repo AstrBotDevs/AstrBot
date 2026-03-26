@@ -420,7 +420,7 @@ class WeixinOCAdapter(Platform):
     async def _cleanup_typing_tasks(self) -> None:
         tasks: list[asyncio.Task] = []
         cancels: list[tuple[str, str]] = []
-        for user_id, state in self._typing_states.items():
+        for user_id, state in list(self._typing_states.items()):
             if state.ticket and (
                 state.owners
                 or state.keepalive_task is not None
