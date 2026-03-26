@@ -206,6 +206,49 @@ def file_to_base64(file_path: str) -> str:
     return "base64://" + base64_str
 
 
+def detect_image_mime_type(data: bytes) -> str:
+    """根据图片二进制数据的 magic bytes 检测 MIME 类型。"""
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:2] == b"\xff\xd8":
+        return "image/jpeg"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/jpeg"
+
+
+def image_source_to_data_uri(image_source: str) -> tuple[str, str]:
+    """将图片来源统一转换为 data URI，并尽量保留真实 MIME 类型。"""
+    lower_source = image_source.lower()
+
+    if lower_source.startswith("data:image/"):
+        mime_type = "image/jpeg"
+        prefix = image_source.split(",", 1)[0]
+        if prefix.startswith("data:"):
+            mime_type = prefix.split(";", 1)[0].removeprefix("data:")
+            if not mime_type.startswith("image/"):
+                mime_type = "image/jpeg"
+        return image_source, mime_type
+
+    if image_source.startswith("base64://"):
+        raw_base64 = image_source.removeprefix("base64://")
+        mime_type = "image/jpeg"
+        try:
+            image_bytes = base64.b64decode(raw_base64)
+            mime_type = detect_image_mime_type(image_bytes)
+        except Exception:
+            mime_type = "image/jpeg"
+        return f"data:{mime_type};base64,{raw_base64}", mime_type
+
+    with open(image_source, "rb") as f:
+        image_bytes = f.read()
+    mime_type = detect_image_mime_type(image_bytes)
+    image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
+    return f"data:{mime_type};base64,{image_bs64}", mime_type
+
+
 def get_local_ip_addresses():
     net_interfaces = psutil.net_if_addrs()
     network_ips = []

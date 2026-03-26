@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import enum
 import json
 from dataclasses import dataclass, field
@@ -21,7 +20,7 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.io import download_image_by_url, image_source_to_data_uri
 
 
 class ProviderType(enum.Enum):
@@ -216,12 +215,8 @@ class ProviderRequest:
 
     async def _encode_image_bs64(self, image_url: str) -> str:
         """将图片转换为 base64"""
-        if image_url.startswith("base64://"):
-            return image_url.replace("base64://", "data:image/jpeg;base64,")
-        with open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
-            return "data:image/jpeg;base64," + image_bs64
-        return ""
+        data_uri, _ = image_source_to_data_uri(image_url)
+        return data_uri
 
 
 @dataclass

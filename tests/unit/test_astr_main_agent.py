@@ -1,5 +1,6 @@
 """Tests for astr_main_agent module."""
 
+import base64
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -719,6 +720,37 @@ class TestModalitiesFix:
         assert req.prompt == "Hello"
         assert len(req.image_urls) == 1
         assert req.func_tool is not None
+
+
+class TestProviderRequestAssembleContextImage:
+    @pytest.mark.asyncio
+    async def test_provider_request_assemble_context_image_mime_local_and_file_uri(
+        self, tmp_path
+    ):
+        png_path = tmp_path / "request.png"
+        webp_path = tmp_path / "request.webp"
+        png_path.write_bytes(base64.b64decode("iVBORw0KGgo="))
+        webp_path.write_bytes(b"RIFF\x0c\x00\x00\x00WEBPVP8 ")
+
+        req = ProviderRequest(
+            prompt="Hello",
+            image_urls=[
+                str(png_path),
+                f"file:///{webp_path.as_posix()}",
+            ],
+        )
+
+        assembled = await req.assemble_context()
+        assert isinstance(assembled["content"], list)
+
+        image_urls = [
+            part["image_url"]["url"]
+            for part in assembled["content"]
+            if part.get("type") == "image_url"
+        ]
+        assert len(image_urls) == 2
+        assert image_urls[0].startswith("data:image/png;base64,")
+        assert image_urls[1].startswith("data:image/webp;base64,")
 
 
 class TestSanitizeContextByModalities:

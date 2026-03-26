@@ -1,8 +1,11 @@
+import base64
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from openai.types.chat.chat_completion import ChatCompletion
 
+from astrbot.core.agent.message import ImageURLPart
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 
@@ -17,6 +20,14 @@ class _ErrorWithResponse(Exception):
     def __init__(self, message: str, response_text: str):
         super().__init__(message)
         self.response = SimpleNamespace(text=response_text)
+
+
+PNG_BYTES = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+GIF_BYTES = b"GIF89a\x01\x00\x01\x00\x80\x00\x00"
+WEBP_BYTES = b"RIFF\x0c\x00\x00\x00WEBPVP8 "
+PNG_BASE64 = base64.b64encode(PNG_BYTES).decode("utf-8")
+GIF_BASE64 = base64.b64encode(GIF_BYTES).decode("utf-8")
+WEBP_BASE64 = base64.b64encode(WEBP_BYTES).decode("utf-8")
 
 
 def _make_provider(overrides: dict | None = None) -> ProviderOpenAIOfficial:
@@ -531,5 +542,82 @@ async def test_query_injects_reasoning_effort_none_for_ollama(monkeypatch):
         assert extra_body["reasoning_effort"] == "none"
         assert "reasoning" not in extra_body
         assert extra_body["temperature"] == 0.1
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_encode_image_bs64_detects_base64_mime():
+    provider = _make_provider()
+    try:
+        png_data = await provider.encode_image_bs64(f"base64://{PNG_BASE64}")
+        gif_data = await provider.encode_image_bs64(f"base64://{GIF_BASE64}")
+        webp_data = await provider.encode_image_bs64(f"base64://{WEBP_BASE64}")
+
+        assert png_data.startswith("data:image/png;base64,")
+        assert gif_data.startswith("data:image/gif;base64,")
+        assert webp_data.startswith("data:image/webp;base64,")
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_encode_image_bs64_detects_local_file_mime(tmp_path: Path):
+    provider = _make_provider()
+    png_path = tmp_path / "pixel.png"
+    webp_path = tmp_path / "pixel.webp"
+    png_path.write_bytes(PNG_BYTES)
+    webp_path.write_bytes(WEBP_BYTES)
+    try:
+        png_data = await provider.encode_image_bs64(str(png_path))
+        webp_data = await provider.encode_image_bs64(str(webp_path))
+
+        assert png_data.startswith("data:image/png;base64,")
+        assert webp_data.startswith("data:image/webp;base64,")
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_encode_image_bs64_keeps_data_uri():
+    provider = _make_provider()
+    data_uri = f"data:image/png;base64,{PNG_BASE64}"
+    try:
+        assert await provider.encode_image_bs64(data_uri) == data_uri
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_encode_image_bs64_invalid_base64_fallback_to_jpeg():
+    provider = _make_provider()
+    try:
+        image_data = await provider.encode_image_bs64("base64://not-valid-base64")
+        assert image_data == "data:image/jpeg;base64,not-valid-base64"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_assemble_context_extra_image_file_uri_mime(tmp_path: Path):
+    provider = _make_provider()
+    png_path = tmp_path / "agent-request.png"
+    png_path.write_bytes(PNG_BYTES)
+    try:
+        assembled = await provider.assemble_context(
+            text="hello",
+            extra_user_content_parts=[
+                ImageURLPart(
+                    image_url=ImageURLPart.ImageURL(
+                        url=f"file:///{png_path.as_posix()}",
+                    )
+                )
+            ],
+        )
+
+        assert isinstance(assembled["content"], list)
+        image_part = assembled["content"][1]
+        assert image_part["type"] == "image_url"
+        assert image_part["image_url"]["url"].startswith("data:image/png;base64,")
     finally:
         await provider.terminate()
