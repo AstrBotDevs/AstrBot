@@ -339,10 +339,10 @@ class TelegramPlatformAdapter(Platform):
             if update.message.caption:
                 message.message_str = update.message.caption
                 message.message.append(Comp.Plain(message.message_str))
-            if update.message.caption_entities:
+            if update.message.caption and update.message.caption_entities:
                 for entity in update.message.caption_entities:
                     if entity.type == "mention":
-                        name = message.message_str[
+                        name = update.message.caption[
                             entity.offset + 1 : entity.offset + entity.length
                         ]
                         message.message.append(Comp.At(qq=name, name=name))
