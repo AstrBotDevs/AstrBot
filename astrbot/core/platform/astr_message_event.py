@@ -460,6 +460,14 @@ class AstrMessageEvent(abc.ABC):
         """
         await self.send(MessageChain([Plain(emoji)]))
 
+    async def remove_react(self, emoji: str) -> None:
+        """移除消息上的表情回应。
+
+        默认实现为空操作。
+        如需支持平台原生的撤回表情功能，请在对应平台的子类中重写本方法。
+        """
+        pass
+
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
 
