@@ -287,30 +287,96 @@ agent_collaboration:
 
 ### 2.1 队列结构
 
-```python
-@dataclass
-class InputMessage:
-    """输入消息单元"""
-    message_id: str                    # 全局唯一 ID
-    platform: str                      # 平台标识
-    user_id: str                      # 用户 ID
-    conversation_id: str               # 会话 ID
-    content: MessageChain | str        # 消息内容
-    timestamp: float                   # 到达时间
-    metadata: dict                     # 扩展元数据
-    priority: int = 0                 # 优先级（越高越先处理）
+```rust
+use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
+use std::sync::Arc;
 
-@dataclass
-class UserMessageQueue:
-    """用户消息队列"""
-    user_id: str
-    session_id: str
-    messages: deque[InputMessage]      # 消息列表（有序）
-    metadata: dict                     # 用户元数据
-    created_at: float
-    updated_at: float
-    max_size: int = 1000              # 最大消息数
-    max_age: float = 3600             # 消息最大存活时间（秒）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InputMessage {
+    /// 全局唯一 ID
+    pub message_id: String,
+    /// 平台标识
+    pub platform: String,
+    /// 用户 ID
+    pub user_id: String,
+    /// 会话 ID
+    pub conversation_id: String,
+    /// 消息内容
+    pub content: MessageContent,
+    /// 到达时间
+    pub timestamp: f64,
+    /// 扩展元数据
+    pub metadata: HashMap<String, String>,
+    /// 优先级（越高越先处理）
+    #[serde(default)]
+    pub priority: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MessageContent {
+    Plain(String),
+    Chain(Vec<MessageSegment>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageSegment {
+    pub segment_type: String,
+    pub content: String,
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+}
+
+pub struct UserMessageQueue {
+    pub user_id: String,
+    pub session_id: String,
+    messages: VecDeque<InputMessage>,
+    metadata: HashMap<String, String>,
+    pub created_at: f64,
+    pub updated_at: f64,
+    pub max_size: usize,
+    pub max_age: f64,
+}
+
+impl UserMessageQueue {
+    pub fn new(user_id: String, session_id: String) -> Self {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+
+        Self {
+            user_id,
+            session_id,
+            messages: VecDeque::new(),
+            metadata: HashMap::new(),
+            created_at: now,
+            updated_at: now,
+            max_size: 1000,
+            max_age: 3600.0,
+        }
+    }
+
+    pub fn push(&mut self, msg: InputMessage) {
+        self.messages.push_back(msg);
+        self.updated_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+    }
+
+    pub fn pop(&mut self) -> Option<InputMessage> {
+        self.messages.pop_front()
+    }
+
+    pub fn len(&self) -> usize {
+        self.messages.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.messages.is_empty()
+    }
+}
 ```
 
 ### 2.2 缓冲区配置
@@ -347,22 +413,67 @@ input_buffer:
 
 **溢出时的处理**：
 
-```python
-async def add_message(queue: UserMessageQueue, message: InputMessage) -> None:
-    if len(queue.messages) >= queue.max_size:
-        if queue.overflow_strategy == "drop_oldest":
-            old_msg = queue.messages.popleft()
-            # 在丢弃的消息前插入提示
-            hint = InputMessage(
-                content=f"[{queue.overflow_hint} 丢弃于 {old_msg.timestamp}]",
-                message_id="system_hint",
-                # ...
-            )
-            queue.messages.appendleft(hint)
-        elif queue.overflow_strategy == "drop_newest":
-            return  # 丢弃新消息
-        elif queue.overflow_strategy == "block":
-            await queue.not_full.wait()  # 阻塞等待
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OverflowStrategy {
+    DropOldest,
+    DropNewest,
+    Block,
+}
+
+pub struct InputBuffer {
+    queues: HashMap<String, Arc<tokio::sync::Mutex<UserMessageQueue>>>,
+    overflow_strategy: OverflowStrategy,
+    overflow_hint: String,
+}
+
+impl InputBuffer {
+    /// 添加消息到队列
+    pub async fn add_message(&self, queue_id: &str, message: InputMessage) -> Result<(), BufferError> {
+        let queue = self.queues.get(queue_id)
+            .ok_or(BufferError::QueueNotFound)?;
+
+        let mut queue = queue.lock().await;
+
+        if queue.messages.len() >= queue.max_size {
+            match self.overflow_strategy {
+                OverflowStrategy::DropOldest => {
+                    if let Some(old_msg) = queue.messages.pop_front() {
+                        // 在丢弃的消息前插入提示
+                        let hint = InputMessage {
+                            message_id: "system_hint".into(),
+                            content: MessageContent::Plain(format!(
+                                "[{} 丢弃于 {}]",
+                                self.overflow_hint,
+                                old_msg.timestamp
+                            )),
+                            ..message.clone()
+                        };
+                        queue.messages.push_front(hint);
+                    }
+                    queue.messages.push_back(message);
+                }
+                OverflowStrategy::DropNewest => {
+                    // 丢弃新消息，不插入
+                }
+                OverflowStrategy::Block => {
+                    // 等待直到队列有空位
+                    while queue.messages.len() >= queue.max_size {
+                        let queue_clone = queue.clone();
+                        drop(queue);
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                        queue = queue_clone.lock().await;
+                    }
+                    queue.messages.push_back(message);
+                }
+            }
+        } else {
+            queue.messages.push_back(message);
+        }
+
+        Ok(())
+    }
+}
 ```
 
 ---
