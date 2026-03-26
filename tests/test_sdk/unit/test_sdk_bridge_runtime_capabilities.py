@@ -69,6 +69,7 @@ from astrbot_sdk.protocol.descriptors import (
     PlatformFilterSpec,
     ScheduleTrigger,
 )
+from astrbot_sdk.schedule import ScheduleContext
 from astrbot_sdk.testing import MockContext
 
 from astrbot.core.cron.manager import CronJobManager
@@ -1049,21 +1050,39 @@ def test_build_schedule_payload_exposes_interval_metadata() -> None:
     payload = SdkPluginBridge._build_schedule_payload(
         plugin_id="sdk-demo",
         handler_id="sdk-demo:main.tick",
-        trigger=ScheduleTrigger(interval_seconds=60),
+        trigger=ScheduleTrigger(interval_seconds=60, timezone="Asia/Shanghai"),
+        job=types.SimpleNamespace(
+            job_id="job-interval",
+            name="MoodLog interval dispatcher",
+            description="Run periodic maintenance",
+            job_type="basic",
+            timezone="Asia/Shanghai",
+        ),
     )
 
     assert payload["event_type"] == "schedule"
     assert payload["text"] == ""
     assert payload["schedule"] == {
         "schedule_id": "sdk-demo:sdk-demo:main.tick",
+        "job_id": "job-interval",
         "plugin_id": "sdk-demo",
         "handler_id": "sdk-demo:main.tick",
+        "name": "MoodLog interval dispatcher",
+        "description": "Run periodic maintenance",
+        "job_type": "basic",
         "trigger_kind": "interval",
         "cron": None,
         "interval_seconds": 60,
+        "timezone": "Asia/Shanghai",
         "scheduled_at": payload["schedule"]["scheduled_at"],
     }
     assert isinstance(payload["schedule"]["scheduled_at"], str)
+    schedule = ScheduleContext.from_payload(payload)
+    assert schedule.job_id == "job-interval"
+    assert schedule.name == "MoodLog interval dispatcher"
+    assert schedule.description == "Run periodic maintenance"
+    assert schedule.job_type == "basic"
+    assert schedule.timezone == "Asia/Shanghai"
 
 
 @pytest.mark.unit
@@ -1074,8 +1093,20 @@ async def test_register_schedule_handlers_passes_trigger_config_to_cron_manager(
     cron_manager = types.SimpleNamespace(
         add_basic_job=AsyncMock(
             side_effect=[
-                types.SimpleNamespace(job_id="job-interval"),
-                types.SimpleNamespace(job_id="job-cron"),
+                types.SimpleNamespace(
+                    job_id="job-interval",
+                    name="Interval maintenance",
+                    description="Run periodic maintenance",
+                    job_type="basic",
+                    timezone="Asia/Shanghai",
+                ),
+                types.SimpleNamespace(
+                    job_id="job-cron",
+                    name="Morning mood sweep",
+                    description="Run morning maintenance",
+                    job_type="basic",
+                    timezone=None,
+                ),
             ]
         )
     )
@@ -1089,14 +1120,23 @@ async def test_register_schedule_handlers_passes_trigger_config_to_cron_manager(
                 handler_id="sdk-demo:main.interval",
                 descriptor=HandlerDescriptor(
                     id="sdk-demo:main.interval",
-                    trigger=ScheduleTrigger(interval_seconds=60),
+                    trigger=ScheduleTrigger(
+                        interval_seconds=60,
+                        name="Interval maintenance",
+                        timezone="Asia/Shanghai",
+                    ),
+                    description="Run periodic maintenance",
                 ),
             ),
             types.SimpleNamespace(
                 handler_id="sdk-demo:main.cron",
                 descriptor=HandlerDescriptor(
                     id="sdk-demo:main.cron",
-                    trigger=ScheduleTrigger(cron="0 9 * * *"),
+                    trigger=ScheduleTrigger(
+                        cron="0 9 * * *",
+                        name="Morning mood sweep",
+                    ),
+                    description="Run morning maintenance",
                 ),
             ),
         ],
@@ -1107,13 +1147,17 @@ async def test_register_schedule_handlers_passes_trigger_config_to_cron_manager(
     assert cron_manager.add_basic_job.await_count == 2
     first_call = cron_manager.add_basic_job.await_args_list[0].kwargs
     second_call = cron_manager.add_basic_job.await_args_list[1].kwargs
-    assert first_call["name"] == "sdk-demo:sdk-demo:main.interval"
+    assert first_call["name"] == "Interval maintenance"
     assert first_call["interval_seconds"] == 60
     assert first_call["cron_expression"] is None
+    assert first_call["description"] == "Run periodic maintenance"
+    assert first_call["timezone"] == "Asia/Shanghai"
     assert callable(first_call["handler"])
-    assert second_call["name"] == "sdk-demo:sdk-demo:main.cron"
+    assert second_call["name"] == "Morning mood sweep"
     assert second_call["cron_expression"] == "0 9 * * *"
     assert second_call["interval_seconds"] is None
+    assert second_call["description"] == "Run morning maintenance"
+    assert second_call["timezone"] is None
     assert callable(second_call["handler"])
     assert bridge._schedule_job_ids["sdk-demo"] == {"job-interval", "job-cron"}
 

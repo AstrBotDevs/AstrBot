@@ -3073,19 +3073,24 @@ class SdkPluginBridge:
             if not isinstance(trigger, ScheduleTrigger):
                 continue
             schedule_key = f"{record.plugin_id}:{handler.handler_id}"
+            job_ref: dict[str, Any] = {"job": None}
             job = await cron_manager.add_basic_job(
-                name=schedule_key,
+                name=trigger.name or schedule_key,
                 cron_expression=trigger.cron,
                 interval_seconds=trigger.interval_seconds,
                 handler=self._build_schedule_runner(
                     plugin_id=record.plugin_id,
                     handler_id=handler.handler_id,
                     trigger=trigger,
+                    job_ref=job_ref,
                 ),
-                description=f"SDK schedule handler {handler.handler_id}",
+                description=handler.descriptor.description
+                or f"SDK schedule handler {handler.handler_id}",
+                timezone=trigger.timezone,
                 enabled=True,
                 persistent=False,
             )
+            job_ref["job"] = job
             self._schedule_job_ids.setdefault(record.plugin_id, set()).add(job.job_id)
 
     async def _unregister_schedule_jobs(self, plugin_id: str) -> None:
@@ -3104,16 +3109,23 @@ class SdkPluginBridge:
         plugin_id: str,
         handler_id: str,
         trigger: ScheduleTrigger,
+        job_ref: dict[str, Any] | None = None,
     ):
         async def _run(**_scheduler_payload: Any) -> None:
             # CronJobManager stores scheduler metadata such as interval_seconds in the
             # job payload and replays that payload into basic handlers. SDK schedule
             # handlers do not consume those transport-level kwargs, so the bridge
             # must swallow them here and only forward the synthesized schedule event.
+            invoke_kwargs = {
+                "plugin_id": plugin_id,
+                "handler_id": handler_id,
+                "trigger": trigger,
+            }
+            job = (job_ref or {}).get("job")
+            if job is not None:
+                invoke_kwargs["job"] = job
             await self._invoke_schedule_handler(
-                plugin_id=plugin_id,
-                handler_id=handler_id,
-                trigger=trigger,
+                **invoke_kwargs,
             )
 
         return _run
@@ -3144,6 +3156,7 @@ class SdkPluginBridge:
         plugin_id: str,
         handler_id: str,
         trigger: ScheduleTrigger,
+        job: Any | None = None,
     ) -> None:
         record = self._records.get(plugin_id)
         if (
@@ -3171,6 +3184,7 @@ class SdkPluginBridge:
             plugin_id=plugin_id,
             handler_id=handler_id,
             trigger=trigger,
+            job=job,
         )
         try:
             await record.session.invoke_handler(
@@ -3193,8 +3207,22 @@ class SdkPluginBridge:
         plugin_id: str,
         handler_id: str,
         trigger: ScheduleTrigger,
+        job: Any | None = None,
     ) -> dict[str, Any]:
         scheduled_at = datetime.now(timezone.utc).isoformat()
+        job_name = str(getattr(job, "name", "")).strip() or f"{plugin_id}:{handler_id}"
+        job_id = str(getattr(job, "job_id", "")).strip() or None
+        description = getattr(job, "description", None)
+        if description is not None:
+            description = str(description).strip() or None
+        job_type = str(getattr(job, "job_type", "")).strip() or "basic"
+        timezone_name = getattr(job, "timezone", None)
+        if isinstance(timezone_name, str):
+            timezone_name = timezone_name.strip() or None
+        else:
+            timezone_name = None
+        if timezone_name is None:
+            timezone_name = trigger.timezone
         return {
             "type": "schedule",
             "event_type": "schedule",
@@ -3208,11 +3236,16 @@ class SdkPluginBridge:
             "raw": {"event_type": "schedule"},
             "schedule": {
                 "schedule_id": f"{plugin_id}:{handler_id}",
+                "job_id": job_id,
                 "plugin_id": plugin_id,
                 "handler_id": handler_id,
+                "name": job_name,
+                "description": description,
+                "job_type": job_type,
                 "trigger_kind": "cron" if trigger.cron is not None else "interval",
                 "cron": trigger.cron,
                 "interval_seconds": trigger.interval_seconds,
+                "timezone": timezone_name,
                 "scheduled_at": scheduled_at,
             },
         }

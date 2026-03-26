@@ -50,6 +50,7 @@ from astrbot_sdk.protocol.descriptors import (
     MessageTypeFilterSpec,
     Permissions,
     PlatformFilterSpec,
+    ScheduleTrigger,
     SessionRef,
 )
 from astrbot_sdk.runtime.capability_dispatcher import CapabilityDispatcher
@@ -245,7 +246,12 @@ def test_handler_descriptions_flow_from_decorators_to_loaded_descriptors(
     @on_event("ready", description="React when the runtime is ready")
     async def ready(event: MessageEvent, ctx: Context) -> None: ...
 
-    @on_schedule(interval_seconds=60, description="Run periodic maintenance")
+    @on_schedule(
+        interval_seconds=60,
+        name="periodic-maintenance",
+        timezone="Asia/Shanghai",
+        description="Run periodic maintenance",
+    )
     async def tick(ctx: Context) -> None: ...
 
     hello_meta = get_handler_meta(hello)
@@ -257,6 +263,9 @@ def test_handler_descriptions_flow_from_decorators_to_loaded_descriptors(
     assert hello_meta.description == "Handle hello messages"
     assert ready_meta.description == "React when the runtime is ready"
     assert tick_meta.description == "Run periodic maintenance"
+    assert isinstance(tick_meta.trigger, ScheduleTrigger)
+    assert tick_meta.trigger.name == "periodic-maintenance"
+    assert tick_meta.trigger.timezone == "Asia/Shanghai"
 
     env = SDKTestEnvironment(tmp_path)
     plugin_dir = _write_sdk_plugin(
@@ -282,7 +291,10 @@ def test_handler_descriptions_flow_from_decorators_to_loaded_descriptors(
                 "    async def ready(self, event: MessageEvent, ctx: Context) -> None:",
                 "        return None",
                 "",
-                '    @on_schedule(interval_seconds=60, description="Run periodic maintenance")',
+                (
+                    '    @on_schedule(interval_seconds=60, name="periodic-maintenance", '
+                    'timezone="Asia/Shanghai", description="Run periodic maintenance")'
+                ),
                 "    async def tick(self, ctx: Context) -> None:",
                 "        return None",
             ]
@@ -303,6 +315,9 @@ def test_handler_descriptions_flow_from_decorators_to_loaded_descriptors(
     assert descriptors["ping"].description == "React to ping messages"
     assert descriptors["ready"].description == "Observe ready events"
     assert descriptors["tick"].description == "Run periodic maintenance"
+    assert isinstance(descriptors["tick"].trigger, ScheduleTrigger)
+    assert descriptors["tick"].trigger.name == "periodic-maintenance"
+    assert descriptors["tick"].trigger.timezone == "Asia/Shanghai"
 
     @admin_only
     @priority(7)
