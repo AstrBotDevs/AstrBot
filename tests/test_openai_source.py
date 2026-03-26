@@ -606,6 +606,7 @@ async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeyp
         contexts = [
             {
                 "role": "user",
+                "metadata": {"source": "quoted"},
                 "content": [
                     {"type": "text", "text": "look"},
                     {
@@ -829,6 +830,78 @@ async def test_resolve_image_part_rejects_invalid_file_uri(tmp_path):
         invalid_file.write_text("not an image")
 
         assert await provider._resolve_image_part(invalid_file.as_uri()) is None
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_image_ref_to_data_url_mode_controls_invalid_file_behavior(tmp_path):
+    provider = _make_provider()
+    try:
+        invalid_file = tmp_path / "not-image.txt"
+        invalid_file.write_text("not an image")
+
+        assert (
+            await provider._image_ref_to_data_url(str(invalid_file), mode="safe")
+            is None
+        )
+        with pytest.raises(ValueError, match="Invalid image file"):
+            await provider._image_ref_to_data_url(str(invalid_file), mode="strict")
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_materialize_context_image_parts_returns_new_messages(monkeypatch):
+    provider = _make_provider()
+    try:
+        context_query = [
+            {
+                "role": "user",
+                "metadata": {"source": "quoted"},
+                "content": [
+                    {"type": "text", "text": "look"},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "https://example.com/quoted.png",
+                            "detail": "high",
+                        },
+                    },
+                ],
+            },
+            {"role": "assistant", "content": "plain text"},
+        ]
+
+        async def fake_resolve(image_url: str, *, image_detail: str | None = None):
+            assert image_url == "https://example.com/quoted.png"
+            assert image_detail == "high"
+            return {
+                "type": "image_url",
+                "image_url": {
+                    "url": "data:image/png;base64,abcd",
+                    "detail": "high",
+                },
+            }
+
+        monkeypatch.setattr(provider, "_resolve_image_part", fake_resolve)
+
+        materialized = await provider._materialize_context_image_parts(context_query)
+
+        assert materialized is not context_query
+        assert materialized[0] is not context_query[0]
+        assert materialized[0]["metadata"] is not context_query[0]["metadata"]
+        assert materialized[0]["content"][0] is not context_query[0]["content"][0]
+        assert (
+            materialized[0]["content"][1]["image_url"]["url"]
+            == "data:image/png;base64,abcd"
+        )
+        assert (
+            context_query[0]["content"][1]["image_url"]["url"]
+            == "https://example.com/quoted.png"
+        )
+        assert materialized[1] is not context_query[1]
+        assert materialized[1]["content"] == "plain text"
     finally:
         await provider.terminate()
 

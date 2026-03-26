@@ -8,7 +8,7 @@ import re
 from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import unquote, urlparse
 
 import httpx
@@ -170,13 +170,12 @@ class ProviderOpenAIOfficial(Provider):
         cls,
         image_path: str,
         *,
-        suppress_errors: bool = True,
-        raise_on_invalid_image: bool = False,
+        mode: Literal["safe", "strict"],
     ) -> str | None:
         try:
             image_bytes = Path(image_path).read_bytes()
         except OSError:
-            if not suppress_errors:
+            if mode == "strict":
                 raise
             return None
 
@@ -185,7 +184,7 @@ class ProviderOpenAIOfficial(Provider):
                 image.verify()
                 image_format = str(image.format or "").upper()
         except (OSError, UnidentifiedImageError):
-            if raise_on_invalid_image:
+            if mode == "strict":
                 raise ValueError(f"Invalid image file: {image_path}")
             return None
 
@@ -224,8 +223,7 @@ class ProviderOpenAIOfficial(Provider):
         self,
         image_ref: str,
         *,
-        suppress_errors: bool = True,
-        raise_on_invalid_image: bool = False,
+        mode: Literal["safe", "strict"] = "safe",
     ) -> str | None:
         if image_ref.startswith("base64://"):
             return image_ref.replace("base64://", "data:image/jpeg;base64,")
@@ -239,26 +237,8 @@ class ProviderOpenAIOfficial(Provider):
 
         return self._encode_image_file_to_data_url(
             image_path,
-            suppress_errors=suppress_errors,
-            raise_on_invalid_image=raise_on_invalid_image,
+            mode=mode,
         )
-
-    async def _image_ref_to_data_url_safe(self, image_ref: str) -> str | None:
-        return await self._image_ref_to_data_url(
-            image_ref,
-            suppress_errors=True,
-            raise_on_invalid_image=False,
-        )
-
-    async def _image_ref_to_data_url_strict(self, image_ref: str) -> str:
-        image_data = await self._image_ref_to_data_url(
-            image_ref,
-            suppress_errors=False,
-            raise_on_invalid_image=True,
-        )
-        if image_data is None:
-            raise RuntimeError(f"Failed to encode image data: {image_ref}")
-        return image_data
 
     async def _resolve_image_part(
         self,
@@ -269,7 +249,7 @@ class ProviderOpenAIOfficial(Provider):
         if image_url.startswith("data:"):
             image_payload = {"url": image_url}
         else:
-            image_data = await self._image_ref_to_data_url_safe(image_url)
+            image_data = await self._image_ref_to_data_url(image_url, mode="safe")
             if not image_data:
                 logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                 return None
@@ -301,17 +281,21 @@ class ProviderOpenAIOfficial(Provider):
             image_detail = None
         return url, image_detail
 
-    async def _materialize_context_image_parts(self, context_query: list[dict]) -> None:
+    async def _materialize_context_image_parts(
+        self, context_query: list[dict]
+    ) -> list[dict]:
+        new_messages: list[dict] = []
         for message in context_query:
             content = message.get("content")
             if not isinstance(content, list):
+                new_messages.append(copy.deepcopy(message))
                 continue
 
             new_content: list[dict] = []
             for part in content:
                 url, image_detail = self._extract_image_part_info(part)
                 if not url:
-                    new_content.append(part)
+                    new_content.append(copy.deepcopy(part))
                     continue
 
                 try:
@@ -324,15 +308,19 @@ class ProviderOpenAIOfficial(Provider):
                         url,
                         exc,
                     )
-                    new_content.append(part)
+                    new_content.append(copy.deepcopy(part))
                     continue
 
                 if resolved_part is None:
-                    new_content.append(part)
+                    new_content.append(copy.deepcopy(part))
                     continue
 
                 new_content.append(resolved_part)
-            message["content"] = new_content
+            new_message = copy.deepcopy(message)
+            new_message["content"] = new_content
+            new_messages.append(new_message)
+
+        return new_messages
 
     async def _fallback_to_text_only_and_retry(
         self,
@@ -814,7 +802,7 @@ class ProviderOpenAIOfficial(Provider):
                     context_query.extend(tcr.to_openai_messages())
 
         if self._context_contains_image(context_query):
-            await self._materialize_context_image_parts(context_query)
+            context_query = await self._materialize_context_image_parts(context_query)
 
         model = model or self.get_model()
 
@@ -1178,7 +1166,10 @@ class ProviderOpenAIOfficial(Provider):
 
     async def encode_image_bs64(self, image_url: str) -> str:
         """将图片转换为 base64"""
-        return await self._image_ref_to_data_url_strict(image_url)
+        image_data = await self._image_ref_to_data_url(image_url, mode="strict")
+        if image_data is None:
+            raise RuntimeError(f"Failed to encode image data: {image_url}")
+        return image_data
 
     async def terminate(self):
         if self.client:
