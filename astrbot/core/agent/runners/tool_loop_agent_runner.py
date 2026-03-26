@@ -4,6 +4,8 @@ import sys
 import time
 import traceback
 import typing as T
+from collections.abc import AsyncIterator
+from contextlib import suppress
 from dataclasses import dataclass, field
 
 from mcp.types import (
@@ -80,6 +82,18 @@ class FollowUpTicket:
     resolved: asyncio.Event = field(default_factory=asyncio.Event)
 
 
+class _ToolExecutionInterrupted(Exception):
+    """Raised when a running tool call is interrupted by a stop request."""
+
+
+ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
+
+USER_INTERRUPTION_MESSAGE = (
+    "[SYSTEM: User actively interrupted the response generation. "
+    "Partial output before interruption is preserved.]"
+)
+
+
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
@@ -154,8 +168,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_executor = tool_executor
         self.agent_hooks = agent_hooks
         self.run_context = run_context
-        self._stop_requested = False
         self._aborted = False
+        self._abort_signal = asyncio.Event()
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
 
@@ -208,6 +222,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             "func_tool": self.req.func_tool,
             "session_id": self.req.session_id,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
+            "abort_signal": self._abort_signal,
         }
         if include_model:
             # For primary provider we keep explicit model selection if provided.
@@ -302,7 +317,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         message_text: str,
     ) -> FollowUpTicket | None:
         """Queue a follow-up message for the next tool result."""
-        if self.done():
+        if self.done() or self._is_stop_requested():
             return None
         text = (message_text or "").strip()
         if not text:
@@ -398,10 +413,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             ),
                         ),
                     )
-                if self._stop_requested:
+                if self._is_stop_requested():
                     llm_resp_result = LLMResponse(
                         role="assistant",
-                        completion_text="[SYSTEM: User actively interrupted the response generation. Partial output before interruption is preserved.]",
+                        completion_text=USER_INTERRUPTION_MESSAGE,
                         reasoning_content=llm_response.reasoning_content,
                         reasoning_signature=llm_response.reasoning_signature,
                     )
@@ -417,49 +432,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             break  # got final response
 
         if not llm_resp_result:
-            if self._stop_requested:
+            if self._is_stop_requested():
                 llm_resp_result = LLMResponse(role="assistant", completion_text="")
             else:
                 return
 
-        if self._stop_requested:
-            logger.info("Agent execution was requested to stop by user.")
-            llm_resp = llm_resp_result
-            if llm_resp.role != "assistant":
-                llm_resp = LLMResponse(
-                    role="assistant",
-                    completion_text="[SYSTEM: User actively interrupted the response generation. Partial output before interruption is preserved.]",
-                )
-            self.final_llm_resp = llm_resp
-            self._aborted = True
-            self._transition_state(AgentState.DONE)
-            self.stats.end_time = time.time()
-
-            parts = []
-            if llm_resp.reasoning_content or llm_resp.reasoning_signature:
-                parts.append(
-                    ThinkPart(
-                        think=llm_resp.reasoning_content,
-                        encrypted=llm_resp.reasoning_signature,
-                    )
-                )
-            if llm_resp.completion_text:
-                parts.append(TextPart(text=llm_resp.completion_text))
-            if parts:
-                self.run_context.messages.append(
-                    Message(role="assistant", content=parts)
-                )
-
-            try:
-                await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
-            except Exception as e:
-                logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
-
-            yield AgentResponse(
-                type="aborted",
-                data=AgentResponseData(chain=MessageChain(type="aborted")),
-            )
-            self._resolve_unconsumed_follow_ups()
+        if self._is_stop_requested():
+            yield await self._finalize_aborted_step(llm_resp_result)
             return
 
         # 处理 LLM 响应
@@ -534,27 +513,31 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             tool_call_result_blocks = []
             cached_images = []  # Collect cached images for LLM visibility
-            async for result in self._handle_function_tools(self.req, llm_resp):
-                if result.kind == "tool_call_result_blocks":
-                    if result.tool_call_result_blocks is not None:
-                        tool_call_result_blocks = result.tool_call_result_blocks
-                elif result.kind == "cached_image":
-                    if result.cached_image is not None:
-                        # Collect cached image info
-                        cached_images.append(result.cached_image)
-                elif result.kind == "message_chain":
-                    chain = result.message_chain
-                    if chain is None or chain.type is None:
-                        # should not happen
-                        continue
-                    if chain.type == "tool_direct_result":
-                        ar_type = "tool_call_result"
-                    else:
-                        ar_type = chain.type
-                    yield AgentResponse(
-                        type=ar_type,
-                        data=AgentResponseData(chain=chain),
-                    )
+            try:
+                async for result in self._handle_function_tools(self.req, llm_resp):
+                    if result.kind == "tool_call_result_blocks":
+                        if result.tool_call_result_blocks is not None:
+                            tool_call_result_blocks = result.tool_call_result_blocks
+                    elif result.kind == "cached_image":
+                        if result.cached_image is not None:
+                            # Collect cached image info
+                            cached_images.append(result.cached_image)
+                    elif result.kind == "message_chain":
+                        chain = result.message_chain
+                        if chain is None or chain.type is None:
+                            # should not happen
+                            continue
+                        if chain.type == "tool_direct_result":
+                            ar_type = "tool_call_result"
+                        else:
+                            ar_type = chain.type
+                        yield AgentResponse(
+                            type=ar_type,
+                            data=AgentResponseData(chain=chain),
+                        )
+            except _ToolExecutionInterrupted:
+                yield await self._finalize_aborted_step(llm_resp)
+                return
 
             # 将结果添加到上下文中
             parts = []
@@ -754,73 +737,74 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
 
                 _final_resp: CallToolResult | None = None
-                async for resp in executor:  # type: ignore
+                async for resp in self._iter_tool_executor_results(executor):  # type: ignore
                     if isinstance(resp, CallToolResult):
                         res = resp
                         _final_resp = resp
-                        if isinstance(res.content[0], TextContent):
+                        if not res.content:
                             _append_tool_call_result(
                                 func_tool_id,
-                                res.content[0].text,
+                                "The tool returned no content.",
                             )
-                        elif isinstance(res.content[0], ImageContent):
-                            # Cache the image instead of sending directly
-                            cached_img = tool_image_cache.save_image(
-                                base64_data=res.content[0].data,
-                                tool_call_id=func_tool_id,
-                                tool_name=func_tool_name,
-                                index=0,
-                                mime_type=res.content[0].mimeType or "image/png",
-                            )
-                            _append_tool_call_result(
-                                func_tool_id,
-                                (
+                            continue
+
+                        result_parts: list[str] = []
+                        for index, content_item in enumerate(res.content):
+                            if isinstance(content_item, TextContent):
+                                result_parts.append(content_item.text)
+                            elif isinstance(content_item, ImageContent):
+                                # Cache the image instead of sending directly
+                                cached_img = tool_image_cache.save_image(
+                                    base64_data=content_item.data,
+                                    tool_call_id=func_tool_id,
+                                    tool_name=func_tool_name,
+                                    index=index,
+                                    mime_type=content_item.mimeType or "image/png",
+                                )
+                                result_parts.append(
                                     f"Image returned and cached at path='{cached_img.file_path}'. "
                                     f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
                                     f"with type='image' and path='{cached_img.file_path}'."
-                                ),
-                            )
-                            # Yield image info for LLM visibility (will be handled in step())
-                            yield _HandleFunctionToolsResult.from_cached_image(
-                                cached_img
-                            )
-                        elif isinstance(res.content[0], EmbeddedResource):
-                            resource = res.content[0].resource
-                            if isinstance(resource, TextResourceContents):
-                                _append_tool_call_result(
-                                    func_tool_id,
-                                    resource.text,
                                 )
-                            elif (
-                                isinstance(resource, BlobResourceContents)
-                                and resource.mimeType
-                                and resource.mimeType.startswith("image/")
-                            ):
-                                # Cache the image instead of sending directly
-                                cached_img = tool_image_cache.save_image(
-                                    base64_data=resource.blob,
-                                    tool_call_id=func_tool_id,
-                                    tool_name=func_tool_name,
-                                    index=0,
-                                    mime_type=resource.mimeType,
-                                )
-                                _append_tool_call_result(
-                                    func_tool_id,
-                                    (
-                                        f"Image returned and cached at path='{cached_img.file_path}'. "
-                                        f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
-                                        f"with type='image' and path='{cached_img.file_path}'."
-                                    ),
-                                )
-                                # Yield image info for LLM visibility
+                                # Yield image info for LLM visibility (will be handled in step())
                                 yield _HandleFunctionToolsResult.from_cached_image(
                                     cached_img
                                 )
-                            else:
-                                _append_tool_call_result(
-                                    func_tool_id,
-                                    "The tool has returned a data type that is not supported.",
-                                )
+                            elif isinstance(content_item, EmbeddedResource):
+                                resource = content_item.resource
+                                if isinstance(resource, TextResourceContents):
+                                    result_parts.append(resource.text)
+                                elif (
+                                    isinstance(resource, BlobResourceContents)
+                                    and resource.mimeType
+                                    and resource.mimeType.startswith("image/")
+                                ):
+                                    # Cache the image instead of sending directly
+                                    cached_img = tool_image_cache.save_image(
+                                        base64_data=resource.blob,
+                                        tool_call_id=func_tool_id,
+                                        tool_name=func_tool_name,
+                                        index=index,
+                                        mime_type=resource.mimeType,
+                                    )
+                                    result_parts.append(
+                                        f"Image returned and cached at path='{cached_img.file_path}'. "
+                                        f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
+                                        f"with type='image' and path='{cached_img.file_path}'."
+                                    )
+                                    # Yield image info for LLM visibility
+                                    yield _HandleFunctionToolsResult.from_cached_image(
+                                        cached_img
+                                    )
+                                else:
+                                    result_parts.append(
+                                        "The tool has returned a data type that is not supported."
+                                    )
+                        if result_parts:
+                            _append_tool_call_result(
+                                func_tool_id,
+                                "\n\n".join(result_parts),
+                            )
 
                     elif resp is None:
                         # Tool 直接请求发送消息给用户
@@ -855,6 +839,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 except Exception as e:
                     logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)
             except Exception as e:
+                if isinstance(e, _ToolExecutionInterrupted):
+                    raise
                 logger.warning(traceback.format_exc())
                 _append_tool_call_result(
                     func_tool_id,
@@ -945,6 +931,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     func_tool=param_subset,
                     model=self.req.model,
                     session_id=self.req.session_id,
+                    extra_user_content_parts=self.req.extra_user_content_parts,
+                    abort_signal=self._abort_signal,
                 )
                 if requery_resp:
                     llm_resp = requery_resp
@@ -956,10 +944,102 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         return self._state in (AgentState.DONE, AgentState.ERROR)
 
     def request_stop(self) -> None:
-        self._stop_requested = True
+        self._abort_signal.set()
+
+    def _is_stop_requested(self) -> bool:
+        return self._abort_signal.is_set()
 
     def was_aborted(self) -> bool:
         return self._aborted
 
     def get_final_llm_resp(self) -> LLMResponse | None:
         return self.final_llm_resp
+
+    async def _finalize_aborted_step(
+        self,
+        llm_resp: LLMResponse | None = None,
+    ) -> AgentResponse:
+        logger.info("Agent execution was requested to stop by user.")
+        if llm_resp is None:
+            llm_resp = LLMResponse(role="assistant", completion_text="")
+        if llm_resp.role != "assistant":
+            llm_resp = LLMResponse(
+                role="assistant",
+                completion_text=USER_INTERRUPTION_MESSAGE,
+            )
+        self.final_llm_resp = llm_resp
+        self._aborted = True
+        self._transition_state(AgentState.DONE)
+        self.stats.end_time = time.time()
+
+        parts = []
+        if llm_resp.reasoning_content or llm_resp.reasoning_signature:
+            parts.append(
+                ThinkPart(
+                    think=llm_resp.reasoning_content,
+                    encrypted=llm_resp.reasoning_signature,
+                )
+            )
+        if llm_resp.completion_text:
+            parts.append(TextPart(text=llm_resp.completion_text))
+        if parts:
+            self.run_context.messages.append(Message(role="assistant", content=parts))
+
+        try:
+            await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
+        except Exception as e:
+            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
+
+        self._resolve_unconsumed_follow_ups()
+        return AgentResponse(
+            type="aborted",
+            data=AgentResponseData(chain=MessageChain(type="aborted")),
+        )
+
+    async def _close_executor(self, executor: T.Any) -> None:
+        close_executor = getattr(executor, "aclose", None)
+        if close_executor is None:
+            return
+        with suppress(asyncio.CancelledError, RuntimeError, StopAsyncIteration):
+            await close_executor()
+
+    async def _iter_tool_executor_results(
+        self,
+        executor: AsyncIterator[ToolExecutorResultT],
+    ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
+        while True:
+            if self._is_stop_requested():
+                await self._close_executor(executor)
+                raise _ToolExecutionInterrupted(
+                    "Tool execution interrupted before reading the next tool result."
+                )
+
+            next_result_task = asyncio.create_task(anext(executor))
+            abort_task = asyncio.create_task(self._abort_signal.wait())
+            try:
+                done, _ = await asyncio.wait(
+                    {next_result_task, abort_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+
+                if abort_task in done:
+                    if not next_result_task.done():
+                        next_result_task.cancel()
+                        with suppress(asyncio.CancelledError, StopAsyncIteration):
+                            await next_result_task
+
+                    await self._close_executor(executor)
+
+                    raise _ToolExecutionInterrupted(
+                        "Tool execution interrupted by a stop request."
+                    )
+
+                try:
+                    yield next_result_task.result()
+                except StopAsyncIteration:
+                    return
+            finally:
+                if not abort_task.done():
+                    abort_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await abort_task

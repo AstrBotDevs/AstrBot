@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 229 icons */
+/* Auto-generated MDI subset – 248 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -112,8 +112,16 @@
   content: "\F09D1";
 }
 
+.mdi-broom::before {
+  content: "\F00E2";
+}
+
 .mdi-bug::before {
   content: "\F00E4";
+}
+
+.mdi-cached::before {
+  content: "\F00E8";
 }
 
 .mdi-calendar::before {
@@ -300,12 +308,20 @@
   content: "\F1640";
 }
 
+.mdi-database-refresh-outline::before {
+  content: "\F1634";
+}
+
 .mdi-delete::before {
   content: "\F01B4";
 }
 
 .mdi-delete-outline::before {
   content: "\F09E7";
+}
+
+.mdi-delete-sweep-outline::before {
+  content: "\F0C62";
 }
 
 .mdi-dots-hexagon::before {
@@ -350,6 +366,10 @@
 
 .mdi-eye-outline::before {
   content: "\F06D0";
+}
+
+.mdi-eyedropper::before {
+  content: "\F020A";
 }
 
 .mdi-file::before {
@@ -608,6 +628,14 @@
   content: "\F035C";
 }
 
+.mdi-menu-down::before {
+  content: "\F035D";
+}
+
+.mdi-menu-right::before {
+  content: "\F035F";
+}
+
 .mdi-message-off-outline::before {
   content: "\F164E";
 }
@@ -630,6 +658,10 @@
 
 .mdi-minus::before {
   content: "\F0374";
+}
+
+.mdi-minus-box::before {
+  content: "\F0375";
 }
 
 .mdi-note-text-outline::before {
@@ -664,6 +696,18 @@
   content: "\F03D6";
 }
 
+.mdi-page-first::before {
+  content: "\F0600";
+}
+
+.mdi-page-last::before {
+  content: "\F0601";
+}
+
+.mdi-paperclip::before {
+  content: "\F03E2";
+}
+
 .mdi-pause::before {
   content: "\F03E4";
 }
@@ -692,6 +736,14 @@
   content: "\F03F6";
 }
 
+.mdi-pin::before {
+  content: "\F0403";
+}
+
+.mdi-pin-outline::before {
+  content: "\F0931";
+}
+
 .mdi-play::before {
   content: "\F040A";
 }
@@ -718,6 +770,18 @@
 
 .mdi-puzzle-outline::before {
   content: "\F0A66";
+}
+
+.mdi-qrcode::before {
+  content: "\F0432";
+}
+
+.mdi-radiobox-blank::before {
+  content: "\F043D";
+}
+
+.mdi-radiobox-marked::before {
+  content: "\F043E";
 }
 
 .mdi-refresh::before {
@@ -816,6 +880,14 @@
   content: "\F1C55";
 }
 
+.mdi-star-half-full::before {
+  content: "\F04D0";
+}
+
+.mdi-star-outline::before {
+  content: "\F04D2";
+}
+
 .mdi-stop::before {
   content: "\F04DB";
 }
@@ -870,6 +942,10 @@
 
 .mdi-trash-can-outline::before {
   content: "\F0A7A";
+}
+
+.mdi-unfold-more-horizontal::before {
+  content: "\F054F";
 }
 
 .mdi-update::before {

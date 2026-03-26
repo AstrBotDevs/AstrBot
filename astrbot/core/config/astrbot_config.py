@@ -178,4 +178,6 @@ class AstrBotConfig(dict):
         self[key] = value
 
     def check_exist(self) -> bool:
+        if not self.config_path:  # 加判空
+            return False
         return os.path.exists(self.config_path)

@@ -21,6 +21,7 @@
     },
     "description": {
       "openai": "Supports all OpenAI API compatible providers.",
+      "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API compatibility layer.",
       "default": ""
     }
   },
