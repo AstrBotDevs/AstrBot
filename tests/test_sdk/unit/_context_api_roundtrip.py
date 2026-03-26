@@ -6,7 +6,7 @@ import sys
 import types
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -859,6 +859,7 @@ class FakeMessageHistoryManager:
     def __init__(self) -> None:
         self._records: dict[tuple[str, str, str], list[MessageHistoryRecord]] = {}
         self._next_id = 1
+        self._last_created_at: datetime | None = None
 
     @staticmethod
     def _session_key(session: CoreMessageSession) -> tuple[str, str, str]:
@@ -883,6 +884,13 @@ class FakeMessageHistoryManager:
         idempotency_key: str | None = None,
     ) -> MessageHistoryRecord:
         now = datetime.now(timezone.utc)
+        # Windows test environments can return identical wall-clock timestamps
+        # for consecutive inserts. Keep fake history timestamps monotonic so
+        # delete_before/delete_after boundary tests reflect the manager contract
+        # instead of host clock resolution.
+        if self._last_created_at is not None and now <= self._last_created_at:
+            now = self._last_created_at + timedelta(microseconds=1)
+        self._last_created_at = now
         record = MessageHistoryRecord(
             id=self._next_id,
             session=session,
