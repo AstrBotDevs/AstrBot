@@ -56,6 +56,8 @@ BUILD_EXCLUDED_DIRS = {
     "dist",
 }
 BUILD_EXCLUDED_FILES = {
+    "AGENTS.md",
+    "CLAUDE.md",
     ".astrbot-worker-state.json",
 }
 WATCH_POLL_INTERVAL_SECONDS = 0.5
@@ -719,6 +721,8 @@ def _render_init_readme(*, plugin_name: str) -> str:
 
         ```
         .
+        ├── AGENTS.md
+        ├── CLAUDE.md
         ├── plugin.yaml
         ├── requirements.txt
         ├── main.py
@@ -741,6 +745,41 @@ def _render_init_readme(*, plugin_name: str) -> str:
         ```
         """
     )
+
+
+def _render_init_agent_notes(*, title: str, plugin_name: str) -> str:
+    return dedent(
+        f"""\
+        # {title}
+
+        ## Plugin Context
+
+        - Plugin name: `{plugin_name}`
+        - Plugin type: AstrBot SDK v4 plugin
+
+        ## Error Handling Rules
+
+        - For expected plugin errors, use `AstrBotError` from `astrbot_sdk.errors`.
+        - Select stable error codes from `ErrorCodes`; prefer existing factory helpers such as `AstrBotError.invalid_input(...)`, `AstrBotError.internal_error(...)`, `AstrBotError.network_error(...)`, and `AstrBotError.capability_not_found(...)`.
+        - Keep the SDK error payload shape consistent: `code`, `message`, `hint`, `details`, `docs_url`, `retryable`.
+        - Do not invent ad-hoc primary error contracts like `{{"error": "..."}}` when the operation should fail; raise `AstrBotError` so SDK CLI, local harness, and AstrBot bridge layers can render errors consistently.
+
+        ## Development Rules
+
+        - Prefer the stable public SDK surface: `astrbot_sdk`, `astrbot_sdk.decorators`, `astrbot_sdk.clients`, `astrbot_sdk.testing`.
+        - Avoid runtime internals such as `astrbot_sdk.runtime.*` in plugin code unless you are explicitly changing the SDK itself.
+        - Use `ctx.logger.debug(...)` for local debug output in `astrbot-sdk dev --local`.
+        - In tests, prefer `PluginHarness.from_plugin_dir(...)`; avoid `from main import ...`, which can pollute `sys.modules`.
+        """
+    )
+
+
+def _render_init_agents_md(*, plugin_name: str) -> str:
+    return _render_init_agent_notes(title="AGENTS Notes", plugin_name=plugin_name)
+
+
+def _render_init_claude_md(*, plugin_name: str) -> str:
+    return _render_init_agent_notes(title="CLAUDE Notes", plugin_name=plugin_name)
 
 
 def _render_init_test_py(*, plugin_name: str) -> str:
@@ -981,6 +1020,14 @@ def _init_plugin(name: str | None, agents: tuple[str, ...] = ()) -> None:
     )
     (target_dir / "README.md").write_text(
         _render_init_readme(plugin_name=plugin_name),
+        encoding="utf-8",
+    )
+    (target_dir / "AGENTS.md").write_text(
+        _render_init_agents_md(plugin_name=plugin_name),
+        encoding="utf-8",
+    )
+    (target_dir / "CLAUDE.md").write_text(
+        _render_init_claude_md(plugin_name=plugin_name),
         encoding="utf-8",
     )
     (target_dir / "tests" / "test_plugin.py").write_text(
