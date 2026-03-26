@@ -26,31 +26,5 @@ dependencies = [
 [project.scripts]
 astr = "astrbot_sdk.cli:cli"
 
-[tool.pytest.ini_options]
-markers = [
-    "unit: unit tests",
-]
-
-# ============================================================
-# Package Discovery (src layout)
-# ============================================================
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.setuptools.package-data]
-astrbot_sdk = [
-    "templates/skills/*/SKILL.md",
-    "templates/skills/*/agents/*.yaml",
-    "templates/skills/*/references/*.md",
-]
-
-# ============================================================
-# Optional Dependencies
-# ============================================================
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.24.0",
-    "pytest-cov>=5.0.0",
-    "ruff>=0.4.0",
-]
