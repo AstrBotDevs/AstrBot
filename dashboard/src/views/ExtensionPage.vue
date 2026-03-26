@@ -227,7 +227,8 @@ const {
         <v-btn
           variant="text"
           prepend-icon="mdi-book-open-variant"
-          href="https://astrbot.app/dev/plugin.html"
+          href="https://docs.astrbot.app/dev/star/plugin-new.html"
+          rel="noopener noreferrer"
           target="_blank"
           color="primary"
           class="text-none"
@@ -387,6 +388,7 @@ const {
     elevation="24"
     :color="snack_success"
     v-model="snack_show"
+    location="bottom center"
   >
     {{ snack_message }}
   </v-snackbar>
