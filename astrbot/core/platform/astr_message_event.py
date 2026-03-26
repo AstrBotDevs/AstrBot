@@ -451,14 +451,27 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
-    async def react(self, emoji: str) -> None:
+    async def react(self, emoji: str) -> str | None:
         """对消息添加表情回应。
 
         默认实现为发送一条包含该表情的消息。
-        注意：此实现并不一定符合所有平台的原生“表情回应”行为。
+        注意：此实现并不一定符合所有平台的原生”表情回应”行为。
         如需支持平台原生的消息反应功能，请在对应平台的子类中重写本方法。
+
+        Returns:
+            一个标识符字符串，可传给 unreact() 撤回；如果平台不支持撤回则返回 None。
         """
         await self.send(MessageChain([Plain(emoji)]))
+        return None
+
+    async def unreact(self, reaction_id: str) -> None:
+        """撤回之前通过 react() 添加的表情回应。
+
+        默认实现为空操作，由具体平台按需重写。
+
+        Args:
+            reaction_id: react() 返回的标识符。
+        """
 
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。

@@ -12,6 +12,7 @@ from lark_oapi.api.im.v1 import (
     CreateImageRequestBody,
     CreateMessageReactionRequest,
     CreateMessageReactionRequestBody,
+    DeleteMessageReactionRequest,
     Emoji,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
@@ -534,10 +535,10 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id_type=receive_id_type,
         )
 
-    async def react(self, emoji: str) -> None:
+    async def react(self, emoji: str) -> str | None:
         if self.bot.im is None:
             logger.error("[Lark] API Client im 模块未初始化，无法发送表情")
-            return
+            return None
 
         request = (
             CreateMessageReactionRequest.builder()
@@ -553,7 +554,27 @@ class LarkMessageEvent(AstrMessageEvent):
         response = await self.bot.im.v1.message_reaction.acreate(request)
         if not response.success():
             logger.error(f"发送飞书表情回应失败({response.code}): {response.msg}")
+            return None
+
+        if response.data:
+            return response.data.reaction_id
+        return None
+
+    async def unreact(self, reaction_id: str) -> None:
+        if self.bot.im is None:
+            logger.error("[Lark] API Client im 模块未初始化，无法撤回表情")
             return
+
+        request = (
+            DeleteMessageReactionRequest.builder()
+            .message_id(self.message_obj.message_id)
+            .reaction_id(reaction_id)
+            .build()
+        )
+
+        response = await self.bot.im.v1.message_reaction.adelete(request)
+        if not response.success():
+            logger.error(f"撤回飞书表情回应失败({response.code}): {response.msg}")
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         buffer = None

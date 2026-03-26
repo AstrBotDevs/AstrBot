@@ -323,11 +323,14 @@ class TelegramPlatformEvent(AstrMessageEvent):
             await self.send_with_client(self.client, message, self.get_sender_id())
         await super().send(message)
 
-    async def react(self, emoji: str | None, big: bool = False) -> None:
+    async def react(self, emoji: str | None, big: bool = False) -> str | None:
         """给原消息添加 Telegram 反应：
         - 普通 emoji：传入 '👍'、'😂' 等
         - 自定义表情：传入其 custom_emoji_id（纯数字字符串）
         - 取消本机器人的反应：传入 None 或空字符串
+
+        Returns:
+            emoji 字符串本身作为标识符（可传给 unreact()），失败时返回 None。
         """
         try:
             # 解析 chat_id（去掉超级群的 "#<thread_id>" 片段）
@@ -352,8 +355,19 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 reaction=reaction_param,  # 注意是列表
                 is_big=big,  # 可选：大动画
             )
+            return emoji if emoji else None
         except Exception as e:
             logger.error(f"[Telegram] 添加反应失败: {e}")
+            return None
+
+    async def unreact(self, reaction_id: str) -> None:
+        """撤回之前添加的表情回应。
+
+        注意：Telegram API 不支持只撤回单个表情反应，
+        因此本方法会清除本机器人在该消息上的所有反应。
+        reaction_id 参数仅为接口兼容保留。
+        """
+        await self.react(None)
 
     async def _send_message_draft(
         self,

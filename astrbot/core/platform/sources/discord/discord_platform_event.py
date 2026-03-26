@@ -267,8 +267,12 @@ class DiscordPlatformEvent(AstrMessageEvent):
             content = content[:2000]
         return content, files, view, embeds, reference_message_id
 
-    async def react(self, emoji: str) -> None:
-        """对原消息添加反应"""
+    async def react(self, emoji: str) -> str | None:
+        """对原消息添加反应
+
+        Returns:
+            emoji 字符串本身作为标识符（可传给 unreact()），失败时返回 None。
+        """
         try:
             if hasattr(self.message_obj, "raw_message") and hasattr(
                 self.message_obj.raw_message,
@@ -277,8 +281,23 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 await cast(discord.Message, self.message_obj.raw_message).add_reaction(
                     emoji
                 )
+                return emoji
         except Exception as e:
             logger.error(f"[Discord] 添加反应失败: {e}")
+        return None
+
+    async def unreact(self, reaction_id: str) -> None:
+        """撤回之前添加的表情反应"""
+        try:
+            if hasattr(self.message_obj, "raw_message") and hasattr(
+                self.message_obj.raw_message,
+                "remove_reaction",
+            ):
+                await cast(discord.Message, self.message_obj.raw_message).remove_reaction(
+                    reaction_id, self.client.user
+                )
+        except Exception as e:
+            logger.error(f"[Discord] 撤回反应失败: {e}")
 
     def is_slash_command(self) -> bool:
         """判断是否为斜杠命令"""

@@ -10,6 +10,7 @@ from astrbot.core.utils.active_event_registry import active_event_registry
 
 from .bootstrap import ensure_builtin_stages_registered
 from .context import PipelineContext
+from .pre_ack_emoji.stage import PreAckEmoji
 from .stage import registered_stages
 from .stage_order import STAGES_ORDER
 
@@ -49,7 +50,9 @@ class PipelineScheduler:
 
             if isinstance(coroutine, AsyncGenerator):
                 # 如果返回的是异步生成器, 实现洋葱模型的核心
+                _yielded = False
                 async for _ in coroutine:
+                    _yielded = True
                     # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
                     if event.is_stopped():
                         logger.debug(
@@ -66,6 +69,9 @@ class PipelineScheduler:
                             f"阶段 {stage.__class__.__name__} 已终止事件传播。",
                         )
                         break
+                if _yielded:
+                    # 递归调用已执行了所有后续阶段，跳出外层循环避免重复执行
+                    break
             else:
                 # 如果返回的是普通协程(不含yield的async函数), 则不进入下一层(基线条件)
                 # 简单地等待它执行完成, 然后继续执行下一个阶段
@@ -83,7 +89,10 @@ class PipelineScheduler:
 
         """
         active_event_registry.register(event)
+        pre_ack = PreAckEmoji(self.ctx.astrbot_config)
         try:
+            await pre_ack.try_react(event)
+
             await self._process_stages(event)
 
             # 如果没有发送操作, 则发送一个空消息, 以便于后续的处理
@@ -92,4 +101,5 @@ class PipelineScheduler:
 
             logger.debug("pipeline 执行完毕。")
         finally:
+            await pre_ack.try_unreact(event)
             active_event_registry.unregister(event)
