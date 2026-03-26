@@ -12,6 +12,7 @@ from lark_oapi.api.im.v1 import (
     CreateImageRequestBody,
     CreateMessageReactionRequest,
     CreateMessageReactionRequestBody,
+    DeleteMessageReactionRequest,
     Emoji,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
@@ -554,6 +555,30 @@ class LarkMessageEvent(AstrMessageEvent):
         if not response.success():
             logger.error(f"发送飞书表情回应失败({response.code}): {response.msg}")
             return
+
+        # 保存 reaction_id 以便后续撤回
+        if response.data and response.data.reaction_id:
+            self._pre_ack_reaction_id = response.data.reaction_id
+
+    async def remove_react(self, emoji: str) -> None:
+        reaction_id = getattr(self, "_pre_ack_reaction_id", None)
+        if not reaction_id:
+            return
+
+        if self.bot.im is None:
+            logger.warning("[Lark] API Client im 模块未初始化，无法撤回表情")
+            return
+
+        request = (
+            DeleteMessageReactionRequest.builder()
+            .message_id(self.message_obj.message_id)
+            .reaction_id(reaction_id)
+            .build()
+        )
+
+        response = await self.bot.im.v1.message_reaction.adelete(request)
+        if not response.success():
+            logger.warning(f"撤回飞书表情回应失败({response.code}): {response.msg}")
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         buffer = None
