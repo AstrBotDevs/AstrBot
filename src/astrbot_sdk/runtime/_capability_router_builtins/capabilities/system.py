@@ -13,6 +13,13 @@ from ..bridge_base import (
 
 
 class SystemCapabilityMixin(CapabilityRouterBridgeBase):
+    @staticmethod
+    def _overlay_request_id(request_id: str, payload: dict[str, Any]) -> str:
+        scope_request_id = payload.get("_request_scope_id")
+        if isinstance(scope_request_id, str) and scope_request_id.strip():
+            return scope_request_id
+        return request_id
+
     def _register_system_capabilities(self) -> None:
         self.register(
             self._builtin_descriptor("system.get_data_dir", "获取插件数据目录"),
@@ -174,7 +181,10 @@ class SystemCapabilityMixin(CapabilityRouterBridgeBase):
         self, _request_id: str, _payload: dict[str, Any], _token
     ) -> dict[str, Any]:
         plugin_id = self._require_caller_plugin_id("system.get_data_dir")
-        data_dir = self._system_data_root / plugin_id
+        data_dir = self._plugin_data_dir(
+            plugin_id,
+            capability_name="system.get_data_dir",
+        )
         data_dir.mkdir(parents=True, exist_ok=True)
         return {"path": str(data_dir)}
 
@@ -219,26 +229,35 @@ class SystemCapabilityMixin(CapabilityRouterBridgeBase):
         return {"path": path}
 
     async def _system_event_llm_get_state(
-        self, request_id: str, _payload: dict[str, Any], _token
+        self, request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
-        overlay = self._ensure_request_overlay(request_id)
+        overlay = self._ensure_request_overlay(
+            self._overlay_request_id(request_id, payload)
+        )
         return {
             "should_call_llm": bool(overlay["should_call_llm"]),
             "requested_llm": bool(overlay["requested_llm"]),
         }
 
     async def _system_event_llm_request(
-        self, request_id: str, _payload: dict[str, Any], _token
+        self, request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
-        overlay = self._ensure_request_overlay(request_id)
+        overlay_request_id = self._overlay_request_id(request_id, payload)
+        overlay = self._ensure_request_overlay(overlay_request_id)
         overlay["requested_llm"] = True
         overlay["should_call_llm"] = True
-        return await self._system_event_llm_get_state(request_id, {}, _token)
+        return await self._system_event_llm_get_state(
+            request_id,
+            {"_request_scope_id": overlay_request_id},
+            _token,
+        )
 
     async def _system_event_result_get(
-        self, request_id: str, _payload: dict[str, Any], _token
+        self, request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
-        overlay = self._ensure_request_overlay(request_id)
+        overlay = self._ensure_request_overlay(
+            self._overlay_request_id(request_id, payload)
+        )
         result = overlay.get("result")
         return {"result": dict(result) if isinstance(result, dict) else None}
 
@@ -250,21 +269,27 @@ class SystemCapabilityMixin(CapabilityRouterBridgeBase):
             raise AstrBotError.invalid_input(
                 "system.event.result.set 的 result 必须是 object"
             )
-        overlay = self._ensure_request_overlay(request_id)
+        overlay = self._ensure_request_overlay(
+            self._overlay_request_id(request_id, payload)
+        )
         overlay["result"] = dict(result)
         return {"result": dict(result)}
 
     async def _system_event_result_clear(
-        self, request_id: str, _payload: dict[str, Any], _token
+        self, request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
-        overlay = self._ensure_request_overlay(request_id)
+        overlay = self._ensure_request_overlay(
+            self._overlay_request_id(request_id, payload)
+        )
         overlay["result"] = None
         return {}
 
     async def _system_event_handler_whitelist_get(
-        self, request_id: str, _payload: dict[str, Any], _token
+        self, request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
-        overlay = self._ensure_request_overlay(request_id)
+        overlay = self._ensure_request_overlay(
+            self._overlay_request_id(request_id, payload)
+        )
         whitelist = overlay.get("handler_whitelist")
         if whitelist is None:
             return {"plugin_names": None}
@@ -273,7 +298,8 @@ class SystemCapabilityMixin(CapabilityRouterBridgeBase):
     async def _system_event_handler_whitelist_set(
         self, request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
-        overlay = self._ensure_request_overlay(request_id)
+        overlay_request_id = self._overlay_request_id(request_id, payload)
+        overlay = self._ensure_request_overlay(overlay_request_id)
         plugin_names_payload = payload.get("plugin_names")
         if plugin_names_payload is None:
             overlay["handler_whitelist"] = None
@@ -285,7 +311,11 @@ class SystemCapabilityMixin(CapabilityRouterBridgeBase):
             raise AstrBotError.invalid_input(
                 "system.event.handler_whitelist.set 的 plugin_names 必须是数组或 null"
             )
-        return await self._system_event_handler_whitelist_get(request_id, {}, _token)
+        return await self._system_event_handler_whitelist_get(
+            request_id,
+            {"_request_scope_id": overlay_request_id},
+            _token,
+        )
 
     async def _registry_get_handlers_by_event_type(
         self, _request_id: str, payload: dict[str, Any], _token
@@ -316,9 +346,18 @@ class SystemCapabilityMixin(CapabilityRouterBridgeBase):
                                 if bool(route.get("use_regex", False))
                                 else "command"
                             ),
+                            "description": (
+                                None
+                                if route.get("desc") is None
+                                else str(route.get("desc", "")).strip() or None
+                            ),
                             "event_types": ["message"],
                             "enabled": True,
                             "group_path": [],
+                            "priority": int(route.get("priority", 0) or 0),
+                            "kind": "handler",
+                            "require_admin": False,
+                            "required_role": None,
                         }
                     )
         return {"handlers": handlers}

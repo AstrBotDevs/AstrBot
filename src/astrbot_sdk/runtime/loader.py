@@ -68,9 +68,10 @@ from typing import Any, Literal, TypeAlias, cast
 
 import yaml
 
-from .._command_model import resolve_command_model_param
-from .._injected_params import is_framework_injected_parameter
-from .._typing_utils import unwrap_optional
+from .._internal.command_model import resolve_command_model_param
+from .._internal.injected_params import is_framework_injected_parameter
+from .._internal.plugin_ids import validate_plugin_id
+from .._internal.typing_utils import unwrap_optional
 from ..decorators import (
     ConversationMeta,
     LimiterMeta,
@@ -660,12 +661,13 @@ def validate_plugin_spec(plugin: PluginSpec) -> None:
     manifest_data = plugin.manifest_data
     manifest_label = f"插件 '{plugin.name}'（{plugin.manifest_path}）"
 
-    if not plugin.requirements_path.exists():
-        raise ValueError(f"{manifest_label} 缺少 requirements.txt。")
-
     raw_name = manifest_data.get("name")
     if not isinstance(raw_name, str) or not raw_name:
         raise ValueError(f"{manifest_label} 缺少 name。")
+    try:
+        validate_plugin_id(raw_name)
+    except ValueError as exc:
+        raise ValueError(f"{manifest_label} 的 name 不合法：{exc}") from exc
 
     raw_runtime = manifest_data.get("runtime") or {}
     raw_python = raw_runtime.get("python")
@@ -724,11 +726,6 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
                     plugin_id=skip_key,
                     message="插件发现失败",
                     details=details,
-                    hint=(
-                        "即使没有依赖，也需要创建一个空的 requirements.txt 文件。"
-                        if "requirements.txt" in details
-                        else ""
-                    ),
                 )
             )
             continue
@@ -964,6 +961,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                             trigger=meta.trigger,
                             kind=cast(HandlerKind, meta.kind),
                             contract=meta.contract,
+                            description=meta.description,
                             priority=meta.priority,
                             permissions=meta.permissions.model_copy(deep=True),
                             filters=[

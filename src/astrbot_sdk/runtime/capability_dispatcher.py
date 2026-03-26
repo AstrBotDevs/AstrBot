@@ -23,10 +23,10 @@ from typing import Any, cast, get_type_hints
 
 from loguru import logger
 
-from .._invocation_context import caller_plugin_scope
-from .._plugin_logger import PluginLogger
-from .._star_runtime import bind_star_runtime
-from .._typing_utils import unwrap_optional
+from .._internal.invocation_context import caller_plugin_scope
+from .._internal.plugin_logger import PluginLogger
+from .._internal.star_runtime import bind_star_runtime
+from .._internal.typing_utils import unwrap_optional
 from ..context import CancelToken, Context
 from ..errors import AstrBotError
 from ..events import MessageEvent
@@ -114,6 +114,7 @@ class CapabilityDispatcher:
         ctx = Context(
             peer=self._peer,
             plugin_id=plugin_id,
+            request_id=message.id,
             cancel_token=cancel_token,
         )
         bound_logger = cast(PluginLogger, ctx.logger).bind(
@@ -160,6 +161,7 @@ class CapabilityDispatcher:
         ctx = Context(
             peer=self._peer,
             plugin_id=plugin_id,
+            request_id=message.id,
             cancel_token=cancel_token,
             source_event_payload=event_payload
             if isinstance(event_payload, dict)

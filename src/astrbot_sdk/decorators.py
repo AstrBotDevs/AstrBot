@@ -12,6 +12,7 @@
 
 权限与过滤装饰器：
     - @require_admin / @admin_only: 管理员权限标记
+    - @require_permission: 通用角色权限标记
     - @platforms: 限定平台
     - @group_only / @private_only: 群聊/私聊限定
     - @message_types: 消息类型过滤
@@ -53,7 +54,7 @@ from typing import Any, Literal, cast
 
 from pydantic import BaseModel
 
-from ._typing_utils import unwrap_optional
+from ._internal.typing_utils import unwrap_optional
 from .llm.agents import AgentSpec, BaseAgentRunner
 from .llm.entities import LLMToolSpec
 from .protocol.descriptors import (
@@ -75,6 +76,12 @@ HANDLER_META_ATTR = "__astrbot_handler_meta__"
 CAPABILITY_META_ATTR = "__astrbot_capability_meta__"
 LLM_TOOL_META_ATTR = "__astrbot_llm_tool_meta__"
 AGENT_META_ATTR = "__astrbot_agent_meta__"
+HTTP_API_META_ATTR = "__astrbot_http_api_meta__"
+VALIDATE_CONFIG_META_ATTR = "__astrbot_validate_config_meta__"
+PROVIDER_CHANGE_META_ATTR = "__astrbot_provider_change_meta__"
+BACKGROUND_TASK_META_ATTR = "__astrbot_background_task_meta__"
+MCP_SERVER_META_ATTR = "__astrbot_mcp_server_meta__"
+SKILL_META_ATTR = "__astrbot_skill_meta__"
 
 LimiterScope = Literal["session", "user", "group", "global"]
 LimiterBehavior = Literal["hint", "silent", "error"]
@@ -118,6 +125,7 @@ class HandlerMeta:
     )
     kind: str = "handler"
     contract: str | None = None
+    description: str | None = None
     priority: int = 0
     permissions: Permissions = field(default_factory=Permissions)
     filters: list[FilterSpec] = field(default_factory=list)
@@ -149,6 +157,75 @@ class LLMToolMeta:
 @dataclass(slots=True)
 class AgentMeta:
     spec: AgentSpec
+
+
+@dataclass(slots=True)
+class HttpApiMeta:
+    route: str
+    methods: list[str] = field(default_factory=lambda: ["GET"])
+    description: str = ""
+    capability_name: str | None = None
+
+
+@dataclass(slots=True)
+class ValidateConfigMeta:
+    model: type[BaseModel] | None = None
+    schema: dict[str, Any] | None = None
+
+
+def _is_valid_validate_config_expected_type(value: Any) -> bool:
+    if isinstance(value, type):
+        return True
+    return (
+        isinstance(value, tuple)
+        and len(value) > 0
+        and all(isinstance(item, type) for item in value)
+    )
+
+
+def _validate_validate_config_schema(schema: dict[str, Any]) -> None:
+    for field_name, field_schema in schema.items():
+        if not isinstance(field_schema, dict):
+            raise TypeError(
+                f"validate_config schema field {field_name!r} must be a dict"
+            )
+        expected_type = field_schema.get("type")
+        if expected_type is not None and not _is_valid_validate_config_expected_type(
+            expected_type
+        ):
+            raise TypeError(
+                "validate_config schema field "
+                f"{field_name!r} has invalid 'type' entry {expected_type!r}; "
+                "expected a type or tuple of types"
+            )
+
+
+@dataclass(slots=True)
+class ProviderChangeMeta:
+    provider_types: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class BackgroundTaskMeta:
+    description: str = ""
+    auto_start: bool = True
+    on_error: Literal["log", "restart"] = "log"
+
+
+@dataclass(slots=True)
+class MCPServerMeta:
+    name: str
+    scope: Literal["local", "global"] = "global"
+    config: dict[str, Any] | None = None
+    timeout: float = 30.0
+    wait_until_ready: bool = True
+
+
+@dataclass(slots=True)
+class SkillMeta:
+    name: str
+    path: str
+    description: str = ""
 
 
 def _get_or_create_meta(func: HandlerCallable) -> HandlerMeta:
@@ -190,6 +267,44 @@ def get_llm_tool_meta(func: HandlerCallable) -> LLMToolMeta | None:
 
 def get_agent_meta(obj: Any) -> AgentMeta | None:
     return getattr(obj, AGENT_META_ATTR, None)
+
+
+def get_http_api_meta(func: HandlerCallable) -> HttpApiMeta | None:
+    return getattr(func, HTTP_API_META_ATTR, None)
+
+
+def get_validate_config_meta(func: HandlerCallable) -> ValidateConfigMeta | None:
+    return getattr(func, VALIDATE_CONFIG_META_ATTR, None)
+
+
+def get_provider_change_meta(func: HandlerCallable) -> ProviderChangeMeta | None:
+    return getattr(func, PROVIDER_CHANGE_META_ATTR, None)
+
+
+def get_background_task_meta(func: HandlerCallable) -> BackgroundTaskMeta | None:
+    return getattr(func, BACKGROUND_TASK_META_ATTR, None)
+
+
+def get_mcp_server_meta(obj: Any) -> list[MCPServerMeta]:
+    values = getattr(obj, MCP_SERVER_META_ATTR, None)
+    if not isinstance(values, list):
+        return []
+    return [item for item in values if isinstance(item, MCPServerMeta)]
+
+
+def get_skill_meta(obj: Any) -> list[SkillMeta]:
+    values = getattr(obj, SKILL_META_ATTR, None)
+    if not isinstance(values, list):
+        return []
+    return [item for item in values if isinstance(item, SkillMeta)]
+
+
+def _append_list_meta(obj: Any, attr_name: str, value: Any) -> None:
+    values = getattr(obj, attr_name, None)
+    if not isinstance(values, list):
+        values = []
+        setattr(obj, attr_name, values)
+    values.append(value)
 
 
 def _replace_filter(meta: HandlerMeta, spec: FilterSpec) -> None:
@@ -258,6 +373,26 @@ def _validate_message_trigger_compatibility(meta: HandlerMeta) -> None:
         raise ValueError(
             "rate_limit(...) 和 cooldown(...) 只适用于 on_command/on_message"
         )
+
+
+def _set_required_role(
+    meta: HandlerMeta,
+    role: Literal["member", "admin"],
+) -> None:
+    current = meta.permissions.required_role
+    if current is not None and current != role:
+        raise ValueError(
+            f"require_permission({role!r}) 与已有权限要求 {current!r} 冲突"
+        )
+    meta.permissions.required_role = role
+    meta.permissions.require_admin = role == "admin"
+
+
+def _normalize_description(description: str | None) -> str | None:
+    if description is None:
+        return None
+    text = str(description).strip()
+    return text or None
 
 
 def _validate_limiter_args(
@@ -356,11 +491,13 @@ def on_command(
 
     def decorator(func: HandlerCallable) -> HandlerCallable:
         meta = _get_or_create_meta(func)
+        normalized_description = _normalize_description(description)
         meta.trigger = CommandTrigger(
             command=canonical,
             aliases=merged_aliases,
-            description=description,
+            description=normalized_description,
         )
+        meta.description = normalized_description
         _validate_message_trigger_compatibility(meta)
         return func
 
@@ -373,6 +510,7 @@ def on_message(
     keywords: list[str] | None = None,
     platforms: list[str] | None = None,
     message_types: list[str] | None = None,
+    description: str | None = None,
 ) -> Callable[[HandlerCallable], HandlerCallable]:
     """注册消息处理方法。
 
@@ -407,6 +545,7 @@ def on_message(
             platforms=platforms or [],
             message_types=message_types or [],
         )
+        meta.description = _normalize_description(description)
         if platforms:
             _set_platform_filter(meta, list(platforms), source="trigger.platforms")
         if message_types:
@@ -446,7 +585,11 @@ def set_command_route_meta(
     return func
 
 
-def on_event(event_type: str) -> Callable[[HandlerCallable], HandlerCallable]:
+def on_event(
+    event_type: str,
+    *,
+    description: str | None = None,
+) -> Callable[[HandlerCallable], HandlerCallable]:
     """注册事件处理方法。
 
     当特定类型的事件发生时触发。用于处理非消息类型的事件，
@@ -467,6 +610,7 @@ def on_event(event_type: str) -> Callable[[HandlerCallable], HandlerCallable]:
     def decorator(func: HandlerCallable) -> HandlerCallable:
         meta = _get_or_create_meta(func)
         meta.trigger = EventTrigger(event_type=event_type)
+        meta.description = _normalize_description(description)
         _validate_message_trigger_compatibility(meta)
         return func
 
@@ -477,6 +621,7 @@ def on_schedule(
     *,
     cron: str | None = None,
     interval_seconds: int | None = None,
+    description: str | None = None,
 ) -> Callable[[HandlerCallable], HandlerCallable]:
     """注册定时任务方法。
 
@@ -505,8 +650,182 @@ def on_schedule(
     def decorator(func: HandlerCallable) -> HandlerCallable:
         meta = _get_or_create_meta(func)
         meta.trigger = ScheduleTrigger(cron=cron, interval_seconds=interval_seconds)
+        meta.description = _normalize_description(description)
         _validate_message_trigger_compatibility(meta)
         return func
+
+    return decorator
+
+
+def http_api(
+    route: str,
+    *,
+    methods: list[str] | None = None,
+    description: str = "",
+    capability_name: str | None = None,
+) -> Callable[[HandlerCallable], HandlerCallable]:
+    normalized_route = str(route).strip()
+    if not normalized_route:
+        raise ValueError("http_api(...) requires a non-empty route")
+    normalized_methods = methods or ["GET"]
+    normalized_methods = [
+        str(item).strip().upper() for item in normalized_methods if str(item).strip()
+    ]
+    if not normalized_methods:
+        raise ValueError("http_api(...) requires at least one HTTP method")
+
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        setattr(
+            func,
+            HTTP_API_META_ATTR,
+            HttpApiMeta(
+                route=normalized_route,
+                methods=normalized_methods,
+                description=str(description),
+                capability_name=(
+                    str(capability_name).strip()
+                    if capability_name is not None
+                    else None
+                ),
+            ),
+        )
+        return func
+
+    return decorator
+
+
+def validate_config(
+    *,
+    model: type[BaseModel] | None = None,
+    schema: dict[str, Any] | None = None,
+) -> Callable[[HandlerCallable], HandlerCallable]:
+    if model is None and schema is None:
+        raise ValueError("validate_config(...) requires model or schema")
+    if model is not None and schema is not None:
+        raise ValueError("validate_config(...) cannot accept model and schema together")
+    if model is not None and (
+        not isinstance(model, type) or not issubclass(model, BaseModel)
+    ):
+        raise TypeError("validate_config model must be a pydantic BaseModel subclass")
+    if schema is not None and not isinstance(schema, dict):
+        raise TypeError("validate_config schema must be a dict")
+    if isinstance(schema, dict):
+        _validate_validate_config_schema(schema)
+
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        setattr(
+            func,
+            VALIDATE_CONFIG_META_ATTR,
+            ValidateConfigMeta(
+                model=model,
+                schema=dict(schema) if isinstance(schema, dict) else None,
+            ),
+        )
+        return func
+
+    return decorator
+
+
+def on_provider_change(
+    *,
+    provider_types: list[str] | tuple[str, ...] | None = None,
+) -> Callable[[HandlerCallable], HandlerCallable]:
+    normalized = [
+        str(item).strip().lower()
+        for item in (provider_types or [])
+        if str(item).strip()
+    ]
+
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        setattr(
+            func,
+            PROVIDER_CHANGE_META_ATTR,
+            ProviderChangeMeta(provider_types=normalized),
+        )
+        return func
+
+    return decorator
+
+
+def background_task(
+    *,
+    description: str = "",
+    auto_start: bool = True,
+    on_error: Literal["log", "restart"] = "log",
+) -> Callable[[HandlerCallable], HandlerCallable]:
+    if on_error not in {"log", "restart"}:
+        raise ValueError("background_task on_error must be 'log' or 'restart'")
+
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        setattr(
+            func,
+            BACKGROUND_TASK_META_ATTR,
+            BackgroundTaskMeta(
+                description=str(description),
+                auto_start=bool(auto_start),
+                on_error=on_error,
+            ),
+        )
+        return func
+
+    return decorator
+
+
+def mcp_server(
+    *,
+    name: str,
+    scope: Literal["local", "global"] = "global",
+    config: dict[str, Any] | None = None,
+    timeout: float = 30.0,
+    wait_until_ready: bool = True,
+):
+    normalized_name = str(name).strip()
+    if not normalized_name:
+        raise ValueError("mcp_server(...) requires a non-empty name")
+    if scope not in {"local", "global"}:
+        raise ValueError("mcp_server scope must be 'local' or 'global'")
+    if config is not None and not isinstance(config, dict):
+        raise TypeError("mcp_server config must be a dict")
+    if float(timeout) <= 0:
+        raise ValueError("mcp_server timeout must be positive")
+
+    meta = MCPServerMeta(
+        name=normalized_name,
+        scope=scope,
+        config=dict(config) if isinstance(config, dict) else None,
+        timeout=float(timeout),
+        wait_until_ready=bool(wait_until_ready),
+    )
+
+    def decorator(target):
+        _append_list_meta(target, MCP_SERVER_META_ATTR, meta)
+        return target
+
+    return decorator
+
+
+def register_skill(
+    *,
+    name: str,
+    path: str,
+    description: str = "",
+):
+    normalized_name = str(name).strip()
+    normalized_path = str(path).strip()
+    if not normalized_name:
+        raise ValueError("register_skill(...) requires a non-empty name")
+    if not normalized_path:
+        raise ValueError("register_skill(...) requires a non-empty path")
+
+    meta = SkillMeta(
+        name=normalized_name,
+        path=normalized_path,
+        description=str(description),
+    )
+
+    def decorator(target):
+        _append_list_meta(target, SKILL_META_ATTR, meta)
+        return target
 
     return decorator
 
@@ -529,12 +848,30 @@ def require_admin(func: HandlerCallable) -> HandlerCallable:
             await event.reply("管理员命令执行成功")
     """
     meta = _get_or_create_meta(func)
-    meta.permissions.require_admin = True
+    _set_required_role(meta, "admin")
     return func
 
 
 def admin_only(func: HandlerCallable) -> HandlerCallable:
     return require_admin(func)
+
+
+def require_permission(
+    role: Literal["member", "admin"],
+) -> Callable[[HandlerCallable], HandlerCallable]:
+    normalized_role = str(role).strip().lower()
+    if normalized_role not in {"member", "admin"}:
+        raise ValueError("require_permission(...) 只支持 'member' 或 'admin'")
+
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        meta = _get_or_create_meta(func)
+        _set_required_role(
+            meta,
+            cast(Literal["member", "admin"], normalized_role),
+        )
+        return func
+
+    return decorator
 
 
 def platforms(*names: str) -> Callable[[HandlerCallable], HandlerCallable]:
@@ -854,7 +1191,7 @@ def register_llm_tool(
             func,
             LLM_TOOL_META_ATTR,
             LLMToolMeta(
-                spec=LLMToolSpec(
+                spec=LLMToolSpec.create(
                     name=tool_name,
                     description=description
                     or (inspect.getdoc(func) or "").splitlines()[0]
@@ -896,3 +1233,14 @@ def register_agent(
         return cls
 
     return decorator
+
+
+def acknowledge_global_mcp_risk(cls: type[Any]) -> type[Any]:
+    """Mark an SDK plugin class as eligible to mutate global MCP state.
+
+    This is intentionally a coarse, class-level marker. Runtime enforcement lives
+    in the Core MCP capability bridge.
+    """
+
+    setattr(cls, "__astrbot_acknowledge_global_mcp_risk__", True)
+    return cls

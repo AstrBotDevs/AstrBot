@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from .._internal.memory_utils import join_memory_namespace
 from ._proxy import CapabilityProxy
 
 
@@ -40,13 +41,39 @@ class MemoryClient:
         _proxy: CapabilityProxy 实例，用于远程能力调用
     """
 
-    def __init__(self, proxy: CapabilityProxy) -> None:
+    def __init__(
+        self,
+        proxy: CapabilityProxy,
+        *,
+        namespace: str | None = None,
+    ) -> None:
         """初始化记忆客户端。
 
         Args:
             proxy: CapabilityProxy 实例
         """
         self._proxy = proxy
+        self._namespace = join_memory_namespace(namespace)
+
+    def namespace(self, *parts: Any) -> MemoryClient:
+        """Create a derived client that operates inside a child namespace."""
+
+        return MemoryClient(
+            self._proxy,
+            namespace=join_memory_namespace(self._namespace, *parts),
+        )
+
+    def _resolve_exact_namespace(self, namespace: str | None) -> str:
+        if namespace is None:
+            return self._namespace
+        return join_memory_namespace(self._namespace, namespace)
+
+    def _resolve_scope_namespace(self, namespace: str | None) -> tuple[bool, str]:
+        if namespace is None:
+            if self._namespace:
+                return True, self._namespace
+            return False, ""
+        return True, join_memory_namespace(self._namespace, namespace)
 
     async def search(
         self,
@@ -56,6 +83,8 @@ class MemoryClient:
         limit: int | None = None,
         min_score: float | None = None,
         provider_id: str | None = None,
+        namespace: str | None = None,
+        include_descendants: bool = True,
     ) -> list[dict[str, Any]]:
         """搜索记忆项。
 
@@ -88,6 +117,10 @@ class MemoryClient:
             payload["min_score"] = min_score
         if provider_id is not None:
             payload["provider_id"] = provider_id
+        has_namespace, resolved_namespace = self._resolve_scope_namespace(namespace)
+        if has_namespace:
+            payload["namespace"] = resolved_namespace
+        payload["include_descendants"] = bool(include_descendants)
         output = await self._proxy.call("memory.search", payload)
         items = output.get("items")
         if not isinstance(items, (list, tuple)):
@@ -103,6 +136,7 @@ class MemoryClient:
         self,
         key: str,
         value: dict[str, Any] | None = None,
+        namespace: str | None = None,
         **extra: Any,
     ) -> None:
         """保存记忆项。
@@ -133,9 +167,16 @@ class MemoryClient:
         payload = dict(value or {})
         if extra:
             payload.update(extra)
-        await self._proxy.call("memory.save", {"key": key, "value": payload})
+        request: dict[str, Any] = {"key": key, "value": payload}
+        request["namespace"] = self._resolve_exact_namespace(namespace)
+        await self._proxy.call("memory.save", request)
 
-    async def get(self, key: str) -> dict[str, Any] | None:
+    async def get(
+        self,
+        key: str,
+        *,
+        namespace: str | None = None,
+    ) -> dict[str, Any] | None:
         """精确获取单个记忆项。
 
         通过唯一键精确获取记忆内容，不经过搜索匹配。
@@ -151,11 +192,47 @@ class MemoryClient:
             if pref:
                 print(f"用户偏好主题: {pref.get('theme')}")
         """
-        output = await self._proxy.call("memory.get", {"key": key})
+        payload: dict[str, Any] = {"key": key}
+        payload["namespace"] = self._resolve_exact_namespace(namespace)
+        output = await self._proxy.call("memory.get", payload)
         value = output.get("value")
         return value if isinstance(value, dict) else None
 
-    async def delete(self, key: str) -> None:
+    async def list_keys(
+        self,
+        *,
+        namespace: str | None = None,
+    ) -> list[str]:
+        """List keys in the exact namespace using case-insensitive ordering."""
+
+        payload: dict[str, Any] = {
+            "namespace": self._resolve_exact_namespace(namespace)
+        }
+        output = await self._proxy.call("memory.list_keys", payload)
+        keys = output.get("keys")
+        if not isinstance(keys, (list, tuple)):
+            return []
+        return [str(item) for item in keys]
+
+    async def exists(
+        self,
+        key: str,
+        *,
+        namespace: str | None = None,
+    ) -> bool:
+        """Check whether a key exists in the exact namespace."""
+
+        payload: dict[str, Any] = {"key": key}
+        payload["namespace"] = self._resolve_exact_namespace(namespace)
+        output = await self._proxy.call("memory.exists", payload)
+        return bool(output.get("exists", False))
+
+    async def delete(
+        self,
+        key: str,
+        *,
+        namespace: str | None = None,
+    ) -> None:
         """删除记忆项。
 
         Args:
@@ -164,13 +241,32 @@ class MemoryClient:
         示例:
             await ctx.memory.delete("old_note")
         """
-        await self._proxy.call("memory.delete", {"key": key})
+        payload: dict[str, Any] = {"key": key}
+        payload["namespace"] = self._resolve_exact_namespace(namespace)
+        await self._proxy.call("memory.delete", payload)
+
+    async def clear_namespace(
+        self,
+        *,
+        namespace: str | None = None,
+        include_descendants: bool = False,
+    ) -> int:
+        """Delete memories in a namespace and optionally its descendants."""
+
+        payload: dict[str, Any] = {
+            "namespace": self._resolve_exact_namespace(namespace),
+            "include_descendants": bool(include_descendants),
+        }
+        output = await self._proxy.call("memory.clear_namespace", payload)
+        return int(output.get("deleted_count", 0))
 
     async def save_with_ttl(
         self,
         key: str,
         value: dict[str, Any],
         ttl_seconds: int,
+        *,
+        namespace: str | None = None,
     ) -> None:
         """保存带过期时间的记忆项。
 
@@ -198,14 +294,19 @@ class MemoryClient:
             raise TypeError("memory.save_with_ttl 的 value 必须是 dict")
         if ttl_seconds < 1:
             raise ValueError("ttl_seconds 必须大于 0")
-        await self._proxy.call(
-            "memory.save_with_ttl",
-            {"key": key, "value": value, "ttl_seconds": ttl_seconds},
-        )
+        payload: dict[str, Any] = {
+            "key": key,
+            "value": value,
+            "ttl_seconds": ttl_seconds,
+        }
+        payload["namespace"] = self._resolve_exact_namespace(namespace)
+        await self._proxy.call("memory.save_with_ttl", payload)
 
     async def get_many(
         self,
         keys: list[str],
+        *,
+        namespace: str | None = None,
     ) -> list[dict[str, Any]]:
         """批量获取多个记忆项。
 
@@ -224,13 +325,20 @@ class MemoryClient:
                 if item["value"]:
                     print(f"{item['key']}: {item['value']}")
         """
-        output = await self._proxy.call("memory.get_many", {"keys": keys})
+        payload: dict[str, Any] = {"keys": keys}
+        payload["namespace"] = self._resolve_exact_namespace(namespace)
+        output = await self._proxy.call("memory.get_many", payload)
         items = output.get("items")
         if not isinstance(items, (list, tuple)):
             return []
-        return [dict(item) for item in items]
+        return [dict(item) for item in items if isinstance(item, dict)]
 
-    async def delete_many(self, keys: list[str]) -> int:
+    async def delete_many(
+        self,
+        keys: list[str],
+        *,
+        namespace: str | None = None,
+    ) -> int:
         """批量删除多个记忆项。
 
         一次性删除多个键对应的记忆项，返回实际删除的数量。
@@ -245,10 +353,32 @@ class MemoryClient:
             deleted = await ctx.memory.delete_many(["old1", "old2", "old3"])
             print(f"删除了 {deleted} 条记忆")
         """
-        output = await self._proxy.call("memory.delete_many", {"keys": keys})
+        payload: dict[str, Any] = {"keys": keys}
+        payload["namespace"] = self._resolve_exact_namespace(namespace)
+        output = await self._proxy.call("memory.delete_many", payload)
         return int(output.get("deleted_count", 0))
 
-    async def stats(self) -> dict[str, Any]:
+    async def count(
+        self,
+        *,
+        namespace: str | None = None,
+        include_descendants: bool = False,
+    ) -> int:
+        """Count memories in a namespace and optionally its descendants."""
+
+        payload: dict[str, Any] = {
+            "namespace": self._resolve_exact_namespace(namespace),
+            "include_descendants": bool(include_descendants),
+        }
+        output = await self._proxy.call("memory.count", payload)
+        return int(output.get("count", 0))
+
+    async def stats(
+        self,
+        *,
+        namespace: str | None = None,
+        include_descendants: bool = True,
+    ) -> dict[str, Any]:
         """获取记忆系统统计信息。
 
         返回记忆系统的当前状态，包括条目数、索引状态和脏索引数量。
@@ -268,11 +398,27 @@ class MemoryClient:
             if "embedded_items" in stats:
                 print(f"其中 {stats['embedded_items']} 条已经向量化")
         """
-        output = await self._proxy.call("memory.stats", {})
+        payload: dict[str, Any] = {
+            "include_descendants": bool(include_descendants),
+        }
+        has_namespace, resolved_namespace = self._resolve_scope_namespace(namespace)
+        if has_namespace:
+            payload["namespace"] = resolved_namespace
+        output = await self._proxy.call("memory.stats", payload)
         stats = {
             "total_items": output.get("total_items", 0),
             "total_bytes": output.get("total_bytes"),
         }
+        if "namespace" in output:
+            stats["namespace"] = output.get("namespace")
+        if "namespace_count" in output:
+            stats["namespace_count"] = output.get("namespace_count")
+        if "fts_enabled" in output:
+            stats["fts_enabled"] = output.get("fts_enabled")
+        if "vector_backend" in output:
+            stats["vector_backend"] = output.get("vector_backend")
+        if "vector_indexes" in output:
+            stats["vector_indexes"] = output.get("vector_indexes")
         if "plugin_id" in output:
             stats["plugin_id"] = output.get("plugin_id")
         if "ttl_entries" in output:

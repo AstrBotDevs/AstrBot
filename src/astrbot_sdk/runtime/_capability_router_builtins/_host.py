@@ -10,6 +10,7 @@ from ...protocol.descriptors import CapabilityDescriptor
 
 class CapabilityRouterHost:
     memory_store: dict[str, dict[str, Any]]
+    _memory_backends: dict[str, Any]
     _memory_index: dict[str, dict[str, Any]]
     _memory_dirty_keys: set[str]
     _memory_expires_at: dict[str, datetime | None]
@@ -36,6 +37,8 @@ class CapabilityRouterHost:
     _conversation_store: dict[str, dict[str, Any]]
     _session_current_conversation_ids: dict[str, str]
     _kb_store: dict[str, dict[str, Any]]
+    _kb_document_store: dict[str, dict[str, dict[str, Any]]]
+    _kb_document_content_store: dict[str, str]
 
     def register(
         self,
@@ -55,6 +58,13 @@ class CapabilityRouterHost:
     def _require_caller_plugin_id(capability_name: str) -> str:
         raise NotImplementedError
 
+    @staticmethod
+    def _validated_plugin_id(plugin_id: str, *, capability_name: str) -> str:
+        raise NotImplementedError
+
+    def _plugin_data_dir(self, plugin_id: str, *, capability_name: str) -> Path:
+        raise NotImplementedError
+
     def register_dynamic_command_route(
         self,
         *,
@@ -68,6 +78,30 @@ class CapabilityRouterHost:
         raise NotImplementedError
 
     def get_platform_instances(self) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    @staticmethod
+    def _normalize_platform_name(value: Any) -> str:
+        raise NotImplementedError
+
+    @classmethod
+    def _normalized_platform_names(cls, values: Any) -> set[str]:
+        raise NotImplementedError
+
+    def _plugin_supports_platform(self, plugin_id: str, platform_name: str) -> bool:
+        raise NotImplementedError
+
+    def _platform_name_from_id(self, platform_id: str) -> str:
+        raise NotImplementedError
+
+    def _session_platform_name(self, session: str) -> str:
+        raise NotImplementedError
+
+    def _require_platform_support_for_session(
+        self,
+        capability_name: str,
+        session: str,
+    ) -> str:
         raise NotImplementedError
 
     def _register_agent_tool_capabilities(self) -> None:

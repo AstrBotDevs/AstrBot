@@ -73,7 +73,12 @@ import inspect
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import Any
 
-from .._invocation_context import caller_plugin_scope, current_caller_plugin_id
+from loguru import logger
+
+from .._internal.invocation_context import (
+    caller_plugin_scope,
+    current_caller_plugin_id,
+)
 from ..context import CancelToken
 from ..errors import AstrBotError, ErrorCodes
 from ..protocol.messages import (
@@ -204,6 +209,7 @@ class Peer:
             str, tuple[asyncio.Task[None], CancelToken, asyncio.Event]
         ] = {}
         self._remote_initialized = asyncio.Event()
+        self._remote_initialized_successfully = False
         self._transport_watch_task: asyncio.Task[None] | None = None
 
     def set_initialize_handler(self, handler: InitializeHandler) -> None:
@@ -225,6 +231,7 @@ class Peer:
         self._stopping = False
         self.negotiated_protocol_version = None
         self._remote_initialized.clear()
+        self._remote_initialized_successfully = False
         self.transport.set_message_handler(self._handle_raw_message)
         await self.transport.start()
         self._transport_watch_task = asyncio.create_task(self._watch_transport_closed())
@@ -292,7 +299,7 @@ class Peer:
             )
             if not done:
                 raise TimeoutError()
-            if init_waiter in done:
+            if init_waiter in done and self._remote_initialized_successfully:
                 return
             raise AstrBotError.protocol_error("连接在初始化完成前关闭")
         finally:
@@ -369,6 +376,7 @@ class Peer:
         self.remote_capability_map = {item.name: item for item in output.capabilities}
         self.remote_metadata = output.metadata
         self.negotiated_protocol_version = negotiated_protocol_version
+        self._remote_initialized_successfully = True
         self._remote_initialized.set()
         return output
 
@@ -503,11 +511,37 @@ class Peer:
                 started = asyncio.Event()
                 task = asyncio.create_task(self._handle_invoke(message, token, started))
                 self._inbound_tasks[message.id] = (task, token, started)
-                task.add_done_callback(
-                    lambda _task, request_id=message.id: self._inbound_tasks.pop(
-                        request_id, None
+
+                def _on_invoke_done(
+                    _task: asyncio.Task[None], request_id: str = message.id
+                ) -> None:
+                    self._inbound_tasks.pop(request_id, None)
+                    if _task.cancelled():
+                        return
+                    exc = _task.exception()
+                    if exc is None:
+                        return
+                    # 后台 invoke 理论上应把错误编码成协议消息；若异常仍逃逸，通常说明
+                    # 回复发送失败或连接状态异常，必须立刻标记连接失效，避免对端永久等待。
+                    logger.error(
+                        "Peer inbound invoke task crashed unexpectedly: "
+                        "request_id={} error={!r}",
+                        request_id,
+                        exc,
                     )
-                )
+                    error = (
+                        exc
+                        if isinstance(exc, AstrBotError)
+                        else AstrBotError(
+                            code=ErrorCodes.NETWORK_ERROR,
+                            message="处理入站调用响应时连接已失效",
+                            hint=str(exc),
+                            retryable=True,
+                        )
+                    )
+                    asyncio.create_task(self._fail_connection(error))
+
+                task.add_done_callback(_on_invoke_done)
                 return
             if isinstance(message, CancelMessage):
                 await self._handle_cancel(message)
@@ -575,6 +609,7 @@ class Peer:
                 output=output.model_dump(),
             )
         )
+        self._remote_initialized_successfully = True
         self._remote_initialized.set()
 
     async def _handle_invoke(

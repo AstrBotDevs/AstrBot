@@ -15,14 +15,29 @@ from .clients.managers import (
     ConversationRecord,
     ConversationUpdateParams,
     KnowledgeBaseCreateParams,
+    KnowledgeBaseDocumentRecord,
+    KnowledgeBaseDocumentUploadParams,
     KnowledgeBaseManagerClient,
     KnowledgeBaseRecord,
+    KnowledgeBaseRetrieveResult,
+    KnowledgeBaseRetrieveResultItem,
+    KnowledgeBaseUpdateParams,
+    MessageHistoryManagerClient,
+    MessageHistoryPage,
+    MessageHistoryRecord,
+    MessageHistorySender,
     PersonaCreateParams,
     PersonaManagerClient,
     PersonaRecord,
     PersonaUpdateParams,
 )
+from .clients.mcp import MCPManagerClient, MCPServerRecord, MCPServerScope, MCPSession
 from .clients.metadata import PluginMetadata, StarMetadata
+from .clients.permission import (
+    PermissionCheckResult,
+    PermissionClient,
+    PermissionManagerClient,
+)
 from .clients.platform import PlatformError, PlatformStats, PlatformStatus
 from .clients.provider import (
     ManagedProviderRecord,
@@ -39,21 +54,29 @@ from .conversation import (
     ConversationState,
 )
 from .decorators import (
+    acknowledge_global_mcp_risk,
     admin_only,
+    background_task,
     conversation_command,
     cooldown,
     group_only,
+    http_api,
+    mcp_server,
     message_types,
     on_command,
     on_event,
     on_message,
+    on_provider_change,
     on_schedule,
     platforms,
     priority,
     private_only,
     provide_capability,
     rate_limit,
+    register_skill,
     require_admin,
+    require_permission,
+    validate_config,
 )
 from .errors import AstrBotError
 from .events import MessageEvent
@@ -65,7 +88,7 @@ from .filters import (
     any_of,
     custom_filter,
 )
-from .message_components import (
+from .message.components import (
     At,
     AtAll,
     BaseMessageComponent,
@@ -80,13 +103,13 @@ from .message_components import (
     UnknownComponent,
     Video,
 )
-from .message_result import (
+from .message.result import (
     EventResultType,
     MessageBuilder,
     MessageChain,
     MessageEventResult,
 )
-from .message_session import MessageSession
+from .message.session import MessageSession
 from .plugin_kv import PluginKVStoreMixin
 from .schedule import ScheduleContext
 from .session_waiter import SessionController, session_waiter
@@ -116,10 +139,23 @@ __all__ = [
     "GreedyStr",
     "Image",
     "KnowledgeBaseCreateParams",
+    "KnowledgeBaseDocumentRecord",
+    "KnowledgeBaseDocumentUploadParams",
     "KnowledgeBaseManagerClient",
     "KnowledgeBaseRecord",
+    "KnowledgeBaseRetrieveResult",
+    "KnowledgeBaseRetrieveResultItem",
+    "KnowledgeBaseUpdateParams",
     "ManagedProviderRecord",
+    "MCPManagerClient",
+    "MCPSession",
+    "MCPServerRecord",
+    "MCPServerScope",
     "MediaHelper",
+    "MessageHistoryManagerClient",
+    "MessageHistoryPage",
+    "MessageHistoryRecord",
+    "MessageHistorySender",
     "MessageEvent",
     "MessageEventResult",
     "MessageChain",
@@ -129,6 +165,9 @@ __all__ = [
     "Plain",
     "PluginKVStoreMixin",
     "PluginMetadata",
+    "PermissionCheckResult",
+    "PermissionClient",
+    "PermissionManagerClient",
     "PlatformFilter",
     "PlatformError",
     "PlatformStats",
@@ -151,18 +190,23 @@ __all__ = [
     "StarTools",
     "UnknownComponent",
     "Video",
+    "acknowledge_global_mcp_risk",
     "admin_only",
     "all_of",
     "any_of",
+    "background_task",
     "cooldown",
     "conversation_command",
     "command_group",
     "custom_filter",
     "group_only",
+    "http_api",
+    "mcp_server",
     "message_types",
     "on_command",
     "on_event",
     "on_message",
+    "on_provider_change",
     "on_schedule",
     "platforms",
     "print_cmd_tree",
@@ -171,5 +215,8 @@ __all__ = [
     "private_only",
     "rate_limit",
     "require_admin",
+    "require_permission",
+    "register_skill",
     "session_waiter",
+    "validate_config",
 ]

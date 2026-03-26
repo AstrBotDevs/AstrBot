@@ -19,6 +19,7 @@ capability clients so `Context` keeps a narrow, stable surface.
     - KnowledgeBaseManagerClient: 知识库管理
     - HTTPClient: Web API 注册
     - MetadataClient: 插件元数据查询
+    - SkillClient: 运行时注册插件 skill
 """
 
 from .db import DBClient
@@ -33,13 +34,19 @@ from .managers import (
     KnowledgeBaseCreateParams,
     KnowledgeBaseManagerClient,
     KnowledgeBaseRecord,
+    MessageHistoryManagerClient,
+    MessageHistoryPage,
+    MessageHistoryRecord,
+    MessageHistorySender,
     PersonaCreateParams,
     PersonaManagerClient,
     PersonaRecord,
     PersonaUpdateParams,
 )
+from .mcp import MCPManagerClient, MCPServerRecord, MCPServerScope, MCPSession
 from .memory import MemoryClient
 from .metadata import MetadataClient, PluginMetadata, StarMetadata
+from .permission import PermissionCheckResult, PermissionClient, PermissionManagerClient
 from .platform import PlatformClient, PlatformError, PlatformStats, PlatformStatus
 from .provider import (
     ManagedProviderRecord,
@@ -49,6 +56,7 @@ from .provider import (
 )
 from .registry import HandlerMetadata, RegistryClient
 from .session import SessionPluginManager, SessionServiceManager
+from .skills import SkillClient, SkillRegistration
 
 __all__ = [
     "ChatMessage",
@@ -63,11 +71,22 @@ __all__ = [
     "KnowledgeBaseCreateParams",
     "KnowledgeBaseManagerClient",
     "KnowledgeBaseRecord",
+    "MessageHistoryManagerClient",
+    "MessageHistoryPage",
+    "MessageHistoryRecord",
+    "MessageHistorySender",
     "LLMClient",
     "LLMResponse",
+    "MCPManagerClient",
+    "MCPSession",
+    "MCPServerRecord",
+    "MCPServerScope",
     "MemoryClient",
     "ManagedProviderRecord",
     "MetadataClient",
+    "PermissionCheckResult",
+    "PermissionClient",
+    "PermissionManagerClient",
     "PlatformClient",
     "PlatformError",
     "PlatformStats",
@@ -85,4 +104,6 @@ __all__ = [
     "RegistryClient",
     "SessionPluginManager",
     "SessionServiceManager",
+    "SkillClient",
+    "SkillRegistration",
 ]

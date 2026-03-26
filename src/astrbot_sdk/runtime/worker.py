@@ -25,7 +25,6 @@
 
 from __future__ import annotations
 
-import inspect
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,12 +32,11 @@ from typing import Any
 
 from loguru import logger
 
-from .._invocation_context import caller_plugin_scope
-from .._star_runtime import bind_star_runtime
+from .._internal.decorator_lifecycle import run_lifecycle_with_decorators
+from .._internal.invocation_context import caller_plugin_scope
 from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
 from ..protocol.messages import PeerInfo
-from ..star import Star
 from .handler_dispatcher import CapabilityDispatcher, HandlerDispatcher
 from .loader import (
     LoadedPlugin,
@@ -56,12 +54,37 @@ __all__ = [
     "_load_group_plugin_specs",
 ]
 
+GLOBAL_MCP_RISK_ATTR = "__astrbot_acknowledge_global_mcp_risk__"
+
 
 @dataclass(slots=True)
 class GroupPluginRuntimeState:
     plugin: PluginSpec
     loaded_plugin: LoadedPlugin
     lifecycle_context: RuntimeContext
+
+
+def _plugin_acknowledges_global_mcp_risk(instances: list[Any]) -> bool:
+    return any(
+        bool(getattr(instance.__class__, GLOBAL_MCP_RISK_ATTR, False))
+        for instance in instances
+    )
+
+
+def _metadata_plugin_instances(loaded_plugin: Any) -> list[Any]:
+    """Return plugin instances for metadata-only inspection.
+
+    Metadata serialization is also exercised by lightweight tests that stub
+    ``loaded_plugin`` with only the fields relevant to the payload. Missing
+    ``instances`` means the plugin cannot acknowledge the global MCP risk, but
+    it should not break issue/metadata reporting.
+    """
+    instances = getattr(loaded_plugin, "instances", [])
+    if isinstance(instances, list):
+        return instances
+    if isinstance(instances, tuple):
+        return list(instances)
+    return []
 
 
 def _load_group_plugin_specs(group_metadata_path: Path) -> tuple[str, list[PluginSpec]]:
@@ -108,14 +131,13 @@ async def run_plugin_lifecycle(
     """运行插件生命周期方法。"""
     for instance in instances:
         method = getattr(instance, method_name, None)
-        if method is None:
-            continue
         with caller_plugin_scope(context.plugin_id):
-            owner = instance if isinstance(instance, Star) else None
-            with bind_star_runtime(owner, context):
-                result = method(context)
-                if inspect.isawaitable(result):
-                    await result
+            await run_lifecycle_with_decorators(
+                instance=instance,
+                hook=method if callable(method) else None,
+                method_name=method_name,
+                context=context,
+            )
 
 
 class GroupWorkerRuntime:
@@ -317,6 +339,12 @@ class GroupWorkerRuntime:
                 for state in self._active_plugin_states
                 for agent in state.loaded_plugin.agents
             ],
+            "acknowledge_global_mcp_risk": any(
+                _plugin_acknowledges_global_mcp_risk(
+                    _metadata_plugin_instances(state.loaded_plugin)
+                )
+                for state in self._active_plugin_states
+            ),
         }
 
     async def _run_lifecycle(
@@ -391,6 +419,9 @@ class PluginWorkerRuntime:
                         }
                         for item in self.loaded_plugin.agents
                     ],
+                    "acknowledge_global_mcp_risk": _plugin_acknowledges_global_mcp_risk(
+                        _metadata_plugin_instances(self.loaded_plugin)
+                    ),
                 },
             )
         except Exception:

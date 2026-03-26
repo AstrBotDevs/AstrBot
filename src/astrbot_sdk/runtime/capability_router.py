@@ -19,9 +19,13 @@
         memory.save: 保存记忆
         memory.save_with_ttl: 保存带过期时间的记忆
         memory.get: 读取单条记忆
+        memory.list_keys: 列出命名空间中的记忆键
+        memory.exists: 检查记忆键是否存在
         memory.get_many: 批量获取多条记忆
         memory.delete: 删除记忆
+        memory.clear_namespace: 清理命名空间中的记忆
         memory.delete_many: 批量删除多条记忆
+        memory.count: 统计命名空间中的记忆数量
         memory.stats: 获取记忆统计信息
     DB:
         db.get: 读取 KV 存储
@@ -38,6 +42,11 @@
         platform.send_by_session: 主动按会话发送消息链
         platform.get_group: 获取当前群信息
         platform.get_members: 获取群成员
+    Permission:
+        permission.check: 查询用户权限角色
+        permission.get_admins: 列出管理员 ID
+        permission.manager.add_admin: 添加管理员 ID
+        permission.manager.remove_admin: 移除管理员 ID
     HTTP:
         http.register_api: 注册 HTTP 路由到插件 capability
         http.unregister_api: 注销 HTTP 路由
@@ -103,7 +112,9 @@
         persona.get / persona.list / persona.create / persona.update / persona.delete
         conversation.new / conversation.switch / conversation.delete
         conversation.get / conversation.list / conversation.update
-        kb.get / kb.create / kb.delete
+        kb.list / kb.get / kb.create / kb.update / kb.delete / kb.retrieve
+        kb.document.upload / kb.document.list / kb.document.get
+        kb.document.delete / kb.document.refresh
     System (内部使用):
         system.get_data_dir: 获取插件数据目录
         system.text_to_image: 文本转图片
@@ -122,7 +133,7 @@
 
 能力命名规范：
     - 格式: {namespace}.{action} 或 {namespace}.{sub_namespace}.{action}
-    - 内置能力命名空间: llm, memory, db, platform, http, metadata, provider, llm_tool, agent, registry
+    - 内置能力命名空间: llm, memory, db, platform, permission, http, metadata, provider, llm_tool, agent, registry
     - 保留命名空间前缀: handler., system., internal.
 
 使用示例：
@@ -171,7 +182,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .._invocation_context import current_caller_plugin_id
+from .._internal.invocation_context import current_caller_plugin_id
 from ..errors import AstrBotError
 from ..protocol.descriptors import (
     RESERVED_CAPABILITY_PREFIXES,
@@ -209,7 +220,9 @@ class _RegisteredPlugin:
     handlers: list[dict[str, Any]]
     llm_tools: dict[str, dict[str, Any]] = field(default_factory=dict)
     active_llm_tools: set[str] = field(default_factory=set)
+    local_mcp_servers: dict[str, dict[str, Any]] = field(default_factory=dict)
     agents: dict[str, dict[str, Any]] = field(default_factory=dict)
+    skills: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 class CapabilityRouter(BuiltinCapabilityRouterMixin):
@@ -217,6 +230,7 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         self._registrations: dict[str, _CapabilityRegistration] = {}
         self.db_store: dict[str, Any] = {}
         self.memory_store: dict[str, dict[str, Any]] = {}
+        self._memory_backends: dict[str, Any] = {}
         self._memory_index: dict[str, dict[str, Any]] = {}
         self._memory_dirty_keys: set[str] = set()
         self._memory_expires_at: dict[str, datetime | None] = {}
@@ -292,7 +306,14 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         self._persona_store: dict[str, dict[str, Any]] = {}
         self._conversation_store: dict[str, dict[str, Any]] = {}
         self._session_current_conversation_ids: dict[str, str] = {}
+        self._message_history_store: dict[str, list[dict[str, Any]]] = {}
+        self._message_history_next_id = 1
+        self._mcp_session_store: dict[str, dict[str, Any]] = {}
+        self._mcp_global_servers: dict[str, dict[str, Any]] = {}
+        self._mcp_audit_logs: list[dict[str, str]] = []
         self._kb_store: dict[str, dict[str, Any]] = {}
+        self._kb_document_store: dict[str, dict[str, dict[str, Any]]] = {}
+        self._kb_document_content_store: dict[str, str] = {}
         self._platform_instances: list[dict[str, Any]] = [
             {
                 "id": "mock-platform",
@@ -301,6 +322,7 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
                 "status": "running",
             }
         ]
+        self._permission_admin_ids: list[str] = ["astrbot"]
         self._register_builtin_capabilities()
 
     def upsert_plugin(
@@ -319,12 +341,21 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         normalized_metadata.setdefault("version", "0.0.0")
         normalized_metadata.setdefault("enabled", True)
         normalized_metadata.setdefault("reserved", False)
+        normalized_metadata.setdefault("acknowledge_global_mcp_risk", False)
         normalized_metadata.setdefault("support_platforms", [])
         normalized_metadata.setdefault("astrbot_version", None)
+        local_mcp_servers = normalized_metadata.pop("local_mcp_servers", {})
         self._plugins[name] = _RegisteredPlugin(
             metadata=normalized_metadata,
             config=dict(config or {}),
             handlers=[],
+            local_mcp_servers={
+                str(server_name): dict(server_payload)
+                for server_name, server_payload in local_mcp_servers.items()
+                if str(server_name).strip() and isinstance(server_payload, dict)
+            }
+            if isinstance(local_mcp_servers, dict)
+            else {},
         )
 
     def set_plugin_handlers(
@@ -444,6 +475,11 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
 
     def get_platform_instances(self) -> list[dict[str, Any]]:
         return [dict(item) for item in self._platform_instances]
+
+    def set_admin_ids(self, admin_ids: list[str]) -> None:
+        self._permission_admin_ids = [
+            user_id for user_id in (str(item).strip() for item in admin_ids) if user_id
+        ]
 
     def _plugin_has_handler(self, plugin_id: str, handler_full_name: str) -> bool:
         plugin = self._plugins.get(plugin_id)

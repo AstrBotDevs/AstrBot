@@ -16,12 +16,15 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.resources as resources
+import os
 import re
 import sys
 import typing
 import zipfile
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
+from importlib.resources.abc import Traversable
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
@@ -40,9 +43,12 @@ EXIT_PLUGIN_LOAD = 3
 EXIT_RUNTIME = 4
 EXIT_PLUGIN_EXECUTION = 5
 BUILD_EXCLUDED_DIRS = {
+    ".agents",
+    ".claude",
     ".git",
     ".idea",
     ".mypy_cache",
+    ".opencode",
     ".pytest_cache",
     ".ruff_cache",
     ".venv",
@@ -53,6 +59,19 @@ BUILD_EXCLUDED_FILES = {
     ".astrbot-worker-state.json",
 }
 WATCH_POLL_INTERVAL_SECONDS = 0.5
+SUPPORTED_INIT_AGENTS = ("claude", "codex", "opencode")
+_TEMPLATE_VARIABLE_PATTERN = re.compile(r"{{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*}}")
+INIT_AGENT_SKILL_ROOTS = {
+    "claude": Path(".claude") / "skills",
+    "codex": Path(".agents") / "skills",
+    "opencode": Path(".opencode") / "skills",
+}
+INIT_AGENT_DISPLAY_NAMES = {
+    "claude": "Claude Code",
+    "codex": "Codex",
+    "opencode": "OpenCode",
+}
+INIT_SKILL_TEMPLATE_NAME = "astrbot-plugin-dev"
 
 
 class _CliPluginValidationError(RuntimeError):
@@ -97,6 +116,23 @@ def setup_logger(verbose: bool = False) -> None:
     )
 
 
+def _resolve_protocol_stdout(
+    protocol_stdout: str | None,
+) -> tuple[typing.TextIO, typing.TextIO | None]:
+    configured = str(protocol_stdout).strip() if protocol_stdout is not None else ""
+    if not configured:
+        stdout = sys.stdout
+        if callable(getattr(stdout, "isatty", None)) and stdout.isatty():
+            opened_stdout = open(os.devnull, "w", encoding="utf-8")
+            return opened_stdout, opened_stdout
+        return stdout, None
+    if configured.lower() == "console":
+        return sys.stdout, None
+    output_path = os.devnull if configured.lower() == "silent" else configured
+    opened_stdout = open(output_path, "w", encoding="utf-8")
+    return opened_stdout, opened_stdout
+
+
 def _run_async_entrypoint(
     entrypoint: Coroutine[Any, Any, object],
     *,
@@ -108,6 +144,9 @@ def _run_async_entrypoint(
     log_method(log_message)
     try:
         asyncio.run(entrypoint)
+    except (click.Abort, KeyboardInterrupt):
+        click.echo("\n创建插件已优雅地中断。", err=True)
+        raise SystemExit(130)
     except Exception as exc:
         exit_code, error_code, hint = _classify_cli_exception(exc)
         docs_url = exc.docs_url if isinstance(exc, AstrBotError) else ""
@@ -136,6 +175,9 @@ def _run_sync_entrypoint(
     log_method(log_message)
     try:
         entrypoint()
+    except (click.Abort, KeyboardInterrupt):
+        click.echo("\n创建插件已优雅地中断。", err=True)
+        raise SystemExit(130)
     except Exception as exc:
         exit_code, error_code, hint = _classify_cli_exception(exc)
         docs_url = exc.docs_url if isinstance(exc, AstrBotError) else ""
@@ -173,7 +215,7 @@ def _classify_cli_exception(exc: Exception) -> tuple[int, str, str]:
         return (
             EXIT_PLUGIN_LOAD,
             "plugin_load_error",
-            "请检查插件目录、plugin.yaml、requirements.txt 和导入路径",
+            "请检查插件目录、plugin.yaml、requirements.txt（如有）和导入路径",
         )
     if isinstance(exc, LookupError):
         return (
@@ -573,6 +615,16 @@ def _slugify_plugin_name(value: str) -> str:
     return slug or "my_plugin"
 
 
+def _normalize_plugin_name(value: str) -> str:
+    normalized = _slugify_plugin_name(value)
+    if normalized.startswith("astrbot_plugin_"):
+        return normalized
+    normalized = normalized.removeprefix("astrbot_plugin")
+    normalized = normalized.strip("_")
+    suffix = normalized or "my_plugin"
+    return f"astrbot_plugin_{suffix}"
+
+
 def _class_name_for_plugin(value: str) -> str:
     parts = [part for part in re.split(r"[^a-zA-Z0-9]+", value) if part]
     if not parts:
@@ -585,16 +637,54 @@ def _sanitize_build_part(value: str) -> str:
     return sanitized or "artifact"
 
 
-def _render_init_plugin_yaml(*, plugin_name: str, display_name: str) -> str:
+def _parse_init_agents(
+    _ctx: click.Context,
+    _param: click.Parameter,
+    value: str | None,
+) -> tuple[str, ...]:
+    if value is None:
+        return ()
+
+    normalized_agents: list[str] = []
+    seen: set[str] = set()
+    invalid_agents: list[str] = []
+    for raw_agent in value.split(","):
+        candidate = raw_agent.strip().lower()
+        if not candidate:
+            invalid_agents.append("<empty>")
+            continue
+        if candidate not in SUPPORTED_INIT_AGENTS:
+            invalid_agents.append(raw_agent.strip())
+            continue
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        normalized_agents.append(candidate)
+
+    if invalid_agents:
+        supported = ", ".join(SUPPORTED_INIT_AGENTS)
+        invalid = ", ".join(invalid_agents)
+        raise click.BadParameter(f"仅支持以下 agent: {supported}；非法值: {invalid}")
+    return tuple(normalized_agents)
+
+
+def _render_init_plugin_yaml(
+    *,
+    plugin_name: str,
+    display_name: str,
+    desc: str,
+    author: str,
+    version: str,
+) -> str:
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
     class_name = _class_name_for_plugin(plugin_name)
     return dedent(
         f"""\
         name: {plugin_name}
         display_name: {display_name}
-        desc: 使用 AstrBot SDK 创建的插件
-        author: your-name
-        version: 0.1.0
+        desc: {desc}
+        author: {author}
+        version: {version}
         runtime:
           python: "{python_version}"
         components:
@@ -692,6 +782,90 @@ def _render_init_test_py(*, plugin_name: str) -> str:
     )
 
 
+def _plugin_root_hint_for_agent(agent: str) -> str:
+    skill_dir = INIT_AGENT_SKILL_ROOTS[agent] / INIT_SKILL_TEMPLATE_NAME
+    return "/".join(".." for _ in skill_dir.parts) or "."
+
+
+def _build_agent_template_context(
+    *,
+    plugin_name: str,
+    display_name: str,
+    agent: str,
+) -> dict[str, str]:
+    return {
+        "plugin_name": plugin_name,
+        "display_name": display_name,
+        "class_name": _class_name_for_plugin(plugin_name),
+        "skill_name": f"{plugin_name}_project",
+        "plugin_root": _plugin_root_hint_for_agent(agent),
+        "agent_name": agent,
+        "agent_display_name": INIT_AGENT_DISPLAY_NAMES[agent],
+        "skill_dir_name": INIT_SKILL_TEMPLATE_NAME,
+    }
+
+
+def _render_template_text(template_text: str, context: dict[str, str]) -> str:
+    def replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in context:
+            raise _CliPluginValidationError(f"agent 模板变量未定义：{key}")
+        return context[key]
+
+    return _TEMPLATE_VARIABLE_PATTERN.sub(replace, template_text)
+
+
+def _copy_rendered_template_tree(
+    source_dir: Traversable,
+    target_dir: Path,
+    *,
+    context: dict[str, str],
+) -> None:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for entry in sorted(source_dir.iterdir(), key=lambda item: item.name):
+        destination = target_dir / entry.name
+        if entry.is_dir():
+            _copy_rendered_template_tree(entry, destination, context=context)
+            continue
+        destination.write_text(
+            _render_template_text(entry.read_text(encoding="utf-8"), context),
+            encoding="utf-8",
+        )
+
+
+def _render_init_agent_templates(
+    *,
+    target_dir: Path,
+    plugin_name: str,
+    display_name: str,
+    agents: tuple[str, ...],
+) -> None:
+    if not agents:
+        return
+
+    template_root = resources.files("astrbot_sdk").joinpath(
+        "templates",
+        "skills",
+        INIT_SKILL_TEMPLATE_NAME,
+    )
+    if not template_root.is_dir():
+        raise _CliPluginValidationError(
+            f"未找到项目级 skill 模板：{INIT_SKILL_TEMPLATE_NAME}"
+        )
+
+    for agent in agents:
+        context = _build_agent_template_context(
+            plugin_name=plugin_name,
+            display_name=display_name,
+            agent=agent,
+        )
+        _copy_rendered_template_tree(
+            template_root,
+            target_dir / INIT_AGENT_SKILL_ROOTS[agent] / INIT_SKILL_TEMPLATE_NAME,
+            context=context,
+        )
+
+
 def _ensure_plugin_dir_exists(plugin_dir: Path) -> Path:
     resolved = plugin_dir.resolve()
     if not resolved.exists() or not resolved.is_dir():
@@ -761,19 +935,42 @@ def _iter_build_files(plugin_dir: Path, output_dir: Path) -> list[Path]:
     return files
 
 
-def _init_plugin(name: str) -> None:
-    target_dir = Path(name)
+def _prompt_nonempty_text(prompt: str) -> str:
+    while True:
+        value = click.prompt(prompt, type=str, default="", show_default=False).strip()
+        if value:
+            return value
+        click.echo("该字段不能为空，请重新输入。")
+
+
+def _collect_init_metadata(name: str | None) -> tuple[str, str, str, str]:
+    if name is not None:
+        return name, "", "", "1.0.0"
+
+    plugin_name = _prompt_nonempty_text("插件名字")
+    author = click.prompt("作者", type=str, default="", show_default=False).strip()
+    desc = click.prompt("描述", type=str, default="", show_default=False).strip()
+    version = click.prompt("版本", type=str, default="1.0.0", show_default=True).strip()
+    return plugin_name, author, desc, version or "1.0.0"
+
+
+def _init_plugin(name: str | None, agents: tuple[str, ...] = ()) -> None:
+    raw_name, author, desc, version = _collect_init_metadata(name)
+    plugin_name = _normalize_plugin_name(raw_name)
+    target_dir = Path(plugin_name)
     if target_dir.exists():
         raise _CliPluginValidationError(f"目标目录已存在：{target_dir}")
 
-    plugin_name = _slugify_plugin_name(target_dir.name)
-    display_name = target_dir.name
+    display_name = raw_name.strip() or plugin_name
     target_dir.mkdir(parents=True, exist_ok=False)
     (target_dir / "tests").mkdir()
     (target_dir / "plugin.yaml").write_text(
         _render_init_plugin_yaml(
             plugin_name=plugin_name,
             display_name=display_name,
+            desc=desc,
+            author=author,
+            version=version,
         ),
         encoding="utf-8",
     )
@@ -790,7 +987,40 @@ def _init_plugin(name: str) -> None:
         _render_init_test_py(plugin_name=plugin_name),
         encoding="utf-8",
     )
-    click.echo(f"已创建插件骨架：{target_dir}")
+    _render_init_agent_templates(
+        target_dir=target_dir,
+        plugin_name=plugin_name,
+        display_name=display_name,
+        agents=agents,
+    )
+
+    import subprocess
+
+    try:
+        process = subprocess.run(
+            ["git", "init", str(target_dir)],
+            capture_output=True,
+            text=True,
+        )
+        if process.returncode != 0:
+            stderr = process.stderr.strip()
+            raise RuntimeError(
+                f"Git 初始化失败（退出码 {process.returncode}）"
+                + (f": {stderr}" if stderr else "")
+            )
+        click.echo(f"Git 仓库已初始化: {target_dir}")
+    except FileNotFoundError:
+        click.echo("警告: 未找到 git 命令，请先安装 git 后手动执行 git init")
+    except RuntimeError as e:
+        click.echo(f"警告: {e}")
+
+    click.echo(f"已创建插件：{target_dir}")
+    if agents:
+        generated_paths = ", ".join(
+            str(INIT_AGENT_SKILL_ROOTS[agent] / INIT_SKILL_TEMPLATE_NAME)
+            for agent in agents
+        )
+        click.echo(f"已生成项目级 skill：{generated_paths}")
     click.echo("后续命令：")
     click.echo(f"  astrbot-sdk validate --plugin-dir {target_dir}")
     click.echo(
@@ -846,23 +1076,40 @@ def cli(ctx, verbose: bool) -> None:
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
     help="Directory containing plugin folders",
 )
-def run(plugins_dir: Path) -> None:
+@click.option(
+    "--protocol-stdout",
+    default=None,
+    type=str,
+    help="Redirect runtime protocol stdout to console, silent, or a file path",
+)
+def run(plugins_dir: Path, protocol_stdout: str | None) -> None:
     """Start the plugin supervisor over stdio."""
-    _run_async_entrypoint(
-        run_supervisor(plugins_dir=plugins_dir),
-        log_message=f"启动插件主管进程，插件目录：{plugins_dir}",
-        context={"plugins_dir": plugins_dir},
-    )
+    transport_stdout, opened_stdout = _resolve_protocol_stdout(protocol_stdout)
+    try:
+        _run_async_entrypoint(
+            run_supervisor(plugins_dir=plugins_dir, stdout=transport_stdout),
+            log_message=f"启动插件主管进程，插件目录：{plugins_dir}",
+            context={"plugins_dir": plugins_dir},
+        )
+    finally:
+        if opened_stdout is not None:
+            opened_stdout.close()
 
 
 @cli.command()
-@click.argument("name", type=str)
-def init(name: str) -> None:
+@click.argument("name", type=str, required=False)
+@click.option(
+    "--agents",
+    callback=_parse_init_agents,
+    metavar="claude,codex,opencode",
+    help="Generate per-agent project templates, comma-separated: claude,codex,opencode",
+)
+def init(name: str | None, agents: tuple[str, ...]) -> None:
     """Create a new plugin skeleton in the target directory."""
     _run_sync_entrypoint(
-        lambda: _init_plugin(name),
-        log_message=f"创建插件骨架：{name}",
-        context={"target": Path(name)},
+        lambda: _init_plugin(name, agents),
+        log_message=f"创建插件：{name or '<interactive>'}",
+        context={"target": name or "<interactive>"},
     )
 
 
@@ -987,7 +1234,17 @@ def dev(
     required=False,
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
 )
-def worker(plugin_dir: Path | None, group_metadata: Path | None) -> None:
+@click.option(
+    "--protocol-stdout",
+    default=None,
+    type=str,
+    help="Redirect runtime protocol stdout to console, silent, or a file path",
+)
+def worker(
+    plugin_dir: Path | None,
+    group_metadata: Path | None,
+    protocol_stdout: str | None,
+) -> None:
     """Internal command used by the supervisor to start a worker."""
     if plugin_dir is None and group_metadata is None:
         raise click.UsageError("Either --plugin-dir or --group-metadata is required")
@@ -997,16 +1254,27 @@ def worker(plugin_dir: Path | None, group_metadata: Path | None) -> None:
         )
 
     target = str(group_metadata or plugin_dir)
+    transport_stdout, opened_stdout = _resolve_protocol_stdout(protocol_stdout)
     if group_metadata is not None:
-        entrypoint = run_plugin_worker(group_metadata=group_metadata)
+        entrypoint = run_plugin_worker(
+            group_metadata=group_metadata,
+            stdout=transport_stdout,
+        )
     else:
-        entrypoint = run_plugin_worker(plugin_dir=plugin_dir)
-    _run_async_entrypoint(
-        entrypoint,
-        log_message=f"启动插件工作进程：{target}",
-        log_level="debug",
-        context={"plugin_dir": plugin_dir},
-    )
+        entrypoint = run_plugin_worker(
+            plugin_dir=plugin_dir,
+            stdout=transport_stdout,
+        )
+    try:
+        _run_async_entrypoint(
+            entrypoint,
+            log_message=f"启动插件工作进程：{target}",
+            log_level="debug",
+            context={"plugin_dir": plugin_dir},
+        )
+    finally:
+        if opened_stdout is not None:
+            opened_stdout.close()
 
 
 @cli.command(hidden=True)

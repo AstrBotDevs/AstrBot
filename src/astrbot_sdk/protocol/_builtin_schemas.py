@@ -81,6 +81,8 @@ MEMORY_SEARCH_INPUT_SCHEMA = _object_schema(
     limit={"type": "integer", "minimum": 1},
     min_score={"type": "number"},
     provider_id={"type": "string"},
+    namespace={"type": "string"},
+    include_descendants={"type": "boolean"},
 )
 MEMORY_SEARCH_OUTPUT_SCHEMA = _object_schema(
     required=("items",),
@@ -89,6 +91,7 @@ MEMORY_SEARCH_OUTPUT_SCHEMA = _object_schema(
         "items": _object_schema(
             required=("key", "value", "score", "match_type"),
             key={"type": "string"},
+            namespace=_nullable({"type": "string"}),
             value=_nullable({"type": "object"}),
             score={"type": "number"},
             match_type={
@@ -102,28 +105,58 @@ MEMORY_SAVE_INPUT_SCHEMA = _object_schema(
     required=("key", "value"),
     key={"type": "string"},
     value={"type": "object"},
+    namespace={"type": "string"},
 )
 MEMORY_SAVE_OUTPUT_SCHEMA = _object_schema()
-MEMORY_GET_INPUT_SCHEMA = _object_schema(required=("key",), key={"type": "string"})
+MEMORY_GET_INPUT_SCHEMA = _object_schema(
+    required=("key",),
+    key={"type": "string"},
+    namespace={"type": "string"},
+)
 MEMORY_GET_OUTPUT_SCHEMA = _object_schema(
     required=("value",),
     value=_nullable({"type": "object"}),
 )
+MEMORY_LIST_KEYS_INPUT_SCHEMA = _object_schema(namespace={"type": "string"})
+MEMORY_LIST_KEYS_OUTPUT_SCHEMA = _object_schema(
+    required=("keys",),
+    keys={"type": "array", "items": {"type": "string"}},
+)
+MEMORY_EXISTS_INPUT_SCHEMA = _object_schema(
+    required=("key",),
+    key={"type": "string"},
+    namespace={"type": "string"},
+)
+MEMORY_EXISTS_OUTPUT_SCHEMA = _object_schema(
+    required=("exists",),
+    exists={"type": "boolean"},
+)
 MEMORY_DELETE_INPUT_SCHEMA = _object_schema(
     required=("key",),
     key={"type": "string"},
+    namespace={"type": "string"},
 )
 MEMORY_DELETE_OUTPUT_SCHEMA = _object_schema()
+MEMORY_CLEAR_NAMESPACE_INPUT_SCHEMA = _object_schema(
+    namespace={"type": "string"},
+    include_descendants={"type": "boolean"},
+)
+MEMORY_CLEAR_NAMESPACE_OUTPUT_SCHEMA = _object_schema(
+    required=("deleted_count",),
+    deleted_count={"type": "integer"},
+)
 MEMORY_SAVE_WITH_TTL_INPUT_SCHEMA = _object_schema(
     required=("key", "value", "ttl_seconds"),
     key={"type": "string"},
     value={"type": "object"},
     ttl_seconds={"type": "integer", "minimum": 1},
+    namespace={"type": "string"},
 )
 MEMORY_SAVE_WITH_TTL_OUTPUT_SCHEMA = _object_schema()
 MEMORY_GET_MANY_INPUT_SCHEMA = _object_schema(
     required=("keys",),
     keys={"type": "array", "items": {"type": "string"}},
+    namespace={"type": "string"},
 )
 MEMORY_GET_MANY_OUTPUT_SCHEMA = _object_schema(
     required=("items",),
@@ -139,20 +172,37 @@ MEMORY_GET_MANY_OUTPUT_SCHEMA = _object_schema(
 MEMORY_DELETE_MANY_INPUT_SCHEMA = _object_schema(
     required=("keys",),
     keys={"type": "array", "items": {"type": "string"}},
+    namespace={"type": "string"},
 )
 MEMORY_DELETE_MANY_OUTPUT_SCHEMA = _object_schema(
     required=("deleted_count",),
     deleted_count={"type": "integer"},
 )
-MEMORY_STATS_INPUT_SCHEMA = _object_schema()
+MEMORY_COUNT_INPUT_SCHEMA = _object_schema(
+    namespace={"type": "string"},
+    include_descendants={"type": "boolean"},
+)
+MEMORY_COUNT_OUTPUT_SCHEMA = _object_schema(
+    required=("count",),
+    count={"type": "integer"},
+)
+MEMORY_STATS_INPUT_SCHEMA = _object_schema(
+    namespace={"type": "string"},
+    include_descendants={"type": "boolean"},
+)
 MEMORY_STATS_OUTPUT_SCHEMA = _object_schema(
     total_items={"type": "integer"},
     total_bytes=_nullable({"type": "integer"}),
     plugin_id=_nullable({"type": "string"}),
     ttl_entries=_nullable({"type": "integer"}),
+    namespace=_nullable({"type": "string"}),
+    namespace_count=_nullable({"type": "integer"}),
     indexed_items=_nullable({"type": "integer"}),
     embedded_items=_nullable({"type": "integer"}),
     dirty_items=_nullable({"type": "integer"}),
+    fts_enabled={"type": "boolean"},
+    vector_backend=_nullable({"type": "string"}),
+    vector_indexes={"type": "array", "items": {"type": "object"}},
 )
 SYSTEM_GET_DATA_DIR_INPUT_SCHEMA = _object_schema()
 SYSTEM_GET_DATA_DIR_OUTPUT_SCHEMA = _object_schema(
@@ -475,6 +525,39 @@ PLATFORM_MANAGER_GET_STATS_OUTPUT_SCHEMA = _object_schema(
     required=("stats",),
     stats=_nullable(PLATFORM_STATS_SCHEMA),
 )
+PERMISSION_ROLE_SCHEMA = {"type": "string", "enum": ["member", "admin"]}
+PERMISSION_CHECK_INPUT_SCHEMA = _object_schema(
+    required=("user_id",),
+    user_id={"type": "string"},
+    session_id=_nullable({"type": "string"}),
+)
+PERMISSION_CHECK_RESULT_SCHEMA = _object_schema(
+    required=("is_admin", "role"),
+    is_admin={"type": "boolean"},
+    role=PERMISSION_ROLE_SCHEMA,
+)
+PERMISSION_CHECK_OUTPUT_SCHEMA = PERMISSION_CHECK_RESULT_SCHEMA
+PERMISSION_GET_ADMINS_INPUT_SCHEMA = _object_schema()
+PERMISSION_GET_ADMINS_OUTPUT_SCHEMA = _object_schema(
+    required=("admins",),
+    admins={"type": "array", "items": {"type": "string"}},
+)
+PERMISSION_MANAGER_ADD_ADMIN_INPUT_SCHEMA = _object_schema(
+    required=("user_id",),
+    user_id={"type": "string"},
+)
+PERMISSION_MANAGER_ADD_ADMIN_OUTPUT_SCHEMA = _object_schema(
+    required=("changed",),
+    changed={"type": "boolean"},
+)
+PERMISSION_MANAGER_REMOVE_ADMIN_INPUT_SCHEMA = _object_schema(
+    required=("user_id",),
+    user_id={"type": "string"},
+)
+PERMISSION_MANAGER_REMOVE_ADMIN_OUTPUT_SCHEMA = _object_schema(
+    required=("changed",),
+    changed={"type": "boolean"},
+)
 SESSION_PLUGIN_IS_ENABLED_INPUT_SCHEMA = _object_schema(
     required=("session", "plugin_name"),
     session={"type": "string"},
@@ -666,6 +749,235 @@ CONVERSATION_UPDATE_INPUT_SCHEMA = _object_schema(
     conversation=_nullable(CONVERSATION_UPDATE_SCHEMA),
 )
 CONVERSATION_UPDATE_OUTPUT_SCHEMA = _object_schema()
+CONVERSATION_UNSET_PERSONA_INPUT_SCHEMA = _object_schema(
+    required=("session",),
+    session={"type": "string"},
+    conversation_id=_nullable({"type": "string"}),
+)
+CONVERSATION_UNSET_PERSONA_OUTPUT_SCHEMA = _object_schema()
+MESSAGE_HISTORY_SESSION_SCHEMA = _object_schema(
+    required=("platform_id", "message_type", "session_id"),
+    platform_id={"type": "string"},
+    message_type={"type": "string", "enum": ["group", "private", "other"]},
+    session_id={"type": "string"},
+)
+MESSAGE_HISTORY_SENDER_SCHEMA = _object_schema(
+    sender_id=_nullable({"type": "string"}),
+    sender_name=_nullable({"type": "string"}),
+)
+MESSAGE_HISTORY_RECORD_SCHEMA = _object_schema(
+    required=("id", "session", "sender", "parts", "metadata"),
+    id={"type": "integer"},
+    session=MESSAGE_HISTORY_SESSION_SCHEMA,
+    sender=MESSAGE_HISTORY_SENDER_SCHEMA,
+    parts={"type": "array", "items": {"type": "object"}},
+    metadata={"type": "object"},
+    created_at=_nullable({"type": "string"}),
+    updated_at=_nullable({"type": "string"}),
+    idempotency_key=_nullable({"type": "string"}),
+)
+MESSAGE_HISTORY_PAGE_SCHEMA = _object_schema(
+    required=("records",),
+    records={"type": "array", "items": MESSAGE_HISTORY_RECORD_SCHEMA},
+    next_cursor=_nullable({"type": "string"}),
+    total=_nullable({"type": "integer"}),
+)
+MESSAGE_HISTORY_LIST_INPUT_SCHEMA = _object_schema(
+    required=("session",),
+    session=MESSAGE_HISTORY_SESSION_SCHEMA,
+    cursor=_nullable({"type": "string", "pattern": "^(|[1-9][0-9]*)$"}),
+    limit={"type": "integer", "minimum": 1},
+)
+MESSAGE_HISTORY_LIST_OUTPUT_SCHEMA = _object_schema(
+    required=("page",),
+    page=MESSAGE_HISTORY_PAGE_SCHEMA,
+)
+MESSAGE_HISTORY_GET_BY_ID_INPUT_SCHEMA = _object_schema(
+    required=("session", "record_id"),
+    session=MESSAGE_HISTORY_SESSION_SCHEMA,
+    record_id={"type": "integer", "minimum": 1},
+)
+MESSAGE_HISTORY_GET_BY_ID_OUTPUT_SCHEMA = _object_schema(
+    required=("record",),
+    record=_nullable(MESSAGE_HISTORY_RECORD_SCHEMA),
+)
+MESSAGE_HISTORY_APPEND_INPUT_SCHEMA = _object_schema(
+    required=("session", "sender", "parts"),
+    session=MESSAGE_HISTORY_SESSION_SCHEMA,
+    sender=MESSAGE_HISTORY_SENDER_SCHEMA,
+    parts={"type": "array", "items": {"type": "object"}},
+    metadata=_nullable({"type": "object"}),
+    idempotency_key=_nullable({"type": "string"}),
+)
+MESSAGE_HISTORY_APPEND_OUTPUT_SCHEMA = _object_schema(
+    required=("record",),
+    record=MESSAGE_HISTORY_RECORD_SCHEMA,
+)
+MESSAGE_HISTORY_DELETE_BEFORE_INPUT_SCHEMA = _object_schema(
+    required=("session", "before"),
+    session=MESSAGE_HISTORY_SESSION_SCHEMA,
+    before={"type": "string"},
+)
+MESSAGE_HISTORY_DELETE_BEFORE_OUTPUT_SCHEMA = _object_schema(
+    required=("deleted_count",),
+    deleted_count={"type": "integer"},
+)
+MESSAGE_HISTORY_DELETE_AFTER_INPUT_SCHEMA = _object_schema(
+    required=("session", "after"),
+    session=MESSAGE_HISTORY_SESSION_SCHEMA,
+    after={"type": "string"},
+)
+MESSAGE_HISTORY_DELETE_AFTER_OUTPUT_SCHEMA = _object_schema(
+    required=("deleted_count",),
+    deleted_count={"type": "integer"},
+)
+MESSAGE_HISTORY_DELETE_ALL_INPUT_SCHEMA = _object_schema(
+    required=("session",),
+    session=MESSAGE_HISTORY_SESSION_SCHEMA,
+)
+MESSAGE_HISTORY_DELETE_ALL_OUTPUT_SCHEMA = _object_schema(
+    required=("deleted_count",),
+    deleted_count={"type": "integer"},
+)
+MCP_SERVER_SCOPE_SCHEMA = {"type": "string", "enum": ["local", "global"]}
+MCP_SERVER_RECORD_SCHEMA = _object_schema(
+    required=("name", "scope", "active", "running", "config", "tools", "errlogs"),
+    name={"type": "string"},
+    scope=MCP_SERVER_SCOPE_SCHEMA,
+    active={"type": "boolean"},
+    running={"type": "boolean"},
+    config={"type": "object"},
+    tools={"type": "array", "items": {"type": "string"}},
+    errlogs={"type": "array", "items": {"type": "string"}},
+    last_error=_nullable({"type": "string"}),
+)
+MCP_LOCAL_GET_INPUT_SCHEMA = _object_schema(required=("name",), name={"type": "string"})
+MCP_LOCAL_GET_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=_nullable(MCP_SERVER_RECORD_SCHEMA),
+)
+MCP_LOCAL_LIST_INPUT_SCHEMA = _object_schema()
+MCP_LOCAL_LIST_OUTPUT_SCHEMA = _object_schema(
+    required=("servers",),
+    servers={"type": "array", "items": MCP_SERVER_RECORD_SCHEMA},
+)
+MCP_LOCAL_ENABLE_INPUT_SCHEMA = _object_schema(
+    required=("name",), name={"type": "string"}
+)
+MCP_LOCAL_ENABLE_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=MCP_SERVER_RECORD_SCHEMA,
+)
+MCP_LOCAL_DISABLE_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+)
+MCP_LOCAL_DISABLE_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=MCP_SERVER_RECORD_SCHEMA,
+)
+MCP_LOCAL_WAIT_UNTIL_READY_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+    timeout={"type": "number"},
+)
+MCP_LOCAL_WAIT_UNTIL_READY_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=MCP_SERVER_RECORD_SCHEMA,
+)
+MCP_SESSION_OPEN_INPUT_SCHEMA = _object_schema(
+    required=("name", "config"),
+    name={"type": "string"},
+    config={"type": "object"},
+    timeout={"type": "number"},
+)
+MCP_SESSION_OPEN_OUTPUT_SCHEMA = _object_schema(
+    required=("session_id", "tools"),
+    session_id={"type": "string"},
+    tools={"type": "array", "items": {"type": "string"}},
+)
+MCP_SESSION_LIST_TOOLS_INPUT_SCHEMA = _object_schema(
+    required=("session_id",),
+    session_id={"type": "string"},
+)
+MCP_SESSION_LIST_TOOLS_OUTPUT_SCHEMA = _object_schema(
+    required=("tools",),
+    tools={"type": "array", "items": {"type": "string"}},
+)
+MCP_SESSION_CALL_TOOL_INPUT_SCHEMA = _object_schema(
+    required=("session_id", "tool_name", "args"),
+    session_id={"type": "string"},
+    tool_name={"type": "string"},
+    args={"type": "object"},
+)
+MCP_SESSION_CALL_TOOL_OUTPUT_SCHEMA = _object_schema(
+    required=("result",),
+    result={"type": "object"},
+)
+MCP_SESSION_CLOSE_INPUT_SCHEMA = _object_schema(
+    required=("session_id",),
+    session_id={"type": "string"},
+)
+MCP_SESSION_CLOSE_OUTPUT_SCHEMA = _object_schema()
+MCP_GLOBAL_REGISTER_INPUT_SCHEMA = _object_schema(
+    required=("name", "config"),
+    name={"type": "string"},
+    config={"type": "object"},
+    timeout={"type": "number"},
+)
+MCP_GLOBAL_REGISTER_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=MCP_SERVER_RECORD_SCHEMA,
+)
+MCP_GLOBAL_GET_INPUT_SCHEMA = _object_schema(
+    required=("name",), name={"type": "string"}
+)
+MCP_GLOBAL_GET_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=_nullable(MCP_SERVER_RECORD_SCHEMA),
+)
+MCP_GLOBAL_LIST_INPUT_SCHEMA = _object_schema()
+MCP_GLOBAL_LIST_OUTPUT_SCHEMA = _object_schema(
+    required=("servers",),
+    servers={"type": "array", "items": MCP_SERVER_RECORD_SCHEMA},
+)
+MCP_GLOBAL_ENABLE_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+    timeout={"type": "number"},
+)
+MCP_GLOBAL_ENABLE_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=MCP_SERVER_RECORD_SCHEMA,
+)
+MCP_GLOBAL_DISABLE_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+)
+MCP_GLOBAL_DISABLE_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=MCP_SERVER_RECORD_SCHEMA,
+)
+MCP_GLOBAL_UNREGISTER_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+)
+MCP_GLOBAL_UNREGISTER_OUTPUT_SCHEMA = _object_schema(
+    required=("server",),
+    server=MCP_SERVER_RECORD_SCHEMA,
+)
+INTERNAL_MCP_LOCAL_EXECUTE_INPUT_SCHEMA = _object_schema(
+    required=("plugin_id", "server_name", "tool_name", "tool_args"),
+    plugin_id={"type": "string"},
+    server_name={"type": "string"},
+    tool_name={"type": "string"},
+    tool_args={"type": "object"},
+)
+INTERNAL_MCP_LOCAL_EXECUTE_OUTPUT_SCHEMA = _object_schema(
+    required=("content", "success"),
+    content=_nullable({"type": "string"}),
+    success={"type": "boolean"},
+)
 KNOWLEDGE_BASE_RECORD_SCHEMA = _object_schema(
     required=("kb_id", "kb_name", "embedding_provider_id", "doc_count", "chunk_count"),
     kb_id={"type": "string"},
@@ -697,6 +1009,80 @@ KNOWLEDGE_BASE_CREATE_SCHEMA = _object_schema(
     top_k_sparse=_nullable({"type": "integer"}),
     top_m_final=_nullable({"type": "integer"}),
 )
+KNOWLEDGE_BASE_UPDATE_SCHEMA = _object_schema(
+    kb_name=_nullable({"type": "string"}),
+    description=_nullable({"type": "string"}),
+    emoji=_nullable({"type": "string"}),
+    embedding_provider_id=_nullable({"type": "string"}),
+    rerank_provider_id=_nullable({"type": "string"}),
+    chunk_size=_nullable({"type": "integer"}),
+    chunk_overlap=_nullable({"type": "integer"}),
+    top_k_dense=_nullable({"type": "integer"}),
+    top_k_sparse=_nullable({"type": "integer"}),
+    top_m_final=_nullable({"type": "integer"}),
+)
+KNOWLEDGE_BASE_DOCUMENT_RECORD_SCHEMA = _object_schema(
+    required=(
+        "doc_id",
+        "kb_id",
+        "doc_name",
+        "file_type",
+        "file_size",
+        "chunk_count",
+        "media_count",
+    ),
+    doc_id={"type": "string"},
+    kb_id={"type": "string"},
+    doc_name={"type": "string"},
+    file_type={"type": "string"},
+    file_size={"type": "integer"},
+    file_path={"type": "string"},
+    chunk_count={"type": "integer"},
+    media_count={"type": "integer"},
+    created_at=_nullable({"type": "string"}),
+    updated_at=_nullable({"type": "string"}),
+)
+KNOWLEDGE_BASE_RETRIEVE_RESULT_SCHEMA = _object_schema(
+    required=(
+        "chunk_id",
+        "doc_id",
+        "kb_id",
+        "kb_name",
+        "doc_name",
+        "chunk_index",
+        "content",
+        "score",
+        "char_count",
+    ),
+    chunk_id={"type": "string"},
+    doc_id={"type": "string"},
+    kb_id={"type": "string"},
+    kb_name={"type": "string"},
+    doc_name={"type": "string"},
+    chunk_index={"type": "integer"},
+    content={"type": "string"},
+    score={"type": "number"},
+    char_count={"type": "integer"},
+)
+KNOWLEDGE_BASE_DOCUMENT_UPLOAD_SCHEMA = _object_schema(
+    file_token=_nullable({"type": "string"}),
+    url=_nullable({"type": "string"}),
+    text=_nullable({"type": "string"}),
+    file_name=_nullable({"type": "string"}),
+    file_type=_nullable({"type": "string"}),
+    chunk_size=_nullable({"type": "integer"}),
+    chunk_overlap=_nullable({"type": "integer"}),
+    batch_size=_nullable({"type": "integer"}),
+    tasks_limit=_nullable({"type": "integer"}),
+    max_retries=_nullable({"type": "integer"}),
+    enable_cleaning=_nullable({"type": "boolean"}),
+    cleaning_provider_id=_nullable({"type": "string"}),
+)
+KB_LIST_INPUT_SCHEMA = _object_schema()
+KB_LIST_OUTPUT_SCHEMA = _object_schema(
+    required=("kbs",),
+    kbs={"type": "array", "items": KNOWLEDGE_BASE_RECORD_SCHEMA},
+)
 KB_GET_INPUT_SCHEMA = _object_schema(
     required=("kb_id",),
     kb_id={"type": "string"},
@@ -713,6 +1099,15 @@ KB_CREATE_OUTPUT_SCHEMA = _object_schema(
     required=("kb",),
     kb=KNOWLEDGE_BASE_RECORD_SCHEMA,
 )
+KB_UPDATE_INPUT_SCHEMA = _object_schema(
+    required=("kb_id", "kb"),
+    kb_id={"type": "string"},
+    kb=KNOWLEDGE_BASE_UPDATE_SCHEMA,
+)
+KB_UPDATE_OUTPUT_SCHEMA = _object_schema(
+    required=("kb",),
+    kb=_nullable(KNOWLEDGE_BASE_RECORD_SCHEMA),
+)
 KB_DELETE_INPUT_SCHEMA = _object_schema(
     required=("kb_id",),
     kb_id={"type": "string"},
@@ -720,6 +1115,73 @@ KB_DELETE_INPUT_SCHEMA = _object_schema(
 KB_DELETE_OUTPUT_SCHEMA = _object_schema(
     required=("deleted",),
     deleted={"type": "boolean"},
+)
+KB_RETRIEVE_INPUT_SCHEMA = _object_schema(
+    required=("query",),
+    query={"type": "string"},
+    kb_ids={"type": "array", "items": {"type": "string"}},
+    kb_names={"type": "array", "items": {"type": "string"}},
+    top_k_fusion={"type": "integer"},
+    top_m_final={"type": "integer"},
+)
+KB_RETRIEVE_OUTPUT_SCHEMA = _object_schema(
+    required=("result",),
+    result=_nullable(
+        _object_schema(
+            required=("context_text", "results"),
+            context_text={"type": "string"},
+            results={
+                "type": "array",
+                "items": KNOWLEDGE_BASE_RETRIEVE_RESULT_SCHEMA,
+            },
+        )
+    ),
+)
+KB_DOCUMENT_UPLOAD_INPUT_SCHEMA = _object_schema(
+    required=("kb_id", "document"),
+    kb_id={"type": "string"},
+    document=KNOWLEDGE_BASE_DOCUMENT_UPLOAD_SCHEMA,
+)
+KB_DOCUMENT_UPLOAD_OUTPUT_SCHEMA = _object_schema(
+    required=("document",),
+    document=KNOWLEDGE_BASE_DOCUMENT_RECORD_SCHEMA,
+)
+KB_DOCUMENT_LIST_INPUT_SCHEMA = _object_schema(
+    required=("kb_id",),
+    kb_id={"type": "string"},
+    offset={"type": "integer"},
+    limit={"type": "integer"},
+)
+KB_DOCUMENT_LIST_OUTPUT_SCHEMA = _object_schema(
+    required=("documents",),
+    documents={"type": "array", "items": KNOWLEDGE_BASE_DOCUMENT_RECORD_SCHEMA},
+)
+KB_DOCUMENT_GET_INPUT_SCHEMA = _object_schema(
+    required=("kb_id", "doc_id"),
+    kb_id={"type": "string"},
+    doc_id={"type": "string"},
+)
+KB_DOCUMENT_GET_OUTPUT_SCHEMA = _object_schema(
+    required=("document",),
+    document=_nullable(KNOWLEDGE_BASE_DOCUMENT_RECORD_SCHEMA),
+)
+KB_DOCUMENT_DELETE_INPUT_SCHEMA = _object_schema(
+    required=("kb_id", "doc_id"),
+    kb_id={"type": "string"},
+    doc_id={"type": "string"},
+)
+KB_DOCUMENT_DELETE_OUTPUT_SCHEMA = _object_schema(
+    required=("deleted",),
+    deleted={"type": "boolean"},
+)
+KB_DOCUMENT_REFRESH_INPUT_SCHEMA = _object_schema(
+    required=("kb_id", "doc_id"),
+    kb_id={"type": "string"},
+    doc_id={"type": "string"},
+)
+KB_DOCUMENT_REFRESH_OUTPUT_SCHEMA = _object_schema(
+    required=("document",),
+    document=_nullable(KNOWLEDGE_BASE_DOCUMENT_RECORD_SCHEMA),
 )
 REGISTRY_COMMAND_REGISTER_INPUT_SCHEMA = _object_schema(
     required=("command_name", "handler_full_name"),
@@ -732,6 +1194,35 @@ REGISTRY_COMMAND_REGISTER_INPUT_SCHEMA = _object_schema(
     ignore_prefix={"type": "boolean"},
 )
 REGISTRY_COMMAND_REGISTER_OUTPUT_SCHEMA = _object_schema()
+SKILL_REGISTER_INPUT_SCHEMA = _object_schema(
+    required=("name", "path"),
+    name={"type": "string"},
+    path={"type": "string"},
+    description={"type": "string"},
+)
+SKILL_REGISTER_OUTPUT_SCHEMA = _object_schema(
+    required=("name", "description", "path", "skill_dir"),
+    name={"type": "string"},
+    description={"type": "string"},
+    path={"type": "string"},
+    skill_dir={"type": "string"},
+)
+SKILL_UNREGISTER_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+)
+SKILL_UNREGISTER_OUTPUT_SCHEMA = _object_schema(
+    required=("removed",),
+    removed={"type": "boolean"},
+)
+SKILL_LIST_INPUT_SCHEMA = _object_schema()
+SKILL_LIST_OUTPUT_SCHEMA = _object_schema(
+    required=("skills",),
+    skills={
+        "type": "array",
+        "items": SKILL_REGISTER_OUTPUT_SCHEMA,
+    },
+)
 HTTP_REGISTER_API_INPUT_SCHEMA = _object_schema(
     required=("route", "methods", "handler_capability"),
     route={"type": "string"},
@@ -769,6 +1260,14 @@ METADATA_GET_PLUGIN_CONFIG_INPUT_SCHEMA = _object_schema(
     name={"type": "string"},
 )
 METADATA_GET_PLUGIN_CONFIG_OUTPUT_SCHEMA = _object_schema(
+    required=("config",),
+    config=_nullable({"type": "object"}),
+)
+METADATA_SAVE_PLUGIN_CONFIG_INPUT_SCHEMA = _object_schema(
+    required=("config",),
+    config={"type": "object"},
+)
+METADATA_SAVE_PLUGIN_CONFIG_OUTPUT_SCHEMA = _object_schema(
     required=("config",),
     config=_nullable({"type": "object"}),
 )
@@ -1095,9 +1594,21 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": MEMORY_GET_INPUT_SCHEMA,
         "output": MEMORY_GET_OUTPUT_SCHEMA,
     },
+    "memory.list_keys": {
+        "input": MEMORY_LIST_KEYS_INPUT_SCHEMA,
+        "output": MEMORY_LIST_KEYS_OUTPUT_SCHEMA,
+    },
+    "memory.exists": {
+        "input": MEMORY_EXISTS_INPUT_SCHEMA,
+        "output": MEMORY_EXISTS_OUTPUT_SCHEMA,
+    },
     "memory.delete": {
         "input": MEMORY_DELETE_INPUT_SCHEMA,
         "output": MEMORY_DELETE_OUTPUT_SCHEMA,
+    },
+    "memory.clear_namespace": {
+        "input": MEMORY_CLEAR_NAMESPACE_INPUT_SCHEMA,
+        "output": MEMORY_CLEAR_NAMESPACE_OUTPUT_SCHEMA,
     },
     "memory.save_with_ttl": {
         "input": MEMORY_SAVE_WITH_TTL_INPUT_SCHEMA,
@@ -1110,6 +1621,10 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
     "memory.delete_many": {
         "input": MEMORY_DELETE_MANY_INPUT_SCHEMA,
         "output": MEMORY_DELETE_MANY_OUTPUT_SCHEMA,
+    },
+    "memory.count": {
+        "input": MEMORY_COUNT_INPUT_SCHEMA,
+        "output": MEMORY_COUNT_OUTPUT_SCHEMA,
     },
     "memory.stats": {
         "input": MEMORY_STATS_INPUT_SCHEMA,
@@ -1228,18 +1743,151 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": CONVERSATION_UPDATE_INPUT_SCHEMA,
         "output": CONVERSATION_UPDATE_OUTPUT_SCHEMA,
     },
+    "conversation.unset_persona": {
+        "input": CONVERSATION_UNSET_PERSONA_INPUT_SCHEMA,
+        "output": CONVERSATION_UNSET_PERSONA_OUTPUT_SCHEMA,
+    },
+    "message_history.list": {
+        "input": MESSAGE_HISTORY_LIST_INPUT_SCHEMA,
+        "output": MESSAGE_HISTORY_LIST_OUTPUT_SCHEMA,
+    },
+    "message_history.get_by_id": {
+        "input": MESSAGE_HISTORY_GET_BY_ID_INPUT_SCHEMA,
+        "output": MESSAGE_HISTORY_GET_BY_ID_OUTPUT_SCHEMA,
+    },
+    "message_history.append": {
+        "input": MESSAGE_HISTORY_APPEND_INPUT_SCHEMA,
+        "output": MESSAGE_HISTORY_APPEND_OUTPUT_SCHEMA,
+    },
+    "message_history.delete_before": {
+        "input": MESSAGE_HISTORY_DELETE_BEFORE_INPUT_SCHEMA,
+        "output": MESSAGE_HISTORY_DELETE_BEFORE_OUTPUT_SCHEMA,
+    },
+    "message_history.delete_after": {
+        "input": MESSAGE_HISTORY_DELETE_AFTER_INPUT_SCHEMA,
+        "output": MESSAGE_HISTORY_DELETE_AFTER_OUTPUT_SCHEMA,
+    },
+    "message_history.delete_all": {
+        "input": MESSAGE_HISTORY_DELETE_ALL_INPUT_SCHEMA,
+        "output": MESSAGE_HISTORY_DELETE_ALL_OUTPUT_SCHEMA,
+    },
+    "mcp.local.get": {
+        "input": MCP_LOCAL_GET_INPUT_SCHEMA,
+        "output": MCP_LOCAL_GET_OUTPUT_SCHEMA,
+    },
+    "mcp.local.list": {
+        "input": MCP_LOCAL_LIST_INPUT_SCHEMA,
+        "output": MCP_LOCAL_LIST_OUTPUT_SCHEMA,
+    },
+    "mcp.local.enable": {
+        "input": MCP_LOCAL_ENABLE_INPUT_SCHEMA,
+        "output": MCP_LOCAL_ENABLE_OUTPUT_SCHEMA,
+    },
+    "mcp.local.disable": {
+        "input": MCP_LOCAL_DISABLE_INPUT_SCHEMA,
+        "output": MCP_LOCAL_DISABLE_OUTPUT_SCHEMA,
+    },
+    "mcp.local.wait_until_ready": {
+        "input": MCP_LOCAL_WAIT_UNTIL_READY_INPUT_SCHEMA,
+        "output": MCP_LOCAL_WAIT_UNTIL_READY_OUTPUT_SCHEMA,
+    },
+    "mcp.session.open": {
+        "input": MCP_SESSION_OPEN_INPUT_SCHEMA,
+        "output": MCP_SESSION_OPEN_OUTPUT_SCHEMA,
+    },
+    "mcp.session.list_tools": {
+        "input": MCP_SESSION_LIST_TOOLS_INPUT_SCHEMA,
+        "output": MCP_SESSION_LIST_TOOLS_OUTPUT_SCHEMA,
+    },
+    "mcp.session.call_tool": {
+        "input": MCP_SESSION_CALL_TOOL_INPUT_SCHEMA,
+        "output": MCP_SESSION_CALL_TOOL_OUTPUT_SCHEMA,
+    },
+    "mcp.session.close": {
+        "input": MCP_SESSION_CLOSE_INPUT_SCHEMA,
+        "output": MCP_SESSION_CLOSE_OUTPUT_SCHEMA,
+    },
+    "mcp.global.register": {
+        "input": MCP_GLOBAL_REGISTER_INPUT_SCHEMA,
+        "output": MCP_GLOBAL_REGISTER_OUTPUT_SCHEMA,
+    },
+    "mcp.global.get": {
+        "input": MCP_GLOBAL_GET_INPUT_SCHEMA,
+        "output": MCP_GLOBAL_GET_OUTPUT_SCHEMA,
+    },
+    "mcp.global.list": {
+        "input": MCP_GLOBAL_LIST_INPUT_SCHEMA,
+        "output": MCP_GLOBAL_LIST_OUTPUT_SCHEMA,
+    },
+    "mcp.global.enable": {
+        "input": MCP_GLOBAL_ENABLE_INPUT_SCHEMA,
+        "output": MCP_GLOBAL_ENABLE_OUTPUT_SCHEMA,
+    },
+    "mcp.global.disable": {
+        "input": MCP_GLOBAL_DISABLE_INPUT_SCHEMA,
+        "output": MCP_GLOBAL_DISABLE_OUTPUT_SCHEMA,
+    },
+    "mcp.global.unregister": {
+        "input": MCP_GLOBAL_UNREGISTER_INPUT_SCHEMA,
+        "output": MCP_GLOBAL_UNREGISTER_OUTPUT_SCHEMA,
+    },
+    "internal.mcp.local.execute": {
+        "input": INTERNAL_MCP_LOCAL_EXECUTE_INPUT_SCHEMA,
+        "output": INTERNAL_MCP_LOCAL_EXECUTE_OUTPUT_SCHEMA,
+    },
+    "kb.list": {"input": KB_LIST_INPUT_SCHEMA, "output": KB_LIST_OUTPUT_SCHEMA},
     "kb.get": {"input": KB_GET_INPUT_SCHEMA, "output": KB_GET_OUTPUT_SCHEMA},
     "kb.create": {
         "input": KB_CREATE_INPUT_SCHEMA,
         "output": KB_CREATE_OUTPUT_SCHEMA,
     },
+    "kb.update": {
+        "input": KB_UPDATE_INPUT_SCHEMA,
+        "output": KB_UPDATE_OUTPUT_SCHEMA,
+    },
     "kb.delete": {
         "input": KB_DELETE_INPUT_SCHEMA,
         "output": KB_DELETE_OUTPUT_SCHEMA,
     },
+    "kb.retrieve": {
+        "input": KB_RETRIEVE_INPUT_SCHEMA,
+        "output": KB_RETRIEVE_OUTPUT_SCHEMA,
+    },
+    "kb.document.upload": {
+        "input": KB_DOCUMENT_UPLOAD_INPUT_SCHEMA,
+        "output": KB_DOCUMENT_UPLOAD_OUTPUT_SCHEMA,
+    },
+    "kb.document.list": {
+        "input": KB_DOCUMENT_LIST_INPUT_SCHEMA,
+        "output": KB_DOCUMENT_LIST_OUTPUT_SCHEMA,
+    },
+    "kb.document.get": {
+        "input": KB_DOCUMENT_GET_INPUT_SCHEMA,
+        "output": KB_DOCUMENT_GET_OUTPUT_SCHEMA,
+    },
+    "kb.document.delete": {
+        "input": KB_DOCUMENT_DELETE_INPUT_SCHEMA,
+        "output": KB_DOCUMENT_DELETE_OUTPUT_SCHEMA,
+    },
+    "kb.document.refresh": {
+        "input": KB_DOCUMENT_REFRESH_INPUT_SCHEMA,
+        "output": KB_DOCUMENT_REFRESH_OUTPUT_SCHEMA,
+    },
     "registry.command.register": {
         "input": REGISTRY_COMMAND_REGISTER_INPUT_SCHEMA,
         "output": REGISTRY_COMMAND_REGISTER_OUTPUT_SCHEMA,
+    },
+    "skill.register": {
+        "input": SKILL_REGISTER_INPUT_SCHEMA,
+        "output": SKILL_REGISTER_OUTPUT_SCHEMA,
+    },
+    "skill.unregister": {
+        "input": SKILL_UNREGISTER_INPUT_SCHEMA,
+        "output": SKILL_UNREGISTER_OUTPUT_SCHEMA,
+    },
+    "skill.list": {
+        "input": SKILL_LIST_INPUT_SCHEMA,
+        "output": SKILL_LIST_OUTPUT_SCHEMA,
     },
     "http.register_api": {
         "input": HTTP_REGISTER_API_INPUT_SCHEMA,
@@ -1264,6 +1912,10 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
     "metadata.get_plugin_config": {
         "input": METADATA_GET_PLUGIN_CONFIG_INPUT_SCHEMA,
         "output": METADATA_GET_PLUGIN_CONFIG_OUTPUT_SCHEMA,
+    },
+    "metadata.save_plugin_config": {
+        "input": METADATA_SAVE_PLUGIN_CONFIG_INPUT_SCHEMA,
+        "output": METADATA_SAVE_PLUGIN_CONFIG_OUTPUT_SCHEMA,
     },
     "registry.get_handlers_by_event_type": {
         "input": REGISTRY_GET_HANDLERS_BY_EVENT_TYPE_INPUT_SCHEMA,
@@ -1396,6 +2048,22 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
     "platform.manager.get_stats": {
         "input": PLATFORM_MANAGER_GET_STATS_INPUT_SCHEMA,
         "output": PLATFORM_MANAGER_GET_STATS_OUTPUT_SCHEMA,
+    },
+    "permission.check": {
+        "input": PERMISSION_CHECK_INPUT_SCHEMA,
+        "output": PERMISSION_CHECK_OUTPUT_SCHEMA,
+    },
+    "permission.get_admins": {
+        "input": PERMISSION_GET_ADMINS_INPUT_SCHEMA,
+        "output": PERMISSION_GET_ADMINS_OUTPUT_SCHEMA,
+    },
+    "permission.manager.add_admin": {
+        "input": PERMISSION_MANAGER_ADD_ADMIN_INPUT_SCHEMA,
+        "output": PERMISSION_MANAGER_ADD_ADMIN_OUTPUT_SCHEMA,
+    },
+    "permission.manager.remove_admin": {
+        "input": PERMISSION_MANAGER_REMOVE_ADMIN_INPUT_SCHEMA,
+        "output": PERMISSION_MANAGER_REMOVE_ADMIN_OUTPUT_SCHEMA,
     },
     "llm_tool.manager.get": {
         "input": LLM_TOOL_MANAGER_GET_INPUT_SCHEMA,
@@ -1537,14 +2205,22 @@ __all__ = [
     "LLM_CHAT_RAW_OUTPUT_SCHEMA",
     "LLM_STREAM_CHAT_INPUT_SCHEMA",
     "LLM_STREAM_CHAT_OUTPUT_SCHEMA",
+    "MEMORY_CLEAR_NAMESPACE_INPUT_SCHEMA",
+    "MEMORY_CLEAR_NAMESPACE_OUTPUT_SCHEMA",
+    "MEMORY_COUNT_INPUT_SCHEMA",
+    "MEMORY_COUNT_OUTPUT_SCHEMA",
     "MEMORY_DELETE_INPUT_SCHEMA",
     "MEMORY_DELETE_MANY_INPUT_SCHEMA",
     "MEMORY_DELETE_MANY_OUTPUT_SCHEMA",
     "MEMORY_DELETE_OUTPUT_SCHEMA",
+    "MEMORY_EXISTS_INPUT_SCHEMA",
+    "MEMORY_EXISTS_OUTPUT_SCHEMA",
     "MEMORY_GET_INPUT_SCHEMA",
     "MEMORY_GET_MANY_INPUT_SCHEMA",
     "MEMORY_GET_MANY_OUTPUT_SCHEMA",
     "MEMORY_GET_OUTPUT_SCHEMA",
+    "MEMORY_LIST_KEYS_INPUT_SCHEMA",
+    "MEMORY_LIST_KEYS_OUTPUT_SCHEMA",
     "MEMORY_SAVE_INPUT_SCHEMA",
     "MEMORY_SAVE_OUTPUT_SCHEMA",
     "MEMORY_SAVE_WITH_TTL_INPUT_SCHEMA",
@@ -1555,6 +2231,8 @@ __all__ = [
     "MEMORY_STATS_OUTPUT_SCHEMA",
     "METADATA_GET_PLUGIN_CONFIG_INPUT_SCHEMA",
     "METADATA_GET_PLUGIN_CONFIG_OUTPUT_SCHEMA",
+    "METADATA_SAVE_PLUGIN_CONFIG_INPUT_SCHEMA",
+    "METADATA_SAVE_PLUGIN_CONFIG_OUTPUT_SCHEMA",
     "METADATA_GET_PLUGIN_INPUT_SCHEMA",
     "METADATA_GET_PLUGIN_OUTPUT_SCHEMA",
     "METADATA_LIST_PLUGINS_INPUT_SCHEMA",
@@ -1641,6 +2319,16 @@ __all__ = [
     "PLATFORM_MANAGER_GET_STATS_INPUT_SCHEMA",
     "PLATFORM_MANAGER_GET_STATS_OUTPUT_SCHEMA",
     "PLATFORM_MANAGER_STATE_SCHEMA",
+    "PERMISSION_CHECK_INPUT_SCHEMA",
+    "PERMISSION_CHECK_OUTPUT_SCHEMA",
+    "PERMISSION_CHECK_RESULT_SCHEMA",
+    "PERMISSION_GET_ADMINS_INPUT_SCHEMA",
+    "PERMISSION_GET_ADMINS_OUTPUT_SCHEMA",
+    "PERMISSION_MANAGER_ADD_ADMIN_INPUT_SCHEMA",
+    "PERMISSION_MANAGER_ADD_ADMIN_OUTPUT_SCHEMA",
+    "PERMISSION_MANAGER_REMOVE_ADMIN_INPUT_SCHEMA",
+    "PERMISSION_MANAGER_REMOVE_ADMIN_OUTPUT_SCHEMA",
+    "PERMISSION_ROLE_SCHEMA",
     "PLATFORM_SEND_CHAIN_INPUT_SCHEMA",
     "PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA",
     "PLATFORM_SEND_BY_SESSION_INPUT_SCHEMA",
@@ -1677,19 +2365,63 @@ __all__ = [
     "CONVERSATION_RECORD_SCHEMA",
     "CONVERSATION_SWITCH_INPUT_SCHEMA",
     "CONVERSATION_SWITCH_OUTPUT_SCHEMA",
+    "CONVERSATION_UNSET_PERSONA_INPUT_SCHEMA",
+    "CONVERSATION_UNSET_PERSONA_OUTPUT_SCHEMA",
     "CONVERSATION_UPDATE_INPUT_SCHEMA",
     "CONVERSATION_UPDATE_OUTPUT_SCHEMA",
     "CONVERSATION_UPDATE_SCHEMA",
+    "MESSAGE_HISTORY_APPEND_INPUT_SCHEMA",
+    "MESSAGE_HISTORY_APPEND_OUTPUT_SCHEMA",
+    "MESSAGE_HISTORY_DELETE_AFTER_INPUT_SCHEMA",
+    "MESSAGE_HISTORY_DELETE_AFTER_OUTPUT_SCHEMA",
+    "MESSAGE_HISTORY_DELETE_ALL_INPUT_SCHEMA",
+    "MESSAGE_HISTORY_DELETE_ALL_OUTPUT_SCHEMA",
+    "MESSAGE_HISTORY_DELETE_BEFORE_INPUT_SCHEMA",
+    "MESSAGE_HISTORY_DELETE_BEFORE_OUTPUT_SCHEMA",
+    "MESSAGE_HISTORY_GET_BY_ID_INPUT_SCHEMA",
+    "MESSAGE_HISTORY_GET_BY_ID_OUTPUT_SCHEMA",
+    "MESSAGE_HISTORY_LIST_INPUT_SCHEMA",
+    "MESSAGE_HISTORY_LIST_OUTPUT_SCHEMA",
+    "MESSAGE_HISTORY_PAGE_SCHEMA",
+    "MESSAGE_HISTORY_RECORD_SCHEMA",
+    "MESSAGE_HISTORY_SENDER_SCHEMA",
+    "MESSAGE_HISTORY_SESSION_SCHEMA",
     "KB_CREATE_INPUT_SCHEMA",
     "KB_CREATE_OUTPUT_SCHEMA",
+    "KB_DOCUMENT_DELETE_INPUT_SCHEMA",
+    "KB_DOCUMENT_DELETE_OUTPUT_SCHEMA",
+    "KB_DOCUMENT_GET_INPUT_SCHEMA",
+    "KB_DOCUMENT_GET_OUTPUT_SCHEMA",
+    "KB_DOCUMENT_LIST_INPUT_SCHEMA",
+    "KB_DOCUMENT_LIST_OUTPUT_SCHEMA",
+    "KB_DOCUMENT_REFRESH_INPUT_SCHEMA",
+    "KB_DOCUMENT_REFRESH_OUTPUT_SCHEMA",
+    "KB_DOCUMENT_UPLOAD_INPUT_SCHEMA",
+    "KB_DOCUMENT_UPLOAD_OUTPUT_SCHEMA",
     "KB_DELETE_INPUT_SCHEMA",
     "KB_DELETE_OUTPUT_SCHEMA",
     "KB_GET_INPUT_SCHEMA",
     "KB_GET_OUTPUT_SCHEMA",
+    "KB_LIST_INPUT_SCHEMA",
+    "KB_LIST_OUTPUT_SCHEMA",
+    "KB_RETRIEVE_INPUT_SCHEMA",
+    "KB_RETRIEVE_OUTPUT_SCHEMA",
+    "KB_UPDATE_INPUT_SCHEMA",
+    "KB_UPDATE_OUTPUT_SCHEMA",
     "KNOWLEDGE_BASE_CREATE_SCHEMA",
+    "KNOWLEDGE_BASE_DOCUMENT_RECORD_SCHEMA",
+    "KNOWLEDGE_BASE_DOCUMENT_UPLOAD_SCHEMA",
     "KNOWLEDGE_BASE_RECORD_SCHEMA",
+    "KNOWLEDGE_BASE_RETRIEVE_RESULT_SCHEMA",
+    "KNOWLEDGE_BASE_UPDATE_SCHEMA",
     "REGISTRY_COMMAND_REGISTER_INPUT_SCHEMA",
     "REGISTRY_COMMAND_REGISTER_OUTPUT_SCHEMA",
+    "SKILL_REGISTER_INPUT_SCHEMA",
+    "SKILL_REGISTER_OUTPUT_SCHEMA",
+    "SKILL_UNREGISTER_INPUT_SCHEMA",
+    "SKILL_UNREGISTER_OUTPUT_SCHEMA",
+    "SKILL_LIST_INPUT_SCHEMA",
+    "SKILL_LIST_OUTPUT_SCHEMA",
     "REGISTRY_GET_HANDLER_BY_FULL_NAME_INPUT_SCHEMA",
     "REGISTRY_GET_HANDLER_BY_FULL_NAME_OUTPUT_SCHEMA",
     "REGISTRY_GET_HANDLERS_BY_EVENT_TYPE_INPUT_SCHEMA",

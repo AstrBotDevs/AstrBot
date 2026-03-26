@@ -5,8 +5,11 @@ import hashlib
 import math
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
+from ..._internal.plugin_ids import resolve_plugin_data_dir, validate_plugin_id
+from ...errors import AstrBotError
 from ...protocol.descriptors import (
     BUILTIN_CAPABILITY_SCHEMAS,
     CapabilityDescriptor,
@@ -67,6 +70,39 @@ def _mock_embedding_vector(text: str, *, provider_id: str) -> list[float]:
 
 
 class CapabilityRouterBridgeBase(CapabilityRouterHost):
+    _memory_backends: dict[str, Any]
+
+    @staticmethod
+    def _normalize_platform_name(value: Any) -> str:
+        return str(value or "").strip().lower()
+
+    @classmethod
+    def _normalized_platform_names(cls, values: Any) -> set[str]:
+        if not isinstance(values, list):
+            return set()
+        return {
+            cls._normalize_platform_name(item)
+            for item in values
+            if cls._normalize_platform_name(item)
+        }
+
+    @staticmethod
+    def _validated_plugin_id(plugin_id: str, *, capability_name: str) -> str:
+        try:
+            return validate_plugin_id(plugin_id)
+        except ValueError as exc:
+            raise AstrBotError.invalid_input(
+                f"{capability_name} requires a safe plugin_id: {exc}"
+            ) from exc
+
+    def _plugin_data_dir(self, plugin_id: str, *, capability_name: str) -> Path:
+        try:
+            return resolve_plugin_data_dir(self._system_data_root, plugin_id)
+        except ValueError as exc:
+            raise AstrBotError.invalid_input(
+                f"{capability_name} requires a safe plugin_id: {exc}"
+            ) from exc
+
     def _builtin_descriptor(
         self,
         name: str,
@@ -143,6 +179,51 @@ class CapabilityRouterBridgeBase(CapabilityRouterHost):
             return parts[0].strip()
         return "unknown"
 
+    def _plugin_supports_platform(self, plugin_id: str, platform_name: str) -> bool:
+        normalized_platform = self._normalize_platform_name(platform_name)
+        if not normalized_platform:
+            return True
+        plugin = self._plugins.get(str(plugin_id))
+        if plugin is None:
+            return True
+        metadata = getattr(plugin, "metadata", None)
+        if not isinstance(metadata, dict):
+            return True
+        supported = self._normalized_platform_names(metadata.get("support_platforms"))
+        if not supported:
+            return True
+        return normalized_platform in supported
+
+    def _platform_name_from_id(self, platform_id: str) -> str:
+        normalized_platform_id = str(platform_id).strip()
+        if not normalized_platform_id:
+            return ""
+        for item in self.get_platform_instances():
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("id", "")).strip() != normalized_platform_id:
+                continue
+            return self._normalize_platform_name(item.get("type"))
+        return ""
+
+    def _session_platform_name(self, session: str) -> str:
+        return self._platform_name_from_id(self._session_platform_id(session))
+
+    def _require_platform_support_for_session(
+        self,
+        capability_name: str,
+        session: str,
+    ) -> str:
+        plugin_id = self._require_caller_plugin_id(capability_name)
+        platform_name = self._session_platform_name(session)
+        if not platform_name or self._plugin_supports_platform(
+            plugin_id, platform_name
+        ):
+            return plugin_id
+        raise AstrBotError.invalid_input(
+            f"{capability_name} does not support platform '{platform_name}' for plugin '{plugin_id}'"
+        )
+
     @staticmethod
     def _normalize_history_payload(value: Any) -> list[dict[str, Any]]:
         if not isinstance(value, list):
@@ -163,21 +244,3 @@ class CapabilityRouterBridgeBase(CapabilityRouterHost):
             return int(value)
         except (TypeError, ValueError):
             return None
-
-    def _provider_entry(
-        self,
-        payload: dict[str, Any],
-        capability_name: str,
-        expected_kind: str | None = None,
-    ) -> dict[str, Any]:
-        raise NotImplementedError
-
-    async def _provider_embedding_get_embedding(
-        self, request_id: str, payload: dict[str, Any], token
-    ) -> dict[str, Any]:
-        raise NotImplementedError
-
-    async def _provider_embedding_get_embeddings(
-        self, request_id: str, payload: dict[str, Any], token
-    ) -> dict[str, Any]:
-        raise NotImplementedError

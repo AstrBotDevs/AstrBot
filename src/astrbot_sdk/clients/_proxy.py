@@ -26,7 +26,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Mapping
 from typing import Any, Protocol
 
-from .._invocation_context import caller_plugin_scope
+from .._internal.invocation_context import caller_plugin_scope
 from ..errors import AstrBotError
 
 
@@ -44,12 +44,15 @@ class _CapabilityPeerLike(Protocol):
         payload: dict[str, Any],
         *,
         stream: bool = False,
+        request_id: str | None = None,
     ) -> dict[str, Any]: ...
 
     async def invoke_stream(
         self,
         capability: str,
         payload: dict[str, Any],
+        *,
+        request_id: str | None = None,
     ) -> AsyncIterator[Any]: ...
 
 
@@ -66,6 +69,7 @@ class CapabilityProxy:
         self,
         peer: _CapabilityPeerLike,
         caller_plugin_id: str | None = None,
+        request_scope_id: str | None = None,
     ) -> None:
         """初始化能力代理。
 
@@ -74,6 +78,7 @@ class CapabilityProxy:
         """
         self._peer = peer
         self._caller_plugin_id = caller_plugin_id
+        self._request_scope_id = request_scope_id
 
     def _get_descriptor(self, name: str):
         """获取能力描述符。
@@ -84,16 +89,22 @@ class CapabilityProxy:
         Returns:
             能力描述符，若不存在则返回 None
         """
-        capability_map = getattr(self._peer, "__dict__", {}).get(
-            "remote_capability_map",
-            {},
-        )
+        capability_map = getattr(self._peer, "remote_capability_map", {})
+        if not isinstance(capability_map, Mapping):
+            return None
         return capability_map.get(name)
 
     def _remote_initialized(self) -> bool:
-        peer_state = getattr(self._peer, "__dict__", {})
-        return bool(peer_state.get("remote_peer")) or bool(
-            peer_state.get("remote_capability_map", {})
+        peer_attrs = getattr(self._peer, "__dict__", None)
+        if not isinstance(peer_attrs, dict):
+            return False
+
+        # Avoid getattr() here: MagicMock synthesizes truthy child attributes and
+        # makes an uninitialized peer look ready.
+        remote_peer = peer_attrs.get("remote_peer")
+        capability_map = peer_attrs.get("remote_capability_map")
+        return bool(remote_peer) or (
+            isinstance(capability_map, Mapping) and bool(capability_map)
         )
 
     def _ensure_available(self, name: str, *, stream: bool) -> None:
@@ -114,6 +125,17 @@ class CapabilityProxy:
         if stream and not descriptor.supports_stream:
             raise AstrBotError.invalid_input(f"{name} 不支持 stream=true")
 
+    def _prepare_payload(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if (
+            not isinstance(self._request_scope_id, str)
+            or not self._request_scope_id
+            or not name.startswith("system.event.")
+        ):
+            return payload
+        scoped_payload = dict(payload)
+        scoped_payload.setdefault("_request_scope_id", self._request_scope_id)
+        return scoped_payload
+
     async def call(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         """执行普通能力调用（非流式）。
 
@@ -132,8 +154,9 @@ class CapabilityProxy:
             print(result["text"])
         """
         self._ensure_available(name, stream=False)
+        prepared_payload = self._prepare_payload(name, payload)
         with caller_plugin_scope(self._caller_plugin_id):
-            return await self._peer.invoke(name, payload, stream=False)
+            return await self._peer.invoke(name, prepared_payload, stream=False)
 
     async def stream(
         self,
@@ -157,8 +180,9 @@ class CapabilityProxy:
                 print(delta["text"], end="")
         """
         self._ensure_available(name, stream=True)
+        prepared_payload = self._prepare_payload(name, payload)
         with caller_plugin_scope(self._caller_plugin_id):
-            event_stream = await self._peer.invoke_stream(name, payload)
+            event_stream = await self._peer.invoke_stream(name, prepared_payload)
         async for event in event_stream:
             if event.phase == "delta":
                 yield event.data

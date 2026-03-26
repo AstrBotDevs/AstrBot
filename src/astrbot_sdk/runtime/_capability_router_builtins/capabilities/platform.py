@@ -11,6 +11,7 @@ class PlatformCapabilityMixin(CapabilityRouterBridgeBase):
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
         session, target = self._resolve_target(payload)
+        self._require_platform_support_for_session("platform.send", session)
         text = str(payload.get("text", ""))
         message_id = f"msg_{len(self.sent_messages) + 1}"
         sent: dict[str, Any] = {
@@ -27,6 +28,7 @@ class PlatformCapabilityMixin(CapabilityRouterBridgeBase):
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
         session, target = self._resolve_target(payload)
+        self._require_platform_support_for_session("platform.send_image", session)
         image_url = str(payload.get("image_url", ""))
         message_id = f"img_{len(self.sent_messages) + 1}"
         sent: dict[str, Any] = {
@@ -43,6 +45,7 @@ class PlatformCapabilityMixin(CapabilityRouterBridgeBase):
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
         session, target = self._resolve_target(payload)
+        self._require_platform_support_for_session("platform.send_chain", session)
         chain = payload.get("chain")
         if not isinstance(chain, list) or not all(
             isinstance(item, dict) for item in chain
@@ -72,6 +75,7 @@ class PlatformCapabilityMixin(CapabilityRouterBridgeBase):
                 "platform.send_by_session 的 chain 必须是 object 数组"
             )
         session = str(payload.get("session", ""))
+        self._require_platform_support_for_session("platform.send_by_session", session)
         message_id = f"proactive_{len(self.sent_messages) + 1}"
         self.sent_messages.append(
             {
@@ -100,6 +104,7 @@ class PlatformCapabilityMixin(CapabilityRouterBridgeBase):
     async def _platform_list_instances(
         self, _request_id: str, _payload: dict[str, Any], _token
     ) -> dict[str, Any]:
+        plugin_id = self._require_caller_plugin_id("platform.list_instances")
         return {
             "platforms": [
                 {
@@ -110,6 +115,7 @@ class PlatformCapabilityMixin(CapabilityRouterBridgeBase):
                 }
                 for item in self.get_platform_instances()
                 if isinstance(item, dict)
+                and self._plugin_supports_platform(plugin_id, str(item.get("type", "")))
             ]
         }
 

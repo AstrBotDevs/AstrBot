@@ -14,14 +14,13 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ._star_runtime import bind_star_runtime
-from ._testing_support import (
+from ._internal.decorator_lifecycle import run_lifecycle_with_decorators
+from ._internal.testing_support import (
     InMemoryDB,
     InMemoryMemory,
     MockCapabilityRouter,
@@ -33,6 +32,7 @@ from ._testing_support import (
     RecordedSend,
     StdoutPlatformSink,
 )
+from ._message_types import normalize_message_type
 from .context import CancelToken
 from .context import Context as RuntimeContext
 from .errors import AstrBotError
@@ -123,6 +123,8 @@ def _handler_metadata_from_loaded(
             if loaded.descriptor.command_route is not None
             else []
         ),
+        "require_admin": loaded.descriptor.permissions.require_admin,
+        "required_role": loaded.descriptor.permissions.required_role,
     }
 
 
@@ -255,8 +257,19 @@ class PluginHarness:
             peer=self.peer,
             plugin_id=self.plugin.name,
         )
+        plugin_metadata = _plugin_metadata_from_spec(self.plugin, enabled=True)
+        plugin_metadata["acknowledge_global_mcp_risk"] = any(
+            bool(
+                getattr(
+                    instance.__class__,
+                    "__astrbot_acknowledge_global_mcp_risk__",
+                    False,
+                )
+            )
+            for instance in self.loaded_plugin.instances
+        )
         self.router.upsert_plugin(
-            metadata=_plugin_metadata_from_spec(self.plugin, enabled=True),
+            metadata=plugin_metadata,
             config=load_plugin_config(self.plugin),
         )
         self.router.set_plugin_handlers(
@@ -333,17 +346,8 @@ class PluginHarness:
 
         start_index = len(self.platform_sink.records)
         if self._has_waiter_for_event(event_payload):
-            carrier = (
-                self.loaded_plugin.handlers[0] if self.loaded_plugin.handlers else None
-            )
-            if carrier is None:
-                raise AstrBotError.invalid_input(
-                    "当前没有可用于承接 session_waiter 的 handler"
-                )
-            await self._invoke_handler(
-                carrier,
+            await self._invoke_session_waiter(
                 event_payload,
-                args={},
                 request_id=request_id,
             )
             await self._wait_for_followup_side_effects(
@@ -356,12 +360,16 @@ class PluginHarness:
         if not matches:
             raise AstrBotError.invalid_input("未找到匹配的 handler")
         for loaded, args in matches:
-            await self._invoke_handler(
+            result = await self._invoke_handler(
                 loaded,
                 event_payload,
                 args=args,
                 request_id=request_id,
             )
+            # Mirror the runtime dispatcher contract: once a handler explicitly
+            # stops the event, later matches in the same dispatch should not run.
+            if bool(result.get("stop", False)):
+                break
         return self.platform_sink.records[start_index:]
 
     async def invoke_capability(
@@ -433,7 +441,7 @@ class PluginHarness:
         *,
         args: dict[str, Any],
         request_id: str | None = None,
-    ) -> None:
+    ) -> dict[str, Any]:
         assert self.dispatcher is not None
         message = InvokeMessage(
             id=request_id or self._next_request_id("msg"),
@@ -445,7 +453,32 @@ class PluginHarness:
             },
         )
         try:
-            await self.dispatcher.invoke(message, CancelToken())
+            result = await self.dispatcher.invoke(message, CancelToken())
+            return dict(result)
+        except AstrBotError:
+            raise
+        except Exception as exc:  # pragma: no cover - 由 CLI/集成测试覆盖
+            raise _PluginExecutionError(str(exc)) from exc
+
+    async def _invoke_session_waiter(
+        self,
+        event_payload: dict[str, Any],
+        *,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        assert self.dispatcher is not None
+        message = InvokeMessage(
+            id=request_id or self._next_request_id("msg"),
+            capability="handler.invoke",
+            input={
+                "handler_id": "__sdk_session_waiter__",
+                "event": dict(event_payload),
+                "args": {},
+            },
+        )
+        try:
+            result = await self.dispatcher.invoke(message, CancelToken())
+            return dict(result)
         except AstrBotError:
             raise
         except Exception as exc:  # pragma: no cover - 由 CLI/集成测试覆盖
@@ -457,11 +490,16 @@ class PluginHarness:
         start_index: int,
         event_payload: dict[str, Any],
     ) -> None:
+        settled_rounds = 0
         for _ in range(20):
             if len(self.platform_sink.records) > start_index:
                 return
             await asyncio.sleep(0)
-            if not self._has_waiter_for_event(event_payload):
+            if self._has_waiter_for_event(event_payload):
+                settled_rounds = 0
+                continue
+            settled_rounds += 1
+            if settled_rounds >= 3:
                 return
 
     async def _run_lifecycle(self, method_name: str) -> None:
@@ -470,32 +508,12 @@ class PluginHarness:
 
         for instance in self.loaded_plugin.instances:
             hook = self._resolve_lifecycle_hook(instance, method_name)
-            if hook is None:
-                continue
-            args: list[Any] = []
-            try:
-                signature = inspect.signature(hook)
-            except (TypeError, ValueError):
-                signature = None
-            if signature is not None:
-                positional_params = [
-                    parameter
-                    for parameter in signature.parameters.values()
-                    if parameter.kind
-                    in (
-                        inspect.Parameter.POSITIONAL_ONLY,
-                        inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                    )
-                ]
-                if positional_params:
-                    args.append(self.lifecycle_context)
-            with bind_star_runtime(
-                instance if isinstance(instance, Star) else None,
-                self.lifecycle_context,
-            ):
-                result = hook(*args)
-                if inspect.isawaitable(result):
-                    await result
+            await run_lifecycle_with_decorators(
+                instance=instance,
+                hook=hook,
+                method_name=method_name,
+                context=self.lifecycle_context,
+            )
 
     def _match_handlers(
         self,
@@ -568,6 +586,8 @@ class PluginHarness:
         loaded: LoadedHandler,
         event_payload: dict[str, Any],
     ) -> dict[str, Any] | None:
+        if not self._passes_permissions(loaded, event_payload):
+            return None
         trigger = loaded.descriptor.trigger
         if isinstance(trigger, CommandTrigger):
             return self._match_command_trigger(loaded, trigger, event_payload)
@@ -587,6 +607,13 @@ class PluginHarness:
                 str(event_payload.get("event_type") or event_payload.get("type"))
                 == "schedule"
             ):
+                schedule_payload = event_payload.get("schedule")
+                if isinstance(schedule_payload, dict):
+                    target_handler_id = str(
+                        schedule_payload.get("handler_id", "")
+                    ).strip()
+                    if target_handler_id and target_handler_id != loaded.descriptor.id:
+                        return None
                 return {}
             return None
         return None
@@ -628,6 +655,19 @@ class PluginHarness:
         ):
             return None
         return {}
+
+    @staticmethod
+    def _passes_permissions(
+        loaded: LoadedHandler,
+        event_payload: dict[str, Any],
+    ) -> bool:
+        permissions = loaded.descriptor.permissions
+        required_role = permissions.required_role
+        if required_role is None and permissions.require_admin:
+            required_role = "admin"
+        if required_role == "admin":
+            return bool(event_payload.get("is_admin", False))
+        return True
 
     def _passes_filters(
         self,
@@ -680,6 +720,9 @@ class PluginHarness:
             event_payload,
             context=self.lifecycle_context,
         )
+        public_probe = getattr(self.dispatcher, "has_active_waiter", None)
+        if callable(public_probe):
+            return bool(public_probe(probe_event))
         session_waiters = getattr(self.dispatcher, "_session_waiters", None)
         if session_waiters is None:
             return False
@@ -695,14 +738,12 @@ class PluginHarness:
 
     @staticmethod
     def _message_type_name(event_payload: dict[str, Any]) -> str:
-        explicit = str(event_payload.get("message_type", "")).lower()
-        if explicit in {"group", "private", "other"}:
-            return explicit
-        if event_payload.get("group_id"):
-            return "group"
-        if event_payload.get("user_id"):
-            return "private"
-        return "other"
+        return normalize_message_type(
+            event_payload.get("message_type", ""),
+            group_id=str(event_payload.get("group_id", "")).strip() or None,
+            user_id=str(event_payload.get("user_id", "")).strip() or None,
+            empty_default="other",
+        )
 
     @staticmethod
     def _resolve_lifecycle_hook(instance: Any, method_name: str):

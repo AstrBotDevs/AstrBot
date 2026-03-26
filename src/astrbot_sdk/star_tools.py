@@ -3,11 +3,11 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
-from ._star_runtime import current_star_context
+from ._internal.star_runtime import current_star_context
 from .context import Context
-from .message_components import BaseMessageComponent
-from .message_result import MessageChain
-from .message_session import MessageSession
+from .message.components import BaseMessageComponent
+from .message.result import MessageChain
+from .message.session import MessageSession
 
 
 class _StarToolsContextDescriptor:
@@ -107,3 +107,21 @@ class StarTools:
     @classmethod
     async def unregister_llm_tool(cls, name: str) -> bool:
         return await cls._require_context().unregister_llm_tool(name)
+
+    @classmethod
+    async def register_skill(
+        cls,
+        *,
+        name: str,
+        path: str,
+        description: str = "",
+    ):
+        return await cls._require_context().skills.register(
+            name=name,
+            path=path,
+            description=description,
+        )
+
+    @classmethod
+    async def unregister_skill(cls, name: str) -> bool:
+        return await cls._require_context().skills.unregister(name)

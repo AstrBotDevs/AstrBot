@@ -7,8 +7,8 @@ from typing import Any
 
 from .context import Context
 from .events import MessageEvent
-from .message_components import BaseMessageComponent
-from .message_result import MessageChain
+from .message.components import BaseMessageComponent
+from .message.result import MessageChain
 from .session_waiter import SessionWaiterManager
 
 DEFAULT_BUSY_MESSAGE = "当前会话已有进行中的交互，请先完成后再试。"
