@@ -227,7 +227,8 @@ const {
         <v-btn
           variant="text"
           prepend-icon="mdi-book-open-variant"
-          href="https://astrbot.app/dev/plugin.html"
+          href="https://docs.astrbot.app/dev/star/plugin-new.html"
+          rel="noopener noreferrer"
           target="_blank"
           color="primary"
           class="text-none"
