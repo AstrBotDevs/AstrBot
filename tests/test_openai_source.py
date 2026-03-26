@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 from openai.types.chat.chat_completion import ChatCompletion
+from PIL import Image as PILImage
 
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
@@ -234,7 +235,9 @@ async def test_openai_payload_keeps_reasoning_content_in_assistant_history():
         provider._finally_convert_payload(payloads)
 
         assistant_message = payloads["messages"][0]
-        assert assistant_message["content"] == [{"type": "text", "text": "final answer"}]
+        assert assistant_message["content"] == [
+            {"type": "text", "text": "final answer"}
+        ]
         assert assistant_message["reasoning_content"] == "step 1"
     finally:
         await provider.terminate()
@@ -259,7 +262,9 @@ async def test_groq_payload_drops_reasoning_content_from_assistant_history():
         provider._finally_convert_payload(payloads)
 
         assistant_message = payloads["messages"][0]
-        assert assistant_message["content"] == [{"type": "text", "text": "final answer"}]
+        assert assistant_message["content"] == [
+            {"type": "text", "text": "final answer"}
+        ]
         assert "reasoning_content" not in assistant_message
         assert "reasoning" not in assistant_message
     finally:
@@ -446,6 +451,363 @@ async def test_handle_api_error_unknown_image_error_raises():
                 retry_cnt=0,
                 max_retries=10,
             )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_handle_api_error_invalid_attachment_removes_images_and_retries_text_only():
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "hello"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/jpeg;base64,abcd"},
+                        },
+                    ],
+                }
+            ]
+        }
+        context_query = payloads["messages"]
+        err = _ErrorWithBody(
+            "upstream error",
+            {
+                "error": {
+                    "code": "INVALID_ATTACHMENT",
+                    "message": "download attachment: unexpected status 404",
+                }
+            },
+        )
+
+        success, *_rest = await provider._handle_api_error(
+            err,
+            payloads=payloads,
+            context_query=context_query,
+            func_tool=None,
+            chosen_key="test-key",
+            available_api_keys=["test-key"],
+            retry_cnt=0,
+            max_retries=10,
+        )
+
+        assert success is False
+        assert payloads["messages"][0]["content"] == [{"type": "text", "text": "hello"}]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_handle_api_error_invalid_attachment_without_images_raises():
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "hello"}],
+                }
+            ]
+        }
+        context_query = payloads["messages"]
+        err = _ErrorWithBody(
+            "upstream error",
+            {
+                "error": {
+                    "code": "INVALID_ATTACHMENT",
+                    "message": "download attachment: unexpected status 404",
+                }
+            },
+        )
+
+        with pytest.raises(_ErrorWithBody, match="upstream error"):
+            await provider._handle_api_error(
+                err,
+                payloads=payloads,
+                context_query=context_query,
+                func_tool=None,
+                chosen_key="test-key",
+                available_api_keys=["test-key"],
+                retry_cnt=0,
+                max_retries=10,
+            )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_handle_api_error_invalid_attachment_after_fallback_raises():
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "hello"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/jpeg;base64,abcd"},
+                        },
+                    ],
+                }
+            ]
+        }
+        context_query = payloads["messages"]
+        err = _ErrorWithBody(
+            "upstream error",
+            {
+                "error": {
+                    "code": "INVALID_ATTACHMENT",
+                    "message": "download attachment: unexpected status 404",
+                }
+            },
+        )
+
+        with pytest.raises(_ErrorWithBody, match="upstream error"):
+            await provider._handle_api_error(
+                err,
+                payloads=payloads,
+                context_query=context_query,
+                func_tool=None,
+                chosen_key="test-key",
+                available_api_keys=["test-key"],
+                retry_cnt=1,
+                max_retries=10,
+                image_fallback_used=True,
+            )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeypatch):
+    provider = _make_provider()
+    try:
+
+        async def fake_download(url: str) -> str:
+            assert url == "https://example.com/quoted.png"
+            return "/tmp/quoted.png"
+
+        async def fake_encode(image_path: str) -> str:
+            assert image_path == "/tmp/quoted.png"
+            return "data:image/png;base64,abcd"
+
+        monkeypatch.setattr(
+            "astrbot.core.provider.sources.openai_source.download_image_by_url",
+            fake_download,
+        )
+        monkeypatch.setattr(provider, "_is_valid_image_file", lambda _: True)
+        monkeypatch.setattr(provider, "encode_image_bs64", fake_encode)
+
+        contexts = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "look"},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "https://example.com/quoted.png",
+                            "id": "ctx-img",
+                            "detail": "high",
+                        },
+                    },
+                ],
+            }
+        ]
+
+        payloads, _ = await provider._prepare_chat_payload(
+            prompt=None,
+            contexts=contexts,
+        )
+
+        assert payloads["messages"][0]["content"] == [
+            {"type": "text", "text": "look"},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": "data:image/png;base64,abcd",
+                    "detail": "high",
+                },
+            },
+        ]
+        assert payloads["messages"][0]["content"][1]["image_url"].get("id") is None
+        assert contexts[0]["content"][1]["image_url"] == {
+            "url": "https://example.com/quoted.png",
+            "id": "ctx-img",
+            "detail": "high",
+        }
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_prepare_chat_payload_materializes_context_http_image_urls_with_detected_mime(
+    monkeypatch, tmp_path
+):
+    provider = _make_provider()
+    try:
+        image_path = tmp_path / "quoted-image.png"
+        PILImage.new("RGBA", (1, 1), (255, 0, 0, 255)).save(image_path)
+
+        async def fake_download(url: str) -> str:
+            assert url == "https://example.com/quoted.png"
+            return str(image_path)
+
+        monkeypatch.setattr(
+            "astrbot.core.provider.sources.openai_source.download_image_by_url",
+            fake_download,
+        )
+
+        payloads, _ = await provider._prepare_chat_payload(
+            prompt=None,
+            contexts=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "look"},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": "https://example.com/quoted.png",
+                            },
+                        },
+                    ],
+                }
+            ],
+        )
+
+        image_payload = payloads["messages"][0]["content"][1]["image_url"]
+        assert image_payload["url"].startswith("data:image/png;base64,")
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_prepare_chat_payload_materializes_context_file_uri_image_urls(tmp_path):
+    provider = _make_provider()
+    try:
+        image_path = tmp_path / "quoted-image.png"
+        PILImage.new("RGBA", (1, 1), (255, 0, 0, 255)).save(image_path)
+
+        payloads, _ = await provider._prepare_chat_payload(
+            prompt=None,
+            contexts=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "look"},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": image_path.as_uri(),
+                            },
+                        },
+                    ],
+                }
+            ],
+        )
+
+        image_payload = payloads["messages"][0]["content"][1]["image_url"]
+        assert image_payload["url"].startswith("data:image/png;base64,")
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_file_uri_to_path_preserves_windows_drive_letter():
+    provider = _make_provider()
+    try:
+        assert provider._file_uri_to_path("file:///C:/tmp/quoted-image.png") == (
+            "C:/tmp/quoted-image.png"
+        )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_prepare_chat_payload_materializes_context_localhost_file_uri_image_urls(
+    tmp_path,
+):
+    provider = _make_provider()
+    try:
+        image_path = tmp_path / "quoted-image.png"
+        PILImage.new("RGBA", (1, 1), (255, 0, 0, 255)).save(image_path)
+
+        localhost_uri = f"file://localhost{image_path.as_posix()}"
+        payloads, _ = await provider._prepare_chat_payload(
+            prompt=None,
+            contexts=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "look"},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": localhost_uri,
+                            },
+                        },
+                    ],
+                }
+            ],
+        )
+
+        image_payload = payloads["messages"][0]["content"][1]["image_url"]
+        assert image_payload["url"].startswith("data:image/png;base64,")
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_prepare_chat_payload_keeps_original_context_image_when_materialization_fails(
+    monkeypatch,
+):
+    provider = _make_provider()
+    try:
+
+        async def fake_download(url: str) -> str:
+            assert url == "https://example.com/expired.png"
+            return "/tmp/not-an-image"
+
+        monkeypatch.setattr(
+            "astrbot.core.provider.sources.openai_source.download_image_by_url",
+            fake_download,
+        )
+        monkeypatch.setattr(provider, "_is_valid_image_file", lambda _: False)
+
+        payloads, _ = await provider._prepare_chat_payload(
+            prompt=None,
+            contexts=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "look"},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": "https://example.com/expired.png",
+                            },
+                        },
+                    ],
+                }
+            ],
+        )
+
+        assert payloads["messages"][0]["content"] == [
+            {"type": "text", "text": "look"},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": "https://example.com/expired.png",
+                },
+            },
+        ]
     finally:
         await provider.terminate()
 

@@ -1,11 +1,14 @@
 import asyncio
 import base64
+import copy
 import inspect
 import json
 import random
 import re
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
@@ -14,6 +17,8 @@ from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.completion_usage import CompletionUsage
+from PIL import Image as PILImage
+from PIL import UnidentifiedImageError
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -132,6 +137,161 @@ class ProviderOpenAIOfficial(Provider):
                 if isinstance(item, dict) and item.get("type") == "image_url":
                     return True
         return False
+
+    def _is_invalid_attachment_error(self, error: Exception) -> bool:
+        body = getattr(error, "body", None)
+        if isinstance(body, dict):
+            err_obj = body.get("error")
+            if isinstance(err_obj, dict):
+                code = err_obj.get("code")
+                if isinstance(code, str) and code.lower() == "invalid_attachment":
+                    return True
+                message = err_obj.get("message")
+                if isinstance(message, str):
+                    lower_message = message.lower()
+                    if (
+                        "download attachment" in lower_message
+                        and "404" in lower_message
+                    ):
+                        return True
+
+        candidates = [
+            candidate.lower()
+            for candidate in self._extract_error_text_candidates(error)
+        ]
+        return any(
+            "invalid_attachment" in candidate for candidate in candidates
+        ) or any(
+            "download attachment" in candidate and "404" in candidate
+            for candidate in candidates
+        )
+
+    @staticmethod
+    def _is_valid_image_file(image_path: str) -> bool:
+        try:
+            with PILImage.open(image_path) as image:
+                image.verify()
+        except (FileNotFoundError, OSError, UnidentifiedImageError):
+            return False
+        return True
+
+    @staticmethod
+    def _detect_image_mime_type(image_path: str) -> str:
+        try:
+            with PILImage.open(image_path) as image:
+                image_format = str(image.format or "").upper()
+        except (FileNotFoundError, OSError, UnidentifiedImageError):
+            return "image/jpeg"
+
+        return {
+            "JPEG": "image/jpeg",
+            "PNG": "image/png",
+            "GIF": "image/gif",
+            "WEBP": "image/webp",
+            "BMP": "image/bmp",
+        }.get(image_format, "image/jpeg")
+
+    @staticmethod
+    def _file_uri_to_path(file_uri: str) -> str:
+        parsed = urlparse(file_uri)
+        if parsed.scheme != "file":
+            return file_uri
+
+        path = unquote(parsed.path or "")
+        if re.match(r"^/[A-Za-z]:/", path):
+            path = path[1:]
+        if parsed.netloc and parsed.netloc != "localhost":
+            path = f"//{parsed.netloc}{path}"
+        return str(Path(path))
+
+    async def _resolve_image_part(
+        self,
+        image_url: str,
+        *,
+        image_detail: str | None = None,
+    ) -> dict | None:
+        if image_url.startswith("data:"):
+            image_payload = {"url": image_url}
+        else:
+            if image_url.startswith("http"):
+                image_path = await download_image_by_url(image_url)
+                if not self._is_valid_image_file(image_path):
+                    logger.warning(
+                        "图片 URL %s 下载结果不是有效图片，将忽略。",
+                        image_url,
+                    )
+                    return None
+                image_data = await self.encode_image_bs64(image_path)
+            elif image_url.startswith("file://"):
+                image_path = self._file_uri_to_path(image_url)
+                image_data = await self.encode_image_bs64(image_path)
+            else:
+                image_data = await self.encode_image_bs64(image_url)
+            if not image_data:
+                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                return None
+            image_payload = {"url": image_data}
+
+        if image_detail:
+            image_payload["detail"] = image_detail
+        return {
+            "type": "image_url",
+            "image_url": image_payload,
+        }
+
+    async def _materialize_context_image_parts(self, context_query: list[dict]) -> None:
+        for message in context_query:
+            content = message.get("content")
+            if not isinstance(content, list):
+                continue
+
+            new_content: list[dict] = []
+            content_changed = False
+            for part in content:
+                if not isinstance(part, dict) or part.get("type") != "image_url":
+                    new_content.append(part)
+                    continue
+
+                image_url_data = part.get("image_url")
+                if not isinstance(image_url_data, dict):
+                    logger.warning("图片内容块格式无效，将保留原始内容。")
+                    new_content.append(part)
+                    continue
+
+                url = image_url_data.get("url")
+                if not isinstance(url, str) or not url:
+                    logger.warning("图片内容块缺少有效 URL，将保留原始内容。")
+                    new_content.append(part)
+                    continue
+
+                image_detail = image_url_data.get("detail")
+                if not isinstance(image_detail, str):
+                    image_detail = None
+
+                try:
+                    resolved_part = await self._resolve_image_part(
+                        url, image_detail=image_detail
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "图片 %s 预处理失败，将保留原始内容。错误: %s",
+                        url,
+                        exc,
+                    )
+                    new_content.append(part)
+                    continue
+
+                if resolved_part is None:
+                    new_content.append(part)
+                    continue
+
+                new_content.append(resolved_part)
+                if resolved_part != part:
+                    content_changed = True
+
+            if not content_changed:
+                continue
+            message["content"] = new_content
 
     async def _fallback_to_text_only_and_retry(
         self,
@@ -594,7 +754,7 @@ class ProviderOpenAIOfficial(Provider):
             new_record = await self.assemble_context(
                 prompt, image_urls, extra_user_content_parts
             )
-        context_query = self._ensure_message_to_dicts(contexts)
+        context_query = copy.deepcopy(self._ensure_message_to_dicts(contexts))
         if new_record:
             context_query.append(new_record)
         if system_prompt:
@@ -611,6 +771,8 @@ class ProviderOpenAIOfficial(Provider):
             else:
                 for tcr in tool_calls_result:
                     context_query.extend(tcr.to_openai_messages())
+
+        await self._materialize_context_image_parts(context_query)
 
         model = model or self.get_model()
 
@@ -710,6 +872,18 @@ class ProviderOpenAIOfficial(Provider):
                 available_api_keys,
                 func_tool,
                 "image_content_moderated",
+                image_fallback_used=True,
+            )
+        if self._is_invalid_attachment_error(e):
+            if image_fallback_used or not self._context_contains_image(context_query):
+                raise e
+            return await self._fallback_to_text_only_and_retry(
+                payloads,
+                context_query,
+                chosen_key,
+                available_api_keys,
+                func_tool,
+                "invalid_attachment",
                 image_fallback_used=True,
             )
 
@@ -913,23 +1087,6 @@ class ProviderOpenAIOfficial(Provider):
     ) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
 
-        async def resolve_image_part(image_url: str) -> dict | None:
-            if image_url.startswith("http"):
-                image_path = await download_image_by_url(image_url)
-                image_data = await self.encode_image_bs64(image_path)
-            elif image_url.startswith("file:///"):
-                image_path = image_url.replace("file:///", "")
-                image_data = await self.encode_image_bs64(image_path)
-            else:
-                image_data = await self.encode_image_bs64(image_url)
-            if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
-                return None
-            return {
-                "type": "image_url",
-                "image_url": {"url": image_data},
-            }
-
         # 构建内容块列表
         content_blocks = []
 
@@ -949,7 +1106,9 @@ class ProviderOpenAIOfficial(Provider):
                 if isinstance(part, TextPart):
                     content_blocks.append({"type": "text", "text": part.text})
                 elif isinstance(part, ImageURLPart):
-                    image_part = await resolve_image_part(part.image_url.url)
+                    image_part = await self._resolve_image_part(
+                        part.image_url.url,
+                    )
                     if image_part:
                         content_blocks.append(image_part)
                 else:
@@ -958,7 +1117,7 @@ class ProviderOpenAIOfficial(Provider):
         # 3. 图片内容
         if image_urls:
             for image_url in image_urls:
-                image_part = await resolve_image_part(image_url)
+                image_part = await self._resolve_image_part(image_url)
                 if image_part:
                     content_blocks.append(image_part)
 
@@ -979,9 +1138,10 @@ class ProviderOpenAIOfficial(Provider):
         """将图片转换为 base64"""
         if image_url.startswith("base64://"):
             return image_url.replace("base64://", "data:image/jpeg;base64,")
+        mime_type = self._detect_image_mime_type(image_url)
         with open(image_url, "rb") as f:
             image_bs64 = base64.b64encode(f.read()).decode("utf-8")
-            return "data:image/jpeg;base64," + image_bs64
+            return f"data:{mime_type};base64," + image_bs64
 
     async def terminate(self):
         if self.client:
