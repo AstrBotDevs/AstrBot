@@ -4,12 +4,14 @@ version = "4.25.0"
 edition = "2024"
 
 [lib]
-name = "astrbot__core"
+name = "astrbot_core"
 crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["python"]
-python = ["pyo3"]
+python = ["pyo3", "pyo3-asyncio"]
+pyo3-asyncio = []
+pyo3-async-runtimes = ["dep:pyo3-async-runtimes"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -27,6 +29,13 @@ pyo3 = { version = "0.28", features = [
     "full",
     "extension-module",
 ], optional = true }
+pyo3-async-runtimes = { version = "0.28", optional = true }
+uuid = { version = "1.22.0", features = ["v4"] }
+reqwest = { version = "0.13.2", features = ["json", "default"] }
+dirs = "6.0.0"
+tokio-tungstenite = "0.29.0"
+base64 = "0.22.1"
+futures-util = "0.3"
 
 [profile.release]
 opt-level = 3

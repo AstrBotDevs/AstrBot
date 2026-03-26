@@ -19,6 +19,9 @@ pub enum AstrBotError {
     #[error("Invalid state: {0}")]
     InvalidState(String),
 
+    #[error("Not found: {0}")]
+    NotFound(String),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 

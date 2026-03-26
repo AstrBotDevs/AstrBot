@@ -1,33 +1,43 @@
 //! Core orchestrator for AstrBot runtime
+//!
+//! Manages lifecycle of all protocol clients and stars (plugins).
 
+use crate::abp::{AbpClient, PluginConfig, PluginLoadMode};
 use crate::error::AstrBotError;
+use crate::protocol::{AcpClient, LspClient, McpClient, ProtocolClient};
 use crate::stats::RuntimeStats;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tokio::sync::broadcast;
-use tokio::time::{interval, Duration};
+use tokio::time::{Duration, interval};
+use tracing::{debug, info, warn};
 
-#[derive(Debug, Clone)]
-pub struct ProtocolStatus {
-    pub connected: bool,
-    pub name: String,
-}
+// ============================================================================
+// Orchestrator
+// ============================================================================
 
-impl Default for ProtocolStatus {
-    fn default() -> Self {
-        Self {
-            connected: false,
-            name: String::new(),
-        }
-    }
-}
-
-/// Main orchestrator coordinating all protocol clients
+/// Main orchestrator coordinating all protocol clients and stars
 pub struct Orchestrator {
+    /// Running state
     running: RwLock<bool>,
+    /// Shutdown signal sender
     shutdown_tx: Arc<RwLock<Option<broadcast::Sender<()>>>>,
-    stars: RwLock<HashMap<String, String>>,
-    stats: RwLock<RuntimeStats>,
+    /// Protocol clients
+    lsp: RwLock<LspClient>,
+    mcp: RwLock<McpClient>,
+    acp: RwLock<AcpClient>,
+    abp: RwLock<AbpClient>,
+    /// Star registry
+    stars: RwLock<HashMap<String, StarRegistration>>,
+    /// Runtime statistics
+    stats: RuntimeStats,
+}
+
+/// Star registration entry
+#[derive(Debug, Clone)]
+pub struct StarRegistration {
+    pub name: String,
+    pub handler: String,
 }
 
 impl Default for Orchestrator {
@@ -37,52 +47,108 @@ impl Default for Orchestrator {
 }
 
 impl Orchestrator {
+    /// Create a new Orchestrator instance
     #[must_use]
     pub fn new() -> Self {
         Self {
             running: RwLock::new(false),
             shutdown_tx: Arc::new(RwLock::new(None)),
+            lsp: RwLock::new(LspClient::new()),
+            mcp: RwLock::new(McpClient::new()),
+            acp: RwLock::new(AcpClient::new()),
+            abp: RwLock::new(AbpClient::new()),
             stars: RwLock::new(HashMap::new()),
-            stats: RwLock::new(RuntimeStats::default()),
+            stats: RuntimeStats::new(),
         }
     }
 
-    /// Start the orchestrator
-    pub fn start(&self) -> Result<(), AstrBotError> {
+    /// Start the orchestrator and all protocol clients (sync version)
+    pub fn start_sync(&self) -> Result<(), AstrBotError> {
         {
-            let mut running = self.running.write().map_err(|_| {
-                AstrBotError::InvalidState("Failed to acquire write lock".into())
-            })?;
+            let mut running = self
+                .running
+                .write()
+                .map_err(|_| AstrBotError::InvalidState("Failed to acquire write lock".into()))?;
+            if *running {
+                return Err(AstrBotError::InvalidState(
+                    "Orchestrator already started".into(),
+                ));
+            }
             *running = true;
         }
 
         let (tx, _rx) = broadcast::channel(1);
         {
-            let mut shutdown_tx = self.shutdown_tx.write().map_err(|_| {
-                AstrBotError::InvalidState("Failed to acquire write lock".into())
-            })?;
+            let mut shutdown_tx = self
+                .shutdown_tx
+                .write()
+                .map_err(|_| AstrBotError::InvalidState("Failed to acquire write lock".into()))?;
             *shutdown_tx = Some(tx);
         }
 
-        tracing::info!("Orchestrator started");
+        // Connect all protocol clients (sync)
+        self.connect_protocols_sync()?;
+
+        info!("Orchestrator started");
         Ok(())
     }
 
-    /// Bootstrap all protocol clients
-    pub async fn bootstrap(&self) -> Result<(), AstrBotError> {
-        self.start()?;
-        tracing::info!("Protocol clients would be started here");
-        tokio::time::sleep(Duration::from_millis(500)).await;
+    /// Connect all protocol clients (sync version for Python binding)
+    fn connect_protocols_sync(&self) -> Result<(), AstrBotError> {
+        // Connect LSP
+        {
+            let mut lsp = self
+                .lsp
+                .write()
+                .map_err(|_| AstrBotError::InvalidState("Failed to acquire write lock".into()))?;
+            // For now, just mark as connected (actual connection is async)
+            lsp.set_connected(true);
+        }
+
+        // Connect MCP
+        {
+            let mut mcp = self
+                .mcp
+                .write()
+                .map_err(|_| AstrBotError::InvalidState("Failed to acquire write lock".into()))?;
+            mcp.set_connected(true);
+        }
+
+        // Connect ACP
+        {
+            let mut acp = self
+                .acp
+                .write()
+                .map_err(|_| AstrBotError::InvalidState("Failed to acquire write lock".into()))?;
+            acp.set_connected(true);
+        }
+
+        // Connect ABP
+        {
+            let mut abp = self
+                .abp
+                .write()
+                .map_err(|_| AstrBotError::InvalidState("Failed to acquire write lock".into()))?;
+            abp.set_connected(true);
+        }
+
         Ok(())
+    }
+
+    /// Start the orchestrator and all protocol clients (async)
+    pub async fn start(&self) -> Result<(), AstrBotError> {
+        self.start_sync()
     }
 
     /// Main event loop
     pub async fn run_loop(&self) -> Result<(), AstrBotError> {
         if !self.is_running() {
-            return Err(AstrBotError::InvalidState("Orchestrator not started".into()));
+            return Err(AstrBotError::InvalidState(
+                "Orchestrator not started".into(),
+            ));
         }
 
-        tracing::info!("Orchestrator event loop started");
+        info!("Orchestrator event loop started");
         let mut tick_interval = interval(Duration::from_secs(5));
 
         loop {
@@ -91,7 +157,7 @@ impl Orchestrator {
                     self.periodic_health_check();
                 }
                 _ = self.wait_for_shutdown() => {
-                    tracing::info!("Orchestrator shutdown signal received");
+                    info!("Orchestrator shutdown signal received");
                     break;
                 }
             }
@@ -101,10 +167,11 @@ impl Orchestrator {
             }
         }
 
-        tracing::info!("Orchestrator event loop stopped");
+        info!("Orchestrator event loop stopped");
         Ok(())
     }
 
+    /// Wait for shutdown signal
     async fn wait_for_shutdown(&self) {
         let tx_guard = self.shutdown_tx.read().ok();
         let tx = tx_guard.as_ref().and_then(|t| t.as_ref());
@@ -117,16 +184,36 @@ impl Orchestrator {
         }
     }
 
+    /// Periodic health check for all protocol clients
     fn periodic_health_check(&self) {
-        tracing::debug!("Orchestrator health check");
+        debug!("Running periodic health check");
+
+        if let Ok(lsp) = self.lsp.read() {
+            if !lsp.is_connected() {
+                warn!("LSP client disconnected");
+            }
+        }
+
+        if let Ok(mcp) = self.mcp.read() {
+            if !mcp.is_connected() {
+                warn!("MCP client disconnected");
+            }
+        }
+
+        if let Ok(acp) = self.acp.read() {
+            if !acp.is_connected() {
+                warn!("ACP client disconnected");
+            }
+        }
     }
 
-    /// Stop the orchestrator
-    pub fn stop(&self) -> Result<(), AstrBotError> {
+    /// Stop the orchestrator (sync version)
+    pub fn stop_sync(&self) -> Result<(), AstrBotError> {
         {
-            let mut running = self.running.write().map_err(|_| {
-                AstrBotError::InvalidState("Failed to acquire write lock".into())
-            })?;
+            let mut running = self
+                .running
+                .write()
+                .map_err(|_| AstrBotError::InvalidState("Failed to acquire write lock".into()))?;
             *running = false;
         }
 
@@ -136,31 +223,121 @@ impl Orchestrator {
             }
         }
 
-        tracing::info!("Orchestrator stopped");
+        self.shutdown_protocols_sync()?;
+        info!("Orchestrator stopped");
         Ok(())
     }
 
+    /// Shutdown all protocol clients (sync version)
+    fn shutdown_protocols_sync(&self) -> Result<(), AstrBotError> {
+        {
+            let mut lsp = self
+                .lsp
+                .write()
+                .map_err(|_| AstrBotError::InvalidState("Failed to acquire write lock".into()))?;
+            lsp.set_connected(false);
+        }
+
+        {
+            let mut mcp = self
+                .mcp
+                .write()
+                .map_err(|_| AstrBotError::InvalidState("Failed to acquire write lock".into()))?;
+            mcp.set_connected(false);
+        }
+
+        {
+            let mut acp = self
+                .acp
+                .write()
+                .map_err(|_| AstrBotError::InvalidState("Failed to acquire write lock".into()))?;
+            acp.set_connected(false);
+        }
+
+        {
+            let mut abp = self
+                .abp
+                .write()
+                .map_err(|_| AstrBotError::InvalidState("Failed to acquire write lock".into()))?;
+            abp.set_connected(false);
+        }
+
+        Ok(())
+    }
+
+    /// Stop the orchestrator (async)
+    pub async fn stop(&self) -> Result<(), AstrBotError> {
+        self.stop_sync()
+    }
+
+    /// Check if orchestrator is running
     #[must_use]
     pub fn is_running(&self) -> bool {
         self.running.read().map(|r| *r).unwrap_or(false)
     }
 
-    pub fn register_star(&self, name: &str, _handler: &str) -> Result<(), AstrBotError> {
-        let mut stars = self.stars.write().map_err(|_| {
-            AstrBotError::InvalidState("Failed to acquire write lock".into())
-        })?;
-        stars.insert(name.to_string(), name.to_string());
+    /// Register a star (plugin)
+    pub fn register_star(&self, name: &str, handler: &str) -> Result<(), AstrBotError> {
+        let mut stars = self
+            .stars
+            .write()
+            .map_err(|_| AstrBotError::InvalidState("Failed to acquire write lock".into()))?;
+
+        let registration = StarRegistration {
+            name: name.to_string(),
+            handler: handler.to_string(),
+        };
+
+        stars.insert(name.to_string(), registration);
+
+        // 根据 handler 判断加载模式：包含 "/" 视为 Unix Socket 路径，否则为模块名
+        if handler.starts_with('/') || handler.contains(".sock") {
+            // 跨进程加载
+            if let Ok(mut abp) = self.abp.write() {
+                let config = PluginConfig {
+                    name: name.to_string(),
+                    version: "1.0.0".to_string(),
+                    load_mode: PluginLoadMode::OutOfProcess,
+                    command: Some(handler.to_string()),
+                    ..Default::default()
+                };
+                abp.register_out_of_process_plugin(config);
+            }
+        } else {
+            // 进程内加载
+            if let Ok(mut abp) = self.abp.write() {
+                let config = PluginConfig {
+                    name: name.to_string(),
+                    version: "1.0.0".to_string(),
+                    load_mode: PluginLoadMode::InProcess,
+                    ..Default::default()
+                };
+                abp.register_in_process_plugin(config);
+            }
+        }
+
+        info!("Star '{}' registered", name);
         Ok(())
     }
 
+    /// Unregister a star (plugin)
     pub fn unregister_star(&self, name: &str) -> Result<(), AstrBotError> {
-        let mut stars = self.stars.write().map_err(|_| {
-            AstrBotError::InvalidState("Failed to acquire write lock".into())
-        })?;
+        let mut stars = self
+            .stars
+            .write()
+            .map_err(|_| AstrBotError::InvalidState("Failed to acquire write lock".into()))?;
+
         stars.remove(name);
+
+        if let Ok(mut abp) = self.abp.write() {
+            abp.unregister_plugin(name);
+        }
+
+        info!("Star '{}' unregistered", name);
         Ok(())
     }
 
+    /// List all registered stars
     #[must_use]
     pub fn list_stars(&self) -> Vec<String> {
         self.stars
@@ -169,26 +346,196 @@ impl Orchestrator {
             .unwrap_or_default()
     }
 
+    /// Record a message activity
     pub fn record_activity(&self) {
-        if let Ok(stats) = self.stats.write() {
-            stats.record_message();
+        self.stats.record_message();
+    }
+
+    /// Get runtime statistics
+    #[must_use]
+    pub fn stats(&self) -> RuntimeStats {
+        self.stats.clone()
+    }
+
+    /// Set protocol connection status
+    pub fn set_protocol_connected(
+        &self,
+        protocol: &str,
+        connected: bool,
+    ) -> Result<(), AstrBotError> {
+        match protocol {
+            "lsp" => {
+                let mut lsp = self.lsp.write().map_err(|_| {
+                    AstrBotError::InvalidState("Failed to acquire write lock".into())
+                })?;
+                lsp.set_connected(connected);
+            }
+            "mcp" => {
+                let mut mcp = self.mcp.write().map_err(|_| {
+                    AstrBotError::InvalidState("Failed to acquire write lock".into())
+                })?;
+                mcp.set_connected(connected);
+            }
+            "acp" => {
+                let mut acp = self.acp.write().map_err(|_| {
+                    AstrBotError::InvalidState("Failed to acquire write lock".into())
+                })?;
+                acp.set_connected(connected);
+            }
+            "abp" => {
+                let mut abp = self.abp.write().map_err(|_| {
+                    AstrBotError::InvalidState("Failed to acquire write lock".into())
+                })?;
+                abp.set_connected(connected);
+            }
+            _ => {
+                return Err(AstrBotError::InvalidState(format!(
+                    "Unknown protocol: {protocol}"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Get protocol status
+    #[must_use]
+    pub fn get_protocol_status(&self, protocol: &str) -> Option<crate::protocol::ProtocolStatus> {
+        match protocol {
+            "lsp" => self
+                .lsp
+                .read()
+                .ok()
+                .map(|lsp| crate::protocol::ProtocolStatus {
+                    connected: lsp.is_connected(),
+                    name: "lsp".to_string(),
+                }),
+            "mcp" => self
+                .mcp
+                .read()
+                .ok()
+                .map(|mcp| crate::protocol::ProtocolStatus {
+                    connected: mcp.is_connected(),
+                    name: "mcp".to_string(),
+                }),
+            "acp" => self
+                .acp
+                .read()
+                .ok()
+                .map(|acp| crate::protocol::ProtocolStatus {
+                    connected: acp.is_connected(),
+                    name: "acp".to_string(),
+                }),
+            "abp" => self
+                .abp
+                .read()
+                .ok()
+                .map(|abp| crate::protocol::ProtocolStatus {
+                    connected: abp.is_connected(),
+                    name: "abp".to_string(),
+                }),
+            _ => None,
+        }
+    }
+}
+
+// ============================================================================
+// Python bindings via PyO3 (sync only)
+// ============================================================================
+
+#[cfg(feature = "python")]
+mod python {
+    use super::*;
+    use pyo3::prelude::*;
+    use pyo3::types::PyDict;
+
+    /// Python wrapper for Orchestrator
+    #[pyclass]
+    pub struct PyOrchestrator {
+        inner: Orchestrator,
+    }
+
+    #[pymethods]
+    impl PyOrchestrator {
+        #[new]
+        pub fn new() -> Self {
+            Self {
+                inner: Orchestrator::new(),
+            }
+        }
+
+        /// Start the orchestrator (sync, callable from Python)
+        pub fn start(&self) -> PyResult<()> {
+            self.inner
+                .start_sync()
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+        }
+
+        /// Stop the orchestrator (sync, callable from Python)
+        pub fn stop(&self) -> PyResult<()> {
+            self.inner
+                .stop_sync()
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+        }
+
+        pub fn is_running(&self) -> bool {
+            self.inner.is_running()
+        }
+
+        pub fn register_star(&self, name: &str, handler: &str) -> PyResult<()> {
+            self.inner
+                .register_star(name, handler)
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+        }
+
+        pub fn unregister_star(&self, name: &str) -> PyResult<()> {
+            self.inner
+                .unregister_star(name)
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+        }
+
+        pub fn list_stars(&self) -> Vec<String> {
+            self.inner.list_stars()
+        }
+
+        pub fn record_activity(&self) {
+            self.inner.record_activity();
+        }
+
+        pub fn get_stats(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+            let stats = self.inner.stats();
+            let dict = PyDict::new(py);
+            dict.set_item("message_count", stats.message_count())?;
+            dict.set_item("uptime_seconds", stats.uptime_seconds())?;
+            dict.set_item("last_activity_time", stats.last_activity_time())?;
+            Ok(dict.into())
+        }
+
+        pub fn set_protocol_connected(&self, protocol: &str, connected: bool) -> PyResult<()> {
+            self.inner
+                .set_protocol_connected(protocol, connected)
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+        }
+
+        pub fn get_protocol_status(
+            &self,
+            protocol: &str,
+            py: Python<'_>,
+        ) -> PyResult<Option<Py<PyDict>>> {
+            Ok(self.inner.get_protocol_status(protocol).map(|status| {
+                let dict = PyDict::new(py);
+                dict.set_item("connected", status.connected).unwrap();
+                dict.set_item("name", &status.name).unwrap();
+                dict.into()
+            }))
         }
     }
 
-    #[must_use]
-    pub fn stats(&self) -> RuntimeStats {
-        self.stats.read().map(|s| s.clone()).unwrap_or_default()
-    }
-
-    #[must_use]
-    pub fn get_protocol_status(&self, _protocol: &str) -> Option<ProtocolStatus> {
-        Some(ProtocolStatus {
-            connected: true,
-            name: _protocol.to_string(),
-        })
-    }
-
-    pub fn set_protocol_connected(&self, _protocol: &str, _connected: bool) -> Result<(), AstrBotError> {
-        Ok(())
+    impl Default for PyOrchestrator {
+        fn default() -> Self {
+            Self::new()
+        }
     }
 }
+
+#[cfg(feature = "python")]
+pub use python::PyOrchestrator;
