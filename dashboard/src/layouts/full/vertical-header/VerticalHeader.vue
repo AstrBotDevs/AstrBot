@@ -824,7 +824,7 @@ onMounted(async () => {
     <!-- 账户对话框 -->
     <v-dialog v-model="dialog" persistent :max-width="$vuetify.display.xs ? '90%' : '500'">
       <v-card class="account-dialog">
-        <v-card-text class="py-6">
+        <v-card-text class="account-dialog__content py-6">
           <div class="d-flex flex-column align-center mb-6">
             <logo :title="t('core.header.logoTitle')" :subtitle="t('core.header.accountDialog.title')"></logo>
           </div>
@@ -923,6 +923,17 @@ onMounted(async () => {
 
 .account-dialog .v-alert {
   margin-bottom: 20px;
+}
+
+.account-dialog {
+  max-height: min(90vh, 760px);
+  display: flex;
+  flex-direction: column;
+}
+
+.account-dialog__content {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .account-dialog .v-btn {
