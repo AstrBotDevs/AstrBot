@@ -1026,6 +1026,7 @@ export default {
     const applyUploadResults = (attemptedItems, payload) => {
       const succeededMap = buildResultMap(payload?.succeeded);
       const failedMap = buildResultMap(payload?.failed);
+      const skippedMap = buildResultMap(payload?.skipped);
 
       for (const item of attemptedItems) {
         const successEntry = takeFirstMatch(succeededMap, item.filenameKey);
@@ -1034,6 +1035,14 @@ export default {
           item.validationMessage = tm("skills.validationUploadedAs", {
             name: successEntry.name || item.name,
           });
+          continue;
+        }
+
+        const skippedEntry = takeFirstMatch(skippedMap, item.filenameKey);
+        if (skippedEntry) {
+          item.status = STATUS_SKIPPED;
+          item.validationMessage =
+            skippedEntry.error || tm("skills.validationDuplicate");
           continue;
         }
 

@@ -11,6 +11,7 @@ import {
   resolveUsedIcons,
   extractUtilityCss,
   ICON_CLASS_PATTERN,
+  REQUIRED_ICONS,
 } from '../scripts/subset-mdi-font.mjs';
 
 // ── Helper: create a temporary directory tree for file-system tests ─────────
@@ -83,9 +84,11 @@ test('scanUsedIcons extracts mdi-* icon names from files', () => {
   assert.ok(icons instanceof Set);
   assert.ok(icons.has('mdi-home'));
   assert.ok(icons.has('mdi-close'));
-  assert.ok(icons.has('mdi-radiobox-blank'));
-  assert.ok(icons.has('mdi-radiobox-marked'));
-  assert.equal(icons.size, 4); // source icons + required radio icons
+  for (const requiredIcon of REQUIRED_ICONS) {
+    assert.ok(icons.has(requiredIcon));
+  }
+  const expectedIcons = new Set([...REQUIRED_ICONS, 'mdi-home', 'mdi-close']);
+  assert.deepEqual(icons, expectedIcons);
 
   rmSync(tmp, { recursive: true });
 });
@@ -103,25 +106,29 @@ test('scanUsedIcons excludes utility classes', () => {
   rmSync(tmp, { recursive: true });
 });
 
-test('scanUsedIcons includes required radio icons even when no mdi-* icons are found in source', () => {
+test('scanUsedIcons includes all required icons even when no mdi-* icons are found in source', () => {
   const tmp = makeTmpDir();
   writeFileSync(join(tmp, 'A.vue'), '<div>Hello</div>');
 
   const icons = scanUsedIcons(collectFiles(tmp, ['.vue']));
-  assert.ok(icons.has('mdi-radiobox-blank'));
-  assert.ok(icons.has('mdi-radiobox-marked'));
-  assert.equal(icons.size, 2);
+  for (const requiredIcon of REQUIRED_ICONS) {
+    assert.ok(icons.has(requiredIcon));
+  }
+  assert.equal(icons.size, REQUIRED_ICONS.size);
 
   rmSync(tmp, { recursive: true });
 });
 
-test('scanUsedIcons deduplicates required radio icons when source already references them', () => {
+test('scanUsedIcons deduplicates required icons when source already references them', () => {
   const tmp = makeTmpDir();
-  writeFileSync(join(tmp, 'A.vue'), '<v-icon>mdi-radiobox-marked</v-icon><v-icon>mdi-home</v-icon>');
+  const requiredIcon = [...REQUIRED_ICONS][0];
+  writeFileSync(join(tmp, 'A.vue'), `<v-icon>${requiredIcon}</v-icon><v-icon>mdi-home</v-icon>`);
 
   const icons = [...scanUsedIcons(collectFiles(tmp, ['.vue']))];
-  assert.equal(icons.filter(icon => icon === 'mdi-radiobox-marked').length, 1);
-  assert.ok(icons.includes('mdi-radiobox-blank'));
+  assert.equal(icons.filter(icon => icon === requiredIcon).length, 1);
+  for (const builtInRequiredIcon of REQUIRED_ICONS) {
+    assert.ok(icons.includes(builtInRequiredIcon));
+  }
   assert.ok(icons.includes('mdi-home'));
 
   rmSync(tmp, { recursive: true });

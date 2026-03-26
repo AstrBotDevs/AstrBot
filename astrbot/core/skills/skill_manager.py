@@ -23,7 +23,12 @@ SANDBOX_SKILLS_ROOT = "skills"
 SANDBOX_WORKSPACE_ROOT = "/workspace"
 _SANDBOX_SKILLS_CACHE_VERSION = 1
 
-_SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_SKILL_NAME_RE = re.compile(r"^[\w.-]+$")
+
+
+def _normalize_skill_name(name: str | None) -> str:
+    raw = str(name or "")
+    return re.sub(r"\s+", "_", raw.strip())
 
 
 def _default_sandbox_skill_path(name: str) -> str:
@@ -548,7 +553,13 @@ class SkillManager:
             config["skills"].pop(name, None)
             self._save_config(config)
 
-    def install_skill_from_zip(self, zip_path: str, *, overwrite: bool = True) -> str:
+    def install_skill_from_zip(
+        self,
+        zip_path: str,
+        *,
+        overwrite: bool = True,
+        skill_name_hint: str | None = None,
+    ) -> str:
         zip_path_obj = Path(zip_path)
         if not zip_path_obj.exists():
             raise FileNotFoundError(f"Zip file not found: {zip_path}")
@@ -565,15 +576,48 @@ class SkillManager:
             if not file_names:
                 raise ValueError("Zip archive is empty.")
 
-            top_dirs = {
-                PurePosixPath(name).parts[0] for name in file_names if name.strip()
-            }
+            has_root_skill_md = any(
+                len(parts := PurePosixPath(name).parts) == 1
+                and parts[0] in {"SKILL.md", "skill.md"}
+                for name in file_names
+            )
+            root_mode = has_root_skill_md
 
-            if len(top_dirs) != 1:
-                raise ValueError("Zip archive must contain a single top-level folder.")
-            skill_name = next(iter(top_dirs))
-            if skill_name in {".", "..", ""} or not _SKILL_NAME_RE.match(skill_name):
-                raise ValueError("Invalid skill folder name.")
+            archive_skill_name = None
+            if skill_name_hint is not None:
+                archive_skill_name = _normalize_skill_name(skill_name_hint)
+                if archive_skill_name and not _SKILL_NAME_RE.fullmatch(
+                    archive_skill_name
+                ):
+                    raise ValueError("Invalid skill name.")
+
+            if root_mode:
+                archive_hint = _normalize_skill_name(
+                    archive_skill_name or zip_path_obj.stem
+                )
+                if not archive_hint or not _SKILL_NAME_RE.fullmatch(archive_hint):
+                    raise ValueError("Invalid skill name.")
+                skill_name = archive_hint
+            else:
+                top_dirs = {
+                    PurePosixPath(name).parts[0] for name in file_names if name.strip()
+                }
+                if len(top_dirs) != 1:
+                    raise ValueError(
+                        "Zip archive must contain a single top-level folder."
+                    )
+                archive_root_name = next(iter(top_dirs))
+                archive_root_name_normalized = _normalize_skill_name(archive_root_name)
+                if archive_root_name in {".", "..", ""} or not _SKILL_NAME_RE.fullmatch(
+                    archive_root_name_normalized
+                ):
+                    raise ValueError("Invalid skill folder name.")
+                if archive_skill_name:
+                    if not _SKILL_NAME_RE.fullmatch(archive_skill_name):
+                        raise ValueError("Invalid skill name.")
+                    skill_name = archive_skill_name
+                else:
+                    skill_name = archive_root_name_normalized
 
             for name in names:
                 if not name:
@@ -583,16 +627,20 @@ class SkillManager:
                 parts = PurePosixPath(name).parts
                 if ".." in parts:
                     raise ValueError("Zip archive contains invalid relative paths.")
-                if parts and parts[0] != skill_name:
+                if (not root_mode) and parts and parts[0] != archive_root_name:
                     raise ValueError(
                         "Zip archive contains unexpected top-level entries."
                     )
 
-            if (
-                f"{skill_name}/SKILL.md" not in file_names
-                and f"{skill_name}/skill.md" not in file_names
-            ):
-                raise ValueError("SKILL.md not found in the skill folder.")
+            if root_mode:
+                if "SKILL.md" not in file_names and "skill.md" not in file_names:
+                    raise ValueError("SKILL.md not found in the skill folder.")
+            else:
+                if (
+                    f"{archive_root_name}/SKILL.md" not in file_names
+                    and f"{archive_root_name}/skill.md" not in file_names
+                ):
+                    raise ValueError("SKILL.md not found in the skill folder.")
 
             with tempfile.TemporaryDirectory(dir=str(astrbot_paths.temp)) as tmp_dir:
                 for member in zf.infolist():
@@ -600,7 +648,12 @@ class SkillManager:
                     if not member_name or _is_ignored_zip_entry(member_name):
                         continue
                     zf.extract(member, tmp_dir)
-                src_dir = Path(tmp_dir) / skill_name
+                src_dir = (
+                    Path(tmp_dir) if root_mode else Path(tmp_dir) / archive_root_name
+                )
+                normalized_path = _normalize_skill_markdown_path(src_dir)
+                if normalized_path is None:
+                    raise ValueError("SKILL.md not found in the skill folder.")
                 _normalize_skill_markdown_path(src_dir)
                 if not src_dir.exists():
                     raise ValueError("Skill folder not found after extraction.")
