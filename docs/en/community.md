@@ -16,15 +16,17 @@ Welcome to submit Issues or Pull Requests:
 
 ### Tencent QQ Groups
 
-> - All groups are available to join. If you find that the group size is below the limit, please feel free to join.
-
-- Group 1: 322154837  (2000-member group)
-- Group 3: 630166526  (2000-member group)
-- Group 4: 1077826412 (1000-member group)
-- Group 5: 822130018  (2000-member group)
-- Group 6: 753075035  (2000-member group)
-- Group 7: 743746109  (500-member  group)
-- Group 8: 1030353265 (500-member  group)
+- Group 12: 916228568 (New)
+- Group 9: 1076659624 (Full)
+- Group 10: 1078079676 (Full)
+- Group 11: 704659519 (Full)
+- Group 1: 322154837 (Full)
+- Group 3: 630166526 (Full)
+- Group 4: 1077826412 (Full)
+- Group 5: 822130018 (Full)
+- Group 6: 753075035 (Full)
+- Group 7: 743746109 (Full)
+- Group 8: 1030353265 (Full)
 - **AstrBot Core Development Group: 975206796** (AstrBot development members are usually active here. Welcome to anyone interested in programming/AI technology~)
 
 ## Become an AstrBot Organization Member
