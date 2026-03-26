@@ -352,6 +352,34 @@ class TestGetMessageOutline:
         assert outline.startswith("A")
         assert len(outline) >= 20000
 
+    def test_outline_plain_text_none(self, platform_meta, astrbot_message):
+        """Test outline with Plain text set to None (Issue #5098)."""
+        plain = Plain(text="test")
+        plain.text = None
+        astrbot_message.message = [plain]
+        event = ConcreteAstrMessageEvent(
+            message_str="test",
+            message_obj=astrbot_message,
+            platform_meta=platform_meta,
+            session_id="session123",
+        )
+        outline = event.get_message_outline()
+        assert outline == ""
+
+    def test_outline_plain_without_text_attr(self, platform_meta, astrbot_message):
+        """Test outline with Plain object missing text attribute (Issue #5098)."""
+        plain = Plain(text="test")
+        delattr(plain, "text")
+        astrbot_message.message = [plain]
+        event = ConcreteAstrMessageEvent(
+            message_str="test",
+            message_obj=astrbot_message,
+            platform_meta=platform_meta,
+            session_id="session123",
+        )
+        outline = event.get_message_outline()
+        assert outline == ""
+
 
 class TestExtras:
     """Tests for extra information methods."""
