@@ -17,6 +17,8 @@
 
 - 当检查 peer 是否完成远程初始化时，避免对可能接收 `MagicMock` peer 的代码使用 `getattr(mock, "remote_peer")` 探测。`MagicMock` 会生成 truthy 子属性，`CapabilityProxy` 应从 `peer.__dict__` 或其他具体存储位置读取显式状态。
 - `test_plugin/old/` 和 `test_plugin/new/` 可能包含已生成的 `__pycache__` / `*.pyc`。测试夹具复制示例插件时必须显式忽略这些缓存文件。
+- `PluginHarness.dispatch_event(...)` 应该作为 SDK 装饰器运行时测试的默认入口；不要只断言 `_match_handlers()` 的匹配结果。停止链(`event.stop_event()`)与定时 handler 定向分发都需要经过实际 dispatch 才有意义。
+- SDK 插件想通过 `ctx.metadata.get_plugin_config()` 读取真实配置，测试夹具必须同时提供 `_conf_schema.json` 和对应配置文件；只有配置文件而没有 schema 时，loader 会按当前实现返回空配置。
 
 ### 插件加载注意事项
 

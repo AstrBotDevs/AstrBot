@@ -107,12 +107,12 @@ if await ctx.memory.exists("user_pref"):
     print("配置存在")
 ```
 
-#### list()
+#### list_keys()
 
-列出键。
+列出某个精确 namespace 下的键。
 
 ```python
-keys = await ctx.memory.list("user_")
+keys = await ctx.memory.list_keys(namespace="users/alice")
 ```
 
 #### count()
@@ -200,12 +200,8 @@ await ctx.db.set_many({"user:1": {"name": "Alice"}, "user:2": {"name": "Bob"}})
 
 #### watch()
 
-监听变更。
-
-```python
-async for event in ctx.db.watch("user:"):
-    print(event["op"], event["key"])
-```
+当前 Core bridge MVP 暂不支持 `ctx.db.watch()`；调用会抛出异常。需要监听变更时，
+请先使用 `get()` / `list()` 轮询。
 
 ---
 
@@ -219,12 +215,16 @@ from astrbot_sdk.clients import PlatformClient
 
 ### 方法
 
+`send()` / `send_image()` / `send_chain()` 当前通过 core bridge 依赖当前事件上下文。
+如果你是在 handler 里针对当前会话回复，直接传 `event.session_id` 即可；如果要主动发消息，
+请改用 `send_by_session()` 或 `send_by_id()`。
+
 #### send()
 
 发送文本消息。
 
 ```python
-await ctx.platform.send("qq:group:123456", "大家好！")
+await ctx.platform.send(event.session_id, "大家好！")
 ```
 
 #### send_image()
@@ -276,10 +276,10 @@ await ctx.platform.send_by_session(session, "Hello")
 
 #### get_members()
 
-获取群成员。
+获取群成员。当前实现只支持“当前群事件”的会话上下文，不支持任意群 ID 直接查询。
 
 ```python
-members = await ctx.platform.get_members("qq:group:123456")
+members = await ctx.platform.get_members(event.session_id)
 ```
 
 ---
@@ -296,7 +296,7 @@ from astrbot_sdk.clients import FileServiceClient
 
 #### register_file()
 
-注册文件。
+注册文件。当前实现依赖宿主配置 `callback_api_base`。
 
 ```python
 token = await ctx.files.register_file("/path/to/file.jpg", timeout=3600)
@@ -539,7 +539,7 @@ async def setup_api(event: MessageEvent, ctx: Context):
 1. 所有客户端方法都是异步的
 2. 远程调用可能失败，建议使用 try-except
 3. `Memory` 适合语义检索，`DB` 适合结构化 KV，`MessageHistory` 适合精确保存原始消息记录
-4. `DBClient` 的 key 对插件隔离；`list()` 和 `watch()` 返回的 key 仍是插件本地视图
+4. `DBClient` 的 key 对插件隔离；`list()` 返回的 key 仍是插件本地视图；`ctx.db.watch()` 在当前 Core bridge MVP 暂不支持
 5. `HTTPClient.register_api()` 当前会拦截 `..` 等明显非法路径，但仍建议插件自行使用规范化 route；`unregister_api(route)` 默认移除该 route 下全部方法
 6. 文件操作使用 file service 注册令牌
-7. 平台标识使用 UMO 格式：`"platform:instance:session_id"`
+7. 平台会话标识使用 `MessageSession` 字符串格式：`"platform_id:message_type:session_id"`，例如 `mock-platform:private:user-42` 或 `mock-platform:group:room-7`

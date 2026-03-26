@@ -353,6 +353,10 @@ await ctx.db.set_many({
 
 订阅 KV 变更事件（流式）。
 
+当前 AstrBot Core bridge 里，这个能力仍处于 MVP 限制状态：
+调用 `ctx.db.watch()` 会返回显式错误 `db.watch is unsupported in AstrBot SDK MVP`，
+因此现在应优先使用 `ctx.db.get()` / `ctx.db.list()` 轮询，而不是依赖流式订阅。
+
 ```python
 async for event in ctx.db.watch("user:"):
     print(event["op"], event["key"])

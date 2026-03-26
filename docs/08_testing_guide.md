@@ -60,21 +60,22 @@ SDK 提供以下测试组件（从 `astrbot_sdk.testing` 导入）：
 ```python
 # conftest.py
 import pytest
-from pathlib import Path
+import pytest_asyncio
 from astrbot_sdk.testing import PluginHarness, SDKTestEnvironment
 
 @pytest.fixture
-async def test_env(tmp_path):
+def test_env(tmp_path):
     """提供测试环境"""
-    env = SDKTestEnvironment(root=tmp_path)
-    yield env
+    return SDKTestEnvironment(root=tmp_path)
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def harness(test_env):
     """提供测试 harness"""
     plugin_dir = test_env.plugin_dir("my_plugin")
-    # 创建最小插件结构（如果需要）
-    # ...
+    # 创建最小插件结构（如果需要），至少包含：
+    # - plugin.yaml（含 _schema_version 与 runtime.python）
+    # - main.py
+    # - requirements.txt
 
     h = PluginHarness.from_plugin_dir(plugin_dir)
     async with h:
@@ -100,7 +101,7 @@ async def test_hello_command():
 
     async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
         # dispatch_text 发送消息并返回发送记录列表
-        sent = await harness.dispatch_text("/hello")
+        sent = await harness.dispatch_text("hello")
 
         # 验证结果 - sent 是 list[RecordedSend]
         assert len(sent) >= 1
@@ -134,6 +135,7 @@ async def test_message_handler():
 
 ```python
 from astrbot_sdk.errors import AstrBotError, ErrorCodes
+from astrbot_sdk.decorators import rate_limit
 
 @pytest.mark.asyncio
 async def test_rate_limit():
@@ -142,12 +144,13 @@ async def test_rate_limit():
 
     async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
         # 第一次调用应该成功
-        sent1 = await harness.dispatch_text("/limited")
+        sent1 = await harness.dispatch_text("limited")
         assert len(sent1) >= 1
 
-        # 快速第二次调用应该被限制
+        # 只有在插件使用 @rate_limit(..., behavior="error") 时，
+        # 第二次调用才会抛出 RATE_LIMITED；默认 behavior="hint" 会直接回复提示消息
         with pytest.raises(AstrBotError) as exc_info:
-            await harness.dispatch_text("/limited")
+            await harness.dispatch_text("limited")
 
         # 验证错误码
         assert exc_info.value.code == ErrorCodes.RATE_LIMITED
@@ -221,7 +224,7 @@ def test_memory_operations():
 使用 `MockLLMClient` 模拟 LLM 响应（通过 `MockContext`）：
 
 ```python
-from astrbot_sdk.testing import MockContext
+from astrbot_sdk.testing import MockContext, MockMessageEvent
 
 @pytest.mark.asyncio
 async def test_llm_integration():
@@ -250,7 +253,7 @@ async def test_platform_send():
 
     async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
         # 模拟命令
-        await harness.dispatch_text("/broadcast 大家好")
+        await harness.dispatch_text("broadcast 大家好")
 
         # 使用 sent_messages 属性获取发送记录
         messages = harness.sent_messages
@@ -313,7 +316,9 @@ async def test_with_mock_ctx(mock_ctx):
     # 验证
     assert response == "Mocked response"
 
-    # 使用 platform.assert_sent 验证发送
+    # 如需验证发送，可配合 MockMessageEvent 或直接调用 platform.send(...)
+    event = MockMessageEvent(text="test", session_id="session_1", context=mock_ctx)
+    await event.reply(response)
     mock_ctx.platform.assert_sent("Mocked response")
 ```
 
@@ -352,7 +357,6 @@ async def test_with_mock_event(mock_event):
 
 ```python
 import time
-from unittest.mock import patch
 from astrbot_sdk.testing import MockClock
 
 def test_with_mock_time():
@@ -464,6 +468,10 @@ name: test_plugin
 version: 1.0.0
 author: test
 desc: Test plugin
+
+runtime:
+  python: "3.12"
+
 components:
   - class: main:TestPlugin
 """)
@@ -477,6 +485,7 @@ class TestPlugin(Star):
     async def hello(self, event: MessageEvent, ctx: Context):
         await event.reply("Hello!")
 """)
+    (plugin_dir / "requirements.txt").write_text("")
 
     harness = PluginHarness.from_plugin_dir(plugin_dir)
     async with harness:
@@ -485,7 +494,7 @@ class TestPlugin(Star):
 # 测试中使用
 @pytest.mark.asyncio
 async def test_with_fixture(sample_user_data, harness_with_plugin):
-    sent = await harness_with_plugin.dispatch_text("/hello")
+    sent = await harness_with_plugin.dispatch_text("hello")
     assert len(sent) >= 1
     assert "Hello" in sent[0].text
 ```
@@ -505,9 +514,9 @@ def test_capitalize(input, expected):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("command,expected_response", [
-    ("/help", "可用命令"),
-    ("/about", "关于"),
-    ("/version", "版本"),
+    ("help", "可用命令"),
+    ("about", "关于"),
+    ("version", "版本"),
 ])
 async def test_commands(harness_with_plugin, command, expected_response):
     sent = await harness_with_plugin.dispatch_text(command)
@@ -601,7 +610,7 @@ exclude_lines =
 import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
-from astrbot_sdk.testing import PluginHarness, SDKTestEnvironment
+from astrbot_sdk.testing import PluginHarness
 
 async def run_with_timeout(coro, timeout=5):
     """带超时运行协程"""
@@ -628,9 +637,14 @@ name: {name}
 version: 1.0.0
 author: test
 desc: Test plugin
+
+runtime:
+  python: "3.12"
+
 components:
   - class: main:TestPlugin
 """)
+    (plugin_dir / "requirements.txt").write_text("")
 
     default_code = """
 from astrbot_sdk import Star, MessageEvent, Context

@@ -438,22 +438,23 @@ async def debug_handler(self, event: MessageEvent, ctx: Context):
 ### 2. 使用测试框架调试
 
 ```python
-from astrbot_sdk.testing import PluginTestHarness
+import asyncio
 
-async def test_with_debug():
-    harness = PluginTestHarness()
-    plugin = harness.load_plugin("my_plugin.main:MyPlugin")
-    
-    # 启用详细日志
-    harness.enable_debug_logging()
-    
-    # 模拟事件
-    result = await harness.simulate_command("/hello")
-    print(f"结果: {result}")
-    
-    # 查看调用历史
-    for call in harness.get_call_history():
-        print(f"调用: {call}")
+from astrbot_sdk.testing import PluginHarness
+
+async def test_with_debug(plugin_dir):
+    async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
+        watcher = harness.lifecycle_context.logger.watch()
+        entry_task = asyncio.create_task(watcher.__anext__())
+
+        records = await harness.dispatch_text("debug")
+        print([item.text for item in records])
+
+        entry = await entry_task
+        print(f"{entry.level}: {entry.message}")
+        print([item.text for item in harness.sent_messages])
+
+        await watcher.aclose()
 ```
 
 ### 3. 使用 PDB 调试
@@ -575,7 +576,9 @@ async def process_handler(self, event: MessageEvent, ctx: Context):
 
 ### Q4: 如何在 on_error 中避免无限循环？
 
-**注意**：如果 `on_error` 中抛出异常，会导致递归调用
+**注意**：当前 runtime 中，如果 `on_error` 自身抛出异常，不会再次递归进入
+`on_error`；新的异常会直接向上传播并覆盖原错误。因此仍然建议在
+`on_error` 内部自行 `try/except`，避免错误处理逻辑掩盖原始异常。
 
 **解决方案**：
 ```python
