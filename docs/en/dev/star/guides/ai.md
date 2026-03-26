@@ -288,83 +288,83 @@ class Conversation:
 
 #### `new_conversation`
 
-- **Usage**  
+- **Usage**
   Create a new conversation in the current session and automatically switch to it.
-- **Arguments**  
-  - `unified_msg_origin: str` – In the format `platform_name:message_type:session_id`  
-  - `platform_id: str | None` – Platform identifier, defaults to parsing from `unified_msg_origin`  
-  - `content: list[dict] | None` – Initial message history  
-  - `title: str | None` – Conversation title  
+- **Arguments**
+  - `unified_msg_origin: str` – In the format `platform_name:message_type:session_id`
+  - `platform_id: str | None` – Platform identifier, defaults to parsing from `unified_msg_origin`
+  - `content: list[dict] | None` – Initial message history
+  - `title: str | None` – Conversation title
   - `persona_id: str | None` – Associated persona ID
-- **Returns**  
+- **Returns**
   `str` – Newly generated UUID conversation ID
 
 #### `switch_conversation`
 
-- **Usage**  
+- **Usage**
   Switch the session to a specified conversation.
-- **Arguments**  
-  - `unified_msg_origin: str`  
+- **Arguments**
+  - `unified_msg_origin: str`
   - `conversation_id: str`
-- **Returns**  
+- **Returns**
   `None`
 
 #### `delete_conversation`
 
-- **Usage**  
+- **Usage**
   Delete a conversation from the session; if `conversation_id` is `None`, deletes the current conversation.
-- **Arguments**  
-  - `unified_msg_origin: str`  
+- **Arguments**
+  - `unified_msg_origin: str`
   - `conversation_id: str | None`
-- **Returns**  
+- **Returns**
   `None`
 
 #### `get_curr_conversation_id`
 
-- **Usage**  
+- **Usage**
   Get the conversation ID currently in use by the session.
-- **Arguments**  
+- **Arguments**
   - `unified_msg_origin: str`
-- **Returns**  
+- **Returns**
   `str | None` – Current conversation ID, returns `None` if it doesn't exist
 
 #### `get_conversation`
 
-- **Usage**  
+- **Usage**
   Get the complete object for a specified conversation; automatically creates it if it doesn't exist and `create_if_not_exists=True`.
-- **Arguments**  
-  - `unified_msg_origin: str`  
-  - `conversation_id: str`  
+- **Arguments**
+  - `unified_msg_origin: str`
+  - `conversation_id: str`
   - `create_if_not_exists: bool = False`
-- **Returns**  
+- **Returns**
   `Conversation | None`
 
 #### `get_conversations`
 
-- **Usage**  
+- **Usage**
   Retrieve the complete list of conversations for a user or platform.
-- **Arguments**  
-  - `unified_msg_origin: str | None` – When `None`, does not filter by user  
+- **Arguments**
+  - `unified_msg_origin: str | None` – When `None`, does not filter by user
   - `platform_id: str | None`
-- **Returns**  
+- **Returns**
   `List[Conversation]`
 
 #### `update_conversation`
 
-- **Usage**  
+- **Usage**
   Update the title, history, or persona_id of a conversation.
-- **Arguments**  
-  - `unified_msg_origin: str`  
-  - `conversation_id: str | None` – Uses the current conversation when `None`  
-  - `history: list[dict] | None`  
-  - `title: str | None`  
+- **Arguments**
+  - `unified_msg_origin: str`
+  - `conversation_id: str | None` – Uses the current conversation when `None`
+  - `history: list[dict] | None`
+  - `title: str | None`
   - `persona_id: str | None`
-- **Returns**  
+- **Returns**
   `None`
 
 ## Persona Manager
 
-`PersonaManager` is responsible for unified loading, caching, and providing CRUD interfaces for all Personas, while maintaining compatibility with the legacy persona format (v3) from before AstrBot 4.x.  
+`PersonaManager` is responsible for unified loading, caching, and providing CRUD interfaces for all Personas, while maintaining compatibility with the legacy persona format (v3) from before AstrBot 4.x.
 During initialization, it automatically reads all personas from the database and generates v3-compatible data for seamless use with legacy code.
 
 ```py
@@ -386,59 +386,59 @@ persona_mgr = self.context.persona_manager
 
 #### `get_all_personas`
 
-- **Usage**  
+- **Usage**
   Retrieve all personas from the database at once.
-- **Returns**  
+- **Returns**
   `list[Persona]` – Persona list, may be empty
 
 #### `create_persona`
 
-- **Usage**  
+- **Usage**
   Create a new persona and immediately write it to the database; automatically refreshes the local cache upon success.
-- **Arguments**  
-  - `persona_id: str` – New persona ID (unique)  
-  - `system_prompt: str` – System prompt  
-  - `begin_dialogs: list[str]` – Optional, opening dialogs (even number of entries, alternating user/assistant)  
+- **Arguments**
+  - `persona_id: str` – New persona ID (unique)
+  - `system_prompt: str` – System prompt
+  - `begin_dialogs: list[str]` – Optional, opening dialogs (even number of entries, alternating user/assistant)
   - `tools: list[str]` – Optional, list of allowed tools; `None`=all tools, `[]`=disable all
-- **Returns**  
+- **Returns**
   `Persona` – Newly created persona object
-- **Raises**  
+- **Raises**
   `ValueError` – If `persona_id` already exists
 
 #### `update_persona`
 
-- **Usage**  
+- **Usage**
   Update any fields of an existing persona and synchronize to database and cache.
-- **Arguments**  
-  - `persona_id: str` – Persona ID to update  
-  - `system_prompt: str` – Optional, new system prompt  
-  - `begin_dialogs: list[str]` – Optional, new opening dialogs  
+- **Arguments**
+  - `persona_id: str` – Persona ID to update
+  - `system_prompt: str` – Optional, new system prompt
+  - `begin_dialogs: list[str]` – Optional, new opening dialogs
   - `tools: list[str]` – Optional, new tool list; semantics same as `create_persona`
-- **Returns**  
+- **Returns**
   `Persona` – Updated persona object
-- **Raises**  
+- **Raises**
   `ValueError` – If `persona_id` doesn't exist
 
 #### `delete_persona`
 
-- **Usage**  
+- **Usage**
   Delete the specified persona and clean up both database and cache.
-- **Arguments**  
+- **Arguments**
   - `persona_id: str` – Persona ID to delete
-- **Raises**  
+- **Raises**
   `ValueError` – If `persona_id` doesn't exist
 
 #### `get_default_persona_v3`
 
-- **Usage**  
-  Get the default persona (v3 format) to use based on the current session configuration.  
+- **Usage**
+  Get the default persona (v3 format) to use based on the current session configuration.
   Falls back to `DEFAULT_PERSONALITY` if configuration doesn't specify one or the specified persona doesn't exist.
-- **Arguments**  
+- **Arguments**
   - `umo: str | MessageSession | None` – Session identifier, used to read user-level configuration
-- **Returns**  
+- **Returns**
   `Personality` – Default persona object in v3 format
 
-::: details Persona / Personality 类型定义
+::: details Persona / Personality type definitions
 
 ```py
 

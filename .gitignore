@@ -77,4 +77,6 @@ rust/target/
 # Build outputs
 dist/
 *.whl
+# 拓展模块
 *.so
+*.dll
