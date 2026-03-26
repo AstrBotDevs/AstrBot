@@ -217,10 +217,17 @@ pre-commit install
 
 ### Groupes QQ
 
-- Groupe 1 : 322154837
-- Groupe 3 : 630166526
-- Groupe 5 : 822130018
-- Groupe 6 : 753075035
+- Groupe 12 : 916228568 (nouveau)
+- Groupe 9 : 1076659624 (complet)
+- Groupe 10 : 1078079676 (complet)
+- Groupe 11 : 704659519 (complet)
+- Groupe 1 : 322154837 (complet)
+- Groupe 3 : 630166526 (complet)
+- Groupe 4 : 1077826412 (complet)
+- Groupe 5 : 822130018 (complet)
+- Groupe 6 : 753075035 (complet)
+- Groupe 7 : 743746109 (complet)
+- Groupe 8 : 1030353265 (complet)
 - Groupe développeurs : 975206796
 - Groupe développeurs (officiel) : 1039761811
 
