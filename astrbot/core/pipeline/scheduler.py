@@ -9,6 +9,7 @@ from astrbot.core.platform.sources.wecom_ai_bot.wecomai_event import (
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 from .bootstrap import ensure_builtin_stages_registered
+from .pre_ack_emoji import PreAckEmojiManager
 from .context import PipelineContext
 from .stage import registered_stages
 from .stage_order import STAGES_ORDER
@@ -24,6 +25,7 @@ class PipelineScheduler:
         )  # 按照顺序排序
         self.ctx = context  # 上下文对象
         self.stages = []  # 存储阶段实例
+        self.pre_ack_emoji_mgr = PreAckEmojiManager(context.astrbot_config)
 
     async def initialize(self) -> None:
         """初始化管道调度器时, 初始化所有阶段"""
@@ -83,6 +85,7 @@ class PipelineScheduler:
 
         """
         active_event_registry.register(event)
+        emoji = await self.pre_ack_emoji_mgr.add_emoji(event)
         try:
             await self._process_stages(event)
 
@@ -92,4 +95,5 @@ class PipelineScheduler:
 
             logger.debug("pipeline 执行完毕。")
         finally:
+            await self.pre_ack_emoji_mgr.remove_emoji(event, emoji)
             active_event_registry.unregister(event)
