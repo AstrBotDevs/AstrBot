@@ -486,6 +486,16 @@ class TelegramPlatformAdapter(Platform):
                 message.message.append(
                     Comp.File(file=file_path, name=file_name, url=file_path)
                 )
+            if update.message.caption:
+                message.message_str = update.message.caption
+                message.message.append(Comp.Plain(message.message_str))
+            if update.message.caption_entities:
+                for entity in update.message.caption_entities:
+                    if entity.type == "mention":
+                        name = message.message_str[
+                            entity.offset + 1 : entity.offset + entity.length
+                        ]
+                        message.message.append(Comp.At(qq=name, name=name))
 
         elif update.message.video:
             file = await update.message.video.get_file()
@@ -497,6 +507,16 @@ class TelegramPlatformAdapter(Platform):
                 )
             else:
                 message.message.append(Comp.Video(file=file_path, path=file.file_path))
+            if update.message.caption:
+                message.message_str = update.message.caption
+                message.message.append(Comp.Plain(message.message_str))
+            if update.message.caption_entities:
+                for entity in update.message.caption_entities:
+                    if entity.type == "mention":
+                        name = message.message_str[
+                            entity.offset + 1 : entity.offset + entity.length
+                        ]
+                        message.message.append(Comp.At(qq=name, name=name))
 
         return message
 
