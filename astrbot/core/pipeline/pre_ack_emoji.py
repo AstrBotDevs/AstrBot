@@ -1,7 +1,16 @@
 import random
+from dataclasses import dataclass
 
 from astrbot.core import logger
 from astrbot.core.platform import AstrMessageEvent
+
+
+@dataclass
+class EmojiRef:
+    """贴出的表情引用，包含撤回所需的全部信息。"""
+
+    emoji: str
+    reaction_id: str | None = None  # 飞书需要 reaction_id 来撤回
 
 
 class PreAckEmojiManager:
@@ -23,8 +32,8 @@ class PreAckEmojiManager:
             .get("pre_ack_emoji", {})
         ) or {}
 
-    async def add_emoji(self, event: AstrMessageEvent) -> str | None:
-        """贴表情。返回所选 emoji，或 None（未贴）。"""
+    async def add_emoji(self, event: AstrMessageEvent) -> EmojiRef | None:
+        """贴表情。返回 EmojiRef，或 None（未贴）。"""
         platform = event.get_platform_name()
         if platform not in self.SUPPORTED_PLATFORMS:
             return None
@@ -37,15 +46,15 @@ class PreAckEmojiManager:
 
         emoji = random.choice(emojis)
         try:
-            await event.react(emoji)
-            return emoji
+            reaction_id = await event.react(emoji)
+            return EmojiRef(emoji=emoji, reaction_id=reaction_id)
         except Exception as e:
             logger.warning(f"{platform} 预回应表情发送失败: {e}")
             return None
 
-    async def remove_emoji(self, event: AstrMessageEvent, emoji: str | None) -> None:
+    async def remove_emoji(self, event: AstrMessageEvent, ref: EmojiRef | None) -> None:
         """根据配置撤回表情。"""
-        if emoji is None:
+        if ref is None:
             return
 
         platform = event.get_platform_name()
@@ -55,6 +64,6 @@ class PreAckEmojiManager:
             return
 
         try:
-            await event.remove_react(emoji)
+            await event.remove_react(ref.emoji, reaction_id=ref.reaction_id)
         except Exception as e:
             logger.warning(f"{platform} 预回应表情撤回失败: {e}")

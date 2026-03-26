@@ -554,14 +554,14 @@ class LarkMessageEvent(AstrMessageEvent):
         response = await self.bot.im.v1.message_reaction.acreate(request)
         if not response.success():
             logger.error(f"发送飞书表情回应失败({response.code}): {response.msg}")
-            return
+            return None
 
-        # 保存 reaction_id 以便后续撤回
+        # 返回 reaction_id 供调用方保存（如 PreAckEmojiManager 用于后续撤回）
         if response.data and response.data.reaction_id:
-            self._pre_ack_reaction_id = response.data.reaction_id
+            return response.data.reaction_id
+        return None
 
-    async def remove_react(self, emoji: str) -> None:
-        reaction_id = getattr(self, "_pre_ack_reaction_id", None)
+    async def remove_react(self, emoji: str, reaction_id: str | None = None) -> None:
         if not reaction_id:
             return
 

@@ -460,11 +460,15 @@ class AstrMessageEvent(abc.ABC):
         """
         await self.send(MessageChain([Plain(emoji)]))
 
-    async def remove_react(self, emoji: str) -> None:
+    async def remove_react(self, emoji: str, reaction_id: str | None = None) -> None:
         """移除消息上的表情回应。
 
         默认实现为空操作。
         如需支持平台原生的撤回表情功能，请在对应平台的子类中重写本方法。
+
+        Args:
+            emoji: 要移除的表情
+            reaction_id: 平台特定的 reaction 标识符（如飞书的 reaction_id）
         """
         pass
 

@@ -355,7 +355,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         except Exception as e:
             logger.error(f"[Telegram] 添加反应失败: {e}")
 
-    async def remove_react(self, emoji: str) -> None:
+    async def remove_react(self, emoji: str, reaction_id: str | None = None) -> None:
         """移除 bot 在原消息上的表情回应（Telegram 通过设置空 reaction 列表实现）"""
         await self.react(None)
 

@@ -1,9 +1,8 @@
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from astrbot.core.pipeline.pre_ack_emoji import PreAckEmojiManager
+from astrbot.core.pipeline.pre_ack_emoji import EmojiRef, PreAckEmojiManager
 
 
 def _make_config(platform: str, enable: bool = True, emojis: list | None = None, auto_remove: bool = True) -> dict:
@@ -28,7 +27,7 @@ def _make_event(platform: str = "telegram", is_wake: bool = True) -> MagicMock:
     event = MagicMock()
     event.get_platform_name.return_value = platform
     event.is_at_or_wake_command = is_wake
-    event.react = AsyncMock()
+    event.react = AsyncMock(return_value=None)
     event.remove_react = AsyncMock()
     return event
 
@@ -84,8 +83,9 @@ class TestPreAckEmojiAddEmoji:
         mgr = PreAckEmojiManager(cfg)
         event = _make_event("telegram")
         result = await mgr.add_emoji(event)
-        assert result in emojis
-        event.react.assert_called_once_with(result)
+        assert result is not None
+        assert result.emoji in emojis
+        event.react.assert_called_once_with(result.emoji)
 
     @pytest.mark.asyncio
     async def test_react_failure_returns_none(self):
@@ -105,8 +105,20 @@ class TestPreAckEmojiAddEmoji:
             mgr = PreAckEmojiManager(cfg)
             event = _make_event(platform)
             result = await mgr.add_emoji(event)
-            assert result == "👍"
+            assert result is not None
+            assert result.emoji == "👍"
             event.react.assert_called_once_with("👍")
+
+    @pytest.mark.asyncio
+    async def test_lark_reaction_id_stored_in_ref(self):
+        """飞书平台 react 返回的 reaction_id 保存在 EmojiRef 中"""
+        cfg = _make_config("lark")
+        mgr = PreAckEmojiManager(cfg)
+        event = _make_event("lark")
+        event.react.return_value = "lark_reaction_123"
+        result = await mgr.add_emoji(event)
+        assert result is not None
+        assert result.reaction_id == "lark_reaction_123"
 
 
 class TestPreAckEmojiRemoveEmoji:
@@ -118,8 +130,9 @@ class TestPreAckEmojiRemoveEmoji:
         cfg = _make_config("telegram", auto_remove=True)
         mgr = PreAckEmojiManager(cfg)
         event = _make_event("telegram")
-        await mgr.remove_emoji(event, "👍")
-        event.remove_react.assert_called_once_with("👍")
+        ref = EmojiRef(emoji="👍")
+        await mgr.remove_emoji(event, ref)
+        event.remove_react.assert_called_once_with("👍", reaction_id=None)
 
     @pytest.mark.asyncio
     async def test_auto_remove_false_does_not_remove(self):
@@ -127,12 +140,13 @@ class TestPreAckEmojiRemoveEmoji:
         cfg = _make_config("telegram", auto_remove=False)
         mgr = PreAckEmojiManager(cfg)
         event = _make_event("telegram")
-        await mgr.remove_emoji(event, "👍")
+        ref = EmojiRef(emoji="👍")
+        await mgr.remove_emoji(event, ref)
         event.remove_react.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_none_emoji_skips_removal(self):
-        """emoji 为 None 时跳过撤回"""
+    async def test_none_ref_skips_removal(self):
+        """ref 为 None 时跳过撤回"""
         cfg = _make_config("telegram")
         mgr = PreAckEmojiManager(cfg)
         event = _make_event("telegram")
@@ -145,7 +159,18 @@ class TestPreAckEmojiRemoveEmoji:
         cfg = _make_config("telegram")
         mgr = PreAckEmojiManager(cfg)
         event = _make_event("telegram")
+        ref = EmojiRef(emoji="👍")
         event.remove_react.side_effect = Exception("API error")
         with patch("astrbot.core.pipeline.pre_ack_emoji.logger") as mock_logger:
-            await mgr.remove_emoji(event, "👍")
+            await mgr.remove_emoji(event, ref)
             mock_logger.warning.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_lark_reaction_id_passed_to_remove_react(self):
+        """飞书平台撤回时传递 reaction_id"""
+        cfg = _make_config("lark", auto_remove=True)
+        mgr = PreAckEmojiManager(cfg)
+        event = _make_event("lark")
+        ref = EmojiRef(emoji="Typing", reaction_id="lark_reaction_123")
+        await mgr.remove_emoji(event, ref)
+        event.remove_react.assert_called_once_with("Typing", reaction_id="lark_reaction_123")
