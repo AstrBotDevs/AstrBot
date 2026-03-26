@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=80", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "astrbot-sdk"
@@ -8,6 +8,14 @@ version = "0.1.0"
 description = "AstrBot SDK with v4 runtime, worker protocol, and plugin tooling"
 readme = "README.md"
 requires-python = ">=3.12"
+classifiers = [
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
 dependencies = [
     "aiohttp>=3.13.2",
     "anthropic>=0.72.1",
@@ -26,5 +34,17 @@ dependencies = [
 [project.scripts]
 astr = "astrbot_sdk.cli:cli"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/astrbot_sdk"]
+exclude = ["/src/astrbot_sdk/AGENTS.md"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/README.md",
+    "/LICENSE",
+]
+
+# ============================================================
+# Optional Dependencies
+# ============================================================
