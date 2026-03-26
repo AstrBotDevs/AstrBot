@@ -24,6 +24,16 @@
 - `_prepare_plugin_import()` 不能只在插件目录"不在 `sys.path`"时才插入路径。像 `main.py` 这种通用模块名，如果插件目录已在 `sys.path` 但排在后面，`import main` 仍会先命中别处模块；导入前必须把目标插件目录提到 `sys.path[0]`。
 - 示例/夹具测试如果直接用裸模块名导入插件入口（例如 `from main import HelloPlugin`），会污染 `sys.modules["main"]`，随后真实 loader 再按 `main:HelloPlugin` 加载时可能串到错误模块。
 
+### 源码布局与 vendor 注意事项
+
+- 仓库采用 `src` 布局，SDK 真正源码目录是 `src/astrbot_sdk`，不是仓库根下的 `astrbot_sdk/`。
+- 维护给 AstrBot 主仓库 subtree 使用的 `vendor/` 快照时，必须保留完整 `vendor/src/astrbot_sdk/` 布局；`vendor/pyproject.toml` 也必须保留原始 `src` 包发现配置，不要混入根目录 `tests/`、`docs/`、`.github/` 等开发仓库内容。
+
+### 仓库工具文件注意事项
+
+- `.gitignore` 中忽略根目录脚本目录时要写成 `/scripts/`，不要写成宽泛的 `scripts/`；后者会把 `.github/scripts/` 这类 CI 辅助脚本也一起忽略掉。
+- 涉及仓库路径复制、遍历、校验的维护脚本，优先使用 Python `pathlib` / `shutil` 实现，避免把 `/`、`\` 或 shell 工具行为写死在脚本里。
+
 ---
 
 # 开发命令

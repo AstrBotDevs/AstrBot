@@ -1,0 +1,57 @@
+name: Update Vendor Branch
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-vendor-branch-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  update-vendor-branch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Refresh vendor snapshot
+        run: python3 .github/scripts/sync_vendor.py
+
+      - name: Create local vendor refresh commit when needed
+        run: |
+          if git diff --quiet -- vendor; then
+            echo "vendor/ is already up to date for this source commit."
+            exit 0
+          fi
+
+          # git subtree split only sees committed history, so the workflow needs
+          # a local commit when vendor/ was regenerated in the job workspace.
+          git add vendor
+          git commit -m "chore: refresh vendor snapshot [skip ci]"
+
+      - name: Build vendor-branch from vendor subtree
+        run: |
+          git branch -D vendor-branch 2>/dev/null || true
+          git subtree split --prefix=vendor -b vendor-branch
+          git rev-parse vendor-branch
+
+      - name: Force-push vendor-branch
+        run: git push origin vendor-branch --force
