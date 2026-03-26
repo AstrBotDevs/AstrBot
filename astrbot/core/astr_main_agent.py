@@ -143,8 +143,8 @@ class MainAgentBuildConfig:
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
-
-
+    enhanced_subagent: dict = field(default_factory=dict)
+    """Log level for enhanced SubAgent: info or debug."""
 @dataclass(slots=True)
 class MainAgentBuildResult:
     agent_runner: AgentRunner
@@ -929,6 +929,88 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
         )
 
 
+def _apply_enhanced_subagent_tools(
+    config: MainAgentBuildConfig, req: ProviderRequest, event: AstrMessageEvent
+) -> None:
+    """Apply enhanced SubAgent tools and system prompt
+
+    When enabled:
+    1. Inject enhanced capability prompt into system prompt
+    2. Register dynamic SubAgent management tools
+    3. Register session's transfer_to_xxx tools
+    """
+    if not config.enhanced_subagent.get('enabled', False):
+        return
+
+    if req.func_tool is None:
+        req.func_tool = ToolSet()
+
+    try:
+        from astrbot.core.dynamic_subagent_manager import (
+            CREATE_DYNAMIC_SUBAGENT_TOOL,
+            CLEANUP_DYNAMIC_SUBAGENT_TOOL,
+            LIST_DYNAMIC_SUBAGENTS_TOOL,
+            PROTECT_SUBAGENT_TOOL,
+            UNPROTECT_SUBAGENT_TOOL,
+            SEND_PUBLIC_CONTEXT_TOOL,
+            VIEW_PUBLIC_CONTEXT_TOOL,
+            DynamicSubAgentManager,
+        )
+        from astrbot.core.subagent_logger import SubAgentLogger
+        # Register dynamic SubAgent management tools
+        req.func_tool.add_tool(CREATE_DYNAMIC_SUBAGENT_TOOL)
+        req.func_tool.add_tool(CLEANUP_DYNAMIC_SUBAGENT_TOOL)
+        req.func_tool.add_tool(LIST_DYNAMIC_SUBAGENTS_TOOL)
+        req.func_tool.add_tool(PROTECT_SUBAGENT_TOOL)
+        req.func_tool.add_tool(UNPROTECT_SUBAGENT_TOOL)
+        req.func_tool.add_tool(VIEW_PUBLIC_CONTEXT_TOOL)
+        req.func_tool.add_tool(SEND_PUBLIC_CONTEXT_TOOL)
+
+        # Configure logger
+        SubAgentLogger.configure(level=config.enhanced_subagent.get('log_level'))
+
+        # Configure DynamicSubAgentManager with settings
+        shared_context_enabled = config.enhanced_subagent.get('shared_context_enabled', False)
+        DynamicSubAgentManager.configure(
+            max_subagent_count=config.enhanced_subagent.get('max_subagent_count'),
+            auto_cleanup_per_turn=config.enhanced_subagent.get('auto_cleanup_per_turn'),
+            shared_context_enabled=shared_context_enabled,
+            shared_context_maxlen=config.enhanced_subagent.get('shared_context_maxlen', 200)
+        )
+
+        # Enable shared context if configured
+        if shared_context_enabled:
+            DynamicSubAgentManager.set_shared_context_enabled(event.unified_msg_origin, True)
+
+        # Inject enhanced system prompt
+        enhanced_prompt = DynamicSubAgentManager.ENHANCED_SUBAGENT_SYSTEM_PROMPT
+        req.system_prompt = f"{req.system_prompt}\n{enhanced_prompt}\n"
+
+        # Register existing handoff tools from config
+        plugin_context = getattr(event, "_plugin_context", None)
+        if plugin_context and plugin_context.subagent_orchestrator:
+            so = plugin_context.subagent_orchestrator
+            if hasattr(so, "handoffs"):
+                for tool in so.handoffs:
+                    req.func_tool.add_tool(tool)
+        # Register dynamically created handoff tools
+        session_id = event.unified_msg_origin
+        dynamic_handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(session_id)
+        for handoff in dynamic_handoffs:
+            req.func_tool.add_tool(handoff)
+
+        # Check if we should cleanup subagents from previous turn
+        # This is done at the START of a new turn to clean up from previous turn
+            try:
+                DynamicSubAgentManager.cleanup_session_turn_start(session_id)
+            except Exception as e:
+                from astrbot import logger
+                logger.warning(f"[EnhancedSubAgent] Cleanup failed: {e}")
+    except ImportError as e:
+        from astrbot import logger
+        logger.warning(f"[EnhancedSubAgent] Cannot import module: {e}")
+
+
 def _apply_sandbox_tools(
     config: MainAgentBuildConfig, req: ProviderRequest, session_id: str
 ) -> None:
@@ -1253,6 +1335,9 @@ async def build_main_agent(
         _apply_sandbox_tools(config, req, req.session_id)
     elif config.computer_use_runtime == "local":
         _apply_local_env_tools(req)
+
+    # Apply enhanced SubAgent tools
+    _apply_enhanced_subagent_tools(config, req, event)
 
     agent_runner = AgentRunner()
     astr_agent_ctx = AstrAgentContext(

@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.22.1"
+VERSION = "4.22.0"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -194,6 +194,15 @@ DEFAULT_CONFIG = {
             "Do not try to use domain tools yourself. If no subagent fits, respond directly."
         ),
         "agents": [],
+    },
+    # 增强版动态SubAgent配置（独立于subagent_orchestrator）
+    "enhanced_subagent": {
+        "enabled": False,
+        "log_level": "debug",
+        "max_subagent_count": 3,
+        "auto_cleanup_per_turn": True,
+        "shared_context_enabled": False,
+        "shared_context_maxlen": 200
     },
     "provider_stt_settings": {
         "enable": False,
@@ -2442,17 +2451,17 @@ CONFIG_METADATA_2 = {
                     "mimo-tts-style-prompt": {
                         "description": "风格提示词",
                         "type": "string",
-                        "hint": "会以 <style>...</style> 标签形式添加到待合成文本开头，用于控制语速、情绪、角色或风格，例如 开心、变快、孙悟空、悄悄话。可留空。",
+                        "hint": "用于控制生成语音的说话风格、语气或情绪，例如温柔、活泼、沉稳等。可留空。",
                     },
                     "mimo-tts-dialect": {
                         "description": "方言",
                         "type": "string",
-                        "hint": "会与风格提示词一起写入开头的 <style>...</style> 标签中，例如 东北话、四川话、河南话、粤语。可留空。",
+                        "hint": "指定生成语音时使用的方言或口音，例如四川话、粤语口音等。可留空。",
                     },
                     "mimo-tts-seed-text": {
                         "description": "种子文本",
                         "type": "string",
-                        "hint": "作为可选的 user 消息发送，用于辅助调节语气和风格，不会拼接到待合成文本中。",
+                        "hint": "用于引导音色和说话方式的参考文本，会影响生成语音的表达风格。",
                     },
                     "fishaudio-tts-character": {
                         "description": "character",
