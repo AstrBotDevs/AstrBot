@@ -216,6 +216,10 @@ class ToolSet:
         """Get the list of function tools."""
         return self.tools
 
+    def list_tools(self) -> list[FunctionTool]:
+        """Get the list of function tools (alias for func_list)."""
+        return self.tools
+
     def openai_schema(self, omit_empty_parameter_field: bool = False) -> list[dict]:
         """Convert tools to OpenAI API function calling schema format."""
         result = []
