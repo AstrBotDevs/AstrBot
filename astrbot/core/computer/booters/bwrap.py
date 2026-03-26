@@ -35,6 +35,7 @@ def _decode_shell_output(output: bytes | None) -> str:
 
     return output.decode("utf-8", errors="replace")
 
+
 @dataclass
 class BwrapConfig:
     workspace_dir: str
@@ -48,6 +49,7 @@ class BwrapConfig:
         for p in default_ro:
             if p not in self.ro_binds:
                 self.ro_binds.append(p)
+
 
 def build_bwrap_cmd(config: BwrapConfig, script_cmd: list[str]) -> list[str]:
     """Helper to build a bubblewrap command."""
@@ -69,21 +71,40 @@ def build_bwrap_cmd(config: BwrapConfig, script_cmd: list[str]) -> list[str]:
             cmd.extend(["--bind", path, path])
 
     # Make system binds the last to avoid issues about ro `/`
-    cmd.extend([
-        "--unshare-pid",
-        "--unshare-ipc",
-        "--unshare-uts",
-        "--die-with-parent",
-        "--dir", "/tmp",
-        "--dir", "/var/tmp",
-        "--proc", "/proc",
-        "--dev", "/dev",
-        "--bind", config.workspace_dir, config.workspace_dir,
-    ])
+    cmd.extend(
+        [
+            "--unshare-pid",
+            "--unshare-ipc",
+            "--unshare-uts",
+            "--die-with-parent",
+        ]
+    )
+    cmd += [
+        "--dir",
+        "/tmp",
+    ]
+    cmd += [
+        "--dir",
+        "/var/tmp",
+    ]
+    cmd += [
+        "--proc",
+        "/proc",
+    ]
+    cmd += [
+        "--dev",
+        "/dev",
+    ]
+    cmd += [
+        "--bind",
+        config.workspace_dir,
+        config.workspace_dir,
+    ]
 
     cmd.extend(["--"])
     cmd.extend(script_cmd)
     return cmd
+
 
 @dataclass
 class BwrapShellComponent(ShellComponent):
@@ -136,6 +157,7 @@ class BwrapShellComponent(ShellComponent):
 
         return await asyncio.to_thread(_run)
 
+
 @dataclass
 class BwrapPythonComponent(PythonComponent):
     config: BwrapConfig
@@ -148,7 +170,9 @@ class BwrapPythonComponent(PythonComponent):
         silent: bool = False,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            bwrap_cmd = build_bwrap_cmd(self.config, [os.environ.get("PYTHON", "python3"), "-c", code])
+            bwrap_cmd = build_bwrap_cmd(
+                self.config, [os.environ.get("PYTHON", "python3"), "-c", code]
+            )
             try:
                 result = subprocess.run(
                     bwrap_cmd,
@@ -164,7 +188,9 @@ class BwrapPythonComponent(PythonComponent):
                 }
             except subprocess.TimeoutExpired as e:
                 return {
-                    "stdout": e.stdout.decode() if isinstance(e.stdout, bytes) else str(e.stdout or ""),
+                    "stdout": e.stdout.decode()
+                    if isinstance(e.stdout, bytes)
+                    else str(e.stdout or ""),
                     "stderr": f"Execution timed out after {timeout} seconds.",
                     "exit_code": 1,
                 }
@@ -177,9 +203,11 @@ class BwrapPythonComponent(PythonComponent):
 
         return await asyncio.to_thread(_run)
 
+
 @dataclass
 class HostBackedFileSystemComponent(FileSystemComponent):
     """File operations happen safely on host mapping to workspace, making I/O extremely fast."""
+
     workspace_dir: str
 
     def _safe_path(self, path: str) -> str:
@@ -189,7 +217,9 @@ class HostBackedFileSystemComponent(FileSystemComponent):
             path = os.path.join(self.workspace_dir, path)
         return path
 
-    async def create_file(self, path: str, content: str = "", mode: int = 0o644) -> dict[str, Any]:
+    async def create_file(
+        self, path: str, content: str = "", mode: int = 0o644
+    ) -> dict[str, Any]:
         p = self._safe_path(path)
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "w", encoding="utf-8") as f:
@@ -206,7 +236,9 @@ class HostBackedFileSystemComponent(FileSystemComponent):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def write_file(self, path: str, content: str, mode: str = "w", encoding: str = "utf-8") -> dict[str, Any]:
+    async def write_file(
+        self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
+    ) -> dict[str, Any]:
         p = self._safe_path(path)
         os.makedirs(os.path.dirname(p), exist_ok=True)
         try:
@@ -227,7 +259,9 @@ class HostBackedFileSystemComponent(FileSystemComponent):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def list_dir(self, path: str = ".", show_hidden: bool = False) -> dict[str, Any]:
+    async def list_dir(
+        self, path: str = ".", show_hidden: bool = False
+    ) -> dict[str, Any]:
         p = self._safe_path(path)
         try:
             items = os.listdir(p)
@@ -236,6 +270,7 @@ class HostBackedFileSystemComponent(FileSystemComponent):
             return {"success": True, "items": items}
         except Exception as e:
             return {"success": False, "error": str(e), "items": []}
+
 
 class BwrapBooter(ComputerBooter):
     def __init__(self, rw_binds: list[str] = None, ro_binds: list[str] = None):
@@ -263,30 +298,35 @@ class BwrapBooter(ComputerBooter):
         return ("python", "shell", "filesystem")
 
     async def boot(self, session_id: str) -> None:
-        workspace_dir = os.path.join(get_astrbot_temp_path(), f"sandbox_workspace_{session_id}")
+        workspace_dir = os.path.join(
+            get_astrbot_temp_path(), f"sandbox_workspace_{session_id}"
+        )
         os.makedirs(workspace_dir, exist_ok=True)
 
         self.config = BwrapConfig(
             workspace_dir=os.path.abspath(workspace_dir),
             rw_binds=self._rw_binds,
-            ro_binds=self._ro_binds
+            ro_binds=self._ro_binds,
         )
         self._fs = HostBackedFileSystemComponent(self.config.workspace_dir)
         self._python = BwrapPythonComponent(self.config)
         self._shell = BwrapShellComponent(self.config)
         if not await self.available():
             raise RuntimeError(
-            "BubbleWrap sandbox unavailable on current machine for no bwrap executable.")
-        test_shl = await self._shell.exec(command = "ls > /dev/null")
+                "BubbleWrap sandbox unavailable on current machine for no bwrap executable."
+            )
+        test_shl = await self._shell.exec(command="ls > /dev/null")
         if test_shl["exit_code"] != 0:
             raise RuntimeError(
-            """BubbleWrap sandbox fails to exec test shell command "ls > /dev/null" with stderr:
-{}""".format(test_shl["stderr"]))
-        test_py = await self._python.exec(code = "print('Yes')")
+                """BubbleWrap sandbox fails to exec test shell command "ls > /dev/null" with stderr:
+{}""".format(test_shl["stderr"])
+            )
+        test_py = await self._python.exec(code="print('Yes')")
         if test_py["exit_code"] != 0:
             raise RuntimeError(
-            """BubbleWrap sandbox fails to exec test python code "print('Yes')" with stderr:
-{}""".format(test_py["stderr"]))
+                """BubbleWrap sandbox fails to exec test python code "print('Yes')" with stderr:
+{}""".format(test_py["stderr"])
+            )
 
     async def shutdown(self) -> None:
         if self.config and os.path.exists(self.config.workspace_dir):
