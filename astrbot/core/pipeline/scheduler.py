@@ -51,9 +51,7 @@ class PipelineScheduler:
 
             if isinstance(coroutine, AsyncGenerator):
                 # 如果返回的是异步生成器, 实现洋葱模型的核心
-                did_yield = False
                 async for _ in coroutine:
-                    did_yield = True
                     # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
                     if event.is_stopped():
                         logger.debug(
@@ -70,10 +68,6 @@ class PipelineScheduler:
                             f"阶段 {stage.__class__.__name__} 已终止事件传播。",
                         )
                         break
-
-                # 洋葱阶段已通过递归处理了后续所有阶段，跳出外层循环避免重复执行
-                if did_yield:
-                    break
             else:
                 # 如果返回的是普通协程(不含yield的async函数), 则不进入下一层(基线条件)
                 # 简单地等待它执行完成, 然后继续执行下一个阶段
