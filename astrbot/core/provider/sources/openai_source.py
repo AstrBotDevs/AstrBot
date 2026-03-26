@@ -6,6 +6,7 @@ import json
 import random
 import re
 from collections.abc import AsyncGenerator
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
@@ -138,58 +139,79 @@ class ProviderOpenAIOfficial(Provider):
                     return True
         return False
 
-    def _is_invalid_attachment_error(self, error: Exception) -> bool:
+    @staticmethod
+    def _get_error_info(error: Exception) -> tuple[str | None, str | None]:
         body = getattr(error, "body", None)
-        if isinstance(body, dict):
-            err_obj = body.get("error")
-            if isinstance(err_obj, dict):
-                code = err_obj.get("code")
-                if isinstance(code, str) and code.lower() == "invalid_attachment":
-                    return True
-                message = err_obj.get("message")
-                if isinstance(message, str):
-                    lower_message = message.lower()
-                    if (
-                        "download attachment" in lower_message
-                        and "404" in lower_message
-                    ):
-                        return True
+        if not isinstance(body, dict):
+            return None, None
+
+        err_obj = body.get("error")
+        if not isinstance(err_obj, dict):
+            return None, None
+
+        code = err_obj.get("code")
+        message = err_obj.get("message")
+        return (
+            code.lower() if isinstance(code, str) else None,
+            message.lower() if isinstance(message, str) else None,
+        )
+
+    def _is_invalid_attachment_error(self, error: Exception) -> bool:
+        code, message = self._get_error_info(error)
 
         candidates = [
             candidate.lower()
             for candidate in self._extract_error_text_candidates(error)
         ]
-        return any(
-            "invalid_attachment" in candidate for candidate in candidates
-        ) or any(
-            "download attachment" in candidate and "404" in candidate
-            for candidate in candidates
-        )
+        if message:
+            candidates.append(message)
+
+        for candidate in candidates:
+            if "invalid_attachment" in candidate:
+                return True
+            if "download attachment" in candidate and "404" in candidate:
+                return True
+        return code == "invalid_attachment"
 
     @staticmethod
-    def _is_valid_image_file(image_path: str) -> bool:
-        try:
-            with PILImage.open(image_path) as image:
-                image.verify()
-        except (FileNotFoundError, OSError, UnidentifiedImageError):
-            return False
-        return True
-
-    @staticmethod
-    def _detect_image_mime_type(image_path: str) -> str:
-        try:
-            with PILImage.open(image_path) as image:
-                image_format = str(image.format or "").upper()
-        except (FileNotFoundError, OSError, UnidentifiedImageError):
-            return "image/jpeg"
-
+    def _image_format_to_mime_type(image_format: str | None) -> str:
         return {
             "JPEG": "image/jpeg",
             "PNG": "image/png",
             "GIF": "image/gif",
             "WEBP": "image/webp",
             "BMP": "image/bmp",
-        }.get(image_format, "image/jpeg")
+        }.get(str(image_format or "").upper(), "image/jpeg")
+
+    @staticmethod
+    def _read_file_bytes(image_path: str) -> bytes | None:
+        try:
+            return Path(image_path).read_bytes()
+        except OSError:
+            return None
+
+    @staticmethod
+    def _detect_image_format(image_bytes: bytes) -> str | None:
+        try:
+            with PILImage.open(BytesIO(image_bytes)) as image:
+                image.verify()
+                return str(image.format or "").upper()
+        except (OSError, UnidentifiedImageError):
+            return None
+
+    @classmethod
+    def _encode_image_file_to_data_url(cls, image_path: str) -> str | None:
+        image_bytes = cls._read_file_bytes(image_path)
+        if image_bytes is None:
+            return None
+
+        image_format = cls._detect_image_format(image_bytes)
+        if image_format is None:
+            return None
+
+        mime_type = cls._image_format_to_mime_type(image_format)
+        image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
+        return f"data:{mime_type};base64,{image_bs64}"
 
     @staticmethod
     def _file_uri_to_path(file_uri: str) -> str:
@@ -197,12 +219,28 @@ class ProviderOpenAIOfficial(Provider):
         if parsed.scheme != "file":
             return file_uri
 
+        netloc = unquote(parsed.netloc or "")
         path = unquote(parsed.path or "")
+        if re.fullmatch(r"[A-Za-z]:", netloc):
+            return str(Path(f"{netloc}{path}"))
         if re.match(r"^/[A-Za-z]:/", path):
             path = path[1:]
-        if parsed.netloc and parsed.netloc != "localhost":
-            path = f"//{parsed.netloc}{path}"
+        if netloc and netloc != "localhost":
+            path = f"//{netloc}{path}"
         return str(Path(path))
+
+    async def _load_image_data(self, image_url: str) -> str | None:
+        if image_url.startswith("base64://"):
+            return await self.encode_image_bs64(image_url)
+
+        if image_url.startswith("http"):
+            image_path = await download_image_by_url(image_url)
+        elif image_url.startswith("file://"):
+            image_path = self._file_uri_to_path(image_url)
+        else:
+            image_path = image_url
+
+        return self._encode_image_file_to_data_url(image_path)
 
     async def _resolve_image_part(
         self,
@@ -213,20 +251,7 @@ class ProviderOpenAIOfficial(Provider):
         if image_url.startswith("data:"):
             image_payload = {"url": image_url}
         else:
-            if image_url.startswith("http"):
-                image_path = await download_image_by_url(image_url)
-                if not self._is_valid_image_file(image_path):
-                    logger.warning(
-                        "图片 URL %s 下载结果不是有效图片，将忽略。",
-                        image_url,
-                    )
-                    return None
-                image_data = await self.encode_image_bs64(image_path)
-            elif image_url.startswith("file://"):
-                image_path = self._file_uri_to_path(image_url)
-                image_data = await self.encode_image_bs64(image_path)
-            else:
-                image_data = await self.encode_image_bs64(image_url)
+            image_data = await self._load_image_data(image_url)
             if not image_data:
                 logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                 return None
@@ -1138,10 +1163,8 @@ class ProviderOpenAIOfficial(Provider):
         """将图片转换为 base64"""
         if image_url.startswith("base64://"):
             return image_url.replace("base64://", "data:image/jpeg;base64,")
-        mime_type = self._detect_image_mime_type(image_url)
-        with open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
-            return f"data:{mime_type};base64," + image_bs64
+        image_data = self._encode_image_file_to_data_url(image_url)
+        return image_data or ""
 
     async def terminate(self):
         if self.client:

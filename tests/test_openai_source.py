@@ -593,7 +593,7 @@ async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeyp
             assert url == "https://example.com/quoted.png"
             return "/tmp/quoted.png"
 
-        async def fake_encode(image_path: str) -> str:
+        def fake_encode(image_path: str) -> str:
             assert image_path == "/tmp/quoted.png"
             return "data:image/png;base64,abcd"
 
@@ -601,8 +601,7 @@ async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeyp
             "astrbot.core.provider.sources.openai_source.download_image_by_url",
             fake_download,
         )
-        monkeypatch.setattr(provider, "_is_valid_image_file", lambda _: True)
-        monkeypatch.setattr(provider, "encode_image_bs64", fake_encode)
+        monkeypatch.setattr(provider, "_encode_image_file_to_data_url", fake_encode)
 
         contexts = [
             {
@@ -731,6 +730,41 @@ async def test_file_uri_to_path_preserves_windows_drive_letter():
 
 
 @pytest.mark.asyncio
+async def test_file_uri_to_path_preserves_windows_netloc_drive_letter():
+    provider = _make_provider()
+    try:
+        assert provider._file_uri_to_path("file://C:/tmp/quoted-image.png") == (
+            "C:/tmp/quoted-image.png"
+        )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_resolve_image_part_rejects_invalid_local_file(tmp_path):
+    provider = _make_provider()
+    try:
+        invalid_file = tmp_path / "not-image.txt"
+        invalid_file.write_text("not an image")
+
+        assert await provider._resolve_image_part(str(invalid_file)) is None
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_resolve_image_part_rejects_invalid_file_uri(tmp_path):
+    provider = _make_provider()
+    try:
+        invalid_file = tmp_path / "not-image.txt"
+        invalid_file.write_text("not an image")
+
+        assert await provider._resolve_image_part(invalid_file.as_uri()) is None
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_prepare_chat_payload_materializes_context_localhost_file_uri_image_urls(
     tmp_path,
 ):
@@ -779,7 +813,7 @@ async def test_prepare_chat_payload_keeps_original_context_image_when_materializ
             "astrbot.core.provider.sources.openai_source.download_image_by_url",
             fake_download,
         )
-        monkeypatch.setattr(provider, "_is_valid_image_file", lambda _: False)
+        monkeypatch.setattr(provider, "_encode_image_file_to_data_url", lambda _: None)
 
         payloads, _ = await provider._prepare_chat_payload(
             prompt=None,
