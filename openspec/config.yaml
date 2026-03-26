@@ -2,7 +2,7 @@ schema: spec-driven
 
 # 项目上下文
 context: |
-  技术栈: Python 3.12, anyio (异步), FastAPI, pytest, ruff, uv
+  技术栈: Python 3.12, anyio (异步), ~~FastAPI~~, pytest, ruff, uv , rust
   领域: 多平台 LLM 聊天机器人框架 (QQ, Telegram, Discord 等)
   架构: 基于协议的系统 (LSP, MCP, ACP, ABP)
 
@@ -25,7 +25,7 @@ directives:
     新架构放在 _internal 包中，避免分支冲突。
     协议系统: LSP (客户端), MCP (客户端+服务端), ACP (客户端+服务端), ABP (客户端+服务端)。
     Runtime 协调协议，Gateway 提供 FastAPI 后端。
-    Stars 是插件 - Galaxy 是星星的集合。
+    Stars 是插件 - Galaxy 是加载插件的中间层。
   async_library: |
     使用 anyio 作为异步库（不是 asyncio）。
   coverage: |
