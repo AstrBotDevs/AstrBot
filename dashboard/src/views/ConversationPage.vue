@@ -198,7 +198,9 @@
                     </div>
 
                     <!-- 预览模式 - 聊天界面 -->
-                    <div v-else class="conversation-messages-container" style="background-color: var(--v-theme-surface);">
+                    <div v-else class="conversation-messages-container" style="background-color: var(--v-theme-surface);"
+                        ref="messagesContainer"
+                        @wheel.prevent="onContainerWheel">
                         <!-- 空对话提示 -->
                         <div v-if="conversationHistory.length === 0" class="text-center py-5">
                             <v-icon size="48" color="grey">mdi-chat-remove</v-icon>
@@ -1050,6 +1052,13 @@ export default {
             }
             
             return parts;
+        },
+
+        // Manually handle wheel scrolling inside the dialog preview container.
+        onContainerWheel(event) {
+            const el = this.$refs.messagesContainer;
+            if (!el) return;
+            el.scrollTop += event.deltaY;
         },
 
         // 从内容中提取文本（保留用于其他用途）
