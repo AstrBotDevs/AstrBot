@@ -146,19 +146,23 @@ class ScheduleTrigger(_DescriptorBase):
 
     Attributes:
         type: 触发器类型，固定为 "schedule"
+        name: 调度任务名称，默认回退为插件 ID 与 handler ID 组合
         cron: cron 表达式（如 "0 9 * * *" 表示每天 9 点）
         interval_seconds: 执行间隔（秒）
+        timezone: IANA 时区名称（如 "Asia/Shanghai"）
 
     Note:
         cron 和 interval_seconds 必须且只能有一个非空。
     """
 
     type: Literal["schedule"] = "schedule"
+    name: str | None = None
     cron: str | None = Field(
         default=None,
         validation_alias=AliasChoices("cron", "schedule"),
     )
     interval_seconds: int | None = None
+    timezone: str | None = None
 
     @property
     def schedule(self) -> str | None:

@@ -619,8 +619,10 @@ def on_event(
 
 def on_schedule(
     *,
+    name: str | None = None,
     cron: str | None = None,
     interval_seconds: int | None = None,
+    timezone: str | None = None,
     description: str | None = None,
 ) -> Callable[[HandlerCallable], HandlerCallable]:
     """注册定时任务方法。
@@ -628,8 +630,10 @@ def on_schedule(
     按指定的时间计划定期执行。
 
     Args:
+        name: 调度任务名称，默认回退为插件 ID 与 handler ID 组合
         cron: cron 表达式（如 "0 8 * * *" 表示每天 8:00）
         interval_seconds: 执行间隔（秒）
+        timezone: IANA 时区名称（如 "Asia/Shanghai"）
 
     Returns:
         装饰器函数
@@ -649,7 +653,12 @@ def on_schedule(
 
     def decorator(func: HandlerCallable) -> HandlerCallable:
         meta = _get_or_create_meta(func)
-        meta.trigger = ScheduleTrigger(cron=cron, interval_seconds=interval_seconds)
+        meta.trigger = ScheduleTrigger(
+            name=name,
+            cron=cron,
+            interval_seconds=interval_seconds,
+            timezone=timezone,
+        )
         meta.description = _normalize_description(description)
         _validate_message_trigger_compatibility(meta)
         return func
