@@ -286,8 +286,7 @@ const pinnedPlugins = computed(() => {
             hide-details
             single-line
             style="min-width: 220px; max-width: 340px"
-          >
-          </v-text-field>
+          />
 
           <v-btn-toggle
             v-model="isListView"
@@ -296,8 +295,8 @@ const pinnedPlugins = computed(() => {
             color="primary"
             class="view-mode-toggle"
           >
-            <v-btn :value="false" icon="mdi-view-grid"></v-btn>
-            <v-btn :value="true" icon="mdi-view-list"></v-btn>
+            <v-btn :value="false" icon="mdi-view-grid" />
+            <v-btn :value="true" icon="mdi-view-list" />
           </v-btn-toggle>
         </div>
       </div>
@@ -374,7 +373,7 @@ const pinnedPlugins = computed(() => {
 
             <v-row class="mt-3 relative" dense align="center" style="gap: 12px">
               <template v-if="!pinnedPlugins || pinnedPlugins.length === 0">
-                <v-col cols="auto" v-for="n in 4" :key="n"> </v-col>
+                <v-col cols="auto" v-for="n in 4" :key="n" />
               </template>
 
               <transition-group name="list" class="v-row v-row--dense">
@@ -511,7 +510,7 @@ const pinnedPlugins = computed(() => {
                       border-radius: 8px;
                       object-fit: cover;
                     "
-                  />
+                  >
                 </div>
 
                 <div>
@@ -722,7 +721,7 @@ const pinnedPlugins = computed(() => {
                       variant="tonal"
                       color="secondary"
                       class="table-action-btn"
-                    ></v-btn>
+                    />
                   </template>
 
                   <v-list-item
@@ -817,8 +816,7 @@ const pinnedPlugins = computed(() => {
               @view-handlers="showPluginInfo(extension)"
               @view-readme="viewReadme(extension)"
               @view-changelog="viewChangelog(extension)"
-            >
-            </ExtensionCard>
+            />
           </v-col>
         </v-row>
       </div>
@@ -839,14 +837,14 @@ const pinnedPlugins = computed(() => {
           "
           @click="dialog = true"
         >
-          <span class="v-btn__overlay"></span>
-          <span class="v-btn__underlay"></span>
+          <span class="v-btn__overlay" />
+          <span class="v-btn__underlay" />
           <span class="v-btn__content" data-no-activator="">
             <i
               class="mdi-plus mdi v-icon notranslate v-theme--PurpleThemeDark v-icon--size-default"
               aria-hidden="true"
               style="font-size: 32px"
-            ></i>
+            />
           </span>
         </button>
       </template>
