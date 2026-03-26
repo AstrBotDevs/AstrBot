@@ -9,6 +9,9 @@ from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 from tests.fixtures.image_samples import (
     GIF_BASE64,
+    GIF_BYTES,
+    JPEG_BASE64,
+    JPEG_BYTES,
     PNG_BASE64,
     PNG_BYTES,
     WEBP_BASE64,
@@ -563,14 +566,22 @@ async def test_openai_encode_image_bs64_detects_base64_mime():
 async def test_openai_encode_image_bs64_detects_local_file_mime(tmp_path: Path):
     provider = _make_provider()
     png_path = tmp_path / "pixel.png"
+    gif_path = tmp_path / "pixel.gif"
+    jpeg_path = tmp_path / "pixel.jpg"
     webp_path = tmp_path / "pixel.webp"
     png_path.write_bytes(PNG_BYTES)
+    gif_path.write_bytes(GIF_BYTES)
+    jpeg_path.write_bytes(JPEG_BYTES)
     webp_path.write_bytes(WEBP_BYTES)
     try:
         png_data = await provider.encode_image_bs64(str(png_path))
+        gif_data = await provider.encode_image_bs64(str(gif_path))
+        jpeg_data = await provider.encode_image_bs64(str(jpeg_path))
         webp_data = await provider.encode_image_bs64(str(webp_path))
 
         assert png_data.startswith("data:image/png;base64,")
+        assert gif_data.startswith("data:image/gif;base64,")
+        assert jpeg_data.startswith("data:image/jpeg;base64,")
         assert webp_data.startswith("data:image/webp;base64,")
     finally:
         await provider.terminate()
@@ -579,9 +590,13 @@ async def test_openai_encode_image_bs64_detects_local_file_mime(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_openai_encode_image_bs64_keeps_data_uri():
     provider = _make_provider()
-    data_uri = f"data:image/png;base64,{PNG_BASE64}"
+    png_data_uri = f"data:image/png;base64,{PNG_BASE64}"
+    gif_data_uri = f"data:image/gif;base64,{GIF_BASE64}"
+    jpeg_data_uri = f"data:image/jpeg;base64,{JPEG_BASE64}"
     try:
-        assert await provider.encode_image_bs64(data_uri) == data_uri
+        assert await provider.encode_image_bs64(png_data_uri) == png_data_uri
+        assert await provider.encode_image_bs64(gif_data_uri) == gif_data_uri
+        assert await provider.encode_image_bs64(jpeg_data_uri) == jpeg_data_uri
     finally:
         await provider.terminate()
 
@@ -592,6 +607,26 @@ async def test_openai_encode_image_bs64_invalid_base64_fallback_to_jpeg():
     try:
         image_data = await provider.encode_image_bs64("base64://not-valid-base64")
         assert image_data == "data:image/jpeg;base64,not-valid-base64"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_encode_image_bs64_rejects_non_image_data_uri():
+    provider = _make_provider()
+    try:
+        with pytest.raises(ValueError, match="Only image data URI is supported"):
+            await provider.encode_image_bs64("data:text/plain;base64,SGVsbG8=")
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_openai_encode_image_bs64_rejects_unsupported_uri_scheme():
+    provider = _make_provider()
+    try:
+        with pytest.raises(ValueError, match="Unsupported image source scheme"):
+            await provider.encode_image_bs64("s3://bucket/path/image.png")
     finally:
         await provider.terminate()
 

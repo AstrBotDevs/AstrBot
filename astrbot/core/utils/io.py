@@ -225,14 +225,19 @@ def image_source_to_data_uri(image_source: str) -> tuple[str, str]:
     """将图片来源统一转换为 data URI，并尽量保留真实 MIME 类型。"""
     lower_source = image_source.lower()
 
-    if lower_source.startswith("data:image/"):
-        mime_type = "image/jpeg"
+    if lower_source.startswith("data:"):
         prefix = image_source.split(",", 1)[0]
-        if prefix.startswith("data:"):
-            mime_type = prefix.split(";", 1)[0].removeprefix("data:")
-            if not mime_type.startswith("image/"):
-                mime_type = "image/jpeg"
+        mime_type = prefix.split(";", 1)[0].removeprefix("data:").lower()
+        if not mime_type.startswith("image/"):
+            raise ValueError(
+                f"Only image data URI is supported, got MIME type: {mime_type or 'unknown'}",
+            )
         return image_source, mime_type
+
+    if lower_source.startswith(("http://", "https://")):
+        raise ValueError(
+            "Remote image URL is not supported in image_source_to_data_uri; download the file before calling this helper.",
+        )
 
     if image_source.startswith("base64://"):
         raw_base64 = image_source.removeprefix("base64://")
@@ -251,6 +256,11 @@ def image_source_to_data_uri(image_source: str) -> tuple[str, str]:
         else:
             raw_path = parsed.path
         image_source = url2pathname(unquote(raw_path))
+    elif "://" in image_source:
+        scheme = image_source.split("://", 1)[0].lower()
+        raise ValueError(
+            f"Unsupported image source scheme: {scheme}://",
+        )
 
     with open(image_source, "rb") as f:
         image_bytes = f.read()

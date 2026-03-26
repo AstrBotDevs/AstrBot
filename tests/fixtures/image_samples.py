@@ -8,3 +8,4 @@ JPEG_BYTES = b"\xff\xd8\xff\xe0\x00\x10JFIF"
 PNG_BASE64 = base64.b64encode(PNG_BYTES).decode("ascii")
 GIF_BASE64 = base64.b64encode(GIF_BYTES).decode("ascii")
 WEBP_BASE64 = base64.b64encode(WEBP_BYTES).decode("ascii")
+JPEG_BASE64 = base64.b64encode(JPEG_BYTES).decode("ascii")
