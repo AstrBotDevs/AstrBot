@@ -208,21 +208,29 @@ def file_to_base64(file_path: str) -> str:
     return "base64://" + base64_str
 
 
+DEFAULT_IMAGE_MIME_TYPE = "image/jpeg"
+
+
 def detect_image_mime_type(data: bytes) -> str:
     """根据图片二进制数据的 magic bytes 检测 MIME 类型。"""
     if data[:8] == b"\x89PNG\r\n\x1a\n":
         return "image/png"
     if data[:2] == b"\xff\xd8":
-        return "image/jpeg"
+        return DEFAULT_IMAGE_MIME_TYPE
     if data[:6] in (b"GIF87a", b"GIF89a"):
         return "image/gif"
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "image/webp"
-    return "image/jpeg"
+    return DEFAULT_IMAGE_MIME_TYPE
 
 
 def image_source_to_data_uri(image_source: str) -> tuple[str, str]:
-    """将图片来源统一转换为 data URI，并尽量保留真实 MIME 类型。"""
+    """将本地/内联图片来源统一转换为 data URI，并尽量保留真实 MIME 类型。
+
+    说明:
+    - 支持 `data:image/...`、`base64://...`、本地路径和 `file://...`。
+    - 不支持远程 URL（`http://`、`https://`），调用方应先下载到本地文件。
+    """
     lower_source = image_source.lower()
 
     if lower_source.startswith("data:"):
@@ -241,12 +249,12 @@ def image_source_to_data_uri(image_source: str) -> tuple[str, str]:
 
     if image_source.startswith("base64://"):
         raw_base64 = image_source.removeprefix("base64://")
-        mime_type = "image/jpeg"
+        mime_type = DEFAULT_IMAGE_MIME_TYPE
         try:
             image_bytes = base64.b64decode(raw_base64)
             mime_type = detect_image_mime_type(image_bytes)
         except Exception:
-            mime_type = "image/jpeg"
+            mime_type = DEFAULT_IMAGE_MIME_TYPE
         return f"data:{mime_type};base64,{raw_base64}", mime_type
 
     if lower_source.startswith("file://"):
