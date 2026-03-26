@@ -254,7 +254,7 @@ def image_source_to_data_uri(image_source: str) -> tuple[str, str]:
             image_bytes = base64.b64decode(raw_base64)
             mime_type = detect_image_mime_type(image_bytes)
         except Exception:
-            mime_type = DEFAULT_IMAGE_MIME_TYPE
+            pass
         return f"data:{mime_type};base64,{raw_base64}", mime_type
 
     if lower_source.startswith("file://"):

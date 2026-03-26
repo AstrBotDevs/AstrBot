@@ -923,11 +923,12 @@ class ProviderOpenAIOfficial(Provider):
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
 
         async def resolve_image_part(image_url: str) -> dict | None:
-            if image_url.startswith("http"):
-                image_path = await download_image_by_url(image_url)
-                image_data = await self.encode_image_bs64(image_path)
-            else:
-                image_data = await self.encode_image_bs64(image_url)
+            image_source = (
+                await download_image_by_url(image_url)
+                if image_url.startswith("http")
+                else image_url
+            )
+            image_data = await self.encode_image_bs64(image_source)
             if not image_data:
                 logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                 return None
