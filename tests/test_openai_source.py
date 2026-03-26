@@ -765,6 +765,30 @@ async def test_resolve_image_part_rejects_invalid_file_uri(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_encode_image_bs64_missing_file_raises(tmp_path):
+    provider = _make_provider()
+    try:
+        missing_path = tmp_path / "missing-image.png"
+        with pytest.raises(FileNotFoundError):
+            await provider.encode_image_bs64(str(missing_path))
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_encode_image_bs64_invalid_file_raises(tmp_path):
+    provider = _make_provider()
+    try:
+        invalid_file = tmp_path / "not-image.txt"
+        invalid_file.write_text("not an image")
+
+        with pytest.raises(ValueError, match="Invalid image file"):
+            await provider.encode_image_bs64(str(invalid_file))
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_prepare_chat_payload_materializes_context_localhost_file_uri_image_urls(
     tmp_path,
 ):

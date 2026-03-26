@@ -184,10 +184,16 @@ class ProviderOpenAIOfficial(Provider):
         }.get(str(image_format or "").upper(), "image/jpeg")
 
     @staticmethod
-    def _read_file_bytes(image_path: str) -> bytes | None:
+    def _read_file_bytes(
+        image_path: str,
+        *,
+        suppress_errors: bool = True,
+    ) -> bytes | None:
         try:
             return Path(image_path).read_bytes()
         except OSError:
+            if not suppress_errors:
+                raise
             return None
 
     @staticmethod
@@ -1163,8 +1169,16 @@ class ProviderOpenAIOfficial(Provider):
         """将图片转换为 base64"""
         if image_url.startswith("base64://"):
             return image_url.replace("base64://", "data:image/jpeg;base64,")
-        image_data = self._encode_image_file_to_data_url(image_url)
-        return image_data or ""
+        image_bytes = self._read_file_bytes(image_url, suppress_errors=False)
+        if image_bytes is None:
+            raise FileNotFoundError(image_url)
+
+        image_format = self._detect_image_format(image_bytes)
+        if image_format is None:
+            raise ValueError(f"Invalid image file: {image_url}")
+        mime_type = self._image_format_to_mime_type(image_format)
+        image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
+        return f"data:{mime_type};base64,{image_bs64}"
 
     async def terminate(self):
         if self.client:
