@@ -33,6 +33,19 @@ class MessageChain:
     type: str | None = None
     """消息链承载的消息的类型。可选，用于让消息平台区分不同业务场景的消息链。"""
 
+    def derive(self, chain: list[BaseMessageComponent] | None = None) -> "MessageChain":
+        """基于当前消息链创建一个新的 MessageChain，继承元数据（use_t2i_、use_markdown_ 等）。
+
+        Args:
+            chain: 新消息链的组件列表。如果为 None，则使用空列表。
+
+        """
+        new = MessageChain(chain=chain if chain is not None else [])
+        new.use_t2i_ = self.use_t2i_
+        new.use_markdown_ = self.use_markdown_
+        new.type = self.type
+        return new
+
     def message(self, message: str):
         """添加一条文本消息到消息链 `chain` 中。
 
