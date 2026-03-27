@@ -48,18 +48,65 @@ def _prepare_config(config: dict) -> dict:
 
 
 def _prepare_stdio_env(config: dict) -> dict:
+    # """Preserve Windows executable resolution for stdio subprocesses."""
+    # if sys.platform != "win32":
+    #     return config
+
+    # pathext = os.environ.get("PATHEXT")
+    # if not pathext:
+    #     return config
+
+    # prepared = config.copy()
+    # env = dict(prepared.get("env") or {})
+    # env.setdefault("PATHEXT", pathext)
+    # prepared["env"] = env
+    # return prepared
     """Preserve Windows executable resolution for stdio subprocesses."""
     if sys.platform != "win32":
         return config
-
-    pathext = os.environ.get("PATHEXT")
-    if not pathext:
-        return config
-
     prepared = config.copy()
     env = dict(prepared.get("env") or {})
-    env.setdefault("PATHEXT", pathext)
+    
+    # 获取系统的环境变量
+    for key in os.environ:
+        if key not in env:
+            env[key] = os.environ[key]
+    
+    # 确保dotnet在PATH中
+    if "PATH" in env:
+        # 检查dotnet是否在PATH中
+        import shutil
+        dotnet_path = shutil.which("dotnet", path=env["PATH"])
+        if not dotnet_path:
+            # 尝试添加常见的dotnet安装路径
+            common_dotnet_paths = [
+                r"C:\Program Files\dotnet",
+                r"C:\Program Files (x86)\dotnet",
+                os.path.expanduser(r"~\.dotnet\tools")
+            ]
+            for dotnet_dir in common_dotnet_paths:
+                if os.path.exists(dotnet_dir):
+                    env["PATH"] = f"{dotnet_dir};{env['PATH']}"
+    
     prepared["env"] = env
+    
+    # 设置工作目录
+    if "cwd" not in prepared:
+        # 尝试从项目路径推断工作目录
+        args = prepared.get("args", [])
+        for i, arg in enumerate(args):
+            if arg == "--project" and i + 1 < len(args):
+                project_path = args[i + 1]
+                if os.path.exists(project_path):
+                    prepared["cwd"] = os.path.dirname(project_path)
+                    logger.info(f"Setting working directory to: {prepared['cwd']}")
+                break
+    
+    # Windows进程创建标志
+    if "creationflags" not in prepared:
+        import subprocess
+        prepared["creationflags"] = subprocess.CREATE_NO_WINDOW
+    
     return prepared
 
 
