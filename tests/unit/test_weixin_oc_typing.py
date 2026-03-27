@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
 
 from astrbot.core.message.components import Plain
@@ -532,6 +532,63 @@ async def test_run_finally_cancels_keepalive_before_client_close(adapter):
         await adapter.run()
 
     assert order == ["cleanup", "close"]
+
+
+@pytest.mark.asyncio
+async def test_run_recovers_after_server_disconnect(adapter):
+    poll_count = 0
+    adapter._cleanup_typing_tasks = AsyncMock()
+    adapter.client.close = AsyncMock()
+
+    async def fake_poll():
+        nonlocal poll_count
+        poll_count += 1
+        if poll_count == 1:
+            raise aiohttp.ServerDisconnectedError()
+        assert adapter.client.close.await_count == 1
+        adapter._shutdown_event.set()
+
+    with (
+        patch.object(adapter, "_poll_inbound_updates", side_effect=fake_poll),
+        patch(
+            "astrbot.core.platform.sources.weixin_oc.weixin_oc_adapter.asyncio.sleep",
+            new_callable=AsyncMock,
+        ) as sleep_mock,
+        patch(
+            "astrbot.core.platform.sources.weixin_oc.weixin_oc_adapter.logger.warning"
+        ) as warning_mock,
+    ):
+        await adapter.run()
+
+    assert poll_count == 2
+    warning_mock.assert_called_once()
+    assert adapter.client.close.await_count == 2
+    sleep_mock.assert_awaited_once_with(2)
+    assert adapter._last_inbound_error
+    assert (
+        "Server disconnected" in adapter._last_inbound_error
+        or "ServerDisconnectedError" in adapter._last_inbound_error
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_keeps_non_network_poll_errors_fatal(adapter):
+    poll_mock = AsyncMock(side_effect=RuntimeError("boom"))
+    adapter._cleanup_typing_tasks = AsyncMock()
+    adapter.client.close = AsyncMock()
+
+    with (
+        patch.object(adapter, "_poll_inbound_updates", poll_mock),
+        patch(
+            "astrbot.core.platform.sources.weixin_oc.weixin_oc_adapter.logger.exception"
+        ) as exception_mock,
+    ):
+        await adapter.run()
+
+    assert poll_mock.await_count == 1
+    adapter._cleanup_typing_tasks.assert_awaited_once()
+    adapter.client.close.assert_awaited_once()
+    exception_mock.assert_called_once()
 
 
 @pytest.mark.asyncio

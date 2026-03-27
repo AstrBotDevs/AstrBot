@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote
 
+import aiohttp
 import qrcode as qrcode_lib
 
 from astrbot import logger
@@ -1232,6 +1233,15 @@ class WeixinOCAdapter(Platform):
                         "weixin_oc(%s): inbound long-poll timeout",
                         self.meta().id,
                     )
+                except aiohttp.ClientConnectionError as e:
+                    self._last_inbound_error = str(e) or e.__class__.__name__
+                    logger.warning(
+                        "weixin_oc(%s): inbound poll connection error: %s",
+                        self.meta().id,
+                        e,
+                    )
+                    await self.client.close()
+                    await asyncio.sleep(2)
         except asyncio.CancelledError:
             raise
         except Exception as e:
