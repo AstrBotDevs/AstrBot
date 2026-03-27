@@ -778,7 +778,7 @@ function handleSendShortcutChange(mode: string | null) {
     justify-content: center;
 }
 
-.chat-settings-group-trigger :deep(.v-list-item__append) {
+.chat-settings-group-trigger ::v-deep(.v-list-item__append) {
     display: flex;
     align-items: center;
     gap: 6px;
