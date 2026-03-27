@@ -76,10 +76,11 @@ export default {
       localLogCache: [],
       eventSource: null,
       retryTimer: null,
-      retryAttempts: 0,           
-      maxRetryAttempts: 10,       
-      baseRetryDelay: 1000,       
-      lastEventId: null,          
+      retryAttempts: 0,
+      maxRetryAttempts: 10,
+      baseRetryDelay: 1000,
+      lastEventId: null,
+      isUnmounted: false,
     }
   },
   computed: {
@@ -100,6 +101,7 @@ export default {
     this.connectSSE();
   },
   beforeUnmount() {
+    this.isUnmounted = true;
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
@@ -112,6 +114,7 @@ export default {
   },
   methods: {
     connectSSE() {
+      if (this.isUnmounted) return;
       if (this.eventSource) {
         this.eventSource.close();
         this.eventSource = null;
@@ -183,6 +186,7 @@ export default {
         }
 
         this.retryTimer = setTimeout(async () => {
+          if (this.isUnmounted) return;
           this.retryAttempts++;
           
           if (!this.lastEventId) {
@@ -308,7 +312,7 @@ export default {
   margin-left: 20px;
 }
 
-:deep(.console-log-line) {
+::v-deep(.console-log-line) {
   display: block;
   margin-bottom: 2px;
   font-family: SFMono-Regular, Menlo, Monaco, Consolas, var(--astrbot-font-cjk-mono), monospace;
@@ -316,7 +320,7 @@ export default {
   white-space: pre-wrap;
 }
 
-:deep(.fade-in) {
+::v-deep(.fade-in) {
   animation: fadeIn 0.3s;
 }
 
