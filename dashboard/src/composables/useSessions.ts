@@ -19,7 +19,6 @@ export function useSessions(chatboxMode: boolean = false) {
     const selectedSessions = ref<string[]>([]);
     const currSessionId = ref('');
     const pendingSessionId = ref<string | null>(null);
-
     // 编辑标题相关
     const editTitleDialog = ref(false);
     const editingTitle = ref('');
@@ -30,29 +29,16 @@ export function useSessions(chatboxMode: boolean = false) {
         return sessions.value.find(s => s.session_id === currSessionId.value);
     });
 
+    
+
     async function getSessions() {
         try {
             const response = await axios.get('/api/chat/sessions');
             sessions.value = response.data.data;
 
-            // 处理待加载的会话
-            if (pendingSessionId.value) {
-                const session = sessions.value.find(s => s.session_id === pendingSessionId.value);
-                if (session) {
-                    selectedSessions.value = [pendingSessionId.value];
-                    pendingSessionId.value = null;
-                }
-            } else if (currSessionId.value) {
-                // 如果当前有选中的会话，确保它在列表中并被选中
-                const session = sessions.value.find(s => s.session_id === currSessionId.value);
-                if (session) {
-                    selectedSessions.value = [currSessionId.value];
-                }
-            } else if (sessions.value.length > 0) {
-                // 默认选择第一个会话
-                const firstSession = sessions.value[0];
-                selectedSessions.value = [firstSession.session_id];
-            }
+
+
+    
         } catch (err: any) {
             if (err.response?.status === 401) {
                 router.push('/auth/login?redirect=/chatbox');

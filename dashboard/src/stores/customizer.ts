@@ -10,7 +10,6 @@ export const useCustomizerStore = defineStore({
     fontTheme: "Poppins",
     uiTheme: config.uiTheme,
     inputBg: config.inputBg,
-    viewMode: (localStorage.getItem('viewMode') as 'bot' | 'chat') || 'bot', // 'bot' 或 'chat'
     chatSidebarOpen: false // chat mode mobile sidebar state
   }),
 
@@ -29,10 +28,7 @@ export const useCustomizerStore = defineStore({
       this.uiTheme = payload;
       localStorage.setItem("uiTheme", payload);
     },
-    SET_VIEW_MODE(payload: 'bot' | 'chat') {
-      this.viewMode = payload;
-      localStorage.setItem('viewMode', payload);
-    },
+
     TOGGLE_CHAT_SIDEBAR() {
       this.chatSidebarOpen = !this.chatSidebarOpen;
     },
