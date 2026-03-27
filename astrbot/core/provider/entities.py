@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import enum
 import json
 from dataclasses import dataclass, field
@@ -21,6 +20,7 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.utils.image_utils import encode_image_to_base64_url
 from astrbot.core.utils.io import download_image_by_url
 
 
