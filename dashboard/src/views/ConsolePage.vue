@@ -61,11 +61,14 @@ const { tm } = useModuleI18n('features/console');
     <ConsoleDisplayer
       ref="consoleDisplayer"
       :enable-advanced-filters="true"
+      storage-key="console-main"
       style="height: calc(100vh - 220px); "
     />
   </div>
 </template>
 <script>
+const CONSOLE_AUTO_SCROLL_STORAGE_KEY = 'console-page:auto-scroll';
+
 export default {
   name: 'ConsolePage',
   components: {
@@ -83,8 +86,19 @@ export default {
       status: ''
     }
   },
+  mounted() {
+    const savedAutoScroll = localStorage.getItem(CONSOLE_AUTO_SCROLL_STORAGE_KEY);
+    if (savedAutoScroll !== null) {
+      this.autoScrollEnabled = savedAutoScroll === 'true';
+    }
+
+    if (this.$refs.consoleDisplayer) {
+      this.$refs.consoleDisplayer.autoScroll = this.autoScrollEnabled;
+    }
+  },
   watch: {
     autoScrollEnabled(val) {
+      localStorage.setItem(CONSOLE_AUTO_SCROLL_STORAGE_KEY, String(val));
       if (this.$refs.consoleDisplayer) {
         this.$refs.consoleDisplayer.autoScroll = val;
       }

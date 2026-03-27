@@ -94,6 +94,10 @@ export default {
     enableAdvancedFilters: {
       type: Boolean,
       default: false
+    },
+    storageKey: {
+      type: String,
+      default: ''
     }
   },
   setup() {
@@ -169,16 +173,20 @@ export default {
   },
   watch: {
     selectedLevels() {
+      this.persistState();
       this.scheduleAutoScroll();
     },
     selectedTags() {
+      this.persistState();
       this.scheduleAutoScroll();
     },
     keyword() {
+      this.persistState();
       this.scheduleAutoScroll();
     }
   },
   async mounted() {
+    this.restorePersistedState();
     await this.fetchLogHistory();
     this.connectSSE();
   },
@@ -194,6 +202,61 @@ export default {
     this.retryAttempts = 0;
   },
   methods: {
+    getStorageKey() {
+      if (!this.storageKey) {
+        return '';
+      }
+      return `console-displayer:${this.storageKey}`;
+    },
+
+    restorePersistedState() {
+      const storageKey = this.getStorageKey();
+      if (!storageKey || typeof window === 'undefined' || !window.localStorage) {
+        return;
+      }
+
+      try {
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) {
+          return;
+        }
+
+        const parsed = JSON.parse(raw);
+        const selectedLevels = Array.isArray(parsed.selectedLevels)
+          ? parsed.selectedLevels.filter((level) => this.logLevels.includes(level))
+          : [];
+        const selectedTags = Array.isArray(parsed.selectedTags)
+          ? parsed.selectedTags.filter((tag) => typeof tag === 'string' && tag.trim())
+          : [];
+
+        this.selectedLevels = selectedLevels.length > 0 ? selectedLevels : [...this.logLevels];
+        this.selectedTags = selectedTags;
+        this.keyword = typeof parsed.keyword === 'string' ? parsed.keyword : '';
+      } catch (error) {
+        console.warn('Failed to restore console filter state:', error);
+      }
+    },
+
+    persistState() {
+      const storageKey = this.getStorageKey();
+      if (!storageKey || typeof window === 'undefined' || !window.localStorage) {
+        return;
+      }
+
+      try {
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify({
+            selectedLevels: this.selectedLevels,
+            selectedTags: this.selectedTags,
+            keyword: this.keyword
+          })
+        );
+      } catch (error) {
+        console.warn('Failed to persist console filter state:', error);
+      }
+    },
+
     connectSSE() {
       if (this.eventSource) {
         this.eventSource.close();
@@ -363,6 +426,7 @@ export default {
     clearFilters() {
       this.selectedTags = [];
       this.keyword = '';
+      this.persistState();
     },
 
     getLevelColor(level) {
