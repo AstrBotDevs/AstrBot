@@ -12,6 +12,15 @@
 - any_of(*filters): 任一过滤器通过即可执行（OR 逻辑）
 - 支持 & 和 | 运算符进行链式组合
 
+例子：
+@custom_filter(
+    all_of(
+        PlatformFilter(["qq"]),
+        MessageTypeFilter(["group"]),
+        CustomFilter(lambda event: "hello" in event.text),
+    )
+)
+
 过滤器在本地（SDK worker 进程内）求值，避免不必要的跨进程调用。
 """
 
