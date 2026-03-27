@@ -5,7 +5,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
+import binascii
+
+from astrbot import logger
 
 
 def detect_image_mime_type(header_bytes: bytes) -> str:
@@ -14,6 +18,8 @@ def detect_image_mime_type(header_bytes: bytes) -> str:
     依次匹配常见图片格式的文件头特征，均不匹配时回退到 image/jpeg
     以保持向后兼容。支持的格式：JPEG、PNG、GIF、WebP、BMP、TIFF、
     ICO、SVG、AVIF、HEIF/HEIC。
+
+    注意：此函数为纯检测逻辑，不输出日志，日志由调用方负责。
 
     Args:
         header_bytes: 文件头原始字节。SVG检测需要至少 256 字节；
@@ -38,7 +44,7 @@ def detect_image_mime_type(header_bytes: bytes) -> str:
         return "image/tiff"
     if len(header_bytes) >= 4 and header_bytes[:4] == b'\x00\x00\x01\x00':
         return "image/x-icon"
-    # SVG 为文本格式，检测头部是否含有 <svg 标签。
+    # SVG 为文本格式，检测头部是否含有 《svg 标签。
     # 调用方需传入至少 256 字节以覆盖带有 XML 声明的 SVG 文件。
     if b'<svg' in header_bytes[:256].lower():
         return "image/svg+xml"
@@ -55,23 +61,80 @@ def detect_image_mime_type(header_bytes: bytes) -> str:
 
 
 # SVG 检测所需的最小头部字节数。
-# 其他二进制格式的魔术字节最多 16 字节，SVG 需要更多以跳过可能的 XML 声明。
 _HEADER_READ_SIZE = 256
 
 # 对应 _HEADER_READ_SIZE 字节所需的 base64 字符数。
-# base64 每 3 字节编码为 4 字符，向上取整后再补充少量余量保证填充对齐。
 # ceil(256 / 3) * 4 = 344
 _BASE64_SAMPLE_CHARS = 344
+
+
+def detect_mime_type_from_base64_str(
+    raw_b64: str,
+    source_hint: str = "",
+) -> str:
+    """从 base64 编码字符串中采样解码头部字节并检测 MIME 类型。
+
+    统一所有 base64 输入的 MIME 检测逻辑，避免在多处重复
+    采样/解码/回退的代码。解码失败时安全回退到 image/jpeg。
+
+    Args:
+        raw_b64: 原始 base64 编码字符串（不含 "base64://" 前缀）。
+        source_hint: 日志中标识调用来源的提示字符串。
+
+    Returns:
+        检测到的 MIME 类型字符串。
+    """
+    label = source_hint or "base64"
+    try:
+        sample = raw_b64[:_BASE64_SAMPLE_CHARS]
+        missing_padding = len(sample) % 4
+        if missing_padding:
+            sample += '=' * (4 - missing_padding)
+        header_bytes = base64.b64decode(sample)
+    except (binascii.Error, ValueError) as exc:
+        logger.debug(
+            "[%s] base64 解码失败: %s，硬编码回退为 image/jpeg",
+            label,
+            exc,
+        )
+        return "image/jpeg"
+
+    mime_type = detect_image_mime_type(header_bytes)
+    logger.debug(
+        "[%s] 魔术字节检测命中，识别为 %s 格式",
+        label,
+        mime_type,
+    )
+    return mime_type
+
+
+def _sync_encode_from_file(path: str) -> tuple[str, str]:
+    """同步读取文件并编码为 base64，同时检测 MIME 类型。
+
+    此函数包含阻塞式文件 I/O，设计为通过 run_in_executor
+    在线程池中执行，避免阻塞 asyncio 事件循环。
+
+    Args:
+        path: 本地文件路径。
+
+    Returns:
+        (mime_type, image_bs64) 元组。
+    """
+    with open(path, "rb") as f:
+        header_bytes = f.read(_HEADER_READ_SIZE)
+        mime_type = detect_image_mime_type(header_bytes)
+        f.seek(0)
+        image_bs64 = base64.b64encode(f.read()).decode("utf-8")
+    return mime_type, image_bs64
 
 
 async def encode_image_to_base64_url(image_url: str) -> str:
     """将图片转换为 base64 Data URL，自动检测实际 MIME 类型。
 
-    原实现硬编码 image/jpeg，会导致 PNG 等格式在严格校验的接口上报错。
-    现通过读取文件头魔术字节来推断正确的 MIME 类型。
-
-    对于 SVG 文件，需要读取至少 256 字节的头部才能可靠检测，
-    因此统一将读取/解码量提升到 256 字节，消除之前字节数不足的问题。
+    对于 base64:// 输入，委托 detect_mime_type_from_base64_str
+    统一处理采样/解码/回退逻辑。
+    对于文件路径输入，阻塞式文件 I/O 通过 run_in_executor
+    移至线程池执行，避免在高并发场景下阻塞 asyncio 事件循环。
 
     Args:
         image_url: 本地文件路径，或以 "base64://" 开头的 base64 字符串。
@@ -81,26 +144,19 @@ async def encode_image_to_base64_url(image_url: str) -> str:
     """
     if image_url.startswith("base64://"):
         raw_b64 = image_url[len("base64://"):]
-        # 从 base64 数据中解码足量字节以检测实际格式。
-        # 取前 344 个 base64 字符可解码出约 258 字节，足以覆盖 SVG 检测所需的 256 字节。
-        try:
-            sample = raw_b64[:_BASE64_SAMPLE_CHARS]
-            # 确保 base64 填充正确，避免解码报错
-            missing_padding = len(sample) % 4
-            if missing_padding:
-                sample += '=' * (4 - missing_padding)
-            header_bytes = base64.b64decode(sample)
-            mime_type = detect_image_mime_type(header_bytes)
-        except Exception:
-            # 解码失败时安全回退
-            mime_type = "image/jpeg"
+        mime_type = detect_mime_type_from_base64_str(
+            raw_b64, source_hint="image_utils/base64://"
+        )
         return f"data:{mime_type};base64,{raw_b64}"
 
-    with open(image_url, "rb") as f:
-        # 读取 256 字节用于格式检测，以支持需要较多头部数据的 SVG 等格式，
-        # 再 seek 回起点读取完整内容进行 base64 编码。
-        header_bytes = f.read(_HEADER_READ_SIZE)
-        mime_type = detect_image_mime_type(header_bytes)
-        f.seek(0)
-        image_bs64 = base64.b64encode(f.read()).decode("utf-8")
-        return f"data:{mime_type};base64,{image_bs64}"
+    # 文件 I/O 为阻塞操作，移至线程池执行以保持事件循环响应性
+    loop = asyncio.get_running_loop()
+    mime_type, image_bs64 = await loop.run_in_executor(
+        None, _sync_encode_from_file, image_url
+    )
+    logger.debug(
+        "[image_utils][%s] 魔术字节检测命中，识别为 %s 格式",
+        image_url,
+        mime_type,
+    )
+    return f"data:{mime_type};base64,{image_bs64}"
