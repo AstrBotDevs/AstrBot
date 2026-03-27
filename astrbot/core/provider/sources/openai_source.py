@@ -35,7 +35,10 @@ from astrbot.core.utils.network_utils import (
     log_connection_failure,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
-from astrbot.core.utils.image_utils import detect_image_mime_type
+from astrbot.core.utils.image_utils import (
+    detect_image_mime_type,
+    detect_mime_type_from_base64_str,
+)
 
 from ..register import register_provider_adapter
 
@@ -306,29 +309,16 @@ class ProviderOpenAIOfficial(Provider):
         return str(Path(path))
 
     async def _image_ref_to_data_url(
-            self,
-            image_ref: str,
-            *,
-            mode: Literal["safe", "strict"] = "safe",
+        self,
+        image_ref: str,
+        *,
+        mode: Literal["safe", "strict"] = "safe",
     ) -> str | None:
         if image_ref.startswith("base64://"):
             raw_b64 = image_ref[len("base64://"):]
-            try:
-                sample = raw_b64[:_BASE64_SAMPLE_CHARS]
-                missing_padding = len(sample) % 4
-                if missing_padding:
-                    sample += '=' * (4 - missing_padding)
-                header_bytes = base64.b64decode(sample)
-                mime_type = detect_image_mime_type(header_bytes)
-                logger.debug(
-                    "[base64://] 魔术字节检测命中，识别为 %s 格式",
-                    mime_type,
-                )
-            except Exception:
-                mime_type = "image/jpeg"
-                logger.debug(
-                    "[base64://] base64 解码失败，硬编码回退为 image/jpeg"
-                )
+            mime_type = detect_mime_type_from_base64_str(
+                raw_b64, source_hint="adapter/base64://"
+            )
             return f"data:{mime_type};base64,{raw_b64}"
 
         if image_ref.startswith("http"):
@@ -342,6 +332,7 @@ class ProviderOpenAIOfficial(Provider):
             image_path,
             mode=mode,
         )
+
 
     async def _resolve_image_part(
         self,
@@ -473,31 +464,25 @@ class ProviderOpenAIOfficial(Provider):
                 http_client=self._create_http_client(self.provider_config),
             )
 
-    def _ensure_client(self) -> None:
-        """确保 client 可用。如果 client 为 None 或底层连接已关闭，则重新创建。
+    def _is_underlying_client_closed(self) -> bool:
+        """集中处理对 openai SDK 私有属性的访问，便于未来替换为公开 API。
 
-        这提供了多层防御：terminate() 会将 client 置为 None，
-        配置重载（reload）期间若复用已关闭的 client 会导致 APIConnectionError，
-        此方法在每次使用前检查并自动重建。
+        注意：此处直接访问了 openai 库的私有属性 `_client`，
+        依赖其内部实现（httpx.AsyncClient 实例暴露的 is_closed 属性）。
+        这一做法存在脆弱性——若 openai 库未来版本调整了内部结构，
+        此处可能在没有任何报错的情况下静默失效。
+        目前 openai SDK 尚未提供检查底层连接是否已关闭的公开 API。
+        若未来 SDK 提供了类似 self.client.is_closed() 的公开方法，
+        应及时将此处替换为对应的公开接口。
         """
-        need_reinit = False
-        if self.client is None:
-            need_reinit = True
-        else:
-            try:
-                # 注意：此处直接访问了 openai 库的私有属性 `_client`，
-                # 依赖其内部实现（httpx.AsyncClient 实例暴露的 is_closed 属性）。
-                # 这一做法存在脆弱性——若 openai 库未来版本调整了内部结构，
-                # 此处可能在没有任何报错的情况下静默失效。
-                # 目前 openai SDK 尚未提供检查底层连接是否已关闭的公开 API。
-                # 若未来 SDK 提供了类似 self.client.is_closed() 的公开方法，
-                # 应及时将此处替换为对应的公开接口。
-                if self.client._client.is_closed:
-                    need_reinit = True
-            except AttributeError:
-                pass
+        try:
+            return bool(self.client and self.client._client.is_closed)
+        except AttributeError:
+            return False
 
-        if need_reinit:
+    def _ensure_client(self) -> None:
+        """确保 client 可用。如果 client 为 None 或底层连接已关闭，则重新创建。"""
+        if self.client is None or self._is_underlying_client_closed():
             logger.warning("检测到 OpenAI client 已关闭或未初始化，正在重新创建...")
             self.client = self._create_openai_client()
             self.default_params = inspect.signature(
@@ -1336,3 +1321,4 @@ class ProviderOpenAIOfficial(Provider):
                 logger.warning(f"关闭 OpenAI client 时出错: {e}")
             finally:
                 self.client = None
+    
