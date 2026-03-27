@@ -386,7 +386,7 @@ export default {
   },
 
 // 检查未保存的更改
-  async beforeRouteLeave(to, from, next) {
+  async beforeRouteLeave(to, from) {
     if (this.hasUnsavedChanges) {
       const confirmed = await this.$refs.unsavedChangesDialog?.open({
         title: this.tm('unsavedChangesWarning.dialogTitle'),
@@ -397,25 +397,25 @@ export default {
       });
       // 关闭弹窗不跳转
       if (confirmed === 'close') {
-        next(false);
+        return false;
       } else if (confirmed) {
         const result = await this.updateConfig();
         if (this.isSystemConfig) {
-          next(false);
+          return false;
         } else {
           if (result?.success) {
             await new Promise(resolve => setTimeout(resolve, 800));
-            next();
+            return true;
           } else {
-            next(false);
+            return false;
           }
         }
       } else {
         this.hasUnsavedChanges = false;
-        next();
+        return true;
       }
     } else {
-      next();
+      return true;
     }
   },
   props: {
