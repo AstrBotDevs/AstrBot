@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import axios from "@/utils/request";
 import Logo from "@/components/shared/Logo.vue";
@@ -471,6 +471,10 @@ const commonStore = useCommonStore();
 commonStore.createEventSource(); // log
 commonStore.getStartTime();
 
+onBeforeUnmount(() => {
+  commonStore.closeEventSourcet();
+});
+
 // 视图模式切换
 const viewMode = computed({
   get: () => customizer.viewMode,
@@ -862,7 +866,7 @@ const isChristmas = computed(() => {
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
-      <v-card-text>
+      <v-card-text class="overflow-y-auto" style="max-height: 80vh">
         <v-container>
           <v-progress-linear
             v-show="installLoading"
@@ -1392,7 +1396,7 @@ const isChristmas = computed(() => {
   margin-right: 8px;
 }
 
-.language-group-trigger :deep(.v-list-item__append) {
+.language-group-trigger ::v-deep(.v-list-item__append) {
   display: flex;
   align-items: center;
   gap: 6px;
