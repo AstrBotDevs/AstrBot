@@ -164,9 +164,10 @@ class BaseDatabase(abc.ABC):
         cid: str,
         title: str | None = None,
         persona_id: str | None = None,
-        clear_persona: bool = False,
         content: list[dict] | None = None,
         token_usage: int | None = None,
+        *,
+        clear_persona: bool = False,
     ) -> None:
         """Update a conversation's history."""
         ...
@@ -214,7 +215,35 @@ class BaseDatabase(abc.ABC):
         """Get platform message history for a specific user."""
         ...
 
-    @abc.abstractmethod
+    async def _collect_legacy_platform_message_history(
+        self,
+        platform_id: str,
+        user_id: str,
+        *,
+        page_size: int = 200,
+    ) -> list[PlatformMessageHistory]:
+        """Best-effort compatibility fallback for legacy database backends."""
+        # TODO(compat): Remove this pagination shim after third-party database
+        # backends implement the SDK-native platform message history methods.
+        rows: list[PlatformMessageHistory] = []
+        page = 1
+        while True:
+            batch = list(
+                await self.get_platform_message_history(
+                    platform_id=platform_id,
+                    user_id=user_id,
+                    page=page,
+                    page_size=page_size,
+                )
+            )
+            if not batch:
+                break
+            rows.extend(batch)
+            if len(batch) < page_size:
+                break
+            page += 1
+        return rows
+
     async def list_sdk_platform_message_history(
         self,
         platform_id: str,
@@ -223,10 +252,24 @@ class BaseDatabase(abc.ABC):
         limit: int = 50,
         include_total: bool = False,
     ) -> tuple[list[PlatformMessageHistory], int | None]:
-        """List SDK message history records ordered by descending id."""
-        ...
+        """List SDK message history records ordered by descending id.
 
-    @abc.abstractmethod
+        Legacy third-party backends may still implement only the older paged
+        history API. Fall back to that API so they keep working without having
+        to implement the new SDK-specific helpers immediately.
+        """
+
+        rows = await self._collect_legacy_platform_message_history(
+            platform_id=platform_id,
+            user_id=user_id,
+            page_size=max(int(limit), 50),
+        )
+        rows.sort(key=lambda item: int(item.id or 0), reverse=True)
+        if cursor_id is not None:
+            rows = [item for item in rows if int(item.id or 0) < int(cursor_id)]
+        total = len(rows) if include_total else None
+        return rows[: max(int(limit), 1)], total
+
     async def delete_platform_message_before(
         self,
         platform_id: str,
@@ -234,9 +277,14 @@ class BaseDatabase(abc.ABC):
         before: datetime.datetime,
     ) -> int:
         """Delete platform message history records strictly older than ``before``."""
-        ...
 
-    @abc.abstractmethod
+        # TODO(compat): Add a real legacy fallback only if we introduce a safe
+        # record-level delete path for custom database backends.
+        raise NotImplementedError(
+            "This database backend does not implement delete_platform_message_before(). "
+            "Upgrade the backend to support SDK message history pruning.",
+        )
+
     async def delete_platform_message_after(
         self,
         platform_id: str,
@@ -244,18 +292,73 @@ class BaseDatabase(abc.ABC):
         after: datetime.datetime,
     ) -> int:
         """Delete platform message history records strictly newer than ``after``."""
-        ...
 
-    @abc.abstractmethod
+        rows = await self._collect_legacy_platform_message_history(
+            platform_id=platform_id,
+            user_id=user_id,
+        )
+        deleted_count = sum(
+            1
+            for item in rows
+            if item.created_at is not None and item.created_at > after
+        )
+        if deleted_count == 0:
+            return 0
+
+        now = (
+            datetime.datetime.now(after.tzinfo)
+            if after.tzinfo is not None
+            else datetime.datetime.now()
+        )
+        delta_seconds = max(0.0, (now - after).total_seconds())
+        offset_sec = int(delta_seconds)
+        if delta_seconds > offset_sec:
+            offset_sec += 1
+        await self.delete_platform_message_offset(
+            platform_id=platform_id,
+            user_id=user_id,
+            offset_sec=offset_sec,
+        )
+        return deleted_count
+
     async def delete_all_platform_message_history(
         self,
         platform_id: str,
         user_id: str,
     ) -> int:
         """Delete all platform message history records for a specific user."""
-        ...
 
-    @abc.abstractmethod
+        rows = await self._collect_legacy_platform_message_history(
+            platform_id=platform_id,
+            user_id=user_id,
+        )
+        if not rows:
+            return 0
+
+        oldest_created_at = min(
+            (item.created_at for item in rows if item.created_at is not None),
+            default=None,
+        )
+        if oldest_created_at is None:
+            offset_sec = 60 * 60 * 24 * 365 * 100
+        else:
+            now = (
+                datetime.datetime.now(oldest_created_at.tzinfo)
+                if oldest_created_at.tzinfo is not None
+                else datetime.datetime.now()
+            )
+            delta_seconds = max(0.0, (now - oldest_created_at).total_seconds())
+            offset_sec = int(delta_seconds)
+            if delta_seconds > offset_sec:
+                offset_sec += 1
+
+        await self.delete_platform_message_offset(
+            platform_id=platform_id,
+            user_id=user_id,
+            offset_sec=max(offset_sec, 1),
+        )
+        return len(rows)
+
     async def find_platform_message_history_by_idempotency_key(
         self,
         platform_id: str,
@@ -263,7 +366,20 @@ class BaseDatabase(abc.ABC):
         idempotency_key: str,
     ) -> PlatformMessageHistory | None:
         """Find one message history record by the SDK idempotency key."""
-        ...
+
+        rows = await self._collect_legacy_platform_message_history(
+            platform_id=platform_id,
+            user_id=user_id,
+        )
+        matched = []
+        for item in rows:
+            content = item.content if isinstance(item.content, dict) else {}
+            if str(content.get("idempotency_key", "")) == str(idempotency_key):
+                matched.append(item)
+        if not matched:
+            return None
+        matched.sort(key=lambda item: int(item.id or 0), reverse=True)
+        return matched[0]
 
     @abc.abstractmethod
     async def get_platform_message_history_by_id(

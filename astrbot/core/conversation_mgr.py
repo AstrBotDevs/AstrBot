@@ -262,8 +262,9 @@ class ConversationManager:
         history: list[dict] | None = None,
         title: str | None = None,
         persona_id: str | None = None,
-        clear_persona: bool = False,
         token_usage: int | None = None,
+        *,
+        clear_persona: bool = False,
     ) -> None:
         """更新会话的对话.
 
@@ -274,6 +275,8 @@ class ConversationManager:
             token_usage (int | None): token 使用量。None 表示不更新
 
         """
+        # TODO(compat): Keep clear_persona keyword-only until external plugins
+        # have fully migrated away from positional update_conversation calls.
         if not conversation_id:
             # 如果没有提供 conversation_id，则获取当前的
             conversation_id = await self.get_curr_conversation_id(unified_msg_origin)

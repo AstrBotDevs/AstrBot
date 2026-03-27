@@ -1,82 +1,112 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import sys
-from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from astrbot.core.message.components import File, Plain, Video
-from tests.fixtures.helpers import create_mock_file, create_mock_update
-from tests.fixtures.mocks.telegram import MockTelegramBuilder
+import astrbot.api.message_components as Comp
+from tests.fixtures.helpers import (
+    create_mock_file,
+    create_mock_update,
+    make_platform_config,
+)
+from tests.fixtures.mocks.telegram import create_mock_telegram_modules
 
-pytest_plugins = ("tests.fixtures.mocks.telegram",)
+_TELEGRAM_PLATFORM_ADAPTER = None
 
 
-def _build_adapter():
-    sys.modules["telegram.ext"].ContextTypes.DEFAULT_TYPE = object
-    from astrbot.core.platform.sources.telegram.tg_adapter import (
-        TelegramPlatformAdapter,
-    )
+def _load_telegram_adapter():
+    global _TELEGRAM_PLATFORM_ADAPTER
+    if _TELEGRAM_PLATFORM_ADAPTER is not None:
+        return _TELEGRAM_PLATFORM_ADAPTER
 
-    return TelegramPlatformAdapter(
-        {"telegram_token": "test-token", "id": "telegram-test"},
+    mocks = create_mock_telegram_modules()
+    patched_modules = {
+        "telegram": mocks["telegram"],
+        "telegram.constants": mocks["telegram"].constants,
+        "telegram.error": mocks["telegram"].error,
+        "telegram.ext": mocks["telegram.ext"],
+        "telegramify_markdown": mocks["telegramify_markdown"],
+        "apscheduler": mocks["apscheduler"],
+        "apscheduler.schedulers": mocks["apscheduler"].schedulers,
+        "apscheduler.schedulers.asyncio": mocks["apscheduler"].schedulers.asyncio,
+        "apscheduler.schedulers.background": mocks["apscheduler"].schedulers.background,
+    }
+    with patch.dict(sys.modules, patched_modules):
+        sys.modules.pop("astrbot.core.platform.sources.telegram.tg_adapter", None)
+        module = importlib.import_module(
+            "astrbot.core.platform.sources.telegram.tg_adapter"
+        )
+        _TELEGRAM_PLATFORM_ADAPTER = module.TelegramPlatformAdapter
+        return _TELEGRAM_PLATFORM_ADAPTER
+
+
+def _build_context() -> MagicMock:
+    context = MagicMock()
+    context.bot.username = "test_bot"
+    context.bot.id = 12345678
+    return context
+
+
+@pytest.mark.asyncio
+async def test_telegram_document_caption_populates_message_text_and_plain() -> None:
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
         {},
         asyncio.Queue(),
     )
-
-
-def _build_context():
-    return SimpleNamespace(bot=MockTelegramBuilder.create_bot())
-
-
-@pytest.mark.unit
-def test_telegram_document_caption_populates_message_text_and_plain(
-    mock_telegram_modules,  # noqa: ARG001
-) -> None:
-    adapter = _build_adapter()
-    context = _build_context()
-
-    document = create_mock_file("https://api.telegram.org/file/test.pdf")
-    document.file_name = "test.pdf"
+    document = create_mock_file("https://api.telegram.org/file/test/report.md")
+    document.file_name = "report.md"
+    mention = MagicMock(type="mention", offset=0, length=6)
     update = create_mock_update(
         message_text=None,
         document=document,
-        caption="document caption",
+        caption="@alice 请总结这份文档",
+        caption_entities=[mention],
     )
 
-    message = asyncio.run(adapter.convert_message(update, context))
+    result = await adapter.convert_message(update, _build_context())
 
-    assert message is not None
-    assert message.message_str == "document caption"
-    assert any(isinstance(component, File) for component in message.message)
+    assert result is not None
+    assert result.message_str == "@alice 请总结这份文档"
+    assert any(isinstance(component, Comp.File) for component in result.message)
     assert any(
-        isinstance(component, Plain) and component.text == "document caption"
-        for component in message.message
+        isinstance(component, Comp.Plain)
+        and component.text == "@alice 请总结这份文档"
+        for component in result.message
+    )
+    assert any(
+        isinstance(component, Comp.At) and component.qq == "alice"
+        for component in result.message
     )
 
 
-@pytest.mark.unit
-def test_telegram_video_caption_populates_message_text_and_plain(
-    mock_telegram_modules,  # noqa: ARG001
-) -> None:
-    adapter = _build_adapter()
-    context = _build_context()
-
-    video = create_mock_file("https://api.telegram.org/file/test.mp4")
-    video.file_name = "test.mp4"
+@pytest.mark.asyncio
+async def test_telegram_video_caption_populates_message_text_and_plain() -> None:
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    video = create_mock_file("https://api.telegram.org/file/test/lesson.mp4")
+    video.file_name = "lesson.mp4"
     update = create_mock_update(
         message_text=None,
         video=video,
-        caption="video caption",
+        caption="这段视频讲了什么",
     )
 
-    message = asyncio.run(adapter.convert_message(update, context))
+    result = await adapter.convert_message(update, _build_context())
 
-    assert message is not None
-    assert message.message_str == "video caption"
-    assert any(isinstance(component, Video) for component in message.message)
+    assert result is not None
+    assert result.message_str == "这段视频讲了什么"
+    assert any(isinstance(component, Comp.Video) for component in result.message)
     assert any(
-        isinstance(component, Plain) and component.text == "video caption"
-        for component in message.message
+        isinstance(component, Comp.Plain) and component.text == "这段视频讲了什么"
+        for component in result.message
     )

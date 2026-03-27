@@ -298,9 +298,10 @@ class SQLiteDatabase(BaseDatabase):
         cid,
         title=None,
         persona_id=None,
-        clear_persona: bool = False,
         content=None,
         token_usage=None,
+        *,
+        clear_persona: bool = False,
     ):
         async with self.get_db() as session:
             session: AsyncSession
