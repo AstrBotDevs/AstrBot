@@ -485,6 +485,7 @@ export default {
       },
       // Web search results mapping: { 'uuid.idx': { url, title, snippet } }
       webSearchResults: {},
+      isUnmounted: false,
     };
   },
   async mounted() {
@@ -496,6 +497,7 @@ export default {
     this.extractWebSearchResults();
   },
   updated() {
+    if (this.isUnmounted) return;
     this.initCodeCopyButtons();
     this.initImageClickEvents();
     if (this.isUserNearBottom) {
@@ -915,6 +917,7 @@ export default {
     // 初始化代码块复制按钮
     initCodeCopyButtons() {
       this.$nextTick(() => {
+        if (this.isUnmounted) return;
         const codeBlocks =
           this.$refs.messageContainer?.querySelectorAll("pre code") || [];
         codeBlocks.forEach((codeBlock, index) => {
@@ -954,6 +957,7 @@ export default {
 
     initImageClickEvents() {
       this.$nextTick(() => {
+        if (this.isUnmounted) return;
         // 查找所有动态生成的图片（在markdown-content中）
         const images = document.querySelectorAll(".markdown-content img");
         images.forEach((img) => {
@@ -968,6 +972,7 @@ export default {
 
     scrollToBottom() {
       this.$nextTick(() => {
+        if (this.isUnmounted) return;
         const container = this.$refs.messageContainer;
         if (container) {
           container.scrollTop = container.scrollHeight;
@@ -1008,6 +1013,7 @@ export default {
 
     // 组件销毁时移除监听器
     beforeUnmount() {
+      this.isUnmounted = true;
       const container = this.$refs.messageContainer;
       if (container) {
         container.removeEventListener("scroll", this.throttledHandleScroll);
@@ -1174,43 +1180,43 @@ export default {
 </script>
 
 <style scoped>
-:deep(.hr-node) {
+::v-deep(.hr-node) {
   margin-top: 1.25rem;
   margin-bottom: 1.25rem;
   opacity: 0.5;
   border-top-width: 0.3px;
 }
 
-:deep(.paragraph-node) {
+::v-deep(.paragraph-node) {
   margin: 0.5rem 0;
   line-height: 1.7;
   margin-block: 1rem;
 }
 
-:deep(.list-node) {
+::v-deep(.list-node) {
   margin-top: 0.5rem;
   margin-bottom: 0.5rem;
 }
 
-:deep(.mermaid-block-header) {
+::v-deep(.mermaid-block-header) {
   gap: 8px;
 }
 
-:deep(code.bg-secondary) {
+::v-deep(code.bg-secondary) {
   background-color: #ececec !important;
   color: #0d0d0d !important;
 }
 
-:deep(code.rounded) {
+::v-deep(code.rounded) {
   border-radius: 6px !important;
 }
 
-.messages-container.is-dark :deep(code.bg-secondary) {
+.messages-container.is-dark ::v-deep(code.bg-secondary) {
   background-color: #424242 !important;
   color: #ffffff !important;
 }
 
-.messages-container.is-dark :deep(.code-block-container) {
+.messages-container.is-dark ::v-deep(.code-block-container) {
   background-color: #1f1f1f !important;
 }
 
