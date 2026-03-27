@@ -382,7 +382,7 @@ class InternalAgentSubStage(Stage):
             )
             await event.send(MessageChain().message(error_text))
         finally:
-            if typing_requested and not event.platform_meta.support_streaming_message:
+            if typing_requested:
                 try:
                     await event.stop_typing()
                 except Exception:
