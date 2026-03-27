@@ -50,7 +50,7 @@ export function getTutorialLink(platformType) {
   const tutorialMap = {
     "qq_official_webhook": "https://docs.astrbot.app/platform/qqofficial/webhook.html",
     "qq_official": "https://docs.astrbot.app/platform/qqofficial/websockets.html",
-    "aiocqhttp": "https://docs.astrbot.app/platform/aiocqhttp/napcat.html",
+    "aiocqhttp": "https://docs.astrbot.app/platform/aiocqhttp.html",
     "wecom": "https://docs.astrbot.app/platform/wecom.html",
     "weixin_oc": "https://docs.astrbot.app/platform/weixin_oc.html",
     "wecom_ai_bot": "https://docs.astrbot.app/platform/wecom_ai_bot.html",
