@@ -506,7 +506,7 @@ onMounted(() => {
   margin: 0 auto;
 }
 
-.subagent-panels :deep(.v-expansion-panel-text__wrapper) {
+.subagent-panels ::v-deep(.v-expansion-panel-text__wrapper) {
   padding: 16px;
   padding-bottom: 42px;
 }

@@ -447,10 +447,10 @@ const marketCategorySelectItems = computed(() =>
   max-width: 220px;
 }
 
-.market-filter-control :deep(.v-field__input),
-.market-filter-control :deep(.v-field-label),
-.market-filter-control :deep(.v-select__selection-text),
-.market-filter-control :deep(.v-field__prepend-inner) {
+.market-filter-control ::v-deep(.v-field__input),
+.market-filter-control ::v-deep(.v-field-label),
+.market-filter-control ::v-deep(.v-select__selection-text),
+.market-filter-control ::v-deep(.v-field__prepend-inner) {
   font-size: 0.875rem;
 }
 </style>

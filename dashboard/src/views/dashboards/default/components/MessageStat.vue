@@ -36,7 +36,7 @@
               >
                 mdi-calendar-range
               </v-icon>
-              {{ item.raw.label }}
+              {{ item.raw?.label }}
             </div>
           </template>
         </v-select>
@@ -276,8 +276,9 @@ export default {
     },
     
     processTimeSeriesData() {
+      if (!this.chartSeries?.[0]) return;
       // 转换数据为图表格式
-      this.chartSeries[0].data = this.messageTimeSeries.map((item) => {
+      this.chartSeries[0].data = (this.messageTimeSeries || []).map((item) => {
         return [new Date(item[0]*1000).getTime(), item[1]];
       });
       

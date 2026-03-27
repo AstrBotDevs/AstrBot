@@ -874,12 +874,12 @@ const pinnedPlugins = computed(() => {
   justify-content: flex-end;
 }
 
-.installed-status-toggle :deep(.v-btn) {
+.installed-status-toggle ::v-deep(.v-btn) {
   min-height: 34px;
   text-transform: none;
 }
 
-.view-mode-toggle :deep(.v-btn) {
+.view-mode-toggle ::v-deep(.v-btn) {
   min-width: 30px;
   height: 28px;
   padding: 0 8px;
@@ -898,7 +898,7 @@ const pinnedPlugins = computed(() => {
   -webkit-overflow-scrolling: touch;
 }
 
-.plugin-list-table :deep(td) {
+.plugin-list-table ::v-deep(td) {
   vertical-align: top;
 }
 

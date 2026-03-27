@@ -1246,27 +1246,27 @@ export default {
 }
 
 /* 添加美化详情卡片的样式 */
-.fact-detail-card :deep(.v-card-title) {
+.fact-detail-card ::v-deep(.v-card-title) {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
 }
 
-.fact-detail-card :deep(.metadata-table) {
+.fact-detail-card ::v-deep(.metadata-table) {
   border-radius: 8px;
   overflow: hidden;
 }
 
-.fact-detail-card :deep(.v-table) {
+.fact-detail-card ::v-deep(.v-table) {
   background: transparent;
 }
 
-.fact-detail-card :deep(.v-table th) {
+.fact-detail-card ::v-deep(.v-table th) {
   color: var(--v-primary-base);
   font-weight: bold;
   background-color: rgba(var(--v-theme-primary), 0.05);
 }
 
-.fact-detail-card :deep(pre) {
+.fact-detail-card ::v-deep(pre) {
   background-color: #f5f5f5;
   padding: 8px;
   border-radius: 4px;

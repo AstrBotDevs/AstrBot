@@ -1743,17 +1743,17 @@ export default {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07) !important;
 }
 
-.chunk-field :deep(.v-field__input) {
+.chunk-field ::v-deep(.v-field__input) {
     padding-top: 8px;
     padding-bottom: 8px;
 }
 
-.chunk-field :deep(.v-field__prepend-inner) {
+.chunk-field ::v-deep(.v-field__prepend-inner) {
     padding-right: 8px;
     opacity: 0.7;
 }
 
-.chunk-field:focus-within :deep(.v-field__prepend-inner) {
+.chunk-field:focus-within ::v-deep(.v-field__prepend-inner) {
     opacity: 1;
 }
 
@@ -1762,7 +1762,7 @@ export default {
     min-height: 400px;
 }
 
-.data-source-select :deep(.v-field__prepend-inner) {
+.data-source-select ::v-deep(.v-field__prepend-inner) {
     padding-right: 12px;
 }
 </style>

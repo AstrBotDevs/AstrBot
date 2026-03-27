@@ -1600,7 +1600,7 @@ export default {
 </script>
 
 <style scoped>
-.v-data-table :deep(.v-data-table__td) {
+.v-data-table ::v-deep(.v-data-table__td) {
   padding: 8px 16px !important;
   vertical-align: middle !important;
 }
