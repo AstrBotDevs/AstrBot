@@ -454,6 +454,8 @@ def on_command(
     *,
     aliases: list[str] | None = None,
     description: str | None = None,
+    group: str | typing.Sequence[str] | None = None,
+    group_help: str | None = None,
 ) -> Callable[[HandlerCallable], HandlerCallable]:
     """注册命令处理方法。
 
@@ -464,6 +466,9 @@ def on_command(
         command: 命令名称（不包含前缀符）
         aliases: 命令别名列表
         description: 命令描述，用于帮助信息
+        group: 指令组路径。传入 "admin" 表示一级组；传入 ["admin", "user"] 表示多级组
+            设置后实际命令为 ``"admin command"`` 或 ``"admin user command"``
+        group_help: 指令组描述，用于帮助信息
 
     Returns:
         装饰器函数
@@ -472,6 +477,10 @@ def on_command(
         @on_command("echo", aliases=["repeat"], description="重复消息")
         async def echo(self, event: MessageEvent, ctx: Context):
             await event.reply(event.text)
+
+        @on_command("ban", group="admin", description="封禁用户")
+        async def admin_ban(self, event: MessageEvent, ctx: Context):
+            await event.reply("已封禁")
     """
 
     commands = (
@@ -482,22 +491,45 @@ def on_command(
     commands = [item for item in commands if item]
     if not commands:
         raise ValueError("on_command requires at least one non-empty command name")
+
+    group_path: list[str] = []
+    if group is not None:
+        group_path = (
+            [str(group).strip()]
+            if isinstance(group, str)
+            else [str(item).strip() for item in group]
+        )
+        group_path = [item for item in group_path if item]
+
     canonical = commands[0]
+    display_command = " ".join([*group_path, canonical]) if group_path else canonical
     merged_aliases: list[str] = [
         item
         for item in dict.fromkeys([*commands[1:], *(aliases or [])])
         if isinstance(item, str) and item and item != canonical
     ]
+    expanded_aliases: list[str] = (
+        [" ".join([*group_path, alias]) for alias in merged_aliases]
+        if group_path
+        else merged_aliases
+    )
 
     def decorator(func: HandlerCallable) -> HandlerCallable:
         meta = _get_or_create_meta(func)
         normalized_description = _normalize_description(description)
+        trigger_command = display_command if group_path else canonical
         meta.trigger = CommandTrigger(
-            command=canonical,
-            aliases=merged_aliases,
+            command=trigger_command,
+            aliases=expanded_aliases if group_path else merged_aliases,
             description=normalized_description,
         )
         meta.description = normalized_description
+        if group_path:
+            meta.command_route = CommandRouteSpec(
+                group_path=group_path,
+                display_command=display_command,
+                group_help=_normalize_description(group_help),
+            )
         _validate_message_trigger_compatibility(meta)
         return func
 
@@ -1003,6 +1035,8 @@ def conversation_command(
     *,
     aliases: list[str] | None = None,
     description: str | None = None,
+    group: str | typing.Sequence[str] | None = None,
+    group_help: str | None = None,
     timeout: int = 60,
     mode: ConversationMode = "replace",
     busy_message: str | None = None,
@@ -1016,6 +1050,8 @@ def conversation_command(
         command: 命令名称或序列（首项为正式名，其余视为别名）
         aliases: 额外别名列表
         description: 命令描述
+        group: 指令组路径，例如 ``"admin"`` 或 ``["admin", "user"]``
+        group_help: 指令组描述，用于帮助信息
         timeout: 会话超时时间（秒），必须为正整数
         mode: 会话冲突时的行为：
             - ``"replace"``: 替换当前会话
@@ -1046,6 +1082,8 @@ def conversation_command(
         command,
         aliases=aliases,
         description=description,
+        group=group,
+        group_help=group_help,
     )
 
     def decorator(func: HandlerCallable) -> HandlerCallable:
