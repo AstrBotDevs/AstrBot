@@ -1,17 +1,15 @@
-AstrBot/rust/src/server.rs
-```rust
 //! AstrBot HTTP/WebSocket Server
 //!
 //! High-performance async HTTP server with WebSocket support for real-time communication.
 //! Implements JWT authentication and REST API endpoints.
 
-use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 use uuid::Uuid;
 
@@ -67,7 +65,7 @@ impl JwtAuth {
 
     pub fn generate_token(&self, username: &str) -> Result<String, ServerError> {
         let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOODY)
+            .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| ServerError::Jwt(e.to_string()))?
             .as_secs();
 
@@ -79,7 +77,8 @@ impl JwtAuth {
 
         let header = format!("{{\"alg\":\"HS256\",\"typ\":\"JWT\"}}");
         let header_b64 = BASE64.encode(header.as_bytes());
-        let payload_b64 = BASE64.encode(serde_json::to_vec(&claims).map_err(|e| ServerError::Jwt(e.to_string()))?;
+        let payload_b64 = BASE64
+            .encode(serde_json::to_vec(&claims).map_err(|e| ServerError::Jwt(e.to_string()))?);
 
         let signature = self.sign_jwt(&format!("{}.{}", header_b64, payload_b64));
 
@@ -241,10 +240,13 @@ impl WsManager {
 
     pub async fn send_to(&self, id: &str, message: &str) -> Result<(), ServerError> {
         let connections = self.connections.read().await;
-        let sender = connections.get(id).ok_or_else(|| ServerError::NotFound(id.to_string()))?;
-        sender.send(message.to_string()).await.map_err(|_| {
-            ServerError::WebSocket("Failed to send".to_string())
-        })?;
+        let sender = connections
+            .get(id)
+            .ok_or_else(|| ServerError::NotFound(id.to_string()))?;
+        sender
+            .send(message.to_string())
+            .await
+            .map_err(|_| ServerError::WebSocket("Failed to send".to_string()))?;
         Ok(())
     }
 
@@ -276,13 +278,16 @@ pub struct HttpRequest {
 impl HttpRequest {
     pub fn parse(buf: &[u8]) -> Result<Self, ServerError> {
         let header_end = buf.windows(4).position(|w| w == b"\r\n\r\n");
-        let header_end = header_end.ok_or_else(|| ServerError::BadRequest("Invalid HTTP header".to_string()))?;
+        let header_end =
+            header_end.ok_or_else(|| ServerError::BadRequest("Invalid HTTP header".to_string()))?;
 
         let header_str = String::from_utf8_lossy(&buf[..header_end]);
         let body = buf[header_end + 4..].to_vec();
 
         let mut lines = header_str.split("\r\n");
-        let request_line = lines.next().ok_or_else(|| ServerError::BadRequest("Missing request line".to_string()))?;
+        let request_line = lines
+            .next()
+            .ok_or_else(|| ServerError::BadRequest("Missing request line".to_string()))?;
         let parts: Vec<&str> = request_line.split_whitespace().collect();
 
         if parts.len() < 2 {
@@ -344,10 +349,7 @@ impl ServerState {
 // API Handlers
 // ============================================================================
 
-async fn handle_api(
-    state: &ServerState,
-    req: &HttpRequest,
-) -> Result<HttpResponse, ServerError> {
+async fn handle_api(state: &ServerState, req: &HttpRequest) -> Result<HttpResponse, ServerError> {
     let (path, method) = (req.path.as_str(), req.method.as_str());
 
     // Login endpoint (no auth required)
@@ -357,7 +359,10 @@ async fn handle_api(
 
     // Authenticate other requests
     let token = req.auth_token().ok_or(ServerError::Unauthorized)?;
-    state.jwt_auth.verify_token(token).map_err(|_| ServerError::Unauthorized)?;
+    state
+        .jwt_auth
+        .verify_token(token)
+        .map_err(|_| ServerError::Unauthorized)?;
 
     match (path, method) {
         ("/api/stats", "GET") => {
@@ -372,32 +377,33 @@ async fn handle_api(
                 }),
             ))
         }
-        ("/api/sessions", "GET") => {
-            Ok(HttpResponse::json(
-                200,
-                "OK",
-                serde_json::json!({
-                    "sessions": state.orchestrator.list_stars(),
-                }),
-            ))
-        }
-        ("/api/health", "GET") => {
-            Ok(HttpResponse::json(
-                200,
-                "OK",
-                serde_json::json!({
-                    "status": "ok",
-                    "orchestrator_running": state.orchestrator.is_running(),
-                    "websocket_connections": state.ws_manager.count().await,
-                }),
-            ))
-        }
+        ("/api/sessions", "GET") => Ok(HttpResponse::json(
+            200,
+            "OK",
+            serde_json::json!({
+                "sessions": state.orchestrator.list_stars(),
+            }),
+        )),
+        ("/api/health", "GET") => Ok(HttpResponse::json(
+            200,
+            "OK",
+            serde_json::json!({
+                "status": "ok",
+                "orchestrator_running": state.orchestrator.is_running(),
+                "websocket_connections": state.ws_manager.count().await,
+            }),
+        )),
         _ if path.starts_with("/api/sessions/") && method == "DELETE" => {
             let session_id = path.strip_prefix("/api/sessions/").unwrap_or("");
-            state.orchestrator.unregister_star(session_id).map_err(|_| {
-                ServerError::NotFound("Session not found".to_string())
-            })?;
-            Ok(HttpResponse::json(200, "OK", serde_json::json!({"success": true})))
+            state
+                .orchestrator
+                .unregister_star(session_id)
+                .map_err(|_| ServerError::NotFound("Session not found".to_string()))?;
+            Ok(HttpResponse::json(
+                200,
+                "OK",
+                serde_json::json!({"success": true}),
+            ))
         }
         _ if path.starts_with("/api/sessions/") && method == "GET" => {
             let session_id = path.strip_prefix("/api/sessions/").unwrap_or("");
@@ -410,15 +416,16 @@ async fn handle_api(
         _ => Ok(HttpResponse::json(
             404,
             "Not Found",
-            ApiResponse::error(404, "Endpoint not found"),
+            serde_json::to_value(ApiResponse::error(404, "Endpoint not found"))
+                .unwrap_or(serde_json::Value::Null),
         )),
     }
 }
 
 async fn handle_login(state: &ServerState, req: &HttpRequest) -> Result<HttpResponse, ServerError> {
     let body = String::from_utf8_lossy(&req.body);
-    let login: serde_json::Value =
-        serde_json::from_str(&body).map_err(|_| ServerError::BadRequest("Invalid JSON".to_string()))?;
+    let login: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|_| ServerError::BadRequest("Invalid JSON".to_string()))?;
 
     let password = login
         .get("password")
@@ -429,7 +436,8 @@ async fn handle_login(state: &ServerState, req: &HttpRequest) -> Result<HttpResp
         return Ok(HttpResponse::json(
             401,
             "Unauthorized",
-            ApiResponse::error(401, "Invalid credentials"),
+            serde_json::to_value(ApiResponse::error(401, "Invalid credentials"))
+                .unwrap_or(serde_json::Value::Null),
         ));
     }
 
@@ -457,10 +465,10 @@ async fn handle_websocket(state: ServerState, stream: TcpStream, addr: std::net:
         }
     };
 
-    let (writer, mut reader) = ws_stream.split();
+    let (mut writer, mut reader) = ws_stream.split();
     let connection_id = Uuid::new_v4().to_string();
 
-    let (tx, rx) = mpsc::channel::<String>(100);
+    let (tx, mut rx) = mpsc::channel::<String>(100);
     state.ws_manager.register(connection_id.clone(), tx).await;
 
     // Send welcome message
@@ -478,7 +486,7 @@ async fn handle_websocket(state: ServerState, stream: TcpStream, addr: std::net:
             msg = reader.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
-                        if let Err(e) = handle_ws_message(&state, text.to_string()).await {
+                        if let Err(e) = handle_ws_message(&state, &connection_id, text.to_string()).await {
                             tracing::error!("WebSocket error: {}", e);
                             break;
                         }
@@ -489,11 +497,9 @@ async fn handle_websocket(state: ServerState, stream: TcpStream, addr: std::net:
                     _ => {}
                 }
             }
-            Some(msg) = rx.recv() => {
-                if let Some(text) = msg {
-                    if writer.send(Message::Text(text.into())).await.is_err() {
-                        break;
-                    }
+            Some(text) = rx.recv() => {
+                if writer.send(Message::Text(text.into())).await.is_err() {
+                    break;
                 }
             }
         }
@@ -502,11 +508,18 @@ async fn handle_websocket(state: ServerState, stream: TcpStream, addr: std::net:
     state.ws_manager.unregister(&connection_id).await;
 }
 
-async fn handle_ws_message(state: &ServerState, msg: String) -> Result<(), ServerError> {
-    let parsed: serde_json::Value =
-        serde_json::from_str(&msg).map_err(|_| ServerError::BadRequest("Invalid JSON".to_string()))?;
+async fn handle_ws_message(
+    state: &ServerState,
+    connection_id: &str,
+    msg: String,
+) -> Result<(), ServerError> {
+    let parsed: serde_json::Value = serde_json::from_str(&msg)
+        .map_err(|_| ServerError::BadRequest("Invalid JSON".to_string()))?;
 
-    let msg_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let msg_type = parsed
+        .get("type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
 
     let response = match msg_type {
         "ping" => serde_json::json!({"type": "pong"}),
@@ -535,8 +548,9 @@ async fn handle_ws_message(state: &ServerState, msg: String) -> Result<(), Serve
     Ok(())
 }
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use futures_util::SinkExt;
 use futures_util::StreamExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 // ============================================================================
 // HTTP Server
@@ -576,7 +590,7 @@ impl HttpServer {
     }
 }
 
-async fn handle_connection(stream: TcpStream, state: ServerState) -> Result<(), ServerError> {
+async fn handle_connection(mut stream: TcpStream, state: ServerState) -> Result<(), ServerError> {
     let mut buf = vec![0u8; 8192];
     let n = stream.read(&mut buf).await?;
     buf.truncate(n);
