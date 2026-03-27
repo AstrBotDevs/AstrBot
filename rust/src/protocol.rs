@@ -608,4 +608,3 @@ impl ProtocolClient for AcpClient {
         Ok(())
     }
 }
-

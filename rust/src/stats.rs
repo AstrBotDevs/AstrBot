@@ -1,7 +1,7 @@
 //! Runtime statistics tracking
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug, Clone)]
 pub struct RuntimeStats {
@@ -46,11 +46,7 @@ impl RuntimeStats {
     #[must_use]
     pub fn last_activity_time(&self) -> Option<f64> {
         let ts = self.last_activity_time.load(Ordering::Relaxed);
-        if ts == 0 {
-            None
-        } else {
-            Some(ts as f64)
-        }
+        if ts == 0 { None } else { Some(ts as f64) }
     }
 
     #[must_use]
