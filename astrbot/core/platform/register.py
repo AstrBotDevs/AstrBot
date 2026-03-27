@@ -8,6 +8,20 @@ platform_cls_map: dict[str, type] = {}
 """维护了平台适配器名称和适配器类的映射"""
 
 
+def _is_same_adapter_identity(existing_cls: type, new_cls: type) -> bool:
+    """Return whether two adapter classes represent the same logical adapter.
+
+    Re-imports and hot reloads can create a new class object for the same
+    module/class name. Those cases should refresh the registry entry instead of
+    being treated as a real naming conflict.
+    """
+
+    return (
+        existing_cls.__module__ == new_cls.__module__
+        and existing_cls.__qualname__ == new_cls.__qualname__
+    )
+
+
 def register_platform_adapter(
     adapter_name: str,
     desc: str,
@@ -26,11 +40,6 @@ def register_platform_adapter(
     """
 
     def decorator(cls):
-        if adapter_name in platform_cls_map:
-            raise ValueError(
-                f"平台适配器 {adapter_name} 已经注册过了，可能发生了适配器命名冲突。",
-            )
-
         # 添加必备选项
         if default_config_tmpl:
             if "type" not in default_config_tmpl:
@@ -55,6 +64,25 @@ def register_platform_adapter(
             i18n_resources=i18n_resources,
             config_metadata=config_metadata,
         )
+
+        existing_cls = platform_cls_map.get(adapter_name)
+        if existing_cls is not None:
+            if not _is_same_adapter_identity(existing_cls, cls):
+                raise ValueError(
+                    f"平台适配器 {adapter_name} 已经注册过了，可能发生了适配器命名冲突。",
+                )
+
+            for index, registered_pm in enumerate(platform_registry):
+                if registered_pm.name == adapter_name:
+                    platform_registry[index] = pm
+                    break
+            else:
+                platform_registry.append(pm)
+
+            platform_cls_map[adapter_name] = cls
+            logger.debug(f"平台适配器 {adapter_name} 重复注册，已刷新既有注册信息")
+            return cls
+
         platform_registry.append(pm)
         platform_cls_map[adapter_name] = cls
         logger.debug(f"平台适配器 {adapter_name} 已注册")

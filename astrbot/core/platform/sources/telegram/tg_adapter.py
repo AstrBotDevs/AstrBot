@@ -3,7 +3,8 @@ import os
 import re
 import sys
 import uuid
-from typing import cast
+from collections.abc import Sequence
+from typing import Protocol, cast
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
@@ -38,6 +39,12 @@ if sys.version_info >= (3, 12):
     from typing import override
 else:
     from typing_extensions import override
+
+
+class _CaptionEntityLike(Protocol):
+    type: str
+    offset: int
+    length: int
 
 
 @register_platform_adapter("telegram", "telegram 适配器")
@@ -480,16 +487,11 @@ class TelegramPlatformAdapter(Platform):
             photo = update.message.photo[-1]  # get the largest photo
             file = await photo.get_file()
             message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
-            if update.message.caption:
-                message.message_str = update.message.caption
-                message.message.append(Comp.Plain(message.message_str))
-            if update.message.caption_entities:
-                for entity in update.message.caption_entities:
-                    if entity.type == "mention":
-                        name = message.message_str[
-                            entity.offset + 1 : entity.offset + entity.length
-                        ]
-                        message.message.append(Comp.At(qq=name, name=name))
+            self._append_caption_components(
+                message,
+                update.message.caption,
+                update.message.caption_entities,
+            )
 
         elif update.message.sticker:
             # 将sticker当作图片处理
@@ -512,6 +514,11 @@ class TelegramPlatformAdapter(Platform):
                 message.message.append(
                     Comp.File(file=file_path, name=file_name, url=file_path)
                 )
+            self._append_caption_components(
+                message,
+                update.message.caption,
+                update.message.caption_entities,
+            )
 
         elif update.message.video:
             file = await update.message.video.get_file()
@@ -523,8 +530,37 @@ class TelegramPlatformAdapter(Platform):
                 )
             else:
                 message.message.append(Comp.Video(file=file_path, path=file.file_path))
+            self._append_caption_components(
+                message,
+                update.message.caption,
+                update.message.caption_entities,
+            )
 
         return message
+
+    @staticmethod
+    def _append_caption_components(
+        message: AstrBotMessage,
+        caption: str | None,
+        caption_entities: Sequence[_CaptionEntityLike] | None,
+    ) -> None:
+        """Keep media captions aligned with photo/document/video conversions."""
+
+        if not caption:
+            return
+
+        message.message_str = caption
+        message.message.append(Comp.Plain(message.message_str))
+
+        if not caption_entities:
+            return
+
+        for entity in caption_entities:
+            if entity.type == "mention":
+                name = message.message_str[
+                    entity.offset + 1 : entity.offset + entity.length
+                ]
+                message.message.append(Comp.At(qq=name, name=name))
 
     async def handle_media_group_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
