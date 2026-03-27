@@ -49,6 +49,14 @@
             </template>
             <v-list-item-title>{{ tm('persona.contextMenu.moveTo') }}</v-list-item-title>
           </v-list-item>
+          <v-list-item @click.stop="$emit('export')">
+            <template #prepend>
+              <v-icon size="small">
+                mdi-download
+              </v-icon>
+            </template>
+            <v-list-item-title>{{ tm('persona.contextMenu.export') }}</v-list-item-title>
+          </v-list-item>
           <v-divider class="my-1" />
           <v-list-item
             class="text-error"
@@ -167,7 +175,7 @@ export default defineComponent({
             required: true
         }
     },
-    emits: ['view', 'edit', 'clone', 'move', 'delete'],
+    emits: ['view', 'edit', 'clone', 'move', 'export', 'delete'],
     setup() {
         const { tm } = useModuleI18n('features/persona');
         return { tm };

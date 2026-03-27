@@ -1,8 +1,253 @@
 <template>
-  <div class="persona-manager">
-    <!-- 移动端顶部导航 -->
-    <div class="mobile-nav d-md-none mb-4">
-      <FolderBreadcrumb />
+    <div class="persona-manager">
+        <!-- 移动端顶部导航 -->
+        <div class="mobile-nav d-md-none mb-4">
+            <FolderBreadcrumb />
+        </div>
+
+        <div class="manager-layout">
+            <!-- 左侧边栏 - 仅桌面端显示 -->
+            <div class="sidebar d-none d-md-block">
+                <div class="sidebar-header d-flex justify-space-between align-center mb-3">
+                    <h3 class="text-h6">{{ tm('folder.sidebarTitle') }}</h3>
+                    <v-btn icon="mdi-folder-plus" variant="text" size="small" @click="showCreateFolderDialog = true"
+                        :title="tm('folder.createButton')" />
+                </div>
+                <FolderTree @move-folder="openMoveFolderDialog" @success="showSuccess" @error="showError"
+                    @persona-dropped="handlePersonaDropped" />
+            </div>
+
+            <!-- 主内容区 -->
+            <div class="main-content">
+                <!-- 顶部工具栏 -->
+                <div class="toolbar d-flex flex-wrap justify-space-between align-center mb-4 ga-2">
+                    <!-- 面包屑 - 仅桌面端显示 -->
+                    <div class="d-none d-md-block">
+                        <FolderBreadcrumb />
+                    </div>
+
+                    <!-- 操作按钮组 -->
+                    <div class="d-flex ga-2">
+                        <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus" @click="openCreatePersonaDialog"
+                            rounded="lg">
+                            {{ tm('buttons.create') }}
+                        </v-btn>
+                        <v-btn variant="outlined" prepend-icon="mdi-folder-plus" @click="showCreateFolderDialog = true"
+                            rounded="lg">
+                            {{ tm('folder.createButton') }}
+                        </v-btn>
+                        <v-btn variant="outlined" prepend-icon="mdi-upload" @click="handleImportPersona"
+                            rounded="lg">
+                            {{ tm('buttons.import') }}
+                        </v-btn>
+                    </div>
+                </div>
+
+                <!-- 加载状态 - 只有加载超过阈值才显示骨架屏 -->
+                <v-fade-transition>
+                    <div v-if="showSkeleton" class="loading-container">
+                        <v-row>
+                            <v-col v-for="n in 6" :key="n" cols="12" sm="6" lg="4" xl="3">
+                                <v-skeleton-loader type="card" rounded="lg" />
+                            </v-col>
+                        </v-row>
+                    </div>
+                </v-fade-transition>
+
+                <!-- 内容区域 -->
+                <div v-if="!loading">
+                    <!-- 子文件夹区域 -->
+                    <div v-if="currentFolders.length > 0" class="folders-section mb-6">
+                        <h3 class="text-subtitle-1 font-weight-medium mb-3">
+                            <v-icon size="small" class="mr-1">mdi-folder</v-icon>
+                            {{ tm('folder.foldersTitle') }} ({{ currentFolders.length }})
+                        </h3>
+                        <v-row>
+                            <v-col v-for="folder in currentFolders" :key="folder.folder_id" cols="12" sm="6" lg="4"
+                                xl="3">
+                                <FolderCard :folder="folder" @click="navigateToFolder(folder.folder_id)"
+                                    @open="navigateToFolder(folder.folder_id)" @rename="openRenameFolderDialog(folder)"
+                                    @move="openMoveFolderDialog(folder)" @delete="confirmDeleteFolder(folder)"
+                                    @persona-dropped="handlePersonaDropped" />
+                            </v-col>
+                        </v-row>
+                    </div>
+
+                    <!-- Persona 区域 -->
+                    <div v-if="currentPersonas.length > 0" class="personas-section">
+                        <h3 class="text-subtitle-1 font-weight-medium mb-3">
+                            <v-icon size="small" class="mr-1">mdi-account-heart</v-icon>
+                            {{ tm('persona.personasTitle') }} ({{ currentPersonas.length }})
+                        </h3>
+                        <v-row>
+                            <v-col v-for="persona in currentPersonas" :key="persona.persona_id" cols="12" sm="6" lg="4"
+                                xl="3">
+                                <PersonaCard :persona="persona" @view="viewPersona(persona)"
+                                    @edit="editPersona(persona)" @clone="openClonePersonaDialog(persona)" @move="openMovePersonaDialog(persona)"
+                                    @export="handleExportPersona(persona)" @delete="confirmDeletePersona(persona)" />
+                            </v-col>
+                        </v-row>
+                    </div>
+
+                    <!-- 空状态 -->
+                    <div v-if="currentFolders.length === 0 && currentPersonas.length === 0" class="empty-state">
+                        <v-card class="text-center pa-8" elevation="0">
+                            <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-folder-open-outline</v-icon>
+                            <h3 class="text-h5 mb-2">{{ tm('empty.folderEmpty') }}</h3>
+                            <p class="text-body-1 text-medium-emphasis mb-4">{{ tm('empty.folderEmptyDescription') }}</p>
+                            <div class="d-flex justify-center ga-2">
+                                <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus"
+                                    @click="openCreatePersonaDialog">
+                                    {{ tm('buttons.create') }}
+                                </v-btn>
+                                <v-btn variant="outlined" prepend-icon="mdi-folder-plus"
+                                    @click="showCreateFolderDialog = true">
+                                    {{ tm('folder.createButton') }}
+                                </v-btn>
+                            </div>
+                        </v-card>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 创建/编辑 Persona 对话框 -->
+        <PersonaForm v-model="showPersonaDialog" :editing-persona="editingPersona ?? undefined"
+            :current-folder-id="currentFolderId ?? undefined" :current-folder-name="currentFolderName ?? undefined"
+            @saved="handlePersonaSaved" @deleted="handlePersonaDeleted" @error="showError" />
+
+        <!-- 查看 Persona 详情对话框 -->
+        <v-dialog v-model="showViewDialog" max-width="700px">
+            <v-card v-if="viewingPersona">
+                <v-card-title class="d-flex justify-space-between align-center">
+                    <span class="text-h5">{{ viewingPersona.persona_id }}</span>
+                    <v-btn icon="mdi-close" variant="text" @click="showViewDialog = false" />
+                </v-card-title>
+
+                <v-card-text>
+                    <div class="mb-4">
+                        <h4 class="text-h6 mb-2">{{ tm('form.systemPrompt') }}</h4>
+                        <pre class="system-prompt-content">{{ viewingPersona.system_prompt }}</pre>
+                    </div>
+
+                    <div v-if="viewingPersona.begin_dialogs && viewingPersona.begin_dialogs.length > 0" class="mb-4">
+                        <h4 class="text-h6 mb-2">{{ tm('form.presetDialogs') }}</h4>
+                        <div v-for="(dialog, index) in viewingPersona.begin_dialogs" :key="index" class="mb-2">
+                            <v-chip :color="index % 2 === 0 ? 'primary' : 'secondary'" variant="tonal" size="small"
+                                class="mb-1">
+                                {{ index % 2 === 0 ? tm('form.userMessage') : tm('form.assistantMessage') }}
+                            </v-chip>
+                            <div class="dialog-content ml-2">{{ dialog }}</div>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h4 class="text-h6 mb-2">{{ tm('form.tools') }}</h4>
+                        <div v-if="viewingPersona.tools === null" class="text-body-2 text-medium-emphasis">
+                            <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-check-all">
+                                {{ tm('form.allToolsAvailable') }}
+                            </v-chip>
+                        </div>
+                        <div v-else-if="viewingPersona.tools && viewingPersona.tools.length > 0"
+                            class="d-flex flex-wrap ga-1">
+                            <v-chip v-for="toolName in viewingPersona.tools" :key="toolName" size="small"
+                                color="primary" variant="tonal">
+                                {{ toolName }}
+                            </v-chip>
+                        </div>
+                        <div v-else class="text-body-2 text-medium-emphasis">
+                            {{ tm('form.noToolsSelected') }}
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h4 class="text-h6 mb-2">{{ tm('form.skills') }}</h4>
+                        <div v-if="viewingPersona.skills === null" class="text-body-2 text-medium-emphasis">
+                            <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-check-all">
+                                {{ tm('form.allSkillsAvailable') }}
+                            </v-chip>
+                        </div>
+                        <div v-else-if="viewingPersona.skills && viewingPersona.skills.length > 0"
+                            class="d-flex flex-wrap ga-1">
+                            <v-chip v-for="skillName in viewingPersona.skills" :key="skillName" size="small"
+                                color="primary" variant="tonal">
+                                {{ skillName }}
+                            </v-chip>
+                        </div>
+                        <div v-else class="text-body-2 text-medium-emphasis">
+                            {{ tm('form.noSkillsSelected') }}
+                        </div>
+                    </div>
+
+                    <div class="text-caption text-medium-emphasis">
+                        <div>{{ tm('labels.createdAt') }}: {{ formatDate(viewingPersona.created_at) }}</div>
+                        <div v-if="viewingPersona.updated_at">{{ tm('labels.updatedAt') }}:
+                            {{ formatDate(viewingPersona.updated_at) }}</div>
+                    </div>
+                </v-card-text>
+            </v-card>
+        </v-dialog>
+
+        <!-- 创建文件夹对话框 -->
+        <CreateFolderDialog v-model="showCreateFolderDialog" :parent-folder-id="currentFolderId"
+            @created="showSuccess" @error="showError" />
+
+        <!-- 重命名文件夹对话框 -->
+        <v-dialog v-model="showRenameFolderDialog" max-width="400px">
+            <v-card>
+                <v-card-title>{{ tm('folder.renameDialog.title') }}</v-card-title>
+                <v-card-text>
+                    <v-text-field v-model="renameFolderData.name" :label="tm('folder.form.name')"
+                        :rules="[v => !!v || tm('folder.validation.nameRequired')]" variant="outlined"
+                        density="comfortable" autofocus @keyup.enter="submitRenameFolder" />
+                </v-card-text>
+                <v-card-actions>
+                    <v-spacer />
+                    <v-btn variant="text" @click="showRenameFolderDialog = false">
+                        {{ tm('buttons.cancel') }}
+                    </v-btn>
+                    <v-btn color="primary" variant="flat" @click="submitRenameFolder" :loading="renameLoading"
+                        :disabled="!renameFolderData.name">
+                        {{ tm('buttons.save') }}
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+
+        <!-- 移动对话框 -->
+        <MoveToFolderDialog v-model="showMoveDialog" :item-type="moveDialogType" :item="moveDialogItem"
+            @moved="showSuccess" @error="showError" />
+
+        <!-- 删除文件夹确认对话框 -->
+        <v-dialog v-model="showDeleteFolderDialog" max-width="450px">
+            <v-card>
+                <v-card-title class="text-error">
+                    <v-icon class="mr-2" color="error">mdi-alert</v-icon>
+                    {{ tm('folder.deleteDialog.title') }}
+                </v-card-title>
+                <v-card-text>
+                    <p>{{ tm('folder.deleteDialog.message', { name: deleteFolderData?.name ?? '' }) }}</p>
+                    <p class="text-warning mt-2">
+                        <v-icon size="small" class="mr-1">mdi-information</v-icon>
+                        {{ tm('folder.deleteDialog.warning') }}
+                    </p>
+                </v-card-text>
+                <v-card-actions>
+                    <v-spacer />
+                    <v-btn variant="text" @click="showDeleteFolderDialog = false">
+                        {{ tm('buttons.cancel') }}
+                    </v-btn>
+                    <v-btn color="error" variant="flat" @click="submitDeleteFolder" :loading="deleteLoading">
+                        {{ tm('buttons.delete') }}
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+
+        <!-- 消息提示 -->
+        <v-snackbar :timeout="3000" elevation="24" :color="messageType" v-model="showMessage" location="top">
+            {{ message }}
+        </v-snackbar>
     </div>
 
     <div class="manager-layout">
@@ -680,7 +925,7 @@ export default defineComponent({
         await this.initialize();
     },
     methods: {
-        ...mapActions(usePersonaStore, ['loadFolderTree', 'navigateToFolder', 'updateFolder', 'deleteFolder', 'deletePersona', 'refreshCurrentFolder', 'movePersonaToFolder', 'clonePersona']),
+        ...mapActions(usePersonaStore, ['loadFolderTree', 'navigateToFolder', 'updateFolder', 'deleteFolder', 'deletePersona', 'refreshCurrentFolder', 'movePersonaToFolder', 'importPersona', 'clonePersona']),
 
         async initialize() {
             await Promise.all([
@@ -776,6 +1021,159 @@ export default defineComponent({
             } catch (error: any) {
                 this.showError(error.message || this.tm('persona.messages.moveError'));
             }
+        },
+
+        // 导出人格数据
+        async handleExportPersona(persona: Persona) {
+            try {
+                console.log(this.tm('persona.messages.exportStart'), persona.persona_id);
+                
+                // 转换为新格式
+                const exportData = {
+                    version: "1.0",
+                    persona: [{
+                        name: persona.persona_id,
+                        prompt: persona.system_prompt,
+                        begin_dialogs: [] as Array<{user: string, assistant: string}>
+                    }]
+                };
+
+                // 处理对话对
+                if (persona.begin_dialogs && persona.begin_dialogs.length > 0) {
+                    const dialogs = persona.begin_dialogs;
+                    // 按顺序配对消息
+                    for (let i = 0; i < dialogs.length; i += 2) {
+                        // 获取用户消息
+                        let userMessage = '';
+                        if (i < dialogs.length) {
+                            if (typeof dialogs[i] === 'string') {
+                                userMessage = dialogs[i];
+                            } else if (typeof dialogs[i] === 'object' && dialogs[i] !== null) {
+                                userMessage = (dialogs[i] as any).user || '';
+                            }
+                        }
+                        
+                        // 获取助手消息
+                        let assistantMessage = '';
+                        if (i + 1 < dialogs.length) {
+                            if (typeof dialogs[i + 1] === 'string') {
+                                assistantMessage = dialogs[i + 1];
+                            } else if (typeof dialogs[i + 1] === 'object' && dialogs[i + 1] !== null) {
+                                assistantMessage = (dialogs[i + 1] as any).assistant || '';
+                            }
+                        }
+                        exportData.persona[0].begin_dialogs.push({
+                            user: userMessage,
+                            assistant: assistantMessage
+                        });
+                    }
+                }
+                
+                // 清理文件名中的特殊字符
+                const safeFileName = persona.persona_id.replace(/[\/\\:*?"<>|]/g, '_');
+                
+                // 创建 JSON 文件并下载
+                const jsonStr = JSON.stringify(exportData, null, 2);
+                const blob = new Blob([jsonStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `${safeFileName}.json`;
+                document.body.appendChild(link);
+                link.click();
+                
+                // 清理
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                this.showSuccess(this.tm('persona.messages.exportSuccess'));
+            } catch (error: any) {
+                console.error(this.tm('persona.messages.exportFailed'), error);
+                
+                // 构建详细的错误消息
+                let errorMessage = this.tm('persona.messages.exportError');
+                if (error.message) {
+                    errorMessage += `: ${error.message}`;
+                }
+                
+                this.showError(errorMessage);
+            }
+        },
+
+        // 导入人格数据
+        async handleImportPersona() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'application/json';
+            
+            input.onchange = async (event: Event) => {
+                const target = event.target as HTMLInputElement;
+                const file = target.files?.[0];
+                if (!file) return;
+                
+                try {
+                    const text = await file.text();
+                    const data = JSON.parse(text);
+                    
+                    let importData: any = {};
+                    
+                    if (data.version && data.persona && Array.isArray(data.persona)) {
+                        const firstPersona = data.persona[0];
+                        importData = {
+                            persona_id: firstPersona.name,
+                            system_prompt: firstPersona.prompt,
+                            begin_dialogs: []
+                        };
+                        
+                        // 转换对话对
+                        if (firstPersona.begin_dialogs && Array.isArray(firstPersona.begin_dialogs)) {
+                            for (const dialog of firstPersona.begin_dialogs) {
+                                if (dialog.user) {
+                                    importData.begin_dialogs.push(dialog.user);
+                                }
+                                if (dialog.assistant) {
+                                    importData.begin_dialogs.push(dialog.assistant);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 验证必需字段
+                    if (!importData.persona_id || !importData.system_prompt) {
+                        throw new Error(this.tm('persona.messages.importMissingFields'));
+                    }
+                    
+                    // 检查ID是否已存在
+                    const existingPersonas = this.currentPersonas.map(p => p.persona_id);
+                    if (existingPersonas.includes(importData.persona_id)) {
+                        throw new Error(this.tm('messages.importExists', { id: importData.persona_id }));
+                    }
+                    
+                    // 执行导入
+                    await this.importPersona(importData);
+                    this.showSuccess(this.tm('persona.messages.importSuccess'));
+                } catch (error: any) {
+                    console.error(this.tm('persona.messages.importFailed'), error);
+                    
+                    // 构建详细的错误消息
+                    let errorMessage = this.tm('persona.messages.importError');
+                    if (error.response) {
+                        // 后端返回的错误
+                        errorMessage += `: ${error.response.data?.message || error.response.statusText}`;
+                    } else if (error.request) {
+                        // 请求发送但没有收到响应
+                        errorMessage += `: ${this.tm('persona.messages.importNetworkError')}`;
+                    } else if (error.message) {
+                        // 其他错误
+                        errorMessage += `: ${error.message}`;
+                    }
+                    
+                    this.showError(errorMessage);
+                }
+            };
+            
+            input.click();
         },
 
         // 文件夹操作
