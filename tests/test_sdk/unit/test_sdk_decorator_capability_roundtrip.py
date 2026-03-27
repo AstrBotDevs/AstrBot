@@ -135,7 +135,7 @@ def _write_plugin(plugin_dir: Path) -> None:
 
             class CapabilityRoundTripPlugin(Star):
                 @provide_capability(
-                    "capability_roundtrip.calculate",
+                    "capability_roundtrip_plugin.calculate",
                     description="Calculate a total and persist it through the core bridge",
                     input_schema={
                         "type": "object",
@@ -192,7 +192,7 @@ async def test_provide_capability_round_trips_through_core_router_and_sdk_dispat
     )
 
     result = await runtime.capability_router.execute(
-        "capability_roundtrip.calculate",
+        "capability_roundtrip_plugin.calculate",
         {"x": 2, "y": 5},
         stream=False,
         cancel_token=CancelToken(),
@@ -205,9 +205,9 @@ async def test_provide_capability_round_trips_through_core_router_and_sdk_dispat
         "plugin": "capability_roundtrip_plugin",
     }
 
-    with pytest.raises(AstrBotError, match="capability_roundtrip.calculate"):
+    with pytest.raises(AstrBotError, match="capability_roundtrip_plugin.calculate"):
         await runtime.capability_router.execute(
-            "capability_roundtrip.calculate",
+            "capability_roundtrip_plugin.calculate",
             {"x": "bad", "y": 5},
             stream=False,
             cancel_token=CancelToken(),

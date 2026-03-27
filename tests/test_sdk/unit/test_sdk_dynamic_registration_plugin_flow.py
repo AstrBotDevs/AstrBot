@@ -135,8 +135,15 @@ def _materialize_probe_plugin(
         ),
         encoding="utf-8",
     )
+    main_py = plugin_dir / "main.py"
+    main_py.write_text(
+        main_py.read_text(encoding="utf-8").replace(
+            '"dynamic_registration_probe.',
+            f'"{plugin_name}.',
+        ),
+        encoding="utf-8",
+    )
     if not acknowledge_global_mcp_risk:
-        main_py = plugin_dir / "main.py"
         main_py.write_text(
             main_py.read_text(encoding="utf-8").replace(
                 "@acknowledge_global_mcp_risk\n",
@@ -146,6 +153,10 @@ def _materialize_probe_plugin(
             encoding="utf-8",
         )
     return plugin_dir
+
+
+def _plugin_capability_name(plugin_name: str, suffix: str) -> str:
+    return f"{plugin_name}.{suffix}"
 
 
 def _register_plugin_session(runtime, supervisor: SupervisorRuntime, session) -> None:
@@ -199,9 +210,10 @@ async def test_dynamic_skill_registration_round_trips_through_plugin_capability(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime = build_roundtrip_runtime(monkeypatch, tmp_path=tmp_path)
+    plugin_name = "dynamic_registration_probe"
     plugin_dir = _materialize_probe_plugin(
         tmp_path,
-        plugin_name="dynamic_registration_probe",
+        plugin_name=plugin_name,
     )
     session = _BridgeBackedCapabilitySession(runtime, plugin_dir)
     supervisor = SupervisorRuntime(
@@ -213,7 +225,7 @@ async def test_dynamic_skill_registration_round_trips_through_plugin_capability(
 
     registered = await _execute_plugin_capability(
         supervisor,
-        "dynamic_probe.skill.register",
+        _plugin_capability_name(plugin_name, "skill.register"),
         {
             "name": "dynamic_probe.runtime_probe",
             "description": "Runtime probe skill",
@@ -222,7 +234,7 @@ async def test_dynamic_skill_registration_round_trips_through_plugin_capability(
     )
     listed = await _execute_plugin_capability(
         supervisor,
-        "dynamic_probe.skill.list",
+        _plugin_capability_name(plugin_name, "skill.list"),
         {},
         request_id="core-list-skill",
     )
@@ -253,9 +265,10 @@ async def test_dynamic_skill_unregister_and_plugin_isolation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime = build_roundtrip_runtime(monkeypatch, tmp_path=tmp_path)
+    plugin_name = "dynamic_registration_probe"
     plugin_dir = _materialize_probe_plugin(
         tmp_path,
-        plugin_name="dynamic_registration_probe",
+        plugin_name=plugin_name,
     )
     session = _BridgeBackedCapabilitySession(runtime, plugin_dir)
     supervisor = SupervisorRuntime(
@@ -267,7 +280,7 @@ async def test_dynamic_skill_unregister_and_plugin_isolation(
 
     await _execute_plugin_capability(
         supervisor,
-        "dynamic_probe.skill.register",
+        _plugin_capability_name(plugin_name, "skill.register"),
         {"name": "dynamic_probe.runtime_probe"},
         request_id="core-register-skill",
     )
@@ -282,19 +295,19 @@ async def test_dynamic_skill_unregister_and_plugin_isolation(
 
     removed = await _execute_plugin_capability(
         supervisor,
-        "dynamic_probe.skill.unregister",
+        _plugin_capability_name(plugin_name, "skill.unregister"),
         {"name": "dynamic_probe.runtime_probe"},
         request_id="core-unregister-skill",
     )
     listed_after = await _execute_plugin_capability(
         supervisor,
-        "dynamic_probe.skill.list",
+        _plugin_capability_name(plugin_name, "skill.list"),
         {},
         request_id="core-list-skill-after-unregister",
     )
     removed_again = await _execute_plugin_capability(
         supervisor,
-        "dynamic_probe.skill.unregister",
+        _plugin_capability_name(plugin_name, "skill.unregister"),
         {"name": "dynamic_probe.runtime_probe"},
         request_id="core-unregister-skill-again",
     )
@@ -311,9 +324,10 @@ async def test_dynamic_global_mcp_registration_lifecycle_and_audit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime = build_roundtrip_runtime(monkeypatch, tmp_path=tmp_path)
+    plugin_name = "dynamic_registration_probe"
     plugin_dir = _materialize_probe_plugin(
         tmp_path,
-        plugin_name="dynamic_registration_probe",
+        plugin_name=plugin_name,
     )
     session = _BridgeBackedCapabilitySession(runtime, plugin_dir)
     supervisor = SupervisorRuntime(
@@ -331,7 +345,7 @@ async def test_dynamic_global_mcp_registration_lifecycle_and_audit(
 
     registered = await _execute_plugin_capability(
         supervisor,
-        "dynamic_probe.mcp.global.register",
+        _plugin_capability_name(plugin_name, "mcp.global.register"),
         {
             "name": "probe-global",
             "config": {"mock_tools": ["inspect"]},
@@ -341,31 +355,31 @@ async def test_dynamic_global_mcp_registration_lifecycle_and_audit(
     )
     fetched = await _execute_plugin_capability(
         supervisor,
-        "dynamic_probe.mcp.global.get",
+        _plugin_capability_name(plugin_name, "mcp.global.get"),
         {"name": "probe-global"},
         request_id="core-get-global-mcp",
     )
     listed = await _execute_plugin_capability(
         supervisor,
-        "dynamic_probe.mcp.global.list",
+        _plugin_capability_name(plugin_name, "mcp.global.list"),
         {},
         request_id="core-list-global-mcp",
     )
     disabled = await _execute_plugin_capability(
         supervisor,
-        "dynamic_probe.mcp.global.disable",
+        _plugin_capability_name(plugin_name, "mcp.global.disable"),
         {"name": "probe-global"},
         request_id="core-disable-global-mcp",
     )
     enabled = await _execute_plugin_capability(
         supervisor,
-        "dynamic_probe.mcp.global.enable",
+        _plugin_capability_name(plugin_name, "mcp.global.enable"),
         {"name": "probe-global", "timeout": 0.2},
         request_id="core-enable-global-mcp",
     )
     removed = await _execute_plugin_capability(
         supervisor,
-        "dynamic_probe.mcp.global.unregister",
+        _plugin_capability_name(plugin_name, "mcp.global.unregister"),
         {"name": "probe-global"},
         request_id="core-unregister-global-mcp",
     )
@@ -397,9 +411,10 @@ async def test_dynamic_global_mcp_requires_acknowledged_risk(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime = build_roundtrip_runtime(monkeypatch, tmp_path=tmp_path)
+    plugin_name = "dynamic_registration_probe_noack"
     plugin_dir = _materialize_probe_plugin(
         tmp_path,
-        plugin_name="dynamic_registration_probe_noack",
+        plugin_name=plugin_name,
         acknowledge_global_mcp_risk=False,
     )
     session = _BridgeBackedCapabilitySession(runtime, plugin_dir)
@@ -413,7 +428,7 @@ async def test_dynamic_global_mcp_requires_acknowledged_risk(
     with pytest.raises(PermissionError, match="@acknowledge_global_mcp_risk"):
         await _execute_plugin_capability(
             supervisor,
-            "dynamic_probe.mcp.global.register",
+            _plugin_capability_name(plugin_name, "mcp.global.register"),
             {
                 "name": "probe-global",
                 "config": {"mock_tools": ["inspect"]},
@@ -433,9 +448,10 @@ async def test_plugin_teardown_clears_dynamic_skill_and_leaves_no_global_mcp_res
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime = build_roundtrip_runtime(monkeypatch, tmp_path=tmp_path)
+    plugin_name = "dynamic_registration_probe"
     plugin_dir = _materialize_probe_plugin(
         tmp_path,
-        plugin_name="dynamic_registration_probe",
+        plugin_name=plugin_name,
     )
     session = _BridgeBackedCapabilitySession(runtime, plugin_dir)
     supervisor = SupervisorRuntime(
@@ -447,13 +463,13 @@ async def test_plugin_teardown_clears_dynamic_skill_and_leaves_no_global_mcp_res
 
     await _execute_plugin_capability(
         supervisor,
-        "dynamic_probe.skill.register",
+        _plugin_capability_name(plugin_name, "skill.register"),
         {"name": "dynamic_probe.runtime_probe"},
         request_id="core-register-skill",
     )
     await _execute_plugin_capability(
         supervisor,
-        "dynamic_probe.mcp.global.register",
+        _plugin_capability_name(plugin_name, "mcp.global.register"),
         {
             "name": "probe-global",
             "config": {"mock_tools": ["inspect"]},
@@ -463,7 +479,7 @@ async def test_plugin_teardown_clears_dynamic_skill_and_leaves_no_global_mcp_res
     )
     await _execute_plugin_capability(
         supervisor,
-        "dynamic_probe.mcp.global.unregister",
+        _plugin_capability_name(plugin_name, "mcp.global.unregister"),
         {"name": "probe-global"},
         request_id="core-unregister-global-mcp",
     )
@@ -502,9 +518,10 @@ async def test_plugin_provided_capability_descriptors_do_not_hot_register_after_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime = build_roundtrip_runtime(monkeypatch, tmp_path=tmp_path)
+    plugin_name = "dynamic_registration_probe"
     plugin_dir = _materialize_probe_plugin(
         tmp_path,
-        plugin_name="dynamic_registration_probe",
+        plugin_name=plugin_name,
     )
     session = _BridgeBackedCapabilitySession(runtime, plugin_dir)
     supervisor = SupervisorRuntime(
@@ -517,24 +534,32 @@ async def test_plugin_provided_capability_descriptors_do_not_hot_register_after_
     descriptor_names = {
         item.name for item in supervisor.capability_router.descriptors()
     }
-    assert "dynamic_probe.skill.register" in descriptor_names
+    assert _plugin_capability_name(plugin_name, "skill.register") in descriptor_names
 
     session.provided_capabilities.append(
         session.provided_capabilities[0].model_copy(
-            update={"name": "dynamic_probe.skill.hot_added"}
+            update={"name": _plugin_capability_name(plugin_name, "skill.hot_added")}
         )
     )
-    session.capability_sources["dynamic_probe.skill.hot_added"] = session.plugin.name
+    session.capability_sources[
+        _plugin_capability_name(plugin_name, "skill.hot_added")
+    ] = session.plugin.name
 
     descriptor_names_after_mutation = {
         item.name for item in supervisor.capability_router.descriptors()
     }
-    assert "dynamic_probe.skill.hot_added" not in descriptor_names_after_mutation
+    assert (
+        _plugin_capability_name(plugin_name, "skill.hot_added")
+        not in descriptor_names_after_mutation
+    )
 
-    with pytest.raises(AstrBotError, match="dynamic_probe.skill.hot_added"):
+    with pytest.raises(
+        AstrBotError,
+        match=_plugin_capability_name(plugin_name, "skill.hot_added"),
+    ):
         await _execute_plugin_capability(
             supervisor,
-            "dynamic_probe.skill.hot_added",
+            _plugin_capability_name(plugin_name, "skill.hot_added"),
             {},
             request_id="core-execute-hot-added-capability",
         )

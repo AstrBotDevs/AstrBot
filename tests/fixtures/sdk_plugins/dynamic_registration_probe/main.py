@@ -35,7 +35,7 @@ class DynamicRegistrationProbe(Star):
         }
 
     @provide_capability(
-        "dynamic_probe.skill.register",
+        "dynamic_registration_probe.skill.register",
         description="Register the probe skill through ctx.skills",
     )
     async def register_skill_capability(self, payload: dict, ctx: Context) -> dict:
@@ -48,7 +48,7 @@ class DynamicRegistrationProbe(Star):
         return self._skill_payload(record)
 
     @provide_capability(
-        "dynamic_probe.skill.list",
+        "dynamic_registration_probe.skill.list",
         description="List registered probe skills through ctx.skills",
     )
     async def list_skill_capability(self, payload: dict, ctx: Context) -> dict:
@@ -57,7 +57,7 @@ class DynamicRegistrationProbe(Star):
         return {"skills": [self._skill_payload(item) for item in items]}
 
     @provide_capability(
-        "dynamic_probe.skill.unregister",
+        "dynamic_registration_probe.skill.unregister",
         description="Unregister the probe skill through ctx.skills",
     )
     async def unregister_skill_capability(self, payload: dict, ctx: Context) -> dict:
@@ -67,7 +67,7 @@ class DynamicRegistrationProbe(Star):
         return {"removed": bool(removed)}
 
     @provide_capability(
-        "dynamic_probe.mcp.global.register",
+        "dynamic_registration_probe.mcp.global.register",
         description="Register a global MCP server through ctx.mcp",
     )
     async def register_global_mcp_capability(self, payload: dict, ctx: Context) -> dict:
@@ -79,7 +79,7 @@ class DynamicRegistrationProbe(Star):
         return {"server": self._mcp_payload(record)}
 
     @provide_capability(
-        "dynamic_probe.mcp.global.get",
+        "dynamic_registration_probe.mcp.global.get",
         description="Get a global MCP server through ctx.mcp",
     )
     async def get_global_mcp_capability(self, payload: dict, ctx: Context) -> dict:
@@ -89,7 +89,7 @@ class DynamicRegistrationProbe(Star):
         return {"server": self._mcp_payload(record)}
 
     @provide_capability(
-        "dynamic_probe.mcp.global.list",
+        "dynamic_registration_probe.mcp.global.list",
         description="List global MCP servers through ctx.mcp",
     )
     async def list_global_mcp_capability(self, payload: dict, ctx: Context) -> dict:
@@ -98,7 +98,7 @@ class DynamicRegistrationProbe(Star):
         return {"servers": [self._mcp_payload(record) for record in records]}
 
     @provide_capability(
-        "dynamic_probe.mcp.global.disable",
+        "dynamic_registration_probe.mcp.global.disable",
         description="Disable a global MCP server through ctx.mcp",
     )
     async def disable_global_mcp_capability(self, payload: dict, ctx: Context) -> dict:
@@ -108,7 +108,7 @@ class DynamicRegistrationProbe(Star):
         return {"server": self._mcp_payload(record)}
 
     @provide_capability(
-        "dynamic_probe.mcp.global.enable",
+        "dynamic_registration_probe.mcp.global.enable",
         description="Enable a global MCP server through ctx.mcp",
     )
     async def enable_global_mcp_capability(self, payload: dict, ctx: Context) -> dict:
@@ -119,7 +119,7 @@ class DynamicRegistrationProbe(Star):
         return {"server": self._mcp_payload(record)}
 
     @provide_capability(
-        "dynamic_probe.mcp.global.unregister",
+        "dynamic_registration_probe.mcp.global.unregister",
         description="Unregister a global MCP server through ctx.mcp",
     )
     async def unregister_global_mcp_capability(
