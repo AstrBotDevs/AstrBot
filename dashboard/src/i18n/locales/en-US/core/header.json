@@ -4,6 +4,7 @@
     "hasNewVersion": "AstrBot has a new version!",
     "dashboardHasNewVersion": "WebUI has a new version!"
   },
+  "updateAvailable": "New version available",
   "buttons": {
     "update": "Update",
     "account": "Account",

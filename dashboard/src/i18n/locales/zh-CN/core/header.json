@@ -4,6 +4,7 @@
     "hasNewVersion": "AstrBot 有新版本！",
     "dashboardHasNewVersion": "WebUI 有新版本！"
   },
+  "updateAvailable": "发现新版本",
   "buttons": {
     "update": "更新",
     "account": "账户",

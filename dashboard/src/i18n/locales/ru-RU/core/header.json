@@ -4,6 +4,7 @@
         "hasNewVersion": "Доступна новая версия AstrBot!",
         "dashboardHasNewVersion": "Доступна новая версия WebUI!"
     },
+    "updateAvailable": "Доступна новая версия",
     "buttons": {
         "update": "Обновить",
         "account": "Аккаунт",
