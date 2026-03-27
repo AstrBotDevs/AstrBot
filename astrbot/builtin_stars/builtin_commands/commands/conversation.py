@@ -6,6 +6,10 @@ from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_PROVIDER_TYPE,
     DEERFLOW_THREAD_ID_KEY,
 )
+from astrbot.core.persona_utils import (
+    is_persona_none_marker,
+    normalize_persona_id,
+)
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.active_event_registry import active_event_registry
@@ -37,7 +41,7 @@ class ConversationCommands:
         )
         if not conv:
             return None
-        return conv.persona_id
+        return normalize_persona_id(conv.persona_id)
 
     async def reset(self, message: AstrMessageEvent) -> None:
         """重置 LLM 会话"""
@@ -225,7 +229,7 @@ class ConversationCommands:
                 platform_name=platform_name,
                 provider_settings=provider_settings,
             )
-            if persona_id == "[%None]":
+            if is_persona_none_marker(persona_id):
                 persona_name = "无"
             elif persona_id:
                 persona_name = persona_id

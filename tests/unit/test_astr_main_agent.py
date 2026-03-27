@@ -10,6 +10,7 @@ from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Plain, Reply
+from astrbot.core.persona_utils import PERSONA_NONE_MARKER
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
@@ -504,14 +505,14 @@ class TestEnsurePersonaAndSkills:
 
     @pytest.mark.asyncio
     async def test_ensure_persona_none_explicit(self, mock_event, mock_context):
-        """Test that [%None] persona is explicitly set to no persona."""
+        """Test that the explicit no-persona marker is treated as no persona."""
         module = ama
         mock_context.persona_manager.personas_v3 = []
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("[%None]", None, None, False)
+            return_value=(PERSONA_NONE_MARKER, None, None, False)
         )
         req = ProviderRequest()
-        req.conversation = MagicMock(persona_id="[%None]")
+        req.conversation = MagicMock(persona_id=PERSONA_NONE_MARKER)
 
         await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
 
@@ -565,9 +566,10 @@ class TestEnsurePersonaAndSkills:
         tmgr = mock_context.get_llm_tool_manager.return_value
         tmgr.func_list = [tool_a, tool_b]
         tmgr.get_full_tool_set.return_value = ToolSet([tool_a, tool_b])
-        tmgr.get_func.side_effect = lambda name: {"tool_a": tool_a, "tool_b": tool_b}.get(
-            name
-        )
+        tmgr.get_func.side_effect = lambda name: {
+            "tool_a": tool_a,
+            "tool_b": tool_b,
+        }.get(name)
 
         handoff = MagicMock()
         handoff.name = "transfer_to_planner"

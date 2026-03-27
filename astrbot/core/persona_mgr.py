@@ -3,6 +3,7 @@ from astrbot.api import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
+from astrbot.core.persona_utils import is_persona_none_marker
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.sentinels import NOT_GIVEN
 
@@ -104,7 +105,7 @@ class PersonaManager:
 
         if not persona_id:
             persona_id = conversation_persona_id
-            if persona_id == "[%None]":
+            if is_persona_none_marker(persona_id):
                 pass
             elif persona_id is None:
                 persona_id = (provider_settings or {}).get("default_personality")
@@ -115,7 +116,11 @@ class PersonaManager:
         )
 
         use_webchat_special_default = False
-        if not persona and platform_name == "webchat" and persona_id != "[%None]":
+        if (
+            not persona
+            and platform_name == "webchat"
+            and not is_persona_none_marker(persona_id)
+        ):
             persona_id = "_chatui_default_"
             use_webchat_special_default = True
 

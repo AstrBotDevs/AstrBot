@@ -11,6 +11,7 @@ from astrbot.core import sp
 from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Conversation, ConversationV2
+from astrbot.core.persona_utils import normalize_persona_id
 from astrbot.core.utils.datetime_utils import to_utc_timestamp
 
 
@@ -98,6 +99,12 @@ class ConversationManager:
                 platform_id = parts[0]
         if not platform_id:
             platform_id = "unknown"
+        if persona_id is None:
+            curr_cid = await self.get_curr_conversation_id(unified_msg_origin)
+            if curr_cid:
+                curr_conv = await self.db.get_conversation_by_id(cid=curr_cid)
+                if curr_conv:
+                    persona_id = normalize_persona_id(curr_conv.persona_id)
         conv = await self.db.create_conversation(
             user_id=unified_msg_origin,
             platform_id=platform_id,
