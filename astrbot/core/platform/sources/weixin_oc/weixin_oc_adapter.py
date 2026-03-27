@@ -902,6 +902,13 @@ class WeixinOCAdapter(Platform):
                         "weixin_oc(%s): inbound long-poll timeout",
                         self.meta().id,
                     )
+                except Exception as e:
+                    logger.error(
+                        "weixin_oc(%s): poll inbound updates failed, will retry after 5 seconds: %s",
+                        self.meta().id,
+                        e,
+                    )
+                    await asyncio.sleep(5)
         except asyncio.CancelledError:
             raise
         except Exception as e:
