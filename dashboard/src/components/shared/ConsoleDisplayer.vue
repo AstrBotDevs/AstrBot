@@ -1,28 +1,105 @@
-<script setup>
-import { useCommonStore } from '@/stores/common';
-import axios from 'axios';
-import { EventSourcePolyfill } from 'event-source-polyfill';
-</script>
-
 <template>
-  <div>
-    <div class="filter-controls mb-2" v-if="showLevelBtns">
-      <v-chip-group v-model="selectedLevels" column multiple>
-        <v-chip v-for="level in logLevels" :key="level" :color="getLevelColor(level)" filter variant="flat" size="small"
-          :text-color="level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'" class="font-weight-medium">
-          {{ level }}
-        </v-chip>
-      </v-chip-group>
+  <div class="console-displayer">
+    <div v-if="showLevelBtns || enableAdvancedFilters" class="console-toolbar">
+      <div v-if="showLevelBtns" class="filter-controls">
+        <v-chip-group v-model="selectedLevels" column multiple>
+          <v-chip
+            v-for="level in logLevels"
+            :key="level"
+            :value="level"
+            :color="getLevelColor(level)"
+            filter
+            variant="flat"
+            size="small"
+            :text-color="level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'"
+            class="font-weight-medium"
+          >
+            {{ level }}
+          </v-chip>
+        </v-chip-group>
+      </div>
+
+      <div v-if="enableAdvancedFilters" class="advanced-filters">
+        <v-text-field
+          v-model="keyword"
+          label="Search"
+          placeholder="Search message, tag, plugin, platform, or UMO"
+          density="compact"
+          hide-details
+          clearable
+          variant="outlined"
+          class="filter-input"
+        />
+        <v-autocomplete
+          v-model="selectedTags"
+          :items="tagOptions"
+          label="Tag"
+          placeholder="Filter by logcat tag"
+          density="compact"
+          hide-details
+          clearable
+          chips
+          closable-chips
+          multiple
+          variant="outlined"
+          class="filter-input"
+        />
+        <v-btn variant="text" size="small" @click="clearFilters">
+          Clear Filters
+        </v-btn>
+        <span class="filter-summary">
+          {{ `${filteredLogs.length} / ${localLogCache.length} logs` }}
+        </span>
+      </div>
     </div>
 
-    <div id="term" style="background-color: #1e1e1e; padding: 16px; border-radius: 8px; overflow-y:auto; height: 100%">
+    <div ref="term" class="console-terminal">
+      <pre
+        v-for="entry in filteredLogs"
+        :key="entry.uuid"
+        class="console-log-line fade-in"
+        :style="getLineStyle(entry)"
+      >{{ entry.displayText }}</pre>
+      <div v-if="filteredLogs.length === 0" class="console-empty">
+        {{ emptyStateText }}
+      </div>
     </div>
   </div>
 </template>
 
 <script>
+import axios from 'axios';
+import { EventSourcePolyfill } from 'event-source-polyfill';
+
+import { useCommonStore } from '@/stores/common';
+
+const ANSI_PATTERN = /\u001b\[[0-9;]*m/g;
+const LEADING_ANSI_PATTERN = /^(\u001b\[[0-9;]*m)/;
+
+function stripAnsi(value) {
+  return String(value || '').replace(ANSI_PATTERN, '');
+}
+
 export default {
   name: 'ConsoleDisplayer',
+  props: {
+    historyNum: {
+      type: String,
+      default: '-1'
+    },
+    showLevelBtns: {
+      type: Boolean,
+      default: true
+    },
+    enableAdvancedFilters: {
+      type: Boolean,
+      default: false
+    }
+  },
+  setup() {
+    const commonStore = useCommonStore();
+    return { commonStore };
+  },
   data() {
     return {
       autoScroll: true,
@@ -34,47 +111,71 @@ export default {
         '\u001b[1;31m': 'color: #FF0000; font-weight: bold;',
         '\u001b[0m': 'color: inherit; font-weight: normal;',
         '\u001b[32m': 'color: #00FF00;',
-        'default': 'color: #FFFFFF;'
+        default: 'color: #FFFFFF;'
       },
       logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-      selectedLevels: [0, 1, 2, 3, 4],
+      selectedLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+      selectedTags: [],
+      keyword: '',
       levelColors: {
-        'DEBUG': 'grey',
-        'INFO': 'blue-lighten-3',
-        'WARNING': 'amber',
-        'ERROR': 'red',
-        'CRITICAL': 'purple'
+        DEBUG: 'grey',
+        INFO: 'blue-lighten-3',
+        WARNING: 'amber',
+        ERROR: 'red',
+        CRITICAL: 'purple'
       },
       localLogCache: [],
       eventSource: null,
       retryTimer: null,
-      retryAttempts: 0,           
-      maxRetryAttempts: 10,       
-      baseRetryDelay: 1000,       
-      lastEventId: null,          
-    }
+      retryAttempts: 0,
+      maxRetryAttempts: 10,
+      baseRetryDelay: 1000,
+      lastEventId: null
+    };
   },
   computed: {
-    commonStore() {
-      return useCommonStore();
+    filteredLogs() {
+      const keyword = this.keyword.trim().toLowerCase();
+      const selectedTags = new Set(this.selectedTags);
+
+      return this.localLogCache.filter((entry) => {
+        if (!this.selectedLevels.includes(entry.level)) {
+          return false;
+        }
+
+        if (selectedTags.size > 0 && !selectedTags.has(entry.tag)) {
+          return false;
+        }
+
+        if (keyword && !entry.searchIndex.includes(keyword)) {
+          return false;
+        }
+
+        return true;
+      });
     },
-  },
-  props: {
-    historyNum: {
-      type: String,
-      default: "-1"
+    tagOptions() {
+      return [...new Set(this.localLogCache.map((entry) => entry.tag).filter(Boolean))].sort();
     },
-    showLevelBtns: {
-      type: Boolean,
-      default: true
+    hasActiveFilters() {
+      return this.selectedTags.length > 0 || this.keyword.trim().length > 0;
+    },
+    emptyStateText() {
+      if (this.enableAdvancedFilters && this.hasActiveFilters) {
+        return 'No logs match the active filters.';
+      }
+      return 'No logs yet.';
     }
   },
   watch: {
-    selectedLevels: {
-      handler() {
-        this.refreshDisplay();
-      },
-      deep: true
+    selectedLevels() {
+      this.scheduleAutoScroll();
+    },
+    selectedTags() {
+      this.scheduleAutoScroll();
+    },
+    keyword() {
+      this.scheduleAutoScroll();
     }
   },
   async mounted() {
@@ -99,24 +200,21 @@ export default {
         this.eventSource = null;
       }
 
-      console.log(`正在连接日志流... (尝试次数: ${this.retryAttempts})`);
-      
       const token = localStorage.getItem('token');
 
       this.eventSource = new EventSourcePolyfill('/api/live-log', {
         headers: {
-            'Authorization': token ? `Bearer ${token}` : ''
+          Authorization: token ? `Bearer ${token}` : ''
         },
-        heartbeatTimeout: 300000, 
-        withCredentials: true 
+        heartbeatTimeout: 300000,
+        withCredentials: true
       });
 
       this.eventSource.onopen = () => {
-        console.log('日志流连接成功！');
         this.retryAttempts = 0;
 
         if (!this.lastEventId) {
-            this.fetchLogHistory();
+          this.fetchLogHistory();
         }
       };
 
@@ -128,36 +226,32 @@ export default {
 
           const payload = JSON.parse(event.data);
           this.processNewLogs([payload]);
-        } catch (e) {
-          console.error('解析日志失败:', e);
+        } catch (error) {
+          console.error('Failed to parse log stream payload:', error);
         }
       };
 
-      this.eventSource.onerror = (err) => {
-
-        if (err.status === 401) {
-            console.error('鉴权失败 (401)，可能是 Token 过期了。');
-
+      this.eventSource.onerror = (error) => {
+        if (error.status === 401) {
+          console.error('Log stream authentication failed (401).');
         } else {
-            console.warn('日志流连接错误:', err);
+          console.warn('Log stream connection failed.', error);
         }
-        
+
         if (this.eventSource) {
-            this.eventSource.close();
-            this.eventSource = null;
+          this.eventSource.close();
+          this.eventSource = null;
         }
 
         if (this.retryAttempts >= this.maxRetryAttempts) {
-            console.error('❌ 已达到最大重试次数，停止重连。请刷新页面重试。');
-            return; 
+          console.error('Log stream reached max retry attempts.');
+          return;
         }
 
         const delay = Math.min(
-            this.baseRetryDelay * Math.pow(2, this.retryAttempts),
-            30000
+          this.baseRetryDelay * Math.pow(2, this.retryAttempts),
+          30000
         );
-        
-        console.log(`⏳ ${delay}ms 后尝试第 ${this.retryAttempts + 1} 次重连...`);
 
         if (this.retryTimer) {
           clearTimeout(this.retryTimer);
@@ -165,129 +259,197 @@ export default {
         }
 
         this.retryTimer = setTimeout(async () => {
-          this.retryAttempts++;
-          
+          this.retryAttempts += 1;
           if (!this.lastEventId) {
-             await this.fetchLogHistory();
+            await this.fetchLogHistory();
           }
-          
           this.connectSSE();
         }, delay);
       };
     },
 
+    normalizeLogEntry(log) {
+      if (!log || (log.type && log.type !== 'log')) {
+        return null;
+      }
+
+      const rendered = typeof log.rendered === 'string'
+        ? log.rendered
+        : (typeof log.data === 'string' ? log.data : '');
+      const message = typeof log.message === 'string' ? log.message : stripAnsi(rendered);
+      const tag = typeof log.tag === 'string' && log.tag.trim()
+        ? log.tag
+        : 'core:astrbot';
+      const sourceFile = typeof log.source_file === 'string' ? log.source_file : 'unknown';
+      const uuid = log.uuid || [
+        log.time,
+        log.level,
+        tag,
+        log.logger_name || '',
+        sourceFile,
+        log.source_line || '',
+        rendered || message
+      ].join('|');
+      const searchIndex = [
+        message,
+        rendered,
+        tag,
+        ...(Array.isArray(log.tags) ? log.tags : []),
+        log.platform_id || '',
+        log.plugin_name || '',
+        log.plugin_display_name || '',
+        log.umo || '',
+        log.logger_name || '',
+        sourceFile
+      ].join(' ').toLowerCase();
+
+      return {
+        ...log,
+        type: 'log',
+        uuid,
+        rendered,
+        data: rendered,
+        message,
+        tag,
+        displayText: stripAnsi(rendered || message),
+        searchIndex
+      };
+    },
+
     processNewLogs(newLogs) {
-      if (!newLogs || newLogs.length === 0) return;
+      if (!newLogs || newLogs.length === 0) {
+        return;
+      }
 
       let hasUpdate = false;
+      const nextCache = [...this.localLogCache];
+      const existingKeys = new Set(nextCache.map((entry) => entry.uuid));
 
-      newLogs.forEach(log => {
-
-        const exists = this.localLogCache.some(existing => 
-          existing.time === log.time && 
-          existing.data === log.data &&
-          existing.level === log.level
-        );
-        
-        if (!exists) {
-            this.localLogCache.push(log);
-            hasUpdate = true;
-            
-            if (this.isLevelSelected(log.level)) {
-              this.printLog(log.data);
-            }
+      newLogs.forEach((log) => {
+        const entry = this.normalizeLogEntry(log);
+        if (!entry || existingKeys.has(entry.uuid)) {
+          return;
         }
+        existingKeys.add(entry.uuid);
+        nextCache.push(entry);
+        hasUpdate = true;
       });
 
-      if (hasUpdate) {
-        this.localLogCache.sort((a, b) => a.time - b.time);
-        
-        const maxSize = this.commonStore.log_cache_max_len || 200;
-        if (this.localLogCache.length > maxSize) {
-           this.localLogCache.splice(0, this.localLogCache.length - maxSize);
-        }
+      if (!hasUpdate) {
+        return;
       }
+
+      nextCache.sort((left, right) => left.time - right.time);
+
+      const maxSize = this.commonStore.log_cache_max_len || 200;
+      if (nextCache.length > maxSize) {
+        nextCache.splice(0, nextCache.length - maxSize);
+      }
+
+      this.localLogCache = nextCache;
+      this.scheduleAutoScroll();
     },
 
     async fetchLogHistory() {
       try {
-        const res = await axios.get('/api/log-history');
-        if (res.data.data.logs && res.data.data.logs.length > 0) {
-          this.processNewLogs(res.data.data.logs);
-        }
-      } catch (err) {
-        console.error('Failed to fetch log history:', err);
+        const response = await axios.get('/api/log-history');
+        const logs = response.data?.data?.logs || [];
+        this.processNewLogs(logs);
+      } catch (error) {
+        console.error('Failed to fetch log history:', error);
       }
     },
-    
+
+    clearFilters() {
+      this.selectedTags = [];
+      this.keyword = '';
+    },
+
     getLevelColor(level) {
       return this.levelColors[level] || 'grey';
     },
 
-    isLevelSelected(level) {
-      for (let i = 0; i < this.selectedLevels.length; ++i) {
-        let level_ = this.logLevels[this.selectedLevels[i]]
-        if (level_ === level) {
-          return true;
-        }
+    getLineStyle(entry) {
+      const leadingAnsi = entry.rendered.match(LEADING_ANSI_PATTERN)?.[1];
+      if (leadingAnsi && this.logColorAnsiMap[leadingAnsi]) {
+        return this.logColorAnsiMap[leadingAnsi];
       }
-      return false;
-    },
 
-    refreshDisplay() {
-      const termElement = document.getElementById('term');
-      if (termElement) {
-        termElement.innerHTML = '';
-        
-        if (this.localLogCache && this.localLogCache.length > 0) {
-          this.localLogCache.forEach(logItem => {
-            if (this.isLevelSelected(logItem.level)) {
-              this.printLog(logItem.data);
-            }
-          });
-        }
+      switch (entry.level) {
+        case 'DEBUG':
+          return this.logColorAnsiMap['\u001b[1;34m'];
+        case 'INFO':
+          return this.logColorAnsiMap['\u001b[1;36m'];
+        case 'WARNING':
+          return this.logColorAnsiMap['\u001b[1;33m'];
+        case 'ERROR':
+          return this.logColorAnsiMap['\u001b[31m'];
+        case 'CRITICAL':
+          return this.logColorAnsiMap['\u001b[1;31m'];
+        default:
+          return this.logColorAnsiMap.default;
       }
     },
 
-    toggleAutoScroll() {
-      this.autoScroll = !this.autoScroll;
-    },
-
-    printLog(log) {
-      let ele = document.getElementById('term')
-      if (!ele) {
+    scheduleAutoScroll() {
+      if (!this.autoScroll) {
         return;
       }
-      
-      let span = document.createElement('pre')
-      let style = this.logColorAnsiMap['default']
-      for (let key in this.logColorAnsiMap) {
-        if (log.startsWith(key)) {
-          style = this.logColorAnsiMap[key]
-          log = log.replace(key, '').replace('\u001b[0m', '')
-          break
-        }
-      }
 
-      span.style = style
-      span.classList.add('console-log-line', 'fade-in')
-      span.innerText = `${log}`;
-      ele.appendChild(span)
-      if (this.autoScroll) {
-        ele.scrollTop = ele.scrollHeight
-      }
+      this.$nextTick(() => {
+        const element = this.$refs.term;
+        if (!element) {
+          return;
+        }
+        element.scrollTop = element.scrollHeight;
+      });
     }
-  },
-}
+  }
+};
 </script>
 
 <style scoped>
+.console-displayer {
+  height: 100%;
+}
+
+.console-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 .filter-controls {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 8px;
   margin-left: 20px;
+}
+
+.advanced-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.filter-input {
+  min-width: 220px;
+  max-width: 360px;
+}
+
+.filter-summary {
+  color: rgba(var(--v-theme-on-surface), 0.68);
+  font-size: 12px;
+}
+
+.console-terminal {
+  background-color: #1e1e1e;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-y: auto;
+  height: 100%;
 }
 
 :deep(.console-log-line) {
@@ -296,6 +458,11 @@ export default {
   font-family: SFMono-Regular, Menlo, Monaco, Consolas, var(--astrbot-font-cjk-mono), monospace;
   font-size: 12px;
   white-space: pre-wrap;
+}
+
+.console-empty {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
 }
 
 :deep(.fade-in) {
@@ -309,6 +476,17 @@ export default {
 
   to {
     opacity: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .filter-input {
+    min-width: 100%;
+    max-width: 100%;
+  }
+
+  .advanced-filters {
+    align-items: stretch;
   }
 }
 </style>

@@ -58,7 +58,11 @@ const { tm } = useModuleI18n('features/console');
         </v-dialog>
       </div>
     </div>
-    <ConsoleDisplayer ref="consoleDisplayer" style="height: calc(100vh - 220px); " />
+    <ConsoleDisplayer
+      ref="consoleDisplayer"
+      :enable-advanced-filters="true"
+      style="height: calc(100vh - 220px); "
+    />
   </div>
 </template>
 <script>
