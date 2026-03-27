@@ -1,52 +1,60 @@
-<script setup>
-import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
-import { useModuleI18n } from '@/i18n/composables';
-import axios from '@/utils/request';
+<script setup lang="ts">
+import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
+import { useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
-const { tm } = useModuleI18n('features/console');
+const { tm } = useModuleI18n("features/console");
 </script>
 
 <template>
-  <div style="height: 100%;">
+  <div style="height: 100%">
     <div
-      style="background-color: var(--v-theme-surface); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px; display: flex; flex-direction: row; align-items: center; justify-content: space-between;"
+      style="
+        background-color: var(--v-theme-surface);
+        padding: 8px;
+        padding-left: 16px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      "
     >
       <div>
-        <h4>{{ tm('title') }}</h4>
+        <h4>{{ tm("title") }}</h4>
         <v-alert
           type="info"
           variant="tonal"
           density="compact"
           class="mt-2"
-          style="max-width: 600px;"
+          style="max-width: 600px"
         >
-          {{ tm('debugHint.text') }}
+          {{ tm("debugHint.text") }}
         </v-alert>
       </div>
       <div class="d-flex align-center">
         <v-switch
           v-model="autoScrollEnabled"
-          :label="autoScrollEnabled ? tm('autoScroll.enabled') : tm('autoScroll.disabled')"
+          :label="
+            autoScrollEnabled
+              ? tm('autoScroll.enabled')
+              : tm('autoScroll.disabled')
+          "
           hide-details
           density="compact"
           color="primary"
-          style="margin-right: 16px;"
+          style="margin-right: 16px"
         />
-        <v-dialog
-          v-model="pipDialog"
-          width="400"
-        >
+        <v-dialog v-model="pipDialog" width="400">
           <template #activator="{ props }">
-            <v-btn
-              variant="plain"
-              v-bind="props"
-            >
-              {{ tm('pipInstall.button') }}
+            <v-btn variant="plain" v-bind="props">
+              {{ tm("pipInstall.button") }}
             </v-btn>
           </template>
           <v-card>
             <v-card-title>
-              <span class="text-h5">{{ tm('pipInstall.dialogTitle') }}</span>
+              <span class="text-h5">{{ tm("pipInstall.dialogTitle") }}</span>
             </v-card-title>
             <v-card-text>
               <v-text-field
@@ -59,7 +67,7 @@ const { tm } = useModuleI18n('features/console');
                 :label="tm('pipInstall.mirrorLabel')"
                 variant="outlined"
               />
-              <small>{{ tm('pipInstall.mirrorHint') }}</small>
+              <small>{{ tm("pipInstall.mirrorHint") }}</small>
               <div>
                 <small>{{ status }}</small>
               </div>
@@ -72,7 +80,7 @@ const { tm } = useModuleI18n('features/console');
                 :loading="loading"
                 @click="pipInstall"
               >
-                {{ tm('pipInstall.installButton') }}
+                {{ tm("pipInstall.installButton") }}
               </v-btn>
             </v-card-actions>
           </v-card>
@@ -81,55 +89,56 @@ const { tm } = useModuleI18n('features/console');
     </div>
     <ConsoleDisplayer
       ref="consoleDisplayer"
-      style="height: calc(100vh - 220px); "
+      style="height: calc(100vh - 220px)"
     />
   </div>
 </template>
-<script>
+<script lang="ts">
 export default {
-  name: 'ConsolePage',
+  name: "ConsolePage",
   components: {
-    ConsoleDisplayer
+    ConsoleDisplayer,
   },
   data() {
     return {
       autoScrollEnabled: true,
       pipDialog: false,
       pipInstallPayload: {
-        package: '',
-        mirror: ''
+        package: "",
+        mirror: "",
       },
       loading: false,
-      status: ''
-    }
+      status: "",
+    };
   },
   watch: {
     autoScrollEnabled(val) {
       if (this.$refs.consoleDisplayer) {
         this.$refs.consoleDisplayer.autoScroll = val;
       }
-    }
+    },
   },
   methods: {
     pipInstall() {
       this.loading = true;
-      axios.post('/api/update/pip-install', this.pipInstallPayload)
-        .then(res => {
+      axios
+        .post("/api/update/pip-install", this.pipInstallPayload)
+        .then((res) => {
           this.status = res.data.message;
           setTimeout(() => {
-            this.status = '';
+            this.status = "";
             this.pipDialog = false;
           }, 2000);
         })
-        .catch(err => {
+        .catch((err) => {
           this.status = err.response.data.message;
-        }).finally(() => {
+        })
+        .finally(() => {
           this.loading = false;
         });
-    }
-  }
-}
-
+    },
+  },
+};
 </script>
 
 <style>

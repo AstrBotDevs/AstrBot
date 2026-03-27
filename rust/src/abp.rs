@@ -368,18 +368,14 @@ impl AbpClient {
                 metadata: plugin.metadata.clone(),
                 tools_count: plugin.tools.len(),
             })
-        } else if let Some(plugin) = self.out_of_process_plugins.get(name) {
-            Some(PluginInfo {
+        } else { self.out_of_process_plugins.get(name).map(|plugin| PluginInfo {
                 name: plugin.config.name.clone(),
                 version: plugin.config.version.clone(),
                 load_mode: plugin.config.load_mode,
                 capabilities: plugin.capabilities.clone(),
                 metadata: plugin.metadata.clone(),
                 tools_count: plugin.tools.len(),
-            })
-        } else {
-            None
-        }
+            }) }
     }
 
     /// Call a plugin tool (out-of-process)
@@ -457,7 +453,7 @@ impl AbpClient {
             }
         });
 
-        let content = serde_json::to_string(&request).map_err(|e| AstrBotError::Json(e))?;
+        let content = serde_json::to_string(&request).map_err(AstrBotError::Json)?;
         let header = format!("Content-Length: {}\r\n\r\n", content.len());
 
         stream.write_all(header.as_bytes()).await?;
@@ -468,7 +464,7 @@ impl AbpClient {
         stream.read_to_end(&mut buffer).await?;
 
         let response: serde_json::Value =
-            serde_json::from_slice(&buffer).map_err(|e| AstrBotError::Json(e))?;
+            serde_json::from_slice(&buffer).map_err(AstrBotError::Json)?;
 
         if let Some(error) = response.get("error") {
             return Err(AstrBotError::Protocol(error.to_string()));
@@ -476,7 +472,7 @@ impl AbpClient {
 
         let result: ToolResult =
             serde_json::from_value(response.get("result").cloned().unwrap_or_default())
-                .map_err(|e| AstrBotError::Json(e))?;
+                .map_err(AstrBotError::Json)?;
 
         Ok(result)
     }
@@ -593,7 +589,7 @@ impl AbpClient {
             }
         });
 
-        let content = serde_json::to_string(&request).map_err(|e| AstrBotError::Json(e))?;
+        let content = serde_json::to_string(&request).map_err(AstrBotError::Json)?;
         let header = format!("Content-Length: {}\r\n\r\n", content.len());
 
         stream.write_all(header.as_bytes()).await?;
@@ -604,7 +600,7 @@ impl AbpClient {
         stream.read_to_end(&mut buffer).await?;
 
         let response: serde_json::Value =
-            serde_json::from_slice(&buffer).map_err(|e| AstrBotError::Json(e))?;
+            serde_json::from_slice(&buffer).map_err(AstrBotError::Json)?;
 
         if let Some(error) = response.get("error") {
             return Err(AstrBotError::Protocol(error.to_string()));
@@ -612,7 +608,7 @@ impl AbpClient {
 
         let result: HandleEventResult =
             serde_json::from_value(response.get("result").cloned().unwrap_or_default())
-                .map_err(|e| AstrBotError::Json(e))?;
+                .map_err(AstrBotError::Json)?;
 
         Ok(result)
     }
@@ -658,11 +654,7 @@ impl AbpClient {
     pub fn get_plugin_tools(&self, name: &str) -> Option<Vec<Tool>> {
         if let Some(plugin) = self.in_process_plugins.get(name) {
             Some(plugin.tools.clone())
-        } else if let Some(plugin) = self.out_of_process_plugins.get(name) {
-            Some(plugin.tools.clone())
-        } else {
-            None
-        }
+        } else { self.out_of_process_plugins.get(name).map(|plugin| plugin.tools.clone()) }
     }
 
     /// Health check for a plugin

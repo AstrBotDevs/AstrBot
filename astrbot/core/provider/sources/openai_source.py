@@ -820,6 +820,8 @@ class ProviderOpenAIOfficial(Provider):
 
         model = model or self.get_model()
         payloads = {**kwargs, "messages": context_query, "model": model}
+        # Filter out non-JSON-serializable objects (e.g. asyncio.Event from abort_signal)
+        payloads.pop("abort_signal", None)
 
         self._finally_convert_payload(payloads)
 

@@ -26,7 +26,7 @@ export type ThemeTypes = {
     surface?: string;
     background?: string;
     overlay?: string;
-    'on-surface-variant'?: string;
+    "on-surface-variant"?: string;
     facebook?: string;
     twitter?: string;
     linkedin?: string;

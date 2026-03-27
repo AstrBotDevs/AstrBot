@@ -1,34 +1,20 @@
-<script setup>
-import axios from '@/utils/request';
-import { EventSourcePolyfill } from 'event-source-polyfill';
-import { resolveApiUrl } from '@/utils/request';
+<script setup lang="ts">
+import axios from "@/utils/request";
+import { EventSourcePolyfill } from "event-source-polyfill";
+import { resolveApiUrl } from "@/utils/request";
 </script>
 
 <template>
   <div class="trace-wrapper">
-    <div
-      ref="scrollEl"
-      class="trace-table"
-      :style="{ height: tableHeight }"
-    >
+    <div ref="scrollEl" class="trace-table" :style="{ height: tableHeight }">
       <div class="trace-row trace-header">
-        <div class="trace-cell time">
-          Time
-        </div>
-        <div class="trace-cell span">
-          Event ID
-        </div>
-        <div class="trace-cell umo">
-          UMO
-        </div>
+        <div class="trace-cell time">Time</div>
+        <div class="trace-cell span">Event ID</div>
+        <div class="trace-cell umo">UMO</div>
         <!-- <div class="trace-cell count">Records</div> -->
         <!-- <div class="trace-cell last">Last</div> -->
-        <div class="trace-cell sender">
-          Sender
-        </div>
-        <div class="trace-cell outline">
-          Outline
-        </div>
+        <div class="trace-cell sender">Sender</div>
+        <div class="trace-cell outline">Outline</div>
         <div class="trace-cell fields" />
       </div>
       <div
@@ -41,10 +27,7 @@ import { resolveApiUrl } from '@/utils/request';
           <div class="trace-cell time">
             {{ formatTime(event.first_time) }}
           </div>
-          <div
-            class="trace-cell span"
-            :title="event.span_id"
-          >
+          <div class="trace-cell span" :title="event.span_id">
             <div class="event-title">
               {{ shortSpan(event.span_id) }}
             </div>
@@ -61,15 +44,18 @@ import { resolveApiUrl } from '@/utils/request';
           <div class="trace-cell sender">
             <div
               class="event-sub"
-              style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+              style="
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+              "
             >
-              {{
-                event.sender_name || '-' }}
+              {{ event.sender_name || "-" }}
             </div>
           </div>
           <div class="trace-cell outline">
             <div class="event-sub outline">
-              {{ event.message_outline || '-' }}
+              {{ event.message_outline || "-" }}
             </div>
           </div>
           <div class="trace-cell fields event-controls">
@@ -79,18 +65,12 @@ import { resolveApiUrl } from '@/utils/request';
               color="primary"
               @click="toggleEvent(event.span_id)"
             >
-              {{ event.collapsed ? 'Expand' : 'Collapse' }}
-              <span
-                v-if="event.hasAgentPrepare"
-                class="agent-dot"
-              />
+              {{ event.collapsed ? "Expand" : "Collapse" }}
+              <span v-if="event.hasAgentPrepare" class="agent-dot" />
             </v-btn>
           </div>
         </div>
-        <div
-          v-if="!event.collapsed"
-          class="trace-records"
-        >
+        <div v-if="!event.collapsed" class="trace-records">
           <div
             v-for="record in getVisibleRecords(event)"
             :key="record.key"
@@ -119,28 +99,25 @@ import { resolveApiUrl } from '@/utils/request';
           </div>
         </div>
       </div>
-      <div
-        v-if="events.length === 0"
-        class="trace-empty"
-      >
+      <div v-if="events.length === 0" class="trace-empty">
         No trace data yet.
       </div>
     </div>
   </div>
 </template>
 
-<script>
+<script lang="ts">
 export default {
-  name: 'TraceDisplayer',
+  name: "TraceDisplayer",
   props: {
     autoScroll: {
       type: Boolean,
-      default: true
+      default: true,
     },
     maxItems: {
       type: Number,
-      default: 300
-    }
+      default: 300,
+    },
   },
   data() {
     return {
@@ -154,14 +131,14 @@ export default {
       maxRetryAttempts: 10,
       baseRetryDelay: 1000,
       lastEventId: null,
-      tableHeight: 'auto'
+      tableHeight: "auto",
     };
   },
   async mounted() {
     await this.fetchTraceHistory();
     this.connectSSE();
     this.updateTableHeight();
-    window.addEventListener('resize', this.updateTableHeight);
+    window.addEventListener("resize", this.updateTableHeight);
   },
   beforeUnmount() {
     if (this.eventSource) {
@@ -173,14 +150,15 @@ export default {
       this.retryTimer = null;
     }
     this.retryAttempts = 0;
-    window.removeEventListener('resize', this.updateTableHeight);
+    window.removeEventListener("resize", this.updateTableHeight);
   },
   methods: {
     updateTableHeight() {
       this.$nextTick(() => {
         const el = this.$refs.scrollEl;
-        if (!el || typeof window === 'undefined') return;
-        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+        if (!el || typeof window === "undefined") return;
+        const viewportHeight =
+          window.innerHeight || document.documentElement.clientHeight;
         const offsetTop = el.getBoundingClientRect().top;
         const height = Math.max(viewportHeight - offsetTop, 0);
         this.tableHeight = `${height}px`;
@@ -188,12 +166,12 @@ export default {
     },
     async fetchTraceHistory() {
       try {
-        const res = await axios.get('/api/log-history');
+        const res = await axios.get("/api/log-history");
         const logs = res.data?.data?.logs || [];
-        const traces = logs.filter((item) => item.type === 'trace');
+        const traces = logs.filter((item) => item.type === "trace");
         this.processNewTraces(traces);
       } catch (err) {
-        console.error('Failed to fetch trace history:', err);
+        console.error("Failed to fetch trace history:", err);
       }
     },
     connectSSE() {
@@ -202,15 +180,18 @@ export default {
         this.eventSource = null;
       }
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem("token");
 
-      this.eventSource = new EventSourcePolyfill(resolveApiUrl('/api/live-log'), {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : ''
+      this.eventSource = new EventSourcePolyfill(
+        resolveApiUrl("/api/live-log"),
+        {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : "",
+          },
+          heartbeatTimeout: 300000,
+          withCredentials: true,
         },
-        heartbeatTimeout: 300000,
-        withCredentials: true
-      });
+      );
 
       this.eventSource.onopen = () => {
         this.retryAttempts = 0;
@@ -226,12 +207,12 @@ export default {
           }
 
           const payload = JSON.parse(event.data);
-          if (payload?.type !== 'trace') {
+          if (payload?.type !== "trace") {
             return;
           }
           this.processNewTraces([payload]);
         } catch (e) {
-          console.error('Failed to parse trace payload:', e);
+          console.error("Failed to parse trace payload:", e);
         }
       };
 
@@ -242,13 +223,13 @@ export default {
         }
 
         if (this.retryAttempts >= this.maxRetryAttempts) {
-          console.error('Trace stream reached max retry attempts.');
+          console.error("Trace stream reached max retry attempts.");
           return;
         }
 
         const delay = Math.min(
           this.baseRetryDelay * Math.pow(2, this.retryAttempts),
-          30000
+          30000,
         );
 
         if (this.retryTimer) {
@@ -286,7 +267,7 @@ export default {
             collapsed: true,
             visibleCount: 20,
             records: [],
-            hasAgentPrepare: trace.action === 'astr_agent_prepare'
+            hasAgentPrepare: trace.action === "astr_agent_prepare",
           };
           this.eventIndex[trace.span_id] = event;
           this.events.push(event);
@@ -301,9 +282,9 @@ export default {
           action: trace.action,
           fieldsText: this.formatFields(trace.fields),
           timeLabel: this.formatTime(trace.time),
-          key: recordKey
+          key: recordKey,
         });
-        if (trace.action === 'astr_agent_prepare') {
+        if (trace.action === "astr_agent_prepare") {
           event.hasAgentPrepare = true;
         }
         if (!event.first_time || trace.time < event.first_time) {
@@ -352,7 +333,10 @@ export default {
     showMore(spanId) {
       const event = this.eventIndex[spanId];
       if (!event) return;
-      event.visibleCount = Math.min(event.records.length, event.visibleCount + 20);
+      event.visibleCount = Math.min(
+        event.records.length,
+        event.visibleCount + 20,
+      );
     },
     pulseEvent(spanId) {
       if (!spanId) return;
@@ -375,18 +359,18 @@ export default {
       return event.records.slice(0, event.visibleCount);
     },
     formatTime(ts) {
-      if (!ts) return '';
+      if (!ts) return "";
       const date = new Date(ts * 1000);
       const base = date.toLocaleString();
-      const ms = String(date.getMilliseconds()).padStart(3, '0');
+      const ms = String(date.getMilliseconds()).padStart(3, "0");
       return `${base}.${ms}`;
     },
     shortSpan(spanId) {
-      if (!spanId) return '';
+      if (!spanId) return "";
       return spanId.slice(0, 8);
     },
     formatFields(fields) {
-      if (!fields) return '';
+      if (!fields) return "";
       try {
         const text = JSON.stringify(fields, null, 2);
         if (text.length > 2000) {
@@ -396,8 +380,8 @@ export default {
       } catch (e) {
         return String(fields);
       }
-    }
-  }
+    },
+  },
 };
 </script>
 
@@ -413,7 +397,7 @@ export default {
   height: 100%;
   overflow-y: auto;
   color: #2b3340;
-  font-family: 'Fira Code', monospace;
+  font-family: "Fira Code", monospace;
 }
 
 .trace-row {

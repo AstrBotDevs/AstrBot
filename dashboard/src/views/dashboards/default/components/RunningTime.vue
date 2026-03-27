@@ -1,20 +1,14 @@
 <template>
-  <v-card
-    elevation="1"
-    class="stat-card uptime-card"
-  >
+  <v-card elevation="1" class="stat-card uptime-card">
     <v-card-text>
       <div class="d-flex align-start">
         <div class="icon-wrapper">
-          <v-icon
-            icon="mdi-clock-outline"
-            size="24"
-          />
+          <v-icon icon="mdi-clock-outline" size="24" />
         </div>
-        
+
         <div class="stat-content">
           <div class="stat-title">
-            {{ t('stats.runningTime.title') }}
+            {{ t("stats.runningTime.title") }}
           </div>
           <div class="stat-value-wrapper">
             <h2 class="stat-value">
@@ -22,7 +16,7 @@
             </h2>
           </div>
           <div class="stat-subtitle">
-            {{ t('stats.runningTime.subtitle') }}
+            {{ t("stats.runningTime.subtitle") }}
           </div>
         </div>
       </div>
@@ -30,30 +24,30 @@
   </v-card>
 </template>
 
-<script>
-import { useModuleI18n } from '@/i18n/composables';
+<script lang="ts">
+import { useModuleI18n } from "@/i18n/composables";
 
 export default {
-  name: 'RunningTime',
-  props: ['stat'],
+  name: "RunningTime",
+  props: ["stat"],
   setup() {
-    const { tm: t } = useModuleI18n('features/dashboard');
+    const { tm: t } = useModuleI18n("features/dashboard");
     return { t };
   },
   computed: {
     formattedTime() {
       if (!this.stat?.running) {
-        return this.t('status.loading');
+        return this.t("status.loading");
       }
 
       const { hours, minutes, seconds } = this.stat.running;
-      return this.t('stats.runningTime.format', {
+      return this.t("stats.runningTime.format", {
         hours,
         minutes,
-        seconds
+        seconds,
       });
-    }
-  }
+    },
+  },
 };
 </script>
 
@@ -61,7 +55,9 @@ export default {
 .stat-card {
   height: 100%;
   border-radius: 8px;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
   overflow: hidden;
 }
 
@@ -110,7 +106,7 @@ export default {
 }
 
 .stat-subtitle {
-    font-size: 12px;
-    opacity: 0.7;
-  }
+  font-size: 12px;
+  opacity: 0.7;
+}
 </style>

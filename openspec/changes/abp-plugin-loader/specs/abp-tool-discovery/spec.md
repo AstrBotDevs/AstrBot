@@ -26,6 +26,8 @@
 - **AND** 跳过该工具（不注册）
 
 ### Requirement: ToolRegistry
+> **架构约束**：核心路由在 Rust FFI（`tool_router.rs`），Python 层仅做聚合
+
 中心化工具注册表，支持跨插件工具发现和调用。
 
 #### Scenario: Register Tool
@@ -35,18 +37,17 @@
 
 #### Scenario: Discover All Tools
 - **WHEN** 调用 `registry.list_tools()`
-- **THEN** 返回所有插件注册的工具
+- **THEN** 聚合所有插件注册的工具（通过 Rust FFI `list_tools()`）
 - **AND** 每个工具标记来源 plugin_id
 
 #### Scenario: Call Tool
 - **WHEN** 调用 `registry.call_tool(tool_name, args)`
-- **THEN** 查找工具所属插件
-- **AND** 转发调用到对应插件
+- **THEN** 转发调用到 Rust FFI `route_tool_call()`
 - **AND** 返回执行结果
 
 #### Scenario: Tool Not Found
 - **WHEN** 调用不存在的工具
-- **THEN** 抛出 `ToolNotFoundError` 错误
+- **THEN** Rust FFI 抛出 `ToolNotFoundError` 错误
 - **AND** 错误码 -32203
 
 ### Requirement: Cross-Plugin Tool Discovery

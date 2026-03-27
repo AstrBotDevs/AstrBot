@@ -8,7 +8,7 @@ version: "4.16.0"
 | 规范 | 文件 | 状态 |
 |------|------|------|
 | Rust 核心运行时 | `astrbot/rust/` | ⚠️ 仅编译产物，无源码 |
-| ABP 插件协议 | `abp.md` | ⚠️ 纯规范，待实现 |
+| ABP 插件协议 | `abp.md` | ⚠️ 规范完善（新增序列化+SDK），待实现 |
 | ACP Agent 通信 | `acp.md` | ⚠️ 纯规范，待实现 |
 | MCP 客户端 | `mcp.md` | ⚠️ Python 层有简单封装 |
 | LSP 协议 | `lsp.md` | ❌ 参考文档，不做实现 |
@@ -92,6 +92,7 @@ directives:
     | 术语 | 含义 |
     |------|------|
     | Star | Legacy 插件系统（`astrbot/builtin_stars/`），已被 ABP 取代 |
+    | ABP Plugin | 基于 ABP 协议的插件（见 abp.md），可跨语言 |
     | ABP Plugin | 基于 ABP 协议的插件（见 abp.md），可跨语言 |
     | Galaxy | 概念层，负责加载和管理 Stars/ABP 插件（尚未实现） |
     | Gateway | HTTP API 网关（Quart + Hypercorn，见 api.md） |

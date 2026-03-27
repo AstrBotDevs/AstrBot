@@ -32,7 +32,6 @@ onUnmounted(() => {
   window.removeEventListener("astrbot-url-param-username", handleUsernameParam);
 });
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 async function validate(_values: any, { setErrors }: any) {
   loading.value = true;
 
@@ -101,10 +100,7 @@ async function validate(_values: any, { setErrors }: any) {
       <span class="login-btn-text">{{ t("login") }}</span>
     </v-btn>
 
-    <div
-      v-if="errors.apiError"
-      class="mt-4 error-container"
-    >
+    <div v-if="errors.apiError" class="mt-4 error-container">
       <v-alert
         color="error"
         variant="tonal"

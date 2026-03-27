@@ -257,7 +257,7 @@ impl A2AClient {
                 task_id: task_id.map(String::from),
                 session_id: session_id.map(String::from),
             })
-            .map_err(|e| AstrBotError::Json(e))?,
+            .map_err(AstrBotError::Json)?,
         );
 
         let response = client
@@ -276,7 +276,7 @@ impl A2AClient {
 
         // Parse into A2AResponse
         let a2a_response: A2AResponse =
-            serde_json::from_value(result).map_err(|e| AstrBotError::Json(e))?;
+            serde_json::from_value(result).map_err(AstrBotError::Json)?;
 
         Ok(a2a_response)
     }
@@ -295,7 +295,7 @@ impl A2AClient {
             &uuid::Uuid::new_v4().to_string(),
             "SendStreamingMessage",
             serde_json::to_value(SendStreamingMessageParams { message })
-                .map_err(|e| AstrBotError::Json(e))?,
+                .map_err(AstrBotError::Json)?,
         );
 
         // For streaming, we return the task ID and let the caller handle SSE
@@ -352,7 +352,7 @@ impl A2AClient {
             .await
             .map_err(|e| AstrBotError::Protocol(format!("Failed to parse task: {}", e)))?;
 
-        let task: Task = serde_json::from_value(result).map_err(|e| AstrBotError::Json(e))?;
+        let task: Task = serde_json::from_value(result).map_err(AstrBotError::Json)?;
 
         self.tasks.insert(task.id.clone(), task.clone());
 
@@ -386,7 +386,7 @@ impl A2AClient {
             .await
             .map_err(|e| AstrBotError::Protocol(format!("Failed to parse canceled task: {}", e)))?;
 
-        let task: Task = serde_json::from_value(result).map_err(|e| AstrBotError::Json(e))?;
+        let task: Task = serde_json::from_value(result).map_err(AstrBotError::Json)?;
 
         Ok(task)
     }

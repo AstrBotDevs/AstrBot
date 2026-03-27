@@ -92,6 +92,7 @@ dependencies = [
  "clap",
  "dirs",
  "futures-util",
+ "lazy_static",
  "pyo3",
  "pyo3-async-runtimes",
  "reqwest",

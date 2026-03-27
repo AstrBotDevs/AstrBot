@@ -1,24 +1,21 @@
 <template>
-  <v-card
-    elevation="1"
-    class="stat-card memory-card"
-  >
+  <v-card elevation="1" class="stat-card memory-card">
     <v-card-text>
       <div class="d-flex align-start">
         <div class="icon-wrapper">
-          <v-icon
-            icon="mdi-memory"
-            size="24"
-          />
+          <v-icon icon="mdi-memory" size="24" />
         </div>
-        
+
         <div class="stat-content">
           <div class="stat-title">
-            {{ t('stats.memoryUsage.title') }}
+            {{ t("stats.memoryUsage.title") }}
           </div>
           <div class="stat-value-wrapper">
             <h2 class="stat-value">
-              {{ stat.memory?.process || 0 }} <span class="memory-unit">MiB / {{ stat.memory?.system || 0 }} MiB</span>
+              {{ stat.memory?.process || 0 }}
+              <span class="memory-unit"
+                >MiB / {{ stat.memory?.system || 0 }} MiB</span
+              >
             </h2>
             <v-chip
               :color="memoryStatus.color"
@@ -30,47 +27,61 @@
           </div>
         </div>
       </div>
-      
+
       <div class="metrics-container">
         <div class="metric-item">
           <div class="metric-label">
-            {{ t('stats.memoryUsage.cpuLoad') }}
+            {{ t("stats.memoryUsage.cpuLoad") }}
           </div>
-          <div class="metric-value">
-            {{ stat.cpu_percent || '0' }}%
-          </div>
+          <div class="metric-value">{{ stat.cpu_percent || "0" }}%</div>
         </div>
       </div>
     </v-card-text>
   </v-card>
 </template>
 
-<script>
-import { useModuleI18n } from '@/i18n/composables';
+<script lang="ts">
+import { useModuleI18n } from "@/i18n/composables";
 
 export default {
-  name: 'MemoryUsage',
-  props: ['stat'],
+  name: "MemoryUsage",
+  props: ["stat"],
   setup() {
-    const { tm: t } = useModuleI18n('features/dashboard');
+    const { tm: t } = useModuleI18n("features/dashboard");
     return { t };
   },
   computed: {
     memoryPercentage() {
-      if (!this.stat.memory || !this.stat.memory.process || !this.stat.memory.system) return 0;
-      return Math.round((this.stat.memory.process / this.stat.memory.system) * 100);
+      if (
+        !this.stat.memory ||
+        !this.stat.memory.process ||
+        !this.stat.memory.system
+      )
+        return 0;
+      return Math.round(
+        (this.stat.memory.process / this.stat.memory.system) * 100,
+      );
     },
     memoryStatus() {
       const percentage = this.memoryPercentage;
       if (percentage < 30) {
-        return { color: 'success', label: this.t('stats.memoryUsage.status.good') };
+        return {
+          color: "success",
+          label: this.t("stats.memoryUsage.status.good"),
+        };
       } else if (percentage < 70) {
-        return { color: 'warning', label: this.t('stats.memoryUsage.status.normal') };
+        return {
+          color: "warning",
+          label: this.t("stats.memoryUsage.status.normal"),
+        };
       } else {
-        return { color: 'error', label: this.t('stats.memoryUsage.status.high') };
+        return {
+          color: "error",
+          label: this.t("stats.memoryUsage.status.high"),
+        };
       }
-    }
-  }
+    },
+  },
 };
 </script>
 
@@ -78,7 +89,9 @@ export default {
 .stat-card {
   height: 100%;
   border-radius: 8px;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
   overflow: hidden;
 }
 

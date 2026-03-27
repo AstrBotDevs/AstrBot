@@ -1,27 +1,33 @@
 /**
  * 指令操作方法 Composable
  */
-import { reactive } from 'vue';
-import axios from '@/utils/request';
-import type { CommandItem, RenameDialogState, DetailsDialogState, TypeInfo, StatusInfo } from '../types';
+import { reactive } from "vue";
+import axios from "@/utils/request";
+import type {
+  CommandItem,
+  RenameDialogState,
+  DetailsDialogState,
+  TypeInfo,
+  StatusInfo,
+} from "../types";
 
 export function useCommandActions(
   toast: (message: string, color?: string) => void,
-  fetchCommands: () => Promise<void>
+  fetchCommands: () => Promise<void>,
 ) {
   // 重命名对话框状态
   const renameDialog = reactive<RenameDialogState>({
     show: false,
     command: null,
-    newName: '',
+    newName: "",
     aliases: [],
-    loading: false
+    loading: false,
   });
 
   // 详情对话框状态
   const detailsDialog = reactive<DetailsDialogState>({
     show: false,
-    command: null
+    command: null,
   });
 
   /**
@@ -30,22 +36,22 @@ export function useCommandActions(
   const toggleCommand = async (
     cmd: CommandItem,
     successMessage: string,
-    errorMessage: string
+    errorMessage: string,
   ) => {
     try {
-      const res = await axios.post('/api/commands/toggle', {
+      const res = await axios.post("/api/commands/toggle", {
         command_key: cmd.command_key,
         handler_full_name: cmd.handler_full_name,
-        enabled: !cmd.enabled
+        enabled: !cmd.enabled,
       });
-      if (res.data.status === 'ok') {
-        toast(successMessage, 'success');
+      if (res.data.status === "ok") {
+        toast(successMessage, "success");
         await fetchCommands();
       } else {
-        toast(res.data.message || errorMessage, 'error');
+        toast(res.data.message || errorMessage, "error");
       }
     } catch (err: any) {
-      toast(err?.message || errorMessage, 'error');
+      toast(err?.message || errorMessage, "error");
     }
   };
 
@@ -54,7 +60,7 @@ export function useCommandActions(
    */
   const openRenameDialog = (cmd: CommandItem) => {
     renameDialog.command = cmd;
-    renameDialog.newName = cmd.current_fragment || '';
+    renameDialog.newName = cmd.current_fragment || "";
     renameDialog.aliases = [...(cmd.aliases || [])];
     renameDialog.show = true;
   };
@@ -62,26 +68,29 @@ export function useCommandActions(
   /**
    * 确认重命名
    */
-  const confirmRename = async (successMessage: string, errorMessage: string) => {
+  const confirmRename = async (
+    successMessage: string,
+    errorMessage: string,
+  ) => {
     if (!renameDialog.command || !renameDialog.newName.trim()) return;
 
     renameDialog.loading = true;
     try {
-      const res = await axios.post('/api/commands/rename', {
+      const res = await axios.post("/api/commands/rename", {
         command_key: renameDialog.command.command_key,
         handler_full_name: renameDialog.command.handler_full_name,
         new_name: renameDialog.newName.trim(),
-        aliases: renameDialog.aliases.filter(a => a.trim())
+        aliases: renameDialog.aliases.filter((a) => a.trim()),
       });
-      if (res.data.status === 'ok') {
-        toast(successMessage, 'success');
+      if (res.data.status === "ok") {
+        toast(successMessage, "success");
         renameDialog.show = false;
         await fetchCommands();
       } else {
-        toast(res.data.message || errorMessage, 'error');
+        toast(res.data.message || errorMessage, "error");
       }
     } catch (err: any) {
-      toast(err?.message || errorMessage, 'error');
+      toast(err?.message || errorMessage, "error");
     } finally {
       renameDialog.loading = false;
     }
@@ -98,14 +107,29 @@ export function useCommandActions(
   /**
    * 获取类型显示信息
    */
-  const getTypeInfo = (type: string, translations: { group: string; subCommand: string; command: string }): TypeInfo => {
+  const getTypeInfo = (
+    type: string,
+    translations: { group: string; subCommand: string; command: string },
+  ): TypeInfo => {
     switch (type) {
-      case 'group':
-        return { text: translations.group, color: 'info', icon: 'mdi-folder-outline' };
-      case 'sub_command':
-        return { text: translations.subCommand, color: 'secondary', icon: 'mdi-subdirectory-arrow-right' };
+      case "group":
+        return {
+          text: translations.group,
+          color: "info",
+          icon: "mdi-folder-outline",
+        };
+      case "sub_command":
+        return {
+          text: translations.subCommand,
+          color: "secondary",
+          icon: "mdi-subdirectory-arrow-right",
+        };
       default:
-        return { text: translations.command, color: 'primary', icon: 'mdi-console-line' };
+        return {
+          text: translations.command,
+          color: "primary",
+          icon: "mdi-console-line",
+        };
     }
   };
 
@@ -114,18 +138,25 @@ export function useCommandActions(
    */
   const getPermissionColor = (permission: string): string => {
     switch (permission) {
-      case 'admin': return 'error';
-      default: return 'success';
+      case "admin":
+        return "error";
+      default:
+        return "success";
     }
   };
 
   /**
    * 获取权限标签
    */
-  const getPermissionLabel = (permission: string, translations: { admin: string; everyone: string }): string => {
+  const getPermissionLabel = (
+    permission: string,
+    translations: { admin: string; everyone: string },
+  ): string => {
     switch (permission) {
-      case 'admin': return translations.admin;
-      default: return translations.everyone;
+      case "admin":
+        return translations.admin;
+      default:
+        return translations.everyone;
     }
   };
 
@@ -134,15 +165,15 @@ export function useCommandActions(
    */
   const getStatusInfo = (
     cmd: CommandItem,
-    translations: { conflict: string; enabled: string; disabled: string }
+    translations: { conflict: string; enabled: string; disabled: string },
   ): StatusInfo => {
     if (cmd.has_conflict) {
-      return { text: translations.conflict, color: 'warning', variant: 'flat' };
+      return { text: translations.conflict, color: "warning", variant: "flat" };
     }
     if (cmd.enabled) {
-      return { text: translations.enabled, color: 'success', variant: 'flat' };
+      return { text: translations.enabled, color: "success", variant: "flat" };
     }
-    return { text: translations.disabled, color: 'error', variant: 'outlined' };
+    return { text: translations.disabled, color: "error", variant: "outlined" };
   };
 
   /**
@@ -151,15 +182,15 @@ export function useCommandActions(
   const getRowProps = ({ item }: { item: CommandItem }) => {
     const classes: string[] = [];
     if (item.has_conflict) {
-      classes.push('conflict-row');
+      classes.push("conflict-row");
     }
-    if (item.type === 'sub_command') {
-      classes.push('sub-command-row');
+    if (item.type === "sub_command") {
+      classes.push("sub-command-row");
     }
     if (item.is_group) {
-      classes.push('group-row');
+      classes.push("group-row");
     }
-    return classes.length > 0 ? { class: classes.join(' ') } : {};
+    return classes.length > 0 ? { class: classes.join(" ") } : {};
   };
 
   /**
@@ -167,24 +198,24 @@ export function useCommandActions(
    */
   const updatePermission = async (
     cmd: CommandItem,
-    permission: 'admin' | 'member',
+    permission: "admin" | "member",
     successMessage: string,
-    errorMessage: string
+    errorMessage: string,
   ) => {
     try {
-      const res = await axios.post('/api/commands/permission', {
+      const res = await axios.post("/api/commands/permission", {
         command_key: cmd.command_key,
         handler_full_name: cmd.handler_full_name,
-        permission: permission
+        permission: permission,
       });
-      if (res.data.status === 'ok') {
-        toast(successMessage, 'success');
+      if (res.data.status === "ok") {
+        toast(successMessage, "success");
         await fetchCommands();
       } else {
-        toast(res.data.message || errorMessage, 'error');
+        toast(res.data.message || errorMessage, "error");
       }
     } catch (err: any) {
-      toast(err?.message || errorMessage, 'error');
+      toast(err?.message || errorMessage, "error");
     }
   };
 
@@ -203,7 +234,6 @@ export function useCommandActions(
     getPermissionColor,
     getPermissionLabel,
     getStatusInfo,
-    getRowProps
+    getRowProps,
   };
 }
-

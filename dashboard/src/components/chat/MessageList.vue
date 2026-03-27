@@ -10,12 +10,7 @@
       class="loading-overlay"
       :class="{ 'is-dark': isDark }"
     >
-      <v-progress-circular
-        indeterminate
-        size="48"
-        width="4"
-        color="primary"
-      />
+      <v-progress-circular indeterminate size="48" width="4" color="primary" />
     </div>
     <!-- 聊天消息列表 -->
     <div
@@ -29,10 +24,7 @@
         class="message-item fade-in"
       >
         <!-- 用户消息 -->
-        <div
-          v-if="msg.content.type == 'user'"
-          class="user-message"
-        >
+        <div v-if="msg.content.type == 'user'" class="user-message">
           <div
             class="message-bubble user-bubble"
             :class="{ 'has-audio': hasAudio(msg.content.message) }"
@@ -49,10 +41,7 @@
                 class="reply-quote"
                 @click="scrollToMessage(part.message_id)"
               >
-                <v-icon
-                  size="small"
-                  class="reply-quote-icon"
-                >
+                <v-icon size="small" class="reply-quote-icon">
                   mdi-reply
                 </v-icon>
                 <span class="reply-quote-text">{{
@@ -68,7 +57,8 @@
                   white-space: pre-wrap;
                   word-wrap: break-word;
                 "
-              >{{ part.text }}</pre>
+                >{{ part.text }}</pre
+              >
 
               <!-- 图片附件 -->
               <div
@@ -80,7 +70,7 @@
                     :src="part.embedded_url"
                     class="attached-image"
                     @click="openImagePreview(part.embedded_url)"
-                  >
+                  />
                 </div>
               </div>
 
@@ -89,14 +79,8 @@
                 v-else-if="part.type === 'record' && part.embedded_url"
                 class="audio-attachment"
               >
-                <audio
-                  controls
-                  class="audio-player"
-                >
-                  <source
-                    :src="part.embedded_url"
-                    type="audio/wav"
-                  >
+                <audio controls class="audio-player">
+                  <source :src="part.embedded_url" type="audio/wav" />
                   {{ t("messages.errors.browser.audioNotSupported") }}
                 </audio>
               </div>
@@ -116,10 +100,10 @@
                     :style="
                       isDark
                         ? {
-                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                          borderColor: 'rgba(255, 255, 255, 0.1)',
-                          color: 'var(--v-theme-secondary)',
-                        }
+                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                            color: 'var(--v-theme-secondary)',
+                          }
                         : {}
                     "
                   >
@@ -129,7 +113,8 @@
                       :style="
                         isDark ? { color: 'var(--v-theme-secondary)' } : {}
                       "
-                    >mdi-file-document-outline</v-icon>
+                      >mdi-file-document-outline</v-icon
+                    >
                     <span class="file-name">{{
                       part.embedded_file.filename
                     }}</span>
@@ -141,10 +126,10 @@
                     :style="
                       isDark
                         ? {
-                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                          borderColor: 'rgba(255, 255, 255, 0.1)',
-                          color: 'var(--v-theme-secondary)',
-                        }
+                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                            color: 'var(--v-theme-secondary)',
+                          }
                         : {}
                     "
                     @click="downloadFile(part.embedded_file)"
@@ -155,7 +140,8 @@
                       :style="
                         isDark ? { color: 'var(--v-theme-secondary)' } : {}
                       "
-                    >mdi-file-document-outline</v-icon>
+                      >mdi-file-document-outline</v-icon
+                    >
                     <span class="file-name">{{
                       part.embedded_file.filename
                     }}</span>
@@ -165,12 +151,11 @@
                       "
                       size="small"
                       class="download-icon"
-                    >mdi-loading mdi-spin</v-icon>
-                    <v-icon
-                      v-else
-                      size="small"
-                      class="download-icon"
-                    >mdi-download</v-icon>
+                      >mdi-loading mdi-spin</v-icon
+                    >
+                    <v-icon v-else size="small" class="download-icon"
+                      >mdi-download</v-icon
+                    >
                   </a>
                 </div>
               </div>
@@ -179,14 +164,8 @@
         </div>
 
         <!-- Bot Messages -->
-        <div
-          v-else
-          class="bot-message"
-        >
-          <v-avatar
-            class="bot-avatar"
-            size="36"
-          >
+        <div v-else class="bot-message">
+          <v-avatar class="bot-avatar" size="36">
             <v-progress-circular
               v-if="isStreaming && index === messages.length - 1"
               :index="index"
@@ -205,10 +184,7 @@
           <div class="bot-message-content">
             <div class="message-bubble bot-bubble">
               <!-- Loading state -->
-              <div
-                v-if="msg.content.isLoading"
-                class="loading-container"
-              >
+              <div v-if="msg.content.isLoading" class="loading-container">
                 <span class="loading-text">{{ tm("message.loading") }}</span>
               </div>
 
@@ -236,10 +212,7 @@
               v-if="!msg.content.isLoading || index === messages.length - 1"
               class="message-actions"
             >
-              <span
-                v-if="msg.created_at"
-                class="message-time"
-              >{{
+              <span v-if="msg.created_at" class="message-time">{{
                 formatMessageTime(msg.created_at)
               }}</span>
               <!-- Agent Stats Menu -->
@@ -250,11 +223,7 @@
                 :close-on-content-click="false"
               >
                 <template #activator="{ props }">
-                  <v-icon
-                    v-bind="props"
-                    size="x-small"
-                    class="stats-info-icon"
-                  >
+                  <v-icon v-bind="props" size="x-small" class="stats-info-icon">
                     mdi-information-outline
                   </v-icon>
                 </template>
@@ -362,12 +331,7 @@
         :class="{ 'dark-mode': isDark }"
         @click="handleQuoteSelected"
       >
-        <v-icon
-          left
-          small
-        >
-          mdi-reply
-        </v-icon>
+        <v-icon left small> mdi-reply </v-icon>
         引用
       </v-btn>
     </div>
@@ -379,20 +343,17 @@
     class="image-preview-overlay"
     @click="closeImagePreview"
   >
-    <div
-      class="image-preview-container"
-      @click.stop
-    >
+    <div class="image-preview-container" @click.stop>
       <img
         :src="imagePreview.url"
         class="preview-image"
         @click="closeImagePreview"
-      >
+      />
     </div>
   </v-overlay>
 </template>
 
-<script>
+<script lang="ts">
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import {
   enableKatex,

@@ -6,10 +6,10 @@
           width="110"
           src="@/assets/images/astrbot_logo_mini.webp"
           alt="AstrBot Logo"
-        >
+        />
       </div>
       <div class="logo-text">
-        <h2 
+        <h2
           :style="{ color: 'rgb(var(--v-theme-primary))' }"
           v-html="formatTitle(title || t('core.header.logoTitle'))"
         />
@@ -18,7 +18,7 @@
           :style="{ color: 'rgba(var(--v-theme-on-surface), 0.72)' }"
           class="hint-text"
         >
-          {{ subtitle || t('core.header.accountDialog.title') }}
+          {{ subtitle || t("core.header.accountDialog.title") }}
         </h4>
       </div>
     </div>
@@ -26,27 +26,30 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from '@/i18n/composables';
+import { useI18n } from "@/i18n/composables";
 
 const { t } = useI18n();
 
-const props = withDefaults(defineProps<{
-  title?: string;
-  subtitle?: string;
-}>(), {
-  title: '',  // 默认为空，组件会使用翻译值
-  subtitle: ''
-})
+const props = withDefaults(
+  defineProps<{
+    title?: string;
+    subtitle?: string;
+  }>(),
+  {
+    title: "", // 默认为空，组件会使用翻译值
+    subtitle: "",
+  },
+);
 
 // 智能格式化标题，在小屏幕上允许在合适位置换行
 const formatTitle = (title: string) => {
   // 如果标题包含 "AstrBot" 和其他文字，在它们之间添加换行机会
-  if (title.includes('AstrBot ') || title.includes('AstrBot')) {
+  if (title.includes("AstrBot ") || title.includes("AstrBot")) {
     // 处理 "AstrBot 仪表盘" 或 "AstrBot Dashboard" 等格式
-    return title.replace(/(AstrBot)\s+(.+)/, '$1<wbr> $2');
+    return title.replace(/(AstrBot)\s+(.+)/, "$1<wbr> $2");
   }
   return title;
-}
+};
 </script>
 
 <style scoped>
@@ -114,15 +117,15 @@ const formatTitle = (title: string) => {
   .logo-content {
     gap: 15px;
   }
-  
+
   .logo-text h2 {
     font-size: 1.6rem;
   }
-  
+
   .logo-text h4 {
     font-size: 0.9rem;
   }
-  
+
   .logo-image img {
     width: 90px;
   }

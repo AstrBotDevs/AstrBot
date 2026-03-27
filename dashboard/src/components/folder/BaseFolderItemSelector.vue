@@ -2,10 +2,7 @@
   <div class="folder-item-selector">
     <!-- Trigger area -->
     <div class="d-flex align-center justify-space-between">
-      <span
-        v-if="!modelValue"
-        style="color: rgb(var(--v-theme-primaryText))"
-      >
+      <span v-if="!modelValue" style="color: rgb(var(--v-theme-primaryText))">
         {{ labels.notSelected || "未选择" }}
       </span>
 
@@ -13,12 +10,7 @@
         {{ displayValue }}
       </span>
 
-      <v-btn
-        size="small"
-        color="primary"
-        variant="tonal"
-        @click="openDialog"
-      >
+      <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
         {{ labels.buttonText || "选择..." }}
       </v-btn>
     </div>
@@ -34,12 +26,7 @@
           class="dialog-title d-flex align-center"
           :class="isCompactLayout ? 'py-3 px-4' : 'py-4 px-5'"
         >
-          <v-icon
-            class="mr-3"
-            color="primary"
-          >
-            mdi-account-circle
-          </v-icon>
+          <v-icon class="mr-3" color="primary"> mdi-account-circle </v-icon>
           <span>{{ labels.dialogTitle || "选择项目" }}</span>
         </v-card-title>
 
@@ -48,18 +35,12 @@
         <v-card-text class="pa-0 selector-content">
           <div class="selector-layout">
             <!-- Left: folder tree -->
-            <div
-              v-if="!isCompactLayout"
-              class="folder-sidebar"
-            >
+            <div v-if="!isCompactLayout" class="folder-sidebar">
               <div class="sidebar-header pa-3 pb-2">
                 <span
                   class="text-caption text-medium-emphasis font-weight-medium"
                 >
-                  <v-icon
-                    size="small"
-                    class="mr-1"
-                  >mdi-folder-multiple</v-icon>
+                  <v-icon size="small" class="mr-1">mdi-folder-multiple</v-icon>
                   文件夹
                 </span>
               </div>
@@ -104,10 +85,7 @@
                   />
                 </template>
 
-                <div
-                  v-if="treeLoading"
-                  class="text-center pa-4"
-                >
+                <div v-if="treeLoading" class="text-center pa-4">
                   <v-progress-circular
                     indeterminate
                     size="20"
@@ -119,10 +97,7 @@
 
             <!-- Right: items -->
             <div class="items-panel">
-              <div
-                v-if="isCompactLayout"
-                class="mobile-folder-bar px-4 py-2"
-              >
+              <div v-if="isCompactLayout" class="mobile-folder-bar px-4 py-2">
                 <v-btn
                   icon="mdi-arrow-left"
                   size="small"
@@ -161,7 +136,7 @@
                       :class="{ 'breadcrumb-link': !(item as any).disabled }"
                       @click="
                         !(item as any).disabled &&
-                          navigateToFolder((item as any).folderId)
+                        navigateToFolder((item as any).folderId)
                       "
                     >
                       <v-icon
@@ -176,10 +151,7 @@
                   </template>
 
                   <template #divider>
-                    <v-icon
-                      size="small"
-                      color="grey"
-                    >
+                    <v-icon size="small" color="grey">
                       mdi-chevron-right
                     </v-icon>
                   </template>
@@ -222,10 +194,7 @@
                           color="amber-lighten-4"
                           class="mr-3"
                         >
-                          <v-icon
-                            color="amber-darken-2"
-                            size="20"
-                          >
+                          <v-icon color="amber-darken-2" size="20">
                             mdi-folder
                           </v-icon>
                         </v-avatar>
@@ -236,10 +205,7 @@
                       </v-list-item-title>
 
                       <template #append>
-                        <v-icon
-                          size="20"
-                          color="grey"
-                        >
+                        <v-icon size="20" color="grey">
                           mdi-chevron-right
                         </v-icon>
                       </template>
@@ -325,14 +291,11 @@
                   <div
                     v-if="
                       currentSubFolders.length === 0 &&
-                        currentItems.length === 0
+                      currentItems.length === 0
                     "
                     class="empty-state text-center py-12"
                   >
-                    <v-icon
-                      size="64"
-                      color="grey-lighten-2"
-                    >
+                    <v-icon size="64" color="grey-lighten-2">
                       mdi-folder-open-outline
                     </v-icon>
                     <p class="text-grey mt-4 text-body-2">
@@ -360,10 +323,7 @@
 
           <v-spacer />
 
-          <v-btn
-            variant="text"
-            @click="cancelSelection"
-          >
+          <v-btn variant="text" @click="cancelSelection">
             {{ labels.cancelButton || "取消" }}
           </v-btn>
 

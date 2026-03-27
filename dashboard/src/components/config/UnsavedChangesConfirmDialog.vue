@@ -1,17 +1,11 @@
 <template>
-  <v-dialog
-    v-model="isOpen"
-    max-width="480"
-    persistent
-  >
+  <v-dialog v-model="isOpen" max-width="480" persistent>
     <v-card>
-      <v-card-title class="dialog-title d-flex align-center justify-space-between">
+      <v-card-title
+        class="dialog-title d-flex align-center justify-space-between"
+      >
         <span>{{ title }}</span>
-        <v-btn
-          icon="mdi-close"
-          variant="text"
-          @click="handleClose"
-        />
+        <v-btn icon="mdi-close" variant="text" @click="handleClose" />
       </v-card-title>
       <v-card-text>
         <div class="message-text">
@@ -25,27 +19,20 @@
       </v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn
-          color="gray"
-          @click="handleCancel"
-        >
-          {{ t('core.common.dialog.cancelButton') }}
+        <v-btn color="gray" @click="handleCancel">
+          {{ t("core.common.dialog.cancelButton") }}
         </v-btn>
-        <v-btn
-          color="red"
-          class="confirm-button"
-          @click="handleConfirm"
-        >
-          {{ t('core.common.dialog.confirmButton') }}
+        <v-btn color="red" class="confirm-button" @click="handleConfirm">
+          {{ t("core.common.dialog.confirmButton") }}
         </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from "vue";
-import { useI18n } from '@/i18n/composables';
+import { useI18n } from "@/i18n/composables";
 
 const { t } = useI18n();
 
@@ -58,8 +45,8 @@ const closeHint = ref("");
 let resolvePromise = null;
 
 const open = (options) => {
-  title.value = options.title || t('core.common.dialog.confirmTitle');
-  message.value = options.message || t('core.common.dialog.confirmMessage');
+  title.value = options.title || t("core.common.dialog.confirmTitle");
+  message.value = options.message || t("core.common.dialog.confirmMessage");
   confirmHint.value = options.confirmHint || "";
   cancelHint.value = options.cancelHint || "";
   closeHint.value = options.closeHint || "";
@@ -82,12 +69,11 @@ const handleCancel = () => {
 
 const handleClose = () => {
   isOpen.value = false;
-  if (resolvePromise) resolvePromise('close');
+  if (resolvePromise) resolvePromise("close");
 };
 
 defineExpose({ open });
 </script>
-
 
 <style scoped>
 .message-text {

@@ -10,6 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::Path;
 use std::path::PathBuf;
 
 // ============================================================================
@@ -19,6 +20,7 @@ use std::path::PathBuf;
 /// Main configuration entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct AstrBotConfig {
     #[serde(default)]
     pub system: SystemConfig,
@@ -32,21 +34,10 @@ pub struct AstrBotConfig {
     pub plugins: HashMap<String, serde_json::Value>,
 }
 
-impl Default for AstrBotConfig {
-    fn default() -> Self {
-        Self {
-            system: SystemConfig::default(),
-            platform: PlatformConfig::default(),
-            providers: ProvidersConfig::default(),
-            agent: AgentConfig::default(),
-            plugins: HashMap::new(),
-        }
-    }
-}
 
 impl AstrBotConfig {
     /// Load all config files from config directory
-    pub fn load_from_dir(config_dir: &PathBuf) -> anyhow::Result<Self> {
+    pub fn load_from_dir(config_dir: &Path) -> anyhow::Result<Self> {
         let mut config = AstrBotConfig::default();
 
         let system_path = config_dir.join("system.yaml");
@@ -74,24 +65,20 @@ impl AstrBotConfig {
         }
 
         let plugins_dir = config_dir.join("plugins");
-        if plugins_dir.is_dir() {
-            if let Ok(entries) = std::fs::read_dir(plugins_dir) {
+        if plugins_dir.is_dir()
+            && let Ok(entries) = std::fs::read_dir(plugins_dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    if path.extension().and_then(|s| s.to_str()) == Some("yaml") {
-                        if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
-                            if let Ok(content) = std::fs::read_to_string(&path) {
-                                if let Ok(plugin_config) =
+                    if path.extension().and_then(|s| s.to_str()) == Some("yaml")
+                        && let Some(name) = path.file_stem().and_then(|s| s.to_str())
+                            && let Ok(content) = std::fs::read_to_string(&path)
+                                && let Ok(plugin_config) =
                                     serde_json::from_str::<serde_json::Value>(&content)
                                 {
                                     config.plugins.insert(name.to_string(), plugin_config);
                                 }
-                            }
-                        }
-                    }
                 }
             }
-        }
 
         Ok(config)
     }
@@ -187,6 +174,7 @@ impl Default for ProxyConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct TraceConfig {
     #[serde(default)]
     pub enable: bool,
@@ -196,15 +184,6 @@ pub struct TraceConfig {
     pub log_path: String,
 }
 
-impl Default for TraceConfig {
-    fn default() -> Self {
-        Self {
-            enable: false,
-            log_enable: false,
-            log_path: String::new(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -225,6 +204,7 @@ impl Default for TempConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct PlatformConfig {
     #[serde(default)]
     pub platform_settings: PlatformSettings,
@@ -234,15 +214,6 @@ pub struct PlatformConfig {
     pub platform_specific: PlatformSpecificConfig,
 }
 
-impl Default for PlatformConfig {
-    fn default() -> Self {
-        Self {
-            platform_settings: PlatformSettings::default(),
-            platforms: Vec::new(),
-            platform_specific: PlatformSpecificConfig::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -395,6 +366,7 @@ pub struct PlatformAdapterConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct PlatformSpecificConfig {
     #[serde(default)]
     pub lark: PlatformSpecificSettings,
@@ -404,33 +376,19 @@ pub struct PlatformSpecificConfig {
     pub discord: PlatformSpecificSettings,
 }
 
-impl Default for PlatformSpecificConfig {
-    fn default() -> Self {
-        Self {
-            lark: PlatformSpecificSettings::default(),
-            telegram: PlatformSpecificSettings::default(),
-            discord: PlatformSpecificSettings::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct PlatformSpecificSettings {
     #[serde(default)]
     pub pre_ack_emoji: PreAckEmojiConfig,
 }
 
-impl Default for PlatformSpecificSettings {
-    fn default() -> Self {
-        Self {
-            pre_ack_emoji: PreAckEmojiConfig::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct PreAckEmojiConfig {
     #[serde(default)]
     pub enable: bool,
@@ -438,14 +396,6 @@ pub struct PreAckEmojiConfig {
     pub emojis: Vec<String>,
 }
 
-impl Default for PreAckEmojiConfig {
-    fn default() -> Self {
-        Self {
-            enable: false,
-            emojis: Vec::new(),
-        }
-    }
-}
 
 // ============================================================================
 // Providers Config (providers.yaml)
@@ -453,18 +403,12 @@ impl Default for PreAckEmojiConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct ProvidersConfig {
     #[serde(default)]
     pub provider_settings: ProviderSettings,
 }
 
-impl Default for ProvidersConfig {
-    fn default() -> Self {
-        Self {
-            provider_settings: ProviderSettings::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -502,6 +446,7 @@ impl Default for ProviderSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct AgentConfig {
     #[serde(default)]
     pub agent_settings: AgentSettings,
@@ -515,17 +460,6 @@ pub struct AgentConfig {
     pub provider_ltm_settings: ProviderLtmSettings,
 }
 
-impl Default for AgentConfig {
-    fn default() -> Self {
-        Self {
-            agent_settings: AgentSettings::default(),
-            subagent_orchestrator: SubagentOrchestratorConfig::default(),
-            provider_stt_settings: ProviderSttSettings::default(),
-            provider_tts_settings: ProviderTtsSettings::default(),
-            provider_ltm_settings: ProviderLtmSettings::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -688,6 +622,7 @@ impl Default for ImageCompressOptions {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct SubagentOrchestratorConfig {
     #[serde(default)]
     pub main_enable: bool,
@@ -699,16 +634,6 @@ pub struct SubagentOrchestratorConfig {
     pub agents: Vec<AgentDefinition>,
 }
 
-impl Default for SubagentOrchestratorConfig {
-    fn default() -> Self {
-        Self {
-            main_enable: false,
-            remove_main_duplicate_tools: false,
-            router_system_prompt: String::new(),
-            agents: Vec::new(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -724,6 +649,7 @@ pub struct AgentDefinition {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct ProviderSttSettings {
     #[serde(default)]
     pub enable: bool,
@@ -731,14 +657,6 @@ pub struct ProviderSttSettings {
     pub provider_id: String,
 }
 
-impl Default for ProviderSttSettings {
-    fn default() -> Self {
-        Self {
-            enable: false,
-            provider_id: String::new(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -922,18 +840,12 @@ pub struct CozeSecrets {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct GpgConfig {
     #[serde(default)]
     pub security: GpgSecurity,
 }
 
-impl Default for GpgConfig {
-    fn default() -> Self {
-        Self {
-            security: GpgSecurity::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1003,7 +915,7 @@ pub fn get_config_dir() -> PathBuf {
         if let Ok(home) = std::env::var("HOME") {
             return PathBuf::from(home).join(".config").join("astrbot");
         }
-        return PathBuf::from("/root/.config/astrbot");
+        PathBuf::from("/root/.config/astrbot")
     }
 }
 
@@ -1037,7 +949,7 @@ pub fn get_data_dir() -> PathBuf {
         if let Ok(home) = std::env::var("HOME") {
             return PathBuf::from(home).join(".local/share").join("astrbot");
         }
-        return PathBuf::from("/root/.local/share/astrbot");
+        PathBuf::from("/root/.local/share/astrbot")
     }
 }
 
@@ -1065,7 +977,7 @@ pub fn get_cache_dir() -> PathBuf {
         if let Ok(home) = std::env::var("HOME") {
             return PathBuf::from(home).join(".cache").join("astrbot");
         }
-        return PathBuf::from("/root/.cache/astrbot");
+        PathBuf::from("/root/.cache/astrbot")
     }
 }
 
@@ -1093,6 +1005,6 @@ pub fn get_runtime_dir() -> PathBuf {
         if let Ok(home) = std::env::var("HOME") {
             return PathBuf::from(home).join(".local/run").join("astrbot");
         }
-        return PathBuf::from("/run/astrbot");
+        PathBuf::from("/run/astrbot")
     }
 }

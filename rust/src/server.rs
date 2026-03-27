@@ -75,7 +75,7 @@ impl JwtAuth {
             iat: now,
         };
 
-        let header = format!("{{\"alg\":\"HS256\",\"typ\":\"JWT\"}}");
+        let header = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}".to_string();
         let header_b64 = BASE64.encode(header.as_bytes());
         let payload_b64 = BASE64
             .encode(serde_json::to_vec(&claims).map_err(|e| ServerError::Jwt(e.to_string()))?);
@@ -121,7 +121,7 @@ impl JwtAuth {
         let mut hasher = DefaultHasher::new();
         data.hash(&mut hasher);
         self.secret.hash(&mut hasher);
-        BASE64.encode(&hasher.finish().to_be_bytes())
+        BASE64.encode(hasher.finish().to_be_bytes())
     }
 }
 
@@ -540,7 +540,7 @@ async fn handle_ws_message(
     if !response.is_null() {
         state
             .ws_manager
-            .send_to(&connection_id, &serde_json::to_string(&response).unwrap())
+            .send_to(connection_id, &serde_json::to_string(&response).unwrap())
             .await
             .ok();
     }

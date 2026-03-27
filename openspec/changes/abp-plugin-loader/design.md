@@ -44,12 +44,22 @@ class PluginLoader(ABC):
 
 ### 2. InProcessPluginLoader 实现
 
-**决定**：Python 模块直接导入，插件实例化后存入 `Dict[str, PluginInstance]`。
+> **⚠️ 架构约束**：核心加载逻辑在 Rust FFI，Python 仅做胶水层
+
+**决定**：`PluginLoader` trait 定义在 Python，`load/unload/reload` 实现调用 Rust FFI（`load_plugin()`/`unload_plugin()`）。
+
+```python
+class InProcessPluginLoader(PluginLoader):
+    async def load(self, plugin_id, config, data_dirs):
+        # 调用 Rust FFI: _core.load_plugin(config)
+        result = await rust_ffi.load_plugin(plugin_id, config, data_dirs)
+        return PluginInstance(plugin_id, result.instance, ...)
+```
 
 **理由**：
-- 无进程通信开销，性能最优
-- 与项目 "Rust 核心 + Python 胶水层" 架构一致
-- 插件需遵循 `ABPPluginProtocol` 接口约定
+- 核心加载逻辑在 Rust（线程安全、错误隔离）
+- Python 胶水层仅做类型转换和聚合
+- 符合 config.yaml `rust_core` 规范
 
 ### 3. 工具发现架构
 
@@ -70,17 +80,20 @@ ToolRegistry
 
 ### 4. FFI 绑定链路
 
-**决定**：Python → Rust `_core.so` → ABP PluginLoader。
+> **⚠️ 禁止 ctypes**：所有 FFI 必须通过 PyO3（rust-ffi.md 规范）
+
+**决定**：Python → PyO3 `_core.so` → ABP PluginLoader。
 
 ```
-Python PluginManager
-  → ctypes / cffi 调用 _core.so
+Python PluginRegistry (_internal/)
+  → PyO3 调用 _core.so
   → Rust abp_plugin_loader_* 函数
   → 返回 Python 对象（通过 .pyi 类型提示）
 ```
 
 **理由**：
-- Rust 源码待提交，当前仅使用编译产物
+- PyO3 是 Rust 官方 Python 绑定方案
+- `rust-ffi.md` 明确禁止 ctypes
 - `_core.pyi` 提供类型检查
 - anyio 异步调用通过 `run_in_executor` 封装
 
@@ -94,9 +107,9 @@ Python PluginManager
 
 ## Migration Plan
 
-1. **Phase 1**：PluginLoader trait + InProcessPluginLoader（对现有 OutOfProcess 透明）
-2. **Phase 2**：tools/list + ToolRegistry
-3. **Phase 3**：FFI 绑定 + config.yaml 集成
+1. **Phase 1**：PluginLoader trait + Python 聚合层（调用 Rust FFI）
+2. **Phase 2**：tools/list + ToolRegistry（Rust FFI + Python 聚合）
+3. **Phase 3**：PyO3 FFI 绑定 + config.yaml 集成
 4. **Phase 4**：测试覆盖 + 文档
 
 ## Open Questions

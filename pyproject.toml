@@ -115,9 +115,6 @@ ignore = [
   "E501",
 ]
 
-[tool.ty]
-exclude = ["tests", "tests/**", "**/tests/**"]
-
 [tool.pyright]
 typeCheckingMode = "basic"
 pythonVersion = "3.10"

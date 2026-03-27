@@ -1,6 +1,6 @@
-import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import axios from '@/utils/request';
+import { defineStore } from "pinia";
+import { ref } from "vue";
+import axios from "@/utils/request";
 
 interface LogObject {
   uuid?: string;
@@ -30,7 +30,7 @@ interface PluginItem {
   support_platforms: string[];
 }
 
-export const useCommonStore = defineStore('common', () => {
+export const useCommonStore = defineStore("common", () => {
   const eventSource = ref<AbortController | null>(null);
   const log_cache = ref<LogObject[]>([]);
   const sse_connected = ref(false);
@@ -41,105 +41,128 @@ export const useCommonStore = defineStore('common', () => {
 
   async function createEventSource() {
     if (eventSource.value || isUnmounted.value) {
-      return
+      return;
     }
     const controller = new AbortController();
     const { signal } = controller;
 
     const headers = {
-      'Content-Type': 'multipart/form-data',
-      'Authorization': 'Bearer ' + localStorage.getItem('token')
+      "Content-Type": "multipart/form-data",
+      Authorization: "Bearer " + localStorage.getItem("token"),
     };
 
-    fetch('/api/live-log', {
-      method: 'GET',
+    fetch("/api/live-log", {
+      method: "GET",
       headers,
       signal,
-      cache: 'no-cache',
-    }).then(response => {
-      if (!response.ok) {
-        throw new Error(`SSE connection failed: ${response.status}`);
-      }
-      console.log('SSE stream opened');
-      sse_connected.value = true;
-
-      if (!response.body) {
-        throw new Error('Response body is null');
-      }
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let bufferedText = '';
-
-      const processStream = ({ done, value }: { done: boolean; value?: Uint8Array }): Promise<void> => {
-        if (done) {
-          console.log('SSE stream closed');
-          setTimeout(() => {
-            if (isUnmounted.value) return;
-            eventSource.value = null;
-            createEventSource();
-          }, 2000);
-          return Promise.resolve();
+      cache: "no-cache",
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`SSE connection failed: ${response.status}`);
         }
+        console.log("SSE stream opened");
+        sse_connected.value = true;
 
-        const text = decoder.decode(value, { stream: true });
-        bufferedText += text;
+        if (!response.body) {
+          throw new Error("Response body is null");
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let bufferedText = "";
 
-        const segments = bufferedText.split('\n\n');
-        bufferedText = segments.pop() || '';
-
-        segments.forEach(segment => {
-          const line = segment.trim();
-          if (!line.startsWith('data: ')) {
-            return;
+        const processStream = ({
+          done,
+          value,
+        }: {
+          done: boolean;
+          value?: Uint8Array;
+        }): Promise<void> => {
+          if (done) {
+            console.log("SSE stream closed");
+            setTimeout(() => {
+              if (isUnmounted.value) return;
+              eventSource.value = null;
+              createEventSource();
+            }, 2000);
+            return Promise.resolve();
           }
 
-          const logLine = line.replace('data: ', '').trim();
-          if (!logLine) {
-            return;
-          }
+          const text = decoder.decode(value, { stream: true });
+          bufferedText += text;
 
-          try {
-            const logObject = JSON.parse(logLine) as LogObject;
+          const segments = bufferedText.split("\n\n");
+          bufferedText = segments.pop() || "";
 
-            if (!logObject.uuid) {
-               if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+          segments.forEach((segment) => {
+            const line = segment.trim();
+            if (!line.startsWith("data: ")) {
+              return;
+            }
+
+            const logLine = line.replace("data: ", "").trim();
+            if (!logLine) {
+              return;
+            }
+
+            try {
+              const logObject = JSON.parse(logLine) as LogObject;
+
+              if (!logObject.uuid) {
+                if (
+                  typeof crypto !== "undefined" &&
+                  typeof crypto.randomUUID === "function"
+                ) {
                   logObject.uuid = crypto.randomUUID();
-               } else {
-                  logObject.uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-                      var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-                      return v.toString(16);
-                  });
-               }
+                } else {
+                  logObject.uuid =
+                    "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+                      /[xy]/g,
+                      function (c) {
+                        const r = (Math.random() * 16) | 0,
+                          v = c == "x" ? r : (r & 0x3) | 0x8;
+                        return v.toString(16);
+                      },
+                    );
+                }
+              }
+
+              log_cache.value.push(logObject);
+              if (log_cache.value.length > log_cache_max_len.value) {
+                log_cache.value.splice(
+                  0,
+                  log_cache.value.length - log_cache_max_len.value,
+                );
+              }
+            } catch (err) {
+              console.warn(
+                "Failed to parse SSE log line, skipping:",
+                err,
+                logLine,
+              );
             }
+          });
 
-            log_cache.value.push(logObject);
-            if (log_cache.value.length > log_cache_max_len.value) {
-              log_cache.value.splice(0, log_cache.value.length - log_cache_max_len.value);
-            }
-          } catch (err) {
-            console.warn('Failed to parse SSE log line, skipping:', err, logLine);
-          }
-        });
+          return reader.read().then(processStream);
+        };
 
-        return reader.read().then(processStream);
-      };
-
-      reader.read().then(processStream);
-    }).catch(error => {
-      console.error('SSE error:', error);
-      log_cache.value.push({
-          type: 'log',
-          level: 'ERROR',
+        reader.read().then(processStream);
+      })
+      .catch((error) => {
+        console.error("SSE error:", error);
+        log_cache.value.push({
+          type: "log",
+          level: "ERROR",
           time: Date.now() / 1000,
-          data: 'SSE Connection failed, retrying in 5 seconds...',
-          uuid: 'error-' + Date.now()
-      } as LogObject);
-      setTimeout(() => {
-        if (isUnmounted.value) return;
-        eventSource.value = null;
-        createEventSource();
-      }, 1000);
-    });
+          data: "SSE Connection failed, retrying in 5 seconds...",
+          uuid: "error-" + Date.now(),
+        } as LogObject);
+        setTimeout(() => {
+          if (isUnmounted.value) return;
+          eventSource.value = null;
+          createEventSource();
+        }, 1000);
+      });
 
     eventSource.value = controller;
   }
@@ -157,7 +180,7 @@ export const useCommonStore = defineStore('common', () => {
   }
 
   async function fetchStartTime() {
-    const res = await axios.get('/api/stat/start-time');
+    const res = await axios.get("/api/stat/start-time");
     startTime.value = res.data.data.start_time;
     return startTime.value;
   }
@@ -170,40 +193,52 @@ export const useCommonStore = defineStore('common', () => {
     return startTime.value;
   }
 
-  async function getPluginCollections(force = false, customSource: string | null = null) {
+  async function getPluginCollections(
+    force = false,
+    customSource: string | null = null,
+  ) {
     if (!force && pluginMarketData.value.length > 0 && !customSource) {
       return Promise.resolve(pluginMarketData.value);
     }
 
-    let url = force ? '/api/plugin/market_list?force_refresh=true' : '/api/plugin/market_list';
+    let url = force
+      ? "/api/plugin/market_list?force_refresh=true"
+      : "/api/plugin/market_list";
     if (customSource) {
-      url += (url.includes('?') ? '&' : '?') + `custom_registry=${encodeURIComponent(customSource)}`;
+      url +=
+        (url.includes("?") ? "&" : "?") +
+        `custom_registry=${encodeURIComponent(customSource)}`;
     }
 
-    return axios.get(url)
+    return axios
+      .get(url)
       .then((res) => {
         const data: PluginItem[] = [];
-        if (res.data.data && typeof res.data.data === 'object') {
-          for (let key in res.data.data) {
+        if (res.data.data && typeof res.data.data === "object") {
+          for (const key in res.data.data) {
             const pluginData = res.data.data[key];
 
             data.push({
-              "name": pluginData.name || key,
-              "desc": pluginData.desc,
-              "author": pluginData.author,
-              "repo": pluginData.repo,
-              "installed": false,
-              "version": pluginData?.version ? pluginData.version : "未知",
-              "social_link": pluginData?.social_link,
-              "tags": pluginData?.tags ? pluginData.tags : [],
-              "logo": pluginData?.logo ? pluginData.logo : "",
-              "pinned": pluginData?.pinned ? pluginData.pinned : false,
-              "stars": pluginData?.stars ? pluginData.stars : 0,
-              "updated_at": pluginData?.updated_at ? pluginData.updated_at : "",
-              "display_name": pluginData?.display_name ? pluginData.display_name : "",
-              "astrbot_version": pluginData?.astrbot_version ? pluginData.astrbot_version : "",
-              "category": pluginData?.category ? pluginData.category : "",
-              "support_platforms": Array.isArray(pluginData?.support_platforms)
+              name: pluginData.name || key,
+              desc: pluginData.desc,
+              author: pluginData.author,
+              repo: pluginData.repo,
+              installed: false,
+              version: pluginData?.version ? pluginData.version : "未知",
+              social_link: pluginData?.social_link,
+              tags: pluginData?.tags ? pluginData.tags : [],
+              logo: pluginData?.logo ? pluginData.logo : "",
+              pinned: pluginData?.pinned ? pluginData.pinned : false,
+              stars: pluginData?.stars ? pluginData.stars : 0,
+              updated_at: pluginData?.updated_at ? pluginData.updated_at : "",
+              display_name: pluginData?.display_name
+                ? pluginData.display_name
+                : "",
+              astrbot_version: pluginData?.astrbot_version
+                ? pluginData.astrbot_version
+                : "",
+              category: pluginData?.category ? pluginData.category : "",
+              support_platforms: Array.isArray(pluginData?.support_platforms)
                 ? pluginData.support_platforms
                 : Array.isArray(pluginData?.support_platform)
                   ? pluginData.support_platform

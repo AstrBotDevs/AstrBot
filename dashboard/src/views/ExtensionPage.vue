@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
@@ -183,7 +183,9 @@ const {
           <v-tab-item v-show="activeTab === 'mcp'">
             <div class="mb-4 pt-4 pb-4">
               <div class="d-flex align-center flex-wrap" style="gap: 12px">
-                <h2 class="text-h2 mb-0">{{ tm("tabs.installedMcpServers") }}</h2>
+                <h2 class="text-h2 mb-0">
+                  {{ tm("tabs.installedMcpServers") }}
+                </h2>
               </div>
             </div>
             <v-card
@@ -217,7 +219,6 @@ const {
 
           <!-- 插件市场标签页内容 -->
           <MarketPluginsTab :state="pageState" />
-
         </v-card-text>
       </v-card>
     </v-col>
@@ -268,8 +269,8 @@ const {
             v-if="extension_config.metadata"
             :metadata="extension_config.metadata"
             :iterable="extension_config.config"
-            :metadataKey="curr_namespace"
-            :pluginName="curr_namespace"
+            :metadata-key="curr_namespace"
+            :plugin-name="curr_namespace"
           />
           <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
         </div>
@@ -318,7 +319,7 @@ const {
         <div style="margin-top: 32px">
           <h3>{{ tm("dialogs.loading.logs") }}</h3>
           <ConsoleDisplayer
-            historyNum="10"
+            history-num="10"
             style="height: 200px; margin-top: 16px; margin-bottom: 24px"
           >
           </ConsoleDisplayer>
@@ -352,21 +353,21 @@ const {
           :items="selectedPlugin.handlers"
           item-key="name"
         >
-          <template v-slot:header.id="{ column }">
+          <template #header.id="{ column }">
             <p style="font-weight: bold">{{ column.title }}</p>
           </template>
-          <template v-slot:item.event_type="{ item }">
+          <template #item.event_type="{ item }">
             {{ item.event_type }}
           </template>
-          <template v-slot:item.desc="{ item }">
+          <template #item.desc="{ item }">
             {{ item.desc }}
           </template>
-          <template v-slot:item.type="{ item }">
+          <template #item.type="{ item }">
             <v-chip color="success">
               {{ item.type }}
             </v-chip>
           </template>
-          <template v-slot:item.cmd="{ item }">
+          <template #item.cmd="{ item }">
             <span style="font-weight: bold">{{ item.cmd }}</span>
           </template>
         </v-data-table>
@@ -384,10 +385,10 @@ const {
   </v-dialog>
 
   <v-snackbar
+    v-model="snack_show"
     :timeout="2000"
     elevation="24"
     :color="snack_success"
-    v-model="snack_show"
     location="bottom center"
   >
     {{ snack_message }}
@@ -422,24 +423,24 @@ const {
       </v-card-title>
       <v-card-text>
         <p class="text-body-1">
-          {{ tm("dialogs.updateAllConfirm.message", { count: updatableExtensions.length }) }}
+          {{
+            tm("dialogs.updateAllConfirm.message", {
+              count: updatableExtensions.length,
+            })
+          }}
         </p>
       </v-card-text>
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
-        <v-btn
-          variant="text"
-          @click="cancelUpdateAll"
-        >{{ tm("buttons.cancel") }}</v-btn>
-        <v-btn
-          color="warning"
-          variant="flat"
-          @click="confirmUpdateAll"
-        >{{ tm("dialogs.updateAllConfirm.confirm") }}</v-btn>
+        <v-btn variant="text" @click="cancelUpdateAll">{{
+          tm("buttons.cancel")
+        }}</v-btn>
+        <v-btn color="warning" variant="flat" @click="confirmUpdateAll">{{
+          tm("dialogs.updateAllConfirm.confirm")
+        }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
-
 
   <!-- 指令冲突提示对话框 -->
   <v-dialog v-model="conflictDialog.show" max-width="420">
@@ -567,8 +568,8 @@ const {
                 color="primary"
                 size="large"
                 prepend-icon="mdi-upload"
-                @click="$refs.fileInput.click()"
                 elevation="2"
+                @click="$refs.fileInput.click()"
               >
                 {{ tm("buttons.selectFile") }}
               </v-btn>
@@ -585,7 +586,7 @@ const {
                   @click:close="upload_file = null"
                 >
                   {{ upload_file.name }}
-                  <template v-slot:append>
+                  <template #append>
                     <span class="text-caption ml-2"
                       >({{ (upload_file.size / 1024).toFixed(1) }}KB)</span
                     >
@@ -619,7 +620,11 @@ const {
                   {{ selectedInstallPlugin.astrbot_version }}
                 </v-chip>
                 <v-chip
-                  v-if="normalizePlatformList(selectedInstallPlugin.support_platforms).length"
+                  v-if="
+                    normalizePlatformList(
+                      selectedInstallPlugin.support_platforms,
+                    ).length
+                  "
                   size="small"
                   color="info"
                   variant="outlined"
@@ -627,9 +632,9 @@ const {
                 >
                   {{ tm("card.status.supportPlatform") }}:
                   {{
-                    getPlatformDisplayList(selectedInstallPlugin.support_platforms).join(
-                      ", ",
-                    )
+                    getPlatformDisplayList(
+                      selectedInstallPlugin.support_platforms,
+                    ).join(", ")
                   }}
                 </v-chip>
                 <v-alert
@@ -674,15 +679,15 @@ const {
       <v-card-text>
         <v-select
           :model-value="selectedSource || '__default__'"
-          @update:model-value="
-            selectPluginSource($event === '__default__' ? null : $event)
-          "
           :items="sourceSelectItems"
           :label="tm('market.currentSource')"
           variant="outlined"
           prepend-inner-icon="mdi-source-branch"
           hide-details
           class="mb-4"
+          @update:model-value="
+            selectPluginSource($event === '__default__' ? null : $event)
+          "
         ></v-select>
 
         <div class="d-flex align-center justify-space-between mb-2">
@@ -705,10 +710,16 @@ const {
             :active="selectedSource === null"
             @click="selectPluginSource(null)"
           >
-            <template v-slot:prepend>
-              <v-icon icon="mdi-shield-check" size="small" class="mr-2"></v-icon>
+            <template #prepend>
+              <v-icon
+                icon="mdi-shield-check"
+                size="small"
+                class="mr-2"
+              ></v-icon>
             </template>
-            <v-list-item-title>{{ tm("market.defaultSource") }}</v-list-item-title>
+            <v-list-item-title>{{
+              tm("market.defaultSource")
+            }}</v-list-item-title>
           </v-list-item>
 
           <v-list-item
@@ -719,14 +730,18 @@ const {
             :active="selectedSource === source.url"
             @click="selectPluginSource(source.url)"
           >
-            <template v-slot:prepend>
-              <v-icon icon="mdi-link-variant" size="small" class="mr-2"></v-icon>
+            <template #prepend>
+              <v-icon
+                icon="mdi-link-variant"
+                size="small"
+                class="mr-2"
+              ></v-icon>
             </template>
             <v-list-item-title>{{ source.name }}</v-list-item-title>
             <v-list-item-subtitle class="text-caption">{{
               source.url
             }}</v-list-item-subtitle>
-            <template v-slot:append>
+            <template #append>
               <v-btn
                 icon="mdi-pencil-outline"
                 size="small"
@@ -747,9 +762,12 @@ const {
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn color="primary" variant="text" @click="showSourceManagerDialog = false">{{
-          tm("buttons.close")
-        }}</v-btn>
+        <v-btn
+          color="primary"
+          variant="text"
+          @click="showSourceManagerDialog = false"
+          >{{ tm("buttons.close") }}</v-btn
+        >
       </v-card-actions>
     </v-card>
   </v-dialog>

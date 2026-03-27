@@ -44,26 +44,26 @@ const changeLanguage = async (langCode: string) => {
 
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
-let dialog = ref(false);
-let accountWarning = ref(false);
-let updateStatusDialog = ref(false);
-let aboutDialog = ref(false);
+const dialog = ref(false);
+const accountWarning = ref(false);
+const updateStatusDialog = ref(false);
+const aboutDialog = ref(false);
 const username = localStorage.getItem("user");
-let password = ref("");
-let newPassword = ref("");
-let confirmPassword = ref("");
-let newUsername = ref("");
-let status = ref("");
-let updateStatus = ref("");
-let releaseMessage = ref("");
-let hasNewVersion = ref(false);
-let botCurrVersion = ref("");
-let dashboardHasNewVersion = ref(false);
-let dashboardCurrentVersion = ref("");
-let version = ref("");
-let releases = ref([]);
-let updatingDashboardLoading = ref(false);
-let installLoading = ref(false);
+const password = ref("");
+const newPassword = ref("");
+const confirmPassword = ref("");
+const newUsername = ref("");
+const status = ref("");
+const updateStatus = ref("");
+const releaseMessage = ref("");
+const hasNewVersion = ref(false);
+const botCurrVersion = ref("");
+const dashboardHasNewVersion = ref(false);
+const dashboardCurrentVersion = ref("");
+const version = ref("");
+const releases = ref([]);
+const updatingDashboardLoading = ref(false);
+const installLoading = ref(false);
 const isDesktopReleaseMode = ref(
   typeof window !== "undefined" && !!window.astrbotDesktop?.isDesktop,
 );
@@ -75,7 +75,9 @@ const desktopUpdateCurrentVersion = ref("-");
 const desktopUpdateLatestVersion = ref("-");
 const desktopUpdateStatus = ref("");
 
-const getAppUpdaterBridge = (): NonNullable<Window["astrbotAppUpdater"]> | null => {
+const getAppUpdaterBridge = (): NonNullable<
+  Window["astrbotAppUpdater"]
+> | null => {
   if (typeof window === "undefined") {
     return null;
   }
@@ -98,9 +100,9 @@ const getSelectedGitHubProxy = () => {
 };
 
 // Release Notes Modal
-let releaseNotesDialog = ref(false);
-let selectedReleaseNotes = ref("");
-let selectedReleaseTag = ref("");
+const releaseNotesDialog = ref(false);
+const selectedReleaseNotes = ref("");
+const selectedReleaseTag = ref("");
 
 const releasesHeader = computed(() => [
   { title: t("core.header.updateDialog.table.tag"), key: "tag_name" },
@@ -316,7 +318,7 @@ function getVersion() {
     .then((res) => {
       botCurrVersion.value = "v" + res.data.data.version;
       dashboardCurrentVersion.value = res.data.data?.dashboard_version;
-      let change_pwd_hint = res.data.data?.change_pwd_hint;
+      const change_pwd_hint = res.data.data?.change_pwd_hint;
       if (change_pwd_hint) {
         dialog.value = true;
         accountWarning.value = true;
@@ -437,18 +439,22 @@ function autoSwitchThemeListener(e: MediaQueryListEvent) {
 }
 
 // 通过 watch 变量来添加和移除监听器
-watch(() => customizer.autoSwitchTheme, (isAuto) => {
-  if (typeof window === 'undefined') return;
-  
-  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-  
-  if (isAuto) {
-    autoSwitchTheme();
-    mediaQuery.addEventListener('change', autoSwitchThemeListener);
-  } else {
-    mediaQuery.removeEventListener('change', autoSwitchThemeListener);
-  }
-}, { immediate: true });
+watch(
+  () => customizer.autoSwitchTheme,
+  (isAuto) => {
+    if (typeof window === "undefined") return;
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+    if (isAuto) {
+      autoSwitchTheme();
+      mediaQuery.addEventListener("change", autoSwitchThemeListener);
+    } else {
+      mediaQuery.removeEventListener("change", autoSwitchThemeListener);
+    }
+  },
+  { immediate: true },
+);
 
 function openReleaseNotesDialog(body: string, tag: string) {
   selectedReleaseNotes.value = body;
@@ -526,17 +532,10 @@ const isChristmas = computed(() => {
   const day = today.getDate();
   return month === 12 && day === 25;
 });
-
 </script>
 
 <template>
-  <v-app-bar
-    elevation="0"
-    :priority="0"
-    height="70"
-    class="px-0"
-    app
-  >
+  <v-app-bar elevation="0" :priority="0" height="70" class="px-0" app>
     <div class="fill-height d-flex align-center w-100 px-4">
       <!-- 桌面端标题栏拖拽区域 -->
       <div
@@ -585,18 +584,22 @@ const isChristmas = computed(() => {
         }"
         @click="handleLogoClick"
       >
-        <span class="logo-text Outfit">Astr<span class="logo-text bot-text-wrapper">Bot
-          <img
-            v-if="isChristmas"
-            src="@/assets/images/xmas-hat.png"
-            alt="Christmas hat"
-            class="xmas-hat"
-          > </span></span>
+        <span class="logo-text Outfit"
+          >Astr<span class="logo-text bot-text-wrapper"
+            >Bot
+            <img
+              v-if="isChristmas"
+              src="@/assets/images/xmas-hat.png"
+              alt="Christmas hat"
+              class="xmas-hat"
+            /> </span
+        ></span>
         <span
           v-if="customizer.viewMode === 'chat'"
           class="logo-text logo-text-light Outfit"
           style="color: grey"
-        >ChatUI</span>
+          >ChatUI</span
+        >
         <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
       </div>
 
@@ -611,18 +614,8 @@ const isChristmas = computed(() => {
           group
           density="compact"
         >
-          <v-btn
-            value="chat"
-            prepend-icon="mdi-chat-processing"
-          >
-            Chat
-          </v-btn>
-          <v-btn
-            value="bot"
-            prepend-icon="mdi-robot"
-          >
-            Bot
-          </v-btn>
+          <v-btn value="chat" prepend-icon="mdi-chat-processing"> Chat </v-btn>
+          <v-btn value="bot" prepend-icon="mdi-robot"> Bot </v-btn>
         </v-btn-toggle>
       </div>
 
@@ -640,10 +633,7 @@ const isChristmas = computed(() => {
       </div>
 
       <!-- 功能菜单 -->
-      <StyledMenu
-        offset="12"
-        location="bottom end"
-      >
+      <StyledMenu offset="12" location="bottom end">
         <template #activator="{ props: activatorProps }">
           <v-btn
             v-bind="activatorProps"
@@ -669,22 +659,12 @@ const isChristmas = computed(() => {
               color="primary"
               class="mobile-mode-toggle"
             >
-              <v-btn
-                value="bot"
-                size="small"
-              >
-                <v-icon start>
-                  mdi-robot
-                </v-icon>
+              <v-btn value="bot" size="small">
+                <v-icon start> mdi-robot </v-icon>
                 Bot
               </v-btn>
-              <v-btn
-                value="chat"
-                size="small"
-              >
-                <v-icon start>
-                  mdi-chat
-                </v-icon>
+              <v-btn value="chat" size="small">
+                <v-icon start> mdi-chat </v-icon>
                 Chat
               </v-btn>
             </v-btn-toggle>
@@ -711,18 +691,13 @@ const isChristmas = computed(() => {
                 <v-icon>mdi-translate</v-icon>
               </template>
               <v-list-item-title>
-                {{
-                  t("core.common.language")
-                }}
+                {{ t("core.common.language") }}
               </v-list-item-title>
               <template #append>
                 <span class="language-group-current">{{
                   currentLanguage?.flag
                 }}</span>
-                <v-icon
-                  size="18"
-                  class="language-group-arrow"
-                >
+                <v-icon size="18" class="language-group-arrow">
                   mdi-chevron-right
                 </v-icon>
               </template>
@@ -735,10 +710,7 @@ const isChristmas = computed(() => {
             elevation="8"
             rounded="lg"
           >
-            <v-list
-              density="compact"
-              class="styled-menu-list pa-1"
-            >
+            <v-list density="compact" class="styled-menu-list pa-1">
               <v-list-item
                 v-for="lang in languages"
                 :key="lang.code"
@@ -793,9 +765,7 @@ const isChristmas = computed(() => {
             <v-icon>mdi-arrow-up-circle</v-icon>
           </template>
           <v-list-item-title>
-            {{
-              t("core.header.updateDialog.title")
-            }}
+            {{ t("core.header.updateDialog.title") }}
           </v-list-item-title>
           <template
             v-if="
@@ -803,12 +773,7 @@ const isChristmas = computed(() => {
             "
             #append
           >
-            <v-chip
-              size="x-small"
-              color="primary"
-              variant="tonal"
-              class="ml-2"
-            >
+            <v-chip size="x-small" color="primary" variant="tonal" class="ml-2">
               !
             </v-chip>
           </template>
@@ -824,9 +789,7 @@ const isChristmas = computed(() => {
             <v-icon>mdi-account</v-icon>
           </template>
           <v-list-item-title>
-            {{
-              t("core.header.accountDialog.title")
-            }}
+            {{ t("core.header.accountDialog.title") }}
           </v-list-item-title>
         </v-list-item>
 
@@ -840,9 +803,7 @@ const isChristmas = computed(() => {
             <v-icon>mdi-export</v-icon>
           </template>
           <v-list-item-title>
-            {{
-              t("core.header.buttons.logout")
-            }}
+            {{ t("core.header.buttons.logout") }}
           </v-list-item-title>
         </v-list-item>
       </StyledMenu>
@@ -901,18 +862,22 @@ const isChristmas = computed(() => {
           </div>
 
           <div class="mb-4 mt-4">
-            <small>{{ t("core.header.updateDialog.tip") }}
-              {{ t("core.header.updateDialog.tipContinue") }}</small>
+            <small
+              >{{ t("core.header.updateDialog.tip") }}
+              {{ t("core.header.updateDialog.tipContinue") }}</small
+            >
           </div>
 
           <!-- 发行版 -->
           <div>
             <div class="mb-4">
-              <small>{{ t("core.header.updateDialog.dockerTip") }}
+              <small
+                >{{ t("core.header.updateDialog.dockerTip") }}
                 <a href="https://containrrr.dev/watchtower/usage-overview/">{{
                   t("core.header.updateDialog.dockerTipLink")
                 }}</a>
-                {{ t("core.header.updateDialog.dockerTipContinue") }}</small>
+                {{ t("core.header.updateDialog.dockerTipContinue") }}</small
+              >
             </div>
 
             <v-alert
@@ -930,7 +895,7 @@ const isChristmas = computed(() => {
                 <strong>{{
                   t("core.header.updateDialog.preReleaseWarning.title")
                 }}</strong>
-                <br>
+                <br />
                 {{
                   t("core.header.updateDialog.preReleaseWarning.description")
                 }}
@@ -983,9 +948,7 @@ const isChristmas = computed(() => {
                   {{ t("core.header.updateDialog.table.view") }}
                 </v-btn>
               </template>
-              <template
-                #item.switch="{ item }: { item: { tag_name: string } }"
-              >
+              <template #item.switch="{ item }: { item: { tag_name: string } }">
                 <v-btn
                   rounded="xl"
                   variant="plain"
@@ -1004,11 +967,13 @@ const isChristmas = computed(() => {
               {{ t("core.header.updateDialog.dashboardUpdate.title") }}
             </h3>
             <div class="mb-4">
-              <small>{{
-                       t("core.header.updateDialog.dashboardUpdate.currentVersion")
-                     }}
-                {{ dashboardCurrentVersion }}</small>
-              <br>
+              <small
+                >{{
+                  t("core.header.updateDialog.dashboardUpdate.currentVersion")
+                }}
+                {{ dashboardCurrentVersion }}</small
+              >
+              <br />
             </div>
 
             <div class="mb-4">
@@ -1050,10 +1015,7 @@ const isChristmas = computed(() => {
   </v-dialog>
 
   <!-- Release Notes Modal -->
-  <v-dialog
-    v-model="releaseNotesDialog"
-    max-width="800"
-  >
+  <v-dialog v-model="releaseNotesDialog" max-width="800">
     <v-card>
       <v-card-title class="text-h5">
         {{ t("core.header.updateDialog.releaseNotes.title") }}:
@@ -1079,10 +1041,7 @@ const isChristmas = computed(() => {
     </v-card>
   </v-dialog>
 
-  <v-dialog
-    v-model="desktopUpdateDialog"
-    max-width="460"
-  >
+  <v-dialog v-model="desktopUpdateDialog" max-width="460">
     <v-card>
       <v-card-title class="text-h3 pa-4 pl-6 pb-0">
         {{ t("core.header.updateDialog.desktopApp.title") }}
@@ -1091,11 +1050,7 @@ const isChristmas = computed(() => {
         <div class="mb-3">
           {{ t("core.header.updateDialog.desktopApp.message") }}
         </div>
-        <v-alert
-          type="info"
-          variant="tonal"
-          density="compact"
-        >
+        <v-alert type="info" variant="tonal" density="compact">
           <div>
             {{ t("core.header.updateDialog.desktopApp.currentVersion") }}
             <strong>{{ desktopUpdateCurrentVersion }}</strong>
@@ -1134,8 +1089,8 @@ const isChristmas = computed(() => {
           :loading="desktopUpdateInstalling"
           :disabled="
             desktopUpdateChecking ||
-              desktopUpdateInstalling ||
-              !desktopUpdateHasNewVersion
+            desktopUpdateInstalling ||
+            !desktopUpdateHasNewVersion
           "
           @click="confirmDesktopUpdate"
         >
@@ -1189,10 +1144,7 @@ const isChristmas = computed(() => {
           {{ accountEditStatus.message }}
         </v-alert>
 
-        <v-form
-          v-model="formValid"
-          @submit.prevent="accountEdit"
-        >
+        <v-form v-model="formValid" @submit.prevent="accountEdit">
           <v-text-field
             v-model="password"
             :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
@@ -1282,10 +1234,7 @@ const isChristmas = computed(() => {
   </v-dialog>
 
   <!-- About 对话框 - 仅在 chat mode 下使用 -->
-  <v-dialog
-    v-model="aboutDialog"
-    width="600"
-  >
+  <v-dialog v-model="aboutDialog" width="600">
     <v-card>
       <v-card-text style="overflow-y: auto">
         <AboutPage />

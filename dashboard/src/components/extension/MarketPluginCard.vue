@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
@@ -34,23 +34,17 @@ const platformDisplayList = computed(() =>
 const handleInstall = (plugin) => {
   emit("install", plugin);
 };
-
 </script>
 
 <template>
-  <v-card
-    class="rounded-lg d-flex flex-column plugin-card"
-    elevation="0"
-  >
-    <v-card-text
-      class="plugin-card-content"
-    >
+  <v-card class="rounded-lg d-flex flex-column plugin-card" elevation="0">
+    <v-card-text class="plugin-card-content">
       <div class="plugin-cover">
         <img
           :src="plugin?.logo || defaultPluginIcon"
           :alt="plugin.name"
           class="plugin-cover__image"
-        >
+        />
       </div>
 
       <div class="plugin-info">
@@ -125,11 +119,7 @@ const handleInstall = (plugin) => {
             class="d-flex align-center text-subtitle-2 ml-2"
             style="color: rgba(var(--v-theme-on-surface), 0.7)"
           >
-            <v-icon
-              icon="mdi-star"
-              size="x-small"
-              style="margin-right: 2px"
-            />
+            <v-icon icon="mdi-star" size="x-small" style="margin-right: 2px" />
             <span>{{ plugin.stars }}</span>
           </div>
         </div>
@@ -193,10 +183,7 @@ const handleInstall = (plugin) => {
           </v-chip>
         </template>
         <v-list density="compact">
-          <v-list-item
-            v-for="tag in plugin.tags.slice(2)"
-            :key="tag"
-          >
+          <v-list-item v-for="tag in plugin.tags.slice(2)" :key="tag">
             <v-chip
               :color="tag === 'danger' ? 'error' : 'primary'"
               label
@@ -218,11 +205,7 @@ const handleInstall = (plugin) => {
         target="_blank"
         style="height: 32px"
       >
-        <v-icon
-          icon="mdi-github"
-          start
-          size="small"
-        />
+        <v-icon icon="mdi-github" start size="small" />
         {{ tm("buttons.viewRepo") }}
       </v-btn>
       <v-btn

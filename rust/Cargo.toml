@@ -24,6 +24,7 @@ anyhow = "1"
 thiserror = "2"
 async-trait = "0.1"
 clap = { version = "4", features = ["derive"] }
+lazy_static = "1.5"
 
 pyo3 = { version = "0.28", features = [
     "full",

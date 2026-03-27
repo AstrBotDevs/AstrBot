@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import PluginSortControl from "@/components/extension/PluginSortControl.vue";
 import PinnedPluginItem from "@/components/extension/PinnedPluginItem.vue";
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
@@ -276,7 +276,6 @@ const pinnedPlugins = computed(() => {
         <div class="d-flex align-center flex-wrap ml-auto" style="gap: 8px">
           <v-text-field
             :model-value="pluginSearch"
-            @update:model-value="pluginSearch = normalizeTextInput($event)"
             density="compact"
             :label="tm('search.placeholder')"
             prepend-inner-icon="mdi-magnify"
@@ -286,6 +285,7 @@ const pinnedPlugins = computed(() => {
             hide-details
             single-line
             style="min-width: 220px; max-width: 340px"
+            @update:model-value="pluginSearch = normalizeTextInput($event)"
           />
 
           <v-btn-toggle
@@ -373,14 +373,14 @@ const pinnedPlugins = computed(() => {
 
             <v-row class="mt-3 relative" dense align="center" style="gap: 12px">
               <template v-if="!pinnedPlugins || pinnedPlugins.length === 0">
-                <v-col cols="auto" v-for="n in 4" :key="n" />
+                <v-col v-for="n in 4" :key="n" cols="auto" />
               </template>
 
               <transition-group name="list" class="v-row v-row--dense">
                 <v-col
-                  cols="auto"
                   v-for="(p, index) in pinnedPlugins"
                   :key="p.name"
+                  cols="auto"
                 >
                   <PinnedPluginItem
                     :plugin="p"
@@ -494,7 +494,7 @@ const pinnedPlugins = computed(() => {
             item-key="name"
             hover
           >
-            <template v-slot:item.name="{ item }">
+            <template #item.name="{ item }">
               <div class="d-flex">
                 <div class="mr-3" style="flex-shrink: 0">
                   <img
@@ -510,7 +510,7 @@ const pinnedPlugins = computed(() => {
                       border-radius: 8px;
                       object-fit: cover;
                     "
-                  >
+                  />
                 </div>
 
                 <div>
@@ -541,7 +541,7 @@ const pinnedPlugins = computed(() => {
               </div>
             </template>
 
-            <template v-slot:item.desc="{ item }">
+            <template #item.desc="{ item }">
               <div class="py-2">
                 <div
                   class="text-body-2 text-medium-emphasis"
@@ -593,11 +593,11 @@ const pinnedPlugins = computed(() => {
               </div>
             </template>
 
-            <template v-slot:item.version="{ item }">
+            <template #item.version="{ item }">
               <div class="d-flex align-center">
                 <span class="text-body-2">{{ item.version }}</span>
                 <v-tooltip v-if="item.has_update" location="top">
-                  <template v-slot:activator="{ props: tooltipProps }">
+                  <template #activator="{ props: tooltipProps }">
                     <v-icon
                       v-bind="tooltipProps"
                       color="warning"
@@ -614,7 +614,7 @@ const pinnedPlugins = computed(() => {
                   >
                 </v-tooltip>
                 <v-tooltip v-if="item.has_update" location="top">
-                  <template v-slot:activator="{ props: tooltipProps }">
+                  <template #activator="{ props: tooltipProps }">
                     <span
                       v-bind="tooltipProps"
                       class="ml-1 text-caption text-warning"
@@ -629,11 +629,11 @@ const pinnedPlugins = computed(() => {
               </div>
             </template>
 
-            <template v-slot:item.author="{ item }">
+            <template #item.author="{ item }">
               <div class="text-body-2">{{ item.author }}</div>
             </template>
 
-            <template v-slot:item.actions="{ item }">
+            <template #item.actions="{ item }">
               <div
                 class="table-action-row d-flex align-center flex-nowrap justify-start ga-2 py-1"
               >
@@ -643,12 +643,12 @@ const pinnedPlugins = computed(() => {
                   variant="tonal"
                   color="secondary"
                   class="table-action-btn pin-action"
-                  @click.stop="togglePin(item)"
                   :title="
                     isPinned(item.name)
                       ? tm('buttons.unpin')
                       : tm('buttons.pin')
                   "
+                  @click.stop="togglePin(item)"
                 >
                   <v-icon size="18">{{
                     isPinned(item.name) ? "mdi-pin" : "mdi-pin-outline"
@@ -758,7 +758,7 @@ const pinnedPlugins = computed(() => {
               </div>
             </template>
 
-            <template v-slot:no-data>
+            <template #no-data>
               <div class="text-center pa-8">
                 <v-icon size="64" color="info" class="mb-4"
                   >mdi-puzzle-outline</v-icon
@@ -791,19 +791,19 @@ const pinnedPlugins = computed(() => {
 
         <v-row>
           <v-col
+            v-for="extension in filteredPlugins"
+            :key="extension.name"
             cols="12"
             md="6"
             lg="4"
-            v-for="extension in filteredPlugins"
-            :key="extension.name"
             class="pb-2"
           >
             <ExtensionCard
               :extension="extension"
               :pinned="isPinned(extension.name)"
-              @toggle-pin="() => togglePin(extension)"
               class="rounded-lg"
               style="background-color: rgb(var(--v-theme-mcpCardBg))"
+              @toggle-pin="() => togglePin(extension)"
               @configure="openExtensionConfig(extension.name)"
               @uninstall="
                 (ext, options) => uninstallExtension(ext.name, options)
@@ -823,7 +823,7 @@ const pinnedPlugins = computed(() => {
     </v-fade-transition>
 
     <v-tooltip :text="tm('market.installPlugin')" location="left">
-      <template v-slot:activator="{ props }">
+      <template #activator="{ props }">
         <button
           v-bind="props"
           type="button"

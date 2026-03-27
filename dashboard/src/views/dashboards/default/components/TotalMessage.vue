@@ -1,20 +1,14 @@
 <template>
-  <v-card
-    elevation="1"
-    class="stat-card message-card"
-  >
+  <v-card elevation="1" class="stat-card message-card">
     <v-card-text>
       <div class="d-flex align-start">
         <div class="icon-wrapper">
-          <v-icon
-            icon="mdi-message-text-outline"
-            size="24"
-          />
+          <v-icon icon="mdi-message-text-outline" size="24" />
         </div>
-        
+
         <div class="stat-content">
           <div class="stat-title">
-            {{ t('stats.totalMessage.title') }}
+            {{ t("stats.totalMessage.title") }}
           </div>
           <div class="stat-value-wrapper">
             <h2 class="stat-value">
@@ -30,7 +24,7 @@
             </v-chip>
           </div>
           <div class="stat-subtitle">
-            {{ t('stats.totalMessage.subtitle') }}
+            {{ t("stats.totalMessage.subtitle") }}
           </div>
         </div>
       </div>
@@ -38,29 +32,31 @@
   </v-card>
 </template>
 
-<script>
-import { useModuleI18n } from '@/i18n/composables';
+<script lang="ts">
+import { useModuleI18n } from "@/i18n/composables";
 
 export default {
-  name: 'TotalMessage',
-  props: ['stat'],
+  name: "TotalMessage",
+  props: ["stat"],
   setup() {
-    const { tm: t } = useModuleI18n('features/dashboard');
+    const { tm: t } = useModuleI18n("features/dashboard");
     return { t };
   },
   computed: {
     formattedCount() {
       const count = this.stat?.message_count;
-      return count ? count.toLocaleString() : '0';
-    }
-  }
+      return count ? count.toLocaleString() : "0";
+    },
+  },
 };
 </script>
 
 <style scoped>
 .stat-card {
   height: 100%;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
   overflow: hidden;
 }
 

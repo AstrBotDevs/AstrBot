@@ -13,7 +13,7 @@
         :value="section.key"
         style="font-weight: 1000; font-size: 15px"
       >
-        {{ tm(section.value['name']) }}
+        {{ tm(section.value["name"]) }}
       </v-tab>
     </v-tabs>
     <v-tabs-window
@@ -42,100 +42,103 @@
         </v-container>
       </v-tabs-window-item>
 
-
       <div style="margin-left: 16px; padding-bottom: 16px">
-        <small>{{ tm('help.helpPrefix') }}
-          <a
-            href="https://astrbot.app/"
-            target="_blank"
-          >{{ tm('help.documentation') }}</a>
-          {{ tm('help.helpMiddle') }}
+        <small
+          >{{ tm("help.helpPrefix") }}
+          <a href="https://astrbot.app/" target="_blank">{{
+            tm("help.documentation")
+          }}</a>
+          {{ tm("help.helpMiddle") }}
           <a
             href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft"
             target="_blank"
-          >{{ tm('help.support') }}</a>{{ tm('help.helpSuffix') }}
+            >{{ tm("help.support") }}</a
+          >{{ tm("help.helpSuffix") }}
         </small>
       </div>
     </v-tabs-window>
   </div>
-  <v-container
-    v-if="visibleSections.length === 0"
-    fluid
-    class="px-0"
-  >
-    <v-alert
-      type="info"
-      variant="tonal"
-    >
-      {{ tm('search.noResult') }}
+  <v-container v-if="visibleSections.length === 0" fluid class="px-0">
+    <v-alert type="info" variant="tonal">
+      {{ tm("search.noResult") }}
     </v-alert>
   </v-container>
 </template>
 
-<script>
-import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
-import { useModuleI18n } from '@/i18n/composables';
+<script lang="ts">
+import AstrBotConfigV4 from "@/components/shared/AstrBotConfigV4.vue";
+import { useModuleI18n } from "@/i18n/composables";
 
 export default {
-  name: 'AstrBotCoreConfigWrapper',
+  name: "AstrBotCoreConfigWrapper",
   components: {
-    AstrBotConfigV4
+    AstrBotConfigV4,
   },
   props: {
     metadata: {
       type: Object,
       required: true,
-      default: () => ({})
+      default: () => ({}),
     },
     config_data: {
       type: Object,
       required: true,
-      default: () => ({})
+      default: () => ({}),
     },
     readonly: {
       type: Boolean,
-      default: false
+      default: false,
     },
     searchKeyword: {
       type: String,
-      default: ''
-    }
+      default: "",
+    },
   },
   setup() {
-    const { tm: tmConfig } = useModuleI18n('features/config');
-    const { tm: tmMetadata } = useModuleI18n('features/config-metadata');
-    
+    const { tm: tmConfig } = useModuleI18n("features/config");
+    const { tm: tmMetadata } = useModuleI18n("features/config-metadata");
+
     const tm = (key) => {
       const metadataResult = tmMetadata(key);
-      if (!metadataResult.startsWith('[MISSING:') && !metadataResult.startsWith('[INVALID:')) {
+      if (
+        !metadataResult.startsWith("[MISSING:") &&
+        !metadataResult.startsWith("[INVALID:")
+      ) {
         return metadataResult;
       }
       return tmConfig(key);
     };
-    
+
     return {
-      tm
+      tm,
     };
   },
   data() {
     return {
       tab: null, // 当前激活的配置标签页 key
-    }
+    };
   },
   computed: {
     normalizedSearchKeyword() {
-      return String(this.searchKeyword || '').trim().toLowerCase();
+      return String(this.searchKeyword || "")
+        .trim()
+        .toLowerCase();
     },
     visibleSections() {
-      if (!this.metadata || typeof this.metadata !== 'object') {
+      if (!this.metadata || typeof this.metadata !== "object") {
         return [];
       }
-      const allSections = Object.entries(this.metadata).map(([key, value]) => ({ key, value }));
+      const allSections = Object.entries(this.metadata).map(([key, value]) => ({
+        key,
+        value,
+      }));
       if (!this.normalizedSearchKeyword) {
         return allSections;
       }
-      return allSections.filter((section) => this.sectionHasSearchMatch(section.value));
-    }
+      return allSections.filter((section) =>
+        this.sectionHasSearchMatch(section.value),
+      );
+    },
   },
   watch: {
     visibleSections(newSections) {
@@ -143,7 +146,7 @@ export default {
       if (!sectionKeys.includes(this.tab)) {
         this.tab = sectionKeys[0] ?? null;
       }
-    }
+    },
   },
   mounted() {
     const sectionKeys = this.visibleSections.map((section) => section.key);
@@ -156,28 +159,32 @@ export default {
         return true;
       }
       const sectionMetadata = section?.metadata || {};
-      return Object.values(sectionMetadata).some((metaItem) => this.metaObjectHasSearchMatch(metaItem, keyword));
+      return Object.values(sectionMetadata).some((metaItem) =>
+        this.metaObjectHasSearchMatch(metaItem, keyword),
+      );
     },
     metaObjectHasSearchMatch(metaObject, keyword) {
-      if (!metaObject || typeof metaObject !== 'object') {
+      if (!metaObject || typeof metaObject !== "object") {
         return false;
       }
       const target = [
-        this.tm(metaObject.description || ''),
-        this.tm(metaObject.hint || ''),
-        ...Object.entries(metaObject.items || {}).flatMap(([itemKey, itemMeta]) => ([
-          itemKey,
-          this.tm(itemMeta?.description || ''),
-          this.tm(itemMeta?.hint || '')
-        ]))
+        this.tm(metaObject.description || ""),
+        this.tm(metaObject.hint || ""),
+        ...Object.entries(metaObject.items || {}).flatMap(
+          ([itemKey, itemMeta]) => [
+            itemKey,
+            this.tm(itemMeta?.description || ""),
+            this.tm(itemMeta?.hint || ""),
+          ],
+        ),
       ]
-        .join(' ')
+        .join(" ")
         .toLowerCase();
 
       return target.includes(keyword);
-    }
-  }
-}
+    },
+  },
+};
 </script>
 
 <style>

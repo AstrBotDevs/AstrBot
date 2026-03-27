@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 const props = defineProps({
   modelValue: {
     type: String,
@@ -54,9 +54,7 @@ const toggleOrder = () => {
       @update:model-value="updateSortBy"
     >
       <template #prepend-inner>
-        <v-icon size="small">
-          mdi-sort
-        </v-icon>
+        <v-icon size="small"> mdi-sort </v-icon>
       </template>
     </v-select>
 
@@ -68,14 +66,9 @@ const toggleOrder = () => {
       @click="toggleOrder"
     >
       <v-icon>
-        {{
-          order === "desc" ? "mdi-arrow-down-thin" : "mdi-arrow-up-thin"
-        }}
+        {{ order === "desc" ? "mdi-arrow-down-thin" : "mdi-arrow-up-thin" }}
       </v-icon>
-      <v-tooltip
-        activator="parent"
-        location="top"
-      >
+      <v-tooltip activator="parent" location="top">
         {{ order === "desc" ? descendingLabel : ascendingLabel }}
       </v-tooltip>
     </v-btn>

@@ -1,20 +1,14 @@
 <template>
-  <v-card
-    elevation="1"
-    class="stat-card platform-card"
-  >
+  <v-card elevation="1" class="stat-card platform-card">
     <v-card-text>
       <div class="d-flex align-start">
         <div class="icon-wrapper">
-          <v-icon
-            icon="mdi-server-network"
-            size="24"
-          />
+          <v-icon icon="mdi-server-network" size="24" />
         </div>
-        
+
         <div class="stat-content">
           <div class="stat-title">
-            {{ t('stats.onlinePlatform.title') }}
+            {{ t("stats.onlinePlatform.title") }}
           </div>
           <div class="stat-value-wrapper">
             <h2 class="stat-value">
@@ -22,7 +16,7 @@
             </h2>
           </div>
           <div class="stat-subtitle">
-            {{ t('stats.onlinePlatform.subtitle') }}
+            {{ t("stats.onlinePlatform.subtitle") }}
           </div>
         </div>
       </div>
@@ -30,23 +24,25 @@
   </v-card>
 </template>
 
-<script>
-import { useModuleI18n } from '@/i18n/composables';
+<script lang="ts">
+import { useModuleI18n } from "@/i18n/composables";
 
 export default {
-  name: 'OnlinePlatform',
-  props: ['stat'],
+  name: "OnlinePlatform",
+  props: ["stat"],
   setup() {
-    const { tm: t } = useModuleI18n('features/dashboard');
+    const { tm: t } = useModuleI18n("features/dashboard");
     return { t };
-  }
+  },
 };
 </script>
 
 <style scoped>
 .stat-card {
   height: 100%;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
   overflow: hidden;
 }
 

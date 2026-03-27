@@ -1,8 +1,8 @@
-<script setup>
-import { useI18n } from '@/i18n/composables';
-import { useCustomizerStore } from '@/stores/customizer';
-import { computed } from 'vue';
-import { useRoute } from 'vue-router';
+<script setup lang="ts">
+import { useI18n } from "@/i18n/composables";
+import { useCustomizerStore } from "@/stores/customizer";
+import { computed } from "vue";
+import { useRoute } from "vue-router";
 
 const props = defineProps({ item: Object, level: Number });
 const { t } = useI18n();
@@ -11,15 +11,16 @@ const route = useRoute();
 
 const itemStyle = computed(() => {
   const lvl = props.level ?? 0;
-  const indent = customizer.mini_sidebar ? '0px' : `${lvl * 24}px`;
-  return { '--indent-padding': indent };
+  const indent = customizer.mini_sidebar ? "0px" : `${lvl * 24}px`;
+  return { "--indent-padding": indent };
 });
 
 const isItemActive = computed(() => {
-  if (!props.item || props.item.type === 'external' || !props.item.to) return false;
-  if (typeof props.item.to !== 'string') return false;
-  if (props.item.to.includes('#')) {
-    const [path, hash] = props.item.to.split('#');
+  if (!props.item || props.item.type === "external" || !props.item.to)
+    return false;
+  if (typeof props.item.to !== "string") return false;
+  if (props.item.to.includes("#")) {
+    const [path, hash] = props.item.to.split("#");
     return route.path === path && route.hash === `#${hash}`;
   }
   return route.path === props.item.to;
@@ -41,7 +42,14 @@ const isItemActive = computed(() => {
         :prepend-icon="item.icon"
         :style="{ '--indent-padding': '0px' }"
       >
-        <v-list-item-title style="font-size: 14px; font-weight: 500; line-height: 1.2; word-break: break-word;">
+        <v-list-item-title
+          style="
+            font-size: 14px;
+            font-weight: 500;
+            line-height: 1.2;
+            word-break: break-word;
+          "
+        >
           {{ t(item.title) }}
         </v-list-item-title>
       </v-list-item>
@@ -52,10 +60,7 @@ const isItemActive = computed(() => {
       v-for="(child, index) in item.children"
       :key="child.title || child.to || `child-${index}`"
     >
-      <NavItem
-        :item="child"
-        :level="(level || 0) + 1"
-      />
+      <NavItem :item="child" :level="(level || 0) + 1" />
     </template>
   </v-list-group>
 
@@ -79,7 +84,7 @@ const isItemActive = computed(() => {
         :icon="item.icon"
       />
     </template>
-    <v-list-item-title style="font-size: 14px;">
+    <v-list-item-title style="font-size: 14px">
       {{ t(item.title) }}
     </v-list-item-title>
     <v-list-item-subtitle
@@ -88,10 +93,7 @@ const isItemActive = computed(() => {
     >
       {{ item.subCaption }}
     </v-list-item-subtitle>
-    <template
-      v-if="item.chip"
-      #append
-    >
+    <template v-if="item.chip" #append>
       <v-chip
         :color="item.chipColor"
         class="sidebarchip hide-menu"

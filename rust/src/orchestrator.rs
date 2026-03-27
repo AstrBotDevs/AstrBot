@@ -188,23 +188,20 @@ impl Orchestrator {
     fn periodic_health_check(&self) {
         debug!("Running periodic health check");
 
-        if let Ok(lsp) = self.lsp.read() {
-            if !lsp.is_connected() {
+        if let Ok(lsp) = self.lsp.read()
+            && !lsp.is_connected() {
                 warn!("LSP client disconnected");
             }
-        }
 
-        if let Ok(mcp) = self.mcp.read() {
-            if !mcp.is_connected() {
+        if let Ok(mcp) = self.mcp.read()
+            && !mcp.is_connected() {
                 warn!("MCP client disconnected");
             }
-        }
 
-        if let Ok(acp) = self.acp.read() {
-            if !acp.is_connected() {
+        if let Ok(acp) = self.acp.read()
+            && !acp.is_connected() {
                 warn!("ACP client disconnected");
             }
-        }
     }
 
     /// Stop the orchestrator (sync version)
@@ -217,11 +214,10 @@ impl Orchestrator {
             *running = false;
         }
 
-        if let Ok(tx_guard) = self.shutdown_tx.read() {
-            if let Some(tx) = tx_guard.as_ref() {
+        if let Ok(tx_guard) = self.shutdown_tx.read()
+            && let Some(tx) = tx_guard.as_ref() {
                 let _ = tx.send(());
             }
-        }
 
         self.shutdown_protocols_sync()?;
         info!("Orchestrator stopped");
@@ -438,104 +434,3 @@ impl Orchestrator {
     }
 }
 
-// ============================================================================
-// Python bindings via PyO3 (sync only)
-// ============================================================================
-
-#[cfg(feature = "python")]
-mod python {
-    use super::*;
-    use pyo3::prelude::*;
-    use pyo3::types::PyDict;
-
-    /// Python wrapper for Orchestrator
-    #[pyclass]
-    pub struct PyOrchestrator {
-        inner: Orchestrator,
-    }
-
-    #[pymethods]
-    impl PyOrchestrator {
-        #[new]
-        pub fn new() -> Self {
-            Self {
-                inner: Orchestrator::new(),
-            }
-        }
-
-        /// Start the orchestrator (sync, callable from Python)
-        pub fn start(&self) -> PyResult<()> {
-            self.inner
-                .start_sync()
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
-        }
-
-        /// Stop the orchestrator (sync, callable from Python)
-        pub fn stop(&self) -> PyResult<()> {
-            self.inner
-                .stop_sync()
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
-        }
-
-        pub fn is_running(&self) -> bool {
-            self.inner.is_running()
-        }
-
-        pub fn register_star(&self, name: &str, handler: &str) -> PyResult<()> {
-            self.inner
-                .register_star(name, handler)
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
-        }
-
-        pub fn unregister_star(&self, name: &str) -> PyResult<()> {
-            self.inner
-                .unregister_star(name)
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
-        }
-
-        pub fn list_stars(&self) -> Vec<String> {
-            self.inner.list_stars()
-        }
-
-        pub fn record_activity(&self) {
-            self.inner.record_activity();
-        }
-
-        pub fn get_stats(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
-            let stats = self.inner.stats();
-            let dict = PyDict::new(py);
-            dict.set_item("message_count", stats.message_count())?;
-            dict.set_item("uptime_seconds", stats.uptime_seconds())?;
-            dict.set_item("last_activity_time", stats.last_activity_time())?;
-            Ok(dict.into())
-        }
-
-        pub fn set_protocol_connected(&self, protocol: &str, connected: bool) -> PyResult<()> {
-            self.inner
-                .set_protocol_connected(protocol, connected)
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
-        }
-
-        pub fn get_protocol_status(
-            &self,
-            protocol: &str,
-            py: Python<'_>,
-        ) -> PyResult<Option<Py<PyDict>>> {
-            Ok(self.inner.get_protocol_status(protocol).map(|status| {
-                let dict = PyDict::new(py);
-                dict.set_item("connected", status.connected).unwrap();
-                dict.set_item("name", &status.name).unwrap();
-                dict.into()
-            }))
-        }
-    }
-
-    impl Default for PyOrchestrator {
-        fn default() -> Self {
-            Self::new()
-        }
-    }
-}
-
-#[cfg(feature = "python")]
-pub use python::PyOrchestrator;

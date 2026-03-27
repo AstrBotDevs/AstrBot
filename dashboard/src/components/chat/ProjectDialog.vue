@@ -6,7 +6,7 @@
   >
     <v-card>
       <v-card-title class="dialog-title">
-        {{ isEditing ? tm('project.edit') : tm('project.create') }}
+        {{ isEditing ? tm("project.edit") : tm("project.create") }}
       </v-card-title>
       <v-card-text>
         <v-text-field
@@ -39,12 +39,8 @@
       </v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn
-          variant="text"
-          color="grey-darken-1"
-          @click="handleCancel"
-        >
-          {{ t('core.common.cancel') }}
+        <v-btn variant="text" color="grey-darken-1" @click="handleCancel">
+          {{ t("core.common.cancel") }}
         </v-btn>
         <v-btn
           variant="text"
@@ -52,7 +48,7 @@
           :disabled="!form.title.trim()"
           @click="handleSave"
         >
-          {{ t('core.common.save') }}
+          {{ t("core.common.save") }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -60,95 +56,98 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { ref, watch } from "vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 
 export interface Project {
-    project_id: string;
-    title: string;
-    emoji?: string;
-    description?: string;
-    created_at: string;
-    updated_at: string;
+  project_id: string;
+  title: string;
+  emoji?: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ProjectFormData {
-    emoji: string;
-    title: string;
-    description: string;
+  emoji: string;
+  title: string;
+  description: string;
 }
 
 interface Props {
-    modelValue: boolean;
-    project?: Project | null;
+  modelValue: boolean;
+  project?: Project | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-    modelValue: false,
-    project: null
+  modelValue: false,
+  project: null,
 });
 
 const emit = defineEmits<{
-    'update:modelValue': [value: boolean];
-    save: [formData: ProjectFormData, projectId?: string];
+  "update:modelValue": [value: boolean];
+  save: [formData: ProjectFormData, projectId?: string];
 }>();
 
 const { t } = useI18n();
-const { tm } = useModuleI18n('features/chat');
+const { tm } = useModuleI18n("features/chat");
 
 const isOpen = ref(props.modelValue);
 const isEditing = ref(false);
 const form = ref<ProjectFormData>({
-    emoji: '📁',
-    title: '',
-    description: ''
+  emoji: "📁",
+  title: "",
+  description: "",
 });
 
-watch(() => props.modelValue, (newVal) => {
+watch(
+  () => props.modelValue,
+  (newVal) => {
     isOpen.value = newVal;
     if (newVal) {
-        // 打开对话框时初始化表单
-        if (props.project) {
-            isEditing.value = true;
-            form.value = {
-                emoji: props.project.emoji || '📁',
-                title: props.project.title,
-                description: props.project.description || ''
-            };
-        } else {
-            isEditing.value = false;
-            form.value = {
-                emoji: '📁',
-                title: '',
-                description: ''
-            };
-        }
+      // 打开对话框时初始化表单
+      if (props.project) {
+        isEditing.value = true;
+        form.value = {
+          emoji: props.project.emoji || "📁",
+          title: props.project.title,
+          description: props.project.description || "",
+        };
+      } else {
+        isEditing.value = false;
+        form.value = {
+          emoji: "📁",
+          title: "",
+          description: "",
+        };
+      }
     }
-});
+  },
+);
 
 function handleDialogChange(value: boolean) {
-    emit('update:modelValue', value);
+  emit("update:modelValue", value);
 }
 
 function handleCancel() {
-    isOpen.value = false;
-    emit('update:modelValue', false);
+  isOpen.value = false;
+  emit("update:modelValue", false);
 }
 
 function handleSave() {
-    if (!form.value.title.trim()) {
-        return;
-    }
+  if (!form.value.title.trim()) {
+    return;
+  }
 
-    emit('save', { ...form.value }, props.project?.project_id);
-    isOpen.value = false;
-    emit('update:modelValue', false);
+  emit("save", { ...form.value }, props.project?.project_id);
+  isOpen.value = false;
+  emit("update:modelValue", false);
 }
 </script>
 
 <style scoped>
 .dialog-title {
-    font-size: 22px;
-    font-weight: 500;
+  font-size: 22px;
+  font-weight: 500;
 }
 </style>

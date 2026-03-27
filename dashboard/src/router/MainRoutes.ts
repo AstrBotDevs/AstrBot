@@ -1,126 +1,127 @@
-import { EXTENSION_ROUTE_NAME } from './routeConstants.mjs';
+import { EXTENSION_ROUTE_NAME } from "./routeConstants.mjs";
 
 const MainRoutes = {
-  path: '/main',
+  path: "/main",
   meta: {
-    requiresAuth: true
+    requiresAuth: true,
   },
-  redirect: '/welcome',
-  component: () => import('@/layouts/full/FullLayout.vue'),
+  redirect: "/welcome",
+  component: () => import("@/layouts/full/FullLayout.vue"),
   children: [
     {
-      name: 'MainPage',
-      path: '/',
-      component: () => import('@/views/WelcomePage.vue')
+      name: "MainPage",
+      path: "/",
+      component: () => import("@/views/WelcomePage.vue"),
     },
     {
-      name: 'Welcome',
-      path: '/welcome',
-      component: () => import('@/views/WelcomePage.vue')
+      name: "Welcome",
+      path: "/welcome",
+      component: () => import("@/views/WelcomePage.vue"),
     },
     {
       name: EXTENSION_ROUTE_NAME,
-      path: '/extension',
-      component: () => import('@/views/ExtensionPage.vue')
+      path: "/extension",
+      component: () => import("@/views/ExtensionPage.vue"),
     },
     {
-      name: 'ExtensionMarketplace',
-      path: '/extension-marketplace',
-      component: () => import('@/views/ExtensionPage.vue')
+      name: "ExtensionMarketplace",
+      path: "/extension-marketplace",
+      component: () => import("@/views/ExtensionPage.vue"),
     },
     {
-      name: 'Platforms',
-      path: '/platforms',
-      component: () => import('@/views/PlatformPage.vue')
+      name: "Platforms",
+      path: "/platforms",
+      component: () => import("@/views/PlatformPage.vue"),
     },
     {
-      name: 'Providers',
-      path: '/providers',
-      component: () => import('@/views/ProviderPage.vue')
+      name: "Providers",
+      path: "/providers",
+      component: () => import("@/views/ProviderPage.vue"),
     },
     {
-      name: 'Configs',
-      path: '/config',
-      component: () => import('@/views/ConfigPage.vue')
+      name: "Configs",
+      path: "/config",
+      component: () => import("@/views/ConfigPage.vue"),
     },
     {
-      path: '/normal',
-      redirect: '/config#normal'
+      path: "/normal",
+      redirect: "/config#normal",
     },
     {
-      path: '/system',
-      redirect: '/config#system'
+      path: "/system",
+      redirect: "/config#system",
     },
     {
-      name: 'Default',
-      path: '/dashboard/default',
-      component: () => import('@/views/dashboards/default/DefaultDashboard.vue')
+      name: "Default",
+      path: "/dashboard/default",
+      component: () =>
+        import("@/views/dashboards/default/DefaultDashboard.vue"),
     },
     {
-      name: 'Conversation',
-      path: '/conversation',
-      component: () => import('@/views/ConversationPage.vue')
+      name: "Conversation",
+      path: "/conversation",
+      component: () => import("@/views/ConversationPage.vue"),
     },
     {
-      name: 'SessionManagement',
-      path: '/session-management',
-      component: () => import('@/views/SessionManagementPage.vue')
+      name: "SessionManagement",
+      path: "/session-management",
+      component: () => import("@/views/SessionManagementPage.vue"),
     },
     {
-      name: 'Persona',
-      path: '/persona',
-      component: () => import('@/views/PersonaPage.vue')
+      name: "Persona",
+      path: "/persona",
+      component: () => import("@/views/PersonaPage.vue"),
     },
     {
-      name: 'SubAgent',
-      path: '/subagent',
-      component: () => import('@/views/SubAgentPage.vue')
+      name: "SubAgent",
+      path: "/subagent",
+      component: () => import("@/views/SubAgentPage.vue"),
     },
     {
-      name: 'CronJobs',
-      path: '/cron',
-      component: () => import('@/views/CronJobPage.vue')
+      name: "CronJobs",
+      path: "/cron",
+      component: () => import("@/views/CronJobPage.vue"),
     },
     {
-      name: 'Console',
-      path: '/console',
-      component: () => import('@/views/ConsolePage.vue')
+      name: "Console",
+      path: "/console",
+      component: () => import("@/views/ConsolePage.vue"),
     },
     {
-      name: 'Trace',
-      path: '/trace',
-      component: () => import('@/views/TracePage.vue')
+      name: "Trace",
+      path: "/trace",
+      component: () => import("@/views/TracePage.vue"),
     },
     {
-      name: 'NativeKnowledgeBase',
-      path: '/knowledge-base',
-      component: () => import('@/views/knowledge-base/index.vue'),
+      name: "NativeKnowledgeBase",
+      path: "/knowledge-base",
+      component: () => import("@/views/knowledge-base/index.vue"),
       children: [
         {
-          path: '',
-          name: 'NativeKBList',
-          component: () => import('@/views/knowledge-base/KBList.vue')
+          path: "",
+          name: "NativeKBList",
+          component: () => import("@/views/knowledge-base/KBList.vue"),
         },
         {
-          path: ':kbId',
-          name: 'NativeKBDetail',
-          component: () => import('@/views/knowledge-base/KBDetail.vue'),
-          props: true
+          path: ":kbId",
+          name: "NativeKBDetail",
+          component: () => import("@/views/knowledge-base/KBDetail.vue"),
+          props: true,
         },
         {
-          path: ':kbId/document/:docId',
-          name: 'NativeDocumentDetail',
-          component: () => import('@/views/knowledge-base/DocumentDetail.vue'),
-          props: true
-        }
-      ]
+          path: ":kbId/document/:docId",
+          name: "NativeDocumentDetail",
+          component: () => import("@/views/knowledge-base/DocumentDetail.vue"),
+          props: true,
+        },
+      ],
     },
 
     // 旧版本的知识库路由
     {
-      name: 'KnowledgeBase',
-      path: '/alkaid/knowledge-base',
-      component: () => import('@/views/alkaid/KnowledgeBase.vue'),
+      name: "KnowledgeBase",
+      path: "/alkaid/knowledge-base",
+      component: () => import("@/views/alkaid/KnowledgeBase.vue"),
     },
     // {
     //   name: 'Alkaid',
@@ -145,29 +146,29 @@ const MainRoutes = {
     //   ]
     // },
     {
-      name: 'Chat',
-      path: '/chat',
-      component: () => import('@/views/ChatPage.vue'),
+      name: "Chat",
+      path: "/chat",
+      component: () => import("@/views/ChatPage.vue"),
       children: [
         {
-          path: ':conversationId',
-          name: 'ChatDetail',
-          component: () => import('@/views/ChatPage.vue'),
-          props: true
-        }
-      ]
+          path: ":conversationId",
+          name: "ChatDetail",
+          component: () => import("@/views/ChatPage.vue"),
+          props: true,
+        },
+      ],
     },
     {
-      name: 'Settings',
-      path: '/settings',
-      component: () => import('@/views/Settings.vue')
+      name: "Settings",
+      path: "/settings",
+      component: () => import("@/views/Settings.vue"),
     },
     {
-      name: 'About',
-      path: '/about',
-      component: () => import('@/views/AboutPage.vue')
-    }
-  ]
+      name: "About",
+      path: "/about",
+      component: () => import("@/views/AboutPage.vue"),
+    },
+  ],
 };
 
 export default MainRoutes;

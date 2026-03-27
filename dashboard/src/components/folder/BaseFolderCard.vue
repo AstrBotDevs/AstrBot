@@ -12,11 +12,7 @@
     @drop.prevent="handleDrop"
   >
     <v-card-text class="d-flex align-center pa-3">
-      <v-icon
-        size="40"
-        color="amber-darken-2"
-        class="mr-3"
-      >
+      <v-icon size="40" color="amber-darken-2" class="mr-3">
         mdi-folder
       </v-icon>
       <div class="folder-info flex-grow-1 overflow-hidden">
@@ -43,40 +39,26 @@
         <v-list density="compact">
           <v-list-item @click.stop="$emit('open')">
             <template #prepend>
-              <v-icon size="small">
-                mdi-folder-open
-              </v-icon>
+              <v-icon size="small"> mdi-folder-open </v-icon>
             </template>
             <v-list-item-title>{{ mergedLabels.open }}</v-list-item-title>
           </v-list-item>
           <v-list-item @click.stop="$emit('rename')">
             <template #prepend>
-              <v-icon size="small">
-                mdi-pencil
-              </v-icon>
+              <v-icon size="small"> mdi-pencil </v-icon>
             </template>
             <v-list-item-title>{{ mergedLabels.rename }}</v-list-item-title>
           </v-list-item>
           <v-list-item @click.stop="$emit('move')">
             <template #prepend>
-              <v-icon size="small">
-                mdi-folder-move
-              </v-icon>
+              <v-icon size="small"> mdi-folder-move </v-icon>
             </template>
             <v-list-item-title>{{ mergedLabels.moveTo }}</v-list-item-title>
           </v-list-item>
           <v-divider class="my-1" />
-          <v-list-item
-            class="text-error"
-            @click.stop="$emit('delete')"
-          >
+          <v-list-item class="text-error" @click.stop="$emit('delete')">
             <template #prepend>
-              <v-icon
-                size="small"
-                color="error"
-              >
-                mdi-delete
-              </v-icon>
+              <v-icon size="small" color="error"> mdi-delete </v-icon>
             </template>
             <v-list-item-title>{{ mergedLabels.delete }}</v-list-item-title>
           </v-list-item>
@@ -87,98 +69,109 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, type PropType } from 'vue';
-import type { Folder } from './types';
+import { defineComponent, type PropType } from "vue";
+import type { Folder } from "./types";
 
 interface DefaultLabels {
-    open: string;
-    rename: string;
-    moveTo: string;
-    delete: string;
+  open: string;
+  rename: string;
+  moveTo: string;
+  delete: string;
 }
 
 const defaultLabels: DefaultLabels = {
-    open: '打开',
-    rename: '重命名',
-    moveTo: '移动到...',
-    delete: '删除'
+  open: "打开",
+  rename: "重命名",
+  moveTo: "移动到...",
+  delete: "删除",
 };
 
 export default defineComponent({
-    name: 'BaseFolderCard',
-    props: {
-        folder: {
-            type: Object as PropType<Folder>,
-            required: true
-        },
-        acceptDropTypes: {
-            type: Array as PropType<string[]>,
-            default: () => []
-        },
-        labels: {
-            type: Object as PropType<Partial<DefaultLabels>>,
-            default: () => ({})
-        }
+  name: "BaseFolderCard",
+  props: {
+    folder: {
+      type: Object as PropType<Folder>,
+      required: true,
     },
-    emits: ['click', 'contextmenu', 'open', 'rename', 'move', 'delete', 'item-dropped'],
-    data() {
-        return {
-            isDragOver: false
-        };
+    acceptDropTypes: {
+      type: Array as PropType<string[]>,
+      default: () => [],
     },
-    computed: {
-        mergedLabels(): DefaultLabels {
-            return { ...defaultLabels, ...this.labels };
-        }
+    labels: {
+      type: Object as PropType<Partial<DefaultLabels>>,
+      default: () => ({}),
     },
-    methods: {
-        handleDragOver(event: DragEvent) {
-            if (!event.dataTransfer) return;
-            event.dataTransfer.dropEffect = 'move';
-            this.isDragOver = true;
-        },
-        handleDragLeave() {
-            this.isDragOver = false;
-        },
-        handleDrop(event: DragEvent) {
-            this.isDragOver = false;
-            if (!event.dataTransfer) return;
-            
-            try {
-                const data = JSON.parse(event.dataTransfer.getData('application/json'));
-                if (this.acceptDropTypes.length === 0 || this.acceptDropTypes.includes(data.type)) {
-                    this.$emit('item-dropped', {
-                        item_id: data.id || data.persona_id || data.item_id,
-                        item_type: data.type,
-                        target_folder_id: this.folder.folder_id,
-                        source_data: data
-                    });
-                }
-            } catch (e) {
-                console.error('Failed to parse drop data:', e);
-            }
+  },
+  emits: [
+    "click",
+    "contextmenu",
+    "open",
+    "rename",
+    "move",
+    "delete",
+    "item-dropped",
+  ],
+  data() {
+    return {
+      isDragOver: false,
+    };
+  },
+  computed: {
+    mergedLabels(): DefaultLabels {
+      return { ...defaultLabels, ...this.labels };
+    },
+  },
+  methods: {
+    handleDragOver(event: DragEvent) {
+      if (!event.dataTransfer) return;
+      event.dataTransfer.dropEffect = "move";
+      this.isDragOver = true;
+    },
+    handleDragLeave() {
+      this.isDragOver = false;
+    },
+    handleDrop(event: DragEvent) {
+      this.isDragOver = false;
+      if (!event.dataTransfer) return;
+
+      try {
+        const data = JSON.parse(event.dataTransfer.getData("application/json"));
+        if (
+          this.acceptDropTypes.length === 0 ||
+          this.acceptDropTypes.includes(data.type)
+        ) {
+          this.$emit("item-dropped", {
+            item_id: data.id || data.persona_id || data.item_id,
+            item_type: data.type,
+            target_folder_id: this.folder.folder_id,
+            source_data: data,
+          });
         }
-    }
+      } catch (e) {
+        console.error("Failed to parse drop data:", e);
+      }
+    },
+  },
 });
 </script>
 
 <style scoped>
 .base-folder-card {
-    cursor: pointer;
-    transition: all 0.2s ease;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .base-folder-card:hover {
-    transform: translateY(-2px);
+  transform: translateY(-2px);
 }
 
 .base-folder-card.drag-over {
-    background-color: rgba(var(--v-theme-primary), 0.15);
-    border: 2px dashed rgb(var(--v-theme-primary));
-    transform: scale(1.02);
+  background-color: rgba(var(--v-theme-primary), 0.15);
+  border: 2px dashed rgb(var(--v-theme-primary));
+  transform: scale(1.02);
 }
 
 .folder-info {
-    min-width: 0;
+  min-width: 0;
 }
 </style>

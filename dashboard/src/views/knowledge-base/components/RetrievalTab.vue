@@ -2,10 +2,10 @@
   <div class="retrieval-tab">
     <v-card elevation="2">
       <v-card-title class="pa-4 pb-0">
-        {{ t('retrieval.title') }}
+        {{ t("retrieval.title") }}
       </v-card-title>
       <v-card-subtitle class="pb-4 pt-2">
-        {{ t('retrieval.subtitle') }}
+        {{ t("retrieval.subtitle") }}
       </v-card-subtitle>
 
       <v-divider />
@@ -19,10 +19,7 @@
       <v-card-text class="pa-6">
         <!-- 查询输入区域 -->
         <v-row class="mb-4">
-          <v-col
-            cols="12"
-            md="8"
-          >
+          <v-col cols="12" md="8">
             <v-textarea
               v-model="query"
               :label="t('retrieval.query')"
@@ -34,10 +31,7 @@
             />
 
             <!-- debug -->
-            <div
-              v-if="debugVisualize"
-              class="mt-2"
-            >
+            <div v-if="debugVisualize" class="mt-2">
               <v-card variant="outlined">
                 <v-img
                   :src="`data:image/png;base64,${debugVisualize}`"
@@ -46,26 +40,17 @@
                 >
                   <template #placeholder>
                     <div class="d-flex align-center justify-center fill-height">
-                      <v-progress-circular
-                        indeterminate
-                        color="primary"
-                      />
+                      <v-progress-circular indeterminate color="primary" />
                     </div>
                   </template>
                 </v-img>
               </v-card>
             </div>
           </v-col>
-          <v-col
-            cols="12"
-            md="4"
-          >
-            <v-card
-              variant="outlined"
-              class="pa-4"
-            >
+          <v-col cols="12" md="4">
+            <v-card variant="outlined" class="pa-4">
               <h4 class="text-subtitle-2 mb-3">
-                {{ t('retrieval.settings') }}
+                {{ t("retrieval.settings") }}
               </h4>
 
               <v-text-field
@@ -88,10 +73,7 @@
               >
                 <template #label>
                   <span class="text-caption">
-                    <v-icon
-                      size="small"
-                      class="mr-1"
-                    >mdi-bug</v-icon>
+                    <v-icon size="small" class="mr-1">mdi-bug</v-icon>
                     Debug (t-SNE)
                   </span>
                 </template>
@@ -109,36 +91,25 @@
             :disabled="!query || query.trim() === ''"
             @click="performRetrieval"
           >
-            {{ loading ? t('retrieval.searching') : t('retrieval.search') }}
+            {{ loading ? t("retrieval.searching") : t("retrieval.search") }}
           </v-btn>
         </div>
 
         <!-- 检索结果 -->
-        <div
-          v-if="hasSearched"
-          class="results-section"
-        >
+        <div v-if="hasSearched" class="results-section">
           <v-divider class="mb-4" />
 
           <div class="d-flex align-center mb-4">
             <h3 class="text-h6">
-              {{ t('retrieval.results') }}
+              {{ t("retrieval.results") }}
             </h3>
-            <v-chip
-              class="ml-3"
-              color="primary"
-              variant="tonal"
-              size="small"
-            >
-              {{ results.length }} {{ t('retrieval.results') }}
+            <v-chip class="ml-3" color="primary" variant="tonal" size="small">
+              {{ results.length }} {{ t("retrieval.results") }}
             </v-chip>
           </div>
 
           <!-- 结果列表 -->
-          <div
-            v-if="results.length > 0"
-            class="results-list"
-          >
+          <div v-if="results.length > 0" class="results-list">
             <v-card
               v-for="(result, index) in results"
               :key="result.chunk_id"
@@ -146,49 +117,25 @@
               class="mb-4"
             >
               <v-card-title class="d-flex align-center pa-2">
-                <v-chip
-                  size="x-small"
-                  color="primary"
-                  class="mr-2"
-                >
+                <v-chip size="x-small" color="primary" class="mr-2">
                   #{{ index + 1 }}
                 </v-chip>
                 <span class="text-subtitle-1">
-                  {{ t('retrieval.chunk', { index: result.chunk_index }) }}
+                  {{ t("retrieval.chunk", { index: result.chunk_index }) }}
                 </span>
                 <div class="ml-4">
-                  <v-chip
-                    size="x-small"
-                    variant="tonal"
-                    class="mr-2"
-                  >
-                    <v-icon
-                      start
-                      size="small"
-                    >
-                      mdi-file-document
-                    </v-icon>
+                  <v-chip size="x-small" variant="tonal" class="mr-2">
+                    <v-icon start size="small"> mdi-file-document </v-icon>
                     {{ result.doc_name }}
                   </v-chip>
-                  <v-chip
-                    size="x-small"
-                    variant="tonal"
-                  >
-                    <v-icon
-                      start
-                      size="small"
-                    >
-                      mdi-text
-                    </v-icon>
-                    {{ t('retrieval.charCount', { count: result.char_count }) }}
+                  <v-chip size="x-small" variant="tonal">
+                    <v-icon start size="small"> mdi-text </v-icon>
+                    {{ t("retrieval.charCount", { count: result.char_count }) }}
                   </v-chip>
                 </div>
                 <v-spacer />
-                <v-chip
-                  size="x-small"
-                  :color="getScoreColor(result.score)"
-                >
-                  {{ t('retrieval.score') }}: {{ result.score.toFixed(4) }}
+                <v-chip size="x-small" :color="getScoreColor(result.score)">
+                  {{ t("retrieval.score") }}: {{ result.score.toFixed(4) }}
                 </v-chip>
               </v-card-title>
 
@@ -203,21 +150,15 @@
           </div>
 
           <!-- 空结果 -->
-          <div
-            v-else
-            class="text-center py-12"
-          >
-            <v-icon
-              size="80"
-              color="grey-lighten-2"
-            >
+          <div v-else class="text-center py-12">
+            <v-icon size="80" color="grey-lighten-2">
               mdi-text-box-search-outline
             </v-icon>
             <p class="text-h6 mt-4 text-medium-emphasis">
-              {{ t('retrieval.noResults') }}
+              {{ t("retrieval.noResults") }}
             </p>
             <p class="text-body-2 text-medium-emphasis">
-              {{ t('retrieval.tryDifferentQuery') }}
+              {{ t("retrieval.tryDifferentQuery") }}
             </p>
           </div>
         </div>
@@ -225,94 +166,96 @@
     </v-card>
 
     <!-- 消息提示 -->
-    <v-snackbar
-      v-model="snackbar.show"
-      :color="snackbar.color"
-    >
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color">
       {{ snackbar.text }}
     </v-snackbar>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import axios from '@/utils/request'
-import { useModuleI18n } from '@/i18n/composables'
+import { ref } from "vue";
+import axios from "@/utils/request";
+import { useModuleI18n } from "@/i18n/composables";
 
-const { tm: t } = useModuleI18n('features/knowledge-base/detail')
+const { tm: t } = useModuleI18n("features/knowledge-base/detail");
 
 const props = defineProps<{
-  kbId: string,
-  kbName: string,
-}>()
+  kbId: string;
+  kbName: string;
+}>();
 
 // 状态
-const loading = ref(false)
-const query = ref('')
-const topK = ref(5)
-const debugMode = ref(false)
-const results = ref<any[]>([])
-const hasSearched = ref(false)
-const debugVisualize = ref<string | null>(null)
+const loading = ref(false);
+const query = ref("");
+const topK = ref(5);
+const debugMode = ref(false);
+const results = ref<any[]>([]);
+const hasSearched = ref(false);
+const debugVisualize = ref<string | null>(null);
 
 const snackbar = ref({
   show: false,
-  text: '',
-  color: 'success'
-})
+  text: "",
+  color: "success",
+});
 
-const showSnackbar = (text: string, color = 'success') => {
-  snackbar.value.text = text
-  snackbar.value.color = color
-  snackbar.value.show = true
-}
+const showSnackbar = (text: string, color = "success") => {
+  snackbar.value.text = text;
+  snackbar.value.color = color;
+  snackbar.value.show = true;
+};
 
 // 执行检索
 const performRetrieval = async () => {
-  if (!query.value || query.value.trim() === '') {
-    showSnackbar(t('retrieval.queryRequired'), 'warning')
-    return
+  if (!query.value || query.value.trim() === "") {
+    showSnackbar(t("retrieval.queryRequired"), "warning");
+    return;
   }
 
-  loading.value = true
-  hasSearched.value = false
-  debugVisualize.value = null
+  loading.value = true;
+  hasSearched.value = false;
+  debugVisualize.value = null;
 
   try {
-    const response = await axios.post('/api/kb/retrieve', {
+    const response = await axios.post("/api/kb/retrieve", {
       query: query.value,
       kb_names: [props.kbName],
       top_k: topK.value,
-      debug: debugMode.value
-    })
+      debug: debugMode.value,
+    });
 
-    if (response.data.status === 'ok') {
-      results.value = response.data.data.results || []
-      hasSearched.value = true
+    if (response.data.status === "ok") {
+      results.value = response.data.data.results || [];
+      hasSearched.value = true;
 
       if (debugMode.value && response.data.data.visualization) {
-        debugVisualize.value = response.data.data.visualization
+        debugVisualize.value = response.data.data.visualization;
       }
 
-      showSnackbar(t('retrieval.searchSuccess', { count: results.value.length }))
+      showSnackbar(
+        t("retrieval.searchSuccess", { count: results.value.length }),
+      );
     } else {
-      showSnackbar(response.data.message || t('retrieval.searchFailed'), 'error')
+      showSnackbar(
+        response.data.message || t("retrieval.searchFailed"),
+        "error",
+      );
     }
   } catch (error) {
-    console.error('Retrieval failed:', error)
-    showSnackbar(t('retrieval.searchFailed'), 'error')
+    console.error("Retrieval failed:", error);
+    showSnackbar(t("retrieval.searchFailed"), "error");
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 // 根据分数获取颜色
 const getScoreColor = (score: number) => {
-  if (score >= 0.8) return 'success'
-  if (score >= 0.6) return 'info'
-  if (score >= 0.4) return 'warning'
-  return 'error'
-}
+  if (score >= 0.8) return "success";
+  if (score >= 0.6) return "info";
+  if (score >= 0.4) return "warning";
+  return "error";
+};
 </script>
 
 <style scoped>
@@ -352,7 +295,7 @@ const getScoreColor = (score: number) => {
   padding: 16px;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
   font-size: 0.9rem;
   line-height: 1.6;
   height: 120px;

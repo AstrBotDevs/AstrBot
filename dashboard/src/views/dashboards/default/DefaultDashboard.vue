@@ -1,10 +1,7 @@
 <template>
   <div class="dashboard-container">
     <v-slide-y-transition>
-      <v-row
-        v-if="noticeTitle && noticeContent"
-        class="notice-row"
-      >
+      <v-row v-if="noticeTitle && noticeContent" class="notice-row">
         <v-alert
           :type="noticeType"
           :text="noticeContent"
@@ -16,57 +13,39 @@
         />
       </v-row>
     </v-slide-y-transition>
-    
+
     <!-- 主指标卡片行 -->
     <v-row class="stats-row">
-      <v-col
-        cols="12"
-        md="3"
-      >
+      <v-col cols="12" md="3">
         <v-slide-y-transition>
           <TotalMessage :stat="stat" />
         </v-slide-y-transition>
       </v-col>
-      <v-col
-        cols="12"
-        md="3"
-      >
+      <v-col cols="12" md="3">
         <v-slide-y-transition>
           <OnlinePlatform :stat="stat" />
         </v-slide-y-transition>
       </v-col>
-      <v-col
-        cols="12"
-        md="3"
-      >
+      <v-col cols="12" md="3">
         <v-slide-y-transition>
           <RunningTime :stat="stat" />
         </v-slide-y-transition>
       </v-col>
-      <v-col
-        cols="12"
-        md="3"
-      >
+      <v-col cols="12" md="3">
         <v-slide-y-transition>
           <MemoryUsage :stat="stat" />
         </v-slide-y-transition>
       </v-col>
     </v-row>
-    
+
     <!-- 图表行 -->
     <v-row class="charts-row">
-      <v-col
-        cols="12"
-        lg="8"
-      >
+      <v-col cols="12" lg="8">
         <v-slide-y-transition>
           <MessageStat />
         </v-slide-y-transition>
       </v-col>
-      <v-col
-        cols="12"
-        lg="4"
-      >
+      <v-col cols="12" lg="4">
         <v-slide-y-transition>
           <PlatformStat :stat="stat" />
         </v-slide-y-transition>
@@ -79,14 +58,14 @@
         variant="flat"
         prepend-icon="mdi-refresh"
       >
-        {{ t('lastUpdate') }}: {{ lastUpdated }}
+        {{ t("lastUpdate") }}: {{ lastUpdated }}
       </v-chip>
-      <v-btn 
-        icon="mdi-refresh" 
-        size="small" 
-        color="primary" 
-        variant="text" 
-        class="ml-2" 
+      <v-btn
+        icon="mdi-refresh"
+        size="small"
+        color="primary"
+        variant="text"
+        class="ml-2"
         :loading="isRefreshing"
         @click="fetchData"
       />
@@ -94,19 +73,18 @@
   </div>
 </template>
 
-
-<script>
-import TotalMessage from './components/TotalMessage.vue';
-import OnlinePlatform from './components/OnlinePlatform.vue';
-import RunningTime from './components/RunningTime.vue';
-import MemoryUsage from './components/MemoryUsage.vue';
-import MessageStat from './components/MessageStat.vue';
-import PlatformStat from './components/PlatformStat.vue';
-import axios from '@/utils/request';
-import { useModuleI18n } from '@/i18n/composables';
+<script lang="ts">
+import TotalMessage from "./components/TotalMessage.vue";
+import OnlinePlatform from "./components/OnlinePlatform.vue";
+import RunningTime from "./components/RunningTime.vue";
+import MemoryUsage from "./components/MemoryUsage.vue";
+import MessageStat from "./components/MessageStat.vue";
+import PlatformStat from "./components/PlatformStat.vue";
+import axios from "@/utils/request";
+import { useModuleI18n } from "@/i18n/composables";
 
 export default {
-  name: 'DefaultDashboard',
+  name: "DefaultDashboard",
   components: {
     TotalMessage,
     OnlinePlatform,
@@ -116,68 +94,71 @@ export default {
     PlatformStat,
   },
   setup() {
-    const { tm: t } = useModuleI18n('features/dashboard');
+    const { tm: t } = useModuleI18n("features/dashboard");
     return { t };
   },
   data() {
     return {
       stat: {},
-      noticeTitle: '',
-      noticeContent: '',
-      noticeType: '',
-      lastUpdated: '',
+      noticeTitle: "",
+      noticeContent: "",
+      noticeType: "",
+      lastUpdated: "",
       refreshInterval: null,
-      isRefreshing: false
+      isRefreshing: false,
     };
   },
 
   mounted() {
-    this.lastUpdated = this.t('status.loading');
+    this.lastUpdated = this.t("status.loading");
     this.fetchData();
     this.fetchNotice();
-    
+
     // 设置自动刷新（每60秒）
     this.refreshInterval = setInterval(() => {
       this.fetchData();
     }, 60000);
   },
-  
+
   beforeUnmount() {
     // 清除定时器
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
     }
   },
-  
+
   methods: {
     async fetchData() {
       this.isRefreshing = true;
       try {
-        const res = await axios.get('/api/stat/get');
+        const res = await axios.get("/api/stat/get");
         this.stat = res.data.data;
         this.lastUpdated = new Date().toLocaleTimeString();
-        console.log('Dashboard data:', this.stat);
+        console.log("Dashboard data:", this.stat);
       } catch (error) {
-        console.error(this.t('status.dataError'), error);
+        console.error(this.t("status.dataError"), error);
       } finally {
         this.isRefreshing = false;
       }
     },
-    
+
     fetchNotice() {
-      axios.get('https://api.soulter.top/astrbot-announcement').then((res) => {
-        let data = res.data.data;
-        // 如果 dashboard-notice 在其中
-        if (data['dashboard-notice']) {
-          this.noticeTitle = data['dashboard-notice'].title;
-          this.noticeContent = data['dashboard-notice'].content;
-          this.noticeType = data['dashboard-notice'].type;
-        }
-      }).catch(error => {
-        console.error(this.t('status.noticeError'), error);
-      });
-    }
-  }
+      axios
+        .get("https://api.soulter.top/astrbot-announcement")
+        .then((res) => {
+          const data = res.data.data;
+          // 如果 dashboard-notice 在其中
+          if (data["dashboard-notice"]) {
+            this.noticeTitle = data["dashboard-notice"].title;
+            this.noticeContent = data["dashboard-notice"].content;
+            this.noticeType = data["dashboard-notice"].type;
+          }
+        })
+        .catch((error) => {
+          console.error(this.t("status.noticeError"), error);
+        });
+    },
+  },
 };
 </script>
 
@@ -198,7 +179,9 @@ export default {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
 }
 
-.stats-row, .charts-row, .plugin-row {
+.stats-row,
+.charts-row,
+.plugin-row {
   margin-bottom: 24px;
 }
 
@@ -220,7 +203,9 @@ export default {
 }
 
 .plugin-item {
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
 }
 
 .plugin-item:hover {

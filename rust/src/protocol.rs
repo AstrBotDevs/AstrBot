@@ -165,7 +165,7 @@ impl LspClient {
     }
 
     async fn send_json(&mut self, msg: &serde_json::Value) -> Result<(), AstrBotError> {
-        let content = serde_json::to_string(msg).map_err(|e| AstrBotError::Json(e))?;
+        let content = serde_json::to_string(msg).map_err(AstrBotError::Json)?;
         let header = format!("Content-Length: {}\r\n\r\n", content.len());
 
         if let Some(stdin) = &mut self.stdin {
@@ -207,14 +207,13 @@ impl LspClient {
                 stdout.read_exact(&mut content).await?;
 
                 let response: serde_json::Value =
-                    serde_json::from_slice(&content).map_err(|e| AstrBotError::Json(e))?;
+                    serde_json::from_slice(&content).map_err(AstrBotError::Json)?;
 
                 // Handle response
-                if let Some(id) = response.get("id").and_then(|v| v.as_i64()) {
-                    if let Some(tx) = self.pending_requests.remove(&id) {
+                if let Some(id) = response.get("id").and_then(|v| v.as_i64())
+                    && let Some(tx) = self.pending_requests.remove(&id) {
                         let _ = tx.send(response.to_string());
                     }
-                }
             }
         }
         Ok(())
@@ -247,10 +246,10 @@ impl ProtocolClient for LspClient {
         self.connected = false;
 
         // Try graceful shutdown first
-        if let Err(_) = self.send_notification("shutdown", None).await {
+        if self.send_notification("shutdown", None).await.is_err() {
             // Ignore errors during shutdown
         }
-        if let Err(_) = self.send_notification("exit", None).await {
+        if self.send_notification("exit", None).await.is_err() {
             // Ignore errors during exit
         }
 
@@ -449,11 +448,10 @@ impl ProtocolClient for McpClient {
     async fn disconnect(&mut self) -> Result<(), AstrBotError> {
         self.connected = false;
 
-        if let McpTransport::Stdio { child } = &mut self.transport {
-            if let Some(mut child) = child.take() {
+        if let McpTransport::Stdio { child } = &mut self.transport
+            && let Some(mut child) = child.take() {
                 let _ = child.kill().await;
             }
-        }
 
         tracing::info!("MCP client disconnected");
         Ok(())
@@ -558,7 +556,7 @@ impl AcpClient {
     }
 
     async fn send_json(&mut self, msg: &serde_json::Value) -> Result<(), AstrBotError> {
-        let content = serde_json::to_string(msg).map_err(|e| AstrBotError::Json(e))?;
+        let content = serde_json::to_string(msg).map_err(AstrBotError::Json)?;
         let header = serde_json::to_string(&serde_json::json!({
             "content-length": content.len()
         }))? + "\n";

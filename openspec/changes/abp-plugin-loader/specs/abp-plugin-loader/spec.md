@@ -26,17 +26,17 @@ ABP 插件加载器抽象接口，定义进程内/外插件的统一加载方式
 - **AND** 重新加载并初始化插件
 
 ### Requirement: In-Process Plugin Loading
-进程内插件直接加载为 Python 模块，由 Python 胶水层管理生命周期。
+进程内插件由 Rust FFI 核心管理生命周期，Python 胶水层仅做聚合。
 
 #### Scenario: In-Process Plugin Invocation
 - **WHEN** 调用进程内插件方法（如 `handle_event`）
-- **THEN** 直接通过 Python 对象调用
-- **AND** 不经过序列化/反序列化
-- **AND** 无进程通信开销
+- **THEN** 通过 Rust FFI `load_plugin()` 加载
+- **AND** Python PluginRegistry 聚合插件实例
+- **AND** 调用通过 Rust FFI 转发
 
 #### Scenario: In-Process Plugin Context
 - **WHEN** 插件实例化时
-- **THEN** 主进程传入 context 对象
+- **THEN** Rust 核心传入 context 对象
 - **AND** 传入 user_config（来自握手）
 - **AND** 传入 data_dirs（数据目录路径）
 

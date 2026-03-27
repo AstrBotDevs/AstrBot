@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import MarketPluginCard from "@/components/extension/MarketPluginCard.vue";
 import PluginSortControl from "@/components/extension/PluginSortControl.vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
@@ -158,7 +158,9 @@ const currentSourceName = computed(() => {
   if (!selectedSource.value) {
     return tm("market.defaultSource");
   }
-  const matched = customSources.value.find((s) => s.url === selectedSource.value);
+  const matched = customSources.value.find(
+    (s) => s.url === selectedSource.value,
+  );
   return matched?.name || tm("market.defaultSource");
 });
 
@@ -180,22 +182,13 @@ const marketCategorySelectItems = computed(() =>
 <template>
   <v-tab-item v-show="activeTab === 'market'">
     <div class="mb-6 pt-4 pb-4">
-      <div
-        class="d-flex align-center"
-        style="gap: 12px"
-      >
-        <div
-          class="d-flex align-center"
-          style="gap: 12px; min-width: 0"
-        >
+      <div class="d-flex align-center" style="gap: 12px">
+        <div class="d-flex align-center" style="gap: 12px; min-width: 0">
           <h2 class="text-h2 mb-0">
             {{ tm("tabs.market") }}
           </h2>
 
-          <v-tooltip
-            location="top"
-            :text="tm('market.sourceManagement')"
-          >
+          <v-tooltip location="top" :text="tm('market.sourceManagement')">
             <template #activator="{ props }">
               <v-btn
                 v-bind="props"
@@ -205,16 +198,8 @@ const marketCategorySelectItems = computed(() =>
                 class="text-none px-2"
                 @click="openSourceManagerDialog"
               >
-                <v-icon
-                  size="18"
-                  class="mr-1"
-                >
-                  mdi-source-branch
-                </v-icon>
-                <span
-                  class="text-truncate"
-                  style="max-width: 180px"
-                >
+                <v-icon size="18" class="mr-1"> mdi-source-branch </v-icon>
+                <span class="text-truncate" style="max-width: 180px">
                   {{ currentSourceName }}
                 </span>
               </v-btn>
@@ -257,12 +242,7 @@ const marketCategorySelectItems = computed(() =>
         class="d-flex align-center text-caption text-medium-emphasis mt-2"
         style="color: grey; line-height: 1.4"
       >
-        <v-icon
-          size="16"
-          class="mr-1"
-        >
-          mdi-alert-outline
-        </v-icon>
+        <v-icon size="16" class="mr-1"> mdi-alert-outline </v-icon>
         <span>{{ tm("market.sourceSafetyWarning") }}</span>
       </div>
     </div>
@@ -270,30 +250,24 @@ const marketCategorySelectItems = computed(() =>
     <!-- <small style="color: var(--v-theme-secondaryText);">每个插件都是作者无偿提供的的劳动成果。如果您喜欢某个插件，请 Star！</small> -->
 
     <!-- FAB Button -->
-    <v-tooltip
-      :text="tm('market.installPlugin')"
-      location="left"
-    >
+    <v-tooltip :text="tm('market.installPlugin')" location="left">
       <template #activator="{ props }">
         <button
           v-bind="props"
           type="button"
           class="v-btn v-btn--elevated v-btn--icon v-theme--PurpleThemeDark bg-darkprimary v-btn--density-default v-btn--size-x-large v-btn--variant-elevated fab-button"
           style="
-                    position: fixed;
-                    right: 52px;
-                    bottom: 52px;
-                    z-index: 10000;
-                    border-radius: 16px;
-                  "
+            position: fixed;
+            right: 52px;
+            bottom: 52px;
+            z-index: 10000;
+            border-radius: 16px;
+          "
           @click="dialog = true"
         >
           <span class="v-btn__overlay" />
           <span class="v-btn__underlay" />
-          <span
-            class="v-btn__content"
-            data-no-activator=""
-          >
+          <span class="v-btn__content" data-no-activator="">
             <i
               class="mdi-plus mdi v-icon notranslate v-theme--PurpleThemeDark v-icon--size-default"
               aria-hidden="true"
@@ -307,16 +281,9 @@ const marketCategorySelectItems = computed(() =>
     <div class="mt-4">
       <div
         class="d-flex align-center mb-2"
-        style="
-                  justify-content: space-between;
-                  flex-wrap: wrap;
-                  gap: 8px;
-                "
+        style="justify-content: space-between; flex-wrap: wrap; gap: 8px"
       >
-        <div
-          class="d-flex align-center"
-          style="gap: 6px"
-        >
+        <div class="d-flex align-center" style="gap: 6px">
           <h2>
             {{ tm("market.allPlugins") }}
           </h2>
@@ -331,10 +298,7 @@ const marketCategorySelectItems = computed(() =>
           </v-btn>
         </div>
 
-        <div
-          class="d-flex align-center"
-          style="gap: 8px; flex-wrap: wrap"
-        >
+        <div class="d-flex align-center" style="gap: 8px; flex-wrap: wrap">
           <v-select
             v-if="marketCategoryItems.length > 0"
             v-model="marketCategoryFilter"
@@ -362,10 +326,7 @@ const marketCategorySelectItems = computed(() =>
         </div>
       </div>
 
-      <v-row
-        style="min-height: 26rem"
-        dense
-      >
+      <v-row style="min-height: 26rem" dense>
         <v-col
           v-for="plugin in paginatedPlugins"
           :key="plugin.name"
@@ -383,10 +344,7 @@ const marketCategorySelectItems = computed(() =>
         </v-col>
       </v-row>
 
-      <div
-        v-if="totalPages > 1"
-        class="d-flex justify-center mt-4"
-      >
+      <div v-if="totalPages > 1" class="d-flex justify-center mt-4">
         <v-pagination
           v-model="currentPage"
           :length="totalPages"
@@ -415,10 +373,7 @@ const marketCategorySelectItems = computed(() =>
             </v-btn>
           </div>
 
-          <v-row
-            class="mb-6"
-            dense
-          >
+          <v-row class="mb-6" dense>
             <v-col
               v-for="plugin in randomPlugins"
               :key="`random-${plugin.name}`"

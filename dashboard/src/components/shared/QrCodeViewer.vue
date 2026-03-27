@@ -1,22 +1,14 @@
 <template>
   <div class="qr-code-viewer">
-    <img
-      v-if="imageSrc"
-      :src="imageSrc"
-      :alt="alt"
-      class="qr-code-image"
-    >
-    <div
-      v-else
-      class="qr-code-empty"
-    >
+    <img v-if="imageSrc" :src="imageSrc" :alt="alt" class="qr-code-image" />
+    <div v-else class="qr-code-empty">
       {{ emptyHint }}
     </div>
   </div>
 </template>
 
-<script>
-import QRCode from 'qrcode';
+<script lang="ts">
+import QRCode from "qrcode";
 
 export default {
   name: "QrCodeViewer",

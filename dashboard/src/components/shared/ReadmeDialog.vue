@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { ref, watch, computed, onUnmounted } from "vue";
 import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
@@ -35,7 +35,8 @@ const props = defineProps({
   mode: {
     type: String,
     default: "readme",
-    validator: (value) => ["readme", "changelog", "first-notice"].includes(value),
+    validator: (value) =>
+      ["readme", "changelog", "first-notice"].includes(value),
   },
 });
 
@@ -369,29 +370,16 @@ const showActionArea = computed(() => {
 </script>
 
 <template>
-  <v-dialog
-    v-model="_show"
-    width="800"
-  >
+  <v-dialog v-model="_show" width="800">
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
         <span class="text-h2 pa-2">{{ modeConfig.title }}</span>
-        <v-btn
-          icon
-          variant="text"
-          @click="_show = false"
-        >
+        <v-btn icon variant="text" @click="_show = false">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
-      <v-card-text
-        ref="scrollContainer"
-        style="overflow-y: auto"
-      >
-        <div
-          v-if="showActionArea"
-          class="d-flex justify-space-between mb-4"
-        >
+      <v-card-text ref="scrollContainer" style="overflow-y: auto">
+        <div v-if="showActionArea" class="d-flex justify-space-between mb-4">
           <v-btn
             v-if="modeConfig.showGithubButton && repoUrl"
             color="primary"
@@ -438,11 +426,7 @@ const showActionArea = computed(() => {
           class="d-flex flex-column align-center justify-center"
           style="height: 100%"
         >
-          <v-icon
-            size="64"
-            color="error"
-            class="mb-4"
-          >
+          <v-icon size="64" color="error" class="mb-4">
             mdi-alert-circle-outline
           </v-icon>
           <p class="text-body-1 text-center mb-2">
@@ -458,11 +442,7 @@ const showActionArea = computed(() => {
           class="d-flex flex-column align-center justify-center"
           style="height: 100%"
         >
-          <v-icon
-            size="64"
-            color="warning"
-            class="mb-4"
-          >
+          <v-icon size="64" color="warning" class="mb-4">
             mdi-file-question-outline
           </v-icon>
           <p class="text-body-1 text-center mb-2">
@@ -475,11 +455,7 @@ const showActionArea = computed(() => {
       </v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn
-          color="primary"
-          variant="tonal"
-          @click="_show = false"
-        >
+        <v-btn color="primary" variant="tonal" @click="_show = false">
           {{ t("core.common.close") }}
         </v-btn>
       </v-card-actions>
@@ -490,8 +466,8 @@ const showActionArea = computed(() => {
 <style scoped>
 ::v-deep(.markdown-body) {
   --markdown-border: rgba(128, 128, 128, 0.3);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
-    sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   line-height: 1.6;
   padding: 8px 0;
   color: var(--v-theme-secondaryText);
