@@ -51,7 +51,7 @@ const snackbarShow = computed({
 // 统一监听 uiTheme 变化并同步到 Vuetify
 watch(() => customizer.uiTheme, (newTheme) => {
   if (newTheme) {
-    theme.global.name.value = newTheme;
+    theme.change(newTheme);
   }
 }, { immediate: true });
 

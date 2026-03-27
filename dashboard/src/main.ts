@@ -7,6 +7,7 @@ import confirmPlugin from "./plugins/confirmPlugin";
 import { setupI18n } from "./i18n/composables";
 import "@/scss/style.scss";
 import VueApexCharts from "vue3-apexcharts";
+import { useCustomizerStore } from "./stores/customizer";
 
 import print from "vue3-print-nb";
 import { loader } from "@guolao/vue-monaco-editor";
@@ -45,25 +46,23 @@ async function mountApp(app: any, pinia: any, waitForRouter = true) {
   app.mount("#app");
 
   // 挂载后同步 Vuetify 主题
-  import("./stores/customizer").then(({ useCustomizerStore }) => {
-    const customizer = useCustomizerStore(pinia);
-    vuetify.theme.global.name.value = customizer.uiTheme;
-    const storedPrimary = localStorage.getItem("themePrimary");
-    const storedSecondary = localStorage.getItem("themeSecondary");
-    if (storedPrimary || storedSecondary) {
-      const themes = vuetify.theme.themes.value;
-      [LIGHT_THEME_NAME, DARK_THEME_NAME].forEach((name) => {
-        const theme = themes[name];
-        if (!theme?.colors) return;
-        if (storedPrimary) theme.colors.primary = storedPrimary;
-        if (storedSecondary) theme.colors.secondary = storedSecondary;
-        if (storedPrimary && theme.colors.darkprimary)
-          theme.colors.darkprimary = storedPrimary;
-        if (storedSecondary && theme.colors.darksecondary)
-          theme.colors.darksecondary = storedSecondary;
-      });
-    }
-  });
+  const customizer = useCustomizerStore();
+  vuetify.theme.change(customizer.uiTheme);
+  const storedPrimary = localStorage.getItem("themePrimary");
+  const storedSecondary = localStorage.getItem("themeSecondary");
+  if (storedPrimary || storedSecondary) {
+    const themes = vuetify.theme.themes.value;
+    [LIGHT_THEME_NAME, DARK_THEME_NAME].forEach((name) => {
+      const theme = themes[name];
+      if (!theme?.colors) return;
+      if (storedPrimary) theme.colors.primary = storedPrimary;
+      if (storedSecondary) theme.colors.secondary = storedSecondary;
+      if (storedPrimary && theme.colors.darkprimary)
+        theme.colors.darkprimary = storedPrimary;
+      if (storedSecondary && theme.colors.darksecondary)
+        theme.colors.darksecondary = storedSecondary;
+    });
+  }
 }
 
 async function initApp() {
@@ -100,12 +99,11 @@ async function initApp() {
 
     const token = localStorage.getItem("token");
 
-    const headers = new Headers(
-      init?.headers ||
-        (typeof input !== "string" && "headers" in input
-          ? input.headers
-          : undefined),
-    );
+    const inputHeaders =
+      typeof input !== "string" && "headers" in input
+        ? (input as Request).headers
+        : undefined;
+    const headers = new Headers(init?.headers ?? inputHeaders);
     if (token && !headers.has("Authorization")) {
       headers.set("Authorization", `Bearer ${token}`);
     }
@@ -124,50 +122,34 @@ async function initApp() {
     },
   });
 
+  async function createAndMountApp(waitForRouter: boolean) {
+    const app = createApp(App);
+    app.use(router);
+    const pinia = createPinia();
+    app.use(pinia);
+
+    const { useApiStore } = await import("@/stores/api");
+    const apiStore = useApiStore();
+    apiStore.setPresets(presets);
+    apiStore.init();
+
+    app.use(print);
+    app.use(VueApexCharts);
+    app.use(vuetify);
+    app.use(confirmPlugin);
+
+    mountApp(app, pinia, waitForRouter);
+  }
+
   // 初始化新的i18n系统，等待完成后再挂载应用
   setupI18n()
-    .then(async () => {
+    .then(() => {
       console.log("🌍 新i18n系统初始化完成");
-
-      const app = createApp(App);
-      app.use(router);
-      const pinia = createPinia();
-      app.use(pinia);
-
-      // Initialize API Store with presets
-      const { useApiStore } = await import("@/stores/api");
-      const apiStore = useApiStore(pinia);
-      apiStore.setPresets(presets);
-      apiStore.init();
-
-      app.use(print);
-      app.use(VueApexCharts);
-      app.use(vuetify);
-      app.use(confirmPlugin);
-
-      mountApp(app, pinia, true);
+      createAndMountApp(true);
     })
-    .catch(async (error) => {
+    .catch((error) => {
       console.error("❌ 新i18n系统初始化失败:", error);
-
-      // 即使i18n初始化失败，也要挂载应用（使用回退机制）
-      const app = createApp(App);
-      app.use(router);
-      const pinia = createPinia();
-      app.use(pinia);
-
-      // Initialize API Store with presets
-      const { useApiStore } = await import("@/stores/api");
-      const apiStore = useApiStore(pinia);
-      apiStore.setPresets(presets);
-      apiStore.init();
-
-      app.use(print);
-      app.use(VueApexCharts);
-      app.use(vuetify);
-      app.use(confirmPlugin);
-
-      mountApp(app, pinia, false);
+      createAndMountApp(false);
     });
 }
 
