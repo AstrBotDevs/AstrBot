@@ -1,8 +1,8 @@
 import asyncio
-from wechatpy.exceptions import WeChatClientException
 import os
 
 from wechatpy.enterprise import WeChatClient
+from wechatpy.exceptions import WeChatClientException
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -99,10 +99,14 @@ class WecomPlatformEvent(AstrMessageEvent):
                         try:
                             kf_message_api.send_text(user_id, self.get_self_id(), chunk)
                         except WeChatClientException as e:
-                            if getattr(e, 'errcode', None) == 40096:
+                            if getattr(e, "errcode", None) == 40096:
                                 # 40096: invalid external userid, fallback to regular message API
-                                logger.warning(f"kf API error 40096 for user {user_id}, falling back to regular message API")
-                                self.client.message.send_text(self.get_self_id(), user_id, chunk)
+                                logger.warning(
+                                    f"kf API error 40096 for user {user_id}, falling back to regular message API"
+                                )
+                                self.client.message.send_text(
+                                    self.get_self_id(), user_id, chunk
+                                )
                             else:
                                 raise
                         await asyncio.sleep(0.5)  # Avoid sending too fast
