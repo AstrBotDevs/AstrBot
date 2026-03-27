@@ -96,10 +96,10 @@ const toggleOrder = () => {
   max-width: 220px;
 }
 
-.plugin-sort-control__select :deep(.v-field__input),
-.plugin-sort-control__select :deep(.v-field-label),
-.plugin-sort-control__select :deep(.v-select__selection-text),
-.plugin-sort-control__select :deep(.v-field__prepend-inner) {
+.plugin-sort-control__select ::v-deep(.v-field__input),
+.plugin-sort-control__select ::v-deep(.v-field-label),
+.plugin-sort-control__select ::v-deep(.v-select__selection-text),
+.plugin-sort-control__select ::v-deep(.v-field__prepend-inner) {
   font-size: 0.875rem;
 }
 </style>

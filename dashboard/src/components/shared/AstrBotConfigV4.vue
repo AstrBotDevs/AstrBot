@@ -400,8 +400,8 @@ function getSpecialSubtype(value) {
   margin-top: 2px;
 }
 
-.config-hint :deep(a),
-.property-hint :deep(a) {
+.config-hint ::v-deep(a),
+.property-hint ::v-deep(a) {
   color: var(--v-theme-primary);
   text-decoration: underline;
 }

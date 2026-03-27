@@ -1897,11 +1897,11 @@ export default {
   border-radius: 14px;
 }
 
-.neo-data-table :deep(.v-data-table-header__content) {
+.neo-data-table ::v-deep(.v-data-table-header__content) {
   font-weight: 700;
 }
 
-.neo-data-table :deep(tbody tr:hover) {
+.neo-data-table ::v-deep(tbody tr:hover) {
   background: rgba(var(--v-theme-primary), 0.04);
 }
 
