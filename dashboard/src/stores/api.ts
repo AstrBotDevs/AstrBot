@@ -9,7 +9,7 @@ export type ApiPreset = {
 export const useApiStore = defineStore("api", {
   state: () => ({
     // 优先从 localStorage 读取用户手动设置的地址
-    apiBaseUrl: getApiBaseUrl() || localStorage.getItem("apiBaseUrl") || "",
+    apiBaseUrl: localStorage.getItem("apiBaseUrl") || getApiBaseUrl() || "",
     configPresets: [] as ApiPreset[],
     customPresets: JSON.parse(
       localStorage.getItem("customPresets") || "[]",
