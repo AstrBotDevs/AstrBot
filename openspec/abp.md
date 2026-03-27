@@ -10,6 +10,22 @@ ABP 采用**插件作为独立服务**的设计，插件通过配置加载，可
 - **数据目录由主进程分配**：插件的数据存储目录由主进程在握手时告知
 - **零侵入性**：插件无需了解 AstrBot 内部结构
 
+> **⚠️ 实现说明**：ABP 协议的核心实现（握手、消息路由、生命周期管理）在 Rust 核心运行时中。
+> 插件本身可使用任意语言实现，只需遵循 ABP 协议即可。
+> 进程内插件（`load_mode: in_process`）示例使用 Python，但核心逻辑由 Rust 承担。
+
+## 实现状态
+
+| 组件 | 状态 | 说明 |
+|------|------|------|
+| ABP 握手协议 | ⚠️ 待实现 | Rust 核心尚未提交源码 |
+| out_of_process 插件加载 | ⚠️ 待实现 | stdio/Unix Socket/HTTP 传输 |
+| in_process 插件接口 | ⚠️ 待实现 | Python 插件示例待迁移到 Rust |
+| 配置 Schema 生成 | ⚠️ 待实现 | UI 配置表单生成 |
+| 插件生命周期管理 | ⚠️ 待实现 | start/stop/reload |
+
+> 相关协议: [MCP](mcp.md)（工具/数据源连接）, [agent-message](agent-message.md)（消息处理框架）
+
 ## 与 MCP 的关系
 
 | 维度 | ABP | MCP |

@@ -10,6 +10,29 @@ AstrBot 提供 HTTP API 服务器，用于第三方应用集成。支持 API Key
 - 文件上传/下载
 - 主动消息推送
 
+> ⚠️ **实现说明**：实际 HTTP 服务器使用 **Quart + Hypercorn**（ASGI），非 FastAPI。
+> API 路由位于 `astrbot/dashboard/routes/open_api.py`。
+> api.md 描述的是**目标规范**，当前实现可能存在偏差，需逐步对齐。
+
+## 实现状态
+
+| 端点 | 状态 | 实际路径 |
+|------|------|----------|
+| `GET /api/v1/im/bots` | ✅ 已实现 | `open_api.py` |
+| `POST /api/v1/file` | ✅ 已实现 | `open_api.py` |
+| `GET /api/v1/file` | ✅ 已实现 | `open_api.py` |
+| `POST /api/v1/chat` | ✅ 已实现 | `open_api.py` |
+| `GET /api/v1/chat/sessions` | ✅ 已实现 | `open_api.py` |
+| `POST /api/v1/im/message` | ✅ 已实现 | `open_api.py` |
+| `GET /api/v1/configs` | ✅ 已实现 | `open_api.py` |
+| SSE 流式响应 | ✅ 已实现 | `open_api.py` |
+| Webhook 回调 | ⚠️ 待实现 | - |
+| API Key 权限体系 | ⚠️ 部分实现 | 仅基础校验 |
+| SSL/TLS | ⚠️ 待实现 | - |
+| 速率限制 | ⚠️ 待实现 | - |
+
+> 相关: [path.md](path.md)（路径规范）, [env.md](env.md)（环境变量）, [config.md](config.md)（配置规范）
+
 ## 服务器配置
 
 ### 启动参数

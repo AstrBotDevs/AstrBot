@@ -8,6 +8,16 @@ LSP（Language Server Protocol）是由 Microsoft 制定的开放协议，用于
 
 **解决方案**：语言服务器在其自己的进程中运行，编辑器通过标准协议与之通信。只需实现一次语言服务器，即可集成到任何支持 LSP 的工具中。
 
+## 实现状态
+
+| 组件 | 状态 | 说明 |
+|------|------|------|
+| LSP Client | ❌ 不计划 | AstrBot 不作为 LSP 客户端使用（用于 IDE 集成） |
+| LSP Server | ❌ 不计划 | 作为 AI 编程助手，暂无语言服务器需求 |
+| 参考文档 | ✅ 完成 | 本文档为 LSP 协议参考，不做实现 |
+
+> 相关协议: [A2A](a2a.md)（Agent 间通信）, [agent-message](agent-message.md)（消息处理框架）
+
 **参考**：[Language Server Protocol](https://microsoft.github.io/language-server-protocol/) by Microsoft
 
 ## 设计哲学

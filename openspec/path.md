@@ -8,6 +8,8 @@ AstrBot 遵循 [XDG Base Directory Specification](https://specifications.freedes
 - **Linux/macOS 桌面**：遵循 XDG 规范
 - **Linux 服务器**：使用 `/var/lib/astrbot`（systemd 服务场景）
 - **Windows**：不遵循 XDG，使用 `%APPDATA%` / `%LOCALAPPDATA%` / `%USERPROFILE%`
+
+> 相关: [config.md](config.md)（配置规范）, [env.md](env.md)（环境变量）
 - **BSD/Unix**：遵循 XDG 规范
 
 ## Linux 服务器场景
@@ -359,3 +361,5 @@ Claude Code 使用 `~/.claude/` 作为根目录，**不遵循 XDG 规范**：
 
 - Windows 平台**不遵循** XDG 规范，使用 Windows 标准路径
 - 桌面客户端（packaged desktop runtime）使用 `~/.astrbot/` 作为数据根目录
+
+> 相关: [config.md](config.md)（配置规范）, [env.md](env.md)（环境变量）

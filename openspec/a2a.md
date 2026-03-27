@@ -9,6 +9,16 @@ A2A 得到了超过 50 家技术合作伙伴（如 Atlassian, Box, Cohere, Langc
 
 A2A 专注于"互联互通"，与 ACP（Agent Communication Protocol）形成互补关系。
 
+## 实现状态
+
+| 组件 | 状态 | 说明 |
+|------|------|------|
+| A2A Client | ❌ 不计划 | 作为参考协议，不做实现 |
+| A2A Server | ❌ 不计划 | 参考文档 |
+| AgentCard 发现 | ❌ 不计划 | - |
+
+> 相关协议: [ACP](acp.md)（本地 Agent 通信）, [agent-message](agent-message.md)（消息处理框架）
+
 ## 与 ACP 的互补关系
 
 | 维度 | A2A | ACP |
