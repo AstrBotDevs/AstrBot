@@ -27,8 +27,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         api_base = (
             provider_config.get("embedding_api_base", "https://api.openai.com/v1")
             .strip()
-            .rstrip("/")
-            .rstrip("/embeddings")
+            .removesuffix("/")
+            .removesuffix("/embeddings")
         )
         if api_base and not api_base.endswith("/v1") and not api_base.endswith("/v4"):
             # /v4 see #5699
