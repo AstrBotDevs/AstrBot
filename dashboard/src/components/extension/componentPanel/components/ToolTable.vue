@@ -220,7 +220,7 @@ const isInternal = (tool: ToolItem) => tool.source === 'internal';
   border-radius: 8px;
 }
 
-.tool-table :deep(.v-data-table__td) {
+.tool-table ::v-deep(.v-data-table__td) {
   vertical-align: middle;
 }
 

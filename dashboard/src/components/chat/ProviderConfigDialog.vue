@@ -484,11 +484,11 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 768px) {
-  .provider-config-dialog :deep(.v-card-title) {
+  .provider-config-dialog ::v-deep(.v-card-title) {
     padding: 12px 16px !important;
   }
 
-  .provider-config-dialog :deep(.v-card-title .text-h2) {
+  .provider-config-dialog ::v-deep(.v-card-title .text-h2) {
     font-size: 1.5rem !important;
   }
 }

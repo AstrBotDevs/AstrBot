@@ -391,7 +391,7 @@ function getSpecialSubtype(value) {
   gap: 20px;
 }
 
-:deep(.v-field__input) {
+::v-deep(.v-field__input) {
   font-size: 14px;
 }
 </style>

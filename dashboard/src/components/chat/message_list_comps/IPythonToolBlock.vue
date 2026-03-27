@@ -202,7 +202,7 @@ onMounted(async () => {
     animation: fadeIn 0.2s ease-in-out;
 }
 
-:deep(.code-highlighted pre) {
+::v-deep(.code-highlighted pre) {
     background-color: transparent !important;
 }
 

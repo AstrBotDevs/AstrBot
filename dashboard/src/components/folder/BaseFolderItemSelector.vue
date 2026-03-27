@@ -765,7 +765,7 @@ export default defineComponent({
     overflow-x: auto;
   }
 
-  .breadcrumb-bar :deep(.v-breadcrumbs) {
+  .breadcrumb-bar ::v-deep(.v-breadcrumbs) {
     flex-wrap: nowrap;
     min-width: max-content;
   }

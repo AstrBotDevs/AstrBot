@@ -185,7 +185,7 @@ const statusItems = [
   flex: none;
 }
 
-.system-plugin-checkbox :deep(.v-selection-control) {
+.system-plugin-checkbox ::v-deep(.v-selection-control) {
   min-height: auto;
 }
 </style>
