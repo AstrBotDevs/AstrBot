@@ -189,40 +189,51 @@ class ProviderRequest:
             for image_url in self.image_urls:
                 if image_url.startswith("http"):
                     image_path = await download_image_by_url(image_url)
-                    image_data = await self._encode_image_bs64(image_path)
+                    logger.debug(
+                        "[ProviderRequest] 下载远程图片 %s -> %s",
+                        image_url,
+                        image_path,
+                    )
+                    # 统一通过公共工具函数编码，自动检测 MIME 类型
+                    image_data = await encode_image_to_base64_url(image_path)
                 elif image_url.startswith("file:///"):
                     image_path = image_url.replace("file:///", "")
-                    image_data = await self._encode_image_bs64(image_path)
+                    logger.debug(
+                        "[ProviderRequest] 读取本地文件 %s",
+                        image_path,
+                    )
+                    image_data = await encode_image_to_base64_url(image_path)
                 else:
-                    image_data = await self._encode_image_bs64(image_url)
+                    logger.debug(
+                        "[ProviderRequest] 编码图片引用 %s",
+                        image_url[:80],
+                    )
+                    image_data = await encode_image_to_base64_url(image_url)
                 if not image_data:
                     logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                     continue
+                # image_data 已是 data:<mime>;base64,... 格式，
+                # MIME 类型由 encode_image_to_base64_url 内部检测并输出 debug 日志
+                logger.debug(
+                    "[ProviderRequest] 图片编码完成，Data URL 前缀: %s",
+                    image_data[:40],
+                )
                 content_blocks.append(
                     {"type": "image_url", "image_url": {"url": image_data}},
                 )
 
-        # 只有当只有一个来自 prompt 的文本块且没有额外内容块时，才降级为简单格式以保持向后兼容
+        # 只有当只有一个来自 prompt 的文本块且没有额外内容块时，
+        # 才降级为简单格式以保持向后兼容
         if (
-            len(content_blocks) == 1
-            and content_blocks[0]["type"] == "text"
-            and not self.extra_user_content_parts
-            and not self.image_urls
+                len(content_blocks) == 1
+                and content_blocks[0]["type"] == "text"
+                and not self.extra_user_content_parts
+                and not self.image_urls
         ):
             return {"role": "user", "content": content_blocks[0]["text"]}
 
         # 否则返回多模态格式
         return {"role": "user", "content": content_blocks}
-
-    async def _encode_image_bs64(self, image_url: str) -> str:
-        """将图片转换为 base64"""
-        if image_url.startswith("base64://"):
-            return image_url.replace("base64://", "data:image/jpeg;base64,")
-        with open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
-            return "data:image/jpeg;base64," + image_bs64
-        return ""
-
 
 @dataclass
 class TokenUsage:
