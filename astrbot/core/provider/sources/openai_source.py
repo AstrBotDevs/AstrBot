@@ -36,8 +36,8 @@ from astrbot.core.utils.network_utils import (
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 from astrbot.core.utils.image_utils import (
-    detect_image_mime_type,
     detect_mime_type_from_base64_str,
+    encode_image_to_base64_url,
 )
 
 from ..register import register_provider_adapter
@@ -183,106 +183,96 @@ class ProviderOpenAIOfficial(Provider):
         return False
 
     @classmethod
-    def _detect_mime_type_with_fallback(
-            cls,
-            image_bytes: bytes,
-            source_hint: str = "",
-    ) -> str:
-        """检测图片的实际 MIME 类型，使用三级回退策略。
-
-        检测优先级：
-        1. 主检测：基于文件头魔术字节的 detect_image_mime_type（来自 image_utils）
-        2. 回退：PIL 库识别
-        3. 回退的回退：硬编码 image/jpeg
-
-        Args:
-            image_bytes: 图片的原始字节数据。
-            source_hint: 可选的来源描述，用于 debug 日志输出。
-
-        Returns:
-            对应的 MIME 类型字符串，例如 "image/png"。
-        """
-        log_prefix = f"[{source_hint}] " if source_hint else ""
-
-        # --- 第一级：魔术字节检测（主检测） ---
-        header = image_bytes[:_HEADER_READ_SIZE]
-        mime_type = detect_image_mime_type(header)
-        # detect_image_mime_type 在无法识别时回退到 "image/jpeg"，
-        # 因此只有当返回值不是默认回退值时才认为检测成功。
-        # 但如果文件头确实是 JPEG（\xff\xd8\xff），那也是真正检测到了，
-        # 所以额外检查文件头是否是 JPEG 的魔术字节。
-        if mime_type != "image/jpeg" or (
-                len(header) >= 3 and header[:3] == b'\xff\xd8\xff'
-        ):
-            logger.debug(
-                "%s魔术字节检测命中，识别为 %s 格式",
-                log_prefix,
-                mime_type,
-            )
-            return mime_type
-
-        logger.debug(
-            "%s魔术字节检测未命中，尝试 PIL 回退...",
-            log_prefix,
-        )
-
-        # --- 第二级：PIL 回退 ---
-        try:
-            with PILImage.open(BytesIO(image_bytes)) as image:
-                image.verify()
-                image_format = str(image.format or "").upper()
-            pil_mime = {
-                "JPEG": "image/jpeg",
-                "PNG": "image/png",
-                "GIF": "image/gif",
-                "WEBP": "image/webp",
-                "BMP": "image/bmp",
-            }.get(image_format)
-            if pil_mime:
-                logger.debug(
-                    "%sPIL 回退命中，识别为 %s 格式（PIL format: %s）",
-                    log_prefix,
-                    pil_mime,
-                    image_format,
-                )
-                return pil_mime
-            logger.debug(
-                "%sPIL 识别到格式 %s 但无对应 MIME 映射，继续回退...",
-                log_prefix,
-                image_format,
-            )
-        except (OSError, UnidentifiedImageError) as exc:
-            logger.debug(
-                "%sPIL 回退失败: %s，继续回退...",
-                log_prefix,
-                exc,
-            )
-
-        # --- 第三级：硬编码回退 ---
-        logger.debug(
-            "%s所有检测均未命中，硬编码回退为 image/jpeg",
-            log_prefix,
-        )
-        return "image/jpeg"
-
-    @classmethod
     def _encode_image_file_to_data_url(
             cls,
             image_path: str,
             *,
             mode: Literal["safe", "strict"],
     ) -> str | None:
+        """将本地图片文件编码为 base64 Data URL。
+
+        委托给公共工具函数 encode_image_to_base64_url 实现
+        文件读取、MIME 检测与 base64 编码，避免重复逻辑。
+
+        Args:
+            image_path: 本地文件路径。
+            mode: "safe" 模式下读取失败返回 None；
+                  "strict" 模式下读取或校验失败直接抛出异常。
+
+        Returns:
+            形如 "data:image/png;base64,..." 的 Data URL，
+            或 None（仅 safe 模式）。
+        """
         try:
+            # encode_image_to_base64_url 是异步函数，但此处为 classmethod，
+            # 需在同步上下文中处理文件。直接读取文件字节进行编码。
             image_bytes = Path(image_path).read_bytes()
         except OSError:
             if mode == "strict":
                 raise
             return None
 
-        # 使用三级回退策略检测 MIME 类型
-        mime_type = cls._detect_mime_type_with_fallback(
-            image_bytes, source_hint=image_path
+        if not image_bytes:
+            if mode == "strict":
+                raise ValueError(f"图片文件为空: {image_path}")
+            return None
+
+        # 使用魔术字节检测 MIME 类型
+        from astrbot.core.utils.image_utils import (
+            _HEADER_READ_SIZE,
+            detect_image_mime_type,
         )
+
+        header = image_bytes[:_HEADER_READ_SIZE]
+        mime_type = detect_image_mime_type(header)
+
+        # 当魔术字节检测回退到默认值且文件头不是 JPEG 时，
+        # 尝试 PIL 作为二级检测
+        if mime_type == "image/jpeg" and not (
+                len(header) >= 3 and header[:3] == b'\xff\xd8\xff'
+        ):
+            try:
+                with PILImage.open(BytesIO(image_bytes)) as image:
+                    image.verify()
+                    image_format = str(image.format or "").upper()
+                pil_mime = {
+                    "JPEG": "image/jpeg",
+                    "PNG": "image/png",
+                    "GIF": "image/gif",
+                    "WEBP": "image/webp",
+                    "BMP": "image/bmp",
+                }.get(image_format)
+                if pil_mime:
+                    logger.debug(
+                        "[%s] PIL 回退命中，识别为 %s 格式（PIL format: %s）",
+                        image_path,
+                        pil_mime,
+                        image_format,
+                    )
+                    mime_type = pil_mime
+                else:
+                    logger.debug(
+                        "[%s] PIL 识别到格式 %s 但无对应 MIME 映射",
+                        image_path,
+                        image_format,
+                    )
+            except (OSError, UnidentifiedImageError) as exc:
+                # strict 模式下，魔术字节和 PIL 都无法识别，说明不是合法图片
+                if mode == "strict":
+                    raise ValueError(
+                        f"无法识别的图片文件: {image_path}"
+                    ) from exc
+                logger.debug(
+                    "[%s] PIL 回退失败: %s，硬编码回退为 image/jpeg",
+                    image_path,
+                    exc,
+                )
+        else:
+            logger.debug(
+                "[%s] 魔术字节检测命中，识别为 %s 格式",
+                image_path,
+                mime_type,
+            )
 
         image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
         return f"data:{mime_type};base64,{image_bs64}"
@@ -332,6 +322,7 @@ class ProviderOpenAIOfficial(Provider):
             image_path,
             mode=mode,
         )
+
 
 
     async def _resolve_image_part(
@@ -469,16 +460,24 @@ class ProviderOpenAIOfficial(Provider):
 
         注意：此处直接访问了 openai 库的私有属性 `_client`，
         依赖其内部实现（httpx.AsyncClient 实例暴露的 is_closed 属性）。
-        这一做法存在脆弱性——若 openai 库未来版本调整了内部结构，
-        此处可能在没有任何报错的情况下静默失效。
+        若 openai 库未来版本调整了内部结构，此处可能失效。
         目前 openai SDK 尚未提供检查底层连接是否已关闭的公开 API。
         若未来 SDK 提供了类似 self.client.is_closed() 的公开方法，
         应及时将此处替换为对应的公开接口。
+
+        当检测逻辑因 SDK 内部结构变更而抛出 AttributeError 时，会：
+        1. 记录 warning 日志，提示可能的 SDK 变更；
+        2. 保守地视为"已关闭"，触发后续的 client 重建逻辑。
         """
         try:
             return bool(self.client and self.client._client.is_closed)
         except AttributeError:
-            return False
+            logger.warning(
+                "无法检测 OpenAI client 是否已关闭，"
+                "可能是 SDK 内部结构变更导致；"
+                "将保守视为已关闭并触发 client 重建。"
+            )
+            return True
 
     def _ensure_client(self) -> None:
         """确保 client 可用。如果 client 为 None 或底层连接已关闭，则重新创建。"""
@@ -1321,4 +1320,4 @@ class ProviderOpenAIOfficial(Provider):
                 logger.warning(f"关闭 OpenAI client 时出错: {e}")
             finally:
                 self.client = None
-    
+
