@@ -67,6 +67,9 @@ def register_platform_adapter(
 
         existing_cls = platform_cls_map.get(adapter_name)
         if existing_cls is not None:
+            # SDK/adapter tests and hot reload paths can import the same adapter
+            # module more than once in one process. Refresh that registration in
+            # place so we keep conflict detection for genuinely different classes.
             if not _is_same_adapter_identity(existing_cls, cls):
                 raise ValueError(
                     f"平台适配器 {adapter_name} 已经注册过了，可能发生了适配器命名冲突。",

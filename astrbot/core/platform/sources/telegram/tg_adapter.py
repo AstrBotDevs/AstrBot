@@ -42,6 +42,8 @@ else:
 
 
 class _CaptionEntityLike(Protocol):
+    # Telegram stubs expose caption_entities as tuples, so this helper only
+    # relies on the fields we actually read instead of a concrete container type.
     type: str
     offset: int
     length: int
@@ -549,6 +551,8 @@ class TelegramPlatformAdapter(Platform):
         if not caption:
             return
 
+        # Telegram attaches captions to multiple media types; keeping the shared
+        # conversion here prevents photo/document/video from drifting again.
         message.message_str = caption
         message.message.append(Comp.Plain(message.message_str))
 
