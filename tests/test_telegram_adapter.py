@@ -1,7 +1,7 @@
 import asyncio
 import importlib
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -106,3 +106,35 @@ async def test_telegram_video_caption_populates_message_text_and_plain():
         isinstance(component, Comp.Plain) and component.text == "这段视频讲了什么"
         for component in result.message
     )
+
+
+@pytest.mark.asyncio
+async def test_telegram_voice_message_creates_record_component(tmp_path):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    voice = create_mock_file("https://api.telegram.org/file/test/voice.oga")
+    update = create_mock_update(
+        message_text=None,
+        voice=voice,
+    )
+    wav_path = tmp_path / "voice.oga.wav"
+    convert_message_globals = adapter.convert_message.__func__.__globals__
+
+    with patch.dict(
+        convert_message_globals,
+        {
+            "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+            "download_file": AsyncMock(),
+            "convert_audio_to_wav": AsyncMock(return_value=str(wav_path)),
+        },
+    ):
+        result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert len(result.message) == 1
+    assert isinstance(result.message[0], Comp.Record)
+    assert result.message[0].file == str(wav_path)
