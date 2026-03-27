@@ -80,8 +80,8 @@
                   class="me-2"
                 >
                   <v-img
-                    v-if="item.raw.icon"
-                    :src="item.raw.icon"
+                    v-if="item.raw?.icon"
+                    :src="item.raw?.icon"
                     alt="provider icon"
                     cover
                   />

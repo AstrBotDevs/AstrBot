@@ -43,7 +43,7 @@ async function getCurrentVersion() {
     selectedVersion.value = version;
     return version;
   } catch (err) {
-    console.error('Failed to get version:', err);
+    console.warn('Failed to get version:', err);
     return '';
   }
 }

@@ -636,7 +636,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         providers.value = response.data.data.providers || []
       }
     } catch (error) {
-      console.error('Failed to load provider template:', error)
+      console.warn('Failed to load provider template:', error)
     }
   }
 
