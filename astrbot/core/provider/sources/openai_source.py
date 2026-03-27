@@ -1,11 +1,15 @@
 import asyncio
 import base64
+import copy
 import inspect
 import json
 import random
 import re
 from collections.abc import AsyncGenerator
-from typing import Any
+from io import BytesIO
+from pathlib import Path
+from typing import Any, Literal
+from urllib.parse import unquote, urlparse
 
 import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
@@ -14,6 +18,8 @@ from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.completion_usage import CompletionUsage
+from PIL import Image as PILImage
+from PIL import UnidentifiedImageError
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -29,9 +35,19 @@ from astrbot.core.utils.network_utils import (
     log_connection_failure,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
-from astrbot.core.utils.image_utils import encode_image_to_base64_url
+from astrbot.core.utils.image_utils import detect_image_mime_type
 
 from ..register import register_provider_adapter
+
+
+# SVG 检测所需的最小头部字节数。
+# 其他二进制格式的魔术字节最多 16 字节，SVG 需要更多以跳过可能的 XML 声明。
+_HEADER_READ_SIZE = 256
+
+# 对应 _HEADER_READ_SIZE 字节所需的 base64 字符数。
+# base64 每 3 字节编码为 4 字符，向上取整后再补充少量余量保证填充对齐。
+# ceil(256 / 3) * 4 = 344
+_BASE64_SAMPLE_CHARS = 344
 
 
 @register_provider_adapter(
@@ -134,6 +150,275 @@ class ProviderOpenAIOfficial(Provider):
                     return True
         return False
 
+    def _is_invalid_attachment_error(self, error: Exception) -> bool:
+        body = getattr(error, "body", None)
+        code: str | None = None
+        message: str | None = None
+        if isinstance(body, dict):
+            err_obj = body.get("error")
+            if isinstance(err_obj, dict):
+                raw_code = err_obj.get("code")
+                raw_message = err_obj.get("message")
+                code = raw_code.lower() if isinstance(raw_code, str) else None
+                message = raw_message.lower() if isinstance(raw_message, str) else None
+
+        if code == "invalid_attachment":
+            return True
+
+        text_sources: list[str] = []
+        if message:
+            text_sources.append(message)
+        if code:
+            text_sources.append(code)
+        text_sources.extend(map(str, self._extract_error_text_candidates(error)))
+
+        error_text = " ".join(text.lower() for text in text_sources if text)
+        if "invalid_attachment" in error_text:
+            return True
+        if "download attachment" in error_text and "404" in error_text:
+            return True
+        return False
+
+    @classmethod
+    def _detect_mime_type_with_fallback(
+            cls,
+            image_bytes: bytes,
+            source_hint: str = "",
+    ) -> str:
+        """检测图片的实际 MIME 类型，使用三级回退策略。
+
+        检测优先级：
+        1. 主检测：基于文件头魔术字节的 detect_image_mime_type（来自 image_utils）
+        2. 回退：PIL 库识别
+        3. 回退的回退：硬编码 image/jpeg
+
+        Args:
+            image_bytes: 图片的原始字节数据。
+            source_hint: 可选的来源描述，用于 debug 日志输出。
+
+        Returns:
+            对应的 MIME 类型字符串，例如 "image/png"。
+        """
+        log_prefix = f"[{source_hint}] " if source_hint else ""
+
+        # --- 第一级：魔术字节检测（主检测） ---
+        header = image_bytes[:_HEADER_READ_SIZE]
+        mime_type = detect_image_mime_type(header)
+        # detect_image_mime_type 在无法识别时回退到 "image/jpeg"，
+        # 因此只有当返回值不是默认回退值时才认为检测成功。
+        # 但如果文件头确实是 JPEG（\xff\xd8\xff），那也是真正检测到了，
+        # 所以额外检查文件头是否是 JPEG 的魔术字节。
+        if mime_type != "image/jpeg" or (
+                len(header) >= 3 and header[:3] == b'\xff\xd8\xff'
+        ):
+            logger.debug(
+                "%s魔术字节检测命中，识别为 %s 格式",
+                log_prefix,
+                mime_type,
+            )
+            return mime_type
+
+        logger.debug(
+            "%s魔术字节检测未命中，尝试 PIL 回退...",
+            log_prefix,
+        )
+
+        # --- 第二级：PIL 回退 ---
+        try:
+            with PILImage.open(BytesIO(image_bytes)) as image:
+                image.verify()
+                image_format = str(image.format or "").upper()
+            pil_mime = {
+                "JPEG": "image/jpeg",
+                "PNG": "image/png",
+                "GIF": "image/gif",
+                "WEBP": "image/webp",
+                "BMP": "image/bmp",
+            }.get(image_format)
+            if pil_mime:
+                logger.debug(
+                    "%sPIL 回退命中，识别为 %s 格式（PIL format: %s）",
+                    log_prefix,
+                    pil_mime,
+                    image_format,
+                )
+                return pil_mime
+            logger.debug(
+                "%sPIL 识别到格式 %s 但无对应 MIME 映射，继续回退...",
+                log_prefix,
+                image_format,
+            )
+        except (OSError, UnidentifiedImageError) as exc:
+            logger.debug(
+                "%sPIL 回退失败: %s，继续回退...",
+                log_prefix,
+                exc,
+            )
+
+        # --- 第三级：硬编码回退 ---
+        logger.debug(
+            "%s所有检测均未命中，硬编码回退为 image/jpeg",
+            log_prefix,
+        )
+        return "image/jpeg"
+
+    @classmethod
+    def _encode_image_file_to_data_url(
+            cls,
+            image_path: str,
+            *,
+            mode: Literal["safe", "strict"],
+    ) -> str | None:
+        try:
+            image_bytes = Path(image_path).read_bytes()
+        except OSError:
+            if mode == "strict":
+                raise
+            return None
+
+        # 使用三级回退策略检测 MIME 类型
+        mime_type = cls._detect_mime_type_with_fallback(
+            image_bytes, source_hint=image_path
+        )
+
+        image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
+        return f"data:{mime_type};base64,{image_bs64}"
+
+    @staticmethod
+    def _file_uri_to_path(file_uri: str) -> str:
+        """Normalize file URIs to paths.
+
+        `file://localhost/...` and drive-letter forms are treated as local paths.
+        Other non-empty hosts are preserved as UNC-style paths.
+        """
+        parsed = urlparse(file_uri)
+        if parsed.scheme != "file":
+            return file_uri
+
+        netloc = unquote(parsed.netloc or "")
+        path = unquote(parsed.path or "")
+        if re.fullmatch(r"[A-Za-z]:", netloc):
+            return str(Path(f"{netloc}{path}"))
+        if re.match(r"^/[A-Za-z]:/", path):
+            path = path[1:]
+        if netloc and netloc != "localhost":
+            path = f"//{netloc}{path}"
+        return str(Path(path))
+
+    async def _image_ref_to_data_url(
+            self,
+            image_ref: str,
+            *,
+            mode: Literal["safe", "strict"] = "safe",
+    ) -> str | None:
+        if image_ref.startswith("base64://"):
+            raw_b64 = image_ref[len("base64://"):]
+            try:
+                sample = raw_b64[:_BASE64_SAMPLE_CHARS]
+                missing_padding = len(sample) % 4
+                if missing_padding:
+                    sample += '=' * (4 - missing_padding)
+                header_bytes = base64.b64decode(sample)
+                mime_type = detect_image_mime_type(header_bytes)
+                logger.debug(
+                    "[base64://] 魔术字节检测命中，识别为 %s 格式",
+                    mime_type,
+                )
+            except Exception:
+                mime_type = "image/jpeg"
+                logger.debug(
+                    "[base64://] base64 解码失败，硬编码回退为 image/jpeg"
+                )
+            return f"data:{mime_type};base64,{raw_b64}"
+
+        if image_ref.startswith("http"):
+            image_path = await download_image_by_url(image_ref)
+        elif image_ref.startswith("file://"):
+            image_path = self._file_uri_to_path(image_ref)
+        else:
+            image_path = image_ref
+
+        return self._encode_image_file_to_data_url(
+            image_path,
+            mode=mode,
+        )
+
+    async def _resolve_image_part(
+        self,
+        image_url: str,
+        *,
+        image_detail: str | None = None,
+    ) -> dict | None:
+        if image_url.startswith("data:"):
+            image_payload = {"url": image_url}
+        else:
+            image_data = await self._image_ref_to_data_url(image_url, mode="safe")
+            if not image_data:
+                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                return None
+            image_payload = {"url": image_data}
+
+        if image_detail:
+            image_payload["detail"] = image_detail
+        return {
+            "type": "image_url",
+            "image_url": image_payload,
+        }
+
+    def _extract_image_part_info(self, part: dict) -> tuple[str | None, str | None]:
+        if not isinstance(part, dict) or part.get("type") != "image_url":
+            return None, None
+
+        image_url_data = part.get("image_url")
+        if not isinstance(image_url_data, dict):
+            logger.warning("图片内容块格式无效，将保留原始内容。")
+            return None, None
+
+        url = image_url_data.get("url")
+        if not isinstance(url, str) or not url:
+            logger.warning("图片内容块缺少有效 URL，将保留原始内容。")
+            return None, None
+
+        image_detail = image_url_data.get("detail")
+        if not isinstance(image_detail, str):
+            image_detail = None
+        return url, image_detail
+
+    async def _transform_content_part(self, part: dict) -> dict:
+        url, image_detail = self._extract_image_part_info(part)
+        if not url:
+            return part
+
+        try:
+            resolved_part = await self._resolve_image_part(
+                url, image_detail=image_detail
+            )
+        except Exception as exc:
+            logger.warning(
+                "图片 %s 预处理失败，将保留原始内容。错误: %s",
+                url,
+                exc,
+            )
+            return part
+
+        return resolved_part or part
+
+    async def _materialize_message_image_parts(self, message: dict) -> dict:
+        content = message.get("content")
+        if not isinstance(content, list):
+            return {**message}
+
+        new_content = [await self._transform_content_part(part) for part in content]
+        return {**message, "content": new_content}
+
+    async def _materialize_context_image_parts(
+        self, context_query: list[dict]
+    ) -> list[dict]:
+        return [
+            await self._materialize_message_image_parts(message)
+            for message in context_query
+        ]
+
     async def _fallback_to_text_only_and_retry(
         self,
         payloads: dict,
@@ -166,6 +451,59 @@ class ProviderOpenAIOfficial(Provider):
         proxy = provider_config.get("proxy", "")
         return create_proxy_client("OpenAI", proxy)
 
+    def _create_openai_client(self) -> AsyncOpenAI | AsyncAzureOpenAI:
+        """创建 OpenAI/Azure 客户端实例，将初始化逻辑解耦以便复用。"""
+        if "api_version" in self.provider_config:
+            # Using Azure OpenAI API
+            return AsyncAzureOpenAI(
+                api_key=self.chosen_api_key,
+                api_version=self.provider_config.get("api_version", None),
+                default_headers=self.custom_headers,
+                base_url=self.provider_config.get("api_base", ""),
+                timeout=self.timeout,
+                http_client=self._create_http_client(self.provider_config),
+            )
+        else:
+            # Using OpenAI Official API
+            return AsyncOpenAI(
+                api_key=self.chosen_api_key,
+                base_url=self.provider_config.get("api_base", None),
+                default_headers=self.custom_headers,
+                timeout=self.timeout,
+                http_client=self._create_http_client(self.provider_config),
+            )
+
+    def _ensure_client(self) -> None:
+        """确保 client 可用。如果 client 为 None 或底层连接已关闭，则重新创建。
+
+        这提供了多层防御：terminate() 会将 client 置为 None，
+        配置重载（reload）期间若复用已关闭的 client 会导致 APIConnectionError，
+        此方法在每次使用前检查并自动重建。
+        """
+        need_reinit = False
+        if self.client is None:
+            need_reinit = True
+        else:
+            try:
+                # 注意：此处直接访问了 openai 库的私有属性 `_client`，
+                # 依赖其内部实现（httpx.AsyncClient 实例暴露的 is_closed 属性）。
+                # 这一做法存在脆弱性——若 openai 库未来版本调整了内部结构，
+                # 此处可能在没有任何报错的情况下静默失效。
+                # 目前 openai SDK 尚未提供检查底层连接是否已关闭的公开 API。
+                # 若未来 SDK 提供了类似 self.client.is_closed() 的公开方法，
+                # 应及时将此处替换为对应的公开接口。
+                if self.client._client.is_closed:
+                    need_reinit = True
+            except AttributeError:
+                pass
+
+        if need_reinit:
+            logger.warning("检测到 OpenAI client 已关闭或未初始化，正在重新创建...")
+            self.client = self._create_openai_client()
+            self.default_params = inspect.signature(
+                self.client.chat.completions.create,
+            ).parameters.keys()
+
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key = None
@@ -182,7 +520,6 @@ class ProviderOpenAIOfficial(Provider):
             for key in self.custom_headers:
                 self.custom_headers[key] = str(self.custom_headers[key])
 
-        # 创建 client
         self.client = self._create_openai_client()
 
         self.default_params = inspect.signature(
@@ -193,51 +530,6 @@ class ProviderOpenAIOfficial(Provider):
         self.set_model(model)
 
         self.reasoning_key = "reasoning_content"
-
-    def _create_openai_client(self) -> AsyncOpenAI | AsyncAzureOpenAI:
-        """创建 OpenAI client 实例（统一初始化逻辑）。
-        
-        解耦 client 初始化，便于 reload 时重建。
-        """
-        if "api_version" in self.provider_config:
-            # Azure OpenAI
-            return AsyncAzureOpenAI(
-                api_key=self.chosen_api_key,
-                api_version=self.provider_config.get("api_version", None),
-                default_headers=self.custom_headers,
-                base_url=self.provider_config.get("api_base", ""),
-                timeout=self.timeout,
-                http_client=self._create_http_client(self.provider_config),
-            )
-        else:
-            # OpenAI Official
-            return AsyncOpenAI(
-                api_key=self.chosen_api_key,
-                base_url=self.provider_config.get("api_base", None),
-                default_headers=self.custom_headers,
-                timeout=self.timeout,
-                http_client=self._create_http_client(self.provider_config),
-            )
-
-    def _ensure_client(self) -> None:
-        """确保 client 可用，若已关闭则重建。
-        
-        多层防御：None 检查 + 底层连接检查。
-        注：访问 self.client._client.is_closed 依赖 openai 库内部实现，
-        若 SDK 提供公开 API 应及时替换。
-        """
-        if self.client is None:
-            self.client = self._create_openai_client()
-            return
-        
-        # 检查底层 httpx.AsyncClient 是否已关闭
-        try:
-            if hasattr(self.client, '_client') and hasattr(self.client._client, 'is_closed'):
-                if self.client._client.is_closed:
-                    self.client = self._create_openai_client()
-        except Exception:
-            # 若检查失败，安全起见重建 client
-            self.client = self._create_openai_client()
 
     def _ollama_disable_thinking_enabled(self) -> bool:
         value = self.provider_config.get("ollama_disable_thinking", False)
@@ -273,6 +565,7 @@ class ProviderOpenAIOfficial(Provider):
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         self._ensure_client()
+
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -324,6 +617,7 @@ class ProviderOpenAIOfficial(Provider):
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API，逐步返回结果"""
         self._ensure_client()
+
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -636,7 +930,7 @@ class ProviderOpenAIOfficial(Provider):
             new_record = await self.assemble_context(
                 prompt, image_urls, extra_user_content_parts
             )
-        context_query = self._ensure_message_to_dicts(contexts)
+        context_query = copy.deepcopy(self._ensure_message_to_dicts(contexts))
         if new_record:
             context_query.append(new_record)
         if system_prompt:
@@ -653,6 +947,9 @@ class ProviderOpenAIOfficial(Provider):
             else:
                 for tcr in tool_calls_result:
                     context_query.extend(tcr.to_openai_messages())
+
+        if self._context_contains_image(context_query):
+            context_query = await self._materialize_context_image_parts(context_query)
 
         model = model or self.get_model()
 
@@ -695,7 +992,7 @@ class ProviderOpenAIOfficial(Provider):
         """处理API错误并尝试恢复"""
         if "429" in str(e):
             logger.warning(
-                f"API 调用过于频繁，尝试使用其他 Key 重试。当前 Key: {chosen_key[:12]}",
+                "API 调用过于频繁，尝试使用其他 Key 重试。"
             )
             # 最后一次不等待
             if retry_cnt < max_retries - 1:
@@ -752,6 +1049,18 @@ class ProviderOpenAIOfficial(Provider):
                 available_api_keys,
                 func_tool,
                 "image_content_moderated",
+                image_fallback_used=True,
+            )
+        if self._is_invalid_attachment_error(e):
+            if image_fallback_used or not self._context_contains_image(context_query):
+                raise e
+            return await self._fallback_to_text_only_and_retry(
+                payloads,
+                context_query,
+                chosen_key,
+                available_api_keys,
+                func_tool,
+                "invalid_attachment",
                 image_fallback_used=True,
             )
 
@@ -819,6 +1128,7 @@ class ProviderOpenAIOfficial(Provider):
         retry_cnt = 0
         for retry_cnt in range(max_retries):
             try:
+                self._ensure_client()
                 self.client.api_key = chosen_key
                 llm_response = await self._query(payloads, func_tool)
                 break
@@ -885,6 +1195,7 @@ class ProviderOpenAIOfficial(Provider):
         retry_cnt = 0
         for retry_cnt in range(max_retries):
             try:
+                self._ensure_client()
                 self.client.api_key = chosen_key
                 async for response in self._query_stream(payloads, func_tool):
                     yield response
@@ -939,12 +1250,14 @@ class ProviderOpenAIOfficial(Provider):
         return new_contexts
 
     def get_current_key(self) -> str:
+        self._ensure_client()
         return self.client.api_key
 
     def get_keys(self) -> list[str]:
         return self.api_keys
 
     def set_key(self, key) -> None:
+        self._ensure_client()
         self.client.api_key = key
 
     async def assemble_context(
@@ -954,23 +1267,6 @@ class ProviderOpenAIOfficial(Provider):
         extra_user_content_parts: list[ContentPart] | None = None,
     ) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
-
-        async def resolve_image_part(image_url: str) -> dict | None:
-            if image_url.startswith("http"):
-                image_path = await download_image_by_url(image_url)
-                image_data = await self.encode_image_bs64(image_path)
-            elif image_url.startswith("file:///"):
-                image_path = image_url.replace("file:///", "")
-                image_data = await self.encode_image_bs64(image_path)
-            else:
-                image_data = await self.encode_image_bs64(image_url)
-            if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
-                return None
-            return {
-                "type": "image_url",
-                "image_url": {"url": image_data},
-            }
 
         # 构建内容块列表
         content_blocks = []
@@ -991,7 +1287,9 @@ class ProviderOpenAIOfficial(Provider):
                 if isinstance(part, TextPart):
                     content_blocks.append({"type": "text", "text": part.text})
                 elif isinstance(part, ImageURLPart):
-                    image_part = await resolve_image_part(part.image_url.url)
+                    image_part = await self._resolve_image_part(
+                        part.image_url.url,
+                    )
                     if image_part:
                         content_blocks.append(image_part)
                 else:
@@ -1000,7 +1298,7 @@ class ProviderOpenAIOfficial(Provider):
         # 3. 图片内容
         if image_urls:
             for image_url in image_urls:
-                image_part = await resolve_image_part(image_url)
+                image_part = await self._resolve_image_part(image_url)
                 if image_part:
                     content_blocks.append(image_part)
 
@@ -1018,24 +1316,23 @@ class ProviderOpenAIOfficial(Provider):
         return {"role": "user", "content": content_blocks}
 
     async def encode_image_bs64(self, image_url: str) -> str:
-        """将图片转换为 base64 Data URL，自动检测实际 MIME 类型。
-
-        委托给公共工具函数 encode_image_to_base64_url 实现，
-        消除与 ProviderRequest 之间的重复逻辑。原实现硬编码
-        image/jpeg，会导致 PNG 等格式在严格校验的接口上报错。
-
-        Args:
-            image_url: 本地文件路径，或以 "base64://" 开头的 base64 字符串。
-
-        Returns:
-            形如 "data:image/png;base64,..." 的 Data URL 字符串。
-        """
-        return await encode_image_to_base64_url(image_url)
+        """将图片转换为 base64"""
+        image_data = await self._image_ref_to_data_url(image_url, mode="strict")
+        if image_data is None:
+            raise RuntimeError(f"Failed to encode image data: {image_url}")
+        return image_data
 
     async def terminate(self):
-        """关闭 client 并清空引用，防止 reload 时复用已关闭连接。"""
+        """关闭 client 并将引用置为 None。
+
+        通过 try/finally 确保即使 close() 抛出异常，
+        self.client 也会被清空，避免配置重载（reload）期间
+        复用已关闭的 client 导致 APIConnectionError。
+        """
         if self.client:
             try:
                 await self.client.close()
+            except Exception as e:
+                logger.warning(f"关闭 OpenAI client 时出错: {e}")
             finally:
                 self.client = None
