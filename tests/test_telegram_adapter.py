@@ -138,3 +138,5 @@ async def test_telegram_voice_message_creates_record_component(tmp_path):
     assert len(result.message) == 1
     assert isinstance(result.message[0], Comp.Record)
     assert result.message[0].file == str(wav_path)
+    assert result.message[0].path == str(wav_path)
+    assert result.message[0].url == str(wav_path)
