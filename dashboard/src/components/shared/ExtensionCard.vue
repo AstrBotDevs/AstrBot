@@ -617,7 +617,7 @@ const viewChangelog = () => {
   flex-shrink: 0;
 }
 
-.extension-switch-wrap :deep(.v-switch) {
+.extension-switch-wrap ::v-deep(.v-switch) {
   margin: 0;
 }
 
