@@ -7,18 +7,16 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 from astrbot import logger
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.subagent_logger import SubAgentLogger
 
-
 @dataclass
 class DynamicSubAgentConfig:
     name: str
-    instructions: str = ""
+    system_prompt: str = ""
     tools: list | None = None
     skills: list | None = None
     provider_id: str | None = None
@@ -44,13 +42,10 @@ class DynamicSubAgentSession:
     results: dict = field(default_factory=dict)
     enable_interaction: bool = False
     created_at: float = 0.0
-    protected_agents: set = field(
-        default_factory=set
-    )  # 若某个agent受到保护，则不会被自动清理
+    protected_agents: set = field(default_factory=set)   # 若某个agent受到保护，则不会被自动清理
     agent_histories: dict = field(default_factory=dict)  # 存储每个子代理的历史上下文
     shared_context: list = field(default_factory=list)  # 公共上下文列表
     shared_context_enabled: bool = False  # 是否启用公共上下文
-
 
 class DynamicSubAgentManager:
     _sessions: dict = {}
@@ -59,63 +54,96 @@ class DynamicSubAgentManager:
     _auto_cleanup_per_turn: bool = True
     _shared_context_enabled: bool = False
     _shared_context_maxlen: int = 200
-    ENHANCED_SUBAGENT_SYSTEM_PROMPT = """# Enhanced SubAgent Capability
 
-You have the ability to dynamically create and manage subagents with isolated skills.
+    @classmethod
+    def get_dynamic_subagent_prompt(cls):
+        if cls._shared_context_enabled:
+            shared_context_prompt = """- #### Collaborative Communication Mechanism
 
-## Creating Subagents with Skills
+  **Communication Tool description**: Inform the sub-agent that `send_shared_context` tool can be used for public channel communication, visible to all online sub-agents and the main agent.
+  **Communication protocol** : Clarify when to use this tool.
+    Progress reporting: Status updates must be sent when a task starts, encounters a blockage, or is completed.
+    Resource handover: After completing the task, send the generated file path and key conclusions to the public channel for use by downstream agents."""
+        else:
+            shared_context_prompt = ""
 
-When creating a subagent, you can assign specific skills to it:
+        return f"""# Dynamic Sub-Agent Capability
+
+You have the ability to dynamically create and manage sub-agents with isolated instructions, tools and skills.
+
+## When to create Sub-agents:
+
+- The task can be explicitly decomposed
+- Requires multiple professional domain
+- Processing very long contexts that exceeding the limitations of a single agent
+- Parallel processing
+
+## Primary Workflow
+
+1. **Global planning**:
+   After receiving a user request, first formulate an overall execution plan and break it down into multiple subtask steps.
+
+   Identify the dependencies between subtasks (who comes first and who comes second, who depends on whose output, and which sub-agents can run in parallel).
+
+2. **Sub-Agent Designing**:
+   Use the `create_dynamic_subagent` tool to create multiple sub-agents, and `transfer_to_xxx` tools will be created, where `xxx` is the name of a sub-agent.
+
+3. **Sub-Agent Delegating**
+   Use the `transfer_to_xxx` tool to delegate sub-agent, where `xxx` refers to the sub-agent name.
+
+## Creating Sub-agents with Name, System Prompt, Tools and Skills
+
+When creating a sub-agent, you should name it with **letters, numbers, and underscores**, no Chinese characters, punctuation marks, emojis or other characters not allowed in computer program.
+
+Meanwhile, you need to assign specific **System Prompt**, **Tools** and **Skills** to it. Each sub-agent's system prompt, tools and skills are completely isolated.
 
 ```
 create_dynamic_subagent(
     name="expert_analyst",
-    instructions="You are a data analyst...",
-    skills=["data_analysis", "visualization"]
+    system_prompt="You are a data analyst...",
+    tools=["astrbot_execute_shell", "astrbot_execute_python"],
+    skills=["excel", "visualization", "data_analysis"]
 )
 ```
 
-**CAUTION**: Each subagent's skills are completely isolated. Subagent A with skills ["analysis"] cannot access Subagent B's skills ["coding"]. Skills are not shared between subagents.
+**CAUTION**:  **YOU MUST FOLLOW THE STEPS BELOW**to give well-designed system prompts and allocate tools and skills.
 
-## Skills Available
+### 1. When giving system prompt to a sub-agent, include the following information to make them clear and standardized.
 
-Available skills depend on the system's configuration. You should specify skills when creating subagents that need specialized capabilities. 
-When tasks are complex or require parallel processing, you can create specialized subagents to complete them.
+- #### Character Design
 
-## When to create subagents:
+  Define the professional identity, and personality traits of the sub-agent.
 
-- The task can be explicitly decomposed
-- Requires professional domain
-- Processing very long contexts
-- Parallel processing
+- #### Global Tasks and Positioning
 
-## How to create subagents
+  **Overall task description**: Briefly summarize the user's ultimate goal, so that the sub-agent knows what it is striving for.
+  **Current step and position**: If the tasks are parallel, tell the sub-agent that there are other parallel sub-agents. If there are serial parts in the entire workflow, clearly inform the sub-agent of the current step in the entire process, as well as whether there are other sub-agents and what their respective tasks are (briefly described).
 
-Use `create_dynamic_subagent` tool
+> Example：“As Agent B_1, you are currently handling step 2 (of 3): *data cleaning*, an Agent B_2 is also working on step 2 in parallel. You are each responsible for handling two different parts of the data. There are also sub-agent A assigned for step 1: *data fetching* and sub-agent D assigned for step-3: *data labeling*”.
 
-## How to delegate subagents ##
+{shared_context_prompt}
 
-Use `transfer_to_{name}` tool if the subagent is created successfully.
+- #### Specific task instructions
 
-## Subagent Lifecycle
+  Detailed execution steps for current sub-agent, specific paths for input data, and specific format requirements for output.
 
-Subagents are valid during session, but they will be cleaned up once you send the final answer to user.
-If you wish to prevent a certain subagent from being automatically cleaned up, use `protect_subagent` tool.
-Also, you can use the `unprotect_subagent` tool to remove protection.
+- #### Behavioral Norm
 
-## IMPORTANT ##
+  Safety: Dangerous operations are strictly prohibited.
+  Signature convention: Generated code/documents must be marked with the sub-agent's name and the time.
 
-Since `transfer_to_{name}` corresponds to a function in a computer program，The name of subagents **MUSE BE ENGLISH**, no Chinese characters, punctuation marks, emojis or other characters not allowed in computer program.
-    """.strip()
+### 2. Allocate available Tools and Skills
+
+Available tools and Skills depend on the system's configuration. You should check and list tools and skills, and assign tools and skills when creating sub-agents that need specialized capabilities.
+
+## Sub-agent Lifecycle
+
+Sub-agents are valid during single round conversation with the user, but they will be cleaned up automatically after you send the final answer to user.
+If you wish to prevent a certain sub-agent from being automatically cleaned up, use `protect_subagent` tool. Also, you can use the `unprotect_subagent` tool to remove protection.
+""".strip()
 
     @classmethod
-    def configure(
-        cls,
-        max_subagent_count: int = 10,
-        auto_cleanup_per_turn: bool = True,
-        shared_context_enabled: bool = False,
-        shared_context_maxlen: int = 200,
-    ) -> None:
+    def configure(cls, max_subagent_count: int = 10, auto_cleanup_per_turn: bool = True, shared_context_enabled: bool = False, shared_context_maxlen: int = 200) -> None:
         """Configure DynamicSubAgentManager settings"""
         cls._max_subagent_count = max_subagent_count
         cls._auto_cleanup_per_turn = auto_cleanup_per_turn
@@ -137,18 +165,12 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
 
         # 如果启用了公共上下文，处理清理
         if session.shared_context_enabled:
-            remaining_unprotected = [
-                a for a in session.agents.keys() if a not in session.protected_agents
-            ]
+            remaining_unprotected = [a for a in session.agents.keys() if a not in session.protected_agents]
 
             if not remaining_unprotected and not session.protected_agents:
                 # 所有subagent都被清理，清除公共上下文
                 cls.clear_shared_context(session_id)
-                SubAgentLogger.info(
-                    session_id,
-                    "DynamicSubAgentManager:shared_context",
-                    "All subagents cleaned, cleared shared context",
-                )
+                SubAgentLogger.debug(session_id, "DynamicSubAgentManager:shared_context", "All subagents cleaned, cleared shared context")
             else:
                 # 清理已删除agent的上下文
                 for name in cleaned:
@@ -166,12 +188,7 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
         session.handoff_tools.pop(agent_name, None)
         session.protected_agents.discard(agent_name)
         session.agent_histories.pop(agent_name, None)
-        SubAgentLogger.info(
-            session_id,
-            "DynamicSubAgentManager:auto_cleanup",
-            f"Auto cleaned: {agent_name}",
-            agent_name,
-        )
+        SubAgentLogger.info(session_id, "DynamicSubAgentManager:auto_cleanup", f"Auto cleaned: {agent_name}", agent_name)
 
     @classmethod
     def protect_subagent(cls, session_id: str, agent_name: str) -> None:
@@ -181,17 +198,10 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
         # 初始化历史记录（如果还没有）
         if agent_name not in session.agent_histories:
             session.agent_histories[agent_name] = []
-            SubAgentLogger.info(
-                session_id,
-                "DynamicSubAgentManager:history",
-                f"Initialized history for protected agent: {agent_name}",
-                agent_name,
-            )
+            SubAgentLogger.debug(session_id, "DynamicSubAgentManager:history", f"Initialized history for protected agent: {agent_name}", agent_name)
 
     @classmethod
-    def save_subagent_history(
-        cls, session_id: str, agent_name: str, messages: list
-    ) -> None:
+    def save_subagent_history(cls, session_id: str, agent_name: str, messages: list) -> None:
         """Save conversation history for a subagent (only for protected agents)"""
         session = cls.get_session(session_id)
         if not session or agent_name not in session.protected_agents:
@@ -204,12 +214,9 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
         if isinstance(messages, list):
             session.agent_histories[agent_name].extend(messages)
 
-        SubAgentLogger.debug(
-            session_id,
-            "history_save",
-            f"Saved {len(messages) if isinstance(messages, list) else 1} messages for {agent_name}",
-            agent_name,
-        )
+        SubAgentLogger.debug(session_id, "history_save",
+                          f"Saved {len(messages) if isinstance(messages, list) else 1} messages for {agent_name}",
+                          agent_name)
 
     @classmethod
     def get_subagent_history(cls, session_id: str, agent_name: str) -> list:
@@ -220,9 +227,7 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
         return session.agent_histories.get(agent_name, [])
 
     @classmethod
-    def build_subagent_skills_prompt(
-        cls, session_id: str, agent_name: str, runtime: str = "local"
-    ) -> str:
+    def build_subagent_skills_prompt(cls, session_id: str, agent_name: str, runtime: str = "local") -> str:
         """Build skills prompt for a subagent based on its assigned skills"""
         session = cls.get_session(session_id)
         if not session:
@@ -251,7 +256,6 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
                 return build_skills_prompt(filtered_skills)
         except Exception as e:
             from astrbot import logger
-
             logger.warning(f"[SubAgentSkills] Failed to build skills prompt: {e}")
 
         return ""
@@ -275,33 +279,17 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
             return
         if agent_name in session.agent_histories:
             session.agent_histories.pop(agent_name)
-            SubAgentLogger.info(
-                session_id,
-                "DynamicSubAgentManager:history",
-                f"Cleared history for: {agent_name}",
-                agent_name,
-            )
+            SubAgentLogger.debug(session_id, "DynamicSubAgentManager:history", f"Cleared history for: {agent_name}", agent_name)
 
     @classmethod
     def set_shared_context_enabled(cls, session_id: str, enabled: bool) -> None:
         """Enable or disable shared context for a session"""
         session = cls.get_or_create_session(session_id)
         session.shared_context_enabled = enabled
-        SubAgentLogger.info(
-            session_id,
-            "DynamicSubAgentManager:shared_context",
-            f"Shared context {'enabled' if enabled else 'disabled'}",
-        )
+        SubAgentLogger.info(session_id, "DynamicSubAgentManager:shared_context", f"Shared context {'enabled' if enabled else 'disabled'}")
 
     @classmethod
-    def add_shared_context(
-        cls,
-        session_id: str,
-        sender: str,
-        context_type: str,
-        content: str,
-        target: str = "all",
-    ) -> None:
+    def add_shared_context(cls, session_id: str, sender: str, context_type: str, content: str, target: str = "all") -> None:
         """Add a message to the shared context
 
         Args:
@@ -312,21 +300,17 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
             target: Target agent or "all" for broadcast
         """
 
+
         session = cls.get_or_create_session(session_id)
         if not session.shared_context_enabled:
             return
 
         if len(session.shared_context) >= cls._shared_context_maxlen:
             # 删除最旧的消息
-            session.shared_context = session.shared_context[
-                -cls._shared_context_maxlen :
-            ]
-            logger.warning(
-                f"Shared context exceeded limit of {cls._shared_context_maxlen}, removed oldest messages"
-            )
+            session.shared_context = session.shared_context[-cls._shared_context_maxlen:]
+            logger.warning("Shared context exceeded limit, removed oldest messages")
 
         import time
-
         message = {
             "type": context_type,  # status, message, system
             "sender": sender,
@@ -335,12 +319,7 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
             "timestamp": time.time(),
         }
         session.shared_context.append(message)
-        SubAgentLogger.debug(
-            session_id,
-            "shared_context",
-            f"[{context_type}] {sender} -> {target}: {content[:50]}...",
-            sender,
-        )
+        SubAgentLogger.debug(session_id, "shared_context", f"[{context_type}] {sender} -> {target}: {content[:50]}...", sender)
 
     @classmethod
     def get_shared_context(cls, session_id: str, filter_by_agent: str = None) -> list:
@@ -356,18 +335,13 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
 
         if filter_by_agent:
             return [
-                msg
-                for msg in session.shared_context
-                if msg["sender"] == filter_by_agent
-                or msg["target"] == filter_by_agent
-                or msg["target"] == "all"
+                msg for msg in session.shared_context
+                if msg["sender"] == filter_by_agent or msg["target"] == filter_by_agent or msg["target"] == "all"
             ]
         return session.shared_context.copy()
 
     @classmethod
-    def build_shared_context_prompt(
-        cls, session_id: str, agent_name: str = None
-    ) -> str:
+    def build_shared_context_prompt(cls, session_id: str, agent_name: str = None) -> str:
         """Build a formatted prompt from shared context for subagents
 
         Args:
@@ -375,11 +349,7 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
             agent_name: Current agent name (to filter relevant messages)
         """
         session = cls.get_session(session_id)
-        if (
-            not session
-            or not session.shared_context_enabled
-            or not session.shared_context
-        ):
+        if not session or not session.shared_context_enabled or not session.shared_context:
             return ""
         # Shared Context
         lines = [""]
@@ -411,17 +381,12 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
 
         original_len = len(session.shared_context)
         session.shared_context = [
-            msg
-            for msg in session.shared_context
+            msg for msg in session.shared_context
             if msg["sender"] != agent_name and msg["target"] != agent_name
         ]
         removed = original_len - len(session.shared_context)
         if removed > 0:
-            SubAgentLogger.info(
-                session_id,
-                "DynamicSubAgentManager:shared_context",
-                f"Removed {removed} messages related to {agent_name}",
-            )
+            SubAgentLogger.debug(session_id, "DynamicSubAgentManager:shared_context", f"Removed {removed} messages related to {agent_name}")
 
     @classmethod
     def clear_shared_context(cls, session_id: str) -> None:
@@ -430,11 +395,7 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
         if not session:
             return
         session.shared_context.clear()
-        SubAgentLogger.info(
-            session_id,
-            "DynamicSubAgentManager:shared_context",
-            "Cleared all shared context",
-        )
+        SubAgentLogger.debug(session_id, "DynamicSubAgentManager:shared_context", "Cleared all shared context")
 
     @classmethod
     def is_protected(cls, session_id: str, agent_name: str) -> bool:
@@ -456,37 +417,31 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
     def get_or_create_session(cls, session_id: str) -> DynamicSubAgentSession:
         if session_id not in cls._sessions:
             cls._sessions[session_id] = DynamicSubAgentSession(
-                session_id=session_id, created_at=asyncio.get_event_loop().time()
+                session_id=session_id,
+                created_at=asyncio.get_event_loop().time()
             )
         return cls._sessions[session_id]
 
     @classmethod
-    async def create_subagent(
-        cls, session_id: str, config: DynamicSubAgentConfig
-    ) -> tuple:
+    async def create_subagent(cls, session_id: str, config: DynamicSubAgentConfig) -> tuple:
         # Check max count limit
         session = cls.get_or_create_session(session_id)
-        if (
-            config.name not in session.agents
-        ):  # Only count as new if not replacing existing
-            active_count = len(
-                [a for a in session.agents.keys() if a not in session.protected_agents]
-            )
+        if config.name not in session.agents:  # Only count as new if not replacing existing
+            active_count = len([a for a in session.agents.keys() if a not in session.protected_agents])
             if active_count >= cls._max_subagent_count:
-                return (
-                    f"Error: Maximum number of subagents ({cls._max_subagent_count}) reached. More subagents is not allowed.",
-                    None,
-                )
+                return f"Error: Maximum number of subagents ({cls._max_subagent_count}) reached. More subagents is not allowed.", None
 
         if config.name in session.agents:
             session.handoff_tools.pop(config.name, None)
         # When shared_context is enabled, the send_public_context tool is allocated regardless of whether the main agent allocates the tool to the subagent
         if session.shared_context_enabled:
-            config.tools.append("send_public_context")
+            if config.tools is None:
+                config.tools = []
+            config.tools.append('send_public_context')
         session.agents[config.name] = config
         agent = Agent(
             name=config.name,
-            instructions=config.instructions,
+            instructions=config.system_prompt,
             tools=config.tools,
         )
         handoff_tool = HandoffTool(
@@ -496,12 +451,7 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
         if config.provider_id:
             handoff_tool.provider_id = config.provider_id
         session.handoff_tools[config.name] = handoff_tool
-        SubAgentLogger.info(
-            session_id,
-            "DynamicSubAgentManager:create",
-            f"Created: {config.name}",
-            config.name,
-        )
+        SubAgentLogger.info(session_id, "DynamicSubAgentManager:create", f"Created: {config.name}", config.name)
         return f"transfer_to_{config.name}", handoff_tool
 
     @classmethod
@@ -511,9 +461,7 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
             return {"status": "not_found", "cleaned_agents": []}
         cleaned = list(session.agents.keys())
         for name in cleaned:
-            SubAgentLogger.info(
-                session_id, "DynamicSubAgentManager:cleanup", f"Cleaned: {name}", name
-            )
+            SubAgentLogger.info(session_id, "DynamicSubAgentManager:cleanup", f"Cleaned: {name}", name)
         return {"status": "cleaned", "cleaned_agents": cleaned}
 
     @classmethod
@@ -524,12 +472,7 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
         session.agents.pop(agent_name, None)
         session.handoff_tools.pop(agent_name, None)
         session.agent_histories.pop(agent_name, None)
-        SubAgentLogger.info(
-            session_id,
-            "DynamicSubAgentManager:cleanup",
-            f"Cleaned: {agent_name}",
-            agent_name,
-        )
+        SubAgentLogger.info(session_id, "DynamicSubAgentManager:cleanup", f"Cleaned: {agent_name}", agent_name)
         return True
 
     @classmethod
@@ -543,9 +486,7 @@ Since `transfer_to_{name}` corresponds to a function in a computer program，The
 @dataclass
 class CreateDynamicSubAgentTool(FunctionTool):
     name: str = "create_dynamic_subagent"
-    description: str = (
-        "Create a dynamic subagent. After creation, use transfer_to_{name} tool."
-    )
+    description: str = "Create a dynamic subagent. After creation, use transfer_to_{name} tool."
 
     @staticmethod
     def _default_parameters() -> dict:
@@ -553,39 +494,21 @@ class CreateDynamicSubAgentTool(FunctionTool):
             "type": "object",
             "properties": {
                 "name": {"type": "string", "description": "Subagent name"},
-                "instructions": {
-                    "type": "string",
-                    "description": "Subagent persona and instructions",
-                },
-                "tools": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Tools available to subagent",
-                },
-                "skills": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Skills available to subagent (isolated per subagent)",
-                },
+                "system_prompt": {"type": "string", "description": "Subagent persona and system_prompt"},
+                "tools": {"type": "array", "items": {"type": "string"}, "description": "Tools available to subagent"},
+                "skills": {"type": "array", "items": {"type": "string"}, "description": "Skills available to subagent (isolated per subagent)"},
             },
-            "required": ["name", "instructions"],
+            "required": ["name", "system_prompt"],
         }
-
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string", "description": "Subagent name"},
-                "instructions": {
-                    "type": "string",
-                    "description": "Subagent instructions",
-                },
-                "tools": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["name", "instructions"],
-        }
-    )
-
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "Subagent name"},
+            "system_prompt": {"type": "string", "description": "Subagent system_prompt"},
+            "tools": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["name", "system_prompt"],
+    })
     async def call(self, context, **kwargs) -> str:
         name = kwargs.get("name", "")
 
@@ -593,22 +516,20 @@ class CreateDynamicSubAgentTool(FunctionTool):
             return "Error: subagent name required"
 
         # 验证名称格式：只允许英文字母、数字和下划线，长度限制
-        if not re.match(r"^[a-zA-Z][a-zA-Z0-9_]{0,31}$", name):
+        if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]{0,31}$', name):
             return "Error: SubAgent name must start with letter, contain only letters/numbers/underscores, max 32 characters"
 
         # 检查是否包含危险字符
-        dangerous_patterns = ["__", "system", "admin", "root", "super"]
+        dangerous_patterns = ['__', 'system', 'admin', 'root', 'super']
         if any(p in name.lower() for p in dangerous_patterns):
             return f"Error: SubAgent name cannot contain reserved words like {dangerous_patterns}"
 
-        instructions = kwargs.get("instructions", "")
+        system_prompt = kwargs.get("system_prompt", "")
         tools = kwargs.get("tools")
         skills = kwargs.get("skills")
 
         session_id = context.context.event.unified_msg_origin
-        config = DynamicSubAgentConfig(
-            name=name, instructions=instructions, tools=tools, skills=skills
-        )
+        config = DynamicSubAgentConfig(name=name, system_prompt=system_prompt, tools=tools, skills=skills)
 
         tool_name, handoff_tool = await DynamicSubAgentManager.create_subagent(
             session_id=session_id, config=config
@@ -623,14 +544,11 @@ class CreateDynamicSubAgentTool(FunctionTool):
 class CleanupDynamicSubagentTool(FunctionTool):
     name: str = "cleanup_dynamic_subagent"
     description: str = "Clean up dynamic subagent."
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {"name": {"type": "string"}},
-            "required": ["name"],
-        }
-    )
-
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {"name": {"type": "string"}},
+        "required": ["name"],
+    })
     async def call(self, context, **kwargs) -> str:
         name = kwargs.get("name", "")
         if not name:
@@ -644,10 +562,7 @@ class CleanupDynamicSubagentTool(FunctionTool):
 class ListDynamicSubagentsTool(FunctionTool):
     name: str = "list_dynamic_subagents"
     description: str = "List dynamic subagents."
-    parameters: dict = field(
-        default_factory=lambda: {"type": "object", "properties": {}}
-    )
-
+    parameters: dict = field(default_factory=lambda: {"type": "object", "properties": {}})
     async def call(self, context, **kwargs) -> str:
         session_id = context.context.event.unified_msg_origin
         session = DynamicSubAgentManager.get_session(session_id)
@@ -663,19 +578,15 @@ class ListDynamicSubagentsTool(FunctionTool):
 @dataclass
 class ProtectSubagentTool(FunctionTool):
     """Tool to protect a subagent from auto cleanup"""
-
     name: str = "protect_subagent"
     description: str = "Protect a subagent from automatic cleanup. Use this to prevent important subagents from being removed."
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string", "description": "Subagent name to protect"},
-            },
-            "required": ["name"],
-        }
-    )
-
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "Subagent name to protect"},
+        },
+        "required": ["name"],
+    })
     async def call(self, context, **kwargs) -> str:
         name = kwargs.get("name", "")
         if not name:
@@ -691,19 +602,15 @@ class ProtectSubagentTool(FunctionTool):
 @dataclass
 class UnprotectSubagentTool(FunctionTool):
     """Tool to remove protection from a subagent"""
-
     name: str = "unprotect_subagent"
     description: str = "Remove protection from a subagent. It can then be auto cleaned."
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string", "description": "Subagent name to unprotect"},
-            },
-            "required": ["name"],
-        }
-    )
-
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "Subagent name to unprotect"},
+        },
+        "required": ["name"],
+    })
     async def call(self, context, **kwargs) -> str:
         name = kwargs.get("name", "")
         if not name:
@@ -717,7 +624,6 @@ class UnprotectSubagentTool(FunctionTool):
             return f"Subagent {name} is no longer protected"
         return f"Subagent {name} was not protected"
 
-
 # Tool instances
 CREATE_DYNAMIC_SUBAGENT_TOOL = CreateDynamicSubAgentTool()
 CLEANUP_DYNAMIC_SUBAGENT_TOOL = CleanupDynamicSubagentTool()
@@ -730,35 +636,25 @@ UNPROTECT_SUBAGENT_TOOL = UnprotectSubagentTool()
 @dataclass
 class SendPublicContextTool(FunctionTool):
     """Tool to send a message to the shared context (visible to all agents)"""
-
     name: str = "send_public_context"
     description: str = """Send a message to the shared context that will be visible to all subagents and the main agent.
 Use this to share information, status updates, or coordinate with other agents.
 Types: 'status' (your current task/progress), 'message' (to other agents), 'system' (global announcements)."""
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "context_type": {
-                    "type": "string",
-                    "description": "Type of context: status (task progress), message (to other agents), system (global announcement)",
-                    "enum": ["status", "message", "system"],
-                },
-                "content": {"type": "string", "description": "Content to share"},
-                "sender": {
-                    "type": "string",
-                    "description": "Sender agent name",
-                    "default": "Nobody",
-                },
-                "target": {
-                    "type": "string",
-                    "description": "Target agent name or 'all' for broadcast",
-                    "default": "all",
-                },
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "context_type": {
+                "type": "string",
+                "description": "Type of context: status (task progress), message (to other agents), system (global announcement)",
+                "enum": ["status", "message", "system"]
             },
-            "required": ["context_type", "content"],
-        }
-    )
+            "content": {"type": "string", "description": "Content to share"},
+            "sender": {"type": "string", "description": "Sender agent name", "default": "Nobody"},
+            "target": {"type": "string", "description": "Target agent name or 'all' for broadcast", "default": "all"},
+
+        },
+        "required": ["context_type", "content"],
+    })
 
     async def call(self, context, **kwargs) -> str:
         context_type = kwargs.get("context_type", "message")
@@ -770,29 +666,22 @@ Types: 'status' (your current task/progress), 'message' (to other agents), 'syst
 
         session_id = context.context.event.unified_msg_origin
         if context_type == "system":
-            DynamicSubAgentManager.add_shared_context(
-                session_id, "System", context_type, content, target
-            )
+            DynamicSubAgentManager.add_shared_context(session_id, "System", context_type, content, target)
         else:
-            DynamicSubAgentManager.add_shared_context(
-                session_id, sender, context_type, content, target
-            )
+            DynamicSubAgentManager.add_shared_context(session_id, sender, context_type, content, target)
         return f"Shared context updated: [{context_type}] 主Agent -> {target}: {content[:100]}{'...' if len(content) > 100 else ''}"
 
 
 @dataclass
 class ViewPublicContextTool(FunctionTool):
     """Tool to view the shared context (mainly for main agent)"""
-
     name: str = "view_public_context"
-    description: str = """View the shared context between all agents. This shows all messages including status updates, 
+    description: str = """View the shared context between all agents. This shows all messages including status updates,
 inter-agent messages, and system announcements."""
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {},
-        }
-    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {},
+    })
 
     async def call(self, context, **kwargs) -> str:
         session_id = context.context.event.unified_msg_origin
@@ -803,7 +692,6 @@ inter-agent messages, and system announcements."""
 
         lines = ["=== Shared Context ===\n"]
         import time
-
         for msg in shared_context:
             ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
             msg_type = msg["type"]
