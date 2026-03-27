@@ -651,6 +651,15 @@ class TestSendTyping:
         await astr_message_event.send_typing()
 
 
+class TestStopTyping:
+    """Tests for stop_typing method."""
+
+    @pytest.mark.asyncio
+    async def test_stop_typing_default_empty(self, astr_message_event):
+        """Test stop_typing default implementation is empty."""
+        await astr_message_event.stop_typing()
+
+
 class TestReact:
     """Tests for react method."""
 
@@ -772,10 +781,12 @@ class TestDefensiveGetattr:
 
     def test_get_message_type_with_non_enum_type(self, astr_message_event):
         """get_message_type should handle message_obj.type that is not a MessageType."""
+
         class DummyMessage:
             def __init__(self):
                 self.type = "not_an_enum"
                 self.message = []
+
         astr_message_event.message_obj = DummyMessage()
         message_type = astr_message_event.get_message_type()
         assert isinstance(message_type, MessageType)

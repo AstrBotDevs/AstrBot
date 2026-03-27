@@ -226,3 +226,44 @@ class WeixinOCClient:
             if not text:
                 return {}
             return cast(dict[str, Any], json.loads(text))
+
+    async def get_typing_config(
+        self,
+        user_id: str,
+        context_token: str,
+    ) -> dict[str, Any]:
+        return await self.request_json(
+            "POST",
+            "ilink/bot/getconfig",
+            payload={
+                "ilink_user_id": user_id,
+                "context_token": context_token,
+                "base_info": {
+                    "channel_version": "astrbot",
+                },
+            },
+            token_required=True,
+            timeout_ms=self.api_timeout_ms,
+        )
+
+    async def send_typing_state(
+        self,
+        user_id: str,
+        typing_ticket: str,
+        *,
+        cancel: bool,
+    ) -> dict[str, Any]:
+        return await self.request_json(
+            "POST",
+            "ilink/bot/sendtyping",
+            payload={
+                "ilink_user_id": user_id,
+                "typing_ticket": typing_ticket,
+                "status": 2 if cancel else 1,
+                "base_info": {
+                    "channel_version": "astrbot",
+                },
+            },
+            token_required=True,
+            timeout_ms=self.api_timeout_ms,
+        )

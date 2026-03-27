@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from typing import TYPE_CHECKING
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -29,6 +30,12 @@ class WeixinOCMessageEvent(AstrMessageEvent):
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.platform = platform
+        self._typing_owner_id: str | None = None
+
+    def _get_typing_owner_id(self) -> str:
+        if not self._typing_owner_id:
+            self._typing_owner_id = uuid.uuid4().hex
+        return self._typing_owner_id
 
     @staticmethod
     def _segment_to_text(segment: BaseMessageComponent) -> str:
@@ -57,6 +64,18 @@ class WeixinOCMessageEvent(AstrMessageEvent):
             return
         await self.platform.send_by_session(self.session, message)
         await super().send(message)
+
+    async def send_typing(self) -> None:
+        await self.platform.start_typing(
+            self.session.session_id,
+            self._get_typing_owner_id(),
+        )
+
+    async def stop_typing(self) -> None:
+        await self.platform.stop_typing(
+            self.session.session_id,
+            self._get_typing_owner_id(),
+        )
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         if not use_fallback:
