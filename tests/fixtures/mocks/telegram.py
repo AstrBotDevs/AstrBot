@@ -33,7 +33,8 @@ def create_mock_telegram_modules():
 
     mock_telegram_ext = MagicMock()
     mock_telegram_ext.ApplicationBuilder = MagicMock
-    mock_telegram_ext.ContextTypes = MagicMock
+    mock_telegram_ext.ContextTypes = MagicMock()
+    mock_telegram_ext.ContextTypes.DEFAULT_TYPE = MagicMock
     mock_telegram_ext.ExtBot = MagicMock
     mock_telegram_ext.filters = MagicMock()
     mock_telegram_ext.filters.ALL = MagicMock()
