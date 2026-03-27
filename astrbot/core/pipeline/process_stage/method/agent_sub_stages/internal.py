@@ -150,18 +150,13 @@ class InternalAgentSubStage(Stage):
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
                 streaming_response = bool(enable_streaming)
 
-            has_provider_request = event.get_extra("provider_request") is not None
             has_valid_message = bool(event.message_str and event.message_str.strip())
             has_media_content = any(
                 isinstance(comp, Image | File) for comp in event.message_obj.message
             )
 
-            if (
-                not has_provider_request
-                and not has_valid_message
-                and not has_media_content
-            ):
-                logger.debug("skip llm request: empty message and no provider_request")
+            if not has_valid_message and not has_media_content:
+                logger.debug("skip llm request: empty message")
                 return
 
             logger.debug("ready to request llm provider")
