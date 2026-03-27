@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import unquote, urlparse
 
-import aiofiles
 import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai._exceptions import NotFoundError
@@ -29,6 +28,7 @@ from astrbot.core.agent.message import ContentPart, ImageURLPart, Message, TextP
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
@@ -36,8 +36,6 @@ from astrbot.core.utils.network_utils import (
     log_connection_failure,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
-
-from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -736,23 +734,28 @@ class ProviderOpenAIOfficial(Provider):
                     # Should be unreachable
                     raise Exception("工具集未提供")
                 for tool in tools.list_tools():
+                    # Safely access function attribute (ChatCompletionMessageCustomToolCall doesn't have it)
+                    tool_call_function = getattr(tool_call, "function", None)
+                    if not tool_call_function:
+                        continue
                     if (
                         tool_call.type == "function"
-                        and tool.name == tool_call.function.name
+                        and tool_call_function.name == tool.name
                     ):
                         # workaround for #1454
-                        if isinstance(tool_call.function.arguments, str):
-                            args = json.loads(tool_call.function.arguments)
+                        arguments = tool_call_function.arguments
+                        if isinstance(arguments, str):
+                            args = json.loads(arguments)
                         else:
-                            args = tool_call.function.arguments
+                            args = arguments
                         args_ls.append(args)
-                        func_name_ls.append(tool_call.function.name)
+                        func_name_ls.append(tool_call_function.name)
                         tool_call_ids.append(tool_call.id)
 
-                        # gemini-2.5 / gemini-3 series extra_content handling
-                        extra_content = getattr(tool_call, "extra_content", None)
-                        if extra_content is not None:
-                            tool_call_extra_content_dict[tool_call.id] = extra_content
+                    # gemini-2.5 / gemini-3 series extra_content handling
+                    extra_content = getattr(tool_call, "extra_content", None)
+                    if extra_content is not None:
+                        tool_call_extra_content_dict[tool_call.id] = extra_content
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls
@@ -1127,7 +1130,6 @@ class ProviderOpenAIOfficial(Provider):
     ) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
 
-
         # 构建内容块列表
         content_blocks = []
 
@@ -1177,18 +1179,11 @@ class ProviderOpenAIOfficial(Provider):
 
     async def encode_image_bs64(self, image_url: str) -> str:
         """将图片转换为 base64"""
-<<<<<<< ours
-        if image_url.startswith("base64://"):
-            return image_url.replace("base64://", "data:image/jpeg;base64,")
-        async with aiofiles.open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(await f.read()).decode("utf-8")
-            return "data:image/jpeg;base64," + image_bs64
-=======
+
         image_data = await self._image_ref_to_data_url(image_url, mode="strict")
         if image_data is None:
             raise RuntimeError(f"Failed to encode image data: {image_url}")
         return image_data
->>>>>>> theirs
 
     async def terminate(self):
         if self.client:

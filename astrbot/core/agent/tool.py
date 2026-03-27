@@ -224,19 +224,18 @@ class ToolSet:
         """Convert tools to OpenAI API function calling schema format."""
         result = []
         for tool in self.tools:
-            func_def: dict[str, Any] = {
-                "type": "function",
-                "function": {"name": tool.name},
-            }
+            function_dict: dict[str, Any] = {"name": tool.name}
             if tool.description:
-                func_def["function"]["description"] = tool.description
-
+                function_dict["description"] = tool.description
             if tool.parameters is not None:
                 if (
                     tool.parameters and tool.parameters.get("properties")
                 ) or not omit_empty_parameter_field:
-                    func_def["function"]["parameters"] = tool.parameters
-
+                    function_dict["parameters"] = tool.parameters
+            func_def: dict[str, Any] = {
+                "type": "function",
+                "function": function_dict,
+            }
             result.append(func_def)
         return result
 
