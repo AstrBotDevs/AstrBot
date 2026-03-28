@@ -19,6 +19,7 @@ from astrbot_sdk.protocol.descriptors import (
     ParamSpec,
     PlatformFilterSpec,
 )
+from astrbot_sdk.runtime._command_matching import match_command_name
 
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
@@ -45,12 +46,7 @@ class TriggerConverter:
 
     @staticmethod
     def _match_command_name(text: str, command_name: str) -> str | None:
-        normalized = text.strip()
-        if normalized == command_name:
-            return ""
-        if normalized.startswith(f"{command_name} "):
-            return normalized[len(command_name) :].strip()
-        return None
+        return match_command_name(text, command_name)
 
     @staticmethod
     def _split_command_remainder(remainder: str) -> list[str]:

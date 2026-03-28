@@ -141,7 +141,10 @@ class AstrMessageEvent(abc.ABC):
         """获取消息字符串。"""
         return self.message_str
 
-    def _outline_chain(self, chain: list[BaseMessageComponent] | None) -> str:
+    def _outline_chain(
+        self,
+        chain: MessageChain | list[BaseMessageComponent] | None,
+    ) -> str:
         if not chain:
             return ""
 

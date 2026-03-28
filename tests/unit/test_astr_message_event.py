@@ -14,7 +14,7 @@ from astrbot.core.message.components import (
     Plain,
     Reply,
 )
-from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
@@ -555,6 +555,31 @@ class TestResultHelpers:
         assert isinstance(result, MessageEventResult)
         assert len(result.chain) == 1
         assert isinstance(result.chain[0], Image)
+
+    def test_message_chain_behaves_like_sequence(self):
+        """Test MessageChain exposes the list operations used by core stages."""
+        chain = MessageChain([Plain("Hello"), Plain("World")])
+
+        assert len(chain) == 2
+        assert [component.text for component in chain if isinstance(component, Plain)] == [
+            "Hello",
+            "World",
+        ]
+
+        chain.insert(1, Plain("SDK"))
+        chain[0] = Plain("Hi")
+
+        assert chain[0].text == "Hi"
+        assert chain[1].text == "SDK"
+
+    def test_outline_chain_accepts_message_chain(self, astr_message_event):
+        """Test _outline_chain accepts MessageChain instances from SDK results."""
+        chain = MessageChain([Plain("Hello"), Image.fromURL("http://example.com/a.png")])
+
+        outline = astr_message_event._outline_chain(chain)
+
+        assert "Hello" in outline
+        assert "[图片]" in outline
 
 
 class TestGetResult:

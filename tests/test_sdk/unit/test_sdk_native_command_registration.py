@@ -37,6 +37,34 @@ class _BridgeStarContext:
         return []
 
 
+class _DispatchEvent:
+    def __init__(self, text: str) -> None:
+        self._text = text
+        self._stopped = False
+        self._result = None
+        self._has_send_oper = False
+        self.call_llm = False
+        self.unified_msg_origin = "telegram:friend:session"
+
+    def is_stopped(self) -> bool:
+        return self._stopped
+
+    def stop_event(self) -> None:
+        self._stopped = True
+
+    def set_result(self, result) -> None:
+        self._result = result
+
+    def get_platform_name(self) -> str:
+        return "telegram"
+
+    def get_message_str(self) -> str:
+        return self._text
+
+    def should_call_llm(self, call_llm: bool) -> None:
+        self.call_llm = call_llm
+
+
 @pytest.mark.unit
 def test_sdk_bridge_native_command_candidates_collapse_grouped_commands() -> None:
     bridge = SdkPluginBridge(_BridgeStarContext())
@@ -118,6 +146,81 @@ def test_sdk_bridge_native_command_candidates_collapse_grouped_commands() -> Non
             "is_group": False,
         },
     ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_dispatch_message_falls_back_to_group_root_help(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.get_astrbot_data_path",
+        lambda: str(tmp_path),
+    )
+    bridge = SdkPluginBridge(_BridgeStarContext())
+    bridge._records = {  # noqa: SLF001
+        "ai_girlfriend": SimpleNamespace(
+            plugin=SimpleNamespace(
+                name="ai_girlfriend",
+                manifest_data={"support_platforms": ["telegram"]},
+            ),
+            plugin_id="ai_girlfriend",
+            load_order=0,
+            state="enabled",
+            handlers=[
+                SdkHandlerRef(
+                    descriptor=HandlerDescriptor(
+                        id="ai_girlfriend:main.chat",
+                        trigger=CommandTrigger(
+                            command="gf chat",
+                            description="Switch to AI girlfriend persona",
+                        ),
+                        command_route=CommandRouteSpec(
+                            group_path=["gf"],
+                            display_command="gf chat",
+                            group_help="AI girlfriend commands",
+                        ),
+                    ),
+                    declaration_order=0,
+                ),
+                SdkHandlerRef(
+                    descriptor=HandlerDescriptor(
+                        id="ai_girlfriend:main.affection",
+                        trigger=CommandTrigger(
+                            command="gf affection",
+                            description="Show affection level",
+                        ),
+                        command_route=CommandRouteSpec(
+                            group_path=["gf"],
+                            display_command="gf affection",
+                            group_help="AI girlfriend commands",
+                        ),
+                    ),
+                    declaration_order=1,
+                ),
+                SdkHandlerRef(
+                    descriptor=HandlerDescriptor(
+                        id="ai_girlfriend:main.catchall",
+                        trigger=MessageTrigger(regex=r"(?s)^.*$"),
+                    ),
+                    declaration_order=2,
+                ),
+            ],
+            dynamic_command_routes=[],
+            session=None,
+        )
+    }
+    event = _DispatchEvent("/gf")
+
+    result = await bridge.dispatch_message(event)
+
+    assert result.stopped is True
+    assert event._stopped is True
+    assert event.call_llm is True
+    assert event._result is not None
+    assert event._result.get_plain_text().startswith("gf命令：")
+    assert "/gf chat" in event._result.get_plain_text()
 
 
 @pytest.mark.unit

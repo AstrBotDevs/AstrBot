@@ -164,6 +164,16 @@ class TestTriggerConverterCommandMatching:
         result = TriggerConverter._match_command_name("", "ping")
         assert result is None
 
+    def test_match_command_name_accepts_leading_slash(self) -> None:
+        """Leading slash is treated as transport syntax, not part of the command."""
+        result = TriggerConverter._match_command_name("/ping hello world", "ping")
+        assert result == "hello world"
+
+    def test_match_command_name_accepts_space_after_slash(self) -> None:
+        """Slash-prefixed commands may include spaces before the command body."""
+        result = TriggerConverter._match_command_name("/ ping hello", "ping")
+        assert result == "hello"
+
 
 # ============================================================================
 # TriggerConverter: Regex Trigger Tests

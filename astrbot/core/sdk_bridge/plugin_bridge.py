@@ -26,6 +26,7 @@ from astrbot_sdk.protocol.descriptors import (
     PlatformFilterSpec,
     ScheduleTrigger,
 )
+from astrbot_sdk.runtime._command_matching import command_root_name
 from astrbot_sdk.runtime.loader import (
     PluginDiscoveryIssue,
     PluginEnvironmentManager,
@@ -1014,6 +1015,27 @@ class SdkPluginBridge:
             should_call_llm=not bool(getattr(event, "call_llm", False)),
         )
         matches = self._match_handlers(event)
+        group_fallback = self._resolve_group_root_fallback(event)
+        if group_fallback is not None and not self._has_command_trigger_match(matches):
+            dispatch_state = _DispatchState(event=event)
+            request_context = self._request_contexts.get(dispatch_token)
+            if request_context is None:
+                request_context = _RequestContext(
+                    plugin_id=group_fallback["plugin_id"],
+                    request_id="",
+                    dispatch_token=dispatch_token,
+                    dispatch_state=dispatch_state,
+                )
+                self._request_contexts[dispatch_token] = request_context
+            else:
+                request_context.plugin_id = group_fallback["plugin_id"]
+                request_context.dispatch_state = dispatch_state
+            event.set_result(MessageEventResult().message(group_fallback["help_text"]))
+            event.stop_event()
+            event.should_call_llm(True)
+            overlay.should_call_llm = False
+            result.stopped = True
+            return result
         if not matches:
             result.skipped_reason = SKIP_NO_MATCH
             return result
@@ -1869,6 +1891,111 @@ class SdkPluginBridge:
                     matches.append(match)
         matches.sort(key=TriggerConverter.sort_key)
         return matches
+
+    @staticmethod
+    def _descriptor_root_candidates(descriptor: HandlerDescriptor) -> list[str]:
+        trigger = descriptor.trigger
+        if not isinstance(trigger, CommandTrigger):
+            return []
+        candidates: list[str] = []
+        route = descriptor.command_route
+        if route is not None and route.group_path:
+            root_name = str(route.group_path[0]).strip()
+            if root_name:
+                candidates.append(root_name)
+        for name in [trigger.command, *trigger.aliases]:
+            normalized = str(name).strip()
+            if " " not in normalized:
+                continue
+            root_name = normalized.split()[0].strip()
+            if root_name:
+                candidates.append(root_name)
+        return list(dict.fromkeys(candidates))
+
+    @classmethod
+    def _descriptor_help_entry(
+        cls,
+        descriptor: HandlerDescriptor,
+    ) -> tuple[str, str | None] | None:
+        trigger = descriptor.trigger
+        if not isinstance(trigger, CommandTrigger):
+            return None
+        route = descriptor.command_route
+        display_command = (
+            str(route.display_command).strip()
+            if route is not None and str(route.display_command).strip()
+            else str(trigger.command).strip()
+        )
+        if not display_command:
+            return None
+        return display_command, cls._descriptor_description(descriptor)
+
+    def _resolve_group_root_fallback(
+        self,
+        event: AstrMessageEvent,
+    ) -> dict[str, str] | None:
+        root_name = command_root_name(event.get_message_str())
+        if not root_name:
+            return None
+        normalized_platform = self._normalize_platform_name(event.get_platform_name())
+        for record in sorted(self._records.values(), key=lambda item: item.load_order):
+            if record.state in {
+                SDK_STATE_DISABLED,
+                SDK_STATE_FAILED,
+                SDK_STATE_RELOADING,
+            }:
+                continue
+            if not self._record_supports_platform(record, normalized_platform):
+                continue
+            help_text = self._build_group_root_help(record, event, root_name)
+            if help_text is None:
+                continue
+            return {"plugin_id": record.plugin_id, "help_text": help_text}
+        return None
+
+    def _has_command_trigger_match(self, matches: list[TriggerMatch]) -> bool:
+        for match in matches:
+            record = self._records.get(match.plugin_id)
+            if record is None:
+                continue
+            handler_ref = self._find_handler_ref(record, match.handler_id)
+            if handler_ref is not None and isinstance(
+                handler_ref.descriptor.trigger, CommandTrigger
+            ):
+                return True
+        return False
+
+    def _build_group_root_help(
+        self,
+        record: SdkPluginRecord,
+        event: AstrMessageEvent,
+        root_name: str,
+    ) -> str | None:
+        entries: list[tuple[str, str | None]] = []
+        seen_commands: set[str] = set()
+        for handler in record.handlers:
+            descriptor = handler.descriptor
+            if root_name not in self._descriptor_root_candidates(descriptor):
+                continue
+            if not TriggerConverter._match_filters(descriptor, event):
+                continue
+            help_entry = self._descriptor_help_entry(descriptor)
+            if help_entry is None:
+                continue
+            command_name, description = help_entry
+            if command_name in seen_commands:
+                continue
+            seen_commands.add(command_name)
+            entries.append((command_name, description))
+        if not entries:
+            return None
+        lines = [f"{root_name}命令："]
+        for command_name, description in entries:
+            line = f"- /{command_name}"
+            if description:
+                line += f": {description}"
+            lines.append(line)
+        return "\n".join(lines)
 
     def _match_dynamic_command_route(
         self,
