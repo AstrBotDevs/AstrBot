@@ -76,8 +76,8 @@ class PreProcessStage(Stage):
                 return
             message_chain = event.get_messages()
             for idx, component in enumerate(message_chain):
-                if isinstance(component, Record) and component.url:
-                    path = component.url.removeprefix("file://")
+                if isinstance(component, Record):
+                    path = await component.convert_to_file_path()
                     retry = 5
                     for i in range(retry):
                         try:
