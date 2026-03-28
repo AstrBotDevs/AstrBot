@@ -2,6 +2,8 @@ import asyncio
 import logging
 import os
 import sys
+import subprocess
+import shutil
 from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import Generic
@@ -48,65 +50,63 @@ def _prepare_config(config: dict) -> dict:
 
 
 def _prepare_stdio_env(config: dict) -> dict:
-    # """Preserve Windows executable resolution for stdio subprocesses."""
-    # if sys.platform != "win32":
-    #     return config
-
-    # pathext = os.environ.get("PATHEXT")
-    # if not pathext:
-    #     return config
-
-    # prepared = config.copy()
-    # env = dict(prepared.get("env") or {})
-    # env.setdefault("PATHEXT", pathext)
-    # prepared["env"] = env
-    # return prepared
     """Preserve Windows executable resolution for stdio subprocesses."""
     if sys.platform != "win32":
         return config
     prepared = config.copy()
     env = dict(prepared.get("env") or {})
-    
-    # 获取系统的环境变量
-    for key in os.environ:
-        if key not in env:
-            env[key] = os.environ[key]
-    
-    # 确保dotnet在PATH中
-    if "PATH" in env:
-        # 检查dotnet是否在PATH中
-        import shutil
-        dotnet_path = shutil.which("dotnet", path=env["PATH"])
-        if not dotnet_path:
-            # 尝试添加常见的dotnet安装路径
-            common_dotnet_paths = [
-                r"C:\Program Files\dotnet",
-                r"C:\Program Files (x86)\dotnet",
-                os.path.expanduser(r"~\.dotnet\tools")
-            ]
-            for dotnet_dir in common_dotnet_paths:
-                if os.path.exists(dotnet_dir):
-                    env["PATH"] = f"{dotnet_dir};{env['PATH']}"
-    
+    env= _merge_environment_variables(env)
     prepared["env"] = env
+    # 获取配置值，并转换为小写进行不区分大小写比较
+    command = config.get('command')
+    # 目前仅处理 dotnet，如有其他命令需求需扩展 
+    if command and isinstance(command, str) and command.lower() == 'dotnet':
+        env= _ensure_dotnet_in_path(env)
+        prepared["env"] = env
+        return _create_subprocess_NO_WINDOW(prepared)
+    return prepared
+def _merge_environment_variables(env: dict) -> dict:
+    """合并环境变量，处理Windows不区分大小写的情况"""
+    merged = env.copy()
     
-    # 设置工作目录
-    if "cwd" not in prepared:
-        # 尝试从项目路径推断工作目录
-        args = prepared.get("args", [])
-        for i, arg in enumerate(args):
-            if arg == "--project" and i + 1 < len(args):
-                project_path = args[i + 1]
-                if os.path.exists(project_path):
-                    prepared["cwd"] = os.path.dirname(project_path)
-                    logger.info(f"Setting working directory to: {prepared['cwd']}")
-                break
+    # 将用户环境变量转换为统一的大小写形式便于比较
+    user_keys_lower = {k.lower(): k for k in merged.keys()}
     
-    # Windows进程创建标志
+    for sys_key, sys_value in os.environ.items():
+        sys_key_lower = sys_key.lower()
+        if sys_key_lower not in user_keys_lower:
+            # 使用系统环境变量中的原始大小写
+            merged[sys_key] = sys_value
+    
+    return merged
+
+def _ensure_dotnet_in_path(env: dict) -> dict:
+    """确保dotnet在PATH中，若不存在则发出警告而不是自动添加"""
+    
+    # 检查当前环境PATH中是否有dotnet
+    current_path = env.get("PATH", "")
+    if shutil.which("dotnet", path=current_path):
+        return env
+    
+    # 检查系统PATH
+    system_path = os.environ.get("PATH", "")
+    if shutil.which("dotnet", path=system_path):
+        # 安全地合并PATH：过滤空值后连接
+        paths = [p for p in [current_path, system_path] if p]
+        env["PATH"] = ";".join(paths)
+        return env
+    
+    # 发出警告而不是静默添加
+    logger.warning(
+        "dotnet not found in PATH. .NET-based MCP servers may fail to start. "
+        "Please ensure dotnet is installed and in your PATH."
+    )
+    return env
+
+def _create_subprocess_NO_WINDOW(prepared: dict)->dict:
     if "creationflags" not in prepared:
         import subprocess
         prepared["creationflags"] = subprocess.CREATE_NO_WINDOW
-    
     return prepared
 
 
