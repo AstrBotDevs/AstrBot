@@ -6,7 +6,7 @@ import tomllib
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS_PATH = PROJECT_ROOT / "requirements.txt"
 PYPROJECT_PATH = PROJECT_ROOT / "pyproject.toml"
-HTTPX_SOCKS_PATTERN = re.compile(r"^httpx\[socks\](?:\s*[<>=!~].*)?$")
+HTTPX_SOCKS_PATTERN = re.compile(r"^httpx\[socks\](?:\s*[<>=!~][^;]*)?(?:\s*;.*)?$")
 
 
 def _read_httpx_socks_dependency(entries: list[str]) -> str | None:
@@ -61,4 +61,13 @@ def test_httpx_socks_dependency_spec_matches_between_dependency_files() -> None:
     assert requirements_dependency == pyproject_dependency, (
         "Expected httpx[socks] dependency spec to match between requirements.txt "
         "and pyproject.toml for SOCKS proxy support"
+    )
+
+
+def test_httpx_socks_pattern_allows_environment_markers() -> None:
+    entry = 'httpx[socks]; python_version >= "3.11"'
+
+    assert HTTPX_SOCKS_PATTERN.match(entry), (
+        "Expected httpx[socks] dependency pattern to allow environment markers "
+        "for SOCKS proxy support"
     )
