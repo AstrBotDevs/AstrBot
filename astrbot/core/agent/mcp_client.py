@@ -4,7 +4,7 @@ import os
 import sys
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Generic
+from typing import Any, Generic
 
 from tenacity import (
     before_sleep_log,
@@ -123,6 +123,38 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         return False, f"Connection timeout: {timeout} seconds"
     except Exception as e:
         return False, f"{e!s}"
+
+
+_EMPTY_MCP_ARGUMENT = object()
+
+
+def _sanitize_mcp_arguments(value: Any) -> Any:
+    """Remove empty optional payload values before sending to MCP tools."""
+    if value is None:
+        return _EMPTY_MCP_ARGUMENT
+
+    if isinstance(value, str):
+        return value if value != "" else _EMPTY_MCP_ARGUMENT
+
+    if isinstance(value, list):
+        cleaned_items = []
+        for item in value:
+            cleaned_item = _sanitize_mcp_arguments(item)
+            if cleaned_item is _EMPTY_MCP_ARGUMENT:
+                continue
+            cleaned_items.append(cleaned_item)
+        return cleaned_items if cleaned_items else _EMPTY_MCP_ARGUMENT
+
+    if isinstance(value, dict):
+        cleaned_dict = {}
+        for key, item in value.items():
+            cleaned_item = _sanitize_mcp_arguments(item)
+            if cleaned_item is _EMPTY_MCP_ARGUMENT:
+                continue
+            cleaned_dict[key] = cleaned_item
+        return cleaned_dict
+
+    return value
 
 
 class MCPClient:
@@ -347,6 +379,17 @@ class MCPClient:
             anyio.ClosedResourceError: raised after reconnection failure
         """
 
+        sanitized_arguments = _sanitize_mcp_arguments(arguments)
+        if sanitized_arguments is _EMPTY_MCP_ARGUMENT:
+            sanitized_arguments = {}
+        if sanitized_arguments != arguments:
+            logger.debug(
+                "Sanitized MCP tool %s arguments from %s to %s",
+                tool_name,
+                arguments,
+                sanitized_arguments,
+            )
+
         @retry(
             retry=retry_if_exception_type(anyio.ClosedResourceError),
             stop=stop_after_attempt(2),
@@ -361,7 +404,7 @@ class MCPClient:
             try:
                 return await self.session.call_tool(
                     name=tool_name,
-                    arguments=arguments,
+                    arguments=sanitized_arguments,
                     read_timeout_seconds=read_timeout_seconds,
                 )
             except anyio.ClosedResourceError:
