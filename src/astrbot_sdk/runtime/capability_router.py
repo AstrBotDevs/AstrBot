@@ -337,6 +337,7 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         normalized_metadata = dict(metadata)
         normalized_metadata.setdefault("display_name", name)
         normalized_metadata.setdefault("description", "")
+        normalized_metadata.setdefault("repo", "")
         normalized_metadata.setdefault("author", "")
         normalized_metadata.setdefault("version", "0.0.0")
         normalized_metadata.setdefault("enabled", True)

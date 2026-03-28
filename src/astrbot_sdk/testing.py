@@ -87,6 +87,7 @@ def _plugin_metadata_from_spec(
         "name": plugin.name,
         "display_name": str(manifest.get("display_name") or plugin.name),
         "description": str(manifest.get("desc") or manifest.get("description") or ""),
+        "repo": str(manifest.get("repo") or ""),
         "author": str(manifest.get("author") or ""),
         "version": str(manifest.get("version") or "0.0.0"),
         "enabled": enabled,

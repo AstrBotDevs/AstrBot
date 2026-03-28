@@ -26,6 +26,7 @@ class StarMetadata:
     name: str
     display_name: str
     description: str
+    repo: str
     author: str
     version: str
     enabled: bool = True
@@ -44,6 +45,7 @@ class StarMetadata:
             name=str(data.get("name", "")),
             display_name=str(data.get("display_name", data.get("name", ""))),
             description=str(data.get("desc", data.get("description", ""))),
+            repo=str(data.get("repo", "")),
             author=str(data.get("author", "")),
             version=str(data.get("version", "0.0.0")),
             enabled=bool(data.get("enabled", True)),

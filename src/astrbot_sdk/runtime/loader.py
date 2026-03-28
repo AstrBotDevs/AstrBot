@@ -35,6 +35,7 @@
 plugin.yaml 格式：
     name: my_plugin
     author: author_name
+    repo: my_plugin
     desc: Plugin description
     version: 1.0.0
     runtime:
@@ -112,10 +113,27 @@ HandlerKind: TypeAlias = Literal["handler", "hook", "tool", "session"]
 DiscoverySeverity: TypeAlias = Literal["warning", "error"]
 DiscoveryPhase: TypeAlias = Literal["discovery", "load", "lifecycle", "reload"]
 _LOGGER = logging.getLogger(__name__)
+_GITHUB_REPO_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+_GITHUB_REPO_SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+_GITHUB_REPO_URL_RE = re.compile(
+    r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/?$",
+    re.IGNORECASE,
+)
 
 
 def _default_python_version() -> str:
     return f"{sys.version_info.major}.{sys.version_info.minor}"
+
+
+def _is_valid_github_repo_ref(value: str) -> bool:
+    normalized = value.strip()
+    if not normalized:
+        return False
+    return bool(
+        _GITHUB_REPO_NAME_RE.fullmatch(normalized)
+        or _GITHUB_REPO_SLUG_RE.fullmatch(normalized)
+        or _GITHUB_REPO_URL_RE.fullmatch(normalized)
+    )
 
 
 def _venv_python_path(venv_dir: Path) -> Path:
@@ -708,6 +726,19 @@ def validate_plugin_spec(plugin: PluginSpec) -> None:
     raw_python = raw_runtime.get("python")
     if not isinstance(raw_python, str) or not raw_python:
         raise ValueError(f"{manifest_label} 缺少 runtime.python。")
+
+    raw_author = manifest_data.get("author")
+    if not isinstance(raw_author, str) or not raw_author.strip():
+        raise ValueError(f"{manifest_label} 缺少 author。")
+
+    raw_repo = manifest_data.get("repo")
+    if not isinstance(raw_repo, str) or not raw_repo.strip():
+        raise ValueError(f"{manifest_label} 缺少 repo。")
+    if not _is_valid_github_repo_ref(raw_repo):
+        raise ValueError(
+            f"{manifest_label} 的 repo 不合法："
+            "请填写 GitHub 仓库名（repo）、owner/repo，或 https://github.com/owner/repo。"
+        )
 
     components = manifest_data.get("components")
     if not isinstance(components, list):
