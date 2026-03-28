@@ -3288,6 +3288,8 @@ class SdkPluginBridge:
             grouped.setdefault(issue.plugin_id, []).append(issue.to_payload())
         self._discovery_issues = grouped
 
+    # TODO: 平台适配器目前仍用 legacy 的 @register_platform_adapter，不走 SDK 协议。
+    # 长期来看可以把平台适配器也纳入 SDK 的 capability 体系，实现完全统一的插件/平台注册机制。
     async def _refresh_native_platform_commands(
         self, platforms: set[str] | None = None
     ) -> None:
