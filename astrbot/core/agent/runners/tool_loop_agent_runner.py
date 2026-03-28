@@ -213,12 +213,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.post_tool_compaction = PostToolCompactionConfig(
             enabled=bool(compact_context_after_tool_call),
             soft_ratio=post_tool_soft_ratio,
-            hard_ratio=max(post_tool_soft_ratio, to_ratio(compact_context_hard_ratio, 0.7)),
+            hard_ratio=max(
+                post_tool_soft_ratio, to_ratio(compact_context_hard_ratio, 0.7)
+            ),
             min_delta_tokens=to_non_negative_int(compact_context_min_delta_tokens),
             min_delta_turns=to_non_negative_int(compact_context_min_delta_turns),
-            debounce_seconds=to_non_negative_int(
-                compact_context_debounce_seconds
-            ),
+            debounce_seconds=to_non_negative_int(compact_context_debounce_seconds),
         )
         self.post_tool_compaction_controller = PostToolCompactionController(
             self.post_tool_compaction
@@ -303,13 +303,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
         self.run_context.messages = messages
         self._refresh_tool_compaction_baseline(
-            trusted_token_usage=request.conversation.token_usage if request.conversation else 0
+            trusted_token_usage=request.conversation.token_usage
+            if request.conversation
+            else 0
         )
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
 
-    def _refresh_tool_compaction_baseline(self, *, trusted_token_usage: int = 0) -> None:
+    def _refresh_tool_compaction_baseline(
+        self, *, trusted_token_usage: int = 0
+    ) -> None:
         self.post_tool_compaction_controller.refresh_baseline(
             messages=self.run_context.messages,
             token_counter=self.context_manager.token_counter,

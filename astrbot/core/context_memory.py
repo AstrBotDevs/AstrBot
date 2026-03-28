@@ -109,10 +109,14 @@ class ContextMemoryConfig:
 
 
 def normalize_context_memory_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
-    return ContextMemoryConfig.from_raw(raw if isinstance(raw, dict) else None).to_settings_dict()
+    return ContextMemoryConfig.from_raw(
+        raw if isinstance(raw, dict) else None
+    ).to_settings_dict()
 
 
-def load_context_memory_config(provider_settings: dict[str, Any] | None) -> ContextMemoryConfig:
+def load_context_memory_config(
+    provider_settings: dict[str, Any] | None,
+) -> ContextMemoryConfig:
     return ContextMemoryConfig.from_settings(provider_settings)
 
 

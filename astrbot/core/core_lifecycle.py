@@ -62,9 +62,9 @@ class AstrBotCoreLifecycle:
         self.subagent_orchestrator: SubAgentOrchestrator | None = None
         self.cron_manager: CronJobManager | None = None
         self.temp_dir_cleaner: TempDirCleaner | None = None
-        self.context_compaction_scheduler: (
-            PeriodicContextCompactionScheduler | None
-        ) = None
+        self.context_compaction_scheduler: PeriodicContextCompactionScheduler | None = (
+            None
+        )
 
         # 设置代理
         proxy_config = self.astrbot_config.get("http_proxy", "")
@@ -206,7 +206,9 @@ class AstrBotCoreLifecycle:
             self.cron_manager,
             self.subagent_orchestrator,
         )
-        self.star_context.context_compaction_scheduler = self.context_compaction_scheduler
+        self.star_context.context_compaction_scheduler = (
+            self.context_compaction_scheduler
+        )
 
         # 初始化插件管理器
         self.plugin_manager = PluginManager(self.star_context, self.astrbot_config)

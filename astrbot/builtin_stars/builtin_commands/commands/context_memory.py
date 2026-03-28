@@ -13,7 +13,9 @@ class ContextMemoryCommands:
     def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    def _get_provider_settings(self, event: AstrMessageEvent) -> tuple[Any, dict[str, Any]]:
+    def _get_provider_settings(
+        self, event: AstrMessageEvent
+    ) -> tuple[Any, dict[str, Any]]:
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
         if not isinstance(provider_settings, dict):

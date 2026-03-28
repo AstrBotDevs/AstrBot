@@ -389,7 +389,10 @@ class PeriodicContextCompactionScheduler:
     ) -> AsyncIterator[ConversationV2]:
         page = 1
         while not self._stop_event.is_set():
-            conversations, total = await self.conversation_manager.db.get_filtered_conversations(
+            (
+                conversations,
+                total,
+            ) = await self.conversation_manager.db.get_filtered_conversations(
                 page=page,
                 page_size=scan_page_size,
                 updated_before=None,
@@ -623,7 +626,9 @@ class PeriodicContextCompactionScheduler:
         if cfg.instruction:
             return cfg.instruction
 
-        provider_settings = self.config_manager.default_conf.get("provider_settings", {})
+        provider_settings = self.config_manager.default_conf.get(
+            "provider_settings", {}
+        )
         base_instruction = provider_settings.get("llm_compress_instruction", "")
         if isinstance(base_instruction, str) and base_instruction.strip():
             return base_instruction.strip()
@@ -661,12 +666,16 @@ class PeriodicContextCompactionScheduler:
         if provider is not None:
             provider_settings = getattr(provider, "provider_settings", None)
             if isinstance(provider_settings, dict):
-                mode = str(provider_settings.get("context_token_counter_mode", "") or "")
+                mode = str(
+                    provider_settings.get("context_token_counter_mode", "") or ""
+                )
                 normalized = mode.strip().lower()
                 if normalized:
                     return normalized
 
-        provider_settings = self.config_manager.default_conf.get("provider_settings", {})
+        provider_settings = self.config_manager.default_conf.get(
+            "provider_settings", {}
+        )
         mode = "estimate"
         if isinstance(provider_settings, dict):
             mode = str(provider_settings.get("context_token_counter_mode", "estimate"))
