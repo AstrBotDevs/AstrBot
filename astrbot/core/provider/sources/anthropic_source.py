@@ -1,6 +1,7 @@
 import base64
 import json
 from collections.abc import AsyncGenerator
+from typing import Literal
 
 import anthropic
 import httpx
@@ -258,6 +259,11 @@ class ProviderAnthropic(Provider):
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
+                payloads["tool_choice"] = {
+                    "type": "any"
+                    if payloads.get("tool_choice") == "required"
+                    else "auto"
+                }
 
         extra_body = self.provider_config.get("custom_extra_body", {})
 
@@ -334,6 +340,11 @@ class ProviderAnthropic(Provider):
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
+                payloads["tool_choice"] = {
+                    "type": "any"
+                    if payloads.get("tool_choice") == "required"
+                    else "auto"
+                }
 
         # 用于累积工具调用信息
         tool_use_buffer = {}
@@ -483,6 +494,7 @@ class ProviderAnthropic(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -516,6 +528,8 @@ class ProviderAnthropic(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": new_messages, "model": model}
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:
@@ -540,6 +554,7 @@ class ProviderAnthropic(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ):
         if contexts is None:
@@ -572,6 +587,8 @@ class ProviderAnthropic(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": new_messages, "model": model}
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:
