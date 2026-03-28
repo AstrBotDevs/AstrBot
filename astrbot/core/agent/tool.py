@@ -225,18 +225,18 @@ class ToolSet:
         Note: Responses API expects top-level `name` instead of nested `function.name`.
         """
         result = []
-        for tool in self.tools:
-            func_def = {"type": "function", "name": tool.name}
-            if tool.description:
-                func_def["description"] = tool.description
-
-            if tool.parameters is not None:
-                if (
-                    tool.parameters and tool.parameters.get("properties")
-                ) or not omit_empty_parameter_field:
-                    func_def["parameters"] = tool.parameters
-
-            result.append(func_def)
+        for tool_def in self.openai_schema(
+            omit_empty_parameter_field=omit_empty_parameter_field
+        ):
+            func_def = tool_def.get("function", {})
+            if not func_def:
+                continue
+            converted = {"type": "function", "name": func_def.get("name", "")}
+            if func_def.get("description"):
+                converted["description"] = func_def["description"]
+            if func_def.get("parameters") is not None:
+                converted["parameters"] = func_def["parameters"]
+            result.append(converted)
         return result
 
     def anthropic_schema(self) -> list[dict]:
