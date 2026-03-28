@@ -43,7 +43,6 @@
           multiple
           variant="outlined"
           class="filter-input filter-input-tags"
-          @keydown.enter.prevent="commitTagSearch"
         >
           <template #selection="{ index }">
             <span
@@ -633,32 +632,6 @@ export default {
       this.keyword = '';
     },
 
-    normalizeTagValue(value) {
-      if (typeof value === 'string') {
-        return value.trim();
-      }
-
-      if (value && typeof value.title === 'string') {
-        return value.title.trim();
-      }
-
-      if (value && typeof value.value === 'string') {
-        return value.value.trim();
-      }
-
-      return '';
-    },
-
-    commitTagSearch() {
-      const normalizedTag = this.normalizeTagValue(this.tagSearch);
-      if (!normalizedTag || this.selectedTags.includes(normalizedTag)) {
-        return;
-      }
-
-      this.selectedTags = [...this.selectedTags, normalizedTag];
-      this.tagSearch = '';
-    },
-
     getLevelColor(level) {
       return this.levelColors[level] || 'grey';
     },
@@ -743,10 +716,6 @@ export default {
 
 :deep(.filter-input-tags .v-field__input input) {
   min-width: 36px;
-}
-
-:deep(.filter-input-tags .v-combobox__selection) {
-  max-width: calc(100% - 28px);
 }
 
 .tag-selection-summary {
