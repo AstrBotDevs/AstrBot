@@ -163,7 +163,16 @@ def write_migration_artifacts(
         )
         wrote_config_toml = True
 
-    return copied_workspace_files, copied_memory_entries, wrote_timeline, wrote_config_toml
+    return (
+        copied_workspace_files,
+        copied_memory_entries,
+        wrote_timeline,
+        wrote_config_toml,
+    )
 
 
-__all__ = ["collect_workspace_files", "workspace_total_size", "write_migration_artifacts"]
+__all__ = [
+    "collect_workspace_files",
+    "workspace_total_size",
+    "write_migration_artifacts",
+]

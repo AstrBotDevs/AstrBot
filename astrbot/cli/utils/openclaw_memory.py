@@ -85,9 +85,7 @@ def _discover_memory_columns(
 ) -> tuple[str, str, str | None, str | None]:
     table_info_rows = cursor.execute("PRAGMA table_info(memories)").fetchall()
     columns_in_order = [
-        str(row[1]).strip().lower()
-        for row in table_info_rows
-        if str(row[1]).strip()
+        str(row[1]).strip().lower() for row in table_info_rows if str(row[1]).strip()
     ]
     columns = set(columns_in_order)
 
@@ -152,7 +150,9 @@ def _read_openclaw_sqlite_entries(db_path: Path) -> list[MemoryEntry]:
                 if category_col is not None
                 else "'core' AS __category__"
             ),
-            f"{ts_col} AS __timestamp__" if ts_col is not None else "NULL AS __timestamp__",
+            f"{ts_col} AS __timestamp__"
+            if ts_col is not None
+            else "NULL AS __timestamp__",
         ]
         order_by_clause = (
             " ORDER BY __timestamp__ ASC, __key__ ASC"
@@ -173,7 +173,8 @@ def _read_openclaw_sqlite_entries(db_path: Path) -> list[MemoryEntry]:
                 MemoryEntry(
                     key=_normalize_key(row["__key__"], idx),
                     content=content,
-                    category=str(row["__category__"] or "core").strip().lower() or "core",
+                    category=str(row["__category__"] or "core").strip().lower()
+                    or "core",
                     timestamp=_normalize_timestamp(row["__timestamp__"]),
                     source=f"sqlite:{db_path}",
                     order=idx,
@@ -282,7 +283,9 @@ def _dedup_entries(entries: list[MemoryEntry]) -> list[MemoryEntry]:
 
 
 def collect_memory_entries(workspace_dir: Path) -> tuple[list[MemoryEntry], int, int]:
-    sqlite_entries = _read_openclaw_sqlite_entries(workspace_dir / "memory" / "brain.db")
+    sqlite_entries = _read_openclaw_sqlite_entries(
+        workspace_dir / "memory" / "brain.db"
+    )
     markdown_entries = _read_openclaw_markdown_entries(workspace_dir)
     memory_entries = _dedup_entries([*sqlite_entries, *markdown_entries])
     return memory_entries, len(sqlite_entries), len(markdown_entries)

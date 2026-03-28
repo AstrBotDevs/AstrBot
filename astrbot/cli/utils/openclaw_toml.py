@@ -32,7 +32,11 @@ def _classify_items(
         key_text = str(key)
         if isinstance(value, dict):
             nested_dicts.append((key_text, value))
-        elif isinstance(value, list) and value and all(isinstance(item, dict) for item in value):
+        elif (
+            isinstance(value, list)
+            and value
+            and all(isinstance(item, dict) for item in value)
+        ):
             array_tables.append((key_text, value))
         else:
             scalar_items.append((key_text, value))
@@ -96,7 +100,9 @@ def json_to_toml(data: dict[str, Any]) -> str:
             for item in items:
                 lines.append(f"[[{_format_toml_path(table_path)}]]")
                 for sub_key, sub_value in item.items():
-                    lines.append(f"{_toml_quote(str(sub_key))} = {_toml_literal(sub_value)}")
+                    lines.append(
+                        f"{_toml_quote(str(sub_key))} = {_toml_literal(sub_value)}"
+                    )
                 lines.append("")
             if t_idx == len(array_tables) - 1 and lines and lines[-1] == "":
                 lines.pop()
