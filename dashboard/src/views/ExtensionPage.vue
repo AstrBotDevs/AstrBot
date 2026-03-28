@@ -158,67 +158,73 @@ const {
       <v-card variant="flat" style="background-color: transparent">
         <!-- 标签页 -->
         <v-card-text style="padding: 0px 12px">
-          <!-- 已安装插件标签页内容 -->
-          <InstalledPluginsTab :state="pageState" />
+          <v-window v-model="activeTab">
+            <!-- 已安装插件标签页内容 -->
+            <v-window-item value="installed">
+              <InstalledPluginsTab :state="pageState" />
+            </v-window-item>
 
-          <!-- 指令面板标签页内容 -->
-          <v-window-item v-show="activeTab === 'components'">
-            <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex align-center flex-wrap" style="gap: 12px">
-                <h2 class="text-h2 mb-0">{{ tm("tabs.handlersOperation") }}</h2>
+            <!-- 指令面板标签页内容 -->
+            <v-window-item value="components">
+              <div class="mb-4 pt-4 pb-4">
+                <div class="d-flex align-center flex-wrap" style="gap: 12px">
+                  <h2 class="text-h2 mb-0">{{ tm("tabs.handlersOperation") }}</h2>
+                </div>
               </div>
-            </div>
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <ComponentPanel :active="activeTab === 'components'" />
-              </v-card-text>
-            </v-card>
-          </v-window-item>
+              <v-card
+                class="rounded-lg"
+                variant="flat"
+                style="background-color: transparent"
+              >
+                <v-card-text class="pa-0">
+                  <ComponentPanel :active="activeTab === 'components'" />
+                </v-card-text>
+              </v-card>
+            </v-window-item>
 
-          <!-- 已安装的 MCP 服务器标签页内容 -->
-          <v-window-item v-show="activeTab === 'mcp'">
-            <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex align-center flex-wrap" style="gap: 12px">
-                <h2 class="text-h2 mb-0">
-                  {{ tm("tabs.installedMcpServers") }}
-                </h2>
+            <!-- 已安装的 MCP 服务器标签页内容 -->
+            <v-window-item value="mcp">
+              <div class="mb-4 pt-4 pb-4">
+                <div class="d-flex align-center flex-wrap" style="gap: 12px">
+                  <h2 class="text-h2 mb-0">
+                    {{ tm("tabs.installedMcpServers") }}
+                  </h2>
+                </div>
               </div>
-            </div>
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <McpServersSection />
-              </v-card-text>
-            </v-card>
-          </v-window-item>
+              <v-card
+                class="rounded-lg"
+                variant="flat"
+                style="background-color: transparent"
+              >
+                <v-card-text class="pa-0">
+                  <McpServersSection />
+                </v-card-text>
+              </v-card>
+            </v-window-item>
 
-          <!-- Skills 标签页内容 -->
-          <v-window-item v-show="activeTab === 'skills'">
-            <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex align-center flex-wrap" style="gap: 12px">
-                <h2 class="text-h2 mb-0">{{ tm("tabs.skills") }}</h2>
+            <!-- Skills 标签页内容 -->
+            <v-window-item value="skills">
+              <div class="mb-4 pt-4 pb-4">
+                <div class="d-flex align-center flex-wrap" style="gap: 12px">
+                  <h2 class="text-h2 mb-0">{{ tm("tabs.skills") }}</h2>
+                </div>
               </div>
-            </div>
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <SkillsSection />
-              </v-card-text>
-            </v-card>
-          </v-window-item>
+              <v-card
+                class="rounded-lg"
+                variant="flat"
+                style="background-color: transparent"
+              >
+                <v-card-text class="pa-0">
+                  <SkillsSection />
+                </v-card-text>
+              </v-card>
+            </v-window-item>
 
-          <!-- 插件市场标签页内容 -->
-          <MarketPluginsTab :state="pageState" />
+            <!-- 插件市场标签页内容 -->
+            <v-window-item value="market">
+              <MarketPluginsTab :state="pageState" />
+            </v-window-item>
+          </v-window>
         </v-card-text>
       </v-card>
     </v-col>
