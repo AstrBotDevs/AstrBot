@@ -29,7 +29,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal, TypeAlias, TypeVar
 
 from .decorators import append_filter_meta
 from .protocol.descriptors import (
@@ -41,6 +41,7 @@ from .protocol.descriptors import (
 )
 
 FilterOperator: TypeAlias = Literal["and", "or"]
+_HandlerT = TypeVar("_HandlerT", bound=Callable[..., Any])
 
 
 @dataclass(slots=True)
@@ -192,10 +193,10 @@ def _evaluate_filter_spec_locally(
 
 def custom_filter(
     binding: FilterBinding,
-) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+) -> Callable[[_HandlerT], _HandlerT]:
     """Attach a filter declaration to a handler."""
 
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+    def decorator(func: _HandlerT) -> _HandlerT:
         spec, local_bindings = binding.compile()
         append_filter_meta(
             func,

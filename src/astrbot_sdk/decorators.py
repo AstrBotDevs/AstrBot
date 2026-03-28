@@ -50,7 +50,7 @@ import inspect
 import typing
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Literal, cast
+from typing import Any, Literal, TypeVar, cast
 
 from pydantic import BaseModel
 
@@ -72,6 +72,7 @@ from .protocol.descriptors import (
 )
 
 HandlerCallable = Callable[..., Any]
+_HandlerT = TypeVar("_HandlerT", bound=Callable[..., Any])
 HANDLER_META_ATTR = "__astrbot_handler_meta__"
 CAPABILITY_META_ATTR = "__astrbot_capability_meta__"
 LLM_TOOL_META_ATTR = "__astrbot_llm_tool_meta__"
@@ -414,9 +415,9 @@ def _validate_limiter_args(
 
 
 def _set_limiter(
-    func: HandlerCallable,
+    func: _HandlerT,
     limiter: LimiterMeta,
-) -> HandlerCallable:
+) -> _HandlerT:
     meta = _get_or_create_meta(func)
     if meta.limiter is not None:
         raise ValueError("rate_limit(...) 和 cooldown(...) 不能叠加在同一个 handler 上")
@@ -456,7 +457,7 @@ def on_command(
     description: str | None = None,
     group: str | typing.Sequence[str] | None = None,
     group_help: str | None = None,
-) -> Callable[[HandlerCallable], HandlerCallable]:
+) -> Callable[[_HandlerT], _HandlerT]:
     """注册命令处理方法。
 
     当用户发送指定命令时触发。命令格式为 `/{command}` 或直接 `{command}`，
@@ -514,7 +515,7 @@ def on_command(
         else merged_aliases
     )
 
-    def decorator(func: HandlerCallable) -> HandlerCallable:
+    def decorator(func: _HandlerT) -> _HandlerT:
         meta = _get_or_create_meta(func)
         normalized_description = _normalize_description(description)
         trigger_command = display_command if group_path else canonical
@@ -543,7 +544,7 @@ def on_message(
     platforms: list[str] | None = None,
     message_types: list[str] | None = None,
     description: str | None = None,
-) -> Callable[[HandlerCallable], HandlerCallable]:
+) -> Callable[[_HandlerT], _HandlerT]:
     """注册消息处理方法。
 
     当消息匹配指定条件时触发。支持正则表达式或关键词匹配。
@@ -569,7 +570,7 @@ def on_message(
             await event.reply("收到了数字")
     """
 
-    def decorator(func: HandlerCallable) -> HandlerCallable:
+    def decorator(func: _HandlerT) -> _HandlerT:
         meta = _get_or_create_meta(func)
         meta.trigger = MessageTrigger(
             regex=regex,
@@ -593,11 +594,11 @@ def on_message(
 
 
 def append_filter_meta(
-    func: HandlerCallable,
+    func: _HandlerT,
     *,
     specs: list[FilterSpec] | None = None,
     local_bindings: list[Any] | None = None,
-) -> HandlerCallable:
+) -> _HandlerT:
     """追加过滤器元数据。"""
     meta = _get_or_create_meta(func)
     if specs:
@@ -608,9 +609,9 @@ def append_filter_meta(
 
 
 def set_command_route_meta(
-    func: HandlerCallable,
+    func: _HandlerT,
     route: CommandRouteSpec,
-) -> HandlerCallable:
+) -> _HandlerT:
     """设置命令路由元数据。"""
     meta = _get_or_create_meta(func)
     meta.command_route = route
@@ -621,7 +622,7 @@ def on_event(
     event_type: str,
     *,
     description: str | None = None,
-) -> Callable[[HandlerCallable], HandlerCallable]:
+) -> Callable[[_HandlerT], _HandlerT]:
     """注册事件处理方法。
 
     当特定类型的事件发生时触发。用于处理非消息类型的事件，
@@ -639,7 +640,7 @@ def on_event(
             await ctx.platform.send(event.group_id, "欢迎新人!")
     """
 
-    def decorator(func: HandlerCallable) -> HandlerCallable:
+    def decorator(func: _HandlerT) -> _HandlerT:
         meta = _get_or_create_meta(func)
         meta.trigger = EventTrigger(event_type=event_type)
         meta.description = _normalize_description(description)
@@ -656,7 +657,7 @@ def on_schedule(
     interval_seconds: int | None = None,
     timezone: str | None = None,
     description: str | None = None,
-) -> Callable[[HandlerCallable], HandlerCallable]:
+) -> Callable[[_HandlerT], _HandlerT]:
     """注册定时任务方法。
 
     按指定的时间计划定期执行。
@@ -683,7 +684,7 @@ def on_schedule(
             pass
     """
 
-    def decorator(func: HandlerCallable) -> HandlerCallable:
+    def decorator(func: _HandlerT) -> _HandlerT:
         meta = _get_or_create_meta(func)
         meta.trigger = ScheduleTrigger(
             name=name,
@@ -871,7 +872,7 @@ def register_skill(
     return decorator
 
 
-def require_admin(func: HandlerCallable) -> HandlerCallable:
+def require_admin(func: _HandlerT) -> _HandlerT:
     """标记 handler 需要管理员权限。
 
     当用户不是管理员时，handler 将不会被调用。
@@ -893,18 +894,18 @@ def require_admin(func: HandlerCallable) -> HandlerCallable:
     return func
 
 
-def admin_only(func: HandlerCallable) -> HandlerCallable:
+def admin_only(func: _HandlerT) -> _HandlerT:
     return require_admin(func)
 
 
 def require_permission(
     role: Literal["member", "admin"],
-) -> Callable[[HandlerCallable], HandlerCallable]:
+) -> Callable[[_HandlerT], _HandlerT]:
     normalized_role = str(role).strip().lower()
     if normalized_role not in {"member", "admin"}:
         raise ValueError("require_permission(...) 只支持 'member' 或 'admin'")
 
-    def decorator(func: HandlerCallable) -> HandlerCallable:
+    def decorator(func: _HandlerT) -> _HandlerT:
         meta = _get_or_create_meta(func)
         _set_required_role(
             meta,
@@ -915,8 +916,8 @@ def require_permission(
     return decorator
 
 
-def platforms(*names: str) -> Callable[[HandlerCallable], HandlerCallable]:
-    def decorator(func: HandlerCallable) -> HandlerCallable:
+def platforms(*names: str) -> Callable[[_HandlerT], _HandlerT]:
+    def decorator(func: _HandlerT) -> _HandlerT:
         meta = _get_or_create_meta(func)
         _set_platform_filter(meta, list(names), source="decorator.platforms")
         return func
@@ -924,8 +925,8 @@ def platforms(*names: str) -> Callable[[HandlerCallable], HandlerCallable]:
     return decorator
 
 
-def message_types(*types: str) -> Callable[[HandlerCallable], HandlerCallable]:
-    def decorator(func: HandlerCallable) -> HandlerCallable:
+def message_types(*types: str) -> Callable[[_HandlerT], _HandlerT]:
+    def decorator(func: _HandlerT) -> _HandlerT:
         meta = _get_or_create_meta(func)
         _set_message_type_filter(
             meta,
@@ -937,8 +938,8 @@ def message_types(*types: str) -> Callable[[HandlerCallable], HandlerCallable]:
     return decorator
 
 
-def group_only() -> Callable[[HandlerCallable], HandlerCallable]:
-    def decorator(func: HandlerCallable) -> HandlerCallable:
+def group_only() -> Callable[[_HandlerT], _HandlerT]:
+    def decorator(func: _HandlerT) -> _HandlerT:
         meta = _get_or_create_meta(func)
         _set_message_type_filter(meta, ["group"], source="decorator.group_only")
         return func
@@ -946,8 +947,8 @@ def group_only() -> Callable[[HandlerCallable], HandlerCallable]:
     return decorator
 
 
-def private_only() -> Callable[[HandlerCallable], HandlerCallable]:
-    def decorator(func: HandlerCallable) -> HandlerCallable:
+def private_only() -> Callable[[_HandlerT], _HandlerT]:
+    def decorator(func: _HandlerT) -> _HandlerT:
         meta = _get_or_create_meta(func)
         _set_message_type_filter(meta, ["private"], source="decorator.private_only")
         return func
@@ -955,11 +956,11 @@ def private_only() -> Callable[[HandlerCallable], HandlerCallable]:
     return decorator
 
 
-def priority(value: int) -> Callable[[HandlerCallable], HandlerCallable]:
+def priority(value: int) -> Callable[[_HandlerT], _HandlerT]:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError("priority(...) requires an integer")
 
-    def decorator(func: HandlerCallable) -> HandlerCallable:
+    def decorator(func: _HandlerT) -> _HandlerT:
         meta = _get_or_create_meta(func)
         meta.priority = value
         return func
@@ -974,7 +975,7 @@ def rate_limit(
     scope: LimiterScope = "session",
     behavior: LimiterBehavior = "hint",
     message: str | None = None,
-) -> Callable[[HandlerCallable], HandlerCallable]:
+) -> Callable[[_HandlerT], _HandlerT]:
     _validate_limiter_args(
         kind="rate_limit",
         limit=limit,
@@ -983,7 +984,7 @@ def rate_limit(
         behavior=behavior,
     )
 
-    def decorator(func: HandlerCallable) -> HandlerCallable:
+    def decorator(func: _HandlerT) -> _HandlerT:
         return _set_limiter(
             func,
             LimiterMeta(
@@ -1005,7 +1006,7 @@ def cooldown(
     scope: LimiterScope = "session",
     behavior: LimiterBehavior = "hint",
     message: str | None = None,
-) -> Callable[[HandlerCallable], HandlerCallable]:
+) -> Callable[[_HandlerT], _HandlerT]:
     _validate_limiter_args(
         kind="cooldown",
         limit=1,
@@ -1014,7 +1015,7 @@ def cooldown(
         behavior=behavior,
     )
 
-    def decorator(func: HandlerCallable) -> HandlerCallable:
+    def decorator(func: _HandlerT) -> _HandlerT:
         return _set_limiter(
             func,
             LimiterMeta(
@@ -1041,7 +1042,7 @@ def conversation_command(
     mode: ConversationMode = "replace",
     busy_message: str | None = None,
     grace_period: float = 1.0,
-) -> Callable[[HandlerCallable], HandlerCallable]:
+) -> Callable[[_HandlerT], _HandlerT]:
     """注册带会话生命周期的命令处理方法。
 
     在 ``on_command`` 基础上附加会话元数据，支持超时、并发策略和宽限期控制。
@@ -1086,7 +1087,7 @@ def conversation_command(
         group_help=group_help,
     )
 
-    def decorator(func: HandlerCallable) -> HandlerCallable:
+    def decorator(func: _HandlerT) -> _HandlerT:
         decorated = command_decorator(func)
         meta = _get_or_create_meta(decorated)
         meta.conversation = ConversationMeta(
