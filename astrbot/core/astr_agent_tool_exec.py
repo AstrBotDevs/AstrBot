@@ -4,6 +4,7 @@ import json
 import traceback
 import typing as T
 import uuid
+import datetime
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
 
@@ -234,17 +235,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             elif isinstance(tool_name_or_obj, FunctionTool):
                 toolset.add_tool(tool_name_or_obj)
 
-        # Always add send_public_context tool for shared context feature
+        # Always add send_shared_context tool for shared context feature
         try:
-            from astrbot.core.dynamic_subagent_manager import (
-                DynamicSubAgentManager,
-                SEND_PUBLIC_CONTEXT_TOOL,
-            )
-
+            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager, SEND_SHARED_CONTEXT_TOOL
             session_id = event.unified_msg_origin
             session = DynamicSubAgentManager.get_session(session_id)
             if session and session.shared_context_enabled:
-                toolset.add_tool(SEND_PUBLIC_CONTEXT_TOOL)
+                toolset.add_tool(SEND_SHARED_CONTEXT_TOOL)
         except Exception:
             pass
 
@@ -306,39 +303,31 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 except Exception:
                     continue
 
-        # 获取受保护subagent的历史上下文
-        agent_name = getattr(tool.agent, "name", None)
+        # 获取子代理的历史上下文
+        agent_name = getattr(tool.agent, 'name', None)
         subagent_history = []
         if agent_name:
             try:
                 from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
-
-                stored_history = DynamicSubAgentManager.get_subagent_history(
-                    umo, agent_name
-                )
+                stored_history = DynamicSubAgentManager.get_subagent_history(umo, agent_name)
                 if stored_history:
                     # 将历史消息转换为 Message 对象
                     for hist_msg in stored_history:
                         try:
                             if isinstance(hist_msg, dict):
-                                subagent_history.append(
-                                    Message.model_validate(hist_msg)
-                                )
+                                subagent_history.append(Message.model_validate(hist_msg))
                             elif isinstance(hist_msg, Message):
                                 subagent_history.append(hist_msg)
                         except Exception:
                             continue
                     if subagent_history:
-                        logger.info(
-                            f"[SubAgentHistory] Loaded {len(subagent_history)} history messages for {agent_name}"
-                        )
+                        logger.info(f"[SubAgentHistory] Loaded {len(subagent_history)} history messages for {agent_name}")
             except Exception:
                 pass
 
         prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
         agent_max_step = int(prov_settings.get("max_agent_step", 30))
         stream = prov_settings.get("streaming_response", False)
-
         # 如果有历史上下文，合并到 contexts 中
         if subagent_history:
             if contexts is None:
@@ -346,7 +335,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             else:
                 contexts = subagent_history + contexts
 
-        # 构建subagent的 system_prompt，添加 skills 提示词和公共上下文
+        # 构建子代理的 system_prompt，添加 skills 提示词和公共上下文
         subagent_system_prompt = tool.agent.instructions or ""
         if agent_name:
             try:
@@ -354,22 +343,20 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
                 # 注入 skills
                 runtime = prov_settings.get("computer_use_runtime", "local")
-                skills_prompt = DynamicSubAgentManager.build_subagent_skills_prompt(
-                    umo, agent_name, runtime
-                )
+                skills_prompt = DynamicSubAgentManager.build_subagent_skills_prompt(umo, agent_name, runtime)
                 if skills_prompt:
                     subagent_system_prompt += f"\n\n# Available Skills\n{skills_prompt}"
                     logger.info(f"[SubAgentSkills] Injected skills for {agent_name}")
 
                 # 注入公共上下文
-                shared_context_prompt = (
-                    DynamicSubAgentManager.build_shared_context_prompt(umo, agent_name)
-                )
+                shared_context_prompt = DynamicSubAgentManager.build_shared_context_prompt(umo, agent_name)
                 if shared_context_prompt:
                     subagent_system_prompt += f"\n{shared_context_prompt}"
-                    logger.info(
-                        f"[SubAgentSharedContext] Injected shared context for {agent_name}"
-                    )
+                    logger.info(f"[SubAgentSharedContext] Injected shared context for {agent_name}")
+
+                # 注入时间信息
+                current_time = datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
+                subagent_system_prompt += f"Current datetime: {current_time}"
 
             except Exception:
                 pass
@@ -387,27 +374,19 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             stream=stream,
         )
 
-        # 保存受保护subagent的历史上下文
+        # 保存历史上下文
         try:
             from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
-
-            agent_name = getattr(tool.agent, "name", None)
+            agent_name = getattr(tool.agent, 'name', None)
             if agent_name:
                 # 构建当前对话的历史消息
-                history_messages = []
-                if contexts:
-                    history_messages.extend(contexts)
-                # 添加用户输入
-                history_messages.append({"role": "user", "content": input_})
+                current_messages = []
+                # 添加本轮用户输入
+                current_messages.append({"role": "user", "content": input_})
                 # 添加助手回复
-                history_messages.append(
-                    {"role": "assistant", "content": llm_resp.completion_text}
-                )
-                # 保存历史
-                if history_messages:
-                    DynamicSubAgentManager.save_subagent_history(
-                        umo, agent_name, history_messages
-                    )
+                current_messages.append({"role": "assistant", "content": llm_resp.completion_text})
+                if current_messages:
+                    DynamicSubAgentManager.save_subagent_history(umo, agent_name, current_messages)
         except Exception:
             pass  # 不影响主流程
 

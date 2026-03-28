@@ -952,8 +952,9 @@ def _apply_enhanced_subagent_tools(
             LIST_DYNAMIC_SUBAGENTS_TOOL,
             PROTECT_SUBAGENT_TOOL,
             UNPROTECT_SUBAGENT_TOOL,
-            SEND_PUBLIC_CONTEXT_TOOL,
-            VIEW_PUBLIC_CONTEXT_TOOL,
+            SEND_SHARED_CONTEXT_TOOL,
+            SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT,
+            VIEW_SHARED_CONTEXT_TOOL,
             DynamicSubAgentManager,
         )
         from astrbot.core.subagent_logger import SubAgentLogger
@@ -963,8 +964,8 @@ def _apply_enhanced_subagent_tools(
         req.func_tool.add_tool(LIST_DYNAMIC_SUBAGENTS_TOOL)
         req.func_tool.add_tool(PROTECT_SUBAGENT_TOOL)
         req.func_tool.add_tool(UNPROTECT_SUBAGENT_TOOL)
-        req.func_tool.add_tool(VIEW_PUBLIC_CONTEXT_TOOL)
-        req.func_tool.add_tool(SEND_PUBLIC_CONTEXT_TOOL)
+        req.func_tool.add_tool(VIEW_SHARED_CONTEXT_TOOL)
+        req.func_tool.add_tool(SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT)
 
         # Configure logger
         SubAgentLogger.configure(level=config.enhanced_subagent.get('log_level'))

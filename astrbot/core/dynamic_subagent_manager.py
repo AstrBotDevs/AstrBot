@@ -12,7 +12,7 @@ from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.subagent_logger import SubAgentLogger
-
+import time
 @dataclass
 class DynamicSubAgentConfig:
     name: str
@@ -59,7 +59,6 @@ class DynamicSubAgentManager:
     def get_dynamic_subagent_prompt(cls):
         if cls._shared_context_enabled:
             shared_context_prompt = """- #### Collaborative Communication Mechanism
-
   **Communication Tool description**: Inform the sub-agent that `send_shared_context` tool can be used for public channel communication, visible to all online sub-agents and the main agent.
   **Communication protocol** : Clarify when to use this tool.
     Progress reporting: Status updates must be sent when a task starts, encounters a blockage, or is completed.
@@ -69,7 +68,7 @@ class DynamicSubAgentManager:
 
         return f"""# Dynamic Sub-Agent Capability
 
-You have the ability to dynamically create and manage sub-agents with isolated instructions, tools and skills.
+You are the Main Agent, and have the ability to dynamically create and manage sub-agents with isolated instructions, tools and skills.
 
 ## When to create Sub-agents:
 
@@ -86,10 +85,10 @@ You have the ability to dynamically create and manage sub-agents with isolated i
    Identify the dependencies between subtasks (who comes first and who comes second, who depends on whose output, and which sub-agents can run in parallel).
 
 2. **Sub-Agent Designing**:
-   Use the `create_dynamic_subagent` tool to create multiple sub-agents, and `transfer_to_xxx` tools will be created, where `xxx` is the name of a sub-agent.
+   Use the `create_dynamic_subagent` tool to create multiple sub-agents, and `transfer_to_{{name}}` tools will be created, where `{{name}}` is the name of a sub-agent.
 
 3. **Sub-Agent Delegating**
-   Use the `transfer_to_xxx` tool to delegate sub-agent, where `xxx` refers to the sub-agent name.
+   Use the `transfer_to_{{name}}` tool to delegate sub-agent
 
 ## Creating Sub-agents with Name, System Prompt, Tools and Skills
 
@@ -106,13 +105,13 @@ create_dynamic_subagent(
 )
 ```
 
-**CAUTION**:  **YOU MUST FOLLOW THE STEPS BELOW**to give well-designed system prompts and allocate tools and skills.
+**CAUTION**:  **YOU MUST FOLLOW THE STEPS BELOW** to give well-designed system prompt and allocate tools and skills. 
 
-### 1. When giving system prompt to a sub-agent, include the following information to make them clear and standardized.
+### 1. When giving system prompt to a sub-agent, make it detailed, and you should include the following information to make them clear and standardized.
 
 - #### Character Design
 
-  Define the professional identity, and personality traits of the sub-agent.
+  Define the name, professional identity, and personality traits of the sub-agent.
 
 - #### Global Tasks and Positioning
 
@@ -131,6 +130,7 @@ create_dynamic_subagent(
 
   Safety: Dangerous operations are strictly prohibited.
   Signature convention: Generated code/documents must be marked with the sub-agent's name and the time.
+  Working directory: By default, it is consistent with the main Agent's directory.
 
 ### 2. Allocate available Tools and Skills
 
@@ -195,14 +195,11 @@ If you wish to prevent a certain sub-agent from being automatically cleaned up, 
         """Mark a subagent as protected from auto cleanup and history retention"""
         session = cls.get_or_create_session(session_id)
         session.protected_agents.add(agent_name)
-        # 初始化历史记录（如果还没有）
-        if agent_name not in session.agent_histories:
-            session.agent_histories[agent_name] = []
-            SubAgentLogger.debug(session_id, "DynamicSubAgentManager:history", f"Initialized history for protected agent: {agent_name}", agent_name)
+        SubAgentLogger.debug(session_id, "DynamicSubAgentManager:history", f"Initialized history for protected agent: {agent_name}", agent_name)
 
     @classmethod
-    def save_subagent_history(cls, session_id: str, agent_name: str, messages: list) -> None:
-        """Save conversation history for a subagent (only for protected agents)"""
+    def save_subagent_history(cls, session_id: str, agent_name: str, current_messages: list) -> None:
+        """Save conversation history for a subagent"""
         session = cls.get_session(session_id)
         if not session or agent_name not in session.protected_agents:
             return
@@ -211,12 +208,11 @@ If you wish to prevent a certain sub-agent from being automatically cleaned up, 
             session.agent_histories[agent_name] = []
 
         # 追加新消息
-        if isinstance(messages, list):
-            session.agent_histories[agent_name].extend(messages)
+        if isinstance(current_messages, list):
+            session.agent_histories[agent_name].extend(current_messages)
 
         SubAgentLogger.debug(session_id, "history_save",
-                          f"Saved {len(messages) if isinstance(messages, list) else 1} messages for {agent_name}",
-                          agent_name)
+                          f"Saved messages for {agent_name}, current len={len(session.agent_histories[agent_name])} ")
 
     @classmethod
     def get_subagent_history(cls, session_id: str, agent_name: str) -> list:
@@ -310,7 +306,6 @@ If you wish to prevent a certain sub-agent from being automatically cleaned up, 
             session.shared_context = session.shared_context[-cls._shared_context_maxlen:]
             logger.warning("Shared context exceeded limit, removed oldest messages")
 
-        import time
         message = {
             "type": context_type,  # status, message, system
             "sender": sender,
@@ -354,22 +349,42 @@ If you wish to prevent a certain sub-agent from being automatically cleaned up, 
         # Shared Context
         lines = [""]
 
-        lines.append("The following is shared context between all agents:")
-
+        lines.append("""# You have a shared context that contains all subagent and system messages.
+### You should pay attention to whether there are messages in the shared context before executing any instructions. 
+These may be messages sent to you by other subagents, messages you send to other subagents, or system instructions sent to all.
+### Shared Context Message processing rules:
+1. Message processing priority: Messages from System > Messages from other Agents; New messages > Old messages. 
+2. If the message is addressed to you and contains clear instructions, please follow them. If necessary, update your Status through the `send_shared_context` tool after completing the instructions.
+   *Example* 1: If your name is Bob, and there is a message from shared context.
+    > [14:11:16] [message] Alice -> Bob: What day is it today? Please reply.
+    >  You should do:
+    - Function calling if required (Get the time today)
+    - Reply in the shared context using `send_shared_context` tool, and it may be like:
+    > [14:13:20] [message] Bob -> Alice: It's Monday today.
+   *Example* 2: If your name is Bob, and there is a message from System. 
+    > [14:24:02] [system] System -> all: Attention to All agents : Please store all generated files in the **D:/temp** directory
+    >  You can choose not to reply in the public context, but you should follow the instructions provided by the System
+    - Do your original task 
+    - If there are file generated, put them to `D:/temp` directory
+      VERY IMPORTANT: If there is an instruction prefixed with `[system] System -> all` or `[system] System -> Your name`, **YOU MUST PRIORITIZE FOLLOWING IT**.
+3. If the task corresponding to a certain message has been completed (which can be determined through the Status history), it can be ignored.
+4. If you need to send a message to main agent, just output. If to other agents, use the `send_shared_context` tool. 
+  ## < The following is shared context between all agents >""".strip())
         for msg in session.shared_context:
+            ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
             sender = msg["sender"]
             msg_type = msg["type"]
             target = msg["target"]
             content = msg["content"]
 
             if msg_type == "status":
-                lines.append(f"[Status] {sender}: {content}")
+                lines.append(f"[{ts}] [Status] {sender}: {content}")
             elif msg_type == "message":
-                lines.append(f"[Message] {sender} -> {target}: {content}")
+                lines.append(f"[{ts}] [Message] {sender} -> {target}: {content}")
             elif msg_type == "system":
-                lines.append(f"[System] {content}")
-            lines.append("")
+                lines.append(f"[{ts}] [System] {content}")
 
+        lines.append("## </ End of shared context >")
         return "\n".join(lines)
 
     @classmethod
@@ -433,12 +448,13 @@ If you wish to prevent a certain sub-agent from being automatically cleaned up, 
 
         if config.name in session.agents:
             session.handoff_tools.pop(config.name, None)
-        # When shared_context is enabled, the send_public_context tool is allocated regardless of whether the main agent allocates the tool to the subagent
+        # When shared_context is enabled, the send_shared_context tool is allocated regardless of whether the main agent allocates the tool to the subagent
         if session.shared_context_enabled:
             if config.tools is None:
                 config.tools = []
-            config.tools.append('send_public_context')
+            config.tools.append('send_shared_context')
         session.agents[config.name] = config
+
         agent = Agent(
             name=config.name,
             instructions=config.system_prompt,
@@ -451,6 +467,9 @@ If you wish to prevent a certain sub-agent from being automatically cleaned up, 
         if config.provider_id:
             handoff_tool.provider_id = config.provider_id
         session.handoff_tools[config.name] = handoff_tool
+        # 初始化subagent的历史上下文
+        if config.name not in session.agent_histories:
+            session.agent_histories[config.name] = []
         SubAgentLogger.info(session_id, "DynamicSubAgentManager:create", f"Created: {config.name}", config.name)
         return f"transfer_to_{config.name}", handoff_tool
 
@@ -472,6 +491,8 @@ If you wish to prevent a certain sub-agent from being automatically cleaned up, 
         session.agents.pop(agent_name, None)
         session.handoff_tools.pop(agent_name, None)
         session.agent_histories.pop(agent_name, None)
+        # 清理公共上下文中包含该Agent的内容
+        cls.cleanup_shared_context_by_agent(session_id, agent_name)
         SubAgentLogger.info(session_id, "DynamicSubAgentManager:cleanup", f"Cleaned: {agent_name}", agent_name)
         return True
 
@@ -514,11 +535,9 @@ class CreateDynamicSubAgentTool(FunctionTool):
 
         if not name:
             return "Error: subagent name required"
-
         # 验证名称格式：只允许英文字母、数字和下划线，长度限制
         if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]{0,31}$', name):
             return "Error: SubAgent name must start with letter, contain only letters/numbers/underscores, max 32 characters"
-
         # 检查是否包含危险字符
         dangerous_patterns = ['__', 'system', 'admin', 'root', 'super']
         if any(p in name.lower() for p in dangerous_patterns):
@@ -634,48 +653,76 @@ UNPROTECT_SUBAGENT_TOOL = UnprotectSubagentTool()
 
 # Shared Context Tools
 @dataclass
-class SendPublicContextTool(FunctionTool):
+class SendSharedContextToolForMainAgent(FunctionTool):
     """Tool to send a message to the shared context (visible to all agents)"""
-    name: str = "send_public_context"
-    description: str = """Send a message to the shared context that will be visible to all subagents and the main agent.
-Use this to share information, status updates, or coordinate with other agents.
-Types: 'status' (your current task/progress), 'message' (to other agents), 'system' (global announcements)."""
+    name: str = "send_shared_context_for_main_agent"
+    description: str = """Send a message to the shared context that will be visible to all subagents and the main agent. You are the main agent, use this to share global information.
+Types: 'message' (to other agents), 'system' (global announcements)."""
     parameters: dict = field(default_factory=lambda: {
         "type": "object",
         "properties": {
             "context_type": {
                 "type": "string",
-                "description": "Type of context: status (task progress), message (to other agents), system (global announcement)",
-                "enum": ["status", "message", "system"]
+                "description": "Type of context: message (to other agents), system (global announcement)",
+                "enum": ["message", "system"]
             },
             "content": {"type": "string", "description": "Content to share"},
-            "sender": {"type": "string", "description": "Sender agent name", "default": "Nobody"},
             "target": {"type": "string", "description": "Target agent name or 'all' for broadcast", "default": "all"},
 
         },
-        "required": ["context_type", "content"],
+        "required": ["context_type", "content", "target"],
     })
 
     async def call(self, context, **kwargs) -> str:
         context_type = kwargs.get("context_type", "message")
         content = kwargs.get("content", "")
         target = kwargs.get("target", "all")
-        sender = kwargs.get("sender", "Nobody")
         if not content:
             return "Error: content is required"
-
         session_id = context.context.event.unified_msg_origin
-        if context_type == "system":
-            DynamicSubAgentManager.add_shared_context(session_id, "System", context_type, content, target)
-        else:
-            DynamicSubAgentManager.add_shared_context(session_id, sender, context_type, content, target)
-        return f"Shared context updated: [{context_type}] 主Agent -> {target}: {content[:100]}{'...' if len(content) > 100 else ''}"
+        DynamicSubAgentManager.add_shared_context(session_id, "System", context_type, content, target)
+        return f"Shared context updated: [{context_type}] System -> {target}: {content[:100]}{'...' if len(content) > 100 else ''}"
+
+@dataclass
+class SendSharedContextTool(FunctionTool):
+    """Tool to send a message to the shared context (visible to all agents)"""
+    name: str = "send_shared_context"
+    description: str = """Send a message to the shared context that will be visible to all subagents and the main agent.
+Use this to share information, status updates, or coordinate with other agents.
+Types: 'status' (your current task/progress), 'message' (to other agents)"""
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "context_type": {
+                "type": "string",
+                "description": "Type of context: status (task progress), message (to other agents)",
+                "enum": ["status", "message"]
+            },
+            "content": {"type": "string", "description": "Content to share"},
+            "sender": {"type": "string", "description": "Sender agent name", "default": "YourName"},
+            "target": {"type": "string", "description": "Target agent name or 'all' for broadcast",
+                       "default": "all"},
+
+        },
+        "required": ["context_type", "content", "sender", "target"],
+    })
+
+    async def call(self, context, **kwargs) -> str:
+        context_type = kwargs.get("context_type", "message")
+        content = kwargs.get("content", "")
+        target = kwargs.get("target", "all")
+        sender = kwargs.get("sender", "YourName")
+        if not content:
+            return "Error: content is required"
+        session_id = context.context.event.unified_msg_origin
+        DynamicSubAgentManager.add_shared_context(session_id, sender, context_type, content, target)
+        return f"Shared context updated: [{context_type}] {sender} -> {target}: {content[:100]}{'...' if len(content) > 100 else ''}"
 
 
 @dataclass
-class ViewPublicContextTool(FunctionTool):
+class ViewSharedContextTool(FunctionTool):
     """Tool to view the shared context (mainly for main agent)"""
-    name: str = "view_public_context"
+    name: str = "view_shared_context"
     description: str = """View the shared context between all agents. This shows all messages including status updates,
 inter-agent messages, and system announcements."""
     parameters: dict = field(default_factory=lambda: {
@@ -691,7 +738,6 @@ inter-agent messages, and system announcements."""
             return "Shared context is empty."
 
         lines = ["=== Shared Context ===\n"]
-        import time
         for msg in shared_context:
             ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
             msg_type = msg["type"]
@@ -706,5 +752,6 @@ inter-agent messages, and system announcements."""
 
 
 # Shared context tool instances
-SEND_PUBLIC_CONTEXT_TOOL = SendPublicContextTool()
-VIEW_PUBLIC_CONTEXT_TOOL = ViewPublicContextTool()
+SEND_SHARED_CONTEXT_TOOL = SendSharedContextTool()
+SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT = SendSharedContextToolForMainAgent()
+VIEW_SHARED_CONTEXT_TOOL = ViewSharedContextTool()
