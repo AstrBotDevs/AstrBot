@@ -53,25 +53,6 @@
               {{ selectedTagPreview }}
             </span>
           </template>
-
-          <template #prepend-item>
-            <div v-if="selectedTags.length > 0" class="tag-menu-selected">
-              <div class="tag-menu-chip-list">
-                <v-chip
-                  v-for="tag in selectedTags"
-                  :key="tag"
-                  size="small"
-                  closable
-                  variant="tonal"
-                  color="primary"
-                  @click:close.stop="removeTagFilter(tag)"
-                >
-                  {{ tag }}
-                </v-chip>
-              </div>
-              <v-divider class="tag-menu-divider" />
-            </div>
-          </template>
         </v-combobox>
         <v-btn variant="text" size="small" @click="clearFilters">
           {{ tm('filters.clearButton') }}
@@ -678,10 +659,6 @@ export default {
       this.tagSearch = '';
     },
 
-    removeTagFilter(tag) {
-      this.selectedTags = this.selectedTags.filter((item) => item !== tag);
-    },
-
     getLevelColor(level) {
       return this.levelColors[level] || 'grey';
     },
@@ -788,33 +765,6 @@ export default {
 
 :deep(.tag-filter-menu .v-list) {
   padding-top: 0;
-}
-
-:deep(.tag-menu-selected) {
-  padding: 10px 12px 0;
-}
-
-:deep(.tag-menu-chip-list) {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  max-height: 112px;
-  overflow-y: auto;
-  padding-right: 4px;
-  scrollbar-width: thin;
-}
-
-:deep(.tag-menu-chip-list::-webkit-scrollbar) {
-  width: 6px;
-}
-
-:deep(.tag-menu-chip-list::-webkit-scrollbar-thumb) {
-  background: rgba(var(--v-theme-on-surface), 0.24);
-  border-radius: 999px;
-}
-
-:deep(.tag-menu-divider) {
-  margin-top: 10px;
 }
 
 .filter-summary {
