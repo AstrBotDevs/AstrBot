@@ -795,7 +795,7 @@ class HandlerDispatcher:
                 exclude_none=True
             )
         elif (
-            event_type == "decorating_result"
+            event_type in {"decorating_result", "streaming_delta"}
             and injected_payloads.event_result is not None
         ):
             summary["event_result"] = injected_payloads.event_result.to_payload()
