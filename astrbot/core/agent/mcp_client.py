@@ -58,13 +58,24 @@ def _prepare_stdio_env(config: dict) -> dict:
     env= _merge_environment_variables(env)
     prepared["env"] = env
     # 获取配置值，并转换为小写进行不区分大小写比较
-    command = config.get('command')
+    cmd_str = _extract_command_string(config)
     # 目前仅处理 dotnet，如有其他命令需求需扩展 
-    if command and isinstance(command, str) and command.lower() == 'dotnet':
+    if cmd_str and cmd_str.lower() == "dotnet":
         env= _ensure_dotnet_in_path(env)
         prepared["env"] = env
         return _create_subprocess_NO_WINDOW(prepared)
     return prepared
+
+def _extract_command_string(config:dict)->str:
+    """从配置中提取命令字符串"""
+    command = config.get('command')
+    cmd_str = ""
+    if isinstance(command, str):
+        cmd_str = command
+    elif isinstance(command, list) and command:
+        cmd_str = command[0]
+    return cmd_str
+
 def _merge_environment_variables(env: dict) -> dict:
     """合并环境变量，处理Windows不区分大小写的情况"""
     merged = env.copy()
