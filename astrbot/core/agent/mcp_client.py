@@ -103,10 +103,31 @@ def _ensure_dotnet_in_path(env: dict) -> dict:
     )
     return env
 
-def _create_subprocess_NO_WINDOW(prepared: dict)->dict:
-    if "creationflags" not in prepared:
-        import subprocess
-        prepared["creationflags"] = subprocess.CREATE_NO_WINDOW
+def _create_subprocess(prepared: dict)->dict:
+    """准备子进程参数字典"""
+    # 只在Windows平台处理
+    if os.name == "nt":
+        # 检查用户是否指定了控制台行为
+        # 使用更清晰的参数名：show_console
+        show_console = prepared.pop("show_console", None)
+        
+        if show_console is not None:
+            # 确保是布尔值
+            if isinstance(show_console, str):
+                # 处理字符串形式的布尔值
+                show_console = show_console.lower() in ("true", "1", "yes", "y", "t")
+            elif not isinstance(show_console, bool):                
+                # 如果不是字符串也不是布尔值，可以抛出异常或使用默认值                
+                raise ValueError(f"show_console must be bool or str, got {type(show_console)}")
+            existing_flags = prepared.get("creationflags", 0)
+            if not show_console:  # 如果不要显示控制台
+                prepared["creationflags"] = existing_flags | subprocess.CREATE_NO_WINDOW
+            else:
+                prepared["creationflags"] = existing_flags & ~subprocess.CREATE_NO_WINDOW
+        else:
+            # 保持向后兼容：默认添加CREATE_NO_WINDOW
+            if "creationflags" not in prepared:
+                prepared["creationflags"] = subprocess.CREATE_NO_WINDOW
     return prepared
 
 
