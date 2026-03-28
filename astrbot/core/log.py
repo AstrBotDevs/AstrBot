@@ -520,6 +520,9 @@ class LogManager:
         cls._queue_broker = log_broker
         cls._ensure_logger_enricher_filter(logger)
         cls._attach_queue_handler(logger, log_broker)
+        root_logger = logging.getLogger()
+        cls._ensure_logger_enricher_filter(root_logger)
+        cls._attach_queue_handler(root_logger, log_broker)
 
     @classmethod
     def _remove_sink(cls, sink_id: int | None) -> None:
