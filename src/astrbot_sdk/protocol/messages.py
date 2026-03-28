@@ -4,6 +4,40 @@
 `InitializeMessage` 发起，再由 `ResultMessage(kind="initialize_result")`
 返回 `InitializeOutput`；能力调用阶段则使用 `InvokeMessage` / `ResultMessage`
 或 `EventMessage` 序列。
+
+TODO: Batch Invoke（协议 v1.1 候选特性）
+==========================================
+
+设计概要：
+    新增 BatchInvokeMessage / BatchResultMessage，将多个独立非流式调用
+    打包为单次 IPC 传输，减少序列化和 I/O syscall 开销。
+
+约束：
+    - 只支持非流式子调用（stream=false）
+    - 结果保序返回，但服务端内部可 asyncio.gather 并发处理
+    - 单个子调用失败不拖垮整个 batch，各自返回独立的 success/error
+    - 仅协议级错误（空 calls、重复 id、子项带 stream=true）整体失败
+    - 取消只到 batch 粒度：取消 batch ID → 取消全部未完成子调用
+
+改动范围：
+    - messages.py  : 加 BatchInvokeMessage / BatchResultMessage
+    - peer.py      : 加 invoke_batch() 和 _handle_batch_invoke()
+    - clients/_proxy.py : 加 call_batch()
+    - transport.py : 不动（batch 仍然是一行 JSON）
+
+暂不实现的原因（2026-03-28）：
+    1. SDK 集成（feat/sdk-integration）尚在主干开发期，协议层应保持简单稳定
+    2. 现有 pipelining（asyncio.gather + 多行 InvokeMessage）已覆盖并发场景，
+       单次 stdio IPC 延迟在微秒级，实测中不构成瓶颈
+    3. peer.py 已 776 行，是协议栈核心文件，batch 会引入子调用生命周期管理、
+       超时聚合等额外复杂度
+    4. 目前无真实插件在单次 handler 中发出 10+ 独立 capability 调用，
+       缺乏可测量的性能收益数据
+
+触发条件（何时重新评估）：
+    - 有插件在单次 handler 中 gather 10+ 独立 capability 调用
+    - IPC 序列化/解析耗时经 profile 确认占总延迟 >5%
+    - 需要 WebSocket 传输场景下的带宽优化
 """
 
 from __future__ import annotations
