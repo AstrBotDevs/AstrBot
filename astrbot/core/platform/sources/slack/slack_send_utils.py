@@ -219,9 +219,8 @@ async def send_with_blocks_and_fallback(
         )
 
     fallback_text = build_text_fallback(message_chain, resolved_fallbacks)
-    fallback_text = (
-        (fallback_text or "").strip()
-        or resolved_fallbacks.get("safe_text", SLACK_SAFE_TEXT_FALLBACK)
+    fallback_text = (fallback_text or "").strip() or resolved_fallbacks.get(
+        "safe_text", SLACK_SAFE_TEXT_FALLBACK
     )
     fallback_payload: dict[str, Any] = {
         "channel": channel,
