@@ -15,7 +15,6 @@
     "postinstall": "node scripts/patch-dompurify.mjs"
   },
   "dependencies": {
-    "qrcode": "^1.5.4",
     "@guolao/vue-monaco-editor": "^1.6.0",
     "@tiptap/starter-kit": "3.20.5",
     "@tiptap/vue-3": "3.20.5",
@@ -23,6 +22,7 @@
     "axios": "1.13.6",
     "axios-mock-adapter": "^2.1.0",
     "chance": "1.1.13",
+    "d3": "^7.9.0",
     "date-fns": "4.1.0",
     "dompurify": "^3.3.3",
     "event-source-polyfill": "^1.0.31",
@@ -36,6 +36,7 @@
     "monaco-editor": "^0.55.1",
     "pinia": "3.0.4",
     "pinyin-pro": "^3.28.0",
+    "qrcode": "^1.5.4",
     "shiki": "^3.13.0",
     "stream-markdown": "^0.0.14",
     "vee-validate": "4.15.1",
