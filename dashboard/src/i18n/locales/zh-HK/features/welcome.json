@@ -1,8 +1,8 @@
 {
   "greeting": {
-    "morning": "早晨，歡迎用 AstrBot",
-    "afternoon": "午安，歡迎用 AstrBot",
-    "evening": "晚安，歡迎用 AstrBot",
+    "morning": "早晨，歡迎使用 AstrBot",
+    "afternoon": "午安，歡迎使用 AstrBot",
+    "evening": "晚安，歡迎使用 AstrBot",
     "newYear": "新年快樂！"
   },
   "subtitle": "可以搞掂 Basic Guide 先，平台同對話 Provider 都 Support 遲啲先 Config。",
