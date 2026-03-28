@@ -95,13 +95,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             error_type="invalid_background_task",
             fix_hint=(
                 "`background_task` must be a boolean (`true` or `false`) or a string "
-                "equivalent such as `\"1\"`/`\"0\"`, `\"yes\"`/`\"no\"`, or "
-                "`\"on\"`/`\"off\"`."
+                'equivalent such as `"1"`/`"0"`, `"yes"`/`"no"`, or '
+                '`"on"`/`"off"`.'
             ),
             action_hint=(
                 "Retry the same handoff with `background_task` set to a boolean or one "
-                "of the supported string equivalents (`\"true\"`, `\"false\"`, "
-                "`\"1\"`, `\"0\"`, `\"yes\"`, `\"no\"`, `\"on\"`, `\"off\"`)."
+                'of the supported string equivalents (`"true"`, `"false"`, '
+                '`"1"`, `"0"`, `"yes"`, `"no"`, `"on"`, `"off"`).'
             ),
         )
 
@@ -118,9 +118,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 fix_hint=(
                     "Provide a non-empty `input` string that clearly describes the delegated task."
                 ),
-                action_hint=(
-                    "Retry now with a concise task statement in `input`."
-                ),
+                action_hint=("Retry now with a concise task statement in `input`."),
             )
         return input_value.strip(), None
 
