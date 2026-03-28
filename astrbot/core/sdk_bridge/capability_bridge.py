@@ -18,12 +18,11 @@ from .capabilities import (
     SkillCapabilityMixin,
     SystemCapabilityMixin,
 )
-from .event_converter import EventConverter
 
 if TYPE_CHECKING:
     from astrbot.core.star.context import Context as StarContext
 
-__all__ = ["CoreCapabilityBridge", "EventConverter"]
+__all__ = ["CoreCapabilityBridge"]
 
 
 class CoreCapabilityBridge(

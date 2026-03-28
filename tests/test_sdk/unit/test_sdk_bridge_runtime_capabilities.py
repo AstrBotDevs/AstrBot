@@ -85,8 +85,15 @@ from astrbot.core.pipeline.process_stage.method.agent_sub_stages.third_party imp
 )
 from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import ProviderRequest as CoreProviderRequest
-from astrbot.core.sdk_bridge.event_converter import EventConverter
+from astrbot.core.sdk_bridge.event_payload import (
+    build_inbound_event_snapshot,
+    sanitize_sdk_extras,
+)
 from astrbot.core.sdk_bridge.plugin_bridge import SdkPluginBridge
 from astrbot.core.star.context import Context as StarContext
 
@@ -397,12 +404,14 @@ class _EventConverterProbe:
 
 
 @pytest.mark.unit
-def test_event_converter_sanitizes_non_serializable_extras() -> None:
-    payload = EventConverter.core_to_sdk(
-        _EventConverterProbe(),
+def test_build_inbound_event_payload_sanitizes_non_serializable_extras() -> None:
+    event = _EventConverterProbe()
+    payload = build_inbound_event_snapshot(event).to_payload(
         dispatch_token="dispatch-1",
         plugin_id="sdk-demo",
         request_id="req-1",
+        host_extras=sanitize_sdk_extras(event.get_extra()),
+        sdk_local_extras={},
     )
 
     assert payload["extras"] == {"serializable": {"value": 1}}
@@ -442,6 +451,77 @@ class _OverlayFakeStarContext:
 
     def get_all_stars(self) -> list[object]:
         return []
+
+
+class _ConcreteAstrMessageEvent(AstrMessageEvent):
+    async def send(self, message):
+        await super().send(message)
+
+
+def _make_real_astr_event() -> AstrMessageEvent:
+    message = AstrBotMessage()
+    message.type = MessageType.FRIEND_MESSAGE
+    message.self_id = "bot-1"
+    message.session_id = "session-1"
+    message.message_id = "message-1"
+    message.sender = MessageMember(user_id="user-1", nickname="Tester")
+    message.message = [Plain("hello", convert=False)]
+    message.message_str = "hello"
+    message.raw_message = None
+    return _ConcreteAstrMessageEvent(
+        message_str="hello",
+        message_obj=message,
+        platform_meta=PlatformMetadata(
+            name="demo-platform",
+            description="Demo",
+            id="demo-platform",
+        ),
+        session_id="session-1",
+    )
+
+
+def _bind_real_event_to_overlay(
+    bridge: SdkPluginBridge,
+    *,
+    dispatch_token: str = "dispatch-real",
+    request_id: str = "req-1",
+) -> tuple[AstrMessageEvent, object]:
+    event = _make_real_astr_event()
+    bridge._bind_dispatch_token(event, dispatch_token)
+    bridge._request_overlays[dispatch_token] = bridge._ensure_request_overlay(
+        dispatch_token,
+        should_call_llm=True,
+    )
+    bridge._request_contexts[dispatch_token] = types.SimpleNamespace(
+        plugin_id="sdk-demo",
+        request_id=request_id,
+        dispatch_token=dispatch_token,
+        dispatch_state=types.SimpleNamespace(event=event),
+        cancelled=False,
+    )
+    bridge._track_request_scope(
+        dispatch_token=dispatch_token,
+        request_id=request_id,
+        plugin_id="sdk-demo",
+    )
+    overlay = bridge.get_request_overlay_by_token(dispatch_token)
+    assert overlay is not None
+    return event, overlay
+
+
+class _CountingResult(MessageEventResult):
+    def __init__(self) -> None:
+        super().__init__(chain=[Plain("counted", convert=False)])
+        self.stop_calls = 0
+        self.continue_calls = 0
+
+    def stop_event(self) -> _CountingResult:
+        self.stop_calls += 1
+        return super().stop_event()
+
+    def continue_event(self) -> _CountingResult:
+        self.continue_calls += 1
+        return super().continue_event()
 
 
 class _ScheduleDispatchStarContext(_OverlayFakeStarContext):
@@ -869,6 +949,156 @@ def test_sdk_request_overlay_controls_llm_result_and_whitelist() -> None:
 
     assert bridge.clear_result_for_request(request_id) is True
     assert bridge.get_effective_result(event) is None
+
+
+@pytest.mark.unit
+def test_sdk_request_overlay_payload_reads_return_deep_copies() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    request_id = "req-1"
+
+    bridge._request_id_to_token[request_id] = "dispatch-1"
+    bridge._request_overlays["dispatch-1"] = bridge._ensure_request_overlay(
+        "dispatch-1",
+        should_call_llm=False,
+    )
+    assert bridge.set_result_for_request(
+        request_id,
+        {
+            "type": "chain",
+            "chain": [{"type": "text", "data": {"text": "overlay"}}],
+        },
+    )
+
+    first = bridge.get_result_payload_for_request(request_id)
+    assert first is not None
+    first["chain"][0]["data"]["text"] = "mutated"
+
+    second = bridge.get_result_payload_for_request(request_id)
+    assert second is not None
+    assert second["chain"][0]["data"]["text"] == "overlay"
+
+
+@pytest.mark.unit
+def test_astr_message_event_binding_updates_overlay_and_preserves_result_after_close() -> (
+    None
+):
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    dispatch_token = "dispatch-real"
+    event, overlay = _bind_real_event_to_overlay(
+        bridge,
+        dispatch_token=dispatch_token,
+        request_id="req-1",
+    )
+
+    event.set_result(MessageEventResult().message("binding result"))
+    assert event.get_result() is not None
+    assert event.get_result().get_plain_text() == "binding result"
+
+    assert overlay.result_payload is not None
+    assert overlay.result_payload["chain"][0]["data"]["text"] == "binding result"
+
+    event.stop_event()
+    assert event.is_stopped() is True
+    assert overlay.result_stopped is True
+    assert overlay.should_call_llm is False
+
+    event.continue_event()
+    assert event.is_stopped() is False
+    assert overlay.result_stopped is False
+    assert overlay.should_call_llm is False
+
+    bridge.close_request_overlay_for_event(event)
+
+    assert not hasattr(event, "_sdk_result_binding")
+    assert event.get_result() is not None
+    assert event.get_result().get_plain_text() == "binding result"
+
+
+@pytest.mark.unit
+def test_stop_and_continue_do_not_reserialize_existing_result_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    event, overlay = _bind_real_event_to_overlay(bridge)
+    serialize_calls = 0
+    original = bridge._legacy_result_to_sdk_payload
+
+    def _counting_serializer(result: MessageEventResult | None):
+        nonlocal serialize_calls
+        serialize_calls += 1
+        return original(result)
+
+    monkeypatch.setattr(bridge, "_legacy_result_to_sdk_payload", _counting_serializer)
+
+    event.set_result(MessageEventResult().message("binding result"))
+    assert serialize_calls == 1
+    assert overlay.result_payload is not None
+
+    event.stop_event()
+    event.continue_event()
+
+    assert serialize_calls == 1
+    assert overlay.result_payload is not None
+    assert overlay.result_payload["chain"][0]["data"]["text"] == "binding result"
+    assert overlay.result_stopped is False
+    assert overlay.should_call_llm is False
+
+
+@pytest.mark.unit
+def test_get_effective_result_for_token_is_idempotent_when_stop_state_aligned() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    dispatch_token = "dispatch-real"
+    bridge._request_overlays[dispatch_token] = bridge._ensure_request_overlay(
+        dispatch_token,
+        should_call_llm=True,
+    )
+    overlay = bridge.get_request_overlay_by_token(dispatch_token)
+    assert overlay is not None
+
+    result = _CountingResult()
+    result.continue_event()
+    result.stop_calls = 0
+    result.continue_calls = 0
+    overlay.result_object = result
+    overlay.result_is_set = True
+    overlay.result_stopped = False
+
+    first = bridge._get_effective_result_for_token(dispatch_token)
+    second = bridge._get_effective_result_for_token(dispatch_token)
+    assert first is result
+    assert second is result
+    assert result.stop_calls == 0
+    assert result.continue_calls == 0
+
+    result.result_type = result.result_type.STOP
+    overlay.result_stopped = True
+    third = bridge._get_effective_result_for_token(dispatch_token)
+    fourth = bridge._get_effective_result_for_token(dispatch_token)
+    assert third is result
+    assert fourth is result
+    assert result.stop_calls == 0
+    assert result.continue_calls == 0
+
+
+@pytest.mark.unit
+def test_get_effective_result_for_token_lazily_creates_stopped_result_once() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    dispatch_token = "dispatch-real"
+    bridge._request_overlays[dispatch_token] = bridge._ensure_request_overlay(
+        dispatch_token,
+        should_call_llm=True,
+    )
+    overlay = bridge.get_request_overlay_by_token(dispatch_token)
+    assert overlay is not None
+    overlay.result_is_set = True
+    overlay.result_stopped = True
+
+    first = bridge._get_effective_result_for_token(dispatch_token)
+    second = bridge._get_effective_result_for_token(dispatch_token)
+
+    assert first is not None
+    assert first.is_stopped() is True
+    assert second is first
 
 
 @pytest.mark.unit

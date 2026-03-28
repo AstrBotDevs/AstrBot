@@ -309,6 +309,15 @@ class AstrMessageEvent(abc.ABC):
     async def _post_send(self) -> None:
         """调度器会在执行 send() 后调用该方法 deprecated in v3.5.18"""
 
+    def _active_sdk_result_binding(self):
+        binding = getattr(self, "_sdk_result_binding", None)
+        if binding is None:
+            return None
+        is_active = getattr(binding, "is_active", None)
+        if callable(is_active) and not is_active():
+            return None
+        return binding
+
     def set_result(self, result: MessageEventResult | str) -> None:
         """设置消息事件的结果。
 
@@ -336,10 +345,18 @@ class AstrMessageEvent(abc.ABC):
         # 兼容外部插件或调用方传入的 chain=None 的情况，确保为可迭代列表
         if isinstance(result, MessageEventResult) and result.chain is None:
             result.chain = []
+        binding = self._active_sdk_result_binding()
+        if binding is not None:
+            binding.set_result(result)
+            return
         self._result = result
 
     def stop_event(self) -> None:
         """终止事件传播。"""
+        binding = self._active_sdk_result_binding()
+        if binding is not None:
+            binding.stop_event()
+            return
         if self._result is None:
             self.set_result(MessageEventResult().stop_event())
         else:
@@ -347,6 +364,10 @@ class AstrMessageEvent(abc.ABC):
 
     def continue_event(self) -> None:
         """继续事件传播。"""
+        binding = self._active_sdk_result_binding()
+        if binding is not None:
+            binding.continue_event()
+            return
         if self._result is None:
             self.set_result(MessageEventResult().continue_event())
         else:
@@ -354,6 +375,9 @@ class AstrMessageEvent(abc.ABC):
 
     def is_stopped(self) -> bool:
         """是否终止事件传播。"""
+        binding = self._active_sdk_result_binding()
+        if binding is not None and binding.has_result_state():
+            return binding.is_stopped()
         if self._result is None:
             return False  # 默认是继续传播
         return self._result.is_stopped()
@@ -367,10 +391,17 @@ class AstrMessageEvent(abc.ABC):
 
     def get_result(self) -> MessageEventResult | None:
         """获取消息事件的结果。"""
+        binding = self._active_sdk_result_binding()
+        if binding is not None and binding.has_result_state():
+            return binding.get_result()
         return self._result
 
     def clear_result(self) -> None:
         """清除消息事件的结果。"""
+        binding = self._active_sdk_result_binding()
+        if binding is not None:
+            binding.clear_result()
+            return
         self._result = None
 
     """消息链相关"""

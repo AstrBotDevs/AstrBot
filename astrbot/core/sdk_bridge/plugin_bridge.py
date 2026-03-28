@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import copy
 import json
 import os
 import re
@@ -40,6 +41,7 @@ from quart import request as quart_request
 from astrbot.core import logger
 from astrbot.core.agent.mcp_client import MCPClient
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
+from astrbot.core.message.message_types import sdk_message_type
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import LLMResponse as CoreLLMResponse
 from astrbot.core.provider.entities import ProviderRequest as CoreProviderRequest
@@ -54,7 +56,13 @@ from astrbot.core.utils.astrbot_path import (
 
 from .bridge_base import _build_message_chain_from_payload
 from .capability_bridge import CoreCapabilityBridge
-from .event_converter import EventConverter
+from .event_payload import (
+    InboundEventSnapshot,
+    build_inbound_event_snapshot,
+    extract_sdk_handler_result,
+    normalize_sdk_local_extras,
+    sanitize_sdk_extras,
+)
 from .trigger_converter import TriggerConverter, TriggerMatch
 
 SDK_STATE_ENABLED = "enabled"
@@ -177,13 +185,46 @@ class _RequestOverlayState:
     should_call_llm: bool
     requested_llm: bool = False
     sdk_local_extras: dict[str, Any] = field(default_factory=dict)
+    inbound_snapshot: InboundEventSnapshot | None = None
     result_payload: dict[str, Any] | None = None
     result_object: MessageEventResult | None = None
     result_is_set: bool = False
+    result_stopped: bool = False
     handler_whitelist: set[str] | None = None
     request_scope_ids: set[str] = field(default_factory=set)
     closed: bool = False
     cleanup_task: asyncio.Task[None] | None = None
+
+
+@dataclass(slots=True)
+class _EventResultBinding:
+    bridge: SdkPluginBridge
+    dispatch_token: str
+
+    def is_active(self) -> bool:
+        return self.bridge.get_request_overlay_by_token(self.dispatch_token) is not None
+
+    def has_result_state(self) -> bool:
+        overlay = self.bridge.get_request_overlay_by_token(self.dispatch_token)
+        return bool(overlay is not None and overlay.result_is_set)
+
+    def get_result(self) -> MessageEventResult | None:
+        return self.bridge._get_effective_result_for_token(self.dispatch_token)
+
+    def set_result(self, result: MessageEventResult) -> None:
+        self.bridge._set_result_for_dispatch_token(self.dispatch_token, result)
+
+    def clear_result(self) -> None:
+        self.bridge._clear_result_for_dispatch_token(self.dispatch_token)
+
+    def stop_event(self) -> None:
+        self.bridge._stop_event_for_dispatch_token(self.dispatch_token)
+
+    def continue_event(self) -> None:
+        self.bridge._continue_event_for_dispatch_token(self.dispatch_token)
+
+    def is_stopped(self) -> bool:
+        return self.bridge._is_stopped_for_dispatch_token(self.dispatch_token)
 
 
 @dataclass(slots=True)
@@ -248,8 +289,6 @@ class SdkDynamicCommandRoute:
 
 
 class SdkPluginBridge:
-    _DROP_VALUE = object()
-
     def __init__(self, star_context) -> None:
         self.star_context = star_context
         self.plugins_dir = Path(get_astrbot_data_path()) / "sdk_plugins"
@@ -1022,13 +1061,13 @@ class SdkPluginBridge:
             request_context.request_id = request_id
             request_context.cancelled = False
             setattr(event, "_sdk_last_request_id", request_id)
-            payload = EventConverter.core_to_sdk(
+            payload = self._build_sdk_event_payload(
                 event,
                 dispatch_token=dispatch_token,
                 plugin_id=record.plugin_id,
                 request_id=request_id,
+                overlay=overlay,
             )
-            self._apply_request_scoped_event_payload(payload, overlay)
             task = asyncio.create_task(
                 record.session.invoke_handler(
                     match.handler_id,
@@ -1072,7 +1111,7 @@ class SdkPluginBridge:
             if inflight is not None and inflight.logical_cancelled:
                 continue
 
-            handler_result = EventConverter.extract_handler_result(
+            handler_result = extract_sdk_handler_result(
                 output if isinstance(output, dict) else {}
             )
             if isinstance(output, dict) and "sdk_local_extras" in output:
@@ -1135,6 +1174,11 @@ class SdkPluginBridge:
         self, event: AstrMessageEvent, dispatch_token: str
     ) -> None:
         setattr(event, "_sdk_dispatch_token", dispatch_token)
+        setattr(
+            event,
+            "_sdk_result_binding",
+            _EventResultBinding(bridge=self, dispatch_token=dispatch_token),
+        )
 
     def _get_dispatch_token(self, event: AstrMessageEvent) -> str | None:
         token = getattr(event, "_sdk_dispatch_token", None)
@@ -1193,6 +1237,19 @@ class SdkPluginBridge:
             overlay.request_scope_ids.add(request_id)
 
     def _close_request_overlay(self, dispatch_token: str) -> None:
+        request_context = self._request_contexts.get(dispatch_token)
+        bound_event = None
+        dispatch_state = (
+            getattr(request_context, "dispatch_state", None)
+            if request_context is not None
+            else None
+        )
+        if dispatch_state is not None:
+            bound_event = dispatch_state.event
+            bound_event._result = self._get_effective_result_for_token(dispatch_token)
+            bound_event.call_llm = not self.get_effective_should_call_llm(bound_event)
+            if hasattr(bound_event, "_sdk_result_binding"):
+                delattr(bound_event, "_sdk_result_binding")
         overlay = self._request_overlays.pop(dispatch_token, None)
         if overlay is not None:
             overlay.closed = True
@@ -1232,7 +1289,8 @@ class SdkPluginBridge:
         if overlay is None:
             return False
         overlay.requested_llm = True
-        overlay.should_call_llm = True
+        if not overlay.result_stopped:
+            overlay.should_call_llm = True
         return True
 
     def get_effective_should_call_llm(self, event: AstrMessageEvent) -> bool:
@@ -1249,6 +1307,156 @@ class SdkPluginBridge:
             return None
         return overlay.should_call_llm
 
+    def _set_overlay_stop_state(
+        self,
+        overlay: _RequestOverlayState,
+        *,
+        stopped: bool,
+    ) -> None:
+        overlay.result_stopped = stopped
+        if stopped:
+            overlay.should_call_llm = False
+
+    def _set_result_from_object(
+        self,
+        overlay: _RequestOverlayState,
+        result: MessageEventResult | None,
+    ) -> None:
+        overlay.result_object = result
+        overlay.result_is_set = True
+        self._set_overlay_stop_state(
+            overlay,
+            stopped=bool(result is not None and result.is_stopped()),
+        )
+        self._sync_overlay_payload_from_result_object(overlay)
+
+    def _bind_result_object(
+        self,
+        overlay: _RequestOverlayState,
+        result: MessageEventResult | None,
+    ) -> None:
+        overlay.result_object = result
+        overlay.result_is_set = True
+        self._set_overlay_stop_state(
+            overlay,
+            stopped=bool(result is not None and result.is_stopped()),
+        )
+
+    def _set_result_payload_on_overlay(
+        self,
+        overlay: _RequestOverlayState,
+        result_payload: dict[str, Any] | None,
+    ) -> None:
+        if result_payload is None:
+            overlay.result_payload = None
+            overlay.result_object = None
+            overlay.result_is_set = True
+            self._set_overlay_stop_state(overlay, stopped=False)
+            return
+        normalized_payload = json.loads(json.dumps(result_payload))
+        overlay.result_payload = normalized_payload
+        chain_payload = normalized_payload.get("chain")
+        overlay.result_object = (
+            self._build_core_result_from_chain_payload(chain_payload)
+            if isinstance(chain_payload, list)
+            else None
+        )
+        overlay.result_is_set = True
+        self._set_overlay_stop_state(overlay, stopped=False)
+
+    def _sync_overlay_payload_from_result_object(
+        self,
+        overlay: _RequestOverlayState,
+    ) -> None:
+        overlay.result_payload = self._legacy_result_to_sdk_payload(
+            overlay.result_object
+        )
+        self._set_overlay_stop_state(
+            overlay,
+            stopped=bool(
+                overlay.result_object is not None and overlay.result_object.is_stopped()
+            ),
+        )
+
+    def _get_effective_result_for_token(
+        self,
+        dispatch_token: str,
+    ) -> MessageEventResult | None:
+        overlay = self.get_request_overlay_by_token(dispatch_token)
+        if overlay is None or not overlay.result_is_set:
+            request_context = self._request_contexts.get(dispatch_token)
+            if (
+                request_context is not None
+                and request_context.dispatch_state is not None
+            ):
+                return request_context.dispatch_state.event._result
+            return None
+        if overlay.result_object is None and overlay.result_payload is not None:
+            chain_payload = overlay.result_payload.get("chain")
+            if isinstance(chain_payload, list):
+                overlay.result_object = self._build_core_result_from_chain_payload(
+                    chain_payload
+                )
+        if overlay.result_object is None:
+            if overlay.result_stopped:
+                stopped_result = MessageEventResult()
+                stopped_result.stop_event()
+                overlay.result_object = stopped_result
+            else:
+                return None
+        if overlay.result_stopped and not overlay.result_object.is_stopped():
+            overlay.result_object.stop_event()
+        elif not overlay.result_stopped and overlay.result_object.is_stopped():
+            overlay.result_object.continue_event()
+        return overlay.result_object
+
+    def _set_result_for_dispatch_token(
+        self,
+        dispatch_token: str,
+        result: MessageEventResult | None,
+    ) -> None:
+        overlay = self.get_request_overlay_by_token(dispatch_token)
+        if overlay is None:
+            return
+        self._set_result_from_object(overlay, result)
+
+    def _clear_result_for_dispatch_token(self, dispatch_token: str) -> None:
+        overlay = self.get_request_overlay_by_token(dispatch_token)
+        if overlay is None:
+            return
+        overlay.result_payload = None
+        overlay.result_object = None
+        overlay.result_is_set = True
+        self._set_overlay_stop_state(overlay, stopped=False)
+
+    def _stop_event_for_dispatch_token(self, dispatch_token: str) -> None:
+        overlay = self.get_request_overlay_by_token(dispatch_token)
+        if overlay is None:
+            return
+        self._set_overlay_stop_state(overlay, stopped=True)
+        overlay.result_is_set = True
+        if overlay.result_object is not None and not overlay.result_object.is_stopped():
+            overlay.result_object.stop_event()
+
+    def _continue_event_for_dispatch_token(self, dispatch_token: str) -> None:
+        overlay = self.get_request_overlay_by_token(dispatch_token)
+        if overlay is None:
+            return
+        overlay.result_is_set = True
+        self._set_overlay_stop_state(overlay, stopped=False)
+        if overlay.result_object is not None and overlay.result_object.is_stopped():
+            overlay.result_object.continue_event()
+
+    def _is_stopped_for_dispatch_token(self, dispatch_token: str) -> bool:
+        overlay = self.get_request_overlay_by_token(dispatch_token)
+        if overlay is not None and overlay.result_is_set:
+            return overlay.result_stopped
+        request_context = self._request_contexts.get(dispatch_token)
+        if request_context is not None and request_context.dispatch_state is not None:
+            result = request_context.dispatch_state.event._result
+            return bool(result is not None and result.is_stopped())
+        return False
+
     def set_result_for_request(
         self,
         request_id: str,
@@ -1257,19 +1465,7 @@ class SdkPluginBridge:
         overlay = self.get_request_overlay_by_request_id(request_id)
         if overlay is None:
             return False
-        if result_payload is None:
-            overlay.result_payload = None
-            overlay.result_object = None
-        else:
-            normalized_payload = json.loads(json.dumps(result_payload))
-            overlay.result_payload = normalized_payload
-            chain_payload = normalized_payload.get("chain")
-            overlay.result_object = (
-                self._build_core_result_from_chain_payload(chain_payload)
-                if isinstance(chain_payload, list)
-                else None
-            )
-        overlay.result_is_set = True
+        self._set_result_payload_on_overlay(overlay, result_payload)
         return True
 
     def clear_result_for_request(self, request_id: str) -> bool:
@@ -1279,6 +1475,7 @@ class SdkPluginBridge:
         overlay.result_payload = None
         overlay.result_object = None
         overlay.result_is_set = True
+        self._set_overlay_stop_state(overlay, stopped=False)
         return True
 
     def get_result_payload_for_request(self, request_id: str) -> dict[str, Any] | None:
@@ -1294,11 +1491,9 @@ class SdkPluginBridge:
             )
         if overlay is not None and overlay.result_is_set:
             if overlay.result_object is not None:
-                overlay.result_payload = self._legacy_result_to_sdk_payload(
-                    overlay.result_object
-                )
+                self._sync_overlay_payload_from_result_object(overlay)
             return (
-                json.loads(json.dumps(overlay.result_payload))
+                copy.deepcopy(overlay.result_payload)
                 if overlay.result_payload is not None
                 else None
             )
@@ -1387,71 +1582,6 @@ class SdkPluginBridge:
         ]
 
     @classmethod
-    def _sanitize_sdk_extra_value(cls, value: Any) -> Any:
-        if value is None or isinstance(value, (str, int, float, bool)):
-            return value
-        if isinstance(value, (list, tuple)):
-            items = []
-            for item in value:
-                normalized = cls._sanitize_sdk_extra_value(item)
-                if normalized is not cls._DROP_VALUE:
-                    items.append(normalized)
-            return items
-        if isinstance(value, dict):
-            normalized_dict: dict[str, Any] = {}
-            for key, item in value.items():
-                normalized = cls._sanitize_sdk_extra_value(item)
-                if normalized is not cls._DROP_VALUE:
-                    normalized_dict[str(key)] = normalized
-            return normalized_dict
-        model_dump = getattr(value, "model_dump", None)
-        if callable(model_dump):
-            try:
-                return cls._sanitize_sdk_extra_value(model_dump())
-            except Exception:
-                return cls._DROP_VALUE
-        try:
-            json.dumps(value)
-        except (TypeError, ValueError):
-            return cls._DROP_VALUE
-        return value
-
-    @classmethod
-    def _normalize_sdk_local_extras(
-        cls,
-        payload: Any,
-    ) -> tuple[dict[str, Any], list[str]]:
-        if not isinstance(payload, dict):
-            return {}, []
-        normalized: dict[str, Any] = {}
-        dropped_keys: list[str] = []
-        for key, value in payload.items():
-            normalized_value = cls._sanitize_sdk_extra_value(value)
-            if normalized_value is cls._DROP_VALUE:
-                dropped_keys.append(str(key))
-                continue
-            normalized[str(key)] = normalized_value
-        return normalized, dropped_keys
-
-    @classmethod
-    def _apply_request_scoped_event_payload(
-        cls,
-        event_payload: dict[str, Any],
-        overlay: _RequestOverlayState,
-    ) -> None:
-        host_extras = (
-            dict(event_payload["extras"])
-            if isinstance(event_payload.get("extras"), dict)
-            else {}
-        )
-        sdk_local_extras = dict(overlay.sdk_local_extras)
-        merged_extras = dict(host_extras)
-        merged_extras.update(sdk_local_extras)
-        event_payload["host_extras"] = host_extras
-        event_payload["sdk_local_extras"] = sdk_local_extras
-        event_payload["extras"] = merged_extras
-
-    @classmethod
     def _persist_sdk_local_extras_from_handler(
         cls,
         overlay: _RequestOverlayState,
@@ -1471,7 +1601,7 @@ class SdkPluginBridge:
                 type(payload).__name__,
             )
             return
-        normalized, dropped_keys = cls._normalize_sdk_local_extras(payload)
+        normalized, dropped_keys = normalize_sdk_local_extras(payload)
         overlay.sdk_local_extras = normalized
         for key in dropped_keys:
             logger.warning(
@@ -1480,6 +1610,48 @@ class SdkPluginBridge:
                 handler_id,
                 key,
             )
+
+    @staticmethod
+    def _sanitize_host_extras(event: AstrMessageEvent) -> dict[str, Any]:
+        extras = event.get_extra()
+        if not isinstance(extras, dict) or not extras:
+            return {}
+        return sanitize_sdk_extras(extras)
+
+    def _get_or_build_inbound_snapshot(
+        self,
+        event: AstrMessageEvent,
+        overlay: _RequestOverlayState | None,
+    ) -> InboundEventSnapshot:
+        if overlay is not None and overlay.inbound_snapshot is not None:
+            return overlay.inbound_snapshot
+        snapshot = build_inbound_event_snapshot(event)
+        if overlay is not None:
+            overlay.inbound_snapshot = snapshot
+        return snapshot
+
+    def _build_sdk_event_payload(
+        self,
+        event: AstrMessageEvent,
+        *,
+        dispatch_token: str,
+        plugin_id: str,
+        request_id: str,
+        overlay: _RequestOverlayState | None,
+        raw_updates: dict[str, Any] | None = None,
+        field_updates: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        snapshot = self._get_or_build_inbound_snapshot(event, overlay)
+        sdk_local_extras = dict(overlay.sdk_local_extras) if overlay is not None else {}
+        return snapshot.to_payload(
+            dispatch_token=dispatch_token,
+            plugin_id=plugin_id,
+            request_id=request_id,
+            host_extras=self._sanitize_host_extras(event),
+            sdk_local_extras=sdk_local_extras,
+            raw_updates=raw_updates,
+            field_updates=field_updates,
+        )
 
     @staticmethod
     def _core_provider_request_to_sdk_payload(
@@ -1533,7 +1705,7 @@ class SdkPluginBridge:
             "prompt": request.prompt,
             "system_prompt": request.system_prompt or None,
             "session_id": request.session_id or None,
-            "contexts": json.loads(json.dumps(request.contexts or [])),
+            "contexts": copy.deepcopy(request.contexts or []),
             "image_urls": list(request.image_urls or []),
             "tool_calls_result": tool_calls_result,
             "model": request.model,
@@ -1553,7 +1725,7 @@ class SdkPluginBridge:
 
         contexts = payload.get("contexts")
         if isinstance(contexts, list):
-            request.contexts = json.loads(json.dumps(contexts))
+            request.contexts = copy.deepcopy(contexts)
 
         image_urls = payload.get("image_urls")
         if isinstance(image_urls, list):
@@ -1630,19 +1802,8 @@ class SdkPluginBridge:
     ) -> MessageEventResult | None:
         dispatch_token = self._get_dispatch_token(event)
         if dispatch_token:
-            overlay = self.get_request_overlay_by_token(dispatch_token)
-            if overlay is not None and overlay.result_is_set:
-                if overlay.result_payload is None:
-                    return None
-                if overlay.result_object is None:
-                    chain_payload = overlay.result_payload.get("chain")
-                    if not isinstance(chain_payload, list):
-                        return None
-                    overlay.result_object = self._build_core_result_from_chain_payload(
-                        chain_payload
-                    )
-                return overlay.result_object
-        return event.get_result()
+            return self._get_effective_result_for_token(dispatch_token)
+        return event._result
 
     def before_platform_send(self, dispatch_token: str) -> None:
         request_context = self._request_contexts.get(dispatch_token)
@@ -1762,9 +1923,7 @@ class SdkPluginBridge:
             "session_id": str((payload or {}).get("session_id", "")),
             "platform": str((payload or {}).get("platform", "")),
             "platform_id": str((payload or {}).get("platform_id", "")),
-            "message_type": EventConverter._sdk_message_type(
-                (payload or {}).get("message_type", "")
-            ),
+            "message_type": sdk_message_type((payload or {}).get("message_type", "")),
             "sender_name": str((payload or {}).get("sender_name", "")),
             "self_id": str((payload or {}).get("self_id", "")),
             "raw": {"event_type": event_type, **(payload or {})},
@@ -1837,26 +1996,19 @@ class SdkPluginBridge:
                 request_id=request_id,
                 plugin_id=record.plugin_id,
             )
-            event_payload = EventConverter.core_to_sdk(
+            event_payload = self._build_sdk_event_payload(
                 event,
                 dispatch_token=dispatch_token,
                 plugin_id=record.plugin_id,
                 request_id=request_id,
+                overlay=overlay,
+                raw_updates={"event_type": event_type, **(payload or {})},
+                field_updates={
+                    "type": event_type,
+                    "event_type": event_type,
+                    **(payload or {}),
+                },
             )
-            event_payload["type"] = event_type
-            event_payload["event_type"] = event_type
-            event_payload["raw"] = {
-                **(
-                    event_payload["raw"]
-                    if isinstance(event_payload.get("raw"), dict)
-                    else {}
-                ),
-                "event_type": event_type,
-                **(payload or {}),
-            }
-            for key, value in (payload or {}).items():
-                event_payload[key] = value
-            self._apply_request_scoped_event_payload(event_payload, overlay)
             if provider_request is not None:
                 request_payload = self._core_provider_request_to_sdk_payload(
                     provider_request
@@ -3581,11 +3733,12 @@ class SdkPluginBridge:
             request_context.request_id = request_id
             request_context.cancelled = False
             setattr(event, "_sdk_last_request_id", request_id)
-            payload = EventConverter.core_to_sdk(
+            payload = self._build_sdk_event_payload(
                 event,
                 dispatch_token=dispatch_token,
                 plugin_id=record.plugin_id,
                 request_id=request_id,
+                overlay=overlay,
             )
             self._track_request_scope(
                 dispatch_token=dispatch_token,
@@ -3606,7 +3759,7 @@ class SdkPluginBridge:
                     exc,
                 )
                 output = {}
-            handler_result = EventConverter.extract_handler_result(
+            handler_result = extract_sdk_handler_result(
                 output if isinstance(output, dict) else {}
             )
             result.executed_handlers.append(

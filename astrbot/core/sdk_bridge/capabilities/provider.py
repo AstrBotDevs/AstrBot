@@ -16,7 +16,6 @@ from astrbot_sdk.runtime.capability_router import StreamExecution
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from ..bridge_base import _get_runtime_provider_types, _get_runtime_tool_types
-from ..event_converter import EventConverter
 from ._host import CapabilityMixinHost
 
 
@@ -1149,11 +1148,17 @@ class ProviderCapabilityMixin(CapabilityMixinHost):
             dispatch_token = (
                 self._plugin_bridge._get_dispatch_token(event) or uuid.uuid4().hex
             )
-            event_payload = EventConverter.core_to_sdk(
+            get_overlay = getattr(
+                self._plugin_bridge,
+                "get_request_overlay_by_token",
+                lambda _dispatch_token: None,
+            )
+            event_payload = self._plugin_bridge._build_sdk_event_payload(
                 event,
                 dispatch_token=dispatch_token,
                 plugin_id=plugin_id,
                 request_id=request_id,
+                overlay=get_overlay(dispatch_token),
             )
             call_payload = {
                 "plugin_id": plugin_id,

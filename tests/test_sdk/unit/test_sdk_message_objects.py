@@ -45,7 +45,10 @@ _install_optional_dependency_stubs()
 from astrbot.core.message.components import File as CoreFile
 from astrbot.core.message.components import Plain as CorePlain
 from astrbot.core.message.components import Reply as CoreReply
-from astrbot.core.sdk_bridge.event_converter import EventConverter
+from astrbot.core.sdk_bridge.event_payload import (
+    build_inbound_event_snapshot,
+    sanitize_sdk_extras,
+)
 from astrbot_sdk import MessageEvent
 from astrbot_sdk import message_components as sdk_message_components
 from astrbot_sdk._plugin_logger import PluginLogEntry
@@ -405,8 +408,18 @@ async def test_sdk_reply_component_payload_paths_are_consistent() -> None:
     assert await component_to_payload(component) == expected
 
 
+def _build_sdk_payload_from_core_event(event) -> dict[str, object]:
+    return build_inbound_event_snapshot(event).to_payload(
+        dispatch_token="dispatch-1",
+        plugin_id="sdk-demo",
+        request_id="req-1",
+        host_extras=sanitize_sdk_extras(event.get_extra()),
+        sdk_local_extras={},
+    )
+
+
 @pytest.mark.unit
-def test_event_converter_serializes_core_reply_chain() -> None:
+def test_inbound_snapshot_serializes_core_reply_chain() -> None:
     reply = CoreReply(
         id="reply-2",
         sender_id="user-8",
@@ -459,12 +472,7 @@ def test_event_converter_serializes_core_reply_chain() -> None:
         def get_messages(self):
             return [reply]
 
-    payload = EventConverter.core_to_sdk(
-        _CoreEvent(),
-        dispatch_token="dispatch-1",
-        plugin_id="sdk-demo",
-        request_id="req-1",
-    )
+    payload = _build_sdk_payload_from_core_event(_CoreEvent())
 
     reply_payload = payload["messages"][0]
     assert reply_payload["type"] == "reply"
@@ -476,7 +484,7 @@ def test_event_converter_serializes_core_reply_chain() -> None:
 
 
 @pytest.mark.unit
-def test_event_converter_normalizes_legacy_core_message_type_values() -> None:
+def test_inbound_snapshot_normalizes_legacy_core_message_type_values() -> None:
     class _LegacyCoreEvent:
         is_wake = False
         is_at_or_wake_command = False
@@ -522,12 +530,7 @@ def test_event_converter_normalizes_legacy_core_message_type_values() -> None:
         def get_messages(self):
             return [CorePlain(text="hello")]
 
-    payload = EventConverter.core_to_sdk(
-        _LegacyCoreEvent(),
-        dispatch_token="dispatch-1",
-        plugin_id="sdk-demo",
-        request_id="req-1",
-    )
+    payload = _build_sdk_payload_from_core_event(_LegacyCoreEvent())
 
     assert payload["message_type"] == "private"
 
@@ -591,12 +594,7 @@ def test_event_converter_message_type_falls_back_to_event_shape(
         def get_messages(self):
             return [CorePlain(text="hello")]
 
-    payload = EventConverter.core_to_sdk(
-        _UnknownTypeEvent(),
-        dispatch_token="dispatch-1",
-        plugin_id="sdk-demo",
-        request_id="req-1",
-    )
+    payload = _build_sdk_payload_from_core_event(_UnknownTypeEvent())
 
     assert payload["message_type"] == expected
 

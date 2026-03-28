@@ -246,11 +246,10 @@ async def test_sdk_tool_bridge_wraps_timeout_as_failed_tool_result(
         _records={"sdk_demo_agent_tools": SimpleNamespace(session=_SlowSession())},
         _get_dispatch_token=lambda _event: "dispatch-token",
     )
-    monkeypatch.setattr(
-        capability_bridge_module.EventConverter,
-        "core_to_sdk",
-        lambda *_args, **_kwargs: {"session_id": "local-session", "text": "hello"},
-    )
+    bridge._plugin_bridge._build_sdk_event_payload = lambda *_args, **_kwargs: {
+        "session_id": "local-session",
+        "text": "hello",
+    }
 
     handler = bridge._make_sdk_tool_handler(
         plugin_id="sdk_demo_agent_tools",

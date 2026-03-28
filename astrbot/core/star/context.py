@@ -13,6 +13,7 @@ from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.message.message_types import sdk_message_type
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
 from astrbot.core.provider.func_tool_manager import FunctionTool, FunctionToolManager
@@ -23,7 +24,6 @@ from astrbot.core.provider.provider import (
     STTProvider,
     TTSProvider,
 )
-from astrbot.core.sdk_bridge.event_converter import EventConverter
 from astrbot.core.star.filter.platform_adapter_type import (
     ADAPTER_NAME_2_TYPE,
     PlatformAdapterType,
@@ -472,9 +472,7 @@ class Context:
                                 "session_id": str(session),
                                 "platform": platform.meta().name,
                                 "platform_id": platform.meta().id,
-                                "message_type": EventConverter._sdk_message_type(
-                                    session.message_type
-                                ),
+                                "message_type": sdk_message_type(session.message_type),
                                 "message_outline": message_chain.get_plain_text(
                                     with_other_comps_mark=True
                                 ),

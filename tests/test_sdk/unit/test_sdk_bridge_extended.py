@@ -3,20 +3,19 @@
 
 This module covers additional test cases for:
 - trigger_converter.py: regex triggers, filter specs, parameter handling
-- event_converter.py: sanitization edge cases
+- event_payload.py: sanitization edge cases
 - bridge_base.py: serialization helpers and message chain building
 """
+
 from __future__ import annotations
 
 import importlib.util
-import re
 import sys
-import types
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional
-from unittest.mock import MagicMock
 
 import pytest
 from astrbot_sdk.protocol.descriptors import (
@@ -31,8 +30,11 @@ from astrbot_sdk.protocol.descriptors import (
     PlatformFilterSpec,
 )
 
-from astrbot.core.sdk_bridge.event_converter import EventConverter
-
+from astrbot.core.sdk_bridge.event_payload import (
+    extract_sdk_handler_result,
+    sanitize_sdk_extra_value,
+    sanitize_sdk_extras,
+)
 
 # Load trigger_converter module directly
 _TRIGGER_CONVERTER_SPEC = importlib.util.spec_from_file_location(
@@ -76,7 +78,9 @@ sys.modules.setdefault(
     _BRIDGE_BASE_MODULE,
 )
 _BRIDGE_BASE_SPEC.loader.exec_module(_BRIDGE_BASE_MODULE)
-_build_message_chain_from_payload = _BRIDGE_BASE_MODULE._build_message_chain_from_payload
+_build_message_chain_from_payload = (
+    _BRIDGE_BASE_MODULE._build_message_chain_from_payload
+)
 CapabilityBridgeBase = _BRIDGE_BASE_MODULE.CapabilityBridgeBase
 
 
@@ -485,6 +489,7 @@ class TestTriggerConverterLegacyParameterHandling:
 
     def test_legacy_arg_parameter_names_basic(self) -> None:
         """Legacy arg extraction from simple function."""
+
         def handler(name: str, value: int) -> None:
             pass
 
@@ -493,6 +498,7 @@ class TestTriggerConverterLegacyParameterHandling:
 
     def test_legacy_arg_parameter_names_skips_event(self) -> None:
         """Legacy arg extraction skips event parameter."""
+
         def handler(event: Any, name: str) -> None:
             pass
 
@@ -501,6 +507,7 @@ class TestTriggerConverterLegacyParameterHandling:
 
     def test_legacy_arg_parameter_names_skips_ctx(self) -> None:
         """Legacy arg extraction skips ctx parameter."""
+
         def handler(ctx: Any, name: str) -> None:
             pass
 
@@ -509,6 +516,7 @@ class TestTriggerConverterLegacyParameterHandling:
 
     def test_legacy_arg_parameter_names_skips_context(self) -> None:
         """Legacy arg extraction skips context parameter."""
+
         def handler(context: Any, name: str) -> None:
             pass
 
@@ -524,7 +532,7 @@ class TestTriggerConverterLegacyParameterHandling:
 
     def test_unwrap_optional_with_optional(self) -> None:
         """Unwrap Optional type annotation."""
-        result = TriggerConverter._unwrap_optional(Optional[str])
+        result = TriggerConverter._unwrap_optional(Optional[str])  # noqa: UP045
         assert result is str
 
     def test_unwrap_optional_with_non_optional(self) -> None:
@@ -772,16 +780,12 @@ class TestCapabilityBridgeBaseSerialization:
 
     def test_normalize_persona_dialogs_with_list(self) -> None:
         """List of strings passes through."""
-        result = CapabilityBridgeBase._normalize_persona_dialogs(
-            ["Hello", "World"]
-        )
+        result = CapabilityBridgeBase._normalize_persona_dialogs(["Hello", "World"])
         assert result == ["Hello", "World"]
 
     def test_normalize_persona_dialogs_with_json_string(self) -> None:
         """JSON string is parsed to list of strings."""
-        result = CapabilityBridgeBase._normalize_persona_dialogs(
-            '["Hello", "World"]'
-        )
+        result = CapabilityBridgeBase._normalize_persona_dialogs('["Hello", "World"]')
         assert result == ["Hello", "World"]
 
     def test_normalize_session_scoped_config_with_nested(self) -> None:
@@ -819,45 +823,45 @@ class TestBuildMessageChainFromPayload:
 
     def test_text_component(self) -> None:
         """Text/plain component creates Plain message."""
-        chain = _build_message_chain_from_payload([
-            {"type": "text", "data": {"text": "hello"}}
-        ])
+        chain = _build_message_chain_from_payload(
+            [{"type": "text", "data": {"text": "hello"}}]
+        )
         assert chain.get_plain_text() == "hello"
 
     def test_plain_component(self) -> None:
         """Plain type alias creates Plain message."""
-        chain = _build_message_chain_from_payload([
-            {"type": "plain", "data": {"text": "world"}}
-        ])
+        chain = _build_message_chain_from_payload(
+            [{"type": "plain", "data": {"text": "world"}}]
+        )
         assert chain.get_plain_text() == "world"
 
     def test_image_component_with_url(self) -> None:
         """Image with URL creates Image from URL."""
-        chain = _build_message_chain_from_payload([
-            {"type": "image", "data": {"url": "https://example.com/img.png"}}
-        ])
+        chain = _build_message_chain_from_payload(
+            [{"type": "image", "data": {"url": "https://example.com/img.png"}}]
+        )
         assert len(chain.chain) == 1
         # Image component should be present
 
     def test_image_component_with_file(self) -> None:
         """Image with file path creates Image from filesystem."""
-        chain = _build_message_chain_from_payload([
-            {"type": "image", "data": {"file": "/path/to/image.png"}}
-        ])
+        chain = _build_message_chain_from_payload(
+            [{"type": "image", "data": {"file": "/path/to/image.png"}}]
+        )
         assert len(chain.chain) == 1
 
     def test_image_component_with_file_uri(self) -> None:
         """Image with file:/// URI creates Image from filesystem."""
-        chain = _build_message_chain_from_payload([
-            {"type": "image", "data": {"file": "file:///path/to/image.png"}}
-        ])
+        chain = _build_message_chain_from_payload(
+            [{"type": "image", "data": {"file": "file:///path/to/image.png"}}]
+        )
         assert len(chain.chain) == 1
 
     def test_unknown_component_fallback(self) -> None:
         """Unknown component type falls back to JSON string."""
-        chain = _build_message_chain_from_payload([
-            {"type": "unknown", "data": {"foo": "bar"}}
-        ])
+        chain = _build_message_chain_from_payload(
+            [{"type": "unknown", "data": {"foo": "bar"}}]
+        )
         assert "unknown" in chain.get_plain_text()
 
     def test_non_dict_item_skipped(self) -> None:
@@ -873,10 +877,12 @@ class TestBuildMessageChainFromPayload:
 
     def test_multiple_components(self) -> None:
         """Multiple components are combined."""
-        chain = _build_message_chain_from_payload([
-            {"type": "text", "data": {"text": "hello "}},
-            {"type": "text", "data": {"text": "world"}},
-        ])
+        chain = _build_message_chain_from_payload(
+            [
+                {"type": "text", "data": {"text": "hello "}},
+                {"type": "text", "data": {"text": "world"}},
+            ]
+        )
         assert chain.get_plain_text() == "hello  world"
 
 
@@ -954,105 +960,126 @@ class TestPermissionsModel:
 
 
 # ============================================================================
-# EventConverter: Sanitization Tests
+# SDK Event Payload: Sanitization Tests
 # ============================================================================
 
 
 @pytest.mark.unit
-class TestEventConverterSanitization:
-    """Tests for EventConverter sanitization methods."""
+class TestEventPayloadSanitization:
+    """Tests for SDK event payload sanitization helpers."""
 
     def test_sanitize_extra_value_primitives(self) -> None:
         """Primitive types pass through unchanged."""
-        assert EventConverter._sanitize_extra_value(None) is None
-        assert EventConverter._sanitize_extra_value("string") == "string"
-        assert EventConverter._sanitize_extra_value(42) == 42
-        assert EventConverter._sanitize_extra_value(3.14) == 3.14
-        assert EventConverter._sanitize_extra_value(True) is True
+        assert sanitize_sdk_extra_value(None) is None
+        assert sanitize_sdk_extra_value("string") == "string"
+        assert sanitize_sdk_extra_value(42) == 42
+        assert sanitize_sdk_extra_value(3.14) == 3.14
+        assert sanitize_sdk_extra_value(True) is True
 
     def test_sanitize_extra_value_list(self) -> None:
         """Lists are sanitized recursively."""
-        result = EventConverter._sanitize_extra_value([1, "a", None])
+        result = sanitize_sdk_extra_value([1, "a", None])
         assert result == [1, "a", None]
 
     def test_sanitize_extra_value_list_drops_non_serializable(self) -> None:
         """Non-serializable list items are dropped."""
         # Functions are not JSON serializable
-        result = EventConverter._sanitize_extra_value([1, lambda x: x, 2])
+        result = sanitize_sdk_extra_value([1, lambda x: x, 2])
         assert result == [1, 2]
 
     def test_sanitize_extra_value_tuple(self) -> None:
         """Tuples are sanitized as lists."""
-        result = EventConverter._sanitize_extra_value((1, 2, 3))
+        result = sanitize_sdk_extra_value((1, 2, 3))
         assert result == [1, 2, 3]
 
     def test_sanitize_extra_value_dict(self) -> None:
         """Dicts are sanitized recursively."""
-        result = EventConverter._sanitize_extra_value({"a": 1, "b": "text"})
+        result = sanitize_sdk_extra_value({"a": 1, "b": "text"})
         assert result == {"a": 1, "b": "text"}
 
     def test_sanitize_extra_value_dict_drops_non_serializable(self) -> None:
         """Non-serializable dict values are dropped."""
-        result = EventConverter._sanitize_extra_value({"a": 1, "b": lambda: None})
+        result = sanitize_sdk_extra_value({"a": 1, "b": lambda: None})
         assert result == {"a": 1}
 
     def test_sanitize_extra_value_nested_structures(self) -> None:
         """Nested structures are sanitized recursively."""
-        result = EventConverter._sanitize_extra_value({
-            "list": [1, {"nested": "value"}],
-            "dict": {"inner": [2, 3]},
-        })
+        result = sanitize_sdk_extra_value(
+            {
+                "list": [1, {"nested": "value"}],
+                "dict": {"inner": [2, 3]},
+            }
+        )
         assert result == {
             "list": [1, {"nested": "value"}],
             "dict": {"inner": [2, 3]},
         }
 
+    def test_sanitize_extra_value_supports_datetime_bytes_and_uuid(self) -> None:
+        """Common host-side values are normalized explicitly."""
+        result = sanitize_sdk_extra_value(
+            {
+                "created_at": datetime(2026, 3, 28, 12, 0, 0),
+                "blob": b"hello",
+                "id": uuid.UUID("12345678-1234-5678-1234-567812345678"),
+            }
+        )
+        assert result == {
+            "created_at": "2026-03-28T12:00:00",
+            "blob": "hello",
+            "id": "12345678-1234-5678-1234-567812345678",
+        }
+
     def test_sanitize_extra_value_json_serializable_object(self) -> None:
         """JSON serializable objects pass through."""
+
         # Dataclasses with __dict__ are JSON serializable if their contents are
         class SimpleObj:
             def __init__(self) -> None:
                 self.value = 42
 
-        result = EventConverter._sanitize_extra_value(SimpleObj())
-        # Should pass through as the object is JSON serializable
-        assert result is not None
+        result = sanitize_sdk_extra_value(SimpleObj())
+        assert result == {"value": 42}
 
     def test_sanitize_extras_empty_dict(self) -> None:
         """Empty dict returns empty dict."""
-        result = EventConverter._sanitize_extras({})
+        result = sanitize_sdk_extras({})
         assert result == {}
 
     def test_sanitize_extras_all_dropped(self) -> None:
         """Dict with all non-serializable values returns empty dict."""
-        result = EventConverter._sanitize_extras({
-            "a": lambda: None,
-            "b": object(),
-        })
+        result = sanitize_sdk_extras(
+            {
+                "a": lambda: None,
+                "b": object(),
+            }
+        )
         assert result == {}
 
     def test_sanitize_extras_mixed_values(self) -> None:
         """Dict with mixed values keeps only serializable ones."""
-        result = EventConverter._sanitize_extras({
-            "valid": "string",
-            "also_valid": {"nested": 123},
-            "invalid": lambda: None,
-        })
+        result = sanitize_sdk_extras(
+            {
+                "valid": "string",
+                "also_valid": {"nested": 123},
+                "invalid": lambda: None,
+            }
+        )
         assert result == {"valid": "string", "also_valid": {"nested": 123}}
 
 
 # ============================================================================
-# EventConverter: extract_handler_result Tests
+# SDK Event Payload: extract_handler_result Tests
 # ============================================================================
 
 
 @pytest.mark.unit
-class TestEventConverterExtractHandlerResult:
-    """Tests for EventConverter.extract_handler_result method."""
+class TestEventPayloadExtractHandlerResult:
+    """Tests for extract_sdk_handler_result helper."""
 
     def test_extract_handler_result_none(self) -> None:
         """None input returns default values."""
-        result = EventConverter.extract_handler_result(None)
+        result = extract_sdk_handler_result(None)
         assert result == {
             "sent_message": False,
             "stop": False,
@@ -1061,7 +1088,7 @@ class TestEventConverterExtractHandlerResult:
 
     def test_extract_handler_result_empty_dict(self) -> None:
         """Empty dict returns default values."""
-        result = EventConverter.extract_handler_result({})
+        result = extract_sdk_handler_result({})
         assert result == {
             "sent_message": False,
             "stop": False,
@@ -1070,11 +1097,13 @@ class TestEventConverterExtractHandlerResult:
 
     def test_extract_handler_result_all_false(self) -> None:
         """Explicitly false values are preserved."""
-        result = EventConverter.extract_handler_result({
-            "sent_message": False,
-            "stop": False,
-            "call_llm": False,
-        })
+        result = extract_sdk_handler_result(
+            {
+                "sent_message": False,
+                "stop": False,
+                "call_llm": False,
+            }
+        )
         assert result == {
             "sent_message": False,
             "stop": False,
@@ -1083,11 +1112,13 @@ class TestEventConverterExtractHandlerResult:
 
     def test_extract_handler_result_all_true(self) -> None:
         """True values are preserved."""
-        result = EventConverter.extract_handler_result({
-            "sent_message": True,
-            "stop": True,
-            "call_llm": True,
-        })
+        result = extract_sdk_handler_result(
+            {
+                "sent_message": True,
+                "stop": True,
+                "call_llm": True,
+            }
+        )
         assert result == {
             "sent_message": True,
             "stop": True,
@@ -1096,11 +1127,13 @@ class TestEventConverterExtractHandlerResult:
 
     def test_extract_handler_result_truthy_values(self) -> None:
         """Truthy values are converted to boolean True."""
-        result = EventConverter.extract_handler_result({
-            "sent_message": 1,
-            "stop": "yes",
-            "call_llm": [1],
-        })
+        result = extract_sdk_handler_result(
+            {
+                "sent_message": 1,
+                "stop": "yes",
+                "call_llm": [1],
+            }
+        )
         assert result == {
             "sent_message": True,
             "stop": True,
@@ -1109,11 +1142,13 @@ class TestEventConverterExtractHandlerResult:
 
     def test_extract_handler_result_falsy_values(self) -> None:
         """Falsy values are converted to boolean False."""
-        result = EventConverter.extract_handler_result({
-            "sent_message": 0,
-            "stop": "",
-            "call_llm": [],
-        })
+        result = extract_sdk_handler_result(
+            {
+                "sent_message": 0,
+                "stop": "",
+                "call_llm": [],
+            }
+        )
         assert result == {
             "sent_message": False,
             "stop": False,
@@ -1122,11 +1157,13 @@ class TestEventConverterExtractHandlerResult:
 
     def test_extract_handler_result_extra_keys_ignored(self) -> None:
         """Extra keys in input are ignored."""
-        result = EventConverter.extract_handler_result({
-            "sent_message": True,
-            "extra_key": "value",
-            "another_key": 123,
-        })
+        result = extract_sdk_handler_result(
+            {
+                "sent_message": True,
+                "extra_key": "value",
+                "another_key": 123,
+            }
+        )
         assert result == {
             "sent_message": True,
             "stop": False,

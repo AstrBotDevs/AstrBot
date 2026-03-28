@@ -16,7 +16,7 @@ from astrbot_sdk.protocol.descriptors import (
     PlatformFilterSpec,
 )
 
-from astrbot.core.sdk_bridge.event_converter import EventConverter
+from astrbot.core.sdk_bridge.event_payload import extract_sdk_handler_result
 
 _TRIGGER_CONVERTER_SPEC = importlib.util.spec_from_file_location(
     "astrbot_sdk_bridge_trigger_converter_test",
@@ -219,7 +219,9 @@ def test_trigger_converter_applies_platform_and_message_type_filters() -> None:
         TriggerConverter.match_handler(
             plugin_id="demo",
             descriptor=descriptor,
-            event=_FakeEvent(text="hello there", platform="discord", message_type="group"),
+            event=_FakeEvent(
+                text="hello there", platform="discord", message_type="group"
+            ),
             load_order=0,
             declaration_order=0,
         )
@@ -260,8 +262,16 @@ def test_trigger_converter_applies_platform_and_message_type_filters() -> None:
     ("event", "expected"),
     [
         (_FakeEvent(text="", message_type="channel", group_id="group-1"), "group"),
-        (_FakeEvent(text="", message_type="channel", group_id="", sender_id="user-1"), "private"),
-        (_FakeEvent(text="", message_type="channel", group_id="", sender_id=None), "other"),
+        (
+            _FakeEvent(
+                text="", message_type="channel", group_id="", sender_id="user-1"
+            ),
+            "private",
+        ),
+        (
+            _FakeEvent(text="", message_type="channel", group_id="", sender_id=None),
+            "other",
+        ),
     ],
 )
 def test_message_type_name_falls_back_to_event_shape(
@@ -289,7 +299,7 @@ def test_split_command_remainder_falls_back_when_shlex_errors(
 
 @pytest.mark.unit
 def test_extract_handler_result_defaults_when_result_is_missing() -> None:
-    assert EventConverter.extract_handler_result(None) == {
+    assert extract_sdk_handler_result(None) == {
         "sent_message": False,
         "stop": False,
         "call_llm": False,
@@ -298,7 +308,7 @@ def test_extract_handler_result_defaults_when_result_is_missing() -> None:
 
 @pytest.mark.unit
 def test_extract_handler_result_normalizes_truthy_flags() -> None:
-    assert EventConverter.extract_handler_result(
+    assert extract_sdk_handler_result(
         {"sent_message": 1, "stop": "yes", "call_llm": True}
     ) == {
         "sent_message": True,
