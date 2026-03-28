@@ -676,16 +676,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 # First check if it's a dynamically created subagent tool
                 session_id = getattr(self.run_context.context.event, "unified_msg_origin", None)
                 func_tool = None
-                if session_id:
-                    try:
-                        from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
-                        dynamic_handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(session_id)
-                        for h in dynamic_handoffs:
-                            if h.name == func_tool_name or f"transfer_to_{h.name}" == func_tool_name:
-                                func_tool = h
-                                break
-                    except Exception:
-                        pass
+                run_context_context = getattr(self.run_context, "context", None)
+                if run_context_context is not None:
+                    event = getattr(run_context_context, "event", None)
+                    if event is not None:
+                        if session_id:
+                            try:
+                                from astrbot.core.dynamic_subagent_manager import (
+                                    DynamicSubAgentManager,
+                                )
+                                dynamic_handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(session_id)
+                                for h in dynamic_handoffs:
+                                    if h.name == func_tool_name or f"transfer_to_{h.name}" == func_tool_name:
+                                        func_tool = h
+                                        break
+                            except Exception:
+                                pass
 
                 # If not found in dynamic tools, check regular tool sets
                 if func_tool is None:
@@ -827,7 +833,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     logger.info(f"[DynamicSubAgent] Tool created: {new_tool_name}")
                                     # Try to add the new tool to func_tool set
                                     try:
-                                        from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+                                        from astrbot.core.dynamic_subagent_manager import (
+                                            DynamicSubAgentManager,
+                                        )
                                         session_id = getattr(self.run_context.context.event, "unified_msg_origin", None)
                                         if session_id:
                                             handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(session_id)
