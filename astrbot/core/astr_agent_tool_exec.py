@@ -335,7 +335,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         )
 
             except Exception as e:
-                logger.warning(f"[SubAgentHistory] Failed to load history for {agent_name}: {e}")
+                logger.warning(
+                    f"[SubAgentHistory] Failed to load history for {agent_name}: {e}"
+                )
 
         prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
         agent_max_step = int(prov_settings.get("max_agent_step", 30))
