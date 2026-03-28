@@ -14,6 +14,7 @@ import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
 from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
@@ -444,6 +445,23 @@ class ProviderGoogleGenAI(Provider):
             output=usage_metadata.candidates_token_count or 0,
         )
 
+    @staticmethod
+    def _ensure_usable_response(
+        llm_response: LLMResponse,
+        *,
+        response_id: str | None = None,
+        finish_reason: str | None = None,
+    ) -> None:
+        has_text_output = bool((llm_response.completion_text or "").strip())
+        has_reasoning_output = bool(llm_response.reasoning_content.strip())
+        has_tool_output = bool(llm_response.tools_call_args)
+        if has_text_output or has_reasoning_output or has_tool_output:
+            return
+        raise EmptyModelOutputError(
+            "Gemini completion has no usable output. "
+            f"response_id={response_id}, finish_reason={finish_reason}"
+        )
+
     def _process_content_parts(
         self,
         candidate: types.Candidate,
@@ -452,7 +470,10 @@ class ProviderGoogleGenAI(Provider):
         """处理内容部分并构建消息链"""
         if not candidate.content:
             logger.warning(f"收到的 candidate.content 为空: {candidate}")
-            raise Exception("API 返回的 candidate.content 为空。")
+            raise EmptyModelOutputError(
+                "Gemini candidate content is empty. "
+                f"finish_reason={candidate.finish_reason}"
+            )
 
         finish_reason = candidate.finish_reason
         result_parts: list[types.Part] | None = candidate.content.parts
@@ -474,7 +495,10 @@ class ProviderGoogleGenAI(Provider):
 
         if not result_parts:
             logger.warning(f"收到的 candidate.content.parts 为空: {candidate}")
-            raise Exception("API 返回的 candidate.content.parts 为空。")
+            raise EmptyModelOutputError(
+                "Gemini candidate content parts are empty. "
+                f"finish_reason={candidate.finish_reason}"
+            )
 
         # 提取 reasoning content
         reasoning = self._extract_reasoning_content(candidate)
@@ -525,7 +549,14 @@ class ProviderGoogleGenAI(Provider):
             if ts := part.thought_signature:
                 # only keep the last thinking signature
                 llm_response.reasoning_signature = base64.b64encode(ts).decode("utf-8")
-        return MessageChain(chain=chain)
+        chain_result = MessageChain(chain=chain)
+        llm_response.result_chain = chain_result
+        self._ensure_usable_response(
+            llm_response,
+            response_id=None,
+            finish_reason=str(finish_reason) if finish_reason is not None else None,
+        )
+        return chain_result
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         """非流式请求 Gemini API"""
@@ -727,9 +758,12 @@ class ProviderGoogleGenAI(Provider):
             final_response.result_chain = MessageChain(
                 chain=[Comp.Plain(accumulated_text)],
             )
-        elif not final_response.result_chain:
-            # If no text was accumulated and no final response was set, provide empty space
-            final_response.result_chain = MessageChain(chain=[Comp.Plain(" ")])
+
+        self._ensure_usable_response(
+            final_response,
+            response_id=getattr(final_response, "id", None),
+            finish_reason=None,
+        )
 
         yield final_response
 

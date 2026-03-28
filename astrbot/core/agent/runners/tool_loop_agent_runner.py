@@ -16,11 +16,18 @@ from mcp.types import (
     TextContent,
     TextResourceContents,
 )
+from tenacity import (
+    AsyncRetrying,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -95,6 +102,10 @@ USER_INTERRUPTION_MESSAGE = (
 
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
+    EMPTY_OUTPUT_RETRY_ATTEMPTS = 3
+    EMPTY_OUTPUT_RETRY_WAIT_MIN_S = 1
+    EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 4
+
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
         event = getattr(self.run_context.context, "event", None)
@@ -279,31 +290,61 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     candidate_id,
                 )
             self.provider = candidate
-            has_stream_output = False
             try:
-                async for resp in self._iter_llm_responses(include_model=idx == 0):
-                    if resp.is_chunk:
-                        has_stream_output = True
-                        yield resp
-                        continue
+                retrying = AsyncRetrying(
+                    retry=retry_if_exception_type(EmptyModelOutputError),
+                    stop=stop_after_attempt(self.EMPTY_OUTPUT_RETRY_ATTEMPTS),
+                    wait=wait_exponential(
+                        multiplier=1,
+                        min=self.EMPTY_OUTPUT_RETRY_WAIT_MIN_S,
+                        max=self.EMPTY_OUTPUT_RETRY_WAIT_MAX_S,
+                    ),
+                    reraise=True,
+                )
 
-                    if (
-                        resp.role == "err"
-                        and not has_stream_output
-                        and (not is_last_candidate)
-                    ):
-                        last_err_response = resp
-                        logger.warning(
-                            "Chat Model %s returns error response, trying fallback to next provider.",
-                            candidate_id,
-                        )
-                        break
+                async for attempt in retrying:
+                    has_stream_output = False
+                    with attempt:
+                        try:
+                            async for resp in self._iter_llm_responses(
+                                include_model=idx == 0
+                            ):
+                                if resp.is_chunk:
+                                    has_stream_output = True
+                                    yield resp
+                                    continue
 
-                    yield resp
-                    return
+                                if (
+                                    resp.role == "err"
+                                    and not has_stream_output
+                                    and (not is_last_candidate)
+                                ):
+                                    last_err_response = resp
+                                    logger.warning(
+                                        "Chat Model %s returns error response, trying fallback to next provider.",
+                                        candidate_id,
+                                    )
+                                    break
 
-                if has_stream_output:
-                    return
+                                yield resp
+                                return
+
+                            if has_stream_output:
+                                return
+                        except EmptyModelOutputError:
+                            if has_stream_output:
+                                logger.warning(
+                                    "Chat Model %s returned empty output after streaming started; skipping empty-output retry.",
+                                    candidate_id,
+                                )
+                            else:
+                                logger.warning(
+                                    "Chat Model %s returned empty output on attempt %s/%s.",
+                                    candidate_id,
+                                    attempt.retry_state.attempt_number,
+                                    self.EMPTY_OUTPUT_RETRY_ATTEMPTS,
+                                )
+                            raise
             except Exception as exc:  # noqa: BLE001
                 last_exception = exc
                 logger.warning(
