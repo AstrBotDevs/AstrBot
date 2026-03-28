@@ -108,11 +108,24 @@ class WeixinOCClient:
 
     async def upload_to_cdn(
         self,
-        upload_param: str,
+        upload_param: str | None,
+        upload_full_url: str | None,
         file_key: str,
         aes_key_hex: str,
         media_path: Path,
     ) -> str:
+        upload_full_url = (upload_full_url or "").strip() or None
+        upload_param = (upload_param or "").strip() or None
+
+        if upload_full_url:
+            cdn_url = upload_full_url
+        elif upload_param:
+            cdn_url = self._build_cdn_upload_url(upload_param, file_key)
+        else:
+            raise ValueError(
+                "CDN upload URL missing (need upload_full_url or upload_param)"
+            )
+
         raw_data = media_path.read_bytes()
         logger.debug(
             "weixin_oc(%s): prepare CDN upload file=%s size=%s md5=%s filekey=%s",
@@ -135,7 +148,6 @@ class WeixinOCClient:
         await self.ensure_http_session()
         assert self._http_session is not None
         timeout = aiohttp.ClientTimeout(total=self.api_timeout_ms / 1000)
-        cdn_url = self._build_cdn_upload_url(upload_param, file_key)
 
         async with self._http_session.post(
             cdn_url,

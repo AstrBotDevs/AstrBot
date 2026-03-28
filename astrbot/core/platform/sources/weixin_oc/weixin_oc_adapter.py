@@ -593,11 +593,13 @@ class WeixinOCAdapter(Platform):
             len(str(payload.get("upload_param", ""))),
         )
         upload_param = str(payload.get("upload_param", "")).strip()
-        if not upload_param:
-            raise RuntimeError("getuploadurl returned empty upload_param")
+        upload_full_url = str(payload.get("upload_full_url", "")).strip()
+        if not upload_param and not upload_full_url:
+            raise RuntimeError("getuploadurl returned no usable upload url")
 
         encrypted_query_param = await self.client.upload_to_cdn(
             upload_param,
+            upload_full_url,
             file_key,
             aes_key_hex,
             media_path,
