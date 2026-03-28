@@ -171,11 +171,16 @@ class LogRoute(Route):
 
                 queue = self.log_broker.register()
                 while True:
-                    message = await queue.get()
-                    if not _matches_filters(message, filters):
-                        continue
-                    current_ts = float(message.get("time", time.time()))
-                    yield _format_log_sse(message, current_ts)
+                    try:
+                        message = await asyncio.wait_for(queue.get(), timeout=15.0)
+                        if not _matches_filters(message, filters):
+                            continue
+                        current_ts = float(message.get("time", time.time()))
+                        yield _format_log_sse(message, current_ts)
+                    except TimeoutError:
+                        yield ": keepalive\n\n"
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
 
             except asyncio.CancelledError:
                 pass
