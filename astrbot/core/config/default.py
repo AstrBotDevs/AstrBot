@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.22.1"
+VERSION = "4.22.2"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -1623,10 +1623,14 @@ CONFIG_METADATA_2 = {
                         "type": "gsvi_tts_api",
                         "provider": "gpt_sovits_inference",
                         "provider_type": "text_to_speech",
-                        "api_base": "http://127.0.0.1:5000",
-                        "character": "",
-                        "emotion": "default",
                         "enable": False,
+                        "api_key": "",
+                        "api_base": "http://127.0.0.1:8000",
+                        "version": "v4",
+                        "character": "",
+                        "prompt_text_lang": "中文",
+                        "emotion": "默认",
+                        "text_lang": "中文",
                         "timeout": 20,
                     },
                     "FishAudio TTS(API)": {

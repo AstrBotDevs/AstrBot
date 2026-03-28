@@ -110,6 +110,51 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
+async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    shutdown_event = asyncio.Event()
+    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config.get("dashboard", {}),
+    )
+    warning_messages = []
+    info_messages = []
+
+    async def fake_serve(app, config, shutdown_trigger):
+        return config
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["ssl"] = {
+            "enable": True,
+            "cert_file": "",
+            "key_file": "",
+        }
+        monkeypatch.setattr(server, "check_port_in_use", lambda port: False)
+        monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
+        monkeypatch.setattr(
+            "astrbot.dashboard.server.logger.warning",
+            lambda message: warning_messages.append(message),
+        )
+        monkeypatch.setattr(
+            "astrbot.dashboard.server.logger.info",
+            lambda message: info_messages.append(message),
+        )
+
+        config = await server.run()
+
+        assert getattr(config, "certfile", None) is None
+        assert getattr(config, "keyfile", None) is None
+        assert any("cert_file 和 key_file" in message for message in warning_messages)
+        assert any(
+            "正在启动 WebUI, 监听地址: http://" in message for message in info_messages
+        )
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
+
+
+@pytest.mark.asyncio
 async def test_sdk_plugin_page_route_is_public_but_api_route_requires_auth(
     app: Quart,
     authenticated_header: dict,
@@ -522,12 +567,14 @@ async def test_plugin_install_upload_api_returns_sdk_type(
 async def test_plugins_when_installed_at_unresolved(
     app: Quart,
     authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
     """Tests plugin payload when installed_at cannot be resolved."""
     test_client = app.test_client()
 
     monkeypatch.setattr(PluginRoute, "_get_plugin_installed_at", lambda *_args: None)
+    monkeypatch.setattr(core_lifecycle_td.sdk_plugin_bridge, "list_plugins", lambda: [])
 
     response = await test_client.get("/api/plugin/get", headers=authenticated_header)
     assert response.status_code == 200

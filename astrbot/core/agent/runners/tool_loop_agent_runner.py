@@ -16,11 +16,18 @@ from mcp.types import (
     TextContent,
     TextResourceContents,
 )
+from tenacity import (
+    AsyncRetrying,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -95,10 +102,40 @@ USER_INTERRUPTION_MESSAGE = (
 
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
+    EMPTY_OUTPUT_RETRY_ATTEMPTS = 3
+    EMPTY_OUTPUT_RETRY_WAIT_MIN_S = 1
+    EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 4
+
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
         event = getattr(self.run_context.context, "event", None)
         return extract_persona_custom_error_message_from_event(event)
+
+    async def _complete_with_assistant_response(self, llm_resp: LLMResponse) -> None:
+        """Finalize the current step as a plain assistant response with no tool calls."""
+        self.final_llm_resp = llm_resp
+        self._transition_state(AgentState.DONE)
+        self.stats.end_time = time.time()
+
+        parts = []
+        if llm_resp.reasoning_content or llm_resp.reasoning_signature:
+            parts.append(
+                ThinkPart(
+                    think=llm_resp.reasoning_content,
+                    encrypted=llm_resp.reasoning_signature,
+                )
+            )
+        if llm_resp.completion_text:
+            parts.append(TextPart(text=llm_resp.completion_text))
+        if len(parts) == 0:
+            logger.warning("LLM returned empty assistant message with no tool calls.")
+        self.run_context.messages.append(Message(role="assistant", content=parts))
+
+        try:
+            await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
+        except Exception as e:
+            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
+        self._resolve_unconsumed_follow_ups()
 
     @override
     async def reset(
@@ -253,31 +290,61 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     candidate_id,
                 )
             self.provider = candidate
-            has_stream_output = False
             try:
-                async for resp in self._iter_llm_responses(include_model=idx == 0):
-                    if resp.is_chunk:
-                        has_stream_output = True
-                        yield resp
-                        continue
+                retrying = AsyncRetrying(
+                    retry=retry_if_exception_type(EmptyModelOutputError),
+                    stop=stop_after_attempt(self.EMPTY_OUTPUT_RETRY_ATTEMPTS),
+                    wait=wait_exponential(
+                        multiplier=1,
+                        min=self.EMPTY_OUTPUT_RETRY_WAIT_MIN_S,
+                        max=self.EMPTY_OUTPUT_RETRY_WAIT_MAX_S,
+                    ),
+                    reraise=True,
+                )
 
-                    if (
-                        resp.role == "err"
-                        and not has_stream_output
-                        and (not is_last_candidate)
-                    ):
-                        last_err_response = resp
-                        logger.warning(
-                            "Chat Model %s returns error response, trying fallback to next provider.",
-                            candidate_id,
-                        )
-                        break
+                async for attempt in retrying:
+                    has_stream_output = False
+                    with attempt:
+                        try:
+                            async for resp in self._iter_llm_responses(
+                                include_model=idx == 0
+                            ):
+                                if resp.is_chunk:
+                                    has_stream_output = True
+                                    yield resp
+                                    continue
 
-                    yield resp
-                    return
+                                if (
+                                    resp.role == "err"
+                                    and not has_stream_output
+                                    and (not is_last_candidate)
+                                ):
+                                    last_err_response = resp
+                                    logger.warning(
+                                        "Chat Model %s returns error response, trying fallback to next provider.",
+                                        candidate_id,
+                                    )
+                                    break
 
-                if has_stream_output:
-                    return
+                                yield resp
+                                return
+
+                            if has_stream_output:
+                                return
+                        except EmptyModelOutputError:
+                            if has_stream_output:
+                                logger.warning(
+                                    "Chat Model %s returned empty output after streaming started; skipping empty-output retry.",
+                                    candidate_id,
+                                )
+                            else:
+                                logger.warning(
+                                    "Chat Model %s returned empty output on attempt %s/%s.",
+                                    candidate_id,
+                                    attempt.retry_state.attempt_number,
+                                    self.EMPTY_OUTPUT_RETRY_ATTEMPTS,
+                                )
+                            raise
             except Exception as exc:  # noqa: BLE001
                 last_exception = exc
                 logger.warning(
@@ -463,34 +530,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return
 
         if not llm_resp.tools_call_name:
-            # 如果没有工具调用，转换到完成状态
-            self.final_llm_resp = llm_resp
-            self._transition_state(AgentState.DONE)
-            self.stats.end_time = time.time()
-
-            # record the final assistant message
-            parts = []
-            if llm_resp.reasoning_content or llm_resp.reasoning_signature:
-                parts.append(
-                    ThinkPart(
-                        think=llm_resp.reasoning_content,
-                        encrypted=llm_resp.reasoning_signature,
-                    )
-                )
-            if llm_resp.completion_text:
-                parts.append(TextPart(text=llm_resp.completion_text))
-            if len(parts) == 0:
-                logger.warning(
-                    "LLM returned empty assistant message with no tool calls."
-                )
-            self.run_context.messages.append(Message(role="assistant", content=parts))
-
-            # call the on_agent_done hook
-            try:
-                await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
-            except Exception as e:
-                logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
-            self._resolve_unconsumed_follow_ups()
+            await self._complete_with_assistant_response(llm_resp)
 
         # 返回 LLM 结果
         if llm_resp.result_chain:
@@ -510,6 +550,24 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.tools_call_name:
             if self.tool_schema_mode == "skills_like":
                 llm_resp, _ = await self._resolve_tool_exec(llm_resp)
+                if not llm_resp.tools_call_name:
+                    logger.warning(
+                        "skills_like tool re-query returned no tool calls; fallback to assistant response."
+                    )
+                    if llm_resp.result_chain:
+                        yield AgentResponse(
+                            type="llm_result",
+                            data=AgentResponseData(chain=llm_resp.result_chain),
+                        )
+                    elif llm_resp.completion_text:
+                        yield AgentResponse(
+                            type="llm_result",
+                            data=AgentResponseData(
+                                chain=MessageChain().message(llm_resp.completion_text),
+                            ),
+                        )
+                    await self._complete_with_assistant_response(llm_resp)
+                    return
 
             tool_call_result_blocks = []
             cached_images = []  # Collect cached images for LLM visibility
@@ -873,7 +931,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
 
     def _build_tool_requery_context(
-        self, tool_names: list[str]
+        self,
+        tool_names: list[str],
+        extra_instruction: str | None = None,
     ) -> list[dict[str, T.Any]]:
         """Build contexts for re-querying LLM with param-only tool schemas."""
         contexts: list[dict[str, T.Any]] = []
@@ -888,12 +948,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             + ". Now call the tool(s) with required arguments using the tool schema, "
             "and follow the existing tool-use rules."
         )
+        if extra_instruction:
+            instruction = f"{instruction}\n{extra_instruction}"
         if contexts and contexts[0].get("role") == "system":
             content = contexts[0].get("content") or ""
             contexts[0]["content"] = f"{content}\n{instruction}"
         else:
             contexts.insert(0, {"role": "system", "content": instruction})
         return contexts
+
+    @staticmethod
+    def _has_meaningful_assistant_reply(llm_resp: LLMResponse) -> bool:
+        text = (llm_resp.completion_text or "").strip()
+        return bool(text)
 
     def _build_tool_subset(self, tool_set: ToolSet, tool_names: list[str]) -> ToolSet:
         """Build a subset of tools from the given tool set based on tool names."""
@@ -932,10 +999,44 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     model=self.req.model,
                     session_id=self.req.session_id,
                     extra_user_content_parts=self.req.extra_user_content_parts,
+                    tool_choice="required",
                     abort_signal=self._abort_signal,
                 )
                 if requery_resp:
                     llm_resp = requery_resp
+
+                # If the re-query still returns no tool calls, and also does not have a meaningful assistant reply,
+                # we consider it as a failure of the LLM to follow the tool-use instruction,
+                # and we will retry once with a stronger instruction that explicitly requires the LLM to either call the tool or give an explanation.
+                if (
+                    not llm_resp.tools_call_name
+                    and not self._has_meaningful_assistant_reply(llm_resp)
+                ):
+                    logger.warning(
+                        "skills_like tool re-query returned no tool calls and no explanation; retrying with stronger instruction."
+                    )
+                    repair_contexts = self._build_tool_requery_context(
+                        tool_names,
+                        extra_instruction=(
+                            "This is the second-stage tool execution step. "
+                            "You must do exactly one of the following: "
+                            "1. Call one of the selected tools using the provided tool schema. "
+                            "2. If calling a tool is no longer possible or appropriate, reply to the user with a brief explanation of why. "
+                            "Do not return an empty response. "
+                            "Do not ignore the selected tools without explanation."
+                        ),
+                    )
+                    repair_resp = await self.provider.text_chat(
+                        contexts=repair_contexts,
+                        func_tool=param_subset,
+                        model=self.req.model,
+                        session_id=self.req.session_id,
+                        extra_user_content_parts=self.req.extra_user_content_parts,
+                        tool_choice="required",
+                        abort_signal=self._abort_signal,
+                    )
+                    if repair_resp:
+                        llm_resp = repair_resp
 
         return llm_resp, subset
 
