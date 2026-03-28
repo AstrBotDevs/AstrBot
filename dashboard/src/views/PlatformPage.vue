@@ -171,7 +171,7 @@
       :config_data="config_data"
       :updating-mode="updatingMode"
       :updating-platform-config="updatingPlatformConfig"
-      @update="getConfig"
+      @update:show="getConfig"
       @show-toast="showToast"
       @refresh-config="getConfig"
     />
