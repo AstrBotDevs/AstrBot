@@ -534,32 +534,7 @@ class ProviderOpenAIResponses(Provider):
             if tool_list:
                 payloads["tools"] = tool_list
 
-        payloads.pop("abort_signal", None)
-
-        if payloads.get("store") is not False:
-            logger.warning(
-                "OpenAI Responses API requires store=false; overriding request store.",
-            )
-        payloads["store"] = False
-
-        extra_body = {}
-        to_del = []
-        for key in payloads:
-            if key not in self.default_params:
-                extra_body[key] = payloads[key]
-                to_del.append(key)
-        for key in to_del:
-            del payloads[key]
-
-        custom_extra_body = self.provider_config.get("custom_extra_body", {})
-        if isinstance(custom_extra_body, dict):
-            extra_body.update(custom_extra_body)
-        if extra_body.get("store") is not False:
-            if "store" in extra_body:
-                logger.warning(
-                    "OpenAI Responses API requires store=false; overriding extra_body store.",
-                )
-            extra_body.pop("store", None)
+        extra_body = self._prepare_request_payload(payloads)
 
         response = await self.client.responses.create(
             **payloads,
@@ -581,32 +556,7 @@ class ProviderOpenAIResponses(Provider):
             if tool_list:
                 payloads["tools"] = tool_list
 
-        payloads.pop("abort_signal", None)
-
-        if payloads.get("store") is not False:
-            logger.warning(
-                "OpenAI Responses API requires store=false; overriding request store.",
-            )
-        payloads["store"] = False
-
-        extra_body = {}
-        to_del = []
-        for key in payloads:
-            if key not in self.default_params:
-                extra_body[key] = payloads[key]
-                to_del.append(key)
-        for key in to_del:
-            del payloads[key]
-
-        custom_extra_body = self.provider_config.get("custom_extra_body", {})
-        if isinstance(custom_extra_body, dict):
-            extra_body.update(custom_extra_body)
-        if extra_body.get("store") is not False:
-            if "store" in extra_body:
-                logger.warning(
-                    "OpenAI Responses API requires store=false; overriding extra_body store.",
-                )
-            extra_body.pop("store", None)
+        extra_body = self._prepare_request_payload(payloads)
 
         stream = await self.client.responses.create(
             **payloads,
@@ -833,96 +783,43 @@ class ProviderOpenAIResponses(Provider):
 
         raise e
 
-    async def text_chat(
-        self,
-        prompt=None,
-        session_id=None,
-        image_urls=None,
-        func_tool=None,
-        contexts=None,
-        system_prompt=None,
-        tool_calls_result=None,
-        model=None,
-        extra_user_content_parts=None,
-        **kwargs,
-    ) -> LLMResponse:
-        payloads, context_query = await self._prepare_chat_payload(
-            prompt,
-            image_urls,
-            contexts,
-            system_prompt,
-            tool_calls_result,
-            model=model,
-            extra_user_content_parts=extra_user_content_parts,
-            **kwargs,
-        )
+    def _prepare_request_payload(self, payloads: dict) -> dict:
+        payloads.pop("abort_signal", None)
 
-        llm_response = None
-        max_retries = 10
-        available_api_keys = self.api_keys.copy()
-        chosen_key = random.choice(available_api_keys)
-        image_fallback_used = False
+        if payloads.get("store") is not False:
+            logger.warning(
+                "OpenAI Responses API requires store=false; overriding request store.",
+            )
+        payloads["store"] = False
 
-        last_exception = None
-        retry_cnt = 0
-        for retry_cnt in range(max_retries):
-            try:
-                self.client.api_key = chosen_key
-                llm_response = await self._query(payloads, func_tool)
-                break
-            except Exception as e:
-                last_exception = e
-                (
-                    success,
-                    chosen_key,
-                    available_api_keys,
-                    payloads,
-                    context_query,
-                    func_tool,
-                    image_fallback_used,
-                ) = await self._handle_api_error(
-                    e,
-                    payloads,
-                    context_query,
-                    func_tool,
-                    chosen_key,
-                    available_api_keys,
-                    retry_cnt,
-                    max_retries,
-                    image_fallback_used=image_fallback_used,
+        extra_body = {}
+        to_del = []
+        for key in payloads:
+            if key not in self.default_params:
+                extra_body[key] = payloads[key]
+                to_del.append(key)
+        for key in to_del:
+            del payloads[key]
+
+        custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        if isinstance(custom_extra_body, dict):
+            extra_body.update(custom_extra_body)
+        if extra_body.get("store") is not False:
+            if "store" in extra_body:
+                logger.warning(
+                    "OpenAI Responses API requires store=false; overriding extra_body store.",
                 )
-                if success:
-                    break
+            extra_body.pop("store", None)
+        return extra_body
 
-        if retry_cnt == max_retries - 1 or llm_response is None:
-            logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
-            if last_exception is None:
-                raise Exception("未知错误")
-            raise last_exception
-        return llm_response
-
-    async def text_chat_stream(
+    async def _retry_request(
         self,
-        prompt=None,
-        session_id=None,
-        image_urls=None,
-        func_tool=None,
-        contexts=None,
-        system_prompt=None,
-        tool_calls_result=None,
-        model=None,
-        **kwargs,
+        payloads: dict,
+        context_query: list,
+        func_tool: ToolSet | None,
+        *,
+        stream: bool,
     ) -> AsyncGenerator[LLMResponse, None]:
-        payloads, context_query = await self._prepare_chat_payload(
-            prompt,
-            image_urls,
-            contexts,
-            system_prompt,
-            tool_calls_result,
-            model=model,
-            **kwargs,
-        )
-
         max_retries = 10
         available_api_keys = self.api_keys.copy()
         chosen_key = random.choice(available_api_keys)
@@ -933,8 +830,11 @@ class ProviderOpenAIResponses(Provider):
         for retry_cnt in range(max_retries):
             try:
                 self.client.api_key = chosen_key
-                async for response in self._query_stream(payloads, func_tool):
-                    yield response
+                if stream:
+                    async for response in self._query_stream(payloads, func_tool):
+                        yield response
+                else:
+                    yield await self._query(payloads, func_tool)
                 break
             except Exception as e:
                 last_exception = e
@@ -966,20 +866,76 @@ class ProviderOpenAIResponses(Provider):
                 raise Exception("未知错误")
             raise last_exception
 
+    async def text_chat(
+        self,
+        prompt=None,
+        session_id=None,
+        image_urls=None,
+        func_tool=None,
+        contexts=None,
+        system_prompt=None,
+        tool_calls_result=None,
+        model=None,
+        extra_user_content_parts=None,
+        **kwargs,
+    ) -> LLMResponse:
+        payloads, context_query = await self._prepare_chat_payload(
+            prompt,
+            image_urls,
+            contexts,
+            system_prompt,
+            tool_calls_result,
+            model=model,
+            extra_user_content_parts=extra_user_content_parts,
+            **kwargs,
+        )
+        async for response in self._retry_request(
+            payloads, context_query, func_tool, stream=False
+        ):
+            return response
+        raise Exception("未知错误")
+
+    async def text_chat_stream(
+        self,
+        prompt=None,
+        session_id=None,
+        image_urls=None,
+        func_tool=None,
+        contexts=None,
+        system_prompt=None,
+        tool_calls_result=None,
+        model=None,
+        **kwargs,
+    ) -> AsyncGenerator[LLMResponse, None]:
+        payloads, context_query = await self._prepare_chat_payload(
+            prompt,
+            image_urls,
+            contexts,
+            system_prompt,
+            tool_calls_result,
+            model=model,
+            **kwargs,
+        )
+        async for response in self._retry_request(
+            payloads, context_query, func_tool, stream=True
+        ):
+            yield response
+
     async def _remove_image_from_context(self, contexts: list):
         new_contexts = []
 
         for context in contexts:
-            if "content" in context and isinstance(context["content"], list):
+            new_context = dict(context)
+            if "content" in new_context and isinstance(new_context["content"], list):
                 new_content = []
-                for item in context["content"]:
+                for item in new_context["content"]:
                     if isinstance(item, dict) and "image_url" in item:
                         continue
                     new_content.append(item)
                 if not new_content:
                     new_content = [{"type": "text", "text": "[图片]"}]
-                context["content"] = new_content
-            new_contexts.append(context)
+                new_context["content"] = new_content
+            new_contexts.append(new_context)
         return new_contexts
 
     def get_current_key(self) -> str:
