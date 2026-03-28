@@ -525,7 +525,7 @@ watch(
   },
 );
 
-// Merry Christmas! 🎄
+// Merry Christmas!
 const isChristmas = computed(() => {
   const today = new Date();
   const month = today.getMonth() + 1; // getMonth() 返回 0-11
@@ -1250,14 +1250,12 @@ const isChristmas = computed(() => {
 
 .markdown-content ol {
   padding-left: 24px;
-  /* Adds indentation to ordered lists */
   margin-top: 8px;
   margin-bottom: 8px;
 }
 
 .markdown-content ul {
   padding-left: 24px;
-  /* Adds indentation to unordered lists */
   margin-top: 8px;
   margin-bottom: 8px;
 }

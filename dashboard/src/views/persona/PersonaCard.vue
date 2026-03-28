@@ -1,7 +1,7 @@
 <template>
   <v-card
     class="persona-card"
-    :class="{ 'dragging': isDragging }"
+    :class="{ dragging: isDragging }"
     rounded="lg"
     elevation="1"
     hover
@@ -27,50 +27,38 @@
         <v-list density="compact">
           <v-list-item @click.stop="$emit('edit')">
             <template #prepend>
-              <v-icon size="small">
-                mdi-pencil
-              </v-icon>
+              <v-icon size="small"> mdi-pencil </v-icon>
             </template>
-            <v-list-item-title>{{ tm('buttons.edit') }}</v-list-item-title>
+            <v-list-item-title>{{ tm("buttons.edit") }}</v-list-item-title>
           </v-list-item>
           <v-list-item @click.stop="$emit('clone')">
             <template #prepend>
-              <v-icon size="small">
-                mdi-content-copy
-              </v-icon>
+              <v-icon size="small"> mdi-content-copy </v-icon>
             </template>
-            <v-list-item-title>{{ tm('buttons.clone') }}</v-list-item-title>
+            <v-list-item-title>{{ tm("buttons.clone") }}</v-list-item-title>
           </v-list-item>
           <v-list-item @click.stop="$emit('move')">
             <template #prepend>
-              <v-icon size="small">
-                mdi-folder-move
-              </v-icon>
+              <v-icon size="small"> mdi-folder-move </v-icon>
             </template>
-            <v-list-item-title>{{ tm('persona.contextMenu.moveTo') }}</v-list-item-title>
+            <v-list-item-title>{{
+              tm("persona.contextMenu.moveTo")
+            }}</v-list-item-title>
           </v-list-item>
           <v-list-item @click.stop="$emit('export')">
             <template #prepend>
-              <v-icon size="small">
-                mdi-download
-              </v-icon>
+              <v-icon size="small"> mdi-download </v-icon>
             </template>
-            <v-list-item-title>{{ tm('persona.contextMenu.export') }}</v-list-item-title>
+            <v-list-item-title>{{
+              tm("persona.contextMenu.export")
+            }}</v-list-item-title>
           </v-list-item>
           <v-divider class="my-1" />
-          <v-list-item
-            class="text-error"
-            @click.stop="$emit('delete')"
-          >
+          <v-list-item class="text-error" @click.stop="$emit('delete')">
             <template #prepend>
-              <v-icon
-                size="small"
-                color="error"
-              >
-                mdi-delete
-              </v-icon>
+              <v-icon size="small" color="error"> mdi-delete </v-icon>
             </template>
-            <v-list-item-title>{{ tm('buttons.delete') }}</v-list-item-title>
+            <v-list-item-title>{{ tm("buttons.delete") }}</v-list-item-title>
           </v-list-item>
         </v-list>
       </v-menu>
@@ -89,7 +77,11 @@
           variant="tonal"
           prepend-icon="mdi-chat"
         >
-          {{ tm('labels.presetDialogs', { count: persona.begin_dialogs.length / 2 }) }}
+          {{
+            tm("labels.presetDialogs", {
+              count: persona.begin_dialogs.length / 2,
+            })
+          }}
         </v-chip>
         <v-chip
           v-if="persona.tools === null"
@@ -98,7 +90,7 @@
           variant="tonal"
           prepend-icon="mdi-tools"
         >
-          {{ tm('form.allToolsAvailable') }}
+          {{ tm("form.allToolsAvailable") }}
         </v-chip>
         <v-chip
           v-else-if="persona.tools && persona.tools.length > 0"
@@ -107,7 +99,7 @@
           variant="tonal"
           prepend-icon="mdi-tools"
         >
-          {{ persona.tools.length }} {{ tm('persona.toolsCount') }}
+          {{ persona.tools.length }} {{ tm("persona.toolsCount") }}
         </v-chip>
         <v-chip
           v-if="persona.skills === null"
@@ -116,7 +108,7 @@
           variant="tonal"
           prepend-icon="mdi-lightning-bolt"
         >
-          {{ tm('form.allSkillsAvailable') }}
+          {{ tm("form.allSkillsAvailable") }}
         </v-chip>
         <v-chip
           v-else-if="persona.skills && persona.skills.length > 0"
@@ -125,142 +117,139 @@
           variant="tonal"
           prepend-icon="mdi-lightning-bolt"
         >
-          {{ persona.skills.length }} {{ tm('persona.skillsCount') }}
+          {{ persona.skills.length }} {{ tm("persona.skillsCount") }}
         </v-chip>
       </div>
 
       <div class="mt-3 text-caption text-medium-emphasis">
-        {{ tm('labels.createdAt') }}: {{ formatDate(persona.created_at) }}
+        {{ tm("labels.createdAt") }}: {{ formatDate(persona.created_at) }}
       </div>
     </v-card-text>
   </v-card>
 
   <!-- Custom Drag Preview -->
-  <div
-    ref="dragPreview"
-    class="drag-preview"
-  >
-    <v-icon
-      size="small"
-      class="mr-2"
-    >
-      mdi-account
-    </v-icon>
+  <div ref="dragPreview" class="drag-preview">
+    <v-icon size="small" class="mr-2"> mdi-account </v-icon>
     <span class="text-subtitle-2">{{ persona.persona_id }}</span>
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent, type PropType } from 'vue';
-import { useModuleI18n } from '@/i18n/composables';
+import { defineComponent, type PropType } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
 
 interface Persona {
-    persona_id: string;
-    system_prompt: string;
-    custom_error_message?: string | null;
-    begin_dialogs?: string[] | null;
-    tools?: string[] | null;
-    skills?: string[] | null;
-    created_at?: string;
-    updated_at?: string;
-    folder_id?: string | null;
-    [key: string]: any;
+  persona_id: string;
+  system_prompt: string;
+  custom_error_message?: string | null;
+  begin_dialogs?: string[] | null;
+  tools?: string[] | null;
+  skills?: string[] | null;
+  created_at?: string;
+  updated_at?: string;
+  folder_id?: string | null;
+  [key: string]: any;
 }
 
 export default defineComponent({
-    name: 'PersonaCard',
-    props: {
-        persona: {
-            type: Object as PropType<Persona>,
-            required: true
-        }
+  name: "PersonaCard",
+  props: {
+    persona: {
+      type: Object as PropType<Persona>,
+      required: true,
     },
-    emits: ['view', 'edit', 'clone', 'move', 'export', 'delete'],
-    setup() {
-        const { tm } = useModuleI18n('features/persona');
-        return { tm };
-    },
-    data() {
-        return {
-            isDragging: false
-        };
-    },
-    methods: {
-        handleDragStart(event: DragEvent) {
-            this.isDragging = true;
-            if (event.dataTransfer) {
-                event.dataTransfer.effectAllowed = 'move';
-                event.dataTransfer.setData('application/json', JSON.stringify({
-                    type: 'persona',
-                    persona_id: this.persona.persona_id,
-                    persona: this.persona
-                }));
+  },
+  emits: ["view", "edit", "clone", "move", "export", "delete"],
+  setup() {
+    const { tm } = useModuleI18n("features/persona");
+    return { tm };
+  },
+  data() {
+    return {
+      isDragging: false,
+    };
+  },
+  methods: {
+    handleDragStart(event: DragEvent) {
+      this.isDragging = true;
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData(
+          "application/json",
+          JSON.stringify({
+            type: "persona",
+            persona_id: this.persona.persona_id,
+            persona: this.persona,
+          }),
+        );
 
-                // Set custom drag image
-                const dragPreview = this.$refs.dragPreview as HTMLElement;
-                if (dragPreview) {
-                    event.dataTransfer.setDragImage(dragPreview, 15, 15);
-                }
-            }
-        },
-        handleDragEnd() {
-            this.isDragging = false;
-        },
-        truncateText(text: string | undefined | null, maxLength: number): string {
-            if (!text) return '';
-            return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
-        },
-        formatDate(dateString: string | undefined | null): string {
-            if (!dateString) return '';
-            return new Date(dateString).toLocaleString();
+        // Set custom drag image
+        const dragPreview = this.$refs.dragPreview as HTMLElement;
+        if (dragPreview) {
+          event.dataTransfer.setDragImage(dragPreview, 15, 15);
         }
-    }
+      }
+    },
+    handleDragEnd() {
+      this.isDragging = false;
+    },
+    truncateText(text: string | undefined | null, maxLength: number): string {
+      if (!text) return "";
+      return text.length > maxLength
+        ? text.substring(0, maxLength) + "..."
+        : text;
+    },
+    formatDate(dateString: string | undefined | null): string {
+      if (!dateString) return "";
+      return new Date(dateString).toLocaleString();
+    },
+  },
 });
 </script>
 
 <style scoped>
 .persona-card {
-    height: 100%;
-    cursor: grab;
-    transition: all 0.2s ease;
+  height: 100%;
+  cursor: grab;
+  transition: all 0.2s ease;
 }
 
 .persona-card:active {
-    cursor: grabbing;
+  cursor: grabbing;
 }
 
 .persona-card.dragging {
-    opacity: 0.5;
-    transform: scale(0.95);
+  opacity: 0.5;
+  transform: scale(0.95);
 }
 
 .persona-card:hover {
-    transform: translateY(-2px);
+  transform: translateY(-2px);
 }
 
 .system-prompt-preview {
-    font-size: 14px;
-    line-height: 1.4;
-    color: rgba(var(--v-theme-on-surface), 0.7);
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
-    -webkit-box-orient: vertical;
+  font-size: 14px;
+  line-height: 1.4;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
 .drag-preview {
-    position: fixed;
-    top: -1000px;
-    left: -1000px;
-    background: rgb(var(--v-theme-surface));
-    padding: 12px 20px;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    display: flex;
-    align-items: center;
-    border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-    z-index: 9999;
-    pointer-events: none;
+  position: fixed;
+  top: -1000px;
+  left: -1000px;
+  background: rgb(var(--v-theme-surface));
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  z-index: 9999;
+  pointer-events: none;
 }
 </style>

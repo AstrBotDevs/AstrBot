@@ -17,6 +17,7 @@ const customizer = useCustomizerStore();
 const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
+const isCurrentChatRoute = computed(() => route.path === '/chat' || route.path.startsWith('/chat/'));
 
 const isChatPage = computed(() => {
   return route.path.startsWith("/chat");
@@ -127,7 +128,7 @@ onMounted(() => {
         <v-container
           fluid
           class="page-wrapper"
-          :class="{ 'chat-mode-container': showChatPage }"
+          :class="{ 'chat-mode-container': isCurrentChatRoute }"
           :style="{
             height: showChatPage ? '100%' : 'calc(100% - 8px)',
             padding: isChatPage || showChatPage ? '0' : undefined,

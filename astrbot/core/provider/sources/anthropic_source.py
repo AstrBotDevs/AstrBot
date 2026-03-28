@@ -516,7 +516,7 @@ class ProviderAnthropic(Provider):
 
         model = model or self.get_model()
 
-        payloads = {**kwargs, "messages": new_messages, "model": model}
+        payloads = {"messages": new_messages, "model": model}
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:
@@ -572,7 +572,7 @@ class ProviderAnthropic(Provider):
 
         model = model or self.get_model()
 
-        payloads = {**kwargs, "messages": new_messages, "model": model}
+        payloads = {"messages": new_messages, "model": model}
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:

@@ -3,6 +3,7 @@ import asyncio
 import aiofiles
 import anyio
 from wechatpy.enterprise import WeChatClient
+from wechatpy.exceptions import WeChatClientException
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -96,7 +97,19 @@ class WecomPlatformEvent(AstrMessageEvent):
                     # Split long text messages if needed
                     plain_chunks = await self.split_plain(comp.text)
                     for chunk in plain_chunks:
-                        kf_message_api.send_text(user_id, self.get_self_id(), chunk)
+                        try:
+                            kf_message_api.send_text(user_id, self.get_self_id(), chunk)
+                        except WeChatClientException as e:
+                            if getattr(e, "errcode", None) == 40096:
+                                # 40096: invalid external userid, fallback to regular message API
+                                logger.warning(
+                                    f"kf API error 40096 for user {user_id}, falling back to regular message API"
+                                )
+                                self.client.message.send_text(
+                                    self.get_self_id(), user_id, chunk
+                                )
+                            else:
+                                raise
                         await asyncio.sleep(0.5)  # Avoid sending too fast
                 elif isinstance(comp, Image):
                     img_path = await comp.convert_to_file_path()
