@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from ._message_types import normalize_message_type
 from .message.components import (
@@ -45,6 +45,7 @@ class PlainTextResult:
 
 
 ReplyHandler = Callable[[str], Awaitable[None]]
+_MessageComponentT = TypeVar("_MessageComponentT", bound=BaseMessageComponent)
 
 _JSON_DROP = object()
 
@@ -134,6 +135,23 @@ class MessageEvent:
     platform_id: str
     message_type: str
     sender_name: str
+    raw: dict[str, Any]
+    _is_admin: bool
+    _stopped: bool
+    _host_extras: dict[str, Any]
+    _host_extras_present: bool
+    _sdk_local_extras: dict[str, Any]
+    _sdk_local_extras_present: bool
+    _sdk_local_extras_dirty: bool
+    _messages: list[BaseMessageComponent]
+    _messages_present: bool
+    _message_outline: str
+    _sent_messages: list[BaseMessageComponent]
+    _sent_messages_present: bool
+    _sent_message_outline: str
+    _sent_message_outline_present: bool
+    _context: Context | None
+    _reply_handler: ReplyHandler | None
 
     def __init__(
         self,
@@ -398,21 +416,17 @@ class MessageEvent:
 
     def get_components(
         self,
-        type_: type[BaseMessageComponent],
-    ) -> list[BaseMessageComponent]:
+        type_: type[_MessageComponentT],
+    ) -> list[_MessageComponentT]:
         return [
             component for component in self._messages if isinstance(component, type_)
         ]
 
     def get_images(self) -> list[Image]:
-        return [
-            component for component in self._messages if isinstance(component, Image)
-        ]
+        return self.get_components(Image)
 
     def get_files(self) -> list[File]:
-        return [
-            component for component in self._messages if isinstance(component, File)
-        ]
+        return self.get_components(File)
 
     def extract_plain_text(self) -> str:
         return " ".join(
