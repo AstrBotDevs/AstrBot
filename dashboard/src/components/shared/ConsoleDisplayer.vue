@@ -22,8 +22,8 @@
       <div v-if="enableAdvancedFilters" class="advanced-filters">
         <v-text-field
           v-model="keyword"
-          label="Search"
-          placeholder="Search message, tag, plugin, platform, or UMO"
+          :label="tm('filters.searchLabel')"
+          :placeholder="tm('filters.searchPlaceholder')"
           density="compact"
           hide-details
           clearable
@@ -33,8 +33,8 @@
         <v-autocomplete
           v-model="selectedTags"
           :items="tagOptions"
-          label="Tag"
-          placeholder="Filter by logcat tag"
+          :label="tm('filters.tagLabel')"
+          :placeholder="tm('filters.tagPlaceholder')"
           density="compact"
           hide-details
           clearable
@@ -45,22 +45,22 @@
           class="filter-input"
         />
         <v-btn variant="text" size="small" @click="clearFilters">
-          Clear Filters
+          {{ tm('filters.clearButton') }}
         </v-btn>
         <span class="filter-summary">
-          {{ `${filteredLogs.length} / ${localLogCache.length} logs` }}
+          {{ tm('filters.summary', { count: localLogCache.length }) }}
         </span>
       </div>
     </div>
 
     <div ref="term" class="console-terminal">
       <pre
-        v-for="entry in filteredLogs"
+        v-for="entry in localLogCache"
         :key="entry.uuid"
         class="console-log-line fade-in"
         :style="getLineStyle(entry)"
       >{{ entry.displayText }}</pre>
-      <div v-if="filteredLogs.length === 0" class="console-empty">
+      <div v-if="localLogCache.length === 0" class="console-empty">
         {{ emptyStateText }}
       </div>
     </div>
@@ -71,6 +71,7 @@
 import axios from 'axios';
 import { EventSourcePolyfill } from 'event-source-polyfill';
 
+import { useModuleI18n } from '@/i18n/composables';
 import { useCommonStore } from '@/stores/common';
 
 const ANSI_PATTERN = /\u001b\[[0-9;]*m/g;
@@ -98,15 +99,19 @@ export default {
     storageKey: {
       type: String,
       default: ''
+    },
+    autoScroll: {
+      type: Boolean,
+      default: true
     }
   },
   setup() {
     const commonStore = useCommonStore();
-    return { commonStore };
+    const { tm } = useModuleI18n('features/console');
+    return { commonStore, tm };
   },
   data() {
     return {
-      autoScroll: true,
       logColorAnsiMap: {
         '\u001b[1;34m': 'color: #39C5BB; font-weight: bold;',
         '\u001b[1;36m': 'color: #00FFFF; font-weight: bold;',
@@ -134,70 +139,66 @@ export default {
       retryAttempts: 0,
       maxRetryAttempts: 10,
       baseRetryDelay: 1000,
-      lastEventId: null
+      lastEventId: null,
+      knownLogIds: new Set(),
+      filterSyncTimer: null,
+      reloadSequence: 0,
+      suspendFilterSync: false
     };
   },
   computed: {
-    filteredLogs() {
-      const keyword = this.keyword.trim().toLowerCase();
-      const selectedTags = new Set(this.selectedTags);
-
-      return this.localLogCache.filter((entry) => {
-        if (!this.selectedLevels.includes(entry.level)) {
-          return false;
-        }
-
-        if (selectedTags.size > 0 && !selectedTags.has(entry.tag)) {
-          return false;
-        }
-
-        if (keyword && !entry.searchIndex.includes(keyword)) {
-          return false;
-        }
-
-        return true;
-      });
-    },
     tagOptions() {
       return [...new Set(this.localLogCache.map((entry) => entry.tag).filter(Boolean))].sort();
     },
     hasActiveFilters() {
-      return this.selectedTags.length > 0 || this.keyword.trim().length > 0;
+      return (
+        this.selectedLevels.length !== this.logLevels.length ||
+        this.selectedTags.length > 0 ||
+        this.keyword.trim().length > 0
+      );
     },
     emptyStateText() {
-      if (this.enableAdvancedFilters && this.hasActiveFilters) {
-        return 'No logs match the active filters.';
+      if (this.hasActiveFilters) {
+        return this.tm('filters.emptyFiltered');
       }
-      return 'No logs yet.';
+      return this.tm('filters.emptyIdle');
     }
   },
   watch: {
-    selectedLevels() {
-      this.persistState();
+    autoScroll() {
       this.scheduleAutoScroll();
+    },
+    selectedLevels() {
+      if (this.suspendFilterSync) {
+        return;
+      }
+      this.persistState();
+      this.scheduleFilterSync();
     },
     selectedTags() {
+      if (this.suspendFilterSync) {
+        return;
+      }
       this.persistState();
-      this.scheduleAutoScroll();
+      this.scheduleFilterSync();
     },
     keyword() {
+      if (this.suspendFilterSync) {
+        return;
+      }
       this.persistState();
-      this.scheduleAutoScroll();
+      this.scheduleFilterSync();
     }
   },
   async mounted() {
     this.restorePersistedState();
-    await this.fetchLogHistory();
-    this.connectSSE();
+    await this.reloadLogSource();
   },
   beforeUnmount() {
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
-    }
-    if (this.retryTimer) {
-      clearTimeout(this.retryTimer);
-      this.retryTimer = null;
+    this.teardownEventSource();
+    if (this.filterSyncTimer) {
+      clearTimeout(this.filterSyncTimer);
+      this.filterSyncTimer = null;
     }
     this.retryAttempts = 0;
   },
@@ -216,6 +217,7 @@ export default {
       }
 
       try {
+        this.suspendFilterSync = true;
         const raw = localStorage.getItem(storageKey);
         if (!raw) {
           return;
@@ -234,6 +236,8 @@ export default {
         this.keyword = typeof parsed.keyword === 'string' ? parsed.keyword : '';
       } catch (error) {
         console.warn('Failed to restore console filter state:', error);
+      } finally {
+        this.suspendFilterSync = false;
       }
     },
 
@@ -257,28 +261,75 @@ export default {
       }
     },
 
-    connectSSE() {
+    getLogQueryParams() {
+      const params = {};
+      const historyLimit = Number.parseInt(this.historyNum, 10);
+
+      if (!Number.isNaN(historyLimit) && historyLimit > 0) {
+        params.limit = historyLimit;
+      }
+
+      if (this.selectedLevels.length !== this.logLevels.length) {
+        params.levels = this.selectedLevels.length > 0 ? this.selectedLevels.join(',') : '__none__';
+      }
+
+      if (this.selectedTags.length > 0) {
+        params.tag = this.selectedTags.join(',');
+      }
+
+      const keyword = this.keyword.trim();
+      if (keyword) {
+        params.keyword = keyword;
+      }
+
+      return params;
+    },
+
+    buildLogStreamUrl() {
+      const query = new URLSearchParams();
+      const params = this.getLogQueryParams();
+
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          query.set(key, String(value));
+        }
+      });
+
+      return query.toString() ? `/api/live-log?${query.toString()}` : '/api/live-log';
+    },
+
+    teardownEventSource() {
       if (this.eventSource) {
         this.eventSource.close();
         this.eventSource = null;
       }
 
-      const token = localStorage.getItem('token');
+      if (this.retryTimer) {
+        clearTimeout(this.retryTimer);
+        this.retryTimer = null;
+      }
+    },
 
-      this.eventSource = new EventSourcePolyfill('/api/live-log', {
+    connectSSE() {
+      this.teardownEventSource();
+
+      const token = localStorage.getItem('token');
+      const options = {
         headers: {
           Authorization: token ? `Bearer ${token}` : ''
         },
         heartbeatTimeout: 300000,
         withCredentials: true
-      });
+      };
+
+      if (this.lastEventId) {
+        options.lastEventId = this.lastEventId;
+      }
+
+      this.eventSource = new EventSourcePolyfill(this.buildLogStreamUrl(), options);
 
       this.eventSource.onopen = () => {
         this.retryAttempts = 0;
-
-        if (!this.lastEventId) {
-          this.fetchLogHistory();
-        }
       };
 
       this.eventSource.onmessage = (event) => {
@@ -288,7 +339,7 @@ export default {
           }
 
           const payload = JSON.parse(event.data);
-          this.processNewLogs([payload]);
+          this.appendLogs([payload]);
         } catch (error) {
           console.error('Failed to parse log stream payload:', error);
         }
@@ -321,11 +372,21 @@ export default {
           this.retryTimer = null;
         }
 
+        const sequence = this.reloadSequence;
         this.retryTimer = setTimeout(async () => {
+          if (sequence !== this.reloadSequence) {
+            return;
+          }
+
           this.retryAttempts += 1;
           if (!this.lastEventId) {
-            await this.fetchLogHistory();
+            await this.fetchLogHistory(sequence);
           }
+
+          if (sequence !== this.reloadSequence) {
+            return;
+          }
+
           this.connectSSE();
         }, delay);
       };
@@ -353,18 +414,6 @@ export default {
         log.source_line || '',
         rendered || message
       ].join('|');
-      const searchIndex = [
-        message,
-        rendered,
-        tag,
-        ...(Array.isArray(log.tags) ? log.tags : []),
-        log.platform_id || '',
-        log.plugin_name || '',
-        log.plugin_display_name || '',
-        log.umo || '',
-        log.logger_name || '',
-        sourceFile
-      ].join(' ').toLowerCase();
 
       return {
         ...log,
@@ -374,59 +423,147 @@ export default {
         data: rendered,
         message,
         tag,
-        displayText: stripAnsi(rendered || message),
-        searchIndex
+        displayText: stripAnsi(rendered || message)
       };
     },
 
-    processNewLogs(newLogs) {
+    rebuildKnownLogIds() {
+      this.knownLogIds = new Set(this.localLogCache.map((entry) => entry.uuid));
+    },
+
+    setLastEventIdFromLogs(logs) {
+      if (!logs || logs.length === 0) {
+        this.lastEventId = null;
+        return;
+      }
+
+      const lastLog = logs[logs.length - 1];
+      this.lastEventId = lastLog?.time ? String(lastLog.time) : null;
+    },
+
+    replaceLogHistory(logs) {
+      const normalizedLogs = [];
+      const knownLogIds = new Set();
+
+      (logs || []).forEach((log) => {
+        const entry = this.normalizeLogEntry(log);
+        if (!entry || knownLogIds.has(entry.uuid)) {
+          return;
+        }
+
+        knownLogIds.add(entry.uuid);
+        normalizedLogs.push(entry);
+      });
+
+      normalizedLogs.sort((left, right) => left.time - right.time);
+
+      const maxSize = this.commonStore.log_cache_max_len || 200;
+      if (normalizedLogs.length > maxSize) {
+        normalizedLogs.splice(0, normalizedLogs.length - maxSize);
+      }
+
+      this.localLogCache = normalizedLogs;
+      this.knownLogIds = new Set(normalizedLogs.map((entry) => entry.uuid));
+      this.setLastEventIdFromLogs(normalizedLogs);
+      this.scheduleAutoScroll();
+    },
+
+    appendLogs(newLogs) {
       if (!newLogs || newLogs.length === 0) {
         return;
       }
 
-      let hasUpdate = false;
-      const nextCache = [...this.localLogCache];
-      const existingKeys = new Set(nextCache.map((entry) => entry.uuid));
+      const appendedLogs = [];
+      let shouldSort = false;
+      let lastTime = this.localLogCache.length > 0
+        ? Number(this.localLogCache[this.localLogCache.length - 1].time || 0)
+        : Number.NEGATIVE_INFINITY;
 
       newLogs.forEach((log) => {
         const entry = this.normalizeLogEntry(log);
-        if (!entry || existingKeys.has(entry.uuid)) {
+        if (!entry || this.knownLogIds.has(entry.uuid)) {
           return;
         }
-        existingKeys.add(entry.uuid);
-        nextCache.push(entry);
-        hasUpdate = true;
+
+        const entryTime = Number(entry.time || 0);
+        if (entryTime < lastTime) {
+          shouldSort = true;
+        } else {
+          lastTime = entryTime;
+        }
+
+        this.knownLogIds.add(entry.uuid);
+        appendedLogs.push(entry);
       });
 
-      if (!hasUpdate) {
+      if (appendedLogs.length === 0) {
         return;
       }
 
-      nextCache.sort((left, right) => left.time - right.time);
+      const nextCache = [...this.localLogCache, ...appendedLogs];
+      if (shouldSort) {
+        nextCache.sort((left, right) => left.time - right.time);
+      }
 
       const maxSize = this.commonStore.log_cache_max_len || 200;
+      let trimmed = false;
       if (nextCache.length > maxSize) {
         nextCache.splice(0, nextCache.length - maxSize);
+        trimmed = true;
       }
 
       this.localLogCache = nextCache;
+      if (trimmed) {
+        this.rebuildKnownLogIds();
+      }
+      this.setLastEventIdFromLogs(nextCache);
       this.scheduleAutoScroll();
     },
 
-    async fetchLogHistory() {
+    async fetchLogHistory(sequence = this.reloadSequence) {
       try {
-        const response = await axios.get('/api/log-history');
+        const response = await axios.get('/api/log-history', {
+          params: this.getLogQueryParams()
+        });
+        if (sequence !== this.reloadSequence) {
+          return;
+        }
+
         const logs = response.data?.data?.logs || [];
-        this.processNewLogs(logs);
+        this.replaceLogHistory(logs);
       } catch (error) {
         console.error('Failed to fetch log history:', error);
       }
     },
 
+    async reloadLogSource() {
+      const sequence = ++this.reloadSequence;
+      this.lastEventId = null;
+      this.teardownEventSource();
+      await this.fetchLogHistory(sequence);
+
+      if (sequence !== this.reloadSequence) {
+        return;
+      }
+
+      this.connectSSE();
+    },
+
+    scheduleFilterSync() {
+      if (this.filterSyncTimer) {
+        clearTimeout(this.filterSyncTimer);
+        this.filterSyncTimer = null;
+      }
+
+      this.filterSyncTimer = setTimeout(() => {
+        this.reloadLogSource();
+      }, 250);
+    },
+
     clearFilters() {
+      this.selectedLevels = [...this.logLevels];
       this.selectedTags = [];
       this.keyword = '';
-      this.persistState();
     },
 
     getLevelColor(level) {

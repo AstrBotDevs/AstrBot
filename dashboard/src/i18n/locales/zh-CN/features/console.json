@@ -5,14 +5,24 @@
     "disabled": "自动滚动已关闭"
   },
   "pipInstall": {
-    "button": "安装 pip 库",
-    "dialogTitle": "安装 Pip 库",
-    "packageLabel": "*库名，如 llmtuner",
-    "mirrorLabel": "强制 PyPI 软件仓库链接（可选）",
-    "mirrorHint": "强制 PyPI 软件仓库链接 > 配置项 `PyPI 软件仓库地址`",
+    "button": "安装 pip 包",
+    "dialogTitle": "安装 Pip 包",
+    "packageLabel": "*包名，例如 llmtuner",
+    "mirrorLabel": "强制 PyPI 仓库地址（可选）",
+    "mirrorHint": "强制 PyPI 仓库地址 > 配置项 `PyPI 仓库地址`",
     "installButton": "安装"
   },
   "debugHint": {
-    "text": "Debug 日志需要在「配置文件 → 系统 → 控制台日志级别」中开启"
+    "text": "Debug 日志需要在「配置文件 -> 系统 -> 控制台日志级别」中开启"
+  },
+  "filters": {
+    "searchLabel": "搜索",
+    "searchPlaceholder": "搜索消息、标签、插件、平台或 UMO",
+    "tagLabel": "标签",
+    "tagPlaceholder": "按 logcat 标签过滤",
+    "clearButton": "清空过滤",
+    "summary": "{count} 条日志",
+    "emptyFiltered": "没有日志匹配当前过滤条件。",
+    "emptyIdle": "暂无日志。"
   }
 }

@@ -21,9 +21,9 @@ def _format_log_sse(log: dict[str, Any], ts: float) -> str:
     return f"id: {ts}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _split_query_values(name: str) -> set[str]:
+def _split_query_values(args, name: str) -> set[str]:
     values: set[str] = set()
-    for raw in request.args.getlist(name):
+    for raw in args.getlist(name):
         for item in raw.split(","):
             normalized = item.strip()
             if normalized:
@@ -63,16 +63,29 @@ def _build_search_blob(item: dict[str, Any]) -> str:
     return " ".join(_normalize_text(value) for value in values).lower()
 
 
-def _matches_filters(item: dict[str, Any]) -> bool:
-    levels = _split_query_values("levels")
+def _build_filter_state() -> dict[str, Any]:
+    args = request.args
+    return {
+        "levels": _split_query_values(args, "levels"),
+        "event_types": _split_query_values(args, "type"),
+        "tag_filters": _split_query_values(args, "tag"),
+        "platform_filters": _split_query_values(args, "platform_id"),
+        "plugin_filters": _split_query_values(args, "plugin_name"),
+        "umo_filters": _split_query_values(args, "umo"),
+        "keyword": args.get("keyword", "").strip().lower(),
+    }
+
+
+def _matches_filters(item: dict[str, Any], filters: dict[str, Any]) -> bool:
+    levels = filters["levels"]
     if levels and str(item.get("level")) not in levels:
         return False
 
-    event_types = _split_query_values("type")
+    event_types = filters["event_types"]
     if event_types and str(item.get("type", "log")) not in event_types:
         return False
 
-    tag_filters = _split_query_values("tag")
+    tag_filters = filters["tag_filters"]
     if tag_filters:
         item_tags = item.get("tags")
         if not isinstance(item_tags, list):
@@ -81,23 +94,27 @@ def _matches_filters(item: dict[str, Any]) -> bool:
         if not normalized_tags.intersection(tag_filters):
             return False
 
-    platform_filters = _split_query_values("platform_id")
+    platform_filters = filters["platform_filters"]
     if platform_filters and str(item.get("platform_id")) not in platform_filters:
         return False
 
-    plugin_filters = _split_query_values("plugin_name")
+    plugin_filters = filters["plugin_filters"]
     if plugin_filters and str(item.get("plugin_name")) not in plugin_filters:
         return False
 
-    umo_filters = _split_query_values("umo")
+    umo_filters = filters["umo_filters"]
     if umo_filters and str(item.get("umo")) not in umo_filters:
         return False
 
-    keyword = request.args.get("keyword", "").strip().lower()
+    keyword = filters["keyword"]
     if keyword and keyword not in _build_search_blob(item):
         return False
 
     return True
+
+
+def _get_last_event_id() -> str | None:
+    return request.headers.get("Last-Event-ID") or request.args.get("lastEventId")
 
 
 class LogRoute(Route):
@@ -124,6 +141,7 @@ class LogRoute(Route):
     async def _replay_cached_logs(
         self,
         last_event_id: str,
+        filters: dict[str, Any],
     ) -> AsyncGenerator[str, None]:
         """Replay cached events newer than the last SSE event id."""
         try:
@@ -132,7 +150,7 @@ class LogRoute(Route):
 
             for log_item in cached_logs:
                 log_ts = float(log_item.get("time", 0))
-                if log_ts > last_ts:
+                if log_ts > last_ts and _matches_filters(log_item, filters):
                     yield _format_log_sse(log_item, log_ts)
 
         except ValueError:
@@ -141,18 +159,21 @@ class LogRoute(Route):
             logger.error(f"Log SSE replay failed: {e}")
 
     async def log(self) -> QuartResponse:
-        last_event_id = request.headers.get("Last-Event-ID")
+        last_event_id = _get_last_event_id()
+        filters = _build_filter_state()
 
         async def stream():
             queue = None
             try:
                 if last_event_id:
-                    async for event in self._replay_cached_logs(last_event_id):
+                    async for event in self._replay_cached_logs(last_event_id, filters):
                         yield event
 
                 queue = self.log_broker.register()
                 while True:
                     message = await queue.get()
+                    if not _matches_filters(message, filters):
+                        continue
                     current_ts = float(message.get("time", time.time()))
                     yield _format_log_sse(message, current_ts)
 
@@ -182,9 +203,10 @@ class LogRoute(Route):
     async def log_history(self):
         """Return cached logs and traces, with optional filtering."""
         try:
+            filters = _build_filter_state()
             logs = list(self.log_broker.log_cache)
             if request.args:
-                logs = [item for item in logs if _matches_filters(item)]
+                logs = [item for item in logs if _matches_filters(item, filters)]
 
             limit = request.args.get("limit", default=None, type=int)
             if limit and limit > 0:
