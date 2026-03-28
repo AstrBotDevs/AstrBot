@@ -9,8 +9,12 @@ PYPROJECT_PATH = PROJECT_ROOT / "pyproject.toml"
 HTTPX_SOCKS_PATTERN = re.compile(r"^httpx\[socks\](?:\s*[<>=!~].*)?$")
 
 
-def _contains_httpx_socks_dependency(entries: list[str]) -> bool:
-    return any(HTTPX_SOCKS_PATTERN.match(entry.strip()) for entry in entries)
+def _read_httpx_socks_dependency(entries: list[str]) -> str | None:
+    for entry in entries:
+        candidate = entry.strip()
+        if HTTPX_SOCKS_PATTERN.match(candidate):
+            return candidate
+    return None
 
 
 def _read_requirements() -> list[str]:
@@ -29,8 +33,32 @@ def _read_pyproject_dependencies() -> list[str]:
 
 
 def test_requirements_include_httpx_socks_dependency() -> None:
-    assert _contains_httpx_socks_dependency(_read_requirements())
+    requirements_dependency = _read_httpx_socks_dependency(_read_requirements())
+
+    assert requirements_dependency is not None, (
+        "Expected httpx[socks] dependency in requirements.txt for SOCKS proxy support"
+    )
 
 
 def test_pyproject_declares_httpx_socks_dependency() -> None:
-    assert _contains_httpx_socks_dependency(_read_pyproject_dependencies())
+    pyproject_dependency = _read_httpx_socks_dependency(_read_pyproject_dependencies())
+
+    assert pyproject_dependency is not None, (
+        "Expected httpx[socks] dependency in pyproject.toml for SOCKS proxy support"
+    )
+
+
+def test_httpx_socks_dependency_spec_matches_between_dependency_files() -> None:
+    requirements_dependency = _read_httpx_socks_dependency(_read_requirements())
+    pyproject_dependency = _read_httpx_socks_dependency(_read_pyproject_dependencies())
+
+    assert requirements_dependency is not None, (
+        "Expected httpx[socks] dependency in requirements.txt for SOCKS proxy support"
+    )
+    assert pyproject_dependency is not None, (
+        "Expected httpx[socks] dependency in pyproject.toml for SOCKS proxy support"
+    )
+    assert requirements_dependency == pyproject_dependency, (
+        "Expected httpx[socks] dependency spec to match between requirements.txt "
+        "and pyproject.toml for SOCKS proxy support"
+    )
