@@ -4,15 +4,17 @@ Manages dynamically created subagents for task decomposition and parallel proces
 """
 
 from __future__ import annotations
+
 import asyncio
 import re
+import time
 from dataclasses import dataclass, field
+
 from astrbot import logger
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.subagent_logger import SubAgentLogger
-import time
 
 
 @dataclass
@@ -110,7 +112,7 @@ create_dynamic_subagent(
 )
 ```
 
-**CAUTION**:  **YOU MUST FOLLOW THE STEPS BELOW** to give well-designed system prompt and allocate tools and skills. 
+**CAUTION**:  **YOU MUST FOLLOW THE STEPS BELOW** to give well-designed system prompt and allocate tools and skills.
 
 ### 1. When giving system prompt to a sub-agent, make it detailed, and you should include the following information to make them clear and standardized.
 
@@ -417,10 +419,10 @@ If you wish to prevent a certain sub-agent from being automatically cleaned up, 
 
         lines.append(
             """# You have a shared context that contains all subagent and system messages.
-### You should pay attention to whether there are messages in the shared context before executing any instructions. 
+### You should pay attention to whether there are messages in the shared context before executing any instructions.
 These may be messages sent to you by other subagents, messages you send to other subagents, or system instructions sent to all.
 ### Shared Context Message processing rules:
-1. Message processing priority: Messages from System > Messages from other Agents; New messages > Old messages. 
+1. Message processing priority: Messages from System > Messages from other Agents; New messages > Old messages.
 2. If the message is addressed to you and contains clear instructions, please follow them. If necessary, update your Status through the `send_shared_context` tool after completing the instructions.
    *Example* 1: If your name is Bob, and there is a message from shared context.
     > [14:11:16] [message] Alice -> Bob: What day is it today? Please reply.
@@ -428,14 +430,14 @@ These may be messages sent to you by other subagents, messages you send to other
     - Function calling if required (Get the time today)
     - Reply in the shared context using `send_shared_context` tool, and it may be like:
     > [14:13:20] [message] Bob -> Alice: It's Monday today.
-   *Example* 2: If your name is Bob, and there is a message from System. 
+   *Example* 2: If your name is Bob, and there is a message from System.
     > [14:24:02] [system] System -> all: Attention to All agents : Please store all generated files in the **D:/temp** directory
     >  You can choose not to reply in the public context, but you should follow the instructions provided by the System
-    - Do your original task 
+    - Do your original task
     - If there are file generated, put them to `D:/temp` directory
       VERY IMPORTANT: If there is an instruction prefixed with `[system] System -> all` or `[system] System -> Your name`, **YOU MUST PRIORITIZE FOLLOWING IT**.
 3. If the task corresponding to a certain message has been completed (which can be determined through the Status history), it can be ignored.
-4. If you need to send a message to main agent, just output. If to other agents, use the `send_shared_context` tool. 
+4. If you need to send a message to main agent, just output. If to other agents, use the `send_shared_context` tool.
   ## < The following is shared context between all agents >""".strip()
         )
         for msg in session.shared_context:

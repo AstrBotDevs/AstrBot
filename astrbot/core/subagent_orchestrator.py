@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-import re
 from typing import TYPE_CHECKING, Any
 
 from astrbot import logger
@@ -10,7 +9,6 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
 if TYPE_CHECKING:
-    from astrbot.core.astr_agent_context import AstrAgentContext
     from astrbot.core.persona_mgr import PersonaManager
 
 
@@ -112,7 +110,7 @@ class SubAgentOrchestrator:
         if main_enable:
             self._enhanced_enabled = True
             self._log_level = cfg.get("log_level", "info")
-            logger.info("[SubAgentOrchestrator] Enhanced SubAgent mode enabled")
+            logger.info("[SubAgentOrchestrator] Dynamic SubAgent mode enabled")
 
     def set_dynamic_manager(self, manager) -> None:
         """设置动态SubAgent管理器"""
@@ -151,7 +149,7 @@ create_dynamic_subagent(
 
 ## Skills Available
 
-Available skills depend on the system's configuration. You should specify skills when creating subagents that need specialized capabilities. 
+Available skills depend on the system's configuration. You should specify skills when creating subagents that need specialized capabilities.
 When tasks are complex or require parallel processing, you can create specialized subagents to complete them.
 
 ## When to create subagents:

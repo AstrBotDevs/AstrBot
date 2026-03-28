@@ -949,13 +949,12 @@ def _apply_enhanced_subagent_tools(
 
     try:
         from astrbot.core.dynamic_subagent_manager import (
-            CREATE_DYNAMIC_SUBAGENT_TOOL,
             CLEANUP_DYNAMIC_SUBAGENT_TOOL,
+            CREATE_DYNAMIC_SUBAGENT_TOOL,
             LIST_DYNAMIC_SUBAGENTS_TOOL,
             PROTECT_SUBAGENT_TOOL,
-            UNPROTECT_SUBAGENT_TOOL,
-            SEND_SHARED_CONTEXT_TOOL,
             SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT,
+            UNPROTECT_SUBAGENT_TOOL,
             VIEW_SHARED_CONTEXT_TOOL,
             DynamicSubAgentManager,
         )

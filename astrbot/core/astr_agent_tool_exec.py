@@ -1,10 +1,10 @@
 import asyncio
+import datetime
 import inspect
 import json
 import traceback
 import typing as T
 import uuid
-import datetime
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
 
@@ -238,8 +238,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         # Always add send_shared_context tool for shared context feature
         try:
             from astrbot.core.dynamic_subagent_manager import (
-                DynamicSubAgentManager,
                 SEND_SHARED_CONTEXT_TOOL,
+                DynamicSubAgentManager,
             )
 
             session_id = event.unified_msg_origin

@@ -4,12 +4,14 @@ Provides logging capabilities for dynamic subagents
 """
 
 from __future__ import annotations
+
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
 from astrbot import logger as base_logger
 
 
@@ -182,7 +184,7 @@ class SubAgentLogger:
 
     @classmethod
     def get_session_logs(cls, session_id: str) -> list[dict]:
-        return [l.to_dict() for l in cls._session_logs.get(session_id, [])]
+        return [log.to_dict() for log in cls._session_logs.get(session_id, [])]
 
     @classmethod
     def shutdown(cls) -> None:
