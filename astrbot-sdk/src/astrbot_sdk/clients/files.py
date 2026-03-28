@@ -34,6 +34,17 @@ class FileServiceClient:
         )
         return FileRegistration.from_payload(output).token
 
+    async def register_file_url(
+        self,
+        path: str,
+        timeout: float | None = None,
+    ) -> str:
+        output = await self._proxy.call(
+            "system.file.register",
+            {"path": str(path), "timeout": timeout},
+        )
+        return FileRegistration.from_payload(output).url
+
     async def handle_file(self, token: str) -> str:
         output = await self._proxy.call(
             "system.file.handle",
@@ -46,8 +57,4 @@ class FileServiceClient:
         path: str,
         timeout: float | None = None,
     ) -> str:
-        output = await self._proxy.call(
-            "system.file.register",
-            {"path": str(path), "timeout": timeout},
-        )
-        return FileRegistration.from_payload(output).url
+        return await self.register_file_url(path, timeout=timeout)

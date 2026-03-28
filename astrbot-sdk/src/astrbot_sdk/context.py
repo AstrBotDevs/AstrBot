@@ -344,7 +344,7 @@ class Context:
         path: str,
         timeout: float | None = None,
     ) -> str:
-        return await self.files._register_file_url(path, timeout=timeout)
+        return await self.files.register_file_url(path, timeout=timeout)
 
     async def text_to_image(
         self,
