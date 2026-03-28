@@ -329,7 +329,9 @@ class ToolResultGuard:
             return content
 
         signature = self._build_tool_signature(tool_name=tool_name, tool_args=tool_args)
-        content_hash = hashlib.sha256(content.encode("utf-8", errors="replace")).hexdigest()
+        content_hash = hashlib.sha256(
+            content.encode("utf-8", errors="replace")
+        ).hexdigest()
 
         state = self._tool_result_dedup.get(signature)
         if state is None or state.result_hash != content_hash:

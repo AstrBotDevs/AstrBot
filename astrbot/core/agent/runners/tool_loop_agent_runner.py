@@ -124,8 +124,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_schema_mode: str | None = "full",
         fallback_providers: list[Provider] | None = None,
         deduplicate_repeated_tool_results: bool = DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
-        tool_result_dedup_max_entries: int | None = DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
-        tool_error_repeat_guard_threshold: int | None = DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+        tool_result_dedup_max_entries: int
+        | None = DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+        tool_error_repeat_guard_threshold: int
+        | None = DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -471,7 +473,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.req.func_tool = None
 
         if notice_message:
-            self.run_context.messages.append(Message(role="user", content=notice_message))
+            self.run_context.messages.append(
+                Message(role="user", content=notice_message)
+            )
 
         tool_call_result_blocks.append(
             ToolCallMessageSegment(

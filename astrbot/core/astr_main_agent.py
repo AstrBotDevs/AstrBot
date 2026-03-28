@@ -50,12 +50,12 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
     retrieve_knowledge_base,
 )
-from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.config.tool_loop_defaults import (
     DEFAULT_DEDUPLICATE_REPEATED_TOOL_RESULTS,
     DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
     DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
 )
+from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Reply
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,

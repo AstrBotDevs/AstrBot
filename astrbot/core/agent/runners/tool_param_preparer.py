@@ -182,7 +182,9 @@ class ToolParamPreparer:
 
         anyof_groups = _extract_required_groups("anyOf")
         if anyof_groups and not any(_is_group_satisfied(g) for g in anyof_groups):
-            group_text = " or ".join("[" + ", ".join(group) + "]" for group in anyof_groups)
+            group_text = " or ".join(
+                "[" + ", ".join(group) + "]" for group in anyof_groups
+            )
             return (
                 "error: Argument contract violation (anyOf). "
                 f"At least one argument group is required: {group_text}."
@@ -192,7 +194,9 @@ class ToolParamPreparer:
         if oneof_groups:
             satisfied = sum(1 for g in oneof_groups if _is_group_satisfied(g))
             if satisfied != 1:
-                group_text = " | ".join("[" + ", ".join(group) + "]" for group in oneof_groups)
+                group_text = " | ".join(
+                    "[" + ", ".join(group) + "]" for group in oneof_groups
+                )
                 return (
                     "error: Argument contract violation (oneOf). "
                     "Exactly one argument group must be provided. "
@@ -240,7 +244,9 @@ class ToolParamPreparer:
                 alias_mapped_params[raw_key] = canonical_key
 
         if alias_mapped_params:
-            logger.info("工具 %s 参数名称已自动映射: %s", tool_name, alias_mapped_params)
+            logger.info(
+                "工具 %s 参数名称已自动映射: %s", tool_name, alias_mapped_params
+            )
 
         return valid_params, alias_mapped_params
 
@@ -338,7 +344,10 @@ class ToolParamPreparer:
             logger.info(
                 "工具 %s 参数类型已自动纠正: %s",
                 tool_name,
-                {k: {"from": repr(v[0]), "to": repr(v[1])} for k, v in changed_types.items()},
+                {
+                    k: {"from": repr(v[0]), "to": repr(v[1])}
+                    for k, v in changed_types.items()
+                },
             )
 
         ignored_params = self._compute_ignored_params(
