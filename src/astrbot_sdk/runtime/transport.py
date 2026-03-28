@@ -59,6 +59,7 @@ from typing import IO, Any
 from loguru import logger
 
 MessageHandler = Callable[[str], Awaitable[None]]
+STDIO_SUBPROCESS_STREAM_LIMIT = 8 * 1024 * 1024
 
 
 def _get_aiohttp():
@@ -73,15 +74,19 @@ def _get_web():
     return web
 
 
-def _frame_stdio_payload(payload: str) -> str:
-    body = payload
-    if body.endswith("\r\n"):
-        body = body[:-2]
-    elif body.endswith(("\n", "\r")):
-        body = body[:-1]
-    if "\n" in body or "\r" in body:
-        raise ValueError("STDIO payload 不允许包含原始换行符")
-    return f"{body}\n"
+def _frame_stdio_payload(payload: str) -> bytes:
+    body = payload.encode("utf-8")
+    return f"{len(body)}\n".encode("ascii") + body
+
+
+def _parse_stdio_header(raw_header: bytes) -> int:
+    header = raw_header.decode("ascii").strip()
+    if not header:
+        raise ValueError("STDIO frame header is empty")
+    try:
+        return int(header)
+    except ValueError as exc:
+        raise ValueError(f"Invalid STDIO frame header: {header!r}") from exc
 
 
 # TODO 一个更好的解决方案？
@@ -169,6 +174,7 @@ class StdioTransport(Transport):
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=sys.stderr,
+                    limit=STDIO_SUBPROCESS_STREAM_LIMIT,
                 )
             except Exception as exc:
                 last_error = exc
@@ -205,11 +211,11 @@ class StdioTransport(Transport):
         self._closed.set()
 
     async def send(self, payload: str) -> None:
-        line = _frame_stdio_payload(payload)
+        frame = _frame_stdio_payload(payload)
         if self._process is not None:
             if self._process.stdin is None:
                 raise RuntimeError("STDIO subprocess stdin 不可用")
-            self._process.stdin.write(line.encode("utf-8"))
+            self._process.stdin.write(frame)
             await self._process.stdin.drain()
             return
 
@@ -218,8 +224,11 @@ class StdioTransport(Transport):
 
         def _write() -> None:
             assert self._stdout is not None
-            self._stdout.write(line)
-            self._stdout.flush()
+            binary_stdout = getattr(self._stdout, "buffer", None)
+            if binary_stdout is None:
+                raise RuntimeError("STDIO stdout 必须提供可写入 bytes 的 buffer")
+            binary_stdout.write(frame)
+            binary_stdout.flush()
 
         await asyncio.to_thread(_write)
 
@@ -228,10 +237,12 @@ class StdioTransport(Transport):
         assert self._process.stdout is not None
         try:
             while True:
-                raw = await self._process.stdout.readline()
-                if not raw:
+                raw_header = await self._process.stdout.readline()
+                if not raw_header:
                     break
-                await self._dispatch(raw.decode("utf-8").rstrip("\r\n"))
+                payload_size = _parse_stdio_header(raw_header)
+                raw = await self._process.stdout.readexactly(payload_size)
+                await self._dispatch(raw.decode("utf-8"))
         finally:
             self._closed.set()
 
@@ -239,10 +250,17 @@ class StdioTransport(Transport):
         assert self._stdin is not None
         try:
             while True:
-                raw = await asyncio.to_thread(self._stdin.readline)
-                if not raw:
+                binary_stdin = getattr(self._stdin, "buffer", None)
+                if binary_stdin is None:
+                    raise RuntimeError("STDIO stdin 必须提供可读取 bytes 的 buffer")
+                raw_header = await asyncio.to_thread(binary_stdin.readline)
+                if not raw_header:
                     break
-                await self._dispatch(raw.rstrip("\r\n"))
+                payload_size = _parse_stdio_header(raw_header)
+                raw = await asyncio.to_thread(binary_stdin.read, payload_size)
+                if len(raw) != payload_size:
+                    raise EOFError("STDIO frame truncated before payload completed")
+                await self._dispatch(raw.decode("utf-8"))
         finally:
             self._closed.set()
 
