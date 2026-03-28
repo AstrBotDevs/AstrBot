@@ -133,6 +133,7 @@ export default {
         ERROR: 'red',
         CRITICAL: 'purple'
       },
+      availableTags: [],
       localLogCache: [],
       eventSource: null,
       retryTimer: null,
@@ -148,7 +149,7 @@ export default {
   },
   computed: {
     tagOptions() {
-      return [...new Set(this.localLogCache.map((entry) => entry.tag).filter(Boolean))].sort();
+      return [...new Set([...this.availableTags, ...this.selectedTags].filter(Boolean))].sort();
     },
     hasActiveFilters() {
       return (
@@ -262,10 +263,17 @@ export default {
     },
 
     getLogQueryParams() {
+      return this.buildLogQueryParams();
+    },
+
+    buildLogQueryParams({
+      includeTag = true,
+      includeLimit = true
+    } = {}) {
       const params = {};
       const historyLimit = Number.parseInt(this.historyNum, 10);
 
-      if (!Number.isNaN(historyLimit) && historyLimit > 0) {
+      if (includeLimit && !Number.isNaN(historyLimit) && historyLimit > 0) {
         params.limit = historyLimit;
       }
 
@@ -273,7 +281,7 @@ export default {
         params.levels = this.selectedLevels.length > 0 ? this.selectedLevels.join(',') : '__none__';
       }
 
-      if (this.selectedTags.length > 0) {
+      if (includeTag && this.selectedTags.length > 0) {
         params.tag = this.selectedTags.join(',');
       }
 
@@ -431,6 +439,19 @@ export default {
       this.knownLogIds = new Set(this.localLogCache.map((entry) => entry.uuid));
     },
 
+    updateAvailableTags(logs) {
+      const nextTags = new Set([...this.availableTags, ...this.selectedTags]);
+
+      (logs || []).forEach((log) => {
+        const tag = typeof log?.tag === 'string' ? log.tag.trim() : '';
+        if (tag) {
+          nextTags.add(tag);
+        }
+      });
+
+      this.availableTags = [...nextTags].sort();
+    },
+
     setLastEventIdFromLogs(logs) {
       if (!logs || logs.length === 0) {
         this.lastEventId = null;
@@ -464,6 +485,7 @@ export default {
 
       this.localLogCache = normalizedLogs;
       this.knownLogIds = new Set(normalizedLogs.map((entry) => entry.uuid));
+      this.updateAvailableTags(normalizedLogs);
       this.setLastEventIdFromLogs(normalizedLogs);
       this.scheduleAutoScroll();
     },
@@ -516,6 +538,7 @@ export default {
       if (trimmed) {
         this.rebuildKnownLogIds();
       }
+      this.updateAvailableTags(appendedLogs);
       this.setLastEventIdFromLogs(nextCache);
       this.scheduleAutoScroll();
     },
@@ -536,11 +559,33 @@ export default {
       }
     },
 
+    async fetchTagOptions(sequence = this.reloadSequence) {
+      try {
+        const response = await axios.get('/api/log-history', {
+          params: this.buildLogQueryParams({
+            includeTag: false,
+            includeLimit: false
+          })
+        });
+        if (sequence !== this.reloadSequence) {
+          return;
+        }
+
+        const logs = response.data?.data?.logs || [];
+        this.updateAvailableTags(logs);
+      } catch (error) {
+        console.error('Failed to fetch tag options:', error);
+      }
+    },
+
     async reloadLogSource() {
       const sequence = ++this.reloadSequence;
       this.lastEventId = null;
       this.teardownEventSource();
-      await this.fetchLogHistory(sequence);
+      await Promise.all([
+        this.fetchLogHistory(sequence),
+        this.fetchTagOptions(sequence)
+      ]);
 
       if (sequence !== this.reloadSequence) {
         return;

@@ -13,7 +13,7 @@
     "installButton": "Install"
   },
   "debugHint": {
-    "text": "Debug logs can be enabled in \"Configuration File -> System -> Console Log Level\""
+    "text": "Debug logs can be enabled in \"Configuration File → System → Console Log Level\""
   },
   "filters": {
     "searchLabel": "Search",

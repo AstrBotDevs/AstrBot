@@ -419,7 +419,7 @@ class LogManager:
             colorize=True,
             filter=lambda record: not record["extra"].get("is_trace", False),
             format=(
-                "<green>[{time:HH:mm:ss.SSS}]</green> {extra[display_tag]} "
+                "<green>[{time:HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
                 "<level>[{extra[short_levelname]}]</level>{extra[astrbot_version_tag]} "
                 "[{extra[source_file]}:{extra[source_line]}]: <level>{message}</level>"
             ),
@@ -481,7 +481,7 @@ class LogManager:
         handler.addFilter(_QueueAnsiColorFilter())
         handler.setFormatter(
             logging.Formatter(
-                "%(ansi_prefix)s[%(asctime)s.%(msecs)03d] %(display_tag)s [%(short_levelname)s]%(astrbot_version_tag)s "
+                "%(ansi_prefix)s[%(asctime)s.%(msecs)03d] %(plugin_tag)s [%(short_levelname)s]%(astrbot_version_tag)s "
                 "[%(source_file)s:%(source_line)d]: %(message)s%(ansi_reset)s",
                 datefmt="%Y-%m-%d %H:%M:%S",
             ),
@@ -520,7 +520,6 @@ class LogManager:
         cls._queue_broker = log_broker
         cls._ensure_logger_enricher_filter(logger)
         cls._attach_queue_handler(logger, log_broker)
-        cls._attach_queue_handler(logging.getLogger(), log_broker)
 
     @classmethod
     def _remove_sink(cls, sink_id: int | None) -> None:
@@ -565,7 +564,7 @@ class LogManager:
             file_path,
             level=logging_level_name,
             format=(
-                "[{time:YYYY-MM-DD HH:mm:ss.SSS}] {extra[display_tag]} "
+                "[{time:YYYY-MM-DD HH:mm:ss.SSS}] {extra[plugin_tag]} "
                 "[{extra[short_levelname]}]{extra[astrbot_version_tag]} "
                 "[{extra[source_file]}:{extra[source_line]}]: {message}"
             ),
