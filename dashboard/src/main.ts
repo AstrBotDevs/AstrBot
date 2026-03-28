@@ -124,6 +124,13 @@ async function initApp() {
 
   async function createAndMountApp(waitForRouter: boolean) {
     const app = createApp(App);
+
+    // Suppress known Vuetify 4 internal warning about slot invocation
+    app.config.warnHandler = (msg, _instance, _trace) => {
+      if (msg.includes("Slot \"default\" invoked outside of the render function")) return;
+      console.warn(msg);
+    };
+
     app.use(router);
     const pinia = createPinia();
     app.use(pinia);
