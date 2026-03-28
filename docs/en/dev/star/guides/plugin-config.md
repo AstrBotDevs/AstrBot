@@ -68,9 +68,9 @@ The **_special** field is only available after v4.0.0. Common values include `se
 - `select_knowledgebase` returns a `list` and supports multiple selection, so the corresponding config item should use `type: list` with a default value of `[]`.
 
 > [!NOTE]
-> For reference, AstrBot Core also uses other internal `_special` values, such as `select_providers`, `provider_pool`, `persona_pool`, `select_plugin_set`, `t2i_template`, `get_embedding_dim`, and `select_agent_runner_provider:*`.
+> For reference, AstrBot Core also uses other internal `_special` values, such as `select_providers`, `provider_pool`, `persona_pool`, `select_plugin_set`, `t2i_template`, `get_embedding_dim`, and `select_agent_runner_provider:*` (where `*` is a placeholder for the runner type). These are internal implementations and may change at any time — please avoid using them in plugins.
 
-Using `select_provider` as an example, it will present the following effect:
+Using `select_provider` as an example, it will display as follows:
 
 ![image](https://files.astrbot.app/docs/source/images/plugin/image-select-provider.png)
 
