@@ -66,8 +66,8 @@ importers:
         specifier: ^0.55.1
         version: 0.55.1
       pinia:
-        specifier: 3.0.4
-        version: 3.0.4(typescript@6.0.2)(vue@3.5.31(typescript@6.0.2))
+        specifier: 3.0.0
+        version: 3.0.0(typescript@6.0.2)(vue@3.5.31(typescript@6.0.2))
       pinyin-pro:
         specifier: ^3.28.0
         version: 3.28.0
@@ -94,7 +94,7 @@ importers:
         version: 11.3.0(vue@3.5.31(typescript@6.0.2))
       vue-router:
         specifier: 5.0.4
-        version: 5.0.4(@vue/compiler-sfc@3.5.31)(pinia@3.0.4(typescript@6.0.2)(vue@3.5.31(typescript@6.0.2)))(vue@3.5.31(typescript@6.0.2))
+        version: 5.0.4(@vue/compiler-sfc@3.5.31)(pinia@3.0.0(typescript@6.0.2)(vue@3.5.31(typescript@6.0.2)))(vue@3.5.31(typescript@6.0.2))
       vue3-apexcharts:
         specifier: 1.11.1
         version: 1.11.1(apexcharts@5.10.4)(vue@3.5.31(typescript@6.0.2))
@@ -2109,11 +2109,11 @@ packages:
     resolution: {integrity: sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==}
     engines: {node: '>=12'}
 
-  pinia@3.0.4:
-    resolution: {integrity: sha512-l7pqLUFTI/+ESXn6k3nu30ZIzW5E2WZF/LaHJEpoq6ElcLD+wduZoB2kBN19du6K/4FDpPMazY2wJr+IndBtQw==}
+  pinia@3.0.0:
+    resolution: {integrity: sha512-Go23UsqaeABb4OYNmpDkE9VwDnqmbbjGzWpQhi3xfNkSPO6ZP+Ttt0EMo2J4DHXW+T0l3EqRneeXdyV/oJg/Mg==}
     peerDependencies:
-      typescript: '>=4.5.0'
-      vue: ^3.5.11
+      typescript: '>=4.4.4'
+      vue: ^2.7.0 || ^3.5.11
     peerDependenciesMeta:
       typescript:
         optional: true
@@ -4709,7 +4709,7 @@ snapshots:
 
   picomatch@4.0.4: {}
 
-  pinia@3.0.4(typescript@6.0.2)(vue@3.5.31(typescript@6.0.2)):
+  pinia@3.0.0(typescript@6.0.2)(vue@3.5.31(typescript@6.0.2)):
     dependencies:
       '@vue/devtools-api': 7.7.9
       vue: 3.5.31(typescript@6.0.2)
@@ -5229,7 +5229,7 @@ snapshots:
       '@vue/devtools-api': 6.6.4
       vue: 3.5.31(typescript@6.0.2)
 
-  vue-router@5.0.4(@vue/compiler-sfc@3.5.31)(pinia@3.0.4(typescript@6.0.2)(vue@3.5.31(typescript@6.0.2)))(vue@3.5.31(typescript@6.0.2)):
+  vue-router@5.0.4(@vue/compiler-sfc@3.5.31)(pinia@3.0.0(typescript@6.0.2)(vue@3.5.31(typescript@6.0.2)))(vue@3.5.31(typescript@6.0.2)):
     dependencies:
       '@babel/generator': 7.29.1
       '@vue-macros/common': 3.1.2(vue@3.5.31(typescript@6.0.2))
@@ -5251,7 +5251,7 @@ snapshots:
       yaml: 2.8.3
     optionalDependencies:
       '@vue/compiler-sfc': 3.5.31
-      pinia: 3.0.4(typescript@6.0.2)(vue@3.5.31(typescript@6.0.2))
+      pinia: 3.0.0(typescript@6.0.2)(vue@3.5.31(typescript@6.0.2))
 
   vue-tsc@3.2.6(typescript@6.0.2):
     dependencies:
