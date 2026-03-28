@@ -2,21 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import copy
 import json
 import os
 import re
 import signal
 import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from collections.abc import Awaitable, Callable
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.llm.agents import AgentSpec
 from astrbot_sdk.llm.entities import LLMToolSpec
-from astrbot_sdk.message.components import component_to_payload_sync
 from astrbot_sdk.protocol.descriptors import (
     CommandTrigger,
     CompositeFilterSpec,
@@ -37,32 +35,40 @@ from astrbot_sdk.runtime.loader import (
     save_plugin_config,
 )
 from astrbot_sdk.runtime.supervisor import WorkerSession
-from quart import request as quart_request
 
 from astrbot.core import astrbot_config, logger
 from astrbot.core.agent.mcp_client import MCPClient
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
-from astrbot.core.message.message_types import sdk_message_type
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import LLMResponse as CoreLLMResponse
 from astrbot.core.provider.entities import ProviderRequest as CoreProviderRequest
 from astrbot.core.skills.skill_manager import (
     SkillManager,
-    _parse_frontmatter_description,
 )
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_plugin_data_path,
 )
 
-from .bridge_base import _build_message_chain_from_payload
 from .capability_bridge import CoreCapabilityBridge
+from .dispatch_engine import SdkDispatchEngine
 from .event_payload import (
     InboundEventSnapshot,
-    build_inbound_event_snapshot,
-    extract_sdk_handler_result,
-    normalize_sdk_local_extras,
-    sanitize_sdk_extras,
+)
+from .lifecycle_manager import SdkPluginLifecycleManager
+from .mcp_manager import SdkMcpManager
+from .registry_manager import SdkRegistryManager
+from .request_runtime import SdkRequestRuntime
+from .runtime_store import (
+    SdkDispatchResult,
+    SdkDynamicCommandRoute,
+    SdkHandlerRef,
+    SdkHttpRoute,
+    SdkPluginRecord,
+    SdkRuntimeStore,
+    _LocalMCPServerRuntime,
+    _RequestContext,
+    _RequestOverlayState,
 )
 from .trigger_converter import TriggerConverter, TriggerMatch
 
@@ -99,201 +105,22 @@ SUPPORTED_SYSTEM_EVENTS = {
 }
 
 
-@dataclass(slots=True)
-class SdkHandlerRef:
-    descriptor: HandlerDescriptor
-    declaration_order: int
-
-    @property
-    def handler_id(self) -> str:
-        return self.descriptor.id
-
-    @property
-    def handler_name(self) -> str:
-        return self.descriptor.id.rsplit(".", 1)[-1]
-
-
-@dataclass(slots=True)
-class SdkDispatchResult:
-    matched_handlers: list[dict[str, str]] = field(default_factory=list)
-    executed_handlers: list[dict[str, str]] = field(default_factory=list)
-    sent_message: bool = False
-    stopped: bool = False
-    skipped_reason: str | None = None
-
-
-@dataclass(slots=True)
-class _DispatchState:
-    event: AstrMessageEvent
-    sent_message: bool = False
-    stopped: bool = False
-
-
-@dataclass(slots=True)
-class _RequestContext:
-    plugin_id: str
-    request_id: str
-    dispatch_token: str
-    dispatch_state: _DispatchState | None
-    cancelled: bool = False
-
-    @property
-    def has_event(self) -> bool:
-        return self.dispatch_state is not None
-
-    @property
-    def event(self) -> AstrMessageEvent:
-        if self.dispatch_state is None:
-            raise AstrBotError.invalid_input(
-                "The current SDK request is not bound to a message event"
-            )
-        return self.dispatch_state.event
-
-
-@dataclass(slots=True)
-class _InFlightRequest:
-    request_id: str
-    dispatch_token: str
-    task: asyncio.Task[dict[str, Any]]
-    logical_cancelled: bool = False
-
-
-@dataclass(slots=True)
-class _LocalMCPServerRuntime:
-    name: str
-    config: dict[str, Any]
-    active: bool
-    running: bool = False
-    client: MCPClient | None = None
-    tools: list[str] = field(default_factory=list)
-    tool_specs: list[LLMToolSpec] = field(default_factory=list)
-    errlogs: list[str] = field(default_factory=list)
-    last_error: str | None = None
-    ready_event: asyncio.Event = field(default_factory=asyncio.Event)
-    connect_task: asyncio.Task[None] | None = None
-    lease_path: Path | None = None
-
-
-@dataclass(slots=True)
-class _TemporaryMCPSessionRuntime:
-    plugin_id: str
-    name: str
-    client: MCPClient
-    tools: list[str]
-
-
-@dataclass(slots=True)
-class _RequestOverlayState:
-    dispatch_token: str
-    should_call_llm: bool
-    requested_llm: bool = False
-    sdk_local_extras: dict[str, Any] = field(default_factory=dict)
-    inbound_snapshot: InboundEventSnapshot | None = None
-    result_payload: dict[str, Any] | None = None
-    result_object: MessageEventResult | None = None
-    result_is_set: bool = False
-    result_stopped: bool = False
-    handler_whitelist: set[str] | None = None
-    request_scope_ids: set[str] = field(default_factory=set)
-    closed: bool = False
-    cleanup_task: asyncio.Task[None] | None = None
-
-
-@dataclass(slots=True)
-class _EventResultBinding:
-    bridge: SdkPluginBridge
-    dispatch_token: str
-
-    def is_active(self) -> bool:
-        return self.bridge.get_request_overlay_by_token(self.dispatch_token) is not None
-
-    def has_result_state(self) -> bool:
-        overlay = self.bridge.get_request_overlay_by_token(self.dispatch_token)
-        return bool(overlay is not None and overlay.result_is_set)
-
-    def get_result(self) -> MessageEventResult | None:
-        return self.bridge._get_effective_result_for_token(self.dispatch_token)
-
-    def set_result(self, result: MessageEventResult) -> None:
-        self.bridge._set_result_for_dispatch_token(self.dispatch_token, result)
-
-    def clear_result(self) -> None:
-        self.bridge._clear_result_for_dispatch_token(self.dispatch_token)
-
-    def stop_event(self) -> None:
-        self.bridge._stop_event_for_dispatch_token(self.dispatch_token)
-
-    def continue_event(self) -> None:
-        self.bridge._continue_event_for_dispatch_token(self.dispatch_token)
-
-    def is_stopped(self) -> bool:
-        return self.bridge._is_stopped_for_dispatch_token(self.dispatch_token)
-
-
-@dataclass(slots=True)
-class SdkPluginRecord:
-    plugin: PluginSpec
-    load_order: int
-    state: str
-    unsupported_features: list[str]
-    config_schema: dict[str, Any]
-    config: dict[str, Any]
-    handlers: list[SdkHandlerRef]
-    llm_tools: dict[str, LLMToolSpec] = field(default_factory=dict)
-    active_llm_tools: set[str] = field(default_factory=set)
-    agents: dict[str, AgentSpec] = field(default_factory=dict)
-    skills: dict[str, SdkRegisteredSkill] = field(default_factory=dict)
-    dynamic_command_routes: list[SdkDynamicCommandRoute] = field(default_factory=list)
-    session: WorkerSession | None = None
-    restart_attempted: bool = False
-    failure_reason: str = ""
-    issues: list[dict[str, Any]] = field(default_factory=list)
-    local_mcp_servers: dict[str, _LocalMCPServerRuntime] = field(default_factory=dict)
-    acknowledge_global_mcp_risk: bool = False
-
-    @property
-    def plugin_id(self) -> str:
-        return self.plugin.name
-
-
-@dataclass(slots=True)
-class SdkHttpRoute:
-    plugin_id: str
-    route: str
-    methods: tuple[str, ...]
-    handler_capability: str
-    description: str
-
-
-@dataclass(slots=True)
-class SdkRegisteredSkill:
-    name: str
-    description: str
-    skill_dir: Path
-    skill_md_path: Path
-
-    def to_registry_payload(self) -> dict[str, str]:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "path": str(self.skill_md_path),
-            "skill_dir": str(self.skill_dir),
-        }
-
-
-@dataclass(slots=True)
-class SdkDynamicCommandRoute:
-    command_name: str
-    handler_full_name: str
-    desc: str
-    priority: int
-    use_regex: bool
-    declaration_order: int
-
-
 class SdkPluginBridge:
+    SDK_STATE_ENABLED = SDK_STATE_ENABLED
+    SDK_STATE_DISABLED = SDK_STATE_DISABLED
+    SDK_STATE_RELOADING = SDK_STATE_RELOADING
+    SDK_STATE_FAILED = SDK_STATE_FAILED
+    SDK_STATE_UNSUPPORTED_PARTIAL = SDK_STATE_UNSUPPORTED_PARTIAL
+    SKIP_LEGACY_STOPPED = SKIP_LEGACY_STOPPED
+    SKIP_LEGACY_REPLIED = SKIP_LEGACY_REPLIED
+    SKIP_SDK_RELOADING = SKIP_SDK_RELOADING
+    SKIP_NO_MATCH = SKIP_NO_MATCH
+    SKIP_WORKER_FAILED = SKIP_WORKER_FAILED
+    SDK_SKILL_NAME_RE = SDK_SKILL_NAME_RE
+
     def __init__(self, star_context) -> None:
         self.star_context = star_context
+        self.logger = logger
         self.plugins_dir = Path(get_astrbot_data_path()) / "sdk_plugins"
         self.state_path = Path(get_astrbot_data_path()) / "sdk_plugins_state.json"
         self.plugins_dir.mkdir(parents=True, exist_ok=True)
@@ -301,211 +128,58 @@ class SdkPluginBridge:
         self._stopping = False
         self._state_overrides = self._load_state_overrides()
         self.env_manager = PluginEnvironmentManager(Path(__file__).resolve().parents[3])
+        self._store = SdkRuntimeStore()
         self.capability_bridge = CoreCapabilityBridge(
             star_context=star_context,
             plugin_bridge=self,
         )
-        self._records: dict[str, SdkPluginRecord] = {}
-        self._request_contexts: dict[str, _RequestContext] = {}
-        self._request_id_to_token: dict[str, str] = {}
-        self._request_plugin_ids: dict[str, str] = {}
-        self._request_overlays: dict[str, _RequestOverlayState] = {}
-        self._plugin_requests: dict[str, dict[str, _InFlightRequest]] = {}
-        self._http_routes: dict[str, list[SdkHttpRoute]] = {}
-        self._session_waiters: dict[str, set[str]] = {}
-        self._schedule_job_ids: dict[str, set[str]] = {}
-        self._discovery_issues: dict[str, list[dict[str, Any]]] = {}
-        self._temporary_mcp_sessions: dict[str, _TemporaryMCPSessionRuntime] = {}
+        self._records = self._store.records
+        self._request_contexts = self._store.request_contexts
+        self._request_id_to_token = self._store.request_id_to_token
+        self._request_plugin_ids = self._store.request_plugin_ids
+        self._request_overlays = self._store.request_overlays
+        self._plugin_requests = self._store.plugin_requests
+        self._http_routes = self._store.http_routes
+        self._session_waiters = self._store.session_waiters
+        self._schedule_job_ids = self._store.schedule_job_ids
+        self._discovery_issues = self._store.discovery_issues
+        self._temporary_mcp_sessions = self._store.temporary_mcp_sessions
+        self.request_runtime = SdkRequestRuntime(
+            bridge=self,
+            store=self._store,
+            overlay_timeout_seconds=OVERLAY_TIMEOUT_SECONDS,
+        )
+        self.dispatch_engine = SdkDispatchEngine(bridge=self)
+        self.lifecycle = SdkPluginLifecycleManager(bridge=self)
+        self.mcp = SdkMcpManager(bridge=self)
+        self.registry = SdkRegistryManager(bridge=self)
 
     async def start(self) -> None:
-        if self._started:
-            return
-        self._sweep_stale_mcp_leases()
-        await self.reload_all(reset_restart_budget=True)
-        self._started = True
+        await self.lifecycle.start()
 
     async def stop(self) -> None:
-        if not self._started and not self._records:
-            return
-        self._stopping = True
-        for plugin_id in list(self._records.keys()):
-            await self._cancel_plugin_requests(plugin_id)
-            await self._close_temporary_mcp_sessions(plugin_id)
-        for record in list(self._records.values()):
-            await self._shutdown_local_mcp_servers(record)
-            if record.session is not None:
-                await record.session.stop()
-                record.session = None
-        self._records.clear()
-        self._request_contexts.clear()
-        self._request_id_to_token.clear()
-        self._request_plugin_ids.clear()
-        for overlay in list(self._request_overlays.values()):
-            if overlay.cleanup_task is not None:
-                overlay.cleanup_task.cancel()
-        self._request_overlays.clear()
-        self._plugin_requests.clear()
-        self._http_routes.clear()
-        self._session_waiters.clear()
-        self._schedule_job_ids.clear()
-        self._temporary_mcp_sessions.clear()
-        self._started = False
-        self._stopping = False
+        await self.lifecycle.stop()
 
     async def reload_all(self, *, reset_restart_budget: bool = False) -> None:
-        discovered = discover_plugins(self.plugins_dir)
-        self._set_discovery_issues(discovered.issues)
-        self.env_manager.plan(discovered.plugins)
-        known = {plugin.name for plugin in discovered.plugins}
-        SkillManager().prune_sdk_plugin_skills(known)
-        for plugin_id in list(self._records.keys()):
-            if plugin_id not in known:
-                await self._teardown_plugin(plugin_id)
-                self._records.pop(plugin_id, None)
-        for load_order, plugin in enumerate(discovered.plugins):
-            await self._load_or_reload_plugin(
-                plugin,
-                load_order=load_order,
-                reset_restart_budget=reset_restart_budget,
-            )
-        await self._refresh_native_platform_commands({"telegram"})
+        await self.lifecycle.reload_all(reset_restart_budget=reset_restart_budget)
 
     async def reload_plugin(self, plugin_id: str) -> None:
-        discovered = discover_plugins(self.plugins_dir)
-        self._set_discovery_issues(discovered.issues)
-        self.env_manager.plan(discovered.plugins)
-        for load_order, plugin in enumerate(discovered.plugins):
-            if plugin.name != plugin_id:
-                continue
-            await self._load_or_reload_plugin(
-                plugin,
-                load_order=load_order,
-                reset_restart_budget=True,
-            )
-            await self._refresh_native_platform_commands({"telegram"})
-            return
-        raise ValueError(f"SDK plugin not found: {plugin_id}")
+        await self.lifecycle.reload_plugin(plugin_id)
 
     async def turn_off_plugin(self, plugin_id: str) -> None:
-        record = self._records.get(plugin_id)
-        if record is None:
-            raise ValueError(f"SDK plugin not found: {plugin_id}")
-        record.state = SDK_STATE_DISABLED
-        await self._cancel_plugin_requests(plugin_id)
-        await self._teardown_plugin(plugin_id)
-        record.failure_reason = ""
-        self._set_disabled_override(plugin_id, disabled=True)
-        await self._refresh_native_platform_commands({"telegram"})
+        await self.lifecycle.turn_off_plugin(plugin_id)
 
     async def turn_on_plugin(self, plugin_id: str) -> None:
-        discovered = discover_plugins(self.plugins_dir)
-        self._set_discovery_issues(discovered.issues)
-        self.env_manager.plan(discovered.plugins)
-        for load_order, plugin in enumerate(discovered.plugins):
-            if plugin.name != plugin_id:
-                continue
-            self._set_disabled_override(plugin_id, disabled=False)
-            await self._load_or_reload_plugin(
-                plugin,
-                load_order=load_order,
-                reset_restart_budget=True,
-            )
-            await self._refresh_native_platform_commands({"telegram"})
-            return
-        raise ValueError(f"SDK plugin not found: {plugin_id}")
+        await self.lifecycle.turn_on_plugin(plugin_id)
 
     def list_plugins(self) -> list[dict[str, Any]]:
-        records = sorted(self._records.values(), key=lambda item: item.load_order)
-        items = [self._record_to_dashboard_item(record) for record in records]
-        for plugin_id, issues in sorted(self._discovery_issues.items()):
-            if plugin_id in self._records:
-                continue
-            items.append(self._failed_issue_to_dashboard_item(plugin_id, issues))
-        return items
+        return self.registry.list_plugins()
 
     def get_plugin_metadata(self, plugin_id: str) -> dict[str, Any] | None:
-        record = self._records.get(plugin_id)
-        if record is not None:
-            manifest = record.plugin.manifest_data
-            support_platforms = manifest.get("support_platforms")
-            return {
-                "name": plugin_id,
-                "display_name": str(manifest.get("display_name") or plugin_id),
-                "description": str(
-                    manifest.get("desc") or manifest.get("description") or ""
-                ),
-                "author": str(manifest.get("author") or ""),
-                "version": str(manifest.get("version") or "0.0.0"),
-                "enabled": record.state not in {SDK_STATE_DISABLED, SDK_STATE_FAILED},
-                "support_platforms": [
-                    str(item) for item in support_platforms if isinstance(item, str)
-                ]
-                if isinstance(support_platforms, list)
-                else [],
-                "astrbot_version": (
-                    str(manifest.get("astrbot_version"))
-                    if manifest.get("astrbot_version") is not None
-                    else None
-                ),
-                "runtime_kind": "sdk",
-                "issues": [dict(item) for item in record.issues],
-            }
-        for plugin in self.star_context.get_all_stars():
-            if plugin.name == plugin_id:
-                return {
-                    "name": plugin.name,
-                    "display_name": plugin.display_name,
-                    "description": plugin.desc,
-                    "author": plugin.author,
-                    "version": plugin.version,
-                    "enabled": plugin.activated,
-                    "support_platforms": list(plugin.support_platforms),
-                    "astrbot_version": plugin.astrbot_version,
-                    "runtime_kind": "legacy",
-                }
-        if plugin_id in self._discovery_issues:
-            issue = self._discovery_issues[plugin_id][0]
-            return {
-                "name": plugin_id,
-                "display_name": plugin_id,
-                "description": str(issue.get("message", "")),
-                "author": "",
-                "version": "0.0.0",
-                "enabled": False,
-                "support_platforms": [],
-                "astrbot_version": None,
-                "runtime_kind": "sdk",
-                "issues": [dict(item) for item in self._discovery_issues[plugin_id]],
-            }
-        return None
+        return self.registry.get_plugin_metadata(plugin_id)
 
     def list_plugin_metadata(self) -> list[dict[str, Any]]:
-        metadata = []
-        for plugin in self.star_context.get_all_stars():
-            metadata.append(
-                {
-                    "name": plugin.name,
-                    "display_name": plugin.display_name,
-                    "description": plugin.desc,
-                    "author": plugin.author,
-                    "version": plugin.version,
-                    "enabled": plugin.activated,
-                    "support_platforms": list(plugin.support_platforms),
-                    "astrbot_version": plugin.astrbot_version,
-                    "runtime_kind": "legacy",
-                }
-            )
-        for plugin_id in sorted(self._records.keys()):
-            plugin_metadata = self.get_plugin_metadata(plugin_id)
-            if plugin_metadata is not None:
-                metadata.append(plugin_metadata)
-        for plugin_id in sorted(self._discovery_issues.keys()):
-            if plugin_id in self._records:
-                continue
-            plugin_metadata = self.get_plugin_metadata(plugin_id)
-            if plugin_metadata is not None:
-                metadata.append(plugin_metadata)
-        return metadata
+        return self.registry.list_plugin_metadata()
 
     def get_plugin_config(self, plugin_id: str) -> dict[str, Any] | None:
         record = self._records.get(plugin_id)
@@ -635,22 +309,10 @@ class SdkPluginBridge:
         plugin_id: str,
         name: str,
     ) -> dict[str, Any] | None:
-        runtime = self._local_mcp_record(plugin_id, name)
-        if runtime is None:
-            return None
-        return self._serialize_local_mcp_server(runtime)
+        return self.mcp.get_local_mcp_server(plugin_id, name)
 
     def list_local_mcp_servers(self, plugin_id: str) -> list[dict[str, Any]]:
-        record = self._records.get(plugin_id)
-        if record is None:
-            return []
-        return [
-            self._serialize_local_mcp_server(runtime)
-            for runtime in sorted(
-                record.local_mcp_servers.values(),
-                key=lambda item: item.name,
-            )
-        ]
+        return self.mcp.list_local_mcp_servers(plugin_id)
 
     def get_request_tool_specs(self, plugin_id: str) -> list[LLMToolSpec]:
         record = self._records.get(plugin_id)
@@ -750,96 +412,21 @@ class SdkPluginBridge:
         path: str,
         description: str = "",
     ) -> dict[str, str]:
-        record = self._records.get(plugin_id)
-        if record is None:
-            raise AstrBotError.invalid_input(f"Unknown SDK plugin: {plugin_id}")
-
-        skill_name = str(name).strip()
-        if not skill_name or not SDK_SKILL_NAME_RE.fullmatch(skill_name):
-            raise AstrBotError.invalid_input(
-                "skill.register requires a name matching [A-Za-z0-9._-]+"
-            )
-
-        path_text = str(path).strip()
-        if not path_text:
-            raise AstrBotError.invalid_input("skill.register requires path")
-
-        plugin_root = record.plugin.plugin_dir.resolve()
-        requested_path = Path(path_text)
-        resolved_path = (
-            requested_path.resolve()
-            if requested_path.is_absolute()
-            else (plugin_root / requested_path).resolve()
+        return self.registry.register_skill(
+            plugin_id=plugin_id,
+            name=name,
+            path=path,
+            description=description,
         )
-
-        skill_dir = resolved_path if resolved_path.is_dir() else resolved_path.parent
-        skill_md_path = (
-            resolved_path / "SKILL.md" if resolved_path.is_dir() else resolved_path
-        )
-        if skill_md_path.name != "SKILL.md" or not skill_md_path.is_file():
-            raise AstrBotError.invalid_input(
-                "skill.register path must point to a skill directory containing SKILL.md or to SKILL.md itself"
-            )
-        if not skill_dir.is_dir():
-            raise AstrBotError.invalid_input(
-                "skill.register resolved skill_dir is not a directory"
-            )
-        if not skill_md_path.is_relative_to(plugin_root):
-            raise AstrBotError.invalid_input(
-                "skill.register path must stay inside the plugin directory"
-            )
-
-        normalized_description = str(description).strip()
-        if not normalized_description:
-            try:
-                normalized_description = _parse_frontmatter_description(
-                    skill_md_path.read_text(encoding="utf-8")
-                )
-            except Exception:
-                normalized_description = ""
-
-        record.skills[skill_name] = SdkRegisteredSkill(
-            name=skill_name,
-            description=normalized_description,
-            skill_dir=skill_dir,
-            skill_md_path=skill_md_path,
-        )
-        self._publish_plugin_skills(plugin_id)
-        return {
-            "name": skill_name,
-            "description": normalized_description,
-            "path": str(skill_md_path),
-            "skill_dir": str(skill_dir),
-        }
 
     def unregister_skill(self, *, plugin_id: str, name: str) -> bool:
-        record = self._records.get(plugin_id)
-        if record is None:
-            raise AstrBotError.invalid_input(f"Unknown SDK plugin: {plugin_id}")
-        removed = record.skills.pop(str(name).strip(), None) is not None
-        if removed:
-            self._publish_plugin_skills(plugin_id)
-        return removed
+        return self.registry.unregister_skill(plugin_id=plugin_id, name=name)
 
     def list_registered_skills(self, plugin_id: str) -> list[dict[str, str]]:
-        record = self._records.get(plugin_id)
-        if record is None:
-            return []
-        return [
-            record.skills[name].to_registry_payload()
-            for name in sorted(record.skills.keys())
-        ]
+        return self.registry.list_registered_skills(plugin_id)
 
     def _publish_plugin_skills(self, plugin_id: str) -> None:
-        record = self._records.get(plugin_id)
-        manager = SkillManager()
-        if record is None or not record.skills:
-            manager.remove_sdk_plugin_skills(plugin_id)
-            return
-        manager.replace_sdk_plugin_skills(
-            plugin_id,
-            [skill.to_registry_payload() for skill in record.skills.values()],
-        )
+        self.registry.publish_plugin_skills_impl(plugin_id)
 
     async def _clear_plugin_skills(
         self,
@@ -848,25 +435,11 @@ class SdkPluginBridge:
         record: SdkPluginRecord | Any | None,
         reason: str,
     ) -> None:
-        if record is None or not getattr(record, "skills", None):
-            return
-        record.skills.clear()
-        self._publish_plugin_skills(plugin_id)
-        try:
-            from astrbot.core.computer.computer_client import (
-                sync_skills_to_active_sandboxes,
-            )
-
-            # Keep sandbox-visible skills aligned with the bridge registry so a
-            # stopped plugin cannot continue exposing dead skill entries.
-            await sync_skills_to_active_sandboxes()
-        except Exception as exc:
-            logger.warning(
-                "Failed to sync skills after SDK plugin %s %s: %s",
-                plugin_id,
-                reason,
-                exc,
-            )
+        await self.registry.clear_plugin_skills(
+            plugin_id=plugin_id,
+            record=record,
+            reason=reason,
+        )
 
     def register_http_api(
         self,
@@ -877,39 +450,12 @@ class SdkPluginBridge:
         handler_capability: str,
         description: str,
     ) -> None:
-        normalized_route = self._normalize_http_route(route)
-        normalized_methods = self._normalize_http_methods(methods)
-        if not handler_capability:
-            raise AstrBotError.invalid_input(
-                "http.register_api requires handler_capability"
-            )
-        self._ensure_http_route_available(
+        self.registry.register_http_api(
             plugin_id=plugin_id,
-            route=normalized_route,
-            methods=normalized_methods,
-        )
-        route_entry = SdkHttpRoute(
-            plugin_id=plugin_id,
-            route=normalized_route,
-            methods=normalized_methods,
+            route=route,
+            methods=methods,
             handler_capability=handler_capability,
             description=description,
-        )
-        plugin_routes = [
-            entry
-            for entry in self._http_routes.get(plugin_id, [])
-            if not (
-                entry.route == normalized_route and entry.methods == normalized_methods
-            )
-        ]
-        plugin_routes.append(route_entry)
-        self._http_routes[plugin_id] = plugin_routes
-        logger.info(
-            "SDK HTTP route registered: plugin=%s route=%s methods=%s handler=%s",
-            plugin_id,
-            route_entry.route,
-            ",".join(route_entry.methods),
-            handler_capability,
         )
 
     def unregister_http_api(
@@ -919,45 +465,14 @@ class SdkPluginBridge:
         route: str,
         methods: list[str],
     ) -> None:
-        normalized_route = self._normalize_http_route(route)
-        normalized_methods = {method.upper() for method in methods if method}
-        updated: list[SdkHttpRoute] = []
-        for entry in self._http_routes.get(plugin_id, []):
-            if entry.route != normalized_route:
-                updated.append(entry)
-                continue
-            if not normalized_methods:
-                # Plugins do not have a separate "delete route" capability, so an
-                # empty method list means "remove every method registered on route".
-                continue
-            remaining = tuple(
-                method for method in entry.methods if method not in normalized_methods
-            )
-            if remaining:
-                updated.append(
-                    SdkHttpRoute(
-                        plugin_id=entry.plugin_id,
-                        route=entry.route,
-                        methods=remaining,
-                        handler_capability=entry.handler_capability,
-                        description=entry.description,
-                    )
-                )
-        if updated:
-            self._http_routes[plugin_id] = updated
-        else:
-            self._http_routes.pop(plugin_id, None)
+        self.registry.unregister_http_api(
+            plugin_id=plugin_id,
+            route=route,
+            methods=methods,
+        )
 
     def list_http_apis(self, plugin_id: str) -> list[dict[str, Any]]:
-        return [
-            {
-                "route": entry.route,
-                "methods": list(entry.methods),
-                "handler_capability": entry.handler_capability,
-                "description": entry.description,
-            }
-            for entry in self._http_routes.get(plugin_id, [])
-        ]
+        return self.registry.list_http_apis(plugin_id)
 
     def _public_http_path(self, route: str) -> str:
         normalized_route = self._normalize_http_route(route)
@@ -974,35 +489,7 @@ class SdkPluginBridge:
         return value.strip().lower() in {"1", "true", "yes", "on"}
 
     def _dashboard_public_base_url(self) -> str:
-        dashboard_config = astrbot_config.get("dashboard", {})
-        if not isinstance(dashboard_config, dict):
-            dashboard_config = {}
-        ssl_config = dashboard_config.get("ssl", {})
-        if not isinstance(ssl_config, dict):
-            ssl_config = {}
-
-        port = (
-            os.environ.get("DASHBOARD_PORT")
-            or os.environ.get("ASTRBOT_DASHBOARD_PORT")
-            or dashboard_config.get("port", 6185)
-        )
-        host = (
-            os.environ.get("DASHBOARD_HOST")
-            or os.environ.get("ASTRBOT_DASHBOARD_HOST")
-            or dashboard_config.get("host", "0.0.0.0")
-        )
-        ssl_enabled = self._parse_env_bool(
-            os.environ.get("DASHBOARD_SSL_ENABLE")
-            or os.environ.get("ASTRBOT_DASHBOARD_SSL_ENABLE"),
-            bool(ssl_config.get("enable", False)),
-        )
-        scheme = "https" if ssl_enabled else "http"
-        host_text = str(host).strip() or "localhost"
-        if host_text in {"0.0.0.0", "::", "[::]"}:
-            host_text = "localhost"
-        if ":" in host_text and not host_text.startswith("["):
-            host_text = f"[{host_text}]"
-        return f"{scheme}://{host_text}:{int(port)}"
+        return self.registry.dashboard_public_base_url()
 
     def _public_http_url(self, route: str) -> str:
         return f"{self._dashboard_public_base_url()}{self._public_http_path(route)}"
@@ -1025,30 +512,7 @@ class SdkPluginBridge:
         route: str,
         method: str,
     ) -> dict[str, Any] | None:
-        resolved = self._resolve_http_route(route, method)
-        if resolved is None:
-            return None
-        record, route_entry = resolved
-        if record.session is None:
-            raise AstrBotError.invalid_input("SDK HTTP route worker is unavailable")
-        text_body = await quart_request.get_data(as_text=True)
-        payload = {
-            "method": method.upper(),
-            "route": route_entry.route,
-            "path": quart_request.path,
-            "query": quart_request.args.to_dict(flat=False),
-            "headers": dict(quart_request.headers),
-            "json_body": await quart_request.get_json(silent=True),
-            "text_body": text_body,
-        }
-        output = await record.session.invoke_capability(
-            route_entry.handler_capability,
-            payload,
-            request_id=f"sdk_http_{record.plugin_id}_{uuid.uuid4().hex}",
-        )
-        if not isinstance(output, dict):
-            raise AstrBotError.invalid_input("SDK HTTP handler must return an object")
-        return output
+        return await self.registry.dispatch_http_request(route, method)
 
     def register_session_waiter(self, *, plugin_id: str, session_key: str) -> None:
         if not session_key:
@@ -1066,257 +530,31 @@ class SdkPluginBridge:
             self._session_waiters.pop(plugin_id, None)
 
     async def dispatch_message(self, event: AstrMessageEvent) -> SdkDispatchResult:
-        result = SdkDispatchResult()
-        if event.is_stopped():
-            result.skipped_reason = SKIP_LEGACY_STOPPED
-            return result
-        if self._legacy_has_replied(event):
-            result.skipped_reason = SKIP_LEGACY_REPLIED
-            return result
-
-        waiter_plugins = self._match_waiter_plugins(event.unified_msg_origin)
-        if waiter_plugins:
-            return await self._dispatch_waiter_event(event, waiter_plugins)
-
-        dispatch_token = self._get_dispatch_token(event) or uuid.uuid4().hex
-        self._bind_dispatch_token(event, dispatch_token)
-        overlay = self._ensure_request_overlay(
-            dispatch_token,
-            should_call_llm=not bool(getattr(event, "call_llm", False)),
-        )
-        matches = self._match_handlers(event)
-        permission_denied = self._resolve_command_permission_denied(event)
-        if permission_denied is not None and not self._has_command_trigger_match(
-            matches
-        ):
-            dispatch_state = _DispatchState(event=event)
-            request_context = self._request_contexts.get(dispatch_token)
-            if request_context is None:
-                request_context = _RequestContext(
-                    plugin_id=permission_denied["plugin_id"],
-                    request_id="",
-                    dispatch_token=dispatch_token,
-                    dispatch_state=dispatch_state,
-                )
-                self._request_contexts[dispatch_token] = request_context
-            else:
-                request_context.plugin_id = permission_denied["plugin_id"]
-                request_context.dispatch_state = dispatch_state
-            self._set_sdk_origin_plugin_id(event, permission_denied["plugin_id"])
-            event.set_result(MessageEventResult().message(permission_denied["message"]))
-            event.stop_event()
-            event.should_call_llm(True)
-            overlay.should_call_llm = False
-            result.stopped = True
-            return result
-        group_fallback = self._resolve_group_root_fallback(event)
-        if group_fallback is not None and not self._has_command_trigger_match(matches):
-            dispatch_state = _DispatchState(event=event)
-            request_context = self._request_contexts.get(dispatch_token)
-            if request_context is None:
-                request_context = _RequestContext(
-                    plugin_id=group_fallback["plugin_id"],
-                    request_id="",
-                    dispatch_token=dispatch_token,
-                    dispatch_state=dispatch_state,
-                )
-                self._request_contexts[dispatch_token] = request_context
-            else:
-                request_context.plugin_id = group_fallback["plugin_id"]
-                request_context.dispatch_state = dispatch_state
-            self._set_sdk_origin_plugin_id(event, group_fallback["plugin_id"])
-            event.set_result(MessageEventResult().message(group_fallback["help_text"]))
-            event.stop_event()
-            event.should_call_llm(True)
-            overlay.should_call_llm = False
-            result.stopped = True
-            return result
-        if not matches:
-            result.skipped_reason = SKIP_NO_MATCH
-            return result
-        result.matched_handlers = [
-            {"plugin_id": match.plugin_id, "handler_id": match.handler_id}
-            for match in matches
-        ]
-
-        dispatch_state = _DispatchState(event=event)
-        request_context = self._request_contexts.get(dispatch_token)
-        if request_context is None:
-            request_context = _RequestContext(
-                plugin_id="",
-                request_id="",
-                dispatch_token=dispatch_token,
-                dispatch_state=dispatch_state,
-            )
-            self._request_contexts[dispatch_token] = request_context
-        else:
-            request_context.dispatch_state = dispatch_state
-        skipped_reason = None
-        for match in matches:
-            whitelist = (
-                None
-                if overlay.handler_whitelist is None
-                else set(overlay.handler_whitelist)
-            )
-            if whitelist is not None and match.plugin_id not in whitelist:
-                continue
-            record = self._records.get(match.plugin_id)
-            if record is None:
-                continue
-            if record.state == SDK_STATE_RELOADING:
-                skipped_reason = skipped_reason or SKIP_SDK_RELOADING
-                continue
-            if (
-                record.state in {SDK_STATE_FAILED, SDK_STATE_DISABLED}
-                or record.session is None
-            ):
-                skipped_reason = skipped_reason or SKIP_WORKER_FAILED
-                continue
-
-            request_id = f"sdk_{record.plugin_id}_{uuid.uuid4().hex}"
-            request_context.plugin_id = record.plugin_id
-            request_context.request_id = request_id
-            request_context.cancelled = False
-            self._set_sdk_origin_plugin_id(event, record.plugin_id)
-            setattr(event, "_sdk_last_request_id", request_id)
-            payload = self._build_sdk_event_payload(
-                event,
-                dispatch_token=dispatch_token,
-                plugin_id=record.plugin_id,
-                request_id=request_id,
-                overlay=overlay,
-            )
-            task = asyncio.create_task(
-                record.session.invoke_handler(
-                    match.handler_id,
-                    payload,
-                    request_id=request_id,
-                    args=match.args,
-                )
-            )
-            self._track_request_scope(
-                dispatch_token=dispatch_token,
-                request_id=request_id,
-                plugin_id=record.plugin_id,
-            )
-            self._plugin_requests.setdefault(record.plugin_id, {})[request_id] = (
-                _InFlightRequest(
-                    request_id=request_id,
-                    dispatch_token=dispatch_token,
-                    task=task,
-                )
-            )
-
-            try:
-                output = await task
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                logger.warning(
-                    "SDK handler failed: plugin=%s handler=%s error=%s",
-                    record.plugin_id,
-                    match.handler_id,
-                    exc,
-                )
-                skipped_reason = skipped_reason or SKIP_WORKER_FAILED
-                output = {}
-            finally:
-                inflight = self._plugin_requests.get(record.plugin_id, {}).pop(
-                    request_id,
-                    None,
-                )
-
-            if inflight is not None and inflight.logical_cancelled:
-                continue
-
-            handler_result = extract_sdk_handler_result(
-                output if isinstance(output, dict) else {}
-            )
-            if isinstance(output, dict) and "sdk_local_extras" in output:
-                self._persist_sdk_local_extras_from_handler(
-                    overlay,
-                    output.get("sdk_local_extras"),
-                    plugin_id=record.plugin_id,
-                    handler_id=match.handler_id,
-                )
-            result.executed_handlers.append(
-                {"plugin_id": record.plugin_id, "handler_id": match.handler_id}
-            )
-            dispatch_state.sent_message = (
-                dispatch_state.sent_message or handler_result["sent_message"]
-            )
-            dispatch_state.stopped = dispatch_state.stopped or handler_result["stop"]
-            if handler_result["call_llm"]:
-                overlay.requested_llm = True
-                overlay.should_call_llm = True
-            if handler_result["sent_message"] or handler_result["stop"]:
-                overlay.should_call_llm = False
-            if handler_result["stop"]:
-                break
-
-        result.sent_message = dispatch_state.sent_message
-        result.stopped = dispatch_state.stopped
-        if not result.executed_handlers:
-            result.skipped_reason = skipped_reason or SKIP_NO_MATCH
-        if result.sent_message:
-            event._has_send_oper = True
-            overlay.should_call_llm = False
-            event.should_call_llm(True)
-        if result.stopped:
-            event.stop_event()
-            overlay.should_call_llm = False
-            event.should_call_llm(True)
-        return result
+        return await self.dispatch_engine.dispatch_message(event)
 
     def resolve_request_plugin_id(self, request_id: str) -> str:
-        plugin_id = self._request_plugin_ids.get(request_id)
-        if plugin_id is not None:
-            return plugin_id
-        token = self._request_id_to_token.get(request_id)
-        if token is not None and token in self._request_contexts:
-            return self._request_contexts[token].plugin_id
-        raise AstrBotError.invalid_input(f"Unknown SDK request id: {request_id}")
+        return self.request_runtime.resolve_request_plugin_id(request_id)
 
     def resolve_request_session(self, request_id: str) -> _RequestContext | None:
-        token = self._request_id_to_token.get(request_id)
-        if token is None:
-            return None
-        return self._request_contexts.get(token)
+        return self.request_runtime.resolve_request_session(request_id)
 
     def get_request_context_by_token(
         self, dispatch_token: str
     ) -> _RequestContext | None:
-        return self._request_contexts.get(dispatch_token)
+        return self.request_runtime.get_request_context_by_token(dispatch_token)
 
     def _bind_dispatch_token(
         self, event: AstrMessageEvent, dispatch_token: str
     ) -> None:
-        setattr(event, "_sdk_dispatch_token", dispatch_token)
-        setattr(
-            event,
-            "_sdk_result_binding",
-            _EventResultBinding(bridge=self, dispatch_token=dispatch_token),
-        )
+        self.request_runtime.bind_dispatch_token(event, dispatch_token)
 
     def _get_dispatch_token(self, event: AstrMessageEvent) -> str | None:
-        token = getattr(event, "_sdk_dispatch_token", None)
-        return str(token) if token else None
+        return self.request_runtime.get_dispatch_token(event)
 
     def _schedule_overlay_cleanup(
         self, dispatch_token: str
     ) -> asyncio.Task[None] | None:
-        async def _cleanup_later() -> None:
-            try:
-                await asyncio.sleep(OVERLAY_TIMEOUT_SECONDS)
-            except asyncio.CancelledError:
-                return
-            self._close_request_overlay(dispatch_token)
-
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return None
-        return loop.create_task(_cleanup_later())
+        return self.request_runtime.schedule_overlay_cleanup(dispatch_token)
 
     def _ensure_request_overlay(
         self,
@@ -1324,20 +562,10 @@ class SdkPluginBridge:
         *,
         should_call_llm: bool,
     ) -> _RequestOverlayState:
-        overlay = self._request_overlays.get(dispatch_token)
-        if overlay is not None:
-            if overlay.closed:
-                overlay.closed = False
-            if overlay.cleanup_task is None or overlay.cleanup_task.done():
-                overlay.cleanup_task = self._schedule_overlay_cleanup(dispatch_token)
-            return overlay
-        overlay = _RequestOverlayState(
-            dispatch_token=dispatch_token,
+        return self.request_runtime.ensure_request_overlay(
+            dispatch_token,
             should_call_llm=should_call_llm,
-            cleanup_task=self._schedule_overlay_cleanup(dispatch_token),
         )
-        self._request_overlays[dispatch_token] = overlay
-        return overlay
 
     def _track_request_scope(
         self,
@@ -1346,84 +574,36 @@ class SdkPluginBridge:
         request_id: str,
         plugin_id: str,
     ) -> None:
-        # request-scoped system.event.* calls may outlive the original handler RPC
-        # when plugin code moves follow-up work into background tasks.
-        self._request_id_to_token[request_id] = dispatch_token
-        self._request_plugin_ids[request_id] = plugin_id
-        overlay = self._request_overlays.get(dispatch_token)
-        if overlay is not None:
-            overlay.request_scope_ids.add(request_id)
+        self.request_runtime.track_request_scope(
+            dispatch_token=dispatch_token,
+            request_id=request_id,
+            plugin_id=plugin_id,
+        )
 
     def _close_request_overlay(self, dispatch_token: str) -> None:
-        request_context = self._request_contexts.get(dispatch_token)
-        bound_event = None
-        dispatch_state = (
-            getattr(request_context, "dispatch_state", None)
-            if request_context is not None
-            else None
-        )
-        if dispatch_state is not None:
-            bound_event = dispatch_state.event
-            bound_event._result = self._get_effective_result_for_token(dispatch_token)
-            bound_event.call_llm = not self.get_effective_should_call_llm(bound_event)
-            if hasattr(bound_event, "_sdk_result_binding"):
-                delattr(bound_event, "_sdk_result_binding")
-        overlay = self._request_overlays.pop(dispatch_token, None)
-        if overlay is not None:
-            overlay.closed = True
-            if overlay.cleanup_task is not None:
-                overlay.cleanup_task.cancel()
-            for request_id in overlay.request_scope_ids:
-                self._request_id_to_token.pop(request_id, None)
-                self._request_plugin_ids.pop(request_id, None)
-        request_context = self._request_contexts.pop(dispatch_token, None)
-        if request_context is not None:
-            request_context.cancelled = True
+        self.request_runtime.close_request_overlay(dispatch_token)
 
     def close_request_overlay_for_event(self, event: AstrMessageEvent) -> None:
-        dispatch_token = self._get_dispatch_token(event)
-        if not dispatch_token:
-            return
-        self._close_request_overlay(dispatch_token)
+        self.request_runtime.close_request_overlay_for_event(event)
 
     def get_request_overlay_by_token(
         self, dispatch_token: str
     ) -> _RequestOverlayState | None:
-        overlay = self._request_overlays.get(dispatch_token)
-        if overlay is None or overlay.closed:
-            return None
-        return overlay
+        return self.request_runtime.get_request_overlay_by_token(dispatch_token)
 
     def get_request_overlay_by_request_id(
         self, request_id: str
     ) -> _RequestOverlayState | None:
-        token = self._request_id_to_token.get(request_id)
-        if not token:
-            return None
-        return self.get_request_overlay_by_token(token)
+        return self.request_runtime.get_request_overlay_by_request_id(request_id)
 
     def request_llm_for_request(self, request_id: str) -> bool:
-        overlay = self.get_request_overlay_by_request_id(request_id)
-        if overlay is None:
-            return False
-        overlay.requested_llm = True
-        if not overlay.result_stopped:
-            overlay.should_call_llm = True
-        return True
+        return self.request_runtime.request_llm_for_request(request_id)
 
     def get_effective_should_call_llm(self, event: AstrMessageEvent) -> bool:
-        dispatch_token = self._get_dispatch_token(event)
-        if dispatch_token:
-            overlay = self.get_request_overlay_by_token(dispatch_token)
-            if overlay is not None:
-                return overlay.should_call_llm
-        return not bool(getattr(event, "call_llm", False))
+        return self.request_runtime.get_effective_should_call_llm(event)
 
     def get_should_call_llm_for_request(self, request_id: str) -> bool | None:
-        overlay = self.get_request_overlay_by_request_id(request_id)
-        if overlay is None:
-            return None
-        return overlay.should_call_llm
+        return self.request_runtime.get_should_call_llm_for_request(request_id)
 
     def _set_overlay_stop_state(
         self,
@@ -1431,341 +611,148 @@ class SdkPluginBridge:
         *,
         stopped: bool,
     ) -> None:
-        overlay.result_stopped = stopped
-        if stopped:
-            overlay.should_call_llm = False
+        self.request_runtime.set_overlay_stop_state(overlay, stopped=stopped)
 
     def _set_result_from_object(
         self,
         overlay: _RequestOverlayState,
         result: MessageEventResult | None,
     ) -> None:
-        overlay.result_object = result
-        overlay.result_is_set = True
-        self._set_overlay_stop_state(
-            overlay,
-            stopped=bool(result is not None and result.is_stopped()),
-        )
-        self._sync_overlay_payload_from_result_object(overlay)
+        self.request_runtime.set_result_from_object(overlay, result)
 
     def _bind_result_object(
         self,
         overlay: _RequestOverlayState,
         result: MessageEventResult | None,
     ) -> None:
-        overlay.result_object = result
-        overlay.result_is_set = True
-        self._set_overlay_stop_state(
-            overlay,
-            stopped=bool(result is not None and result.is_stopped()),
-        )
+        self.request_runtime.bind_result_object(overlay, result)
 
     def _set_result_payload_on_overlay(
         self,
         overlay: _RequestOverlayState,
         result_payload: dict[str, Any] | None,
     ) -> None:
-        if result_payload is None:
-            overlay.result_payload = None
-            overlay.result_object = None
-            overlay.result_is_set = True
-            self._set_overlay_stop_state(overlay, stopped=False)
-            return
-        normalized_payload = json.loads(json.dumps(result_payload))
-        overlay.result_payload = normalized_payload
-        chain_payload = normalized_payload.get("chain")
-        overlay.result_object = (
-            self._build_core_result_from_chain_payload(chain_payload)
-            if isinstance(chain_payload, list)
-            else None
-        )
-        overlay.result_is_set = True
-        self._set_overlay_stop_state(overlay, stopped=False)
+        self.request_runtime.set_result_payload_on_overlay(overlay, result_payload)
 
     def _sync_overlay_payload_from_result_object(
         self,
         overlay: _RequestOverlayState,
     ) -> None:
-        overlay.result_payload = self._legacy_result_to_sdk_payload(
-            overlay.result_object
-        )
-        self._set_overlay_stop_state(
-            overlay,
-            stopped=bool(
-                overlay.result_object is not None and overlay.result_object.is_stopped()
-            ),
-        )
+        self.request_runtime.sync_overlay_payload_from_result_object(overlay)
 
     def _get_effective_result_for_token(
         self,
         dispatch_token: str,
     ) -> MessageEventResult | None:
-        overlay = self.get_request_overlay_by_token(dispatch_token)
-        if overlay is None or not overlay.result_is_set:
-            request_context = self._request_contexts.get(dispatch_token)
-            if (
-                request_context is not None
-                and request_context.dispatch_state is not None
-            ):
-                return request_context.dispatch_state.event._result
-            return None
-        if overlay.result_object is None and overlay.result_payload is not None:
-            chain_payload = overlay.result_payload.get("chain")
-            if isinstance(chain_payload, list):
-                overlay.result_object = self._build_core_result_from_chain_payload(
-                    chain_payload
-                )
-        if overlay.result_object is None:
-            if overlay.result_stopped:
-                stopped_result = MessageEventResult()
-                stopped_result.stop_event()
-                overlay.result_object = stopped_result
-            else:
-                return None
-        if overlay.result_stopped and not overlay.result_object.is_stopped():
-            overlay.result_object.stop_event()
-        elif not overlay.result_stopped and overlay.result_object.is_stopped():
-            overlay.result_object.continue_event()
-        return overlay.result_object
+        return self.request_runtime.get_effective_result_for_token(dispatch_token)
 
     def _set_result_for_dispatch_token(
         self,
         dispatch_token: str,
         result: MessageEventResult | None,
     ) -> None:
-        overlay = self.get_request_overlay_by_token(dispatch_token)
-        if overlay is None:
-            return
-        self._set_result_from_object(overlay, result)
+        self.request_runtime.set_result_for_dispatch_token(dispatch_token, result)
 
     def _clear_result_for_dispatch_token(self, dispatch_token: str) -> None:
-        overlay = self.get_request_overlay_by_token(dispatch_token)
-        if overlay is None:
-            return
-        overlay.result_payload = None
-        overlay.result_object = None
-        overlay.result_is_set = True
-        self._set_overlay_stop_state(overlay, stopped=False)
+        self.request_runtime.clear_result_for_dispatch_token(dispatch_token)
 
     def _stop_event_for_dispatch_token(self, dispatch_token: str) -> None:
-        overlay = self.get_request_overlay_by_token(dispatch_token)
-        if overlay is None:
-            return
-        self._set_overlay_stop_state(overlay, stopped=True)
-        overlay.result_is_set = True
-        if overlay.result_object is not None and not overlay.result_object.is_stopped():
-            overlay.result_object.stop_event()
+        self.request_runtime.stop_event_for_dispatch_token(dispatch_token)
 
     def _continue_event_for_dispatch_token(self, dispatch_token: str) -> None:
-        overlay = self.get_request_overlay_by_token(dispatch_token)
-        if overlay is None:
-            return
-        overlay.result_is_set = True
-        self._set_overlay_stop_state(overlay, stopped=False)
-        if overlay.result_object is not None and overlay.result_object.is_stopped():
-            overlay.result_object.continue_event()
+        self.request_runtime.continue_event_for_dispatch_token(dispatch_token)
 
     def _is_stopped_for_dispatch_token(self, dispatch_token: str) -> bool:
-        overlay = self.get_request_overlay_by_token(dispatch_token)
-        if overlay is not None and overlay.result_is_set:
-            return overlay.result_stopped
-        request_context = self._request_contexts.get(dispatch_token)
-        if request_context is not None and request_context.dispatch_state is not None:
-            result = request_context.dispatch_state.event._result
-            return bool(result is not None and result.is_stopped())
-        return False
+        return self.request_runtime.is_stopped_for_dispatch_token(dispatch_token)
 
     def set_result_for_request(
         self,
         request_id: str,
         result_payload: dict[str, Any] | None,
     ) -> bool:
-        overlay = self.get_request_overlay_by_request_id(request_id)
-        if overlay is None:
-            return False
-        self._set_result_payload_on_overlay(overlay, result_payload)
-        return True
+        return self.request_runtime.set_result_for_request(request_id, result_payload)
 
     def clear_result_for_request(self, request_id: str) -> bool:
-        overlay = self.get_request_overlay_by_request_id(request_id)
-        if overlay is None:
-            return False
-        overlay.result_payload = None
-        overlay.result_object = None
-        overlay.result_is_set = True
-        self._set_overlay_stop_state(overlay, stopped=False)
-        return True
+        return self.request_runtime.clear_result_for_request(request_id)
 
     def get_result_payload_for_request(self, request_id: str) -> dict[str, Any] | None:
-        overlay = self.get_request_overlay_by_request_id(request_id)
-        request_context = self.resolve_request_session(request_id)
-        request_context_has_event = False
-        if request_context is not None:
-            has_event = getattr(request_context, "has_event", None)
-            request_context_has_event = (
-                bool(has_event)
-                if has_event is not None
-                else hasattr(request_context, "event")
-            )
-        if overlay is not None and overlay.result_is_set:
-            if overlay.result_object is not None:
-                self._sync_overlay_payload_from_result_object(overlay)
-            return (
-                copy.deepcopy(overlay.result_payload)
-                if overlay.result_payload is not None
-                else None
-            )
-        if request_context is None or not request_context_has_event:
-            return None
-        return self._legacy_result_to_sdk_payload(request_context.event.get_result())
+        return self.request_runtime.get_result_payload_for_request(request_id)
 
     def set_handler_whitelist_for_request(
         self,
         request_id: str,
         plugin_names: set[str] | None,
     ) -> bool:
-        overlay = self.get_request_overlay_by_request_id(request_id)
-        if overlay is None:
-            return False
-        overlay.handler_whitelist = None if plugin_names is None else set(plugin_names)
-        return True
+        return self.request_runtime.set_handler_whitelist_for_request(
+            request_id,
+            plugin_names,
+        )
 
     def get_handler_whitelist_for_request(self, request_id: str) -> set[str] | None:
-        overlay = self.get_request_overlay_by_request_id(request_id)
-        if overlay is None:
-            return None
-        return (
-            None
-            if overlay.handler_whitelist is None
-            else set(overlay.handler_whitelist)
-        )
+        return self.request_runtime.get_handler_whitelist_for_request(request_id)
 
     def _get_handler_whitelist_for_event(
         self, event: AstrMessageEvent
     ) -> set[str] | None:
-        dispatch_token = self._get_dispatch_token(event)
-        if not dispatch_token:
-            return None
-        overlay = self.get_request_overlay_by_token(dispatch_token)
-        if overlay is None:
-            return None
-        return (
-            None
-            if overlay.handler_whitelist is None
-            else set(overlay.handler_whitelist)
-        )
+        return self.request_runtime.get_handler_whitelist_for_event(event)
 
     @staticmethod
     def _build_core_message_chain_from_payload(
         chain_payload: list[dict[str, Any]],
     ) -> MessageChain:
-        return _build_message_chain_from_payload(chain_payload)
+        return SdkRequestRuntime.build_core_message_chain_from_payload(chain_payload)
 
     @classmethod
     def _build_core_result_from_chain_payload(
         cls,
         chain_payload: list[dict[str, Any]],
     ) -> MessageEventResult:
-        chain = cls._build_core_message_chain_from_payload(chain_payload)
-        result = MessageEventResult()
-        # Core stages currently treat result.chain as a MessageChain-like object and
-        # call get_plain_text()/mutate nested components on it directly.
-        setattr(result, "chain", chain)
-        result.use_t2i_ = chain.use_t2i_
-        result.type = chain.type
-        return result
+        return SdkRequestRuntime.build_core_result_from_chain_payload(chain_payload)
 
     @staticmethod
     def _legacy_result_to_sdk_payload(
         result: MessageEventResult | None,
     ) -> dict[str, Any] | None:
-        if result is None:
-            return None
-        chain = (
-            result.chain.chain
-            if isinstance(result.chain, MessageChain)
-            else result.chain
-        )
-        return {
-            "type": "chain" if chain else "empty",
-            "chain": SdkPluginBridge._components_to_sdk_payload(chain),
-        }
+        return SdkRequestRuntime.legacy_result_to_sdk_payload(result)
 
     @staticmethod
     def _components_to_sdk_payload(
         components: list[Any] | tuple[Any, ...] | None,
     ) -> list[dict[str, Any]]:
-        return [
-            component_to_payload_sync(component) for component in (components or [])
-        ]
+        return SdkRequestRuntime.components_to_sdk_payload(components)
 
-    @classmethod
     def _persist_sdk_local_extras_from_handler(
-        cls,
+        self,
         overlay: _RequestOverlayState,
         payload: Any,
         *,
         plugin_id: str,
         handler_id: str,
     ) -> None:
-        if payload is None:
-            overlay.sdk_local_extras = {}
-            return
-        if not isinstance(payload, dict):
-            logger.warning(
-                "SDK event handler returned invalid sdk_local_extras: plugin=%s handler=%s payload_type=%s",
-                plugin_id,
-                handler_id,
-                type(payload).__name__,
-            )
-            return
-        normalized, dropped_keys = normalize_sdk_local_extras(payload)
-        overlay.sdk_local_extras = normalized
-        for key in dropped_keys:
-            value = payload.get(key)
-            logger.warning(
-                "Dropped sdk_local_extras entry during SDK bridge serialization: "
-                "plugin=%s handler=%s key=%s value_type=%s reason=%s "
-                "recommended_fix=%s",
-                plugin_id,
-                handler_id,
-                key,
-                type(value).__name__,
-                "sdk_local_extras only preserves JSON-serializable values across "
-                "handler and lifecycle boundaries",
-                "store plain dict/list/scalar payloads, or serialize framework "
-                "objects such as message components before calling set_extra()",
-            )
+        self.request_runtime.persist_sdk_local_extras_from_handler(
+            overlay,
+            payload,
+            plugin_id=plugin_id,
+            handler_id=handler_id,
+        )
 
     @staticmethod
     def _sanitize_host_extras(event: AstrMessageEvent) -> dict[str, Any]:
-        extras = event.get_extra()
-        if not isinstance(extras, dict) or not extras:
-            return {}
-        return sanitize_sdk_extras(extras)
+        return SdkRequestRuntime.sanitize_host_extras(event)
 
     @staticmethod
     def _set_sdk_origin_plugin_id(
         event: AstrMessageEvent,
         plugin_id: str,
     ) -> None:
-        setter = getattr(event, "set_extra", None)
-        if callable(setter):
-            setter("_sdk_origin_plugin_id", plugin_id)
-            return
-        setattr(event, "_sdk_origin_plugin_id", plugin_id)
+        SdkRequestRuntime.set_sdk_origin_plugin_id(event, plugin_id)
 
     def _get_or_build_inbound_snapshot(
         self,
         event: AstrMessageEvent,
         overlay: _RequestOverlayState | None,
     ) -> InboundEventSnapshot:
-        if overlay is not None and overlay.inbound_snapshot is not None:
-            return overlay.inbound_snapshot
-        snapshot = build_inbound_event_snapshot(event)
-        if overlay is not None:
-            overlay.inbound_snapshot = snapshot
-        return snapshot
+        return self.request_runtime.get_or_build_inbound_snapshot(event, overlay)
 
     def _build_sdk_event_payload(
         self,
@@ -1778,14 +765,33 @@ class SdkPluginBridge:
         raw_updates: dict[str, Any] | None = None,
         field_updates: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        snapshot = self._get_or_build_inbound_snapshot(event, overlay)
-        sdk_local_extras = dict(overlay.sdk_local_extras) if overlay is not None else {}
-        return snapshot.to_payload(
+        return self.request_runtime.build_sdk_event_payload(
+            event,
             dispatch_token=dispatch_token,
             plugin_id=plugin_id,
             request_id=request_id,
-            host_extras=self._sanitize_host_extras(event),
-            sdk_local_extras=sdk_local_extras,
+            overlay=overlay,
+            raw_updates=raw_updates,
+            field_updates=field_updates,
+        )
+
+    def build_sdk_event_payload(
+        self,
+        event: AstrMessageEvent,
+        *,
+        dispatch_token: str,
+        plugin_id: str,
+        request_id: str,
+        overlay: _RequestOverlayState | None,
+        raw_updates: dict[str, Any] | None = None,
+        field_updates: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self.request_runtime.build_sdk_event_payload(
+            event,
+            dispatch_token=dispatch_token,
+            plugin_id=plugin_id,
+            request_id=request_id,
+            overlay=overlay,
             raw_updates=raw_updates,
             field_updates=field_updates,
         )
@@ -1794,128 +800,20 @@ class SdkPluginBridge:
     def _core_provider_request_to_sdk_payload(
         request: CoreProviderRequest,
     ) -> dict[str, Any]:
-        tool_calls_result: list[dict[str, Any]] = []
-        raw_results = request.tool_calls_result
-        if raw_results is not None:
-            if not isinstance(raw_results, list):
-                raw_results = [raw_results]
-            for item in raw_results:
-                if not getattr(item, "tool_calls_result", None):
-                    continue
-                tool_name_by_id: dict[str, str] = {}
-                tool_calls_info = getattr(item, "tool_calls_info", None)
-                raw_tool_calls = getattr(tool_calls_info, "tool_calls", None)
-                if isinstance(raw_tool_calls, list):
-                    for tool_call in raw_tool_calls:
-                        if isinstance(tool_call, dict):
-                            tool_call_id = tool_call.get("id")
-                            function_payload = tool_call.get("function")
-                            if isinstance(function_payload, dict):
-                                tool_name = function_payload.get("name")
-                            else:
-                                tool_name = None
-                        else:
-                            tool_call_id = getattr(tool_call, "id", None)
-                            function_payload = getattr(tool_call, "function", None)
-                            tool_name = getattr(function_payload, "name", None)
-                        if tool_call_id is None or tool_name is None:
-                            continue
-                        tool_name_by_id[str(tool_call_id)] = str(tool_name)
-                for tool_result in item.tool_calls_result:
-                    tool_name = ""
-                    tool_call_id = getattr(tool_result, "tool_call_id", None)
-                    content = getattr(tool_result, "content", "")
-                    success = True
-                    if tool_call_id is not None:
-                        tool_name = tool_name_by_id.get(str(tool_call_id), "")
-                    tool_calls_result.append(
-                        {
-                            "tool_call_id": str(tool_call_id)
-                            if tool_call_id is not None
-                            else None,
-                            "tool_name": tool_name,
-                            "content": str(content or ""),
-                            "success": bool(success),
-                        }
-                    )
-        return {
-            "prompt": request.prompt,
-            "system_prompt": request.system_prompt or None,
-            "session_id": request.session_id or None,
-            "contexts": copy.deepcopy(request.contexts or []),
-            "image_urls": list(request.image_urls or []),
-            "tool_calls_result": tool_calls_result,
-            "model": request.model,
-        }
+        return SdkRequestRuntime.core_provider_request_to_sdk_payload(request)
 
     @staticmethod
     def _apply_sdk_provider_request_payload(
         request: CoreProviderRequest,
         payload: dict[str, Any],
     ) -> None:
-        prompt = payload.get("prompt")
-        request.prompt = None if prompt is None else str(prompt)
-        system_prompt = payload.get("system_prompt")
-        request.system_prompt = "" if system_prompt is None else str(system_prompt)
-        session_id = payload.get("session_id")
-        request.session_id = None if session_id is None else str(session_id)
-
-        contexts = payload.get("contexts")
-        if isinstance(contexts, list):
-            request.contexts = copy.deepcopy(contexts)
-
-        image_urls = payload.get("image_urls")
-        if isinstance(image_urls, list):
-            request.image_urls = [str(item) for item in image_urls]
-
-        model = payload.get("model")
-        request.model = None if model is None else str(model)
+        SdkRequestRuntime.apply_sdk_provider_request_payload(request, payload)
 
     @staticmethod
     def _core_llm_response_to_sdk_payload(
         response: CoreLLMResponse,
     ) -> dict[str, Any]:
-        usage_payload = None
-        if response.usage is not None:
-            usage_payload = {
-                "input_tokens": response.usage.input,
-                "output_tokens": response.usage.output,
-                "total_tokens": response.usage.total,
-                "input_cached_tokens": response.usage.input_cached,
-            }
-        tool_calls: list[dict[str, Any]] = []
-        for idx, tool_name in enumerate(response.tools_call_name):
-            tool_calls.append(
-                {
-                    "id": (
-                        response.tools_call_ids[idx]
-                        if idx < len(response.tools_call_ids)
-                        else None
-                    ),
-                    "name": tool_name,
-                    "arguments": (
-                        response.tools_call_args[idx]
-                        if idx < len(response.tools_call_args)
-                        else {}
-                    ),
-                    "extra_content": (
-                        response.tools_call_extra_content.get(
-                            response.tools_call_ids[idx]
-                        )
-                        if idx < len(response.tools_call_ids)
-                        else None
-                    ),
-                }
-            )
-        return {
-            "text": response.completion_text or "",
-            "usage": usage_payload,
-            "finish_reason": "tool_calls" if tool_calls else "stop",
-            "tool_calls": tool_calls,
-            "role": response.role,
-            "reasoning_content": response.reasoning_content or None,
-            "reasoning_signature": response.reasoning_signature,
-        }
+        return SdkRequestRuntime.core_llm_response_to_sdk_payload(response)
 
     @classmethod
     def _apply_sdk_result_payload(
@@ -1923,54 +821,25 @@ class SdkPluginBridge:
         result: MessageEventResult,
         payload: dict[str, Any],
     ) -> MessageEventResult:
-        chain_payload = payload.get("chain")
-        updated = (
-            cls._build_core_result_from_chain_payload(chain_payload)
-            if isinstance(chain_payload, list)
-            else MessageEventResult()
-        )
-        result.chain = updated.chain
-        result.use_t2i_ = updated.use_t2i_
-        result.type = updated.type
-        return result
+        return SdkRequestRuntime.apply_sdk_result_payload(result, payload)
 
     def get_effective_result(
         self, event: AstrMessageEvent
     ) -> MessageEventResult | None:
-        dispatch_token = self._get_dispatch_token(event)
-        if dispatch_token:
-            return self._get_effective_result_for_token(dispatch_token)
-        return event._result
+        return self.request_runtime.get_effective_result(event)
 
     def before_platform_send(self, dispatch_token: str) -> None:
-        request_context = self._request_contexts.get(dispatch_token)
-        if request_context is None:
-            raise AstrBotError.invalid_input(
-                "Unknown SDK dispatch token for platform send"
-            )
-        overlay = self.get_request_overlay_by_token(dispatch_token)
-        if overlay is None:
-            raise AstrBotError.cancelled("The SDK request overlay has been closed")
-        if request_context.cancelled:
-            raise AstrBotError.cancelled("The SDK request has been cancelled")
+        self.request_runtime.before_platform_send(dispatch_token)
 
     def mark_platform_send(self, dispatch_token: str) -> str:
-        request_context = self._request_contexts.get(dispatch_token)
-        if request_context is None:
-            raise AstrBotError.invalid_input(
-                "Unknown SDK dispatch token for platform send"
-            )
-        overlay = self.get_request_overlay_by_token(dispatch_token)
-        if overlay is None:
-            raise AstrBotError.cancelled("The SDK request overlay has been closed")
-        if request_context.cancelled:
-            raise AstrBotError.cancelled("The SDK request has been cancelled")
-        if request_context.dispatch_state is not None:
-            request_context.dispatch_state.sent_message = True
-        overlay.should_call_llm = False
-        if request_context.has_event:
-            request_context.event._has_send_oper = True
-        return f"sdk_{dispatch_token}"
+        return self.request_runtime.mark_platform_send(dispatch_token)
+
+    def get_or_bind_dispatch_token(self, event: AstrMessageEvent) -> str:
+        return self.request_runtime.get_or_bind_dispatch_token(event)
+
+    def get_plugin_session(self, plugin_id: str) -> WorkerSession | None:
+        record = self._records.get(plugin_id)
+        return None if record is None else record.session
 
     @staticmethod
     def _legacy_has_replied(event: AstrMessageEvent) -> bool:
@@ -2228,44 +1097,7 @@ class SdkPluginBridge:
         event_type: str,
         payload: dict[str, Any] | None = None,
     ) -> None:
-        normalized_platform = self._normalize_platform_name(
-            (payload or {}).get("platform")
-        )
-        event_payload = {
-            "type": event_type,
-            "event_type": event_type,
-            "text": str((payload or {}).get("message_outline", "")),
-            "session_id": str((payload or {}).get("session_id", "")),
-            "platform": str((payload or {}).get("platform", "")),
-            "platform_id": str((payload or {}).get("platform_id", "")),
-            "message_type": sdk_message_type((payload or {}).get("message_type", "")),
-            "sender_name": str((payload or {}).get("sender_name", "")),
-            "self_id": str((payload or {}).get("self_id", "")),
-            "raw": {"event_type": event_type, **(payload or {})},
-        }
-        for key, value in (payload or {}).items():
-            event_payload[key] = value
-        matches = self._match_event_handlers(
-            event_type,
-            platform_name=normalized_platform,
-        )
-        for record, descriptor in matches:
-            if record.session is None:
-                continue
-            try:
-                await record.session.invoke_handler(
-                    descriptor.id,
-                    event_payload,
-                    request_id=f"sdk_event_{record.plugin_id}_{uuid.uuid4().hex}",
-                    args={},
-                )
-            except Exception as exc:
-                logger.warning(
-                    "SDK event handler failed: plugin=%s handler=%s error=%s",
-                    record.plugin_id,
-                    descriptor.id,
-                    exc,
-                )
+        await self.dispatch_engine.dispatch_system_event(event_type, payload)
 
     async def dispatch_message_event(
         self,
@@ -2277,105 +1109,14 @@ class SdkPluginBridge:
         llm_response: CoreLLMResponse | None = None,
         event_result: MessageEventResult | None = None,
     ) -> None:
-        dispatch_token = self._get_dispatch_token(event)
-        if not dispatch_token:
-            return
-        overlay = self.get_request_overlay_by_token(dispatch_token)
-        if overlay is None:
-            return
-        normalized_platform = self._normalize_platform_name(event.get_platform_name())
-        matches = self._match_event_handlers(
+        await self.dispatch_engine.dispatch_message_event(
             event_type,
-            allowed_plugins=overlay.handler_whitelist,
-            platform_name=normalized_platform,
+            event,
+            payload,
+            provider_request=provider_request,
+            llm_response=llm_response,
+            event_result=event_result,
         )
-        for record, descriptor in matches:
-            if record.session is None:
-                continue
-            request_id = f"sdk_event_{record.plugin_id}_{uuid.uuid4().hex}"
-            request_context = self._request_contexts.get(dispatch_token)
-            if request_context is None:
-                request_context = _RequestContext(
-                    plugin_id=record.plugin_id,
-                    request_id=request_id,
-                    dispatch_token=dispatch_token,
-                    dispatch_state=_DispatchState(event=event),
-                )
-                self._request_contexts[dispatch_token] = request_context
-            request_context.plugin_id = record.plugin_id
-            request_context.request_id = request_id
-            request_context.dispatch_state.event = event
-            request_context.cancelled = False
-            self._track_request_scope(
-                dispatch_token=dispatch_token,
-                request_id=request_id,
-                plugin_id=record.plugin_id,
-            )
-            event_payload = self._build_sdk_event_payload(
-                event,
-                dispatch_token=dispatch_token,
-                plugin_id=record.plugin_id,
-                request_id=request_id,
-                overlay=overlay,
-                raw_updates={"event_type": event_type, **(payload or {})},
-                field_updates={
-                    "type": event_type,
-                    "event_type": event_type,
-                    **(payload or {}),
-                },
-            )
-            if provider_request is not None:
-                request_payload = self._core_provider_request_to_sdk_payload(
-                    provider_request
-                )
-                event_payload["provider_request"] = request_payload
-                if isinstance(event_payload["raw"], dict):
-                    event_payload["raw"]["provider_request"] = request_payload
-            if llm_response is not None:
-                response_payload = self._core_llm_response_to_sdk_payload(llm_response)
-                event_payload["llm_response"] = response_payload
-                if isinstance(event_payload["raw"], dict):
-                    event_payload["raw"]["llm_response"] = response_payload
-            if event_result is not None:
-                result_payload = self._legacy_result_to_sdk_payload(event_result)
-                if result_payload is not None:
-                    event_payload["event_result"] = result_payload
-                    if isinstance(event_payload["raw"], dict):
-                        event_payload["raw"]["event_result"] = result_payload
-            try:
-                output = await record.session.invoke_handler(
-                    descriptor.id,
-                    event_payload,
-                    request_id=request_id,
-                    args={},
-                )
-                if isinstance(output, dict):
-                    if "sdk_local_extras" in output:
-                        self._persist_sdk_local_extras_from_handler(
-                            overlay,
-                            output.get("sdk_local_extras"),
-                            plugin_id=record.plugin_id,
-                            handler_id=descriptor.id,
-                        )
-                    request_payload = output.get("provider_request")
-                    if provider_request is not None and isinstance(
-                        request_payload, dict
-                    ):
-                        self._apply_sdk_provider_request_payload(
-                            provider_request,
-                            request_payload,
-                        )
-                    result_payload = output.get("event_result")
-                    if event_result is not None and isinstance(result_payload, dict):
-                        if not self.set_result_for_request(request_id, result_payload):
-                            self._apply_sdk_result_payload(event_result, result_payload)
-            except Exception as exc:
-                logger.warning(
-                    "SDK event handler failed: plugin=%s handler=%s error=%s",
-                    record.plugin_id,
-                    descriptor.id,
-                    exc,
-                )
 
     def _match_event_handlers(
         self,
@@ -3001,95 +1742,23 @@ class SdkPluginBridge:
         runtime: _LocalMCPServerRuntime,
         timeout: float,
     ) -> None:
-        runtime.ready_event.clear()
-        runtime.running = False
-        runtime.last_error = None
-        runtime.errlogs = []
-        runtime.tools = []
-        runtime.tool_specs = []
-        self._remove_local_mcp_lease(runtime)
-        await self._cleanup_mcp_client(runtime.client)
-        runtime.client = None
-
-        client = MCPClient()
-        client.name = runtime.name
-        try:
-            await asyncio.wait_for(
-                client.connect_to_server(dict(runtime.config), runtime.name),
-                timeout=timeout,
-            )
-            await asyncio.wait_for(client.list_tools_and_save(), timeout=timeout)
-        except asyncio.CancelledError:
-            await self._cleanup_mcp_client(client)
-            raise
-        except TimeoutError:
-            runtime.last_error = (
-                f"Local MCP server '{runtime.name}' did not become ready within "
-                f"{timeout:g} seconds"
-            )
-            runtime.errlogs = [runtime.last_error]
-            await self._cleanup_mcp_client(client)
-        except Exception as exc:
-            runtime.last_error = str(exc)
-            runtime.errlogs = [runtime.last_error]
-            await self._cleanup_mcp_client(client)
-        else:
-            runtime.client = client
-            runtime.running = True
-            runtime.tools = [
-                str(tool.name) for tool in client.tools if getattr(tool, "name", None)
-            ]
-            runtime.tool_specs = self._build_local_mcp_tool_specs(runtime.name, client)
-            runtime.errlogs = list(client.server_errlogs)
-            if client.process_pid is not None:
-                runtime.lease_path = self._write_local_mcp_lease(
-                    plugin_id=plugin_id,
-                    server_name=runtime.name,
-                    pid=client.process_pid,
-                )
-        finally:
-            runtime.ready_event.set()
-            runtime.connect_task = None
+        await self.mcp.connect_local_mcp_server(
+            plugin_id=plugin_id,
+            runtime=runtime,
+            timeout=timeout,
+        )
 
     async def _initialize_local_mcp_servers(self, record: SdkPluginRecord) -> None:
-        tasks: list[asyncio.Task[None]] = []
-        for runtime in record.local_mcp_servers.values():
-            if not runtime.active:
-                runtime.ready_event.set()
-                continue
-            task = asyncio.create_task(
-                self._connect_local_mcp_server(
-                    plugin_id=record.plugin_id,
-                    runtime=runtime,
-                    timeout=30.0,
-                )
-            )
-            runtime.connect_task = task
-            tasks.append(task)
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        await self.mcp.initialize_local_mcp_servers(record)
 
     async def _shutdown_local_mcp_runtime(
         self,
         runtime: _LocalMCPServerRuntime,
     ) -> None:
-        connect_task = runtime.connect_task
-        runtime.connect_task = None
-        if connect_task is not None and not connect_task.done():
-            connect_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await connect_task
-        self._remove_local_mcp_lease(runtime)
-        await self._cleanup_mcp_client(runtime.client)
-        runtime.client = None
-        runtime.running = False
-        runtime.tools = []
-        runtime.tool_specs = []
-        runtime.ready_event.clear()
+        await self.mcp.shutdown_local_mcp_runtime(runtime)
 
     async def _shutdown_local_mcp_servers(self, record: SdkPluginRecord) -> None:
-        for runtime in record.local_mcp_servers.values():
-            await self._shutdown_local_mcp_runtime(runtime)
+        await self.mcp.shutdown_local_mcp_servers(record)
 
     async def enable_local_mcp_server(
         self,
@@ -3098,40 +1767,18 @@ class SdkPluginBridge:
         *,
         timeout: float = 30.0,
     ) -> dict[str, Any]:
-        runtime = self._local_mcp_record(plugin_id, name)
-        if runtime is None:
-            raise AstrBotError.invalid_input(f"Unknown local MCP server: {name}")
-        if runtime.active and runtime.running and runtime.connect_task is None:
-            return self._serialize_local_mcp_server(runtime)
-        if runtime.connect_task is not None and not runtime.connect_task.done():
-            runtime.active = True
-            await runtime.connect_task
-            return self._serialize_local_mcp_server(runtime)
-        runtime.active = True
-        task = asyncio.create_task(
-            self._connect_local_mcp_server(
-                plugin_id=plugin_id,
-                runtime=runtime,
-                timeout=timeout,
-            )
+        return await self.mcp.enable_local_mcp_server(
+            plugin_id,
+            name,
+            timeout=timeout,
         )
-        runtime.connect_task = task
-        await task
-        return self._serialize_local_mcp_server(runtime)
 
     async def disable_local_mcp_server(
         self,
         plugin_id: str,
         name: str,
     ) -> dict[str, Any]:
-        runtime = self._local_mcp_record(plugin_id, name)
-        if runtime is None:
-            raise AstrBotError.invalid_input(f"Unknown local MCP server: {name}")
-        if not runtime.active and not runtime.running and runtime.connect_task is None:
-            return self._serialize_local_mcp_server(runtime)
-        runtime.active = False
-        await self._shutdown_local_mcp_runtime(runtime)
-        return self._serialize_local_mcp_server(runtime)
+        return await self.mcp.disable_local_mcp_server(plugin_id, name)
 
     async def wait_for_local_mcp_server(
         self,
@@ -3140,15 +1787,11 @@ class SdkPluginBridge:
         *,
         timeout: float,
     ) -> dict[str, Any]:
-        runtime = self._local_mcp_record(plugin_id, name)
-        if runtime is None:
-            raise AstrBotError.invalid_input(f"Unknown local MCP server: {name}")
-        await asyncio.wait_for(runtime.ready_event.wait(), timeout=timeout)
-        if not runtime.running:
-            raise TimeoutError(
-                f"Local MCP server '{name}' did not become ready in time"
-            )
-        return self._serialize_local_mcp_server(runtime)
+        return await self.mcp.wait_for_local_mcp_server(
+            plugin_id,
+            name,
+            timeout=timeout,
+        )
 
     async def open_temporary_mcp_session(
         self,
@@ -3158,56 +1801,29 @@ class SdkPluginBridge:
         config: dict[str, Any],
         timeout: float,
     ) -> tuple[str, list[str]]:
-        client = MCPClient()
-        client.name = name
-        try:
-            await asyncio.wait_for(
-                client.connect_to_server(dict(config), name),
-                timeout=timeout,
-            )
-            await asyncio.wait_for(client.list_tools_and_save(), timeout=timeout)
-        except Exception:
-            await self._cleanup_mcp_client(client)
-            raise
-        session_id = f"{plugin_id}:{uuid.uuid4().hex}"
-        tools = [str(tool.name) for tool in client.tools if getattr(tool, "name", None)]
-        self._temporary_mcp_sessions[session_id] = _TemporaryMCPSessionRuntime(
-            plugin_id=plugin_id,
+        return await self.mcp.open_temporary_mcp_session(
+            plugin_id,
             name=name,
-            client=client,
-            tools=tools,
+            config=config,
+            timeout=timeout,
         )
-        return session_id, tools
 
     async def close_temporary_mcp_session(
         self,
         plugin_id: str,
         session_id: str,
     ) -> None:
-        runtime = self._temporary_mcp_sessions.get(session_id)
-        if runtime is None or runtime.plugin_id != plugin_id:
-            return
-        self._temporary_mcp_sessions.pop(session_id, None)
-        await self._cleanup_mcp_client(runtime.client)
+        await self.mcp.close_temporary_mcp_session(plugin_id, session_id)
 
     async def _close_temporary_mcp_sessions(self, plugin_id: str) -> None:
-        session_ids = [
-            session_id
-            for session_id, runtime in self._temporary_mcp_sessions.items()
-            if runtime.plugin_id == plugin_id
-        ]
-        for session_id in session_ids:
-            await self.close_temporary_mcp_session(plugin_id, session_id)
+        await self.mcp.close_temporary_mcp_sessions(plugin_id)
 
     def get_temporary_mcp_session_tools(
         self,
         plugin_id: str,
         session_id: str,
     ) -> list[str]:
-        runtime = self._temporary_mcp_sessions.get(session_id)
-        if runtime is None or runtime.plugin_id != plugin_id:
-            raise AstrBotError.invalid_input("Unknown MCP session")
-        return list(runtime.tools)
+        return self.mcp.get_temporary_mcp_session_tools(plugin_id, session_id)
 
     async def call_temporary_mcp_tool(
         self,
@@ -3217,16 +1833,12 @@ class SdkPluginBridge:
         tool_name: str,
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
-        runtime = self._temporary_mcp_sessions.get(session_id)
-        if runtime is None or runtime.plugin_id != plugin_id:
-            raise AstrBotError.invalid_input("Unknown MCP session")
-        result = await runtime.client.call_tool_with_reconnect(
+        return await self.mcp.call_temporary_mcp_tool(
+            plugin_id,
+            session_id=session_id,
             tool_name=tool_name,
             arguments=arguments,
-            read_timeout_seconds=timedelta(seconds=60),
         )
-        text = self._mcp_call_result_to_text(result)
-        return {"content": text, "is_error": bool(getattr(result, "isError", False))}
 
     async def execute_local_mcp_tool(
         self,
@@ -3237,35 +1849,13 @@ class SdkPluginBridge:
         tool_args: dict[str, Any],
         timeout_seconds: int = 60,
     ) -> dict[str, Any]:
-        runtime = self._local_mcp_record(plugin_id, server_name)
-        if (
-            runtime is None
-            or not runtime.active
-            or not runtime.running
-            or runtime.client is None
-        ):
-            return {
-                "content": f"Local MCP server unavailable: {server_name}",
-                "success": False,
-            }
-        if tool_name not in runtime.tools:
-            return {
-                "content": f"Local MCP tool not found: {server_name}.{tool_name}",
-                "success": False,
-            }
-        try:
-            result = await runtime.client.call_tool_with_reconnect(
-                tool_name=tool_name,
-                arguments=tool_args,
-                read_timeout_seconds=timedelta(seconds=timeout_seconds),
-            )
-        except Exception as exc:
-            return {"content": f"Tool execution failed: {exc}", "success": False}
-        text = self._mcp_call_result_to_text(result)
-        return {
-            "content": text,
-            "success": not bool(getattr(result, "isError", False)),
-        }
+        return await self.mcp.execute_local_mcp_tool(
+            plugin_id,
+            server_name=server_name,
+            tool_name=tool_name,
+            tool_args=tool_args,
+            timeout_seconds=timeout_seconds,
+        )
 
     @classmethod
     def _descriptor_native_command_candidates(
@@ -3394,6 +1984,14 @@ class SdkPluginBridge:
         )
         config_schema = load_plugin_config_schema(plugin)
         local_mcp_configs = self._load_local_mcp_configs(plugin)
+        local_mcp_servers: dict[str, _LocalMCPServerRuntime] = {}
+        for server_name, server_config in local_mcp_configs.items():
+            local_mcp_servers[server_name] = _LocalMCPServerRuntime(
+                name=server_name,
+                config=dict(server_config),
+                active=bool(server_config.get("active", True)),
+            )
+
         record = SdkPluginRecord(
             plugin=plugin,
             load_order=load_order,
@@ -3409,14 +2007,7 @@ class SdkPluginBridge:
             if reset_restart_budget
             else (current.restart_attempted if current is not None else False),
             issues=[dict(item) for item in self._discovery_issues.get(plugin.name, [])],
-            local_mcp_servers={
-                name: _LocalMCPServerRuntime(
-                    name=name,
-                    config=dict(config),
-                    active=bool(config.get("active", True)),
-                )
-                for name, config in local_mcp_configs.items()
-            },
+            local_mcp_servers=local_mcp_servers,
         )
         self._records[plugin.name] = record
         self._publish_plugin_skills(plugin.name)
@@ -3624,6 +2215,7 @@ class SdkPluginBridge:
 
     # TODO: 平台适配器目前仍用 legacy 的 @register_platform_adapter，不走 SDK 协议。
     # 长期来看可以把平台适配器也纳入 SDK 的 capability 体系，实现完全统一的插件/平台注册机制。
+    # 但是目前先保持现状，等平台适配器的 SDK 能力稳定后再做迁移，以避免不必要的重复开发和潜在风险。
     async def _refresh_native_platform_commands(
         self, platforms: set[str] | None = None
     ) -> None:
@@ -3633,8 +2225,12 @@ class SdkPluginBridge:
         refresh_commands = getattr(platform_manager, "refresh_native_commands", None)
         if not callable(refresh_commands):
             return
+        refresh_commands_async = cast(
+            Callable[..., Awaitable[Any]],
+            refresh_commands,
+        )
         try:
-            await refresh_commands(platforms=platforms)
+            await refresh_commands_async(platforms=platforms)
         except Exception as exc:
             logger.warning("Failed to refresh native platform commands: %s", exc)
 
@@ -3764,38 +2360,7 @@ class SdkPluginBridge:
         self._plugin_requests.pop(plugin_id, None)
 
     async def _handle_worker_closed(self, plugin_id: str) -> None:
-        if self._stopping:
-            return
-        await self._cancel_plugin_requests(plugin_id)
-        await self._close_temporary_mcp_sessions(plugin_id)
-        record = self._records.get(plugin_id)
-        if record is None:
-            return
-        await self._shutdown_local_mcp_servers(record)
-        record.session = None
-        if record.state in {SDK_STATE_RELOADING, SDK_STATE_DISABLED}:
-            return
-        if not record.restart_attempted:
-            record.restart_attempted = True
-            logger.warning(
-                "SDK plugin worker closed unexpectedly, retrying once: %s",
-                plugin_id,
-            )
-            await self._load_or_reload_plugin(
-                record.plugin,
-                load_order=record.load_order,
-                reset_restart_budget=False,
-            )
-            return
-        record.state = SDK_STATE_FAILED
-        self._http_routes.pop(plugin_id, None)
-        self._session_waiters.pop(plugin_id, None)
-        await self._unregister_schedule_jobs(plugin_id)
-        await self._clear_plugin_skills(
-            plugin_id=plugin_id,
-            record=record,
-            reason="worker failure cleanup",
-        )
+        await self.lifecycle.handle_worker_closed(plugin_id)
 
     def _record_to_dashboard_item(self, record: SdkPluginRecord) -> dict[str, Any]:
         manifest = record.plugin.manifest_data
@@ -3956,6 +2521,21 @@ class SdkPluginBridge:
                 self._state_overrides.pop(plugin_id, None)
         self._persist_state_overrides()
 
+    def _discover_plugins(self):
+        return discover_plugins(self.plugins_dir)
+
+    @staticmethod
+    def _make_mcp_client() -> MCPClient:
+        return MCPClient()
+
+    @staticmethod
+    def _make_skill_manager() -> SkillManager:
+        return SkillManager()
+
+    @staticmethod
+    def _get_dashboard_config():
+        return astrbot_config
+
     @staticmethod
     def _normalize_http_route(route: str) -> str:
         route_text = str(route).strip()
@@ -4033,96 +2613,4 @@ class SdkPluginBridge:
         event: AstrMessageEvent,
         records: list[SdkPluginRecord],
     ) -> SdkDispatchResult:
-        result = SdkDispatchResult()
-        dispatch_state = _DispatchState(event=event)
-        dispatch_token = self._get_dispatch_token(event) or uuid.uuid4().hex
-        self._bind_dispatch_token(event, dispatch_token)
-        overlay = self._ensure_request_overlay(
-            dispatch_token,
-            should_call_llm=not bool(getattr(event, "call_llm", False)),
-        )
-        request_context = _RequestContext(
-            plugin_id="",
-            request_id="",
-            dispatch_token=dispatch_token,
-            dispatch_state=dispatch_state,
-        )
-        self._request_contexts[dispatch_token] = request_context
-        for record in records:
-            if record.state in {
-                SDK_STATE_DISABLED,
-                SDK_STATE_FAILED,
-                SDK_STATE_RELOADING,
-            }:
-                continue
-            if record.session is None:
-                continue
-            whitelist = (
-                None
-                if overlay.handler_whitelist is None
-                else set(overlay.handler_whitelist)
-            )
-            if whitelist is not None and record.plugin_id not in whitelist:
-                continue
-            request_id = f"sdk_waiter_{record.plugin_id}_{uuid.uuid4().hex}"
-            request_context.plugin_id = record.plugin_id
-            request_context.request_id = request_id
-            request_context.cancelled = False
-            self._set_sdk_origin_plugin_id(event, record.plugin_id)
-            setattr(event, "_sdk_last_request_id", request_id)
-            payload = self._build_sdk_event_payload(
-                event,
-                dispatch_token=dispatch_token,
-                plugin_id=record.plugin_id,
-                request_id=request_id,
-                overlay=overlay,
-            )
-            self._track_request_scope(
-                dispatch_token=dispatch_token,
-                request_id=request_id,
-                plugin_id=record.plugin_id,
-            )
-            try:
-                output = await record.session.invoke_handler(
-                    "__sdk_session_waiter__",
-                    payload,
-                    request_id=request_id,
-                    args={},
-                )
-            except Exception as exc:
-                logger.warning(
-                    "SDK waiter dispatch failed: plugin=%s error=%s",
-                    record.plugin_id,
-                    exc,
-                )
-                output = {}
-            handler_result = extract_sdk_handler_result(
-                output if isinstance(output, dict) else {}
-            )
-            result.executed_handlers.append(
-                {"plugin_id": record.plugin_id, "handler_id": "__sdk_session_waiter__"}
-            )
-            dispatch_state.sent_message = (
-                dispatch_state.sent_message or handler_result["sent_message"]
-            )
-            dispatch_state.stopped = dispatch_state.stopped or handler_result["stop"]
-            if handler_result["call_llm"]:
-                overlay.requested_llm = True
-                overlay.should_call_llm = True
-            if handler_result["sent_message"] or handler_result["stop"]:
-                overlay.should_call_llm = False
-            if handler_result["stop"]:
-                break
-        result.sent_message = dispatch_state.sent_message
-        result.stopped = dispatch_state.stopped
-        if not result.executed_handlers:
-            result.skipped_reason = SKIP_NO_MATCH
-        if result.sent_message:
-            event._has_send_oper = True
-            overlay.should_call_llm = False
-            event.should_call_llm(True)
-        if result.stopped:
-            event.stop_event()
-            overlay.should_call_llm = False
-            event.should_call_llm(True)
-        return result
+        return await self.dispatch_engine.dispatch_waiter_event(event, records)

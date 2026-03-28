@@ -1134,8 +1134,15 @@ class ProviderCapabilityMixin(CapabilityMixinHost):
         tool_call_timeout: int,
     ):
         async def _handler(event: AstrMessageEvent, **tool_args: Any) -> str | None:
-            record = self._plugin_bridge._records.get(plugin_id)
-            if record is None or record.session is None:
+            get_plugin_session = getattr(
+                self._plugin_bridge, "get_plugin_session", None
+            )
+            if callable(get_plugin_session):
+                session = get_plugin_session(plugin_id)
+            else:
+                record = getattr(self._plugin_bridge, "_records", {}).get(plugin_id)
+                session = None if record is None else getattr(record, "session", None)
+            if session is None:
                 return json.dumps(
                     ToolCallsResult(
                         tool_name=tool_spec.name,
@@ -1145,21 +1152,46 @@ class ProviderCapabilityMixin(CapabilityMixinHost):
                     ensure_ascii=False,
                 )
             request_id = f"sdk_tool_{plugin_id}_{uuid.uuid4().hex}"
-            dispatch_token = (
-                self._plugin_bridge._get_dispatch_token(event) or uuid.uuid4().hex
+            get_or_bind_dispatch_token = getattr(
+                self._plugin_bridge,
+                "get_or_bind_dispatch_token",
+                None,
             )
+            if callable(get_or_bind_dispatch_token):
+                dispatch_token = get_or_bind_dispatch_token(event)
+            else:
+                dispatch_token = (
+                    getattr(
+                        self._plugin_bridge, "_get_dispatch_token", lambda _event: None
+                    )(event)
+                    or uuid.uuid4().hex
+                )
             get_overlay = getattr(
                 self._plugin_bridge,
                 "get_request_overlay_by_token",
                 lambda _dispatch_token: None,
             )
-            event_payload = self._plugin_bridge._build_sdk_event_payload(
-                event,
-                dispatch_token=dispatch_token,
-                plugin_id=plugin_id,
-                request_id=request_id,
-                overlay=get_overlay(dispatch_token),
+            build_sdk_event_payload = getattr(
+                self._plugin_bridge,
+                "build_sdk_event_payload",
+                None,
             )
+            if callable(build_sdk_event_payload):
+                event_payload = build_sdk_event_payload(
+                    event,
+                    dispatch_token=dispatch_token,
+                    plugin_id=plugin_id,
+                    request_id=request_id,
+                    overlay=get_overlay(dispatch_token),
+                )
+            else:
+                event_payload = self._plugin_bridge._build_sdk_event_payload(
+                    event,
+                    dispatch_token=dispatch_token,
+                    plugin_id=plugin_id,
+                    request_id=request_id,
+                    overlay=get_overlay(dispatch_token),
+                )
             call_payload = {
                 "plugin_id": plugin_id,
                 "tool_name": tool_spec.name,
