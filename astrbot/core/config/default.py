@@ -1624,6 +1624,7 @@ CONFIG_METADATA_2 = {
                         "provider": "gpt_sovits_inference",
                         "provider_type": "text_to_speech",
                         "enable": False,
+                        "api_key": "",
                         "api_base": "http://127.0.0.1:8000",
                         "version": "v4",
                         "character": "",

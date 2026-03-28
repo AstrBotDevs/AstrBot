@@ -58,9 +58,7 @@ class ProviderGSVITTS(TTSProvider):
         provider_settings: dict,
     ) -> None:
         super().__init__(provider_config, provider_settings)
-        self.api_key = provider_config.get(
-            "api_key"
-        )
+        self.api_key = provider_config.get("api_key", "")
         self.api_base = provider_config.get("api_base", "http://127.0.0.1:8000")
         self.api_base = self.api_base.removesuffix("/")
         self.version = provider_config.get("version", "v4")
