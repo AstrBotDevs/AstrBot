@@ -4,7 +4,7 @@ import json
 import logging
 import random
 from collections.abc import AsyncGenerator
-from typing import cast
+from typing import Literal, cast
 
 from google import genai
 from google.genai import types
@@ -131,6 +131,7 @@ class ProviderGoogleGenAI(Provider):
         self,
         payloads: dict,
         tools: ToolSet | None = None,
+        tool_choice: Literal["auto", "required"] = "auto",
         system_instruction: str | None = None,
         modalities: list[str] | None = None,
         temperature: float = 0.7,
@@ -207,6 +208,18 @@ class ProviderGoogleGenAI(Provider):
                 types.Tool(function_declarations=func_desc["function_declarations"]),
             ]
 
+        tool_config = None
+        if tools and tool_list:
+            tool_config = types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(
+                    mode=(
+                        types.FunctionCallingConfigMode.ANY
+                        if tool_choice == "required"
+                        else types.FunctionCallingConfigMode.AUTO
+                    )
+                )
+            )
+
         # oper thinking config
         thinking_config = None
         if model_name in [
@@ -272,6 +285,7 @@ class ProviderGoogleGenAI(Provider):
             seed=payloads.get("seed"),
             response_modalities=modalities,
             tools=cast(types.ToolListUnion | None, tool_list),
+            tool_config=tool_config,
             safety_settings=self.safety_settings if self.safety_settings else None,
             thinking_config=thinking_config,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
@@ -535,6 +549,7 @@ class ProviderGoogleGenAI(Provider):
                 config = await self._prepare_query_config(
                     payloads,
                     tools,
+                    payloads.get("tool_choice", "auto"),
                     system_instruction,
                     modalities,
                     temperature,
@@ -616,6 +631,7 @@ class ProviderGoogleGenAI(Provider):
                 config = await self._prepare_query_config(
                     payloads,
                     tools,
+                    payloads.get("tool_choice", "auto"),
                     system_instruction,
                 )
                 result = await self.client.models.generate_content_stream(
@@ -728,6 +744,7 @@ class ProviderGoogleGenAI(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -758,6 +775,8 @@ class ProviderGoogleGenAI(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": context_query, "model": model}
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         retry = 10
         keys = self.api_keys.copy()
@@ -783,6 +802,7 @@ class ProviderGoogleGenAI(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         if contexts is None:
@@ -813,6 +833,8 @@ class ProviderGoogleGenAI(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": context_query, "model": model}
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         retry = 10
         keys = self.api_keys.copy()
