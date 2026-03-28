@@ -1062,14 +1062,16 @@ export const useExtensionPage = () => {
   
   const viewReadme = (plugin) => {
     readmeDialog.pluginName = plugin.name;
-    readmeDialog.repoUrl = plugin.repo;
+    const shouldUseRemoteRepo =
+      (plugin.runtime_kind === "sdk" || plugin.type === "sdk") && plugin.repo;
+    readmeDialog.repoUrl = shouldUseRemoteRepo ? plugin.repo : null;
     readmeDialog.show = true;
   };
   
   // 查看更新日志
   const viewChangelog = (plugin) => {
     changelogDialog.pluginName = plugin.name;
-    changelogDialog.repoUrl = plugin.repo;
+    changelogDialog.repoUrl = null;
     changelogDialog.show = true;
   };
   

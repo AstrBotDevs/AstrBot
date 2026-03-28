@@ -249,7 +249,10 @@ async function fetchContent() {
   try {
     let params;
     if (requiresPluginName.value) {
-      params = { name: props.pluginName };
+      params = {
+        name: props.pluginName,
+        repo_url: props.repoUrl || undefined,
+      };
     } else if (props.mode === "first-notice") {
       params = { locale: locale.value };
     }

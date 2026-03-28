@@ -588,6 +588,153 @@ async def test_plugins_when_installed_at_unresolved(
 
 
 @pytest.mark.asyncio
+async def test_plugin_readme_api_keeps_legacy_local_lookup(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+    tmp_path,
+):
+    test_client = app.test_client()
+    plugin_dir = tmp_path / "legacy_demo"
+    plugin_dir.mkdir()
+    (plugin_dir / "README.md").write_text(
+        "# Legacy Demo\n\nhello legacy\n", encoding="utf-8"
+    )
+
+    fake_plugin = SimpleNamespace(
+        name="legacy_demo",
+        root_dir_name="legacy_demo",
+        reserved=False,
+        repo="https://github.com/test/legacy-demo",
+    )
+
+    async def _unexpected_remote_fetch(self, repo_url: str) -> str:
+        raise AssertionError(f"legacy readme should not fetch remote repo: {repo_url}")
+
+    monkeypatch.setattr(
+        core_lifecycle_td.plugin_manager,
+        "plugin_store_path",
+        str(tmp_path),
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.plugin_manager.context,
+        "get_all_stars",
+        lambda: [fake_plugin],
+    )
+    monkeypatch.setattr(
+        PluginRoute,
+        "_fetch_github_repo_readme",
+        _unexpected_remote_fetch,
+    )
+
+    response = await test_client.get(
+        "/api/plugin/readme?name=legacy_demo",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["content"] == "# Legacy Demo\n\nhello legacy\n"
+
+
+@pytest.mark.asyncio
+async def test_plugin_readme_api_supports_sdk_plugins(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    tmp_path,
+):
+    test_client = app.test_client()
+    old_bridge = getattr(core_lifecycle_td, "sdk_plugin_bridge", None)
+    plugin_dir = tmp_path / "sdk_demo"
+    plugin_dir.mkdir()
+    (plugin_dir / "README.md").write_text("# SDK Demo\n\nhello sdk\n", encoding="utf-8")
+
+    try:
+        core_lifecycle_td.sdk_plugin_bridge = SimpleNamespace(
+            _records={
+                "sdk_demo": SimpleNamespace(
+                    plugin=SimpleNamespace(plugin_dir=plugin_dir)
+                )
+            }
+        )
+
+        response = await test_client.get(
+            "/api/plugin/readme?name=sdk_demo",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["content"] == "# SDK Demo\n\nhello sdk\n"
+    finally:
+        core_lifecycle_td.sdk_plugin_bridge = old_bridge
+
+
+@pytest.mark.asyncio
+async def test_plugin_readme_api_supports_remote_github_repo(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    test_client = app.test_client()
+
+    async def _mock_fetch(self, repo_url: str) -> str:
+        assert repo_url == "https://github.com/test/sdk-demo"
+        return "# Remote SDK Demo\n"
+
+    monkeypatch.setattr(
+        PluginRoute,
+        "_fetch_github_repo_readme",
+        _mock_fetch,
+    )
+
+    response = await test_client.get(
+        "/api/plugin/readme?name=sdk_demo&repo_url=https://github.com/test/sdk-demo",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["content"] == "# Remote SDK Demo\n"
+
+
+@pytest.mark.asyncio
+async def test_plugin_changelog_api_supports_sdk_plugins(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    tmp_path,
+):
+    test_client = app.test_client()
+    old_bridge = getattr(core_lifecycle_td, "sdk_plugin_bridge", None)
+    plugin_dir = tmp_path / "sdk_demo"
+    plugin_dir.mkdir()
+    (plugin_dir / "CHANGELOG.md").write_text("## 1.0.0\n\n- init\n", encoding="utf-8")
+
+    try:
+        core_lifecycle_td.sdk_plugin_bridge = SimpleNamespace(
+            _records={
+                "sdk_demo": SimpleNamespace(
+                    plugin=SimpleNamespace(plugin_dir=plugin_dir)
+                )
+            }
+        )
+
+        response = await test_client.get(
+            "/api/plugin/changelog?name=sdk_demo",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["content"] == "## 1.0.0\n\n- init\n"
+    finally:
+        core_lifecycle_td.sdk_plugin_bridge = old_bridge
+
+
+@pytest.mark.asyncio
 async def test_commands_api(app: Quart, authenticated_header: dict):
     """Tests the command management API endpoints."""
     test_client = app.test_client()
