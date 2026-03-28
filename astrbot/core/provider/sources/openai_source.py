@@ -696,7 +696,7 @@ class ProviderOpenAIOfficial(Provider):
         llm_response = LLMResponse("assistant")
 
         if not completion.choices:
-            raise Exception("API 返回的 completion 为空｡")
+            raise Exception("API 返回的 completion 为空")
         choice = completion.choices[0]
 
         # parse the text completion
