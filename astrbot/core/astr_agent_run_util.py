@@ -270,6 +270,7 @@ async def run_agent(
                 yield MessageChain().message(err_msg)
             else:
                 astr_event.set_result(MessageEventResult().message(err_msg))
+                yield
             return
 
 
