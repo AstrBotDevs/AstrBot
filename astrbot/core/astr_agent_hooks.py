@@ -66,6 +66,21 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         if sdk_plugin_bridge is not None:
             try:
                 await sdk_plugin_bridge.dispatch_message_event(
+                    "llm_response",
+                    run_context.context.event,
+                    {
+                        "completion_text": (
+                            llm_response.completion_text if llm_response else ""
+                        ),
+                    },
+                    llm_response=llm_response,
+                )
+            except Exception as exc:
+                from astrbot.core import logger
+
+                logger.warning("SDK llm_response dispatch failed: %s", exc)
+            try:
+                await sdk_plugin_bridge.dispatch_message_event(
                     "agent_done",
                     run_context.context.event,
                     {

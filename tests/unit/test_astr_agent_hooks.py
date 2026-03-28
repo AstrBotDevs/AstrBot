@@ -63,15 +63,26 @@ async def test_main_agent_hooks_dispatches_agent_done_to_sdk(
         EventType.OnLLMResponseEvent,
         llm_response,
     )
-    sdk_plugin_bridge.dispatch_message_event.assert_awaited_once_with(
+    assert sdk_plugin_bridge.dispatch_message_event.await_count == 2
+    first_call = sdk_plugin_bridge.dispatch_message_event.await_args_list[0]
+    assert first_call.args == (
+        "llm_response",
+        event,
+        {
+            "completion_text": "reply text",
+        },
+    )
+    assert first_call.kwargs == {"llm_response": llm_response}
+    second_call = sdk_plugin_bridge.dispatch_message_event.await_args_list[1]
+    assert second_call.args == (
         "agent_done",
         event,
         {
             "completion_text": "reply text",
             "tool_call_names": ["search_docs"],
         },
-        llm_response=llm_response,
     )
+    assert second_call.kwargs == {"llm_response": llm_response}
 
 
 @pytest.mark.asyncio

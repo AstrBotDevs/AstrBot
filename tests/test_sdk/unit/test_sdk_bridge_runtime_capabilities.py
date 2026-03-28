@@ -905,7 +905,13 @@ async def test_result_decorate_stage_dispatches_sdk_outline_for_legacy_chain_lis
         pass
 
     assert bridge.calls == [
-        ("decorating_result", {"message_outline": "legacy"}),
+        (
+            "decorating_result",
+            {
+                "message_outline": "legacy",
+                "result_content_type": "streaming_finish",
+            },
+        ),
     ]
 
 
@@ -1720,10 +1726,16 @@ async def test_sdk_bridge_close_request_overlay_cleans_all_request_scopes() -> N
 
 
 @pytest.mark.unit
-def test_sdk_bridge_persist_sdk_local_extras_handles_invalid_payloads() -> None:
+def test_sdk_bridge_persist_sdk_local_extras_handles_invalid_payloads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     bridge = SdkPluginBridge(_OverlayFakeStarContext())
     overlay = bridge._ensure_request_overlay("dispatch-typed", should_call_llm=False)
     overlay.sdk_local_extras = {"keep": "existing"}
+    warning_spy = MagicMock()
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.logger.warning", warning_spy
+    )
 
     bridge._persist_sdk_local_extras_from_handler(
         overlay,
@@ -1747,6 +1759,14 @@ def test_sdk_bridge_persist_sdk_local_extras_handles_invalid_payloads() -> None:
         "valid": "value",
         "nested": [1, {"safe": "ok"}],
     }
+    warning_messages = [call.args[0] for call in warning_spy.call_args_list]
+    assert any(
+        "reason=%s recommended_fix=%s" in message for message in warning_messages
+    )
+    assert any(
+        call.args[1:5] == ("sdk-demo", "sdk-demo:main.normalize", "invalid", "object")
+        for call in warning_spy.call_args_list
+    )
 
     bridge._persist_sdk_local_extras_from_handler(
         overlay,

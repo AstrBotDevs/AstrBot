@@ -56,7 +56,12 @@ def _is_plugin_path(pathname: str | None) -> bool:
     if not pathname:
         return False
     norm_path = os.path.normpath(pathname)
-    return ("data/plugins" in norm_path) or ("astrbot/builtin_stars/" in norm_path)
+    markers = (
+        os.path.normpath("data/plugins"),
+        os.path.normpath("data/sdk_plugins"),
+        os.path.normpath("astrbot/builtin_stars"),
+    )
+    return any(marker in norm_path for marker in markers)
 
 
 def _get_short_level_name(level_name: str) -> str:

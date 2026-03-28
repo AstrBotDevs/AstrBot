@@ -87,6 +87,38 @@ def _build_tool_result_status_message(
     return status_msg
 
 
+async def _apply_sdk_streaming_delta_filters(
+    sdk_plugin_bridge,
+    astr_event,
+    chain: MessageChain,
+) -> MessageChain:
+    if sdk_plugin_bridge is None:
+        return chain
+    try:
+        stream_result = MessageEventResult(chain=list(chain.chain))
+        stream_result.type = chain.type
+        stream_result.use_t2i_ = chain.use_t2i_
+        await sdk_plugin_bridge.dispatch_message_event(
+            "streaming_delta",
+            astr_event,
+            {
+                "message_outline": chain.get_plain_text(with_other_comps_mark=True),
+                "result_content_type": "streaming_delta",
+            },
+            event_result=stream_result,
+        )
+        return MessageChain(
+            chain=list(stream_result.chain or []),
+            use_t2i_=stream_result.use_t2i_,
+            type=stream_result.type or chain.type,
+        )
+    except Exception as exc:
+        from astrbot.core import logger
+
+        logger.warning("SDK streaming_delta dispatch failed: %s", exc)
+        return chain
+
+
 async def run_agent(
     agent_runner: AgentRunner,
     max_step: int = 30,
@@ -97,6 +129,9 @@ async def run_agent(
 ) -> AsyncGenerator[MessageChain | None, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.context.event
+    sdk_plugin_bridge = getattr(
+        agent_runner.run_context.context.context, "sdk_plugin_bridge", None
+    )
     tool_name_by_call_id: dict[str, str] = {}
     while step_idx < max_step + 1:
         step_idx += 1
@@ -215,7 +250,13 @@ async def run_agent(
                     if chain.type == "reasoning" and not show_reasoning:
                         # display the reasoning content only when configured
                         continue
-                    yield resp.data["chain"]  # MessageChain
+                    chain = await _apply_sdk_streaming_delta_filters(
+                        sdk_plugin_bridge,
+                        astr_event,
+                        chain,
+                    )
+                    if chain is not None:
+                        yield chain
             if not stop_watcher.done():
                 stop_watcher.cancel()
                 try:

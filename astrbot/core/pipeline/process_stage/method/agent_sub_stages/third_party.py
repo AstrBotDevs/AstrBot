@@ -9,6 +9,7 @@ from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_PROVIDER_TYPE,
 )
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+from astrbot.core.astr_agent_run_util import _apply_sdk_streaming_delta_filters
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -209,16 +210,25 @@ class ThirdPartyAgentSubStage(Stage):
 
         async def _stream_runner_chain() -> AsyncGenerator[MessageChain, None]:
             mark_stream_consumed()
+            sdk_plugin_bridge = getattr(
+                self.ctx.plugin_manager.context, "sdk_plugin_bridge", None
+            )
             try:
                 async for chain, is_error in run_third_party_agent(
                     runner,
                     stream_to_general=False,
                     custom_error_message=custom_error_message,
                 ):
+                    chain = await _apply_sdk_streaming_delta_filters(
+                        sdk_plugin_bridge,
+                        event,
+                        chain,
+                    )
                     aggregator.add_chunk(chain, is_error)
                     if is_error:
                         event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
-                    yield chain
+                    if chain is not None:
+                        yield chain
             finally:
                 # Streaming runner cleanup must happen after consumer
                 # finishes iterating to avoid tearing down active streams.

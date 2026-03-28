@@ -212,7 +212,12 @@ class ResultDecorateStage(Stage):
                     {
                         "message_outline": self._message_outline_for_sdk_event(
                             result.chain
-                        )
+                        ),
+                        "result_content_type": (
+                            result.result_content_type.name.lower()
+                            if result.result_content_type is not None
+                            else ""
+                        ),
                     },
                     event_result=result,
                 )

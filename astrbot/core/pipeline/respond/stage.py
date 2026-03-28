@@ -200,6 +200,47 @@ class RespondStage(Stage):
 
         return extracted
 
+    def _bind_plugin_log(self):
+        bind = getattr(logger, "bind", None)
+        if callable(bind):
+            return bind(plugin_tag="[Plug]")
+        return logger
+
+    async def _dispatch_after_message_sent(
+        self,
+        event: AstrMessageEvent,
+        result,
+    ) -> bool:
+        if await call_event_hook(event, EventType.OnAfterMessageSentEvent):
+            return True
+
+        if self.sdk_plugin_bridge is not None:
+            try:
+                await self.sdk_plugin_bridge.dispatch_message_event(
+                    "after_message_sent",
+                    event,
+                    {
+                        "session_id": event.unified_msg_origin,
+                        "platform": event.get_platform_name(),
+                        "platform_id": event.get_platform_id(),
+                        "message_type": sdk_message_type(event.get_message_type()),
+                        "sender_name": event.get_sender_name(),
+                        "self_id": event.get_self_id(),
+                        "message_outline": self._message_outline_for_sdk_event(
+                            result.chain
+                        ),
+                        "sent_message_outline": self._message_outline_for_sdk_event(
+                            result.chain
+                        ),
+                        "sent_messages": self._message_payloads_for_sdk_event(
+                            result.chain
+                        ),
+                    },
+                )
+            except Exception as exc:
+                logger.warning(f"SDK after_message_sent dispatch failed: {exc}")
+        return False
+
     async def process(
         self,
         event: AstrMessageEvent,
@@ -211,10 +252,20 @@ class RespondStage(Stage):
             # prevent some plugin make result content type to LLM_RESULT after streaming finished, lead to send again
             return
         if result.result_content_type == ResultContentType.STREAMING_FINISH:
+            logger.info(
+                "Streaming finish reached, dispatching after_message_sent hooks."
+            )
             event.set_extra("_streaming_finished", True)
+            await self._dispatch_after_message_sent(event, result)
+            event.clear_result()
             return
 
-        logger.info(
+        log = (
+            self._bind_plugin_log()
+            if event.get_extra("_sdk_origin_plugin_id")
+            else logger
+        )
+        log.info(
             f"Prepare to send - {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}",
         )
 
@@ -323,33 +374,7 @@ class RespondStage(Stage):
                             exc_info=True,
                         )
 
-        if await call_event_hook(event, EventType.OnAfterMessageSentEvent):
+        if await self._dispatch_after_message_sent(event, result):
             return
-
-        if self.sdk_plugin_bridge is not None:
-            try:
-                await self.sdk_plugin_bridge.dispatch_message_event(
-                    "after_message_sent",
-                    event,
-                    {
-                        "session_id": event.unified_msg_origin,
-                        "platform": event.get_platform_name(),
-                        "platform_id": event.get_platform_id(),
-                        "message_type": sdk_message_type(event.get_message_type()),
-                        "sender_name": event.get_sender_name(),
-                        "self_id": event.get_self_id(),
-                        "message_outline": self._message_outline_for_sdk_event(
-                            result.chain
-                        ),
-                        "sent_message_outline": self._message_outline_for_sdk_event(
-                            result.chain
-                        ),
-                        "sent_messages": self._message_payloads_for_sdk_event(
-                            result.chain
-                        ),
-                    },
-                )
-            except Exception as exc:
-                logger.warning(f"SDK after_message_sent dispatch failed: {exc}")
 
         event.clear_result()

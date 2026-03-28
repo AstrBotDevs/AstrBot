@@ -86,7 +86,9 @@ SUPPORTED_SYSTEM_EVENTS = {
     "waiting_llm_request",
     "agent_begin",
     "llm_request",
+    "llm_response",
     "agent_done",
+    "streaming_delta",
     "decorating_result",
     "calling_func_tool",
     "llm_tool_start",
@@ -1030,6 +1032,7 @@ class SdkPluginBridge:
             else:
                 request_context.plugin_id = group_fallback["plugin_id"]
                 request_context.dispatch_state = dispatch_state
+            self._set_sdk_origin_plugin_id(event, group_fallback["plugin_id"])
             event.set_result(MessageEventResult().message(group_fallback["help_text"]))
             event.stop_event()
             event.should_call_llm(True)
@@ -1082,6 +1085,7 @@ class SdkPluginBridge:
             request_context.plugin_id = record.plugin_id
             request_context.request_id = request_id
             request_context.cancelled = False
+            self._set_sdk_origin_plugin_id(event, record.plugin_id)
             setattr(event, "_sdk_last_request_id", request_id)
             payload = self._build_sdk_event_payload(
                 event,
@@ -1626,11 +1630,19 @@ class SdkPluginBridge:
         normalized, dropped_keys = normalize_sdk_local_extras(payload)
         overlay.sdk_local_extras = normalized
         for key in dropped_keys:
+            value = payload.get(key)
             logger.warning(
-                "Dropped non-serializable sdk_local_extras entry: plugin=%s handler=%s key=%s",
+                "Dropped sdk_local_extras entry during SDK bridge serialization: "
+                "plugin=%s handler=%s key=%s value_type=%s reason=%s "
+                "recommended_fix=%s",
                 plugin_id,
                 handler_id,
                 key,
+                type(value).__name__,
+                "sdk_local_extras only preserves JSON-serializable values across "
+                "handler and lifecycle boundaries",
+                "store plain dict/list/scalar payloads, or serialize framework "
+                "objects such as message components before calling set_extra()",
             )
 
     @staticmethod
@@ -1639,6 +1651,17 @@ class SdkPluginBridge:
         if not isinstance(extras, dict) or not extras:
             return {}
         return sanitize_sdk_extras(extras)
+
+    @staticmethod
+    def _set_sdk_origin_plugin_id(
+        event: AstrMessageEvent,
+        plugin_id: str,
+    ) -> None:
+        setter = getattr(event, "set_extra", None)
+        if callable(setter):
+            setter("_sdk_origin_plugin_id", plugin_id)
+            return
+        setattr(event, "_sdk_origin_plugin_id", plugin_id)
 
     def _get_or_build_inbound_snapshot(
         self,
@@ -3861,6 +3884,7 @@ class SdkPluginBridge:
             request_context.plugin_id = record.plugin_id
             request_context.request_id = request_id
             request_context.cancelled = False
+            self._set_sdk_origin_plugin_id(event, record.plugin_id)
             setattr(event, "_sdk_last_request_id", request_id)
             payload = self._build_sdk_event_payload(
                 event,
