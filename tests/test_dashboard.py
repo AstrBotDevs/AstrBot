@@ -7,6 +7,7 @@ import uuid
 import zipfile
 from datetime import datetime
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -106,6 +107,39 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok" and "platform" in data["data"]
+
+
+@pytest.mark.asyncio
+async def test_sdk_plugin_page_route_is_public_but_api_route_requires_auth(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    test_client = app.test_client()
+    dispatch_spy = AsyncMock(
+        return_value={
+            "status": 200,
+            "headers": {"Content-Type": "text/html; charset=utf-8"},
+            "body": "<html><body>sdk page</body></html>",
+        }
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.sdk_plugin_bridge, "dispatch_http_request", dispatch_spy
+    )
+
+    public_response = await test_client.get("/plug/sdk-demo")
+    assert public_response.status_code == 200
+    assert "sdk page" in (await public_response.get_data(as_text=True))
+
+    api_response = await test_client.get("/api/plug/sdk-demo")
+    assert api_response.status_code == 401
+
+    authed_api_response = await test_client.get(
+        "/api/plug/sdk-demo",
+        headers=authenticated_header,
+    )
+    assert authed_api_response.status_code == 200
 
 
 @pytest.mark.asyncio

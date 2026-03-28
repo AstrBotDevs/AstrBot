@@ -2049,6 +2049,79 @@ def test_sdk_bridge_http_route_conflict_and_resolution() -> None:
 
 
 @pytest.mark.unit
+def test_register_http_api_logs_internal_and_public_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.astrbot_config",
+        {"dashboard": {"host": "0.0.0.0", "port": 6185, "ssl": {"enable": False}}},
+    )
+    info_spy = MagicMock()
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.logger.info",
+        info_spy,
+    )
+
+    bridge.register_http_api(
+        plugin_id="sdk-demo",
+        route="/sdk-demo/api/stats",
+        methods=["GET"],
+        handler_capability="sdk-demo.http_stats",
+        description="stats endpoint",
+    )
+
+    assert any(
+        call.args
+        == (
+            "SDK HTTP route registered: plugin=%s route=%s methods=%s handler=%s",
+            "sdk-demo",
+            "/sdk-demo/api/stats",
+            "GET",
+            "sdk-demo.http_stats",
+        )
+        for call in info_spy.call_args_list
+    )
+
+
+@pytest.mark.unit
+def test_dashboard_public_base_url_prefers_dashboard_env_over_bind_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.astrbot_config",
+        {"dashboard": {"host": "0.0.0.0", "port": 6185, "ssl": {"enable": False}}},
+    )
+    monkeypatch.setenv("ASTRBOT_DASHBOARD_HOST", "127.0.0.1")
+    monkeypatch.setenv("ASTRBOT_DASHBOARD_PORT", "7443")
+    monkeypatch.setenv("ASTRBOT_DASHBOARD_SSL_ENABLE", "true")
+
+    assert bridge._dashboard_public_base_url() == "https://127.0.0.1:7443"
+
+
+@pytest.mark.unit
+def test_plugin_entry_route_prefers_plugin_root() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    bridge.register_http_api(
+        plugin_id="sdk-demo",
+        route="/sdk-demo/api/stats",
+        methods=["GET"],
+        handler_capability="sdk-demo.stats",
+        description="stats endpoint",
+    )
+    bridge.register_http_api(
+        plugin_id="sdk-demo",
+        route="/sdk-demo",
+        methods=["GET"],
+        handler_capability="sdk-demo.overview",
+        description="overview",
+    )
+
+    assert bridge._plugin_entry_route("sdk-demo") == "/sdk-demo"
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_sdk_bridge_turn_off_plugin_disables_and_tears_down() -> None:
     bridge = SdkPluginBridge(_OverlayFakeStarContext())

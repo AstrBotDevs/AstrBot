@@ -146,6 +146,11 @@ class AstrBotDashboard:
             view_func=self.srv_plug_route,
             methods=["GET", "POST"],
         )
+        self.app.add_url_rule(
+            "/plug/<path:subpath>",
+            view_func=self.srv_public_plug_route,
+            methods=["GET"],
+        )
 
         self.shutdown_event = shutdown_event
 
@@ -153,6 +158,23 @@ class AstrBotDashboard:
 
     async def srv_plug_route(self, subpath, *args, **kwargs):
         """插件路由"""
+        output = await self._dispatch_plugin_route(subpath, *args, **kwargs)
+        if output is not None:
+            return self._build_sdk_plugin_response(output)
+        return jsonify(Response().error("未找到该路由").__dict__)
+
+    async def srv_public_plug_route(self, subpath, *args, **kwargs):
+        """公开插件页面路由"""
+        output = await self._dispatch_plugin_route(subpath, *args, **kwargs)
+        if output is None:
+            return jsonify(Response().error("未找到该路由").__dict__)
+        if not self._is_public_plugin_page_response(output):
+            r = jsonify(Response().error("该路由需要通过 /api/plug 访问").__dict__)
+            r.status_code = 403
+            return r
+        return self._build_sdk_plugin_response(output)
+
+    async def _dispatch_plugin_route(self, subpath, *args, **kwargs):
         registered_web_apis = self.core_lifecycle.star_context.registered_web_apis
         for api in registered_web_apis:
             route, view_handler, methods, _ = api
@@ -160,12 +182,19 @@ class AstrBotDashboard:
                 return await view_handler(*args, **kwargs)
         sdk_bridge = getattr(self.core_lifecycle, "sdk_plugin_bridge", None)
         if sdk_bridge is not None:
-            output = await sdk_bridge.dispatch_http_request(
-                f"/{subpath}", request.method
-            )
-            if output is not None:
-                return self._build_sdk_plugin_response(output)
-        return jsonify(Response().error("未找到该路由").__dict__)
+            return await sdk_bridge.dispatch_http_request(f"/{subpath}", request.method)
+        return None
+
+    @staticmethod
+    def _is_public_plugin_page_response(output: dict[str, object]) -> bool:
+        headers = output.get("headers")
+        if not isinstance(headers, dict):
+            headers = {}
+        content_type = str(
+            headers.get("Content-Type", headers.get("content-type", ""))
+        ).lower()
+        body = output.get("body")
+        return isinstance(body, str) and "text/html" in content_type
 
     @staticmethod
     def _build_sdk_plugin_response(output: dict) -> QuartResponse:

@@ -39,7 +39,7 @@ from astrbot_sdk.runtime.loader import (
 from astrbot_sdk.runtime.supervisor import WorkerSession
 from quart import request as quart_request
 
-from astrbot.core import logger
+from astrbot.core import astrbot_config, logger
 from astrbot.core.agent.mcp_client import MCPClient
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.message.message_types import sdk_message_type
@@ -904,6 +904,13 @@ class SdkPluginBridge:
         ]
         plugin_routes.append(route_entry)
         self._http_routes[plugin_id] = plugin_routes
+        logger.info(
+            "SDK HTTP route registered: plugin=%s route=%s methods=%s handler=%s",
+            plugin_id,
+            route_entry.route,
+            ",".join(route_entry.methods),
+            handler_capability,
+        )
 
     def unregister_http_api(
         self,
@@ -951,6 +958,67 @@ class SdkPluginBridge:
             }
             for entry in self._http_routes.get(plugin_id, [])
         ]
+
+    def _public_http_path(self, route: str) -> str:
+        normalized_route = self._normalize_http_route(route)
+        return f"/api/plug{normalized_route}"
+
+    def _public_page_path(self, route: str) -> str:
+        normalized_route = self._normalize_http_route(route)
+        return f"/plug{normalized_route}"
+
+    @staticmethod
+    def _parse_env_bool(value: str | None, default: bool) -> bool:
+        if value is None:
+            return default
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+
+    def _dashboard_public_base_url(self) -> str:
+        dashboard_config = astrbot_config.get("dashboard", {})
+        if not isinstance(dashboard_config, dict):
+            dashboard_config = {}
+        ssl_config = dashboard_config.get("ssl", {})
+        if not isinstance(ssl_config, dict):
+            ssl_config = {}
+
+        port = (
+            os.environ.get("DASHBOARD_PORT")
+            or os.environ.get("ASTRBOT_DASHBOARD_PORT")
+            or dashboard_config.get("port", 6185)
+        )
+        host = (
+            os.environ.get("DASHBOARD_HOST")
+            or os.environ.get("ASTRBOT_DASHBOARD_HOST")
+            or dashboard_config.get("host", "0.0.0.0")
+        )
+        ssl_enabled = self._parse_env_bool(
+            os.environ.get("DASHBOARD_SSL_ENABLE")
+            or os.environ.get("ASTRBOT_DASHBOARD_SSL_ENABLE"),
+            bool(ssl_config.get("enable", False)),
+        )
+        scheme = "https" if ssl_enabled else "http"
+        host_text = str(host).strip() or "localhost"
+        if host_text in {"0.0.0.0", "::", "[::]"}:
+            host_text = "localhost"
+        if ":" in host_text and not host_text.startswith("["):
+            host_text = f"[{host_text}]"
+        return f"{scheme}://{host_text}:{int(port)}"
+
+    def _public_http_url(self, route: str) -> str:
+        return f"{self._dashboard_public_base_url()}{self._public_http_path(route)}"
+
+    def _public_page_url(self, route: str) -> str:
+        return f"{self._dashboard_public_base_url()}{self._public_page_path(route)}"
+
+    def _plugin_entry_route(self, plugin_id: str) -> str | None:
+        plugin_root = f"/{plugin_id}"
+        for entry in self._http_routes.get(plugin_id, []):
+            if entry.route == plugin_root:
+                return entry.route
+        for entry in self._http_routes.get(plugin_id, []):
+            if "/api/" not in entry.route:
+                return entry.route
+        return None
 
     async def dispatch_http_request(
         self,
@@ -3425,6 +3493,25 @@ class SdkPluginBridge:
                 else SDK_STATE_ENABLED
             )
             record.failure_reason = ""
+            registered_http_apis = self.list_http_apis(plugin.name)
+            if registered_http_apis:
+                api_base_url = self._public_http_url(f"/{plugin.name}")
+                entry_route = self._plugin_entry_route(plugin.name)
+                if entry_route is not None:
+                    logger.info(
+                        "SDK plugin HTTP routes ready: plugin=%s total=%s page=%s api_base=%s",
+                        plugin.name,
+                        len(registered_http_apis),
+                        self._public_page_url(entry_route),
+                        api_base_url,
+                    )
+                else:
+                    logger.info(
+                        "SDK plugin HTTP routes ready: plugin=%s total=%s api_base=%s",
+                        plugin.name,
+                        len(registered_http_apis),
+                        api_base_url,
+                    )
         except Exception as exc:
             record.session = None
             record.state = SDK_STATE_FAILED
