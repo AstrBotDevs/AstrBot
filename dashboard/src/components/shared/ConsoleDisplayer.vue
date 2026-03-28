@@ -30,20 +30,49 @@
           variant="outlined"
           class="filter-input"
         />
-        <v-autocomplete
+        <v-combobox
           v-model="selectedTags"
+          v-model:search="tagSearch"
           :items="tagOptions"
           :label="tm('filters.tagLabel')"
           :placeholder="tm('filters.tagPlaceholder')"
+          :menu-props="{ maxHeight: 360, contentClass: 'tag-filter-menu' }"
           density="compact"
           hide-details
           clearable
-          chips
-          closable-chips
           multiple
           variant="outlined"
-          class="filter-input"
-        />
+          class="filter-input filter-input-tags"
+          @keydown.enter.prevent="commitTagSearch"
+        >
+          <template #selection="{ index }">
+            <span
+              v-if="index === 0 && selectedTagPreview"
+              class="tag-selection-summary"
+            >
+              {{ selectedTagPreview }}
+            </span>
+          </template>
+
+          <template #prepend-item>
+            <div v-if="selectedTags.length > 0" class="tag-menu-selected">
+              <div class="tag-menu-chip-list">
+                <v-chip
+                  v-for="tag in selectedTags"
+                  :key="tag"
+                  size="small"
+                  closable
+                  variant="tonal"
+                  color="primary"
+                  @click:close.stop="removeTagFilter(tag)"
+                >
+                  {{ tag }}
+                </v-chip>
+              </div>
+              <v-divider class="tag-menu-divider" />
+            </div>
+          </template>
+        </v-combobox>
         <v-btn variant="text" size="small" @click="clearFilters">
           {{ tm('filters.clearButton') }}
         </v-btn>
@@ -125,6 +154,7 @@ export default {
       logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
       selectedLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
       selectedTags: [],
+      tagSearch: '',
       keyword: '',
       levelColors: {
         DEBUG: 'grey',
@@ -150,6 +180,16 @@ export default {
   computed: {
     tagOptions() {
       return [...new Set([...this.availableTags, ...this.selectedTags].filter(Boolean))].sort();
+    },
+    selectedTagPreview() {
+      if (this.tagSearch.trim() || this.selectedTags.length === 0) {
+        return '';
+      }
+
+      const [firstTag, ...remainingTags] = this.selectedTags;
+      return remainingTags.length > 0
+        ? `${firstTag} +${remainingTags.length}`
+        : firstTag;
     },
     hasActiveFilters() {
       return (
@@ -608,7 +648,38 @@ export default {
     clearFilters() {
       this.selectedLevels = [...this.logLevels];
       this.selectedTags = [];
+      this.tagSearch = '';
       this.keyword = '';
+    },
+
+    normalizeTagValue(value) {
+      if (typeof value === 'string') {
+        return value.trim();
+      }
+
+      if (value && typeof value.title === 'string') {
+        return value.title.trim();
+      }
+
+      if (value && typeof value.value === 'string') {
+        return value.value.trim();
+      }
+
+      return '';
+    },
+
+    commitTagSearch() {
+      const normalizedTag = this.normalizeTagValue(this.tagSearch);
+      if (!normalizedTag || this.selectedTags.includes(normalizedTag)) {
+        return;
+      }
+
+      this.selectedTags = [...this.selectedTags, normalizedTag];
+      this.tagSearch = '';
+    },
+
+    removeTagFilter(tag) {
+      this.selectedTags = this.selectedTags.filter((item) => item !== tag);
     },
 
     getLevelColor(level) {
@@ -683,6 +754,67 @@ export default {
 .filter-input {
   min-width: 220px;
   max-width: 360px;
+}
+
+:deep(.filter-input-tags .v-field__input) {
+  min-height: 40px;
+  max-height: 40px;
+  overflow: hidden;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+:deep(.filter-input-tags .v-field__input input) {
+  min-width: 36px;
+}
+
+:deep(.filter-input-tags .v-combobox__selection) {
+  max-width: calc(100% - 28px);
+}
+
+.tag-selection-summary {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  color: rgba(var(--v-theme-on-surface), 0.88);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:deep(.tag-filter-menu .v-overlay__content) {
+  border-radius: 12px;
+}
+
+:deep(.tag-filter-menu .v-list) {
+  padding-top: 0;
+}
+
+:deep(.tag-menu-selected) {
+  padding: 10px 12px 0;
+}
+
+:deep(.tag-menu-chip-list) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 112px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+}
+
+:deep(.tag-menu-chip-list::-webkit-scrollbar) {
+  width: 6px;
+}
+
+:deep(.tag-menu-chip-list::-webkit-scrollbar-thumb) {
+  background: rgba(var(--v-theme-on-surface), 0.24);
+  border-radius: 999px;
+}
+
+:deep(.tag-menu-divider) {
+  margin-top: 10px;
 }
 
 .filter-summary {
