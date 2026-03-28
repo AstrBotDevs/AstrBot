@@ -673,15 +673,31 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 if not req.func_tool:
                     return
 
-                if (
-                    self.tool_schema_mode == "skills_like"
-                    and self._skill_like_raw_tool_set
-                ):
-                    # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
-                    # so we need to get the tool from the raw tool set
-                    func_tool = self._skill_like_raw_tool_set.get_tool(func_tool_name)
-                else:
-                    func_tool = req.func_tool.get_tool(func_tool_name)
+                # First check if it's a dynamically created subagent tool
+                session_id = getattr(self.run_context.context.event, "unified_msg_origin", None)
+                func_tool = None
+                if session_id:
+                    try:
+                        from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+                        dynamic_handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(session_id)
+                        for h in dynamic_handoffs:
+                            if h.name == func_tool_name or f"transfer_to_{h.name}" == func_tool_name:
+                                func_tool = h
+                                break
+                    except Exception:
+                        pass
+
+                # If not found in dynamic tools, check regular tool sets
+                if func_tool is None:
+                    if (
+                        self.tool_schema_mode == "skills_like"
+                        and self._skill_like_raw_tool_set
+                    ):
+                        # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
+                        # so we need to get the tool from the raw tool set
+                        func_tool = self._skill_like_raw_tool_set.get_tool(func_tool_name)
+                    else:
+                        func_tool = req.func_tool.get_tool(func_tool_name)
 
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
@@ -801,9 +817,30 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         "The tool has returned a data type that is not supported."
                                     )
                         if result_parts:
+                            result_content = "\n\n".join(result_parts)
+                            # Check for dynamic tool creation marker
+                            if result_content.startswith("__DYNAMIC_TOOL_CREATED__:"):
+                                parts = result_content.split(":", 3)
+                                if len(parts) >= 4:
+                                    new_tool_name = parts[1]
+                                    new_tool_obj_name = parts[2]
+                                    logger.info(f"[DynamicSubAgent] Tool created: {new_tool_name}")
+                                    # Try to add the new tool to func_tool set
+                                    try:
+                                        from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+                                        session_id = getattr(self.run_context.context.event, "unified_msg_origin", None)
+                                        if session_id:
+                                            handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(session_id)
+                                            for handoff in handoffs:
+                                                if handoff.name == new_tool_obj_name or handoff.name == new_tool_name.replace("transfer_to_", ""):
+                                                    if self.req.func_tool:
+                                                        self.req.func_tool.add_tool(handoff)
+                                                    logger.info(f"[DynamicSubAgent] Added {handoff.name} to func_tool set")
+                                    except Exception as e:
+                                        logger.warning(f"[DynamicSubAgent] Failed to add dynamic tool: {e}")
                             _append_tool_call_result(
                                 func_tool_id,
-                                "\n\n".join(result_parts),
+                                result_content,
                             )
 
                     elif resp is None:
