@@ -171,6 +171,8 @@ def _write_sdk_plugin(
         "\n".join(
             [
                 f"name: {name}",
+                "author: tests",
+                f"repo: {name}",
                 "runtime:",
                 '  python: "3.11"',
                 "components:",

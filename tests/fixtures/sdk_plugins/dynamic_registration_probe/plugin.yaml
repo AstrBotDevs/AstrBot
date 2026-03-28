@@ -1,6 +1,7 @@
 _schema_version: 2
 name: dynamic_registration_probe
 author: tests
+repo: dynamic_registration_probe
 version: 1.0.0
 desc: Dynamic registration probe plugin
 

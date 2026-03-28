@@ -47,7 +47,11 @@ from astrbot_sdk.context import CancelToken
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.protocol.messages import InvokeMessage
 from astrbot_sdk.runtime.capability_dispatcher import CapabilityDispatcher
-from astrbot_sdk.runtime.loader import load_plugin, load_plugin_spec, validate_plugin_spec
+from astrbot_sdk.runtime.loader import (
+    load_plugin,
+    load_plugin_spec,
+    validate_plugin_spec,
+)
 from astrbot_sdk.runtime.supervisor import SupervisorRuntime
 
 
@@ -81,7 +85,8 @@ class _InProcessCapabilitySession:
             for item in self.loaded_plugin.capabilities
         ]
         self.capability_sources = {
-            item.descriptor.name: plugin.name for item in self.loaded_plugin.capabilities
+            item.descriptor.name: plugin.name
+            for item in self.loaded_plugin.capabilities
         }
 
     async def invoke_capability(
@@ -112,6 +117,7 @@ def _write_plugin(plugin_dir: Path) -> None:
             _schema_version: 2
             name: capability_roundtrip_plugin
             author: tests
+            repo: capability_roundtrip_plugin
             version: 1.0.0
             desc: capability roundtrip tests
 

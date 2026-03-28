@@ -67,6 +67,7 @@ def _write_local_sdk_plugin(
                 f"name: {plugin_name}",
                 "version: 1.0.0",
                 "author: AstrBot Team",
+                f"repo: {plugin_name}",
                 'description: "Local SDK test plugin"',
                 "runtime:",
                 '  python: "3.11"',
@@ -106,6 +107,7 @@ def _write_local_sdk_tool_plugin(
                 "display_name: SDK Tool Demo",
                 "version: 1.0.0",
                 "author: AstrBot Team",
+                f"repo: {plugin_name}",
                 'desc: "SDK tool demo plugin"',
                 "runtime:",
                 '  python: "3.11"',
@@ -591,6 +593,75 @@ async def test_update_plugin_dependency_install_flow(
             expected_content="networkx\n",
         )
         assert ("reload", TEST_PLUGIN_DIR) in events
+
+
+@pytest.mark.asyncio
+async def test_update_plugin_migrates_legacy_plugin_to_sdk_runtime(
+    plugin_manager_pm: PluginManager,
+    local_updator: Path,
+    monkeypatch,
+):
+    legacy_plugin = SimpleNamespace(
+        root_dir_name=TEST_PLUGIN_DIR,
+        name=TEST_PLUGIN_NAME,
+        repo=TEST_PLUGIN_REPO,
+        reserved=False,
+        activated=False,
+        module_path=f"data.plugins.{TEST_PLUGIN_DIR}.main",
+    )
+    cast(Any, plugin_manager_pm.context).stars.append(legacy_plugin)
+    events = []
+
+    class MockSdkBridge:
+        async def reload_all(self, *, reset_restart_budget: bool = False) -> None:
+            events.append(("sdk_reload_all", reset_restart_budget))
+
+        async def turn_off_plugin(self, plugin_id: str) -> None:
+            events.append(("sdk_turn_off", plugin_id))
+
+    cast(Any, plugin_manager_pm.context).sdk_plugin_bridge = MockSdkBridge()
+
+    async def mock_update(plugin, proxy=""):
+        del proxy
+        assert plugin is legacy_plugin
+        for path in local_updator.iterdir():
+            if path.is_file():
+                path.unlink()
+        _write_local_sdk_plugin(
+            local_updator,
+            plugin_name="astrbot_plugin_helloworld_sdk",
+        )
+
+    async def fail_if_called(*args, **kwargs):
+        raise AssertionError("legacy reload/dependency path should not be used")
+
+    async def mock_terminate(plugin):
+        events.append(("terminate", plugin.name))
+
+    async def mock_unbind(plugin_name: str, module_path: str) -> None:
+        events.append(("unbind", plugin_name, module_path))
+
+    monkeypatch.setattr(plugin_manager_pm.updator, "update", mock_update)
+    monkeypatch.setattr(
+        plugin_manager_pm, "_ensure_plugin_requirements", fail_if_called
+    )
+    monkeypatch.setattr(plugin_manager_pm, "reload", fail_if_called)
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
+    monkeypatch.setattr(plugin_manager_pm, "_unbind_plugin", mock_unbind)
+
+    await plugin_manager_pm.update_plugin(TEST_PLUGIN_NAME)
+
+    sdk_plugin_dir = (
+        Path(plugin_manager_pm.plugin_store_path).parent
+        / "sdk_plugins"
+        / "astrbot_plugin_helloworld_sdk"
+    )
+    assert not local_updator.exists()
+    assert (sdk_plugin_dir / "plugin.yaml").exists()
+    assert ("terminate", TEST_PLUGIN_NAME) in events
+    assert ("unbind", TEST_PLUGIN_NAME, legacy_plugin.module_path) in events
+    assert ("sdk_reload_all", True) in events
+    assert ("sdk_turn_off", "astrbot_plugin_helloworld_sdk") in events
 
 
 @pytest.mark.asyncio

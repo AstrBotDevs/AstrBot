@@ -560,6 +560,58 @@ class PluginManager:
             plugin_type="sdk",
         )
 
+    async def _migrate_legacy_plugin_to_sdk_runtime(
+        self,
+        *,
+        legacy_plugin: StarMetadata,
+        legacy_plugin_path: Path,
+        sdk_plugin_name: str,
+    ) -> None:
+        """将已更新为 SDK 清单的 legacy 插件迁移到 SDK 运行时目录。"""
+        if legacy_plugin.root_dir_name is None or legacy_plugin.module_path is None:
+            raise Exception(
+                f"插件 {legacy_plugin.name} 缺少 root_dir_name 或 module_path，无法迁移到 SDK 运行时。"
+            )
+
+        logger.info(
+            "检测到 legacy 插件 %s 已切换为 SDK 清单，开始迁移到 data/sdk_plugins/%s",
+            legacy_plugin.name,
+            sdk_plugin_name,
+        )
+
+        try:
+            await self._terminate_plugin(legacy_plugin)
+        except Exception as exc:
+            logger.warning(traceback.format_exc())
+            logger.warning(
+                "插件 %s 在迁移到 SDK 运行时前未被正常终止: %s",
+                legacy_plugin.name,
+                exc,
+            )
+
+        await self._unbind_plugin(legacy_plugin.name, legacy_plugin.module_path)
+
+        sdk_plugins_dir = Path(get_astrbot_data_path()) / "sdk_plugins"
+        target_plugin_path = sdk_plugins_dir / sdk_plugin_name
+        if target_plugin_path.exists():
+            raise Exception(f"迁移失败：SDK 插件 {sdk_plugin_name} 已存在。")
+
+        sdk_plugins_dir.mkdir(parents=True, exist_ok=True)
+        legacy_plugin_path.rename(target_plugin_path)
+
+        sdk_plugin_bridge = getattr(self.context, "sdk_plugin_bridge", None)
+        if sdk_plugin_bridge is not None:
+            await sdk_plugin_bridge.reload_all(reset_restart_budget=True)
+            if not legacy_plugin.activated:
+                await sdk_plugin_bridge.turn_off_plugin(sdk_plugin_name)
+        else:
+            logger.warning(
+                "SDK 插件 %s 已迁移到 %s，但当前未找到 sdk_plugin_bridge，"
+                "需等待后续生命周期重载。",
+                sdk_plugin_name,
+                target_plugin_path,
+            )
+
     @staticmethod
     def _validate_astrbot_version_specifier(
         version_spec: str | None,
@@ -1626,9 +1678,17 @@ class PluginManager:
 
         await self.updator.update(plugin, proxy=proxy)
         if plugin.root_dir_name:
-            plugin_dir_path = os.path.join(self.plugin_store_path, plugin.root_dir_name)
+            plugin_dir_path = Path(self.plugin_store_path) / plugin.root_dir_name
+            plugin_type, detected_name = self._detect_plugin_type(str(plugin_dir_path))
+            if plugin_type == "sdk":
+                await self._migrate_legacy_plugin_to_sdk_runtime(
+                    legacy_plugin=plugin,
+                    legacy_plugin_path=plugin_dir_path,
+                    sdk_plugin_name=detected_name,
+                )
+                return
             await self._ensure_plugin_requirements(
-                plugin_dir_path,
+                str(plugin_dir_path),
                 plugin_name,
             )
         await self.reload(plugin_name)

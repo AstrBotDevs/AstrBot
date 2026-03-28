@@ -2378,7 +2378,7 @@ class SdkPluginBridge:
         ]
         return {
             "name": record.plugin_id,
-            "repo": "",
+            "repo": str(manifest.get("repo") or ""),
             "author": str(manifest.get("author") or ""),
             "desc": str(manifest.get("desc") or manifest.get("description") or ""),
             "version": str(manifest.get("version") or "0.0.0"),

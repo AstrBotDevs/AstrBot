@@ -50,6 +50,7 @@ class SdkRegistryManager:
                 "description": str(
                     manifest.get("desc") or manifest.get("description") or ""
                 ),
+                "repo": str(manifest.get("repo") or ""),
                 "author": str(manifest.get("author") or ""),
                 "version": str(manifest.get("version") or "0.0.0"),
                 "enabled": record.state not in {"disabled", "failed"},
@@ -72,6 +73,7 @@ class SdkRegistryManager:
                     "name": plugin.name,
                     "display_name": plugin.display_name,
                     "description": plugin.desc,
+                    "repo": plugin.repo,
                     "author": plugin.author,
                     "version": plugin.version,
                     "enabled": plugin.activated,
@@ -85,6 +87,7 @@ class SdkRegistryManager:
                 "name": plugin_id,
                 "display_name": plugin_id,
                 "description": str(issue.get("message", "")),
+                "repo": "",
                 "author": "",
                 "version": "0.0.0",
                 "enabled": False,
@@ -105,6 +108,7 @@ class SdkRegistryManager:
                     "name": plugin.name,
                     "display_name": plugin.display_name,
                     "description": plugin.desc,
+                    "repo": plugin.repo,
                     "author": plugin.author,
                     "version": plugin.version,
                     "enabled": plugin.activated,

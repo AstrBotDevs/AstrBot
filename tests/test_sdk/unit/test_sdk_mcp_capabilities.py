@@ -513,7 +513,7 @@ def _plugin_spec(plugin_dir: Path, *, name: str = "sdk-demo") -> PluginSpec:
     plugin_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = plugin_dir / "plugin.yaml"
     manifest_path.write_text(
-        "name: sdk-demo\nauthor: tester\ndesc: demo\nversion: 0.1.0\nruntime:\n  python: '3.11'\ncomponents: []\n",
+        "name: sdk-demo\nauthor: tester\nrepo: sdk-demo\ndesc: demo\nversion: 0.1.0\nruntime:\n  python: '3.11'\ncomponents: []\n",
         encoding="utf-8",
     )
     requirements_path = plugin_dir / "requirements.txt"
@@ -528,6 +528,7 @@ def _plugin_spec(plugin_dir: Path, *, name: str = "sdk-demo") -> PluginSpec:
             "name": name,
             "display_name": name,
             "author": "tester",
+            "repo": "sdk-demo",
             "desc": "demo",
             "version": "0.1.0",
         },
@@ -700,7 +701,7 @@ async def test_sdk_plugin_bridge_start_sweeps_stale_mcp_leases_before_reload(
     async def _fake_reload_all(*, reset_restart_budget: bool) -> None:
         assert reset_restart_budget is True
 
-    bridge.reload_all = _fake_reload_all
+    bridge.lifecycle.reload_all = _fake_reload_all
 
     await bridge.start()
 
