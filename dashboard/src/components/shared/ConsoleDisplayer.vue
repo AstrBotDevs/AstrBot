@@ -123,16 +123,10 @@ export default {
 
       console.log(`正在连接日志流... (尝试次数: ${this.retryAttempts})`);
 
-      const token = localStorage.getItem("token");
-
       this.eventSource = new EventSourcePolyfill(
         resolveApiUrl("/api/live-log"),
         {
-          headers: {
-            Authorization: token ? `Bearer ${token}` : "",
-          },
           heartbeatTimeout: 300000,
-          withCredentials: true,
         },
       );
 
