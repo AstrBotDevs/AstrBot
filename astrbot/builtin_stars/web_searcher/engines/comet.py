@@ -13,6 +13,7 @@ class Comet(SearchEngine):
     - This endpoint is often protected by anti-bot challenges.
     - We intentionally treat failures as non-fatal and rely on fallback engines.
     """
+
     NAME = "comet"
 
     def __init__(self) -> None:

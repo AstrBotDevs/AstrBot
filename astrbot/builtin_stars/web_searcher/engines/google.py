@@ -46,6 +46,7 @@ class Google(SearchEngine):
         return await self._search_with_result_filter(
             query=query,
             num_results=num_results,
-            predicate=lambda result: result.url.startswith("http")
-            and "google.com/search?" not in result.url,
+            predicate=lambda result: (
+                result.url.startswith("http") and "google.com/search?" not in result.url
+            ),
         )

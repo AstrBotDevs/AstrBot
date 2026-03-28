@@ -26,7 +26,9 @@ ENGINE_REGISTRY: tuple[tuple[str, type[object], bool], ...] = (
 DEFAULT_ENGINE_ORDER: tuple[str, ...] = tuple(name for name, _, _ in ENGINE_REGISTRY)
 
 _ENGINE_PROVIDER_SET = {name for name, _, _ in ENGINE_REGISTRY}
-_ENGINE_CAN_BE_PRIMARY = {name: can_be_primary for name, _, can_be_primary in ENGINE_REGISTRY}
+_ENGINE_CAN_BE_PRIMARY = {
+    name: can_be_primary for name, _, can_be_primary in ENGINE_REGISTRY
+}
 _TOOL_BRANCH_PROVIDER_SET = set(WEB_SEARCH_TOOL_BRANCH_PROVIDERS)
 _CANONICAL_PROVIDER_SET = _ENGINE_PROVIDER_SET | _TOOL_BRANCH_PROVIDER_SET
 
