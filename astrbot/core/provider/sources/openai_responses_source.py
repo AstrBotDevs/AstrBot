@@ -182,12 +182,14 @@ class ProviderOpenAIResponses(Provider):
             timeout,
         )
         if use_stream:
+
             async def _consume() -> None:
                 logger.info("[openai_responses.test] using text_chat_stream")
                 async for _ in self.text_chat_stream(
                     prompt="REPLY `PONG` ONLY",
                 ):
                     break
+
             await asyncio.wait_for(_consume(), timeout=timeout)
         else:
             logger.info("[openai_responses.test] using text_chat")
@@ -322,11 +324,17 @@ class ProviderOpenAIResponses(Provider):
                             tool_call = json.loads(tool_call)
                         except Exception:
                             tool_call = {}
-                    func = tool_call.get("function", {}) if isinstance(tool_call, dict) else {}
+                    func = (
+                        tool_call.get("function", {})
+                        if isinstance(tool_call, dict)
+                        else {}
+                    )
                     items.append(
                         {
                             "type": "function_call",
-                            "call_id": tool_call.get("id") or tool_call.get("call_id") or "",
+                            "call_id": tool_call.get("id")
+                            or tool_call.get("call_id")
+                            or "",
                             "name": func.get("name", ""),
                             "arguments": func.get("arguments") or "",
                         }
@@ -414,7 +422,9 @@ class ProviderOpenAIResponses(Provider):
             reason,
         )
         new_contexts = await self._remove_image_from_context(context_query)
-        payloads["input"] = self._convert_openai_messages_to_responses_input(new_contexts)
+        payloads["input"] = self._convert_openai_messages_to_responses_input(
+            new_contexts
+        )
         return (
             False,
             chosen_key,
@@ -610,7 +620,10 @@ class ProviderOpenAIResponses(Provider):
             if event_type == "response.content_part.done":
                 part = _get_event_attr(event, "part")
                 if isinstance(part, dict):
-                    if part.get("type") in {"output_text", "text"} and not had_text_delta:
+                    if (
+                        part.get("type") in {"output_text", "text"}
+                        and not had_text_delta
+                    ):
                         text = part.get("text", "")
                         if text:
                             full_text += str(text)
