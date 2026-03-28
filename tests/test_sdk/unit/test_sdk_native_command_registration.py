@@ -13,6 +13,7 @@ from astrbot_sdk.protocol.descriptors import (
     EventTrigger,
     HandlerDescriptor,
     MessageTrigger,
+    Permissions,
     PlatformFilterSpec,
     ScheduleTrigger,
 )
@@ -38,8 +39,9 @@ class _BridgeStarContext:
 
 
 class _DispatchEvent:
-    def __init__(self, text: str) -> None:
+    def __init__(self, text: str, *, is_admin: bool = False) -> None:
         self._text = text
+        self._is_admin = is_admin
         self._stopped = False
         self._result = None
         self._has_send_oper = False
@@ -60,6 +62,9 @@ class _DispatchEvent:
 
     def get_message_str(self) -> str:
         return self._text
+
+    def is_admin(self) -> bool:
+        return self._is_admin
 
     def should_call_llm(self, call_llm: bool) -> None:
         self.call_llm = call_llm
@@ -221,6 +226,140 @@ async def test_sdk_bridge_dispatch_message_falls_back_to_group_root_help(
     assert event._result is not None
     assert event._result.get_plain_text().startswith("gf命令：")
     assert "/gf chat" in event._result.get_plain_text()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_dispatch_message_returns_permission_denied_for_admin_subcommand(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.get_astrbot_data_path",
+        lambda: str(tmp_path),
+    )
+    bridge = SdkPluginBridge(_BridgeStarContext())
+    bridge._records = {  # noqa: SLF001
+        "ai_girlfriend": SimpleNamespace(
+            plugin=SimpleNamespace(
+                name="ai_girlfriend",
+                manifest_data={"support_platforms": ["telegram"]},
+            ),
+            plugin_id="ai_girlfriend",
+            load_order=0,
+            state="enabled",
+            handlers=[
+                SdkHandlerRef(
+                    descriptor=HandlerDescriptor(
+                        id="ai_girlfriend:main.public",
+                        trigger=CommandTrigger(
+                            command="gf status",
+                            description="Show status",
+                        ),
+                        command_route=CommandRouteSpec(
+                            group_path=["gf"],
+                            display_command="gf status",
+                            group_help="AI girlfriend commands",
+                        ),
+                    ),
+                    declaration_order=0,
+                ),
+                SdkHandlerRef(
+                    descriptor=HandlerDescriptor(
+                        id="ai_girlfriend:main.admin",
+                        trigger=CommandTrigger(
+                            command="gf sync",
+                            description="Sync data",
+                        ),
+                        command_route=CommandRouteSpec(
+                            group_path=["gf"],
+                            display_command="gf sync",
+                            group_help="AI girlfriend commands",
+                        ),
+                        permissions=Permissions(require_admin=True),
+                    ),
+                    declaration_order=1,
+                ),
+            ],
+            dynamic_command_routes=[],
+            session=None,
+        )
+    }
+    event = _DispatchEvent("/gf sync")
+
+    result = await bridge.dispatch_message(event)
+
+    assert result.stopped is True
+    assert event._stopped is True
+    assert event._result is not None
+    assert event._result.get_plain_text() == "权限不足：`/gf sync` 需要管理员权限。"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_group_root_help_hides_admin_commands_for_non_admin(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.get_astrbot_data_path",
+        lambda: str(tmp_path),
+    )
+    bridge = SdkPluginBridge(_BridgeStarContext())
+    bridge._records = {  # noqa: SLF001
+        "ai_girlfriend": SimpleNamespace(
+            plugin=SimpleNamespace(
+                name="ai_girlfriend",
+                manifest_data={"support_platforms": ["telegram"]},
+            ),
+            plugin_id="ai_girlfriend",
+            load_order=0,
+            state="enabled",
+            handlers=[
+                SdkHandlerRef(
+                    descriptor=HandlerDescriptor(
+                        id="ai_girlfriend:main.public",
+                        trigger=CommandTrigger(
+                            command="gf status",
+                            description="Show status",
+                        ),
+                        command_route=CommandRouteSpec(
+                            group_path=["gf"],
+                            display_command="gf status",
+                            group_help="AI girlfriend commands",
+                        ),
+                    ),
+                    declaration_order=0,
+                ),
+                SdkHandlerRef(
+                    descriptor=HandlerDescriptor(
+                        id="ai_girlfriend:main.admin",
+                        trigger=CommandTrigger(
+                            command="gf sync",
+                            description="Sync data",
+                        ),
+                        command_route=CommandRouteSpec(
+                            group_path=["gf"],
+                            display_command="gf sync",
+                            group_help="AI girlfriend commands",
+                        ),
+                        permissions=Permissions(require_admin=True),
+                    ),
+                    declaration_order=1,
+                ),
+            ],
+            dynamic_command_routes=[],
+            session=None,
+        )
+    }
+    event = _DispatchEvent("/gf")
+
+    result = await bridge.dispatch_message(event)
+
+    assert result.stopped is True
+    assert event._result is not None
+    assert "/gf status" in event._result.get_plain_text()
+    assert "/gf sync" not in event._result.get_plain_text()
 
 
 @pytest.mark.unit

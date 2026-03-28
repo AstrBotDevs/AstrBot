@@ -110,12 +110,15 @@ class WebChatAdapter(Platform):
             return
 
         for request_id in target_request_ids:
+            # Proactive sends are already complete messages. Do not replay them as
+            # streaming chunks tied to the active request, otherwise the frontend
+            # keeps the current request in a loading state until that request ends.
             await WebChatMessageEvent._send(
                 request_id,
                 message_chain,
                 session.session_id,
-                streaming=True,
-                emit_complete=True,
+                streaming=False,
+                emit_complete=False,
             )
 
         # If only passive subscription queues exist for this conversation,

@@ -1017,6 +1017,30 @@ class SdkPluginBridge:
             should_call_llm=not bool(getattr(event, "call_llm", False)),
         )
         matches = self._match_handlers(event)
+        permission_denied = self._resolve_command_permission_denied(event)
+        if permission_denied is not None and not self._has_command_trigger_match(
+            matches
+        ):
+            dispatch_state = _DispatchState(event=event)
+            request_context = self._request_contexts.get(dispatch_token)
+            if request_context is None:
+                request_context = _RequestContext(
+                    plugin_id=permission_denied["plugin_id"],
+                    request_id="",
+                    dispatch_token=dispatch_token,
+                    dispatch_state=dispatch_state,
+                )
+                self._request_contexts[dispatch_token] = request_context
+            else:
+                request_context.plugin_id = permission_denied["plugin_id"]
+                request_context.dispatch_state = dispatch_state
+            self._set_sdk_origin_plugin_id(event, permission_denied["plugin_id"])
+            event.set_result(MessageEventResult().message(permission_denied["message"]))
+            event.stop_event()
+            event.should_call_llm(True)
+            overlay.should_call_llm = False
+            result.stopped = True
+            return result
         group_fallback = self._resolve_group_root_fallback(event)
         if group_fallback is not None and not self._has_command_trigger_match(matches):
             dispatch_state = _DispatchState(event=event)
@@ -1976,6 +2000,45 @@ class SdkPluginBridge:
             return {"plugin_id": record.plugin_id, "help_text": help_text}
         return None
 
+    def _resolve_command_permission_denied(
+        self,
+        event: AstrMessageEvent,
+    ) -> dict[str, str] | None:
+        text = event.get_message_str().strip()
+        if not text:
+            return None
+        normalized_platform = self._normalize_platform_name(event.get_platform_name())
+        for record in sorted(self._records.values(), key=lambda item: item.load_order):
+            if record.state in {
+                SDK_STATE_DISABLED,
+                SDK_STATE_FAILED,
+                SDK_STATE_RELOADING,
+            }:
+                continue
+            if not self._record_supports_platform(record, normalized_platform):
+                continue
+            for handler in record.handlers:
+                descriptor = handler.descriptor
+                if not self._descriptor_requires_admin(descriptor):
+                    continue
+                if not TriggerConverter._match_filters(descriptor, event):
+                    continue
+                if not self._descriptor_matches_command_text(descriptor, text):
+                    continue
+                help_entry = self._descriptor_help_entry(descriptor)
+                display_command = (
+                    help_entry[0]
+                    if help_entry is not None
+                    else str(getattr(descriptor.trigger, "command", "")).strip()
+                )
+                if not display_command:
+                    continue
+                return {
+                    "plugin_id": record.plugin_id,
+                    "message": (f"权限不足：`/{display_command}` 需要管理员权限。"),
+                }
+        return None
+
     def _has_command_trigger_match(self, matches: list[TriggerMatch]) -> bool:
         for match in matches:
             record = self._records.get(match.plugin_id)
@@ -2002,6 +2065,8 @@ class SdkPluginBridge:
                 continue
             if not TriggerConverter._match_filters(descriptor, event):
                 continue
+            if not self._descriptor_is_visible_to_event(descriptor, event):
+                continue
             help_entry = self._descriptor_help_entry(descriptor)
             if help_entry is None:
                 continue
@@ -2019,6 +2084,38 @@ class SdkPluginBridge:
                 line += f": {description}"
             lines.append(line)
         return "\n".join(lines)
+
+    @staticmethod
+    def _descriptor_requires_admin(descriptor: HandlerDescriptor) -> bool:
+        required_role = descriptor.permissions.required_role
+        if required_role is None and descriptor.permissions.require_admin:
+            required_role = "admin"
+        return required_role == "admin"
+
+    @classmethod
+    def _descriptor_is_visible_to_event(
+        cls,
+        descriptor: HandlerDescriptor,
+        event: AstrMessageEvent,
+    ) -> bool:
+        if cls._descriptor_requires_admin(descriptor) and not event.is_admin():
+            return False
+        return True
+
+    @staticmethod
+    def _descriptor_matches_command_text(
+        descriptor: HandlerDescriptor,
+        text: str,
+    ) -> bool:
+        trigger = descriptor.trigger
+        if not isinstance(trigger, CommandTrigger):
+            return False
+        for command_name in [trigger.command, *trigger.aliases]:
+            if not command_name:
+                continue
+            if TriggerConverter._match_command_name(text, command_name) is not None:
+                return True
+        return False
 
     def _match_dynamic_command_route(
         self,
