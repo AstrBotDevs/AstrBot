@@ -1,7 +1,10 @@
 import httpx
+import pytest
 
 import astrbot.core.provider.sources.anthropic_source as anthropic_source
 import astrbot.core.provider.sources.kimi_code_source as kimi_code_source
+from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.provider.entities import LLMResponse
 
 
 class _FakeAsyncAnthropic:
@@ -79,3 +82,14 @@ def test_kimi_code_provider_restores_required_user_agent_when_blank(monkeypatch)
     assert provider.custom_headers == {
         "User-Agent": kimi_code_source.KIMI_CODE_USER_AGENT,
     }
+
+
+def test_anthropic_empty_output_raises_empty_model_output_error():
+    llm_response = LLMResponse(role="assistant")
+
+    with pytest.raises(EmptyModelOutputError):
+        anthropic_source.ProviderAnthropic._ensure_usable_response(
+            llm_response,
+            completion_id="msg_empty",
+            stop_reason="end_turn",
+        )

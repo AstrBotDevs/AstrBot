@@ -13,6 +13,7 @@ from anthropic.types.usage import Usage
 from astrbot import logger
 from astrbot.api.provider import Provider
 from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.io import download_image_by_url
@@ -29,6 +30,23 @@ from ..register import register_provider_adapter
     "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
+    @staticmethod
+    def _ensure_usable_response(
+        llm_response: LLMResponse,
+        *,
+        completion_id: str | None = None,
+        stop_reason: str | None = None,
+    ) -> None:
+        has_text_output = bool((llm_response.completion_text or "").strip())
+        has_reasoning_output = bool(llm_response.reasoning_content.strip())
+        has_tool_output = bool(llm_response.tools_call_args)
+        if has_text_output or has_reasoning_output or has_tool_output:
+            return
+        raise EmptyModelOutputError(
+            "Anthropic completion has no usable output. "
+            f"completion_id={completion_id}, stop_reason={stop_reason}"
+        )
+
     @staticmethod
     def _normalize_custom_headers(provider_config: dict) -> dict[str, str] | None:
         custom_headers = provider_config.get("custom_headers", {})
@@ -289,7 +307,9 @@ class ProviderAnthropic(Provider):
         logger.debug(f"completion: {completion}")
 
         if len(completion.content) == 0:
-            raise Exception("API 返回的 completion 为空。")
+            raise EmptyModelOutputError(
+                f"Anthropic completion is empty. completion_id={completion.id}"
+            )
 
         llm_response = LLMResponse(role="assistant")
 
@@ -317,10 +337,9 @@ class ProviderAnthropic(Provider):
         if not llm_response.completion_text and not llm_response.tools_call_args:
             # Guard clause: raise early if no valid content at all
             if not llm_response.reasoning_content:
-                raise ValueError(
-                    f"Anthropic API returned unparsable completion: "
-                    f"no text, tool_use, or thinking content found. "
-                    f"Completion: {completion}"
+                raise EmptyModelOutputError(
+                    "Anthropic completion has no usable output. "
+                    f"completion_id={completion.id}, stop_reason={completion.stop_reason}"
                 )
 
             # We have reasoning content (ThinkingBlock) - this is valid
@@ -330,6 +349,11 @@ class ProviderAnthropic(Provider):
             )
             llm_response.completion_text = ""  # Ensure empty string, not None
 
+        self._ensure_usable_response(
+            llm_response,
+            completion_id=completion.id,
+            stop_reason=completion.stop_reason,
+        )
         return llm_response
 
     async def _query_stream(
@@ -481,6 +505,11 @@ class ProviderAnthropic(Provider):
             final_response.tools_call_name = [call["name"] for call in final_tool_calls]
             final_response.tools_call_ids = [call["id"] for call in final_tool_calls]
 
+        self._ensure_usable_response(
+            final_response,
+            completion_id=id,
+            stop_reason=None,
+        )
         yield final_response
 
     async def text_chat(
