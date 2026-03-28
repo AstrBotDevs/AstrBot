@@ -162,7 +162,7 @@ const {
           <InstalledPluginsTab :state="pageState" />
 
           <!-- 指令面板标签页内容 -->
-          <v-tab-item v-show="activeTab === 'components'">
+          <v-window-item v-show="activeTab === 'components'">
             <div class="mb-4 pt-4 pb-4">
               <div class="d-flex align-center flex-wrap" style="gap: 12px">
                 <h2 class="text-h2 mb-0">{{ tm("tabs.handlersOperation") }}</h2>
@@ -177,10 +177,10 @@ const {
                 <ComponentPanel :active="activeTab === 'components'" />
               </v-card-text>
             </v-card>
-          </v-tab-item>
+          </v-window-item>
 
           <!-- 已安装的 MCP 服务器标签页内容 -->
-          <v-tab-item v-show="activeTab === 'mcp'">
+          <v-window-item v-show="activeTab === 'mcp'">
             <div class="mb-4 pt-4 pb-4">
               <div class="d-flex align-center flex-wrap" style="gap: 12px">
                 <h2 class="text-h2 mb-0">
@@ -197,10 +197,10 @@ const {
                 <McpServersSection />
               </v-card-text>
             </v-card>
-          </v-tab-item>
+          </v-window-item>
 
           <!-- Skills 标签页内容 -->
-          <v-tab-item v-show="activeTab === 'skills'">
+          <v-window-item v-show="activeTab === 'skills'">
             <div class="mb-4 pt-4 pb-4">
               <div class="d-flex align-center flex-wrap" style="gap: 12px">
                 <h2 class="text-h2 mb-0">{{ tm("tabs.skills") }}</h2>
@@ -215,7 +215,7 @@ const {
                 <SkillsSection />
               </v-card-text>
             </v-card>
-          </v-tab-item>
+          </v-window-item>
 
           <!-- 插件市场标签页内容 -->
           <MarketPluginsTab :state="pageState" />

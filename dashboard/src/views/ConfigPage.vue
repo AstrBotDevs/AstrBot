@@ -441,6 +441,7 @@ export default {
       // 未保存的更改状态
       // 存储原始配置
       originalConfigData: null,
+      hasUnsavedChanges: false,
     };
   },
 

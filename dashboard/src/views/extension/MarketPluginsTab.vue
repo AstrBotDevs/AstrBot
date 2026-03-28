@@ -180,7 +180,7 @@ const marketCategorySelectItems = computed(() =>
 </script>
 
 <template>
-  <v-tab-item v-show="activeTab === 'market'">
+  <v-window-item v-show="activeTab === 'market'">
     <div class="mb-6 pt-4 pb-4">
       <div class="d-flex align-center" style="gap: 12px">
         <div class="d-flex align-center" style="gap: 12px; min-width: 0">
@@ -393,7 +393,7 @@ const marketCategorySelectItems = computed(() =>
         </div>
       </v-expand-transition>
     </div>
-  </v-tab-item>
+  </v-window-item>
 </template>
 
 <style scoped>

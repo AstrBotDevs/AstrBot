@@ -14,7 +14,7 @@
           <v-chip size="small" class="ml-1"
             >{{ totalItems }} {{ tm("customRules.rulesCount") }}</v-chip
           >
-          <v-row class="me-4 ms-4" dense>
+          <v-row class="me-4 ms-4" density="compact">
             <v-text-field
               v-model="searchQuery"
               prepend-inner-icon="mdi-magnify"
@@ -241,7 +241,7 @@
           </v-chip>
         </v-card-title>
         <v-card-text>
-          <v-row dense>
+          <v-row density="compact">
             <v-col cols="12" md="6" lg="3">
               <v-select
                 v-model="batchScope"
@@ -302,7 +302,7 @@
               </v-select>
             </v-col>
           </v-row>
-          <v-row dense class="mt-3">
+          <v-row density="compact" class="mt-3">
             <v-col cols="12" class="d-flex justify-end">
               <v-btn
                 color="primary"
@@ -370,7 +370,7 @@
           </v-btn>
         </v-card-title>
         <v-card-text v-if="groups.length > 0">
-          <v-row dense>
+          <v-row density="compact">
             <v-col
               v-for="group in groups"
               :key="group.id"
@@ -440,7 +440,7 @@
               hide-details
               class="mb-4"
             ></v-text-field>
-            <v-row dense>
+            <v-row density="compact">
               <!-- 左侧：可选会话 -->
               <v-col cols="5">
                 <div class="text-subtitle-2 mb-2">
@@ -650,7 +650,7 @@
                 </h3>
               </div>
 
-              <v-row dense>
+              <v-row density="compact">
                 <v-col cols="12">
                   <v-checkbox
                     v-model="serviceConfig.session_enabled"
@@ -707,7 +707,7 @@
                 </h3>
               </div>
 
-              <v-row dense>
+              <v-row density="compact">
                 <v-col cols="12">
                   <v-select
                     v-model="providerConfig.chat_completion"
@@ -767,7 +767,7 @@
                 </h3>
               </div>
 
-              <v-row dense>
+              <v-row density="compact">
                 <v-col cols="12">
                   <v-select
                     v-model="serviceConfig.persona_id"
@@ -812,7 +812,7 @@
                 </h3>
               </div>
 
-              <v-row dense>
+              <v-row density="compact">
                 <v-col cols="12">
                   <v-select
                     v-model="pluginConfig.disabled_plugins"
@@ -860,7 +860,7 @@
                 </h3>
               </div>
 
-              <v-row dense>
+              <v-row density="compact">
                 <v-col cols="12">
                   <v-select
                     v-model="kbConfig.kb_ids"
