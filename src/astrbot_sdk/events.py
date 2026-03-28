@@ -470,12 +470,36 @@ class MessageEvent:
         return dict(payload)
 
     def set_extra(self, key: str, value: Any) -> None:
-        """Store SDK-local transient event data."""
+        """Store SDK-local transient event data.
+
+        Values written here are immediately available through ``get_extra()``
+        inside the current handler invocation. If you expect the value to remain
+        available after the event crosses the SDK bridge into a later handler or
+        lifecycle event, store only JSON-serializable data.
+
+        Recommended approach:
+        - Keep values to ``dict`` / ``list`` / ``str`` / ``int`` / ``float`` /
+          ``bool`` / ``None`` and nested combinations of those types.
+        - Convert framework objects into payloads before storing them. For
+          message components, use ``component_to_payload_sync()`` before
+          ``set_extra()`` and ``payload_to_component()`` after ``get_extra()``.
+
+        Non-serializable values may still be readable in the current handler,
+        but they will be dropped when the SDK bridge serializes extras for a
+        later event.
+        """
         self._sdk_local_extras[key] = value
         self._sdk_local_extras_dirty = True
 
     def get_extra(self, key: str | None = None, default: Any = None) -> Any:
-        """Read SDK-local transient event data."""
+        """Read SDK-local transient event data.
+
+        Extras returned here merge host-provided extras with values previously
+        written via ``set_extra()``. If a key was written with a
+        non-serializable value, it may disappear after the event is serialized
+        across the SDK bridge. In that case, persist a JSON-safe payload
+        instead of the original object.
+        """
         extras = dict(self._host_extras)
         extras.update(self._sdk_local_extras)
         if key is None:
