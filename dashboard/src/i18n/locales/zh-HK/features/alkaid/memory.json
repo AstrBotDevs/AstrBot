@@ -1,0 +1,97 @@
+{
+  "title": "Long Term Memory",
+  "subtitle": "AI Assistant 嘅 Long Term Memory 管理",
+  "memories": {
+    "title": "Memory List",
+    "content": "Memory 內容",
+    "importance": "重要程度",
+    "createTime": "Create 時間",
+    "lastAccess": "最後 Access",
+    "category": "Category"
+  },
+  "categories": {
+    "personal": "個人 Info",
+    "preferences": "Preference",
+    "conversations": "對話 History",
+    "facts": "Fact Info",
+    "skills": "Skill Knowledge"
+  },
+  "importance": {
+    "high": "高",
+    "medium": "中",
+    "low": "低"
+  },
+  "actions": {
+    "view": "睇 Details",
+    "edit": "Edit",
+    "delete": "Delete",
+    "pin": "Pin",
+    "unpin": "Unpin"
+  },
+  "filters": {
+    "all": "全部",
+    "category": "按 Category",
+    "importance": "按重要程度",
+    "dateRange": "按時間 Range",
+    "title": "Filter",
+    "userIdLabel": "Filter User ID",
+    "filterButton": "Filter",
+    "resetButton": "Reset Filter",
+    "refreshButton": "Refresh Graph"
+  },
+  "search": {
+    "title": "Search Memory",
+    "userIdLabel": "User ID",
+    "queryLabel": "入 Keyword",
+    "searchButton": "Search",
+    "resultsTitle": "Search 結果",
+    "noResults": "搵唔到相關 Memory 內容",
+    "similarity": "Similarity",
+    "noTextContent": "冇 Text 內容"
+  },
+  "addMemory": {
+    "title": "Add Memory Data",
+    "textLabel": "入 Text 內容",
+    "userIdLabel": "User ID",
+    "summarizeLabel": "需要 Summary",
+    "addButton": "Add Data"
+  },
+  "nodeDetails": {
+    "title": "Node Details",
+    "id": "ID",
+    "type": "Type",
+    "name": "名",
+    "userId": "User ID",
+    "timestamp": "Timestamp"
+  },
+  "graphStats": {
+    "title": "Graph 統計",
+    "nodeCount": "Node 數量",
+    "edgeCount": "Edge 數量"
+  },
+  "factDialog": {
+    "title": "Memory Fact",
+    "id": "ID",
+    "docId": "Document ID",
+    "createdAt": "Create 時間",
+    "updatedAt": "Update 時間",
+    "metadata": "Metadata",
+    "metadataKey": "Key",
+    "metadataValue": "Value",
+    "loading": "Load 緊...",
+    "close": "Close",
+    "noValue": "冇",
+    "unknown": "Unknown"
+  },
+  "messages": {
+    "searchQueryRequired": "請入 Search Keyword",
+    "searchSuccess": "搵到 {count} 條相關 Memory",
+    "searchNoResults": "搵唔到相關 Memory 內容",
+    "searchError": "Search 失敗",
+    "addSuccess": "Memory Data Add 成功！",
+    "addError": "Add Memory Data 失敗",
+    "factDetailsError": "攞 Memory Details 失敗",
+    "metadataParseError": "Parse 唔到 Metadata",
+    "relationNoMemoryData": "呢個 Relation 冇關聯嘅 Memory Data"
+  }
+}

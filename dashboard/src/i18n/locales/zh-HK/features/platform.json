@@ -1,0 +1,142 @@
+{
+  "title": "機械人",
+  "subtitle": "Manage 平台 Adapter Instance，Connect 去唔同嘅 Message 平台",
+  "adapters": "平台 Adapter",
+  "addAdapter": "Create 機械人",
+  "emptyText": "暫時冇平台 Adapter，撳 Create 機械人 加返個",
+  "viewWebhook": "睇 Webhook Link",
+  "webhookCopied": "Webhook URL 已經 Copy 落 Clipboard",
+  "webhookCopyFailed": "Copy 失敗，請手動 Copy",
+  "webhookDialog": {
+    "title": "Webhook Callback 地址",
+    "description": "Callback 地址如下，請 Make sure Network 環境可以 Public access。都可以喺 Log 度睇 Callback 地址 Info。建議填 Config File -> System 入面嘅「對外可達嘅 Callback API 地址」Config 項。",
+    "close": "Close"
+  },
+  "details": {
+    "adapterType": "Adapter Type",
+    "token": "Token",
+    "description": "Description"
+  },
+  "logs": {
+    "title": "平台 Log",
+    "expand": "Expand",
+    "collapse": "Collapse"
+  },
+  "dialog": {
+    "add": "Add",
+    "edit": "Edit",
+    "adapter": "機械人",
+    "refresh": "Refresh",
+    "cancel": "Cancel",
+    "save": "Save",
+    "addPlatform": "Create 機械人",
+    "connectTitle": "Connect {name}",
+    "viewTutorial": "睇 Connect 教學",
+    "noTemplates": "暫時冇平台 Template",
+    "idConflict": {
+      "title": "ID Conflict 警告",
+      "message": "Detect 到 ID \"{id}\" 重複咗。請用個新 ID。",
+      "confirm": "知道"
+    },
+    "securityWarning": {
+      "title": "Security 提醒",
+      "aiocqhttpTokenMissing": "為咗增強 Connection 安全性，強烈建議你 Set ws_reverse_token。冇 Set Token 可能會有 Security risk。",
+      "learnMore": "了解更多"
+    },
+    "invalidPlatformId": "平台 ID 唔可以包 ':' 或 '!'。"
+  },
+  "createDialog": {
+    "step1Title": "揀 Message 平台類別",
+    "step1Hint": "想將機械人 Connect 去邊度？例如 QQ、企業微信、飛書、Discord、Telegram 等。",
+    "platformTypeLabel": "Message 平台類別",
+    "configFileTitle": "Config File",
+    "optional": "Optional",
+    "configHint": "想點樣 Config 個機械人？Config File 包咗傾偈 Model、人格、Knowledge Base、Plugin 範圍等豐富嘅機械人 Config 項。",
+    "configDefaultHint": "Default 用預設 Config File \"default\"。你都可以遲啲先 Config。",
+    "useExistingConfig": "用現有 Config File",
+    "selectConfigLabel": "揀 Config File",
+    "createNewConfig": "Create 新 Config File",
+    "newConfigNameLabel": "新 Config File 名",
+    "newConfigTitle": "用新嘅 Config File",
+    "newConfigLoadFailed": "Load 唔到 Default Config Template",
+    "addRouteRule": "Add Route 規則",
+    "viewMode": "睇吓",
+    "editMode": "Edit",
+    "noRouteRules": "呢個平台暫時冇 Route 規則，會用 Default Config File",
+    "sessionIdPlaceholder": "Session ID 或者 *",
+    "allSessions": "全部 Session",
+    "configMissing": "Config File 唔存在",
+    "routeHint": "*Message Send 落去嗰陣，會根據 Session 來源順序由上到下 Match 第一個啱條件嘅 Config File。用 * 代表 Match 全部。用 /sid 指令攞 Session ID。全部都唔 Match 就會用 Default Config File。",
+    "warningContinue": "無視 Warning 繼續 Create",
+    "warningEditAgain": "重新修改",
+    "configDrawerTitle": "Config File 管理",
+    "configDrawerIdLabel": "ID",
+    "configTableHeaders": {
+      "configId": "同呢個 Instance 連住嘅 Config File ID",
+      "scope": "喺呢個 Instance 嘅 Apply 範圍"
+    },
+    "routeTableHeaders": {
+      "source": "Message Session 來源(Message Type:Session ID)",
+      "config": "用 Config File",
+      "actions": "Action"
+    },
+    "messageTypeOptions": {
+      "all": "全部 Message",
+      "group": "Group Message (GroupMessage)",
+      "friend": "PM (FriendMessage)"
+    },
+    "messageTypeLabels": {
+      "all": "全部 Message",
+      "group": "Group Message",
+      "friend": "PM"
+    }
+  },
+  "messages": {
+    "updateSuccess": "Update 成功！",
+    "addSuccess": "Add 成功！",
+    "deleteSuccess": "Delete 成功！",
+    "statusUpdateSuccess": "Status Update 成功！",
+    "deleteConfirm": "肯定要 Delete 平台 Adapter？",
+    "configNotFoundOpenConfig": "Target Config File 唔存在，已經開咗 Config 頁面畀你 Check。",
+    "updateMissingPlatformId": "Update 失敗，冇咗平台 ID。",
+    "platformUpdateFailed": "平台 Update 失敗。",
+    "addSuccessWithConfig": "平台 Add 成功，Config File Update 咗",
+    "configIdMissing": "攞唔到 Config File ID。",
+    "routingUpdateFailed": "Update Route Table 失敗: {message}",
+    "createConfigFailed": "Create 新 Config File 失敗: {message}",
+    "platformIdMissing": "攞唔到平台 ID。",
+    "routingSaveFailed": "Save Route Table 失敗: {message}"
+  },
+  "status": {
+    "enabled": "Enable 咗",
+    "disabled": "Disable 咗",
+    "connecting": "Connect 緊",
+    "connected": "Connect 咗",
+    "disconnected": "Disconnect 咗",
+    "error": "Error"
+  },
+  "runtimeStatus": {
+    "running": "Run 緊",
+    "error": "有 Error",
+    "pending": "等緊 Start",
+    "stopped": "Stop 咗",
+    "unknown": "Unknown",
+    "errors": "個 Error"
+  },
+  "platformQr": {
+    "title": "QR Code Login",
+    "show": "睇 QR Code",
+    "status": "QR Code 狀態",
+    "waiting": "等緊 QR Code",
+    "close": "Close"
+  },
+  "errorDialog": {
+    "title": "Error Details",
+    "platformId": "平台 ID",
+    "errorCount": "Error 數量",
+    "lastError": "最近 Error",
+    "occurredAt": "發生時間",
+    "traceback": "Error Stack Trace",
+    "close": "Close"
+  }
+}

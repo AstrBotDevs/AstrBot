@@ -1,0 +1,10 @@
+{
+  "title": "Trace",
+  "autoScroll": {
+    "enabled": "Auto Scroll：開",
+    "disabled": "Auto Scroll：閂"
+  },
+  "hint": "目前淨係 Record 部分 AstrBot Main Agent 嘅 Model Call Path，遲啲會繼續完善。",
+  "recording": "Record 緊",
+  "paused": "Pause 咗"
+}

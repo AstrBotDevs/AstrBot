@@ -1,0 +1,37 @@
+{
+  "greeting": {
+    "morning": "早晨，歡迎用 AstrBot",
+    "afternoon": "午安，歡迎用 AstrBot",
+    "evening": "晚安，歡迎用 AstrBot",
+    "newYear": "新年快樂！"
+  },
+  "subtitle": "可以搞掂 Basic Guide 先，平台同對話 Provider 都 Support 遲啲先 Config。",
+  "announcement": {
+    "title": "Announcement"
+  },
+  "onboard": {
+    "title": "Quick Guide",
+    "subtitle": "Welcome 頁可以一 Click 搞掂 Init。",
+    "step1Title": "Config 平台機械人",
+    "step1Desc": "將 AstrBot Connect 去 QQ、飛書、企業微信、Telegram 等 IM 平台。",
+    "step2Title": "Config AI Model",
+    "step2Desc": "幫 AstrBot Config AI Model。",
+    "configure": "去 Config",
+    "skip": "Skip",
+    "pending": "Pending",
+    "completed": "搞掂咗",
+    "skipped": "Skip 咗",
+    "platformLoadFailed": "Load 平台 Config 失敗",
+    "providerLoadFailed": "Load Provider Config 失敗",
+    "providerUpdateFailed": "Update default Config File 嘅 Default 對話 Provider 失敗",
+    "providerDefaultUpdated": "已經將 default Config File 嘅 Default 對話 Provider Set 做 {id}"
+  },
+  "resources": {
+    "title": "相關 Resource",
+    "githubDesc": "畀 AstrBot 撳個 Star 啦！",
+    "docsTitle": "Document",
+    "docsDesc": "睇吓 AstrBot 嘅官方 Document。",
+    "afdianTitle": "愛發電",
+    "afdianDesc": "經愛發電 Support AstrBot Team。"
+  }
+}

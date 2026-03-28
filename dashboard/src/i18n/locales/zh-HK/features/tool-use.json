@@ -1,0 +1,159 @@
+{
+  "title": "Function Tool 管理",
+  "subtitle": "Manage MCP Server 同睇吓有咩 Function Tool 用得",
+  "tooltip": {
+    "info": "Function Calling 同 MCP 係乜？",
+    "marketplace": "Browse 同 Install 來自 Community 嘅 MCP Server",
+    "serverConfig": "MCP Server (stdio) Config Support 以下 Field:\ncommand: Command 名 (例如 python 或者 uv)\nargs: Command Parameter Array (例如 [\"run\", \"server.py\"])\nenv: Environment Variable Object (例如 {\"api_key\": \"abc\"})\ncwd: Working Directory Path (例如 /path/to/server)\nencoding: Output Encoding (Default utf-8)\nencoding_error_handler: Text encoding error handler。Default 係 strict。\n其他 Field 請參考 MCP Document\n⚠️ 如果你用 Docker Deploy AstrBot，請務必將 MCP Server 裝喺 AstrBot Mount 好嘅 data 目錄入面"
+  },
+  "tabs": {
+    "local": "Local Server",
+    "marketplace": "MCP 市場"
+  },
+  "mcpServers": {
+    "title": "MCP Server",
+    "buttons": {
+      "refresh": "Refresh",
+      "add": "Add Server",
+      "useTemplateStdio": "Stdio Template",
+      "useTemplateStreamableHttp": "Streamable HTTP Template",
+      "useTemplateSse": "SSE Template",
+      "sync": "Sync Server"
+    },
+    "empty": "暫時冇 MCP Server，撳 Add Server 加返個",
+    "status": {
+      "noTools": "冇 Tool 用得",
+      "availableTools": "可用 Tool",
+      "configSummary": "Config: {keys}",
+      "noConfig": "未 Set Config"
+    }
+  },
+  "functionTools": {
+    "title": "Function Tool",
+    "buttons": {
+      "view": "睇吓 Tool"
+    },
+    "search": "Search Function Tool",
+    "empty": "冇 Function Tool 用得",
+    "description": "功能 Description",
+    "parameters": "Parameter List",
+    "noParameters": "呢個 Tool 冇 Parameter",
+    "table": {
+      "paramName": "Parameter 名",
+      "type": "Type",
+      "description": "Description",
+      "required": "Required",
+      "origin": "Source",
+      "originName": "Source 名",
+      "actions": "Action"
+    }
+  },
+  "marketplace": {
+    "title": "MCP Server 市場",
+    "search": "Search Server",
+    "buttons": {
+      "refresh": "Refresh",
+      "detail": "Details",
+      "import": "Import"
+    },
+    "loading": "Load 緊 MCP Server 市場...",
+    "empty": "暫時冇可用嘅 MCP Server",
+    "status": {
+      "availableTools": "可用 Tool ({count})",
+      "noToolsInfo": "冇可用 Tool Info"
+    }
+  },
+  "dialogs": {
+    "addServer": {
+      "title": "Add MCP Server",
+      "editTitle": "Edit MCP Server",
+      "fields": {
+        "name": "Server 名",
+        "nameRequired": "名係必填",
+        "enable": "Enable Server",
+        "config": "Server Config"
+      },
+      "errors": {
+        "configEmpty": "Config 唔可以空",
+        "jsonFormat": "JSON Format 錯: {error}",
+        "jsonParse": "JSON Parse 錯: {error}"
+      },
+      "buttons": {
+        "cancel": "Cancel",
+        "save": "Save",
+        "testConnection": "Test Connection",
+        "sync": "Sync"
+      },
+      "tips": {
+        "timeoutConfig": "Tool Calling 嘅 Timeout 時間請去 Config 頁面單獨 Set"
+      }
+    },
+    "serverDetail": {
+      "title": "Server Details",
+      "installConfig": "Install Config",
+      "availableTools": "可用 Tool",
+      "buttons": {
+        "close": "Close",
+        "importConfig": "Import Config"
+      }
+    },
+    "confirmDelete": "肯定要 Delete Server {name}？",
+    "syncProvider": {
+      "title": "Sync MCP Server",
+      "subtitle": "由 Provider Sync MCP Server Config 落 Local",
+      "steps": {
+        "selectProvider": "Step 1: 揀 Provider",
+        "configureAuth": "Step 2: Config Auth",
+        "syncServers": "Step 3: Sync Server"
+      },
+      "providers": {
+        "modelscope": "ModelScope",
+        "description": "ModelScope 係一個 Open Source 嘅 Model Community，提供各種 ML 同 AI 服務嘅 MCP Server"
+      },
+      "fields": {
+        "provider": "揀 Provider",
+        "accessToken": "Access Token",
+        "tokenRequired": "Access Token 係必填",
+        "tokenHint": "請入你嘅 ModelScope Access Token"
+      },
+      "buttons": {
+        "cancel": "Cancel",
+        "previous": "上一部",
+        "next": "下一部",
+        "sync": "開始 Sync",
+        "getToken": "攞 Token"
+      },
+      "status": {
+        "selectProvider": "請揀一個 MCP Server Provider",
+        "enterToken": "請入 Access Token 先繼續",
+        "readyToSync": "Ready Sync Server Config"
+      },
+      "messages": {
+        "syncSuccess": "MCP Server Sync 成功！",
+        "syncError": "Sync 失敗: {error}",
+        "tokenHelp": "點攞 ModelScope Access Token？撳右邊 Button 睇說明"
+      }
+    }
+  },
+  "messages": {
+    "getServersError": "攞 MCP Server List 失敗: {error}",
+    "getToolsError": "攞 Function Tool List 失敗: {error}",
+    "saveSuccess": "Save 成功！",
+    "saveError": "Save 失敗: {error}",
+    "deleteSuccess": "Delete 成功！",
+    "deleteError": "Delete 失敗: {error}",
+    "updateSuccess": "Update 成功！",
+    "updateError": "Update 失敗: {error}",
+    "getMarketError": "攞 MCP 市場 Server List 失敗: {error}",
+    "importError": {
+      "noConfig": "呢個 Server 冇可用 Config",
+      "invalidFormat": "Server Config Format 唔啱",
+      "failed": "Import Config 失敗: {error}"
+    },
+    "configParseError": "Config Parse Error: {error}",
+    "noAvailableConfig": "冇可用 Config",
+    "toggleToolSuccess": "Tool 狀態 Switch 成功！",
+    "toggleToolError": "Tool 狀態 Switch 失敗: {error}",
+    "testError": "Test Connection 失敗: {error}"
+  }
+}

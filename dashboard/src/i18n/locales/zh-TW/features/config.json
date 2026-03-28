@@ -1,0 +1,129 @@
+{
+  "title": "設定檔",
+  "subtitle": "管理系統設定和配置",
+  "editor": {
+    "visual": "視覺化編輯",
+    "code": "程式碼編輯",
+    "revertCode": "回到變更前的程式碼",
+    "applyConfig": "套用此設定",
+    "applyTip": "`套用此設定` 將設定暫存並套用到視覺化介面。如要儲存，需再點擊右下角儲存按鈕。"
+  },
+  "actions": {
+    "save": "儲存設定",
+    "delete": "刪除這項",
+    "add": "新增",
+    "reset": "重設為預設",
+    "export": "匯出設定",
+    "import": "匯入設定",
+    "validate": "驗證設定"
+  },
+  "help": {
+    "documentation": "官方文件",
+    "support": "加群詢問",
+    "helpText": "不了解設定？請見 {documentation} 或 {support}。",
+    "helpPrefix": "不了解設定？請見",
+    "helpMiddle": "或",
+    "helpSuffix": "。"
+  },
+  "messages": {
+    "configApplied": "設定成功套用。如要儲存，需再點擊右下角儲存按鈕。",
+    "configApplyError": "設定未套用，JSON 格式錯誤。",
+    "unsavedChangesNotice": "目前設定有未儲存的修改。請點擊右下角儲存按鈕以生效。",
+    "saveSuccess": "設定儲存成功",
+    "saveError": "設定儲存失敗",
+    "loadError": "設定載入失敗",
+    "deleteSuccess": "刪除成功",
+    "deleteError": "刪除失敗",
+    "updateSuccess": "更新成功",
+    "updateError": "更新失敗"
+  },
+  "sections": {
+    "general": "一般設定",
+    "advanced": "進階設定",
+    "security": "安全設定",
+    "appearance": "外觀設定",
+    "notification": "通知設定"
+  },
+  "general": {
+    "botName": "機器人名稱",
+    "language": "介面語言",
+    "timezone": "時區",
+    "autoSave": "自動儲存",
+    "debugMode": "偵錯模式"
+  },
+  "advanced": {
+    "logLevel": "日誌級別",
+    "maxConnections": "最大連線數",
+    "timeout": "逾時時間",
+    "retryAttempts": "重試次數",
+    "cacheSize": "快取大小"
+  },
+  "security": {
+    "apiKey": "API 密鑰",
+    "allowedHosts": "允許的主機",
+    "rateLimit": "頻率限制",
+    "encryption": "加密設定"
+  },
+  "configSelection": {
+    "selectConfig": "選擇設定檔",
+    "normalConfig": "一般",
+    "systemConfig": "系統"
+  },
+  "search": {
+    "placeholder": "搜尋設定項（欄位名/描述/提示）",
+    "noResult": "未找到符合的設定項"
+  },
+  "configManagement": {
+    "title": "設定檔管理",
+    "description": "AstrBot 支援針對不同機器人分別設定設定檔。預設會使用 `default` 設定。",
+    "newConfig": "新建設定檔",
+    "editConfig": "編輯設定檔",
+    "manageConfigs": "管理設定檔...",
+    "configName": "名稱",
+    "fillConfigName": "填寫設定檔名稱",
+    "confirmDelete": "確定要刪除設定檔 \"{name}\" 嗎？此操作不可復原。",
+    "pleaseEnterName": "請填寫設定名稱",
+    "createFailed": "新設定檔建立失敗",
+    "deleteFailed": "刪除設定檔失敗",
+    "updateFailed": "更新設定檔失敗"
+  },
+  "buttons": {
+    "cancel": "取消",
+    "create": "建立",
+    "update": "更新"
+  },
+  "codeEditor": {
+    "title": "編輯設定檔"
+  },
+  "fileUpload": {
+    "button": "管理檔案",
+    "dialogTitle": "已上傳檔案",
+    "dropzone": "上傳新檔案",
+    "allowedTypes": "允許類型：{types}",
+    "empty": "暫無已上傳檔案",
+    "statusMissing": "檔案遺失",
+    "statusUnconfigured": "未加入設定",
+    "uploadSuccess": "已上傳 {count} 個檔案",
+    "uploadFailed": "上傳失敗",
+    "loadFailed": "取得檔案列表失敗",
+    "fileTooLarge": "檔案過大（上限 {max} MB）：{name}",
+    "deleteSuccess": "已刪除檔案",
+    "deleteFailed": "刪除失敗",
+    "addToConfig": "已加入設定",
+    "fileCount": "檔案：{count}",
+    "done": "完成"
+  },
+  "unsavedChangesWarning": {
+    "dialogTitle": "未儲存的變更",
+    "leavePage": "目前設定有未儲存的變更，切換前是否儲存？",
+    "switchConfig": "切換設定檔會遺失目前未儲存的變更，是否先儲存？",
+    "options": {
+      "save": "儲存",
+      "saveAndSwitch": "儲存並切換",
+      "discardAndSwitch": "放棄變更並切換",
+      "closeCard": "關閉彈出式視窗",
+      "confirm": "確定",
+      "cancel": "取消"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "hero": {
+    "title": "AstrBot",
+    "subtitle": "A project out of interests and loves ❤️",
+    "starButton": "Star 呢個 Project! 🌟",
+    "issueButton": "開 Issue"
+  },
+  "contributors": {
+    "title": "Contributors",
+    "description": "呢個 Project 由好多 Open Source Community 嘅人一齊 Maintain。多謝每一位 Contributor 嘅幫手！",
+    "viewLink": "睇 AstrBot 嘅 Contributors"
+  },
+  "stats": {
+    "title": "Global Deploy",
+    "license": "AstrBot 用 AGPL v3 License Open Source"
+  }
+}

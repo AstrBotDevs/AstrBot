@@ -1,0 +1,66 @@
+{
+  "page": {
+    "title": "SubAgent 編排",
+    "beta": "Experimental",
+    "subtitle": "Main LLM 可以直接用自己 Tool，都可以經 handoff 分派畀各個 SubAgent。"
+  },
+  "actions": {
+    "refresh": "Refresh",
+    "save": "Save",
+    "add": "Add SubAgent",
+    "delete": "Delete",
+    "close": "Close"
+  },
+  "switches": {
+    "enable": "Enable SubAgent 編排",
+    "enableHint": "Enable SubAgent 功能",
+    "dedupe": "Main LLM 去重重複 Tool（同 SubAgent 重疊嘅 Tool 會 Hide 咗）",
+    "dedupeHint": "喺 Main Agent 度 Remove 重複 Tool"
+  },
+  "description": {
+    "disabled": "唔 Enable：SubAgent 閂咗；Main LLM 按 persona 規則 Mount Tool（預設全部），再直接 Call。",
+    "enabled": "Enable：Main LLM 會 Keep 自己 Tool 再 Mount transfer_to_* 委派 Tool。如果開咗「去重重複 Tool」，同 SubAgent 指定嘅 Tool 重疊嗰 Part 會喺 Main LLM Tool 集度 Remove 走。"
+  },
+  "section": {
+    "title": "SubAgents Config",
+    "globalSettings": "Global Settings"
+  },
+  "cards": {
+    "statusEnabled": "Enable 咗",
+    "statusDisabled": "Disable 咗",
+    "unnamed": "未命名 SubAgent",
+    "transferPrefix": "transfer_to_{name}",
+    "switchLabel": "Enable",
+    "previewTitle": "Preview：Main LLM 會睇到嘅 handoff Tool",
+    "personaChip": "Persona: {id}",
+    "noDescription": "暫時冇 Description"
+  },
+  "form": {
+    "nameLabel": "Agent 名（畀 transfer_to_{name} 用）",
+    "nameHint": "建議用英文細階+Underline，而且要 Global Unique",
+    "providerLabel": "Chat Provider（Optional）",
+    "providerHint": "留空代表跟 Global Default provider。",
+    "personaLabel": "揀人格 Config",
+    "personaHint": "SubAgent 會直接 Inherit 揀咗嘅 Persona 嘅 System Config 同 Tool。喺人格 Config 頁面 Manage 同 Create 人格。",
+    "personaPreview": "人格 Preview",
+    "descriptionLabel": "對 Main LLM 嘅 Description（用嚟決定 Handoff 唔 Handoff）",
+    "descriptionHint": "呢段會當做 transfer_to_* Tool 嘅 Description 畀 Main LLM 睇，建議精簡清晰。"
+  },
+  "messages": {
+    "loadConfigFailed": "攞 Config 失敗",
+    "loadPersonaFailed": "攞 Persona List 失敗",
+    "nameMissing": "有未填名嘅 SubAgent",
+    "nameInvalid": "SubAgent 名 Invalid：淨係容許英文細階/數字/Underline，同埋要字母開頭",
+    "nameDuplicate": "SubAgent 名 Duplicate 咗：{name}",
+    "personaMissing": "SubAgent {name} 未揀 Persona",
+    "saveSuccess": "Save 成功",
+    "saveFailed": "Save 失敗",
+    "nameRequired": "名必填",
+    "namePattern": "淨係 Support 細階字母、數字同 Underline"
+  },
+  "empty": {
+    "title": "未 Config SubAgent",
+    "subtitle": "Add 一個新嘅 SubAgent 開始",
+    "action": "Create 第一個 Agent"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "title": "平台 Log",
+  "autoScroll": {
+    "enabled": "Auto Scroll 開咗",
+    "disabled": "Auto Scroll 閂咗"
+  },
+  "pipInstall": {
+    "button": "Install pip Library",
+    "dialogTitle": "Install pip Library",
+    "packageLabel": "*Library 名，例如 llmtuner",
+    "mirrorLabel": "Force PyPI Repo Link（Optional）",
+    "mirrorHint": "Force PyPI Repo Link > Config `PyPI Repo 地址`",
+    "installButton": "Install"
+  },
+  "debugHint": {
+    "text": "Debug Log 要喺「Config File → System → Console Log Level」度開"
+  }
+}

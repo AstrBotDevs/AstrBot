@@ -1,0 +1,158 @@
+﻿{
+  "title": "自訂 Rule",
+  "subtitle": "為特定 Session Set 自訂 Rule，Priority 高過 Global Config",
+  "buttons": {
+    "refresh": "Refresh",
+    "edit": "Edit",
+    "editRule": "Edit Rule",
+    "deleteAllRules": "Delete 晒所有 Rule",
+    "addRule": "Add Rule",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "clear": "Clear",
+    "next": "下一步",
+    "editCustomName": "Edit 備註",
+    "batchDelete": "Batch Delete"
+  },
+  "customRules": {
+    "title": "自訂 Rule",
+    "rulesCount": "條 Rule",
+    "hasRules": "Config 咗",
+    "noRules": "暫時冇自訂 Rule",
+    "noRulesDesc": "撳「Add Rule」幫特定 Session Config 自訂 Rule",
+    "serviceConfig": "Service Config",
+    "pluginConfig": "Plugin Config",
+    "kbConfig": "Knowledge Base Config",
+    "providerConfig": "Model Config",
+    "configured": "Config 咗",
+    "noCustomName": "未 Set 備註"
+  },
+  "quickEditName": {
+    "title": "Edit 備註名"
+  },
+  "search": {
+    "placeholder": "Search Session..."
+  },
+  "table": {
+    "headers": {
+      "umoInfo": "Message Session 來源",
+      "rulesOverview": "Rule 概覽",
+      "actions": "Action"
+    }
+  },
+  "persona": {
+    "none": "跟 Config File"
+  },
+  "provider": {
+    "followConfig": "跟 Config File"
+  },
+  "addRule": {
+    "title": "Add 自訂 Rule",
+    "description": "揀個 Message Session 來源 (UMO) 嚟 Config 自訂 Rule。自訂 Rule 嘅 Priority 高過呢個來源所屬嘅 Config File 入面嘅 Global Rule。可以用 /sid 指令攞呢個來源嘅 UMO Info。",
+    "selectUmo": "揀 Session",
+    "noUmos": "暫時冇可用 Session"
+  },
+  "ruleEditor": {
+    "title": "Edit 自訂 Rule",
+    "description": "幫呢個 Session Config 自訂 Rule，呢啲 Rule 會 Override Global Config。",
+    "serviceConfig": {
+      "title": "Service Config",
+      "sessionEnabled": "Enable 呢個 Message Session 來源嘅 Message 處理",
+      "llmEnabled": "Enable LLM",
+      "ttsEnabled": "Enable TTS",
+      "customName": "Message Session 來源備註名"
+    },
+    "providerConfig": {
+      "title": "Model Config",
+      "chatProvider": "Chat Model",
+      "sttProvider": "STT Model",
+      "ttsProvider": "TTS Model"
+    },
+    "personaConfig": {
+      "title": "人格 Config",
+      "selectPersona": "揀人格",
+      "hint": "Apply 人格 Config 之後，會強制呢個來源嘅所有對話用呢個人格。"
+    },
+    "pluginConfig": {
+      "title": "Plugin Config",
+      "disabledPlugins": "Disable 咗嘅 Plugin",
+      "hint": "揀要喺呢個 Session Disable 嘅 Plugin。冇揀嘅 Plugin 會 Keep 住 Enable。"
+    },
+    "kbConfig": {
+      "title": "Knowledge Base Config",
+      "selectKbs": "揀 Knowledge Base",
+      "topK": "Return 結果數量 (Top K)",
+      "enableRerank": "Enable Rerank"
+    }
+  },
+  "deleteConfirm": {
+    "title": "確認 Delete",
+    "message": "肯定要 Delete 呢個 Session 嘅所有自訂 Rule？Delete 完會用返 Global Config。"
+  },
+  "batchDeleteConfirm": {
+    "title": "確認 Batch Delete",
+    "message": "肯定要 Delete 揀咗嘅 {count} 條 Rule？Delete 完會用返 Global Config。"
+  },
+  "batchOperations": {
+    "title": "Batch Operation",
+    "hint": "快速 Batch 修改 Session Config",
+    "scope": "Apply 範圍",
+    "scopeSelected": "揀咗嘅 Session",
+    "scopeAll": "所有 Session",
+    "scopeGroup": "所有 Group Chat",
+    "scopePrivate": "所有 PM",
+    "llmStatus": "LLM 狀態",
+    "ttsStatus": "TTS 狀態",
+    "chatProvider": "Chat Model",
+    "ttsProvider": "TTS Model",
+    "apply": "Apply 更改"
+  },
+  "groups": {
+    "title": "Group 管理",
+    "count": "{count} 個 Group",
+    "addToGroup": "Add 落 Group",
+    "create": "Create Group",
+    "edit": "Edit Group",
+    "name": "Group 名",
+    "sessionsCount": "{count} 個 Session",
+    "empty": "暫時冇 Group，撳「Create Group」建立",
+    "availableSessions": "可選 Session ({count})",
+    "selectedSessions": "已選 Session ({count})",
+    "searchPlaceholder": "Search...",
+    "noMatch": "搵唔到 Match",
+    "noMembers": "暫時冇 Member",
+    "customGroupDivider": "── 自訂 Group ──",
+    "customGroupOption": "📁 {name} ({count})",
+    "groupOption": "{name} ({count} 個 Session)",
+    "deleteConfirm": "肯定要 Delete Group \"{name}\"？"
+  },
+  "status": {
+    "enabled": "Enable",
+    "disabled": "Disable"
+  },
+  "messages": {
+    "refreshSuccess": "Data Refresh 咗",
+    "loadError": "Load Data 失敗",
+    "saveSuccess": "Save 成功",
+    "saveError": "Save 失敗",
+    "clearSuccess": "Clear 咗",
+    "clearError": "Clear 失敗",
+    "deleteSuccess": "Delete 成功",
+    "deleteError": "Delete 失敗",
+    "noChanges": "冇嘢需要 Save",
+    "batchDeleteSuccess": "Batch Delete 成功",
+    "batchDeleteError": "Batch Delete 失敗",
+    "selectSessionsFirst": "請先揀要做 Action 嘅 Session",
+    "selectAtLeastOneConfig": "請最少揀一項要改嘅 Config",
+    "batchUpdateSuccess": "Batch Update 成功",
+    "partialUpdateFailed": "部分 Update 失敗",
+    "batchUpdateError": "Batch Update 失敗",
+    "groupNameRequired": "Group 名唔可以空",
+    "saveGroupError": "Save Group 失敗",
+    "deleteGroupError": "Delete Group 失敗",
+    "selectSessionsToAddFirst": "請先揀要 Add 嘅 Session",
+    "addToGroupSuccess": "Add 咗 {count} 個 Session 落 Group",
+    "addToGroupError": "Add 失敗"
+  }
+}

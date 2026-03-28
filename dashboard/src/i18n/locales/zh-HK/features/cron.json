@@ -1,0 +1,66 @@
+{
+  "page": {
+    "title": "未來任務管理",
+    "beta": "Experimental",
+    "subtitle": "睇吓畀 AstrBot Set 嘅未來任務。AstrBot 會自動 Wake up 去做 Task，做完會通知 Set Task 嗰個人。要先喺 Config Enable「主動型能力」。",
+    "proactive": {
+      "supported": "主動 Send 結果淨係 Support 以下你已經 Config 咗嘅平台：{platforms}",
+      "unsupported": "暫時冇 Support 主動 Message 嘅平台，請喺平台 Config 度開。"
+    }
+  },
+  "actions": {
+    "create": "Create 任務",
+    "refresh": "Refresh",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "submit": "Create"
+  },
+  "table": {
+    "title": "Register 咗嘅任務",
+    "empty": "暫時冇任務。",
+    "headers": {
+      "name": "名",
+      "type": "Type",
+      "cron": "Cron",
+      "session": "Session ID",
+      "nextRun": "下一次 Execute",
+      "lastRun": "最近 Execute",
+      "note": "說明",
+      "actions": "Action"
+    },
+    "type": {
+      "once": "一次性",
+      "recurring": "Looping",
+      "activeAgent": "Active Agent",
+      "workflow": "Workflow",
+      "unknown": "{type}"
+    },
+    "timezoneLocal": "Local Timezone",
+    "notAvailable": "—"
+  },
+  "form": {
+    "title": "Create 任務",
+    "chatHint": "可以直接同 AstrBot 傾偈叫佢 Create 未來任務，唔使喺度 Add。",
+    "runOnce": "一次性任務",
+    "name": "任務名",
+    "note": "任務說明",
+    "cron": "Cron Expression",
+    "cronPlaceholder": "0 9 * * *",
+    "runAt": "Execute 時間",
+    "session": "Target session (platform_id:message_type:session_id)",
+    "timezone": "Timezone（Optional，例如 Asia/Hong_Kong）",
+    "enabled": "Enable"
+  },
+  "messages": {
+    "loadFailed": "攞任務失敗",
+    "updateFailed": "Update 失敗",
+    "deleteSuccess": "Delete 咗",
+    "deleteFailed": "Delete 失敗",
+    "sessionRequired": "請填 session",
+    "noteRequired": "請填說明",
+    "cronRequired": "請填 Cron Expression",
+    "runAtRequired": "請揀 Execute 時間",
+    "createSuccess": "Create 成功",
+    "createFailed": "Create 失敗"
+  }
+}

@@ -1,0 +1,153 @@
+{
+  "title": "Model Provider",
+  "subtitle": "可以喺「對話」入面 Config 對話 Model。另外，「Agent 執行器」包埋 Dify、Coze、阿里雲百鍊 App 等 3rd-party Service 嘅 Integration。",
+  "providers": {
+    "title": "Model Provider",
+    "settings": "Settings",
+    "addProvider": "Add Model Provider",
+    "providerType": "Provider Type",
+    "tabs": {
+      "all": "全部",
+      "chatCompletion": "對話",
+      "agentRunner": "Agent 執行器",
+      "speechToText": "語音轉文字",
+      "textToSpeech": "文字轉語音",
+      "embedding": "Embedding",
+      "rerank": "Rerank"
+    },
+    "empty": {
+      "all": "暫時冇 Model Provider，撳 Add Model Provider 加返個",
+      "typed": "暫時冇 {type} Type 嘅 Model Provider，撳 Add Model Provider 加返個"
+    },
+    "description": {
+      "openai": "都 Support 所有 Compatible OpenAI API 嘅 Model Provider。",
+      "kimi_code": "Kimi 嘅 CodingPlan / Kimi Code 專用 Access，用特殊嘅 Anthropic API Compatibility Adapter。",
+      "vllm_rerank": "都 Support Jina AI, Cohere, PPIO 等 Provider。",
+      "default": ""
+    }
+  },
+  "availability": {
+    "title": "Model Provider Availability",
+    "subtitle": "透過 Test Model 對話 Availability 判斷，可能會有 API 費用",
+    "refresh": "Refresh Status",
+    "noData": "撳「Refresh Status」Button 攞 Model Provider Availability",
+    "available": "Available",
+    "unavailable": "Unavailable",
+    "pending": "Check 緊...",
+    "errorMessage": "Error Message",
+    "test": "Test"
+  },
+  "logs": {
+    "title": "Service Log",
+    "expand": "Expand",
+    "collapse": "Collapse"
+  },
+  "dialogs": {
+    "addProvider": {
+      "title": "Model Provider",
+      "tabs": {
+        "basic": "對話",
+        "agentRunner": "Agent 執行器",
+        "speechToText": "語音轉文字",
+        "textToSpeech": "文字轉語音",
+        "embedding": "Embedding",
+        "rerank": "Rerank"
+      },
+      "noTemplates": "暫時冇呢個 Type 嘅 Provider Template"
+    },
+    "config": {
+      "addTitle": "Add",
+      "editTitle": "Edit",
+      "provider": "Model Provider",
+      "cancel": "Cancel",
+      "save": "Save"
+    },
+    "settings": {
+      "title": "Model Provider Settings",
+      "sessionSeparation": {
+        "title": "Enable Provider Session Isolation",
+        "description": "唔同 Session 可以獨立揀 Text Generation、TTS、STT 等 Model Provider。"
+      },
+      "close": "Close"
+    }
+  },
+  "messages": {
+    "success": {
+      "update": "Update 成功！",
+      "add": "Add 成功！",
+      "delete": "Delete 成功！",
+      "statusUpdate": "Status Update 成功！",
+      "sessionSeparation": "Session Isolation Setting Update 咗"
+    },
+    "error": {
+      "sessionSeparation": "攞 Session Isolation Config 失敗",
+      "fetchStatus": "攞 Model Provider Status 失敗",
+      "testError": "Test {id} 失敗: {error}"
+    },
+    "confirm": {
+      "delete": "肯定要 Delete Model Provider {id}？"
+    }
+  },
+  "providerTypes": {
+    "title": "Provider Type"
+  },
+  "providerSources": {
+    "title": "Provider Source",
+    "add": "Add",
+    "empty": "暫時冇 Provider Source",
+    "selectHint": "請揀一個 Provider Source",
+    "selectCreated": "揀已經 Create 咗嘅 Provider Source",
+    "save": "Save Config",
+    "saveAndFetchModels": "Save 完攞 Model",
+    "fetchModels": "攞 Model List",
+    "saveSuccess": "Provider Source Save 成功",
+    "saveError": "Provider Source Save 失敗",
+    "deleteConfirm": "肯定要 Delete Provider Source {id}？咁樣會連埋所有關聯嘅 Model Config 一齊 Delete。",
+    "deleteSuccess": "Provider Source Delete 成功",
+    "deleteError": "Provider Source Delete 失敗",
+    "enabled": "Enable 咗",
+    "disabled": "Disable 咗",
+    "advancedConfig": "Advanced Config...",
+    "fields": {
+      "name": "名",
+      "apiKey": "API Key",
+      "baseUrl": "Base URL"
+    },
+    "hints": {
+      "id": "Provider Source Unique ID（唔係 Provider ID）",
+      "key": "API Key",
+      "apiBase": "Custom API Endpoint URL",
+      "proxy": "HTTP/HTTPS Proxy 地址，Format 例如 http://127.0.0.1:7890。淨係對呢個 Provider 嘅 API Request 生效，唔影響 Docker 內網通信。"
+    },
+    "labels": {
+      "proxy": "Proxy 地址"
+    }
+  },
+  "models": {
+    "available": "Available Model",
+    "configured": "Configured Model",
+    "empty": "暫時冇 Config 咗嘅 Model，撳上面嘅「攞 Model List」加返",
+    "noModelsFound": "搵唔到 Available Model",
+    "fetchError": "攞 Model List 失敗",
+    "addSuccess": "Model {model} Add 成功",
+    "deleteConfirm": "肯定要 Delete Model {id}？",
+    "deleteSuccess": "Model Delete 成功",
+    "deleteError": "Model Delete 失敗",
+    "testSuccess": "Model {id} Test Pass",
+    "testSuccessWithLatency": "Model {id} Test Pass，Latency {latency} ms",
+    "testError": "Model Test 失敗",
+    "searchPlaceholder": "Search Model 或者 ID",
+    "manualAddButton": "Custom Model",
+    "manualDialogTitle": "Add Custom Model",
+    "manualDialogModelLabel": "Model ID（例如 gpt-4.1-mini）",
+    "manualDialogPreviewLabel": "Display ID（自動 Generate）",
+    "manualDialogPreviewHint": "Generate Rule：Source ID/Model ID",
+    "manualModelRequired": "請入 Model ID",
+    "manualModelExists": "呢個 Model 已經存在",
+    "configure": "Config",
+    "tooltips": {
+      "providerId": "Provider ID",
+      "modelId": "Model ID"
+    }
+  }
+}

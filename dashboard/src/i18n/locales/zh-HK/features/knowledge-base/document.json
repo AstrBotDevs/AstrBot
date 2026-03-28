@@ -1,0 +1,55 @@
+{
+  "title": "Document 詳情",
+  "backToKB": "返去 Knowledge Base",
+  "info": {
+    "title": "Document 資訊",
+    "name": "Document 名",
+    "type": "文件 Type",
+    "size": "文件 Size",
+    "chunkCount": "Chunk 數量",
+    "createdAt": "Upload 時間"
+  },
+  "chunks": {
+    "title": "Chunk 列表",
+    "empty": "暫時冇 Chunk",
+    "index": "Index",
+    "content": "內容",
+    "charCount": "字數",
+    "actions": "操作",
+    "view": "睇吓",
+    "edit": "Edit",
+    "delete": "Delete",
+    "preview": "Preview",
+    "search": "Search Chunk",
+    "searchPlaceholder": "打 Keyword search Chunk 內容...",
+    "showing": "顯示緊",
+    "deleteConfirm": "肯定要 Delete 呢個 Chunk？",
+    "deleteSuccess": "Delete Chunk 成功",
+    "deleteFailed": "Delete Chunk 失敗"
+  },
+  "edit": {
+    "title": "Edit Chunk",
+    "content": "Chunk 內容",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saveSuccess": "Save Chunk 成功",
+    "saveFailed": "Save Chunk 失敗"
+  },
+  "delete": {
+    "title": "Delete Chunk",
+    "confirmText": "肯定要 Delete 呢個 Chunk？",
+    "warning": "Delete 咗就冇得 Restore，可能會影響 Knowledge Base 嘅 Search 效果。",
+    "cancel": "Cancel",
+    "confirm": "Delete",
+    "deleteSuccess": "Delete Chunk 成功",
+    "deleteFailed": "Delete Chunk 失敗"
+  },
+  "view": {
+    "title": "Chunk 詳情",
+    "index": "Index",
+    "content": "內容",
+    "charCount": "字數",
+    "vecDocId": "Vector ID",
+    "close": "Close"
+  }
+}

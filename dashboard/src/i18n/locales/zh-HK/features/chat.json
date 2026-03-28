@@ -1,0 +1,161 @@
+{
+  "title": "傾偈啦！",
+  "subtitle": "同 AI 助手傾偈",
+  "input": {
+    "placeholder": "開始打字...",
+    "send": "Send",
+    "clear": "Clear",
+    "upload": "Upload File",
+    "voice": "語音 Input",
+    "recordingPrompt": "錄音緊，請講嘢...",
+    "chatPrompt": "傾偈啦！",
+    "dropToUpload": "放開 Mouse Upload File",
+    "stopGenerating": "Stop Generate"
+  },
+  "message": {
+    "user": "User",
+    "assistant": "Assistant",
+    "system": "System",
+    "error": "Error Message",
+    "loading": "諗緊..."
+  },
+  "voice": {
+    "start": "開始錄音",
+    "stop": "Stop 錄音",
+    "recording": "新錄音",
+    "processing": "Process 緊...",
+    "error": "錄音失敗",
+    "listening": "等緊講嘢...",
+    "speaking": "講緊嘢",
+    "startRecording": "開始語音 Input",
+    "liveMode": "Live 對話"
+  },
+  "welcome": {
+    "title": "歡迎用 AstrBot",
+    "subtitle": "你嘅 AI 助手",
+    "quickActions": "Quick Action",
+    "examples": "Example 問題"
+  },
+  "actions": {
+    "copy": "Copy",
+    "regenerate": "Regenerate",
+    "like": "Like",
+    "dislike": "Dislike",
+    "share": "Share",
+    "newChat": "Create 對話",
+    "deleteChat": "Delete 呢個對話",
+    "editTitle": "Edit Title",
+    "fullscreen": "Full Screen",
+    "exitFullscreen": "Exit Full Screen",
+    "reply": "Quote Reply",
+    "providerConfig": "AI Config",
+    "toolsUsed": "用咗嘅 Tools",
+    "toolCallUsed": "用咗 {name} Tool",
+    "pythonCodeAnalysis": "用咗 Python Code 分析"
+  },
+  "ipython": {
+    "output": "Output"
+  },
+  "conversation": {
+    "newConversation": "New Chat",
+    "noHistory": "暫時冇對話 History",
+    "systemStatus": "System Status",
+    "llmService": "LLM Service",
+    "speechToText": "Speech to Text",
+    "editDisplayName": "Edit Session 名",
+    "displayName": "Session 名",
+    "displayNameUpdated": "Session 名 Update 咗",
+    "displayNameUpdateFailed": "Update Session 名失敗",
+    "confirmDelete": "肯定要 Delete '{name}'？呢個 Action 冇得 Undo。"
+  },
+  "modes": {
+    "darkMode": "轉 Dark Mode",
+    "lightMode": "轉 Light Mode"
+  },
+  "shortcuts": {
+    "help": "Help",
+    "voiceRecord": "錄音",
+    "pasteImage": "Paste 圖",
+    "sendKey": {
+      "title": "Send Shortcut",
+      "enterToSend": "Enter Send",
+      "shiftEnterToSend": "Shift+Enter Send"
+    }
+  },
+  "streaming": {
+    "enabled": "Streaming Response 開咗",
+    "disabled": "Streaming Response 閂咗",
+    "on": "Streaming",
+    "off": "Normal"
+  },
+  "transport": {
+    "title": "Transport Mode",
+    "sse": "SSE",
+    "websocket": "WebSocket"
+  },
+  "config": {
+    "title": "Config File"
+  },
+  "reasoning": {
+    "thinking": "Thinking Process"
+  },
+  "reply": {
+    "replyTo": "Quote",
+    "notFound": "搵唔到 Message"
+  },
+  "project": {
+    "title": "Project",
+    "create": "Create Project",
+    "edit": "Edit Project",
+    "name": "Project 名",
+    "emoji": "Icon (Emoji)",
+    "description": "Project Description（Optional）",
+    "noSessions": "呢個 Project 暫時冇對話",
+    "confirmDelete": "肯定要 Delete Project \"{title}\"？Project 入面嘅對話唔會 Delete。"
+  },
+  "time": {
+    "today": "今日",
+    "yesterday": "尋日"
+  },
+  "stats": {
+    "tokens": "Token",
+    "inputTokens": "Input Token",
+    "outputTokens": "Output Token",
+    "cachedTokens": "Cached Token",
+    "duration": "用時",
+    "ttft": "TTFT (First Token)"
+  },
+  "refs": {
+    "title": "Reference",
+    "sources": "Source"
+  },
+  "connection": {
+    "title": "Connect Status 提醒",
+    "message": "System Detect 到 Chat Connection 要 Reconnect。",
+    "reasons": "可能係因為：",
+    "reasonWindowResize": "Resize 咗 Chat Window（正常現象）",
+    "reasonMultipleTabs": "喺其他 Tab 開咗 Chat 頁面",
+    "reasonNetworkIssue": "Network 斷咗陣",
+    "notice": "留意：為咗 Ensure 收到 Message，System 淨係容許同時 Keep 一個 Chat Connection。如果你開咗多個 Tab 傾偈，建議淨係 Keep 一版。",
+    "understand": "知道",
+    "status": {
+      "reconnecting": "Reconnect 緊...",
+      "reconnected": "Chat Connection 已經 Reconnect",
+      "failed": "Connect 失敗，請 Refresh 頁面再試"
+    }
+  },
+  "errors": {
+    "sendMessageFailed": "Send Message 失敗，請再試",
+    "createSessionFailed": "Create Session 失敗，請 Refresh 頁面再試"
+  },
+  "batch": {
+    "selected": "揀咗 {count} 個",
+    "confirmDelete": "肯定要 Delete {count} 個對話？呢個 Action 冇得 Undo。",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "delete": "Delete",
+    "exit": "Exit",
+    "partialFailure": "{total} 個對話入面有 {failed} 個 Delete 失敗",
+    "requestFailed": "Delete 對話失敗，請再試。"
+  }
+}

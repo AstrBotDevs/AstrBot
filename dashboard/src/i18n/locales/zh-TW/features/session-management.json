@@ -1,0 +1,158 @@
+﻿{
+  "title": "自訂規則",
+  "subtitle": "為特定會話設定自訂規則，優先級高於全域設定",
+  "buttons": {
+    "refresh": "重新整理",
+    "edit": "編輯",
+    "editRule": "編輯規則",
+    "deleteAllRules": "刪除所有規則",
+    "addRule": "新增規則",
+    "save": "儲存",
+    "cancel": "取消",
+    "delete": "刪除",
+    "clear": "清除",
+    "next": "下一步",
+    "editCustomName": "編輯備註",
+    "batchDelete": "批次刪除"
+  },
+  "customRules": {
+    "title": "自訂規則",
+    "rulesCount": "條規則",
+    "hasRules": "已設定",
+    "noRules": "暫無自訂規則",
+    "noRulesDesc": "點擊「新增規則」為特定會話設定自訂規則",
+    "serviceConfig": "服務設定",
+    "pluginConfig": "擴充套件設定",
+    "kbConfig": "知識庫設定",
+    "providerConfig": "模型設定",
+    "configured": "已設定",
+    "noCustomName": "未設定備註"
+  },
+  "quickEditName": {
+    "title": "編輯備註名稱"
+  },
+  "search": {
+    "placeholder": "搜尋會話..."
+  },
+  "table": {
+    "headers": {
+      "umoInfo": "訊息會話來源",
+      "rulesOverview": "規則概覽",
+      "actions": "操作"
+    }
+  },
+  "persona": {
+    "none": "跟隨設定檔"
+  },
+  "provider": {
+    "followConfig": "跟隨設定檔"
+  },
+  "addRule": {
+    "title": "新增自訂規則",
+    "description": "選擇一個訊息會話來源 (UMO) 來設定自訂規則。自訂規則的優先級高於該來源所屬的設定檔中的全域規則。可以使用 /sid 指令取得該來源的 UMO 資訊。",
+    "selectUmo": "選擇會話",
+    "noUmos": "暫無可用會話"
+  },
+  "ruleEditor": {
+    "title": "編輯自訂規則",
+    "description": "為此會話設定自訂規則，這些規則將優先於全域設定生效。",
+    "serviceConfig": {
+      "title": "服務設定",
+      "sessionEnabled": "啟用該訊息會話來源的訊息處理",
+      "llmEnabled": "啟用 LLM",
+      "ttsEnabled": "啟用 TTS",
+      "customName": "訊息會話來源備註名稱"
+    },
+    "providerConfig": {
+      "title": "模型設定",
+      "chatProvider": "聊天模型",
+      "sttProvider": "語音辨識模型",
+      "ttsProvider": "語音合成模型"
+    },
+    "personaConfig": {
+      "title": "人格設定",
+      "selectPersona": "選擇人格",
+      "hint": "套用人格設定後，將會強制該來源的所有對話使用該人格。"
+    },
+    "pluginConfig": {
+      "title": "擴充套件設定",
+      "disabledPlugins": "停用的擴充套件",
+      "hint": "選擇要在此會話中停用的擴充套件。未選擇的擴充套件將保持啟用狀態。"
+    },
+    "kbConfig": {
+      "title": "知識庫設定",
+      "selectKbs": "選擇知識庫",
+      "topK": "回傳結果數量 (Top K)",
+      "enableRerank": "啟用重排序"
+    }
+  },
+  "deleteConfirm": {
+    "title": "確認刪除",
+    "message": "確定要刪除此會話的所有自訂規則嗎？刪除後將恢復使用全域設定。"
+  },
+  "batchDeleteConfirm": {
+    "title": "確認批次刪除",
+    "message": "確定要刪除選取的 {count} 條規則嗎？刪除後將恢復使用全域設定。"
+  },
+  "batchOperations": {
+    "title": "批次操作",
+    "hint": "快速批次修改會話設定",
+    "scope": "套用範圍",
+    "scopeSelected": "選取的會話",
+    "scopeAll": "所有會話",
+    "scopeGroup": "所有群聊",
+    "scopePrivate": "所有私聊",
+    "llmStatus": "LLM 狀態",
+    "ttsStatus": "TTS 狀態",
+    "chatProvider": "聊天模型",
+    "ttsProvider": "TTS 模型",
+    "apply": "套用變更"
+  },
+  "groups": {
+    "title": "分組管理",
+    "count": "{count} 個分組",
+    "addToGroup": "加入到分組",
+    "create": "建立分組",
+    "edit": "編輯分組",
+    "name": "分組名稱",
+    "sessionsCount": "{count} 個會話",
+    "empty": "暫無分組，點擊「建立分組」建立",
+    "availableSessions": "可選會話 ({count})",
+    "selectedSessions": "已選會話 ({count})",
+    "searchPlaceholder": "搜尋...",
+    "noMatch": "無符合項目",
+    "noMembers": "暫無成員",
+    "customGroupDivider": "── 自訂分組 ──",
+    "customGroupOption": "📁 {name} ({count})",
+    "groupOption": "{name} ({count} 個會話)",
+    "deleteConfirm": "確定要刪除分組 \"{name}\" 嗎？"
+  },
+  "status": {
+    "enabled": "啟用",
+    "disabled": "停用"
+  },
+  "messages": {
+    "refreshSuccess": "資料已重新整理",
+    "loadError": "載入資料失敗",
+    "saveSuccess": "儲存成功",
+    "saveError": "儲存失敗",
+    "clearSuccess": "已清除",
+    "clearError": "清除失敗",
+    "deleteSuccess": "刪除成功",
+    "deleteError": "刪除失敗",
+    "noChanges": "沒有需要儲存的變更",
+    "batchDeleteSuccess": "批次刪除成功",
+    "batchDeleteError": "批次刪除失敗",
+    "selectSessionsFirst": "請先選擇要操作的會話",
+    "selectAtLeastOneConfig": "請至少選擇一項要修改的設定",
+    "batchUpdateSuccess": "批次更新成功",
+    "partialUpdateFailed": "部分更新失敗",
+    "batchUpdateError": "批次更新失敗",
+    "groupNameRequired": "分組名稱不能為空",
+    "saveGroupError": "儲存分組失敗",
+    "deleteGroupError": "刪除分組失敗",
+    "selectSessionsToAddFirst": "請先選擇要加入的會話",
+    "addToGroupSuccess": "已加入 {count} 個會話到分組",
+    "addToGroupError": "加入失敗"
+  }
+}

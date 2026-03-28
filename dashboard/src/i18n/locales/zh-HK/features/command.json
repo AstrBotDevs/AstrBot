@@ -1,0 +1,95 @@
+{
+  "title": "指令管理",
+  "summary": {
+    "total": "Show 嘅指令數",
+    "disabled": "Disable 咗",
+    "conflicts": "有 Conflict"
+  },
+  "conflictAlert": {
+    "title": "Detect 到指令 Conflict",
+    "description": "目前有 {count} 對指令有 Conflict，Conflict 嘅指令會同時 Trigger 多個 Plugin 回應，可能會搞到有 Unexpected Behavior。",
+    "hint": "請撳「Rename」Button 改 Conflict 指令嘅名嚟 Resolve Conflict。"
+  },
+  "table": {
+    "headers": {
+      "command": "Command",
+      "type": "Type",
+      "plugin": "所屬 Plugin",
+      "description": "Description",
+      "permission": "Permission",
+      "status": "Status",
+      "actions": "Action"
+    }
+  },
+  "type": {
+    "command": "Command",
+    "group": "Command Group",
+    "subCommand": "Sub-command"
+  },
+  "status": {
+    "enabled": "Enable 咗",
+    "disabled": "Disable 咗",
+    "conflict": "有 Conflict"
+  },
+  "permission": {
+    "everyone": "所有人",
+    "admin": "Admin"
+  },
+  "tooltips": {
+    "enable": "Enable 指令",
+    "disable": "Disable 指令",
+    "rename": "Rename 指令",
+    "viewDetails": "睇 Details"
+  },
+  "dialogs": {
+    "rename": {
+      "title": "Rename 指令",
+      "newName": "新指令名",
+      "aliases": "Manage Alias",
+      "addAlias": "Add Alias",
+      "cancel": "Cancel",
+      "confirm": "Confirm"
+    },
+    "details": {
+      "title": "指令 Details",
+      "type": "指令 Type",
+      "handler": "Handler",
+      "module": "Module Path",
+      "originalCommand": "Original Command",
+      "effectiveCommand": "Effective Command",
+      "parentGroup": "所屬 Command Group",
+      "subCommands": "Sub-command List",
+      "aliases": "Alias",
+      "permission": "Permission Requirement",
+      "conflictStatus": "Conflict Status"
+    }
+  },
+  "messages": {
+    "toggleSuccess": "指令 Status Update 咗",
+    "toggleFailed": "Update 指令 Status 失敗",
+    "renameSuccess": "指令 Rename 咗",
+    "renameFailed": "Rename 失敗",
+    "loadFailed": "Load 指令 List 失敗",
+    "updateSuccess": "Update 成功",
+    "updateFailed": "Update 失敗"
+  },
+  "search": {
+    "placeholder": "Search 指令..."
+  },
+  "empty": {
+    "noCommands": "暫時冇指令",
+    "noCommandsDesc": "目前 Filter 下搵唔到任何指令"
+  },
+  "filters": {
+    "all": "All",
+    "enabled": "Enable 咗",
+    "disabled": "Disable 咗",
+    "conflict": "有 Conflict",
+    "byPlugin": "按 Plugin Filter",
+    "byType": "按 Type Filter",
+    "byPermission": "按 Permission Filter",
+    "byStatus": "按 Status Filter",
+    "showSystemPlugins": "Show System Plugin 指令",
+    "systemPluginConflictHint": "有涉及 System Plugin 嘅 Conflict，要 Resolve 咗先可以 Hide"
+  }
+}

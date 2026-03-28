@@ -1,0 +1,133 @@
+{
+  "save": "Save",
+  "cancel": "Cancel",
+  "close": "Close",
+  "copy": "Copy",
+  "copied": "Copy 咗",
+  "copyFailed": "Copy 失敗",
+  "delete": "Delete",
+  "edit": "Edit",
+  "add": "Add",
+  "confirm": "確認",
+  "loading": "Load緊...",
+  "success": "成功",
+  "error": "Error",
+  "warning": "Warning",
+  "info": "Info",
+  "name": "名",
+  "description": "Description",
+  "author": "作者",
+  "status": "狀態",
+  "actions": "操作",
+  "enable": "Enable",
+  "disable": "Disable",
+  "enabled": "Enable 咗",
+  "disabled": "Disable 咗",
+  "reload": "Reload",
+  "configure": "Config",
+  "install": "Install",
+  "uninstall": "Uninstall",
+  "update": "Update",
+  "language": "語言",
+  "settings": "Settings",
+  "locale": "zh-HK",
+  "type": "輸入",
+  "press": "撳",
+  "longPress": "長撳",
+  "yes": "係",
+  "no": "唔係",
+  "imagePreview": "圖片 Preview",
+  "autoDetect": "Auto Detect",
+  "dialog": {
+    "confirmTitle": "確認操作",
+    "confirmMessage": "你肯定要執行呢個操作？",
+    "confirmButton": "確定",
+    "cancelButton": "Cancel"
+  },
+  "restart": {
+    "waiting": "等緊 AstrBot Restart...",
+    "maxRetriesReached": "Pull 狀態已經去到極限，請人手 Check 吓。"
+  },
+  "readme": {
+    "title": "Plugin 說明文件",
+    "buttons": {
+      "viewOnGithub": "喺 GitHub 睇 Repo",
+      "refresh": "Refresh 文件"
+    },
+    "loading": "Load緊 README 文件...",
+    "errors": {
+      "fetchFailed": "攞 README 失敗",
+      "fetchError": "攞 README 嗰陣發生 Error"
+    },
+    "empty": {
+      "title": "呢個 Plugin 冇提供文件 Link 或者 GitHub Repo 網址。",
+      "subtitle": "請去 Plugin 市場睇吓或者搵 Plugin 作者攞多啲資料。"
+    }
+  },
+  "changelog": {
+    "title": "更新日誌",
+    "loading": "Load緊更新日誌...",
+    "empty": {
+      "title": "呢個 Plugin 冇提供更新日誌",
+      "subtitle": "Developer 可以喺 Plugin 目錄加個 CHANGELOG.md 嚟提供更新日誌"
+    }
+  },
+  "editor": {
+    "fullscreen": "Full Screen 編輯",
+    "editingTitle": "Edit內容"
+  },
+  "templateList": {
+    "addEntry": "Add Item",
+    "empty": "暫時冇 Item，請揀 Template 加落去",
+    "missingTemplate": "搵唔到對應嘅 Template，請 Delete 完重新加過。",
+    "unknownTemplate": "未指定 Template"
+  },
+  "list": {
+    "addItemPlaceholder": "加新 Item，撳 Enter 確認",
+    "addButton": "Add",
+    "addMore": "加多啲",
+    "batchImport": "Batch Import",
+    "batchImportTitle": "Batch Import",
+    "batchImportLabel": "每一行一個 Item",
+    "batchImportPlaceholder": "例如：\nItem 1\nItem 2\nItem 3",
+    "batchImportHint": "每一行會當做一個獨立嘅 Item，空行會自動 Skip",
+    "batchImportButton": "Import {count} 項",
+    "noItems": "暫時冇 Item",
+    "noItemsHint": "暫時冇 Item，喺上面打字之後撳 Enter 加落去",
+    "inputPlaceholder": "打完字撳 Enter 加落去",
+    "editTitle": "改 List Item",
+    "modifyButton": "修改"
+  },
+  "itemCard": {
+    "enabled": "Enable 咗",
+    "disabled": "Disable 咗",
+    "delete": "Delete",
+    "edit": "Edit",
+    "copy": "Copy",
+    "noData": "暫時冇 Data"
+  },
+  "objectEditor": {
+    "dialogTitle": "改 Key-Value",
+    "noItems": "暫時冇 Item",
+    "noParams": "暫時冇 Parameter",
+    "presets": "Preset",
+    "newKeyLabel": "新 Key 名",
+    "valueTypeLabel": "Value Type",
+    "keyExists": "Key 名已經存在",
+    "invalidJson": "JSON Format 錯咗",
+    "placeholders": {
+      "keyName": "Key 名",
+      "stringValue": "String Value",
+      "numberValue": "Number",
+      "jsonValue": "JSON"
+    }
+  },
+  "firstNotice": {
+    "title": "首次提示",
+    "loading": "Load緊首次提示...",
+    "empty": {
+      "title": "暫時冇首次提示內容",
+      "subtitle": "搵唔到 FIRST_NOTICE.md 或者個 File 係空嘅。"
+    }
+  }
+}

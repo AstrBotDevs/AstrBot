@@ -1,0 +1,39 @@
+{
+  "network": {
+    "timeout": "網路請求逾時，請稍後重試",
+    "connection": "網路連線失敗，請檢查網路狀態",
+    "server": "伺服器錯誤，請聯絡技術支援",
+    "unavailable": "服務暫不可用",
+    "forbidden": "存取被拒絕"
+  },
+  "validation": {
+    "required": "此欄位為必填項",
+    "invalid": "輸入格式不正確",
+    "tooLong": "輸入內容過長",
+    "tooShort": "輸入內容過短",
+    "email": "請輸入有效的電子郵件地址",
+    "url": "請輸入有效的 URL 地址",
+    "number": "請輸入有效的數字"
+  },
+  "auth": {
+    "unauthorized": "未授權存取，請重新登入",
+    "forbidden": "權限不足，無法執行此操作",
+    "tokenExpired": "登入已過期，請重新登入",
+    "invalidCredentials": "使用者名稱或密碼錯誤"
+  },
+  "file": {
+    "uploadFailed": "檔案上傳失敗",
+    "invalidFormat": "不支援的檔案格式",
+    "tooLarge": "檔案大小超出限制",
+    "notFound": "找不到檔案"
+  },
+  "operation": {
+    "failed": "操作失敗",
+    "cancelled": "操作已取消",
+    "notSupported": "不支援此操作",
+    "conflict": "操作衝突，請稍後重試"
+  },
+  "browser": {
+    "audioNotSupported": "您的瀏覽器不支援音訊播放。"
+  }
+}

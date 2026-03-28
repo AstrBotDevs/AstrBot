@@ -1,0 +1,67 @@
+{
+  "title": "Knowledge Base 管理",
+  "subtitle": "統一管理同 Search Knowledge Base 內容",
+  "list": {
+    "title": "我嘅 Knowledge Base",
+    "subtitle": "Manage 你所有嘅 Knowledge Base 集合",
+    "create": "Create Knowledge Base",
+    "refresh": "Refresh List",
+    "empty": "暫時冇 Knowledge Base",
+    "loading": "Load 緊...",
+    "documents": "Document",
+    "chunks": "Chunk",
+    "sessionConfig": "Session Config"
+  },
+  "card": {
+    "edit": "Edit",
+    "delete": "Delete",
+    "open": "Open",
+    "docCount": "{count} 個 Document",
+    "chunkCount": "{count} 個 Chunk"
+  },
+  "create": {
+    "title": "Create Knowledge Base",
+    "nameLabel": "Knowledge Base 名",
+    "namePlaceholder": "幫 Knowledge Base 起個名",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "簡單 Description 吓呢個 Knowledge Base 嘅用途...",
+    "emojiLabel": "Icon",
+    "embeddingModelLabel": "Embedding Model",
+    "rerankModelLabel": "Rerank Model (Optional)",
+    "providerInfo": "Provider: {id} | Dimension: {dimensions}",
+    "rerankProviderInfo": "Provider: {id}",
+    "cancel": "Cancel",
+    "submit": "Create",
+    "nameRequired": "請入 Knowledge Base 名"
+  },
+  "edit": {
+    "title": "Edit Knowledge Base",
+    "submit": "Save"
+  },
+  "delete": {
+    "title": "Delete Knowledge Base",
+    "confirmText": "肯定要 Delete Knowledge Base「{name}」？",
+    "warning": "呢個 Action 冇得 Undo，所有 Document、Chunk 同關聯 Config 都會永遠 Delete 晒。",
+    "cancel": "Cancel",
+    "confirm": "Delete"
+  },
+  "emoji": {
+    "title": "揀 Icon",
+    "close": "Close",
+    "categories": {
+      "books": "書同 Document",
+      "emotions": "Emoji 同 Emotion",
+      "objects": "物件同 Tool",
+      "symbols": "Symbol 同 Sign"
+    }
+  },
+  "messages": {
+    "createSuccess": "Knowledge Base Create 成功",
+    "createFailed": "Create 失敗",
+    "updateSuccess": "Knowledge Base Update 成功",
+    "updateFailed": "Update 失敗",
+    "deleteSuccess": "Knowledge Base Delete 成功",
+    "deleteFailed": "Delete 失敗",
+    "loadError": "Load Knowledge Base List 失敗"
+  }
+}

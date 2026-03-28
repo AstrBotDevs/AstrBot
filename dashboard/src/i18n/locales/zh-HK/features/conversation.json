@@ -1,0 +1,102 @@
+{
+  "title": "對話管理",
+  "subtitle": "Manage 同睇 User 對話 History",
+  "filters": {
+    "title": "Filter",
+    "platform": "機械人 ID",
+    "type": "Type",
+    "search": "Search Keyword",
+    "reset": "Reset"
+  },
+  "history": {
+    "title": "對話 History",
+    "refresh": "Refresh"
+  },
+  "batch": {
+    "deleteSelected": "Delete 揀咗嘅 ({count})",
+    "exportSelected": "Export 揀咗嘅 ({count})"
+  },
+  "pagination": {
+    "itemsPerPage": "每頁",
+    "showingItems": "Display {start}-{end} 項目，共 {total} 項"
+  },
+  "table": {
+    "headers": {
+      "title": "對話 Title",
+      "platform": "機械人 ID",
+      "type": "Message Type",
+      "cid": "對話 ID",
+      "umo": "Message Session 來源",
+      "sessionId": "Session ID",
+      "createdAt": "Create 時間",
+      "updatedAt": "Update 時間",
+      "actions": "Action"
+    }
+  },
+  "actions": {
+    "view": "睇吓",
+    "edit": "Edit",
+    "delete": "Delete"
+  },
+  "messageTypes": {
+    "group": "Group Chat",
+    "friend": "PM",
+    "unknown": "Unknown"
+  },
+  "status": {
+    "noTitle": "冇 Title 嘅對話",
+    "unknown": "Unknown",
+    "noData": "暫時冇對話 Record",
+    "emptyContent": "對話內容係空嘅",
+    "audioNotSupported": "你個 Browser 唔 support 播 Audio。"
+  },
+  "dialogs": {
+    "view": {
+      "title": "對話 Details",
+      "editMode": "Edit 對話",
+      "previewMode": "Preview Mode",
+      "saveChanges": "Save 修改",
+      "close": "Close",
+      "confirmClose": "你有未 Save 嘅修改，肯定要 Close？"
+    },
+    "edit": {
+      "title": "Edit 對話 Info",
+      "titleLabel": "對話 Title",
+      "titlePlaceholder": "入對話 Title",
+      "cancel": "Cancel",
+      "save": "Save"
+    },
+    "delete": {
+      "title": "確認 Delete",
+      "message": "肯定要 Delete 對話 {title}？呢個 Action 冇得 Undo。",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    },
+    "batchDelete": {
+      "title": "Batch Delete 確認",
+      "message": "肯定要 Delete 揀咗嘅 {count} 個對話？呢個 Action 冇得 Undo，請諗清楚！",
+      "andMore": "等 {count} 個",
+      "cancel": "Cancel",
+      "confirm": "Batch Delete",
+      "warning": "Warning：呢個 Action 冇得 Undo！"
+    }
+  },
+  "messages": {
+    "fetchError": "攞對話 List 失敗",
+    "saveSuccess": "Save 成功",
+    "saveError": "Save 失敗",
+    "deleteSuccess": "Delete 成功",
+    "deleteError": "Delete 失敗",
+    "historyError": "攞對話 History 失敗",
+    "historySaveSuccess": "對話 History Save 成功",
+    "historySaveError": "對話 History Save 失敗",
+    "invalidJson": "JSON Format Invalid",
+    "noItemSelected": "請先揀要 Delete 嘅對話",
+    "batchDeleteSuccess": "成功 Delete 咗 {count} 個對話",
+    "batchDeleteError": "Batch Delete 失敗",
+    "batchDeletePartial": "Delete 完：成功 {deleted} 個，失敗 {failed} 個",
+    "exportSuccess": "Export 成功",
+    "exportError": "Export 失敗",
+    "noItemSelectedForExport": "請先揀要 Export 嘅對話"
+  }
+}

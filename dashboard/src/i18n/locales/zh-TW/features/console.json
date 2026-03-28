@@ -1,0 +1,18 @@
+{
+  "title": "平台日誌",
+  "autoScroll": {
+    "enabled": "自動捲動已開啟",
+    "disabled": "自動捲動已關閉"
+  },
+  "pipInstall": {
+    "button": "安裝 pip 庫",
+    "dialogTitle": "安裝 Pip 庫",
+    "packageLabel": "*庫名，如 llmtuner",
+    "mirrorLabel": "強制 PyPI 軟體庫連結（選填）",
+    "mirrorHint": "強制 PyPI 軟體庫連結 > 設定項 `PyPI 軟體庫位址`",
+    "installButton": "安裝"
+  },
+  "debugHint": {
+    "text": "Debug 日誌需要在「設定檔 → 系統 → 控制台日誌級別」中開啟"
+  }
+}

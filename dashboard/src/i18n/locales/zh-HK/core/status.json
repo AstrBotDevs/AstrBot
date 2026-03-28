@@ -1,0 +1,22 @@
+{
+  "loading": "Load緊",
+  "success": "成功",
+  "error": "Error",
+  "warning": "Warning",
+  "info": "Info",
+  "pending": "Pending",
+  "processing": "Process緊",
+  "completed": "完成咗",
+  "failed": "失敗咗",
+  "cancelled": "Cancel咗",
+  "timeout": "Timeout",
+  "connecting": "Connect緊",
+  "connected": "Connect咗",
+  "disconnected": "Disconnect咗",
+  "online": "Online",
+  "offline": "Offline",
+  "active": "Active",
+  "inactive": "Inactive",
+  "ready": "Ready",
+  "busy": "Busy"
+}

@@ -1,0 +1,214 @@
+{
+  "network": {
+    "title": "Network",
+    "githubProxy": {
+      "title": "GitHub 加速地址",
+      "subtitle": "Set Download Plugin 或者 Update AstrBot 嗰陣用嘅 GitHub 加速地址。呢個喺中國大陸 Network 環境有用。可以 Custom，入完即刻生效。所有地址都唔 Guarantee 穩定性，如果 Update Plugin/Project 嗰陣出 Error，請首先 Check 吓加速地址用唔用得。",
+      "label": "揀 GitHub 加速地址"
+    },
+    "proxySelector": {
+      "title": "GitHub 加速",
+      "noProxy": "唔用 GitHub 加速",
+      "useProxy": "用 GitHub 加速",
+      "testConnection": "Test Proxy Connection",
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "custom": "Custom"
+    }
+  },
+  "theme": {
+    "title": "Theme",
+    "subtitle": "Custom Theme 主色同輔助色。改完即刻生效，而且會 Save 喺 Browser Local Storage。",
+    "customize": {
+      "title": "Theme Color",
+      "primary": "主色",
+      "secondary": "輔助色",
+      "reset": "Reset Default"
+    }
+  },
+  "system": {
+    "title": "System",
+    "restart": {
+      "title": "Restart",
+      "subtitle": "Restart AstrBot",
+      "button": "Restart"
+    },
+    "migration": {
+      "title": "Data Migrate 去 v4.0.0 Format",
+      "subtitle": "如果你撞到 Data Compatibility 問題，可以手動 Start Database Migration 助手",
+      "button": "Start Migrate 助手"
+    },
+    "backup": {
+      "title": "Data Backup 同 Restore",
+      "subtitle": "Export 或者 Import AstrBot 嘅所有 Data，方便 Migrate 去新 Server",
+      "button": "Backup 管理"
+    },
+    "cleanup": {
+      "title": "Log 同 Cache Clear",
+      "subtitle": "睇吓而家 Log 同 Cache 食咗幾多位，可以一 Click Clear。",
+      "refresh": "Refresh Size",
+      "cleanAll": "全部 Clear",
+      "panel": {
+        "title": "Clear Details",
+        "subtitle": "而家佔用 {size}"
+      },
+      "fileCount": "{count} 個 File",
+      "confirm": "肯定要 Clear {target}？",
+      "targetNames": {
+        "cache": "Cache",
+        "logs": "Log",
+        "all": "Log 同 Cache"
+      },
+      "targets": {
+        "cache": {
+          "title": "Cache",
+          "subtitle": "Clear Temp File、Plugin Market Cache 同 Skill Cache。",
+          "button": "Clear Cache"
+        },
+        "logs": {
+          "title": "Log",
+          "subtitle": "Clear 歷史 Log，同埋清空寫緊嘅 Log File 內容。",
+          "button": "Clear Log"
+        }
+      },
+      "messages": {
+        "statusFailed": "Load Storage Size 失敗",
+        "cleanupSuccess": "Clear 咗 {count} 個 File，放返 {size} 出嚟",
+        "cleanupFailed": "Clear 失敗"
+      }
+    }
+  },
+  "sidebar": {
+    "title": "Sidebar",
+    "customize": {
+      "title": "Custom Sidebar",
+      "subtitle": "Drag 嚟改 Module 順序，或者將 Module 拉出/拉入「更多功能」Group。Setting 淨係 Save 喺 Browser Local Storage。",
+      "reset": "Reset Default",
+      "mainItems": "主要 Module",
+      "moreItems": "更多功能"
+    }
+  },
+  "backup": {
+    "dialog": {
+      "title": "Backup 管理"
+    },
+    "tabs": {
+      "export": "Export Backup",
+      "import": "Import Backup",
+      "list": "Backup List"
+    },
+    "export": {
+      "title": "Create Backup",
+      "description": "將所有 Data Export 做 ZIP Backup File，包埋 Database、Knowledge Base、Config 同 Attachment。",
+      "includes": "Backup 包埋：Main Database、Knowledge Base（Metadata + Vector Index + Document）、Config File、Attachment File",
+      "button": "開始 Export",
+      "processing": "Export 緊...",
+      "wait": "等多陣，Zip 緊 Data...",
+      "completed": "Export 搞掂！",
+      "download": "Download Backup",
+      "another": "Create 新 Backup",
+      "failed": "Export 失敗",
+      "retry": "Retry"
+    },
+    "import": {
+      "title": "Import Backup",
+      "warning": "⚠️ Import 會清空同 Overwrite 現有 Data！請確保已經 Backup 咗而家嘅 Data。",
+      "selectFile": "揀 Backup File (.zip)",
+      "uploadAndCheck": "Upload 兼 Check",
+      "uploading": "Upload 緊...",
+      "uploadWait": "等多陣，Upload 緊 Backup File...",
+      "uploadInit": "Initialize 緊 Upload...",
+      "uploadingChunks": "Upload 緊 Chunk...",
+      "uploadComplete": "Upload 搞掂，Merge 緊 File...",
+      "checking": "Check 緊 Backup File...",
+      "invalidBackup": "Invalid 嘅 Backup File",
+      "backupContents": "Backup 內容",
+      "tables": "個 Data Table",
+      "knowledgeBases": "Knowledge Base",
+      "configFiles": "Config File",
+      "confirmImport": "Confirm Import",
+      "button": "開始 Import",
+      "processing": "Import 紧...",
+      "wait": "等多陣，Restore 緊 Data...",
+      "completed": "Import 搞掂！",
+      "restartRequired": "Data 已經 Import 成功。建議即刻 Restart AstrBot 等啲改動生效。",
+      "restartNow": "即刻 Restart",
+      "failed": "Import 失敗",
+      "retry": "Retry",
+      "version": {
+        "backupVersion": "Backup Version",
+        "currentVersion": "目前 Version",
+        "backupTime": "Backup 時間",
+        "matchTitle": "✅ Version Match",
+        "matchMessage": "Import 會清空同 Overwrite 現有所有 Data，包埋：\n• Main Database（對話 Record、Config 等）\n• Knowledge Base Data\n• Plugin 同 Plugin Data\n• Config File\n\n呢個 Action 冇得 Undo！係咪確認繼續？",
+        "minorDiffTitle": "⚠️ Version 差異 Warning",
+        "minorDiffMessage": "Minor Version 差異通常係 Compatible 嘅，但可能有少少 Data Structure 變動。\nImport 會清空同 Overwrite 現有所有 Data！\n\n係咪確認繼續 Import？",
+        "majorDiffTitle": "⛔ Import 唔到",
+        "majorDiffMessage": "Major Version 唔同，跨 Major Version Import 可能搞到 Data Corrupt。\n請用同一個 Major Version 嘅 AstrBot 嚟 Import。"
+      }
+    },
+    "list": {
+      "empty": "暫時冇 Backup File",
+      "refresh": "Refresh List",
+      "confirmDelete": "肯定要 Delete 呢個 Backup File？呢個 Action 冇得 Undo。",
+      "uploaded": "Upload 咗",
+      "restore": "Restore 呢個 Backup",
+      "rename": "Rename",
+      "renameTitle": "Rename Backup File",
+      "newName": "新 File 名",
+      "renameHint": "File 名淨係可以有字母、數字、Underline、Dash 同點",
+      "renameRequired": "請入 File 名",
+      "renameInvalidChars": "File 名有 Illegal Character",
+      "renameFailed": "Rename 失敗",
+      "ftpHint": "對於大嘅 Backup File，都可以經 FTP/SFTP 等方法直接 Upload 去 data/backups 目錄"
+    }
+  },
+  "apiKey": {
+    "title": "API Key",
+    "manageTitle": "Developer Access Key",
+    "subtitle": "為外部 Developer Create API Key，用嚟 Call Open HTTP API。",
+    "name": "Key 名",
+    "expiresInDays": "Expire 時間",
+    "expiryOptions": {
+      "day1": "1 日",
+      "day7": "7 日",
+      "day30": "30 日",
+      "day90": "90 日",
+      "permanent": "Permanent"
+    },
+    "permanentWarning": "Permanent 嘅 API Key Risk 比較高，請 Save 好同建議淨係喺必要場景用。",
+    "scopes": "Permission Scope",
+    "create": "Create API Key",
+    "revoke": "Revoke",
+    "delete": "Delete",
+    "copy": "Copy",
+    "docsLink": "睇 Document",
+    "plaintextHint": "請即刻 Save 低呢條 Key，Close 咗之後就睇唔返明文。",
+    "empty": "暫時冇 API Key",
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "table": {
+      "name": "名",
+      "prefix": "Prefix",
+      "scopes": "Permission",
+      "status": "狀態",
+      "lastUsed": "最近用過",
+      "createdAt": "Create 時間",
+      "actions": "Action"
+    },
+    "messages": {
+      "loadFailed": "Load API Key 失敗",
+      "scopeRequired": "請最少揀一個 Permission",
+      "createSuccess": "API Key Create 成功",
+      "createFailed": "Create API Key 失敗",
+      "revokeSuccess": "API Key 已經 Revoke",
+      "revokeFailed": "Revoke API Key 失敗",
+      "deleteSuccess": "API Key 已經 Delete",
+      "deleteFailed": "Delete API Key 失敗",
+      "copySuccess": "Copy 咗 API Key",
+      "copyFailed": "Copy API Key 失敗"
+    }
+  }
+}

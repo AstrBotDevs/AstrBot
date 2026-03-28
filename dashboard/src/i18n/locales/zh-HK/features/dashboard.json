@@ -1,0 +1,65 @@
+{
+  "title": "平台 Log",
+  "subtitle": "Real-time 監控同統計 Data",
+  "lastUpdate": "最後 Update",
+  "status": {
+    "loading": "Load 緊...",
+    "dataError": "攞 Data 失敗",
+    "noticeError": "攞 Announcement 失敗",
+    "online": "Online",
+    "uptime": "Uptime",
+    "memoryUsage": "Memory 佔用"
+  },
+  "stats": {
+    "totalMessage": {
+      "title": "Message 總數",
+      "subtitle": "所有平台 Send 嘅 Message 總計"
+    },
+    "onlinePlatform": {
+      "title": "Message 平台",
+      "subtitle": "Connect 咗嘅 Message 平台數量"
+    },
+    "runningTime": {
+      "title": "Uptime",
+      "subtitle": "System Run 咗幾耐",
+      "format": "{hours} 個鐘 {minutes} 分鐘 {seconds} 秒"
+    },
+    "memoryUsage": {
+      "title": "Memory 佔用",
+      "subtitle": "System Memory 使用量",
+      "cpuLoad": "CPU Load",
+      "status": {
+        "good": "Good",
+        "normal": "Normal",
+        "high": "High"
+      }
+    }
+  },
+  "charts": {
+    "messageTrend": {
+      "title": "Message Trend 分析",
+      "subtitle": "Track Message 數量隨時間嘅變化",
+      "totalMessages": "總 Message 數",
+      "dailyAverage": "每日 Average",
+      "growthRate": "Growth Rate",
+      "timeLabel": "時間",
+      "messageCount": "Message 條數",
+      "timeRanges": {
+        "1day": "過去 1 日",
+        "3days": "過去 3 日",
+        "1week": "過去 7 日",
+        "1month": "過去 30 日"
+      }
+    },
+    "platformStat": {
+      "title": "平台 Message 統計",
+      "subtitle": "各平台 Message 數量分佈",
+      "total": "Total",
+      "noData": "暫時冇平台 Data",
+      "messageUnit": "條",
+      "platformCount": "平台數",
+      "mostActive": "最 Active",
+      "totalPercentage": "總 Message 佔比"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "operation": {
+    "saved": "Save 成功",
+    "created": "Create 成功",
+    "updated": "Update 成功",
+    "deleted": "Delete 成功",
+    "uploaded": "Upload 成功",
+    "downloaded": "Download 成功",
+    "imported": "Import 成功",
+    "exported": "Export 成功",
+    "copied": "Copy 成功",
+    "sent": "Send 成功"
+  },
+  "connection": {
+    "connected": "Connect 成功",
+    "authenticated": "Login 成功",
+    "synchronized": "Sync 成功"
+  },
+  "validation": {
+    "valid": "Validate Pass",
+    "completed": "操作完成"
+  }
+}
