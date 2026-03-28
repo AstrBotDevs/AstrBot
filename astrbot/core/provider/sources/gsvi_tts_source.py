@@ -51,9 +51,7 @@ class ProviderGSVITTS(TTSProvider):
         }
 
         async with aiohttp.ClientSession() as session:
-            async with session.post(
-                url, json=data, headers=headers
-            ) as response:
+            async with session.post(url, json=data, headers=headers) as response:
                 if response.status == 200:
                     resp_json = await response.json()
                     msg = resp_json.get("msg")
