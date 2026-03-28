@@ -108,15 +108,12 @@ class WeixinOCClient:
 
     async def upload_to_cdn(
         self,
-        upload_param: str | None,
-        upload_full_url: str | None,
+        upload_full_url: str,
+        upload_param: str,
         file_key: str,
         aes_key_hex: str,
         media_path: Path,
     ) -> str:
-        upload_full_url = (upload_full_url or "").strip() or None
-        upload_param = (upload_param or "").strip() or None
-
         if upload_full_url:
             cdn_url = upload_full_url
         elif upload_param:
