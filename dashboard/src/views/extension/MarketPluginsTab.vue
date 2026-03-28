@@ -326,7 +326,7 @@ const marketCategorySelectItems = computed(() =>
         </div>
       </div>
 
-      <v-row style="min-height: 26rem" dense>
+      <v-row style="min-height: 26rem" density="compact">
         <v-col
           v-for="plugin in paginatedPlugins"
           :key="plugin.name"
@@ -373,7 +373,7 @@ const marketCategorySelectItems = computed(() =>
             </v-btn>
           </div>
 
-          <v-row class="mb-6" dense>
+          <v-row class="mb-6" density="compact">
             <v-col
               v-for="plugin in randomPlugins"
               :key="`random-${plugin.name}`"

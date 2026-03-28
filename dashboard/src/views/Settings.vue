@@ -30,7 +30,7 @@
         :subtitle="tm('theme.subtitle')"
         :title="tm('theme.customize.title')"
       >
-        <v-row class="mt-2" dense>
+        <v-row class="mt-2" density="compact">
           <v-col cols="4" sm="2">
             <v-text-field
               v-model="primaryColor"
@@ -122,7 +122,7 @@
             </v-tooltip>
           </div>
         </template>
-        <v-row class="mt-2" dense>
+        <v-row class="mt-2" density="compact">
           <v-col cols="12" md="4">
             <v-text-field
               v-model="newApiKeyName"

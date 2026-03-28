@@ -38,7 +38,7 @@
                   :label="tm('createDialog.platformTypeLabel')"
                   variant="outlined"
                   rounded="md"
-                  dense
+                  density="compact"
                   hide-details
                   class="mt-6"
                   style="max-width: 30%; min-width: 300px"
@@ -86,7 +86,7 @@
                   :label="tm('createDialog.platformTypeLabel')"
                   variant="outlined"
                   rounded="md"
-                  dense
+                  density="compact"
                   hide-details
                   class="mt-6"
                   style="max-width: 30%; min-width: 300px"
@@ -173,7 +173,7 @@
                       :label="tm('createDialog.selectConfigLabel')"
                       variant="outlined"
                       rounded="md"
-                      dense
+                      density="compact"
                       hide-details
                       style="max-width: 30%; min-width: 200px"
                     />
@@ -201,7 +201,7 @@
                       :label="tm('createDialog.newConfigNameLabel')"
                       variant="outlined"
                       rounded="md"
-                      dense
+                      density="compact"
                       hide-details
                       style="max-width: 30%; min-width: 200px"
                       class="ml-10 my-2"

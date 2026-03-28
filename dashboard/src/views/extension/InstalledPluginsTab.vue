@@ -376,7 +376,7 @@ const pinnedPlugins = computed(() => {
                 <v-col v-for="n in 4" :key="n" cols="auto" />
               </template>
 
-              <transition-group name="list" class="v-row v-row--dense">
+              <transition-group name="list" class="v-row v-row-density-compact">
                 <v-col
                   v-for="(p, index) in pinnedPlugins"
                   :key="p.name"

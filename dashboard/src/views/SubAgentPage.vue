@@ -59,7 +59,7 @@
 
         <v-divider class="my-4" />
 
-        <v-row dense>
+        <v-row density="compact">
           <v-col cols="12" md="6">
             <v-switch
               v-model="cfg.main_enable"

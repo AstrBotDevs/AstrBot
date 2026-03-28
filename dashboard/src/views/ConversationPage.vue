@@ -8,7 +8,7 @@
           <v-chip size="small" class="ml-2">
             {{ pagination.total || 0 }}
           </v-chip>
-          <v-row class="me-4 ms-4" dense>
+          <v-row class="me-4 ms-4" density="compact">
             <v-col cols="12" sm="6" md="4">
               <v-combobox
                 v-model="platformFilter"

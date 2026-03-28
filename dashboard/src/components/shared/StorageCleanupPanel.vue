@@ -57,7 +57,7 @@
             </v-btn>
           </div>
 
-          <v-row dense>
+          <v-row density="compact">
             <v-col
               v-for="item in storageCards"
               :key="item.key"
