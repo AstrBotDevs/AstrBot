@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -11,6 +12,7 @@ from astrbot.core import logger
 from astrbot.core.skills.skill_manager import (
     _parse_frontmatter_description,
 )
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .runtime_store import (
     SdkHttpRoute,
@@ -382,12 +384,40 @@ class SdkRegistryManager:
         from quart import request as quart_request
 
         text_body = await quart_request.get_data(as_text=True)
+        form_payload = (await quart_request.form).to_dict(flat=False)
+        upload_dir = Path(get_astrbot_data_path()) / "temp" / "sdk_http_uploads"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        file_payloads: list[dict[str, Any]] = []
+        request_files = await quart_request.files
+        for field_name in request_files:
+            for storage in request_files.getlist(field_name):
+                original_name = str(storage.filename or "").strip()
+                suffix = Path(original_name).suffix
+                temp_file = tempfile.NamedTemporaryFile(
+                    delete=False,
+                    dir=upload_dir,
+                    suffix=suffix,
+                )
+                temp_path = Path(temp_file.name)
+                temp_file.close()
+                storage.save(temp_path)
+                file_payloads.append(
+                    {
+                        "field_name": str(field_name),
+                        "filename": original_name,
+                        "content_type": str(storage.content_type or ""),
+                        "path": str(temp_path),
+                        "size": temp_path.stat().st_size,
+                    }
+                )
         payload = {
             "method": method.upper(),
             "route": route_entry.route,
             "path": quart_request.path,
             "query": quart_request.args.to_dict(flat=False),
             "headers": dict(quart_request.headers),
+            "form": form_payload,
+            "files": file_payloads,
             "json_body": await quart_request.get_json(silent=True),
             "text_body": text_body,
         }

@@ -194,7 +194,11 @@ class AstrBotDashboard:
             headers.get("Content-Type", headers.get("content-type", ""))
         ).lower()
         body = output.get("body")
-        return isinstance(body, str) and "text/html" in content_type
+        if isinstance(body, str) and "text/html" in content_type:
+            return True
+        return isinstance(body, (bytes, bytearray)) and content_type.startswith(
+            "image/"
+        )
 
     @staticmethod
     def _build_sdk_plugin_response(output: dict) -> QuartResponse:
@@ -216,11 +220,21 @@ class AstrBotDashboard:
                 status=status,
                 content_type="text/plain; charset=utf-8",
             )
+        elif isinstance(body, (bytes, bytearray)):
+            response = QuartResponse(
+                bytes(body),
+                status=status,
+                content_type=str(
+                    headers.get("Content-Type")
+                    or headers.get("content-type")
+                    or "application/octet-stream"
+                ),
+            )
         elif body is None:
             response = QuartResponse("", status=status)
         else:
             raise ValueError(
-                "SDK HTTP handler body must be object, array, string or null"
+                "SDK HTTP handler body must be object, array, string, bytes or null"
             )
 
         for key, value in headers.items():
