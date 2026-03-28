@@ -541,7 +541,7 @@ class SkillManager:
         *,
         overwrite: bool = True,
         skill_name_hint: str | None = None,
-    ) -> str:
+    ) -> str:  
         zip_path_obj = Path(zip_path)
         if not zip_path_obj.exists():
             raise FileNotFoundError(f"Zip file not found: {zip_path}")
@@ -584,6 +584,34 @@ class SkillManager:
                 if ".." in parts:
                     raise ValueError("Zip archive contains invalid relative paths.")
 
+            if not root_mode and not overwrite:
+                top_dirs = {PurePosixPath(n).parts[0] for n in file_names if n.strip()}
+                conflict_dirs: list[str] = []
+                for src_dir_name in top_dirs:
+                    if (f"{src_dir_name}/SKILL.md" not in file_names and f"{src_dir_name}/skill.md" not in file_names):
+                        continue
+                    
+                    candidate_name = _normalize_skill_name(src_dir_name)
+                    if not candidate_name or not _SKILL_NAME_RE.fullmatch(candidate_name):
+                        continue 
+                        
+                    if archive_skill_name and len(top_dirs) == 1:
+                        target_name = archive_skill_name
+                    else:
+                        target_name = candidate_name
+                        
+                    dest_dir = Path(self.skills_root) / target_name
+                    if dest_dir.exists():
+                        conflict_dirs.append(str(dest_dir))
+
+                if conflict_dirs:
+                    raise FileExistsError(
+                        "One or more skills from the archive already exist and "
+                        "overwrite=False. No skills were installed. Conflicting "
+                        f"paths: {', '.join(conflict_dirs)}"
+                    )
+
+
             with tempfile.TemporaryDirectory(dir=get_astrbot_temp_path()) as tmp_dir:
                 for member in zf.infolist():
                     member_name = member.filename.replace("\\", "/")
@@ -605,18 +633,17 @@ class SkillManager:
                         raise ValueError("SKILL.md not found in the root of the zip archive.")
                     
                     dest_dir = Path(self.skills_root) / skill_name
-                    if dest_dir.exists():
-                        if not overwrite:
-                            raise FileExistsError(f"Skill {skill_name} already exists.")
+                    if dest_dir.exists() and overwrite:
                         shutil.rmtree(dest_dir)
+                    elif dest_dir.exists() and not overwrite:
+                         raise FileExistsError(f"Skill {skill_name} already exists.")
+                    
                     shutil.move(str(src_dir), str(dest_dir))
                     self.set_skill_active(skill_name, True)
                     installed_skills.append(skill_name)
                     
                 else:
-                    top_dirs = {
-                        PurePosixPath(name).parts[0] for name in file_names if name.strip()
-                    }
+                    top_dirs = {PurePosixPath(n).parts[0] for n in file_names if n.strip()}
                     
                     for archive_root_name in top_dirs:
                         archive_root_name_normalized = _normalize_skill_name(archive_root_name)
@@ -632,7 +659,11 @@ class SkillManager:
                         ):
                             continue
                             
-                        skill_name = archive_skill_name if archive_skill_name and len(top_dirs) == 1 else archive_root_name_normalized
+      
+                        if archive_skill_name and len(top_dirs) == 1:
+                            skill_name = archive_skill_name
+                        else:
+                            skill_name = archive_root_name_normalized
                         
                         src_dir = Path(tmp_dir) / archive_root_name
                         normalized_path = _normalize_skill_markdown_path(src_dir)
@@ -642,13 +673,14 @@ class SkillManager:
                         dest_dir = Path(self.skills_root) / skill_name
                         if dest_dir.exists():
                             if not overwrite:
-                                raise FileExistsError(f"Skill {skill_name} already exists.")
+                                raise FileExistsError(f"Skill {skill_name} already exists.") 
                             shutil.rmtree(dest_dir)
+                            
                         shutil.move(str(src_dir), str(dest_dir))
                         self.set_skill_active(skill_name, True)
                         installed_skills.append(skill_name)
-                        
+
         if not installed_skills:
             raise ValueError("No valid SKILL.md found in any folder of the zip archive.")
 
-        return ", ".join(installed_skills)
+        return installed_skills[0]
