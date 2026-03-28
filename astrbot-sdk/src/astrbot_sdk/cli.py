@@ -678,6 +678,7 @@ def _render_init_plugin_yaml(
     display_name: str,
     desc: str,
     author: str,
+    repo: str,
     version: str,
 ) -> str:
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
@@ -688,6 +689,7 @@ def _render_init_plugin_yaml(
         display_name: {display_name}
         desc: {desc}
         author: {author}
+        repo: {repo}
         version: {version}
         runtime:
           python: "{python_version}"
@@ -968,19 +970,21 @@ def _prompt_nonempty_text(prompt: str) -> str:
         click.echo("该字段不能为空，请重新输入。")
 
 
-def _collect_init_metadata(name: str | None) -> tuple[str, str, str, str]:
-    if name is not None:
-        return name, "", "", "1.0.0"
+def _default_init_repo_name(plugin_name: str) -> str:
+    return _normalize_plugin_name(plugin_name)
 
-    plugin_name = _prompt_nonempty_text("插件名字")
-    author = click.prompt("作者", type=str, default="", show_default=False).strip()
+
+def _collect_init_metadata(name: str | None) -> tuple[str, str, str, str, str]:
+    plugin_name = name if name is not None else _prompt_nonempty_text("插件名字")
+    author = _prompt_nonempty_text("作者")
+    repo = _default_init_repo_name(plugin_name)
     desc = click.prompt("描述", type=str, default="", show_default=False).strip()
     version = click.prompt("版本", type=str, default="1.0.0", show_default=True).strip()
-    return plugin_name, author, desc, version or "1.0.0"
+    return plugin_name, author, repo, desc, version or "1.0.0"
 
 
 def _init_plugin(name: str | None, agents: tuple[str, ...] = ()) -> None:
-    raw_name, author, desc, version = _collect_init_metadata(name)
+    raw_name, author, repo, desc, version = _collect_init_metadata(name)
     plugin_name = _normalize_plugin_name(raw_name)
     target_dir = Path(plugin_name)
     if target_dir.exists():
@@ -995,6 +999,7 @@ def _init_plugin(name: str | None, agents: tuple[str, ...] = ()) -> None:
             display_name=display_name,
             desc=desc,
             author=author,
+            repo=repo,
             version=version,
         ),
         encoding="utf-8",
