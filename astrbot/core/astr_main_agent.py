@@ -993,8 +993,7 @@ def _apply_enhanced_subagent_tools(
 
         # Inject enhanced system prompt
         dynamic_subagent_prompt = DynamicSubAgentManager.get_dynamic_subagent_prompt()
-        req.system_prompt = f"{req.system_prompt}\n{dynamic_subagent_prompt}\n"
-
+        req.system_prompt = f"{req.system_prompt or ''}\n{dynamic_subagent_prompt}\n"
         # Register existing handoff tools from config
         plugin_context = getattr(event, "_plugin_context", None)
         if plugin_context and plugin_context.subagent_orchestrator:

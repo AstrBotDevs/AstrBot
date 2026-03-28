@@ -246,8 +246,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             session = DynamicSubAgentManager.get_session(session_id)
             if session and session.shared_context_enabled:
                 toolset.add_tool(SEND_SHARED_CONTEXT_TOOL)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"[EnhancedSubAgent] Failed to add shared context tool: {e}")
 
         return None if toolset.empty() else toolset
 
@@ -333,8 +333,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         logger.info(
                             f"[SubAgentHistory] Loaded {len(subagent_history)} history messages for {agent_name}"
                         )
-            except Exception:
-                pass
+
+            except Exception as e:
+                logger.warning(f"[SubAgentHistory] Failed to load history for {agent_name}: {e}")
 
         prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
         agent_max_step = int(prov_settings.get("max_agent_step", 30))

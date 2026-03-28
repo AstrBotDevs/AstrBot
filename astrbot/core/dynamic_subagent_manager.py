@@ -674,7 +674,7 @@ class CreateDynamicSubAgentTool(FunctionTool):
         tool_name, handoff_tool = await DynamicSubAgentManager.create_subagent(
             session_id=session_id, config=config
         )
-        if "Error: Maximum number of subagents" not in tool_name:
+        if handoff_tool:
             return f"__DYNAMIC_TOOL_CREATED__:{tool_name}:{handoff_tool.name}:Created. Use {tool_name} to delegate."
         else:
             return f"__FAILED_TO_CREATE_DYNAMIC_TOOL__:{tool_name}"
