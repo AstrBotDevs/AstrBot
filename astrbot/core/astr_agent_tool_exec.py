@@ -237,7 +237,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         # Always add send_shared_context tool for shared context feature
         try:
-            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager, SEND_SHARED_CONTEXT_TOOL
+            from astrbot.core.dynamic_subagent_manager import (
+                DynamicSubAgentManager,
+                SEND_SHARED_CONTEXT_TOOL,
+            )
+
             session_id = event.unified_msg_origin
             session = DynamicSubAgentManager.get_session(session_id)
             if session and session.shared_context_enabled:
@@ -304,24 +308,31 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     continue
 
         # 获取子代理的历史上下文
-        agent_name = getattr(tool.agent, 'name', None)
+        agent_name = getattr(tool.agent, "name", None)
         subagent_history = []
         if agent_name:
             try:
                 from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
-                stored_history = DynamicSubAgentManager.get_subagent_history(umo, agent_name)
+
+                stored_history = DynamicSubAgentManager.get_subagent_history(
+                    umo, agent_name
+                )
                 if stored_history:
                     # 将历史消息转换为 Message 对象
                     for hist_msg in stored_history:
                         try:
                             if isinstance(hist_msg, dict):
-                                subagent_history.append(Message.model_validate(hist_msg))
+                                subagent_history.append(
+                                    Message.model_validate(hist_msg)
+                                )
                             elif isinstance(hist_msg, Message):
                                 subagent_history.append(hist_msg)
                         except Exception:
                             continue
                     if subagent_history:
-                        logger.info(f"[SubAgentHistory] Loaded {len(subagent_history)} history messages for {agent_name}")
+                        logger.info(
+                            f"[SubAgentHistory] Loaded {len(subagent_history)} history messages for {agent_name}"
+                        )
             except Exception:
                 pass
 
@@ -343,19 +354,27 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
                 # 注入 skills
                 runtime = prov_settings.get("computer_use_runtime", "local")
-                skills_prompt = DynamicSubAgentManager.build_subagent_skills_prompt(umo, agent_name, runtime)
+                skills_prompt = DynamicSubAgentManager.build_subagent_skills_prompt(
+                    umo, agent_name, runtime
+                )
                 if skills_prompt:
                     subagent_system_prompt += f"\n\n# Available Skills\n{skills_prompt}"
                     logger.info(f"[SubAgentSkills] Injected skills for {agent_name}")
 
                 # 注入公共上下文
-                shared_context_prompt = DynamicSubAgentManager.build_shared_context_prompt(umo, agent_name)
+                shared_context_prompt = (
+                    DynamicSubAgentManager.build_shared_context_prompt(umo, agent_name)
+                )
                 if shared_context_prompt:
                     subagent_system_prompt += f"\n{shared_context_prompt}"
-                    logger.info(f"[SubAgentSharedContext] Injected shared context for {agent_name}")
+                    logger.info(
+                        f"[SubAgentSharedContext] Injected shared context for {agent_name}"
+                    )
 
                 # 注入时间信息
-                current_time = datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
+                current_time = (
+                    datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
+                )
                 subagent_system_prompt += f"Current datetime: {current_time}"
 
             except Exception:
@@ -377,16 +396,21 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         # 保存历史上下文
         try:
             from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
-            agent_name = getattr(tool.agent, 'name', None)
+
+            agent_name = getattr(tool.agent, "name", None)
             if agent_name:
                 # 构建当前对话的历史消息
                 current_messages = []
                 # 添加本轮用户输入
                 current_messages.append({"role": "user", "content": input_})
                 # 添加助手回复
-                current_messages.append({"role": "assistant", "content": llm_resp.completion_text})
+                current_messages.append(
+                    {"role": "assistant", "content": llm_resp.completion_text}
+                )
                 if current_messages:
-                    DynamicSubAgentManager.save_subagent_history(umo, agent_name, current_messages)
+                    DynamicSubAgentManager.save_subagent_history(
+                        umo, agent_name, current_messages
+                    )
         except Exception:
             pass  # 不影响主流程
 
