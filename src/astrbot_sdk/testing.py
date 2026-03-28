@@ -51,6 +51,7 @@ from .protocol.messages import InvokeMessage
 from .runtime._command_matching import (
     build_command_args,
     build_regex_args,
+    command_root_name,
     match_command_name,
 )
 from .runtime._streaming import StreamExecution
@@ -357,6 +358,17 @@ class PluginHarness:
             return self.platform_sink.records[start_index:]
 
         matches = self._match_handlers(event_payload)
+        help_text = self._build_group_root_help(event_payload)
+        if help_text is not None and not any(
+            isinstance(loaded.descriptor.trigger, CommandTrigger)
+            for loaded, _args in matches
+        ):
+            assert self.lifecycle_context is not None
+            await self.lifecycle_context.platform.send(
+                str(event_payload.get("session_id", "")),
+                help_text,
+            )
+            return self.platform_sink.records[start_index:]
         if not matches:
             raise AstrBotError.invalid_input("未找到匹配的 handler")
         for loaded, args in matches:
@@ -635,6 +647,59 @@ class PluginHarness:
                 continue
             return build_command_args(loaded.descriptor.param_specs, match)
         return None
+
+    def _build_group_root_help(self, event_payload: dict[str, Any]) -> str | None:
+        assert self.loaded_plugin is not None
+        root_name = command_root_name(str(event_payload.get("text", "")))
+        if not root_name:
+            return None
+        entries: list[tuple[str, str | None]] = []
+        seen_commands: set[str] = set()
+        for loaded in self.loaded_plugin.handlers:
+            descriptor = loaded.descriptor
+            trigger = descriptor.trigger
+            if not isinstance(trigger, CommandTrigger):
+                continue
+            if not self._passes_filters(loaded, event_payload):
+                continue
+            route = descriptor.command_route
+            root_candidates: list[str] = []
+            if route is not None and route.group_path:
+                group_root = str(route.group_path[0]).strip()
+                if group_root:
+                    root_candidates.append(group_root)
+            for name in [trigger.command, *trigger.aliases]:
+                normalized = str(name).strip()
+                if " " not in normalized:
+                    continue
+                command_root = normalized.split()[0].strip()
+                if command_root:
+                    root_candidates.append(command_root)
+            if root_name not in dict.fromkeys(root_candidates):
+                continue
+            display_command = (
+                str(route.display_command).strip()
+                if route is not None and str(route.display_command).strip()
+                else str(trigger.command).strip()
+            )
+            if not display_command or display_command in seen_commands:
+                continue
+            seen_commands.add(display_command)
+            description = (
+                str(descriptor.description or "").strip()
+                or str(trigger.description or "").strip()
+                or None
+            )
+            entries.append((display_command, description))
+        if not entries:
+            return None
+        lines = [f"{root_name}命令："]
+        for command_name, description in entries:
+            line = f"- /{command_name}"
+            if description:
+                line += f": {description}"
+            lines.append(line)
+        return "\n".join(lines)
 
     def _match_message_trigger(
         self,

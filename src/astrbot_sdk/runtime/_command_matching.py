@@ -8,13 +8,35 @@ from typing import Any
 from ..protocol.descriptors import ParamSpec
 
 
-def match_command_name(text: str, command_name: str) -> str | None:
-    normalized = text.strip()
-    if normalized == command_name:
+def normalize_command_invocation(text: str) -> str:
+    normalized = re.sub(r"\s+", " ", str(text).strip())
+    if not normalized:
         return ""
-    if normalized.startswith(f"{command_name} "):
-        return normalized[len(command_name) :].strip()
-    return None
+    normalized = re.sub(r"^/\s*", "", normalized)
+    return normalized.strip()
+
+
+def command_root_name(text: str) -> str:
+    normalized = normalize_command_invocation(text)
+    if not normalized:
+        return ""
+    return normalized.split(" ", 1)[0]
+
+
+def match_command_name(text: str, command_name: str) -> str | None:
+    normalized_command = normalize_command_invocation(command_name)
+    if not normalized_command:
+        return None
+    command_tokens = [re.escape(token) for token in normalized_command.split()]
+    command_pattern = r"\s+".join(command_tokens)
+    pattern = rf"^\s*/?\s*{command_pattern}(?:\s+(?P<remainder>.*))?\s*$"
+    match = re.match(pattern, text)
+    if match is None:
+        return None
+    remainder = match.group("remainder")
+    if remainder is None:
+        return ""
+    return remainder.strip()
 
 
 def build_command_args(
