@@ -25,7 +25,7 @@ function toggleTheme() {
 onMounted(() => {
   // 检查用户是否已登录，如果已登录则重定向
   if (authStore.has_token()) {
-    router.push(authStore.returnUrl || '/');
+    router.push('/welcome');
     return;
   }
 

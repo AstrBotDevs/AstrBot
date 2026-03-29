@@ -5,7 +5,7 @@ import base64
 from collections.abc import AsyncGenerator
 from dataclasses import replace
 
-from astrbot.core import logger
+from astrbot.core import db_helper, logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_main_agent import (
@@ -21,6 +21,9 @@ from astrbot.core.message.message_event_result import (
 )
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
+    resolve_event_conversation_persona_id,
+    resolve_persona_custom_error_message,
+    set_persona_custom_error_message_on_event,
 )
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -138,6 +141,39 @@ class InternalAgentSubStage(Stage):
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
 
+    async def _prime_persona_custom_error_message(
+        self, event: AstrMessageEvent
+    ) -> None:
+        if extract_persona_custom_error_message_from_event(event) is not None:
+            return
+
+        try:
+            conversation_persona_id = None
+            provider_request = event.get_extra("provider_request")
+            if (
+                isinstance(provider_request, ProviderRequest)
+                and provider_request.conversation is not None
+            ):
+                conversation_persona_id = provider_request.conversation.persona_id
+
+            if conversation_persona_id is None:
+                conversation_persona_id = await resolve_event_conversation_persona_id(
+                    event,
+                    self.conv_manager,
+                )
+
+            custom_error_message = await resolve_persona_custom_error_message(
+                event=event,
+                persona_manager=self.ctx.plugin_manager.context.persona_manager,
+                provider_settings=self.main_agent_cfg.provider_settings,
+                conversation_persona_id=conversation_persona_id,
+            )
+        except Exception as exc:
+            logger.debug("Failed to prime persona custom error message: %s", exc)
+            return
+
+        set_persona_custom_error_message_on_event(event, custom_error_message)
+
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None, None]:
@@ -164,6 +200,7 @@ class InternalAgentSubStage(Stage):
                 logger.debug("skip llm request: empty message and no provider_request")
                 return
 
+            await self._prime_persona_custom_error_message(event)
             logger.debug("ready to request llm provider")
             follow_up_capture = try_capture_follow_up(event)
             if follow_up_capture:
@@ -350,6 +387,15 @@ class InternalAgentSubStage(Stage):
                         resp=final_resp.completion_text if final_resp else None,
                     )
 
+                    asyncio.create_task(
+                        _record_internal_agent_stats(
+                            event,
+                            req,
+                            agent_runner,
+                            final_resp,
+                        )
+                    )
+
                     # 检查事件是否被停止，如果被停止则不保存历史记录
                     if not event.is_stopped() or agent_runner.was_aborted():
                         await self._save_to_history(
@@ -462,3 +508,46 @@ class InternalAgentSubStage(Stage):
 # these hosts are base64 encoded
 BLOCKED = {"dGZid2h2d3IuY2xvdWQuc2VhbG9zLmlv", "a291cmljaGF0"}
 decoded_blocked = [base64.b64decode(b).decode("utf-8") for b in BLOCKED]
+
+
+async def _record_internal_agent_stats(
+    event: AstrMessageEvent,
+    req: ProviderRequest | None,
+    agent_runner: AgentRunner | None,
+    final_resp: LLMResponse | None,
+) -> None:
+    """Persist internal agent stats without affecting the user response flow."""
+    if agent_runner is None:
+        return
+
+    provider = agent_runner.provider
+    stats = agent_runner.stats
+    if provider is None or stats is None:
+        return
+
+    try:
+        provider_config = getattr(provider, "provider_config", {}) or {}
+        conversation_id = (
+            req.conversation.cid
+            if req is not None and req.conversation is not None
+            else None
+        )
+
+        if agent_runner.was_aborted():
+            status = "aborted"
+        elif final_resp is not None and final_resp.role == "err":
+            status = "error"
+        else:
+            status = "completed"
+
+        await db_helper.insert_provider_stat(
+            umo=event.unified_msg_origin,
+            conversation_id=conversation_id,
+            provider_id=provider_config.get("id", "") or provider.meta().id,
+            provider_model=provider.get_model(),
+            status=status,
+            stats=stats.to_dict(),
+            agent_type="internal",
+        )
+    except Exception as e:
+        logger.warning("Persist provider stats failed: %s", e, exc_info=True)
