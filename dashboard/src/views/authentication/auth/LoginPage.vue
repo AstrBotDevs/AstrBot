@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AuthLogin from "../authForms/AuthLogin.vue";
+import DailyQuote from "@/components/shared/DailyQuote.vue";
 import LanguageSwitcher from "@/components/shared/LanguageSwitcher.vue";
 import { onMounted, ref } from "vue";
 import { useAuthStore } from "@/stores/auth";
@@ -175,7 +176,7 @@ onMounted(() => {
           {{ t("logo.title") }}
         </div>
         <div class="mt-2 ml-2" style="font-size: 14px; color: grey">
-          {{ t("logo.subtitle") }}
+          <DailyQuote />
         </div>
       </v-card-title>
       <v-card-text>
