@@ -57,24 +57,7 @@ def _prepare_stdio_env(config: dict) -> dict:
     env = dict(prepared.get("env") or {})
     env= _merge_environment_variables(env)
     prepared["env"] = env
-    # 获取配置值，并转换为小写进行不区分大小写比较
-    cmd_str = _extract_command_string(config)
-    # 目前仅处理 dotnet，如有其他命令需求需扩展 
-    if cmd_str and cmd_str.lower() == "dotnet":
-        env= _ensure_dotnet_in_path(env)
-        prepared["env"] = env
-        return _create_subprocess_NO_WINDOW(prepared)
     return prepared
-
-def _extract_command_string(config:dict)->str:
-    """从配置中提取命令字符串"""
-    command = config.get('command')
-    cmd_str = ""
-    if isinstance(command, str):
-        cmd_str = command
-    elif isinstance(command, list) and command:
-        cmd_str = command[0]
-    return cmd_str
 
 def _merge_environment_variables(env: dict) -> dict:
     """合并环境变量，处理Windows不区分大小写的情况"""
@@ -90,53 +73,6 @@ def _merge_environment_variables(env: dict) -> dict:
             merged[sys_key] = sys_value
     
     return merged
-
-def _ensure_dotnet_in_path(env: dict) -> dict:
-    """确保dotnet在PATH中，若不存在则发出警告而不是自动添加"""
-    
-    # 检查当前环境PATH中是否有dotnet
-    current_path = env.get("PATH", "")
-    if shutil.which("dotnet", path=current_path):
-        return env
-    
-    # 检查系统PATH
-    system_path = os.environ.get("PATH", "")
-    if shutil.which("dotnet", path=system_path):
-        # 安全地合并PATH：过滤空值后连接
-        paths = [p for p in [current_path, system_path] if p]
-        env["PATH"] = ";".join(paths)
-        return env
-    
-    # 发出警告而不是静默添加
-    logger.warning(
-        "dotnet not found in PATH. .NET-based MCP servers may fail to start. "
-        "Please ensure dotnet is installed and in your PATH."
-    )
-    return env
-
-def _create_subprocess(prepared: dict)->dict:
-    """准备子进程参数字典"""
-    # 只在Windows平台处理
-    if os.name == "nt":
-        # 检查用户是否指定了控制台行为
-        # 使用更清晰的参数名：no_console
-        
-        no_console = prepared.pop("no_console", False)
-        
-        
-        # 确保是布尔值
-        if isinstance(no_console, str):
-            # 处理字符串形式的布尔值
-            no_console = no_console.lower() in ("true", "1", "yes", "y", "t")
-        elif not isinstance(no_console, bool):                
-            # 如果不是字符串也不是布尔值，可以抛出异常或使用默认值                
-            raise ValueError(f"no_console must be bool or str, got {type(no_console)}")
-        
-        if no_console:  # 如果明确要求不显示控制台
-            existing_flags = prepared.get("creationflags", 0)
-            prepared["creationflags"] = existing_flags | subprocess.CREATE_NO_WINDOW
-        
-    return prepared
 
 
 async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
