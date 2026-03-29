@@ -886,11 +886,11 @@ class PluginRoute(Route):
                 await sdk_bridge.turn_on_plugin(plugin_name)
             except ValueError as exc:
                 return Response().error(str(exc)).__dict__, 404
-            logger.info(f"启用 SDK 插件 {plugin_name} 。")
+            logger.info(f"启用 SDK 插件 {plugin_name}")
             return Response().ok(None, "启用成功。").__dict__
         try:
             await self.plugin_manager.turn_on_plugin(plugin_name)
-            logger.info(f"启用插件 {plugin_name} 。")
+            logger.info(f"启用插件 {plugin_name}")
             return Response().ok(None, "启用成功。").__dict__
         except Exception as e:
             logger.error(f"/api/plugin/on: {traceback.format_exc()}")

@@ -235,34 +235,17 @@ class WorkerSession:
 
     async def _wait_until_initialized(self) -> None:
         assert self.peer is not None
-        init_task = asyncio.create_task(
-            self.peer.wait_until_remote_initialized(
+        try:
+            await self.peer.wait_until_remote_initialized(
                 timeout=WORKER_INITIALIZE_TIMEOUT_SECONDS
             )
-        )
-        closed_task = asyncio.create_task(self.peer.wait_closed())
-        done, pending = await asyncio.wait(
-            {init_task, closed_task},
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        for task in pending:
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-
-        if init_task in done:
-            try:
-                await init_task
-            except TimeoutError as exc:
-                raise RuntimeError(
-                    f"worker {self.worker_id} 初始化超时 "
-                    f"({WORKER_INITIALIZE_TIMEOUT_SECONDS:.0f}s)"
-                ) from exc
-
-        if closed_task in done:
-            raise RuntimeError(f"worker {self.worker_id} 在初始化阶段退出")
+        except TimeoutError as exc:
+            raise RuntimeError(
+                f"worker {self.worker_id} 初始化超时 "
+                f"({WORKER_INITIALIZE_TIMEOUT_SECONDS:.0f}s)"
+            ) from exc
+        except AstrBotError as exc:
+            raise RuntimeError(f"worker {self.worker_id} 在初始化阶段退出") from exc
 
     def _sync_remote_state(self) -> None:
         assert self.peer is not None

@@ -2337,6 +2337,36 @@ async def test_sdk_bridge_turn_on_plugin_reloads_and_clears_disabled_override(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_sdk_bridge_turn_on_plugin_raises_when_worker_start_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    bridge._persist_state_overrides = lambda: None
+    bridge._state_overrides = {"sdk-demo": {"disabled": True}}
+    plugin = types.SimpleNamespace(name="sdk-demo")
+    discovered = types.SimpleNamespace(plugins=[plugin], issues=[])
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.discover_plugins",
+        lambda _plugins_dir: discovered,
+    )
+    bridge.env_manager.plan = lambda _plugins: None  # type: ignore[method-assign]
+
+    async def _load_failed_plugin(*_args, **_kwargs) -> None:
+        bridge._records["sdk-demo"] = _make_sdk_record(
+            state="failed",
+            failure_reason="worker sdk-demo 初始化超时 (60s)",
+        )
+
+    bridge._load_or_reload_plugin = _load_failed_plugin  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="初始化超时"):
+        await bridge.turn_on_plugin("sdk-demo")
+
+    assert bridge._state_overrides == {}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_sdk_bridge_stop_cleans_runtime_state() -> None:
     bridge = SdkPluginBridge(_OverlayFakeStarContext())
     bridge._started = True
@@ -2596,6 +2626,54 @@ async def test_sdk_bridge_reload_plugin_operations_are_serialized(
 
     assert bridge._load_or_reload_plugin.await_count == 2
     assert call_order == ["start", "end", "start", "end"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_reload_all_does_not_block_unrelated_plugin_turn_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    plugin_a = types.SimpleNamespace(name="sdk-a")
+    plugin_b = types.SimpleNamespace(name="sdk-b")
+    discovered = types.SimpleNamespace(plugins=[plugin_a, plugin_b], issues=[])
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.discover_plugins",
+        lambda _plugins_dir: discovered,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.SkillManager",
+        lambda: types.SimpleNamespace(prune_sdk_plugin_skills=lambda _known: None),
+    )
+    bridge.env_manager.plan = lambda _plugins: None  # type: ignore[method-assign]
+    bridge._records = {
+        "sdk-a": _make_sdk_record(plugin_id="sdk-a"),
+        "sdk-b": _make_sdk_record(plugin_id="sdk-b"),
+    }
+    bridge._cancel_plugin_requests = AsyncMock()  # type: ignore[method-assign]
+    bridge._teardown_plugin = AsyncMock()  # type: ignore[method-assign]
+
+    first_plugin_started = asyncio.Event()
+    release_first_plugin = asyncio.Event()
+
+    async def _slow_load(plugin, **_kwargs) -> None:
+        if plugin.name != "sdk-a":
+            return
+        first_plugin_started.set()
+        await release_first_plugin.wait()
+
+    bridge._load_or_reload_plugin = AsyncMock(side_effect=_slow_load)  # type: ignore[method-assign]
+
+    reload_all_task = asyncio.create_task(bridge.reload_all(reset_restart_budget=True))
+    await asyncio.wait_for(first_plugin_started.wait(), timeout=1)
+
+    turn_off_task = asyncio.create_task(bridge.turn_off_plugin("sdk-b"))
+    await asyncio.wait_for(turn_off_task, timeout=1)
+
+    bridge._teardown_plugin.assert_awaited_once_with("sdk-b")
+
+    release_first_plugin.set()
+    await asyncio.wait_for(reload_all_task, timeout=1)
 
 
 @pytest.mark.unit

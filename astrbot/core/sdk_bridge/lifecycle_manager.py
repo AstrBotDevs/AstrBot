@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from astrbot.core import logger
 
@@ -13,7 +13,17 @@ if TYPE_CHECKING:
 class SdkPluginLifecycleManager:
     def __init__(self, *, bridge: SdkPluginBridge) -> None:
         self.bridge = bridge
-        self._reload_lock = asyncio.Lock()
+        # Phase 1 lock: serialize discovery/planning so every operation builds its
+        # action plan from a coherent snapshot instead of racing on shared metadata.
+        self._plan_lock = asyncio.Lock()
+        # Phase 3 lock: serialize the short global refresh/commit tail after each
+        # plugin operation. This keeps command/native-platform refreshes ordered
+        # without holding a global lock during slow worker startup/shutdown.
+        self._commit_lock = asyncio.Lock()
+        # Phase 2 lock map: each plugin gets its own execution lock so unrelated
+        # plugins can load/teardown in parallel, while the same plugin remains
+        # strictly serialized across reload/enable/disable/worker-close flows.
+        self._plugin_locks: dict[str, asyncio.Lock] = {}
         self._startup_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
@@ -57,45 +67,39 @@ class SdkPluginLifecycleManager:
         self.bridge._stopping = False
 
     async def reload_all(self, *, reset_restart_budget: bool = False) -> None:
-        async with self._reload_lock:
-            discovered = self.bridge._discover_plugins()
-            self.bridge._set_discovery_issues(discovered.issues)
-            self.bridge.env_manager.plan(discovered.plugins)
-            known = {plugin.name for plugin in discovered.plugins}
-            self.bridge._make_skill_manager().prune_sdk_plugin_skills(known)
-            for plugin_id in list(self.bridge._records.keys()):
-                if plugin_id not in known:
-                    await self.bridge._teardown_plugin(plugin_id)
-                    self.bridge._records.pop(plugin_id, None)
-            for load_order, plugin in enumerate(discovered.plugins):
+        stale_plugin_ids, load_plan = await self._plan_reload_all()
+
+        for plugin_id in stale_plugin_ids:
+            async with self._plugin_lock(plugin_id):
+                # The plugin may have been removed already by a concurrent operation.
+                if plugin_id not in self.bridge._records:
+                    continue
+                await self.bridge._teardown_plugin(plugin_id)
+                self.bridge._records.pop(plugin_id, None)
+
+        for load_order, plugin in load_plan:
+            async with self._plugin_lock(plugin.name):
                 await self.bridge._load_or_reload_plugin(
                     plugin,
                     load_order=load_order,
                     reset_restart_budget=reset_restart_budget,
                 )
-            self.bridge.refresh_command_compatibility_issues()
-            await self.bridge._refresh_native_platform_commands()
+
+        await self._commit_runtime_refresh()
 
     async def reload_plugin(self, plugin_id: str) -> None:
-        async with self._reload_lock:
-            discovered = self.bridge._discover_plugins()
-            self.bridge._set_discovery_issues(discovered.issues)
-            self.bridge.env_manager.plan(discovered.plugins)
-            for load_order, plugin in enumerate(discovered.plugins):
-                if plugin.name != plugin_id:
-                    continue
-                await self.bridge._load_or_reload_plugin(
-                    plugin,
-                    load_order=load_order,
-                    reset_restart_budget=True,
-                )
-                self.bridge.refresh_command_compatibility_issues()
-                await self.bridge._refresh_native_platform_commands()
-                return
-            raise ValueError(f"SDK plugin not found: {plugin_id}")
+        load_order, plugin = await self._plan_single_plugin(plugin_id)
+        async with self._plugin_lock(plugin_id):
+            await self.bridge._load_or_reload_plugin(
+                plugin,
+                load_order=load_order,
+                reset_restart_budget=True,
+            )
+        await self._commit_runtime_refresh()
 
     async def turn_off_plugin(self, plugin_id: str) -> None:
-        async with self._reload_lock:
+        await self._plan_turn_off(plugin_id)
+        async with self._plugin_lock(plugin_id):
             record = self.bridge._records.get(plugin_id)
             if record is None:
                 raise ValueError(f"SDK plugin not found: {plugin_id}")
@@ -104,30 +108,26 @@ class SdkPluginLifecycleManager:
             await self.bridge._teardown_plugin(plugin_id)
             record.failure_reason = ""
             self.bridge._set_disabled_override(plugin_id, disabled=True)
-            self.bridge.refresh_command_compatibility_issues()
-            await self.bridge._refresh_native_platform_commands()
+        await self._commit_runtime_refresh()
 
     async def turn_on_plugin(self, plugin_id: str) -> None:
-        async with self._reload_lock:
-            discovered = self.bridge._discover_plugins()
-            self.bridge._set_discovery_issues(discovered.issues)
-            self.bridge.env_manager.plan(discovered.plugins)
-            for load_order, plugin in enumerate(discovered.plugins):
-                if plugin.name != plugin_id:
-                    continue
-                self.bridge._set_disabled_override(plugin_id, disabled=False)
-                await self.bridge._load_or_reload_plugin(
-                    plugin,
-                    load_order=load_order,
-                    reset_restart_budget=True,
+        load_order, plugin = await self._plan_single_plugin(plugin_id)
+        async with self._plugin_lock(plugin_id):
+            self.bridge._set_disabled_override(plugin_id, disabled=False)
+            await self.bridge._load_or_reload_plugin(
+                plugin,
+                load_order=load_order,
+                reset_restart_budget=True,
+            )
+            record = self.bridge._records.get(plugin_id)
+            if record is not None and record.state == self.bridge.SDK_STATE_FAILED:
+                raise RuntimeError(
+                    record.failure_reason or f"SDK plugin failed to start: {plugin_id}"
                 )
-                self.bridge.refresh_command_compatibility_issues()
-                await self.bridge._refresh_native_platform_commands()
-                return
-            raise ValueError(f"SDK plugin not found: {plugin_id}")
+        await self._commit_runtime_refresh()
 
     async def handle_worker_closed(self, plugin_id: str) -> None:
-        async with self._reload_lock:
+        async with self._plugin_lock(plugin_id):
             if self.bridge._stopping:
                 return
             await self.bridge._cancel_plugin_requests(plugin_id)
@@ -141,7 +141,7 @@ class SdkPluginLifecycleManager:
                 self.bridge.SDK_STATE_RELOADING,
                 self.bridge.SDK_STATE_DISABLED,
             }:
-                self.bridge.refresh_command_compatibility_issues()
+                await self._commit_runtime_refresh()
                 return
             if not record.restart_attempted:
                 record.restart_attempted = True
@@ -154,7 +154,7 @@ class SdkPluginLifecycleManager:
                     load_order=record.load_order,
                     reset_restart_budget=False,
                 )
-                self.bridge.refresh_command_compatibility_issues()
+                await self._commit_runtime_refresh()
                 return
             record.state = self.bridge.SDK_STATE_FAILED
             self.bridge._http_routes.pop(plugin_id, None)
@@ -165,7 +165,49 @@ class SdkPluginLifecycleManager:
                 record=record,
                 reason="worker failure cleanup",
             )
+        await self._commit_runtime_refresh()
+
+    async def _plan_reload_all(self) -> tuple[list[str], list[tuple[int, Any]]]:
+        async with self._plan_lock:
+            discovered = self.bridge._discover_plugins()
+            self.bridge._set_discovery_issues(discovered.issues)
+            self.bridge.env_manager.plan(discovered.plugins)
+            known = {plugin.name for plugin in discovered.plugins}
+            self.bridge._make_skill_manager().prune_sdk_plugin_skills(known)
+            stale_plugin_ids = [
+                plugin_id
+                for plugin_id in list(self.bridge._records.keys())
+                if plugin_id not in known
+            ]
+            load_plan = list(enumerate(discovered.plugins))
+            return stale_plugin_ids, load_plan
+
+    async def _plan_single_plugin(self, plugin_id: str) -> tuple[int, Any]:
+        async with self._plan_lock:
+            discovered = self.bridge._discover_plugins()
+            self.bridge._set_discovery_issues(discovered.issues)
+            self.bridge.env_manager.plan(discovered.plugins)
+            for load_order, plugin in enumerate(discovered.plugins):
+                if plugin.name == plugin_id:
+                    return load_order, plugin
+            raise ValueError(f"SDK plugin not found: {plugin_id}")
+
+    async def _plan_turn_off(self, plugin_id: str) -> None:
+        async with self._plan_lock:
+            if self.bridge._records.get(plugin_id) is None:
+                raise ValueError(f"SDK plugin not found: {plugin_id}")
+
+    async def _commit_runtime_refresh(self) -> None:
+        async with self._commit_lock:
             self.bridge.refresh_command_compatibility_issues()
+            await self.bridge._refresh_native_platform_commands()
+
+    def _plugin_lock(self, plugin_id: str) -> asyncio.Lock:
+        lock = self._plugin_locks.get(plugin_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._plugin_locks[plugin_id] = lock
+        return lock
 
     def _schedule_background_reload(self, *, reset_restart_budget: bool) -> None:
         if self._startup_task is not None and not self._startup_task.done():
