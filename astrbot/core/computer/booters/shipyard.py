@@ -10,7 +10,12 @@ from astrbot.api import logger
 if TYPE_CHECKING:
     from astrbot.core.agent.tool import FunctionTool
 
-from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
+from astrbot.core.computer.olayer import (
+    FileSystemComponent,
+    PythonComponent,
+    ShellComponent,
+)
+
 from .base import ComputerBooter
 
 

@@ -1,5 +1,5 @@
 import { createVuetify } from "vuetify";
-import "@mdi/font/css/materialdesignicons.min.css";
+// MDI font loaded in index.html via CDN
 import * as components from "vuetify/components";
 import * as directives from "vuetify/directives";
 import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";

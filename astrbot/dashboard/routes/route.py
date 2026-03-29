@@ -59,7 +59,7 @@ def runtime_status_response(
                 core_lifecycle,
                 include_failure_details=include_failure_details,
             ),
-        ).__dict__
+        ).to_json()
     )
     response.status_code = status_code
     return response

@@ -39,11 +39,12 @@ class NeoPythonComponent(PythonComponent):
         self,
         code: str,
         kernel_id: str | None = None,
-        timeout: int = 30,
+        timeout_sec: int = 30,
         silent: bool = False,
     ) -> dict[str, Any]:
         _ = kernel_id  # Bay runtime does not expose kernel_id in current SDK.
-        result = await self._sandbox.python.exec(code, timeout=timeout)
+        with anyio.fail_after(timeout_sec):
+            result = await self._sandbox.python.exec(code)
         payload = _maybe_model_dump(result)
 
         output_text = payload.get("output", "") or ""
@@ -81,7 +82,7 @@ class NeoShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = 30,
+        timeout_sec: int | None = 30,
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
@@ -103,11 +104,8 @@ class NeoShellComponent(ShellComponent):
         if background:
             run_command = f"nohup sh -lc {shlex.quote(run_command)} >/tmp/astrbot_bg.log 2>&1 & echo $!"
 
-        result = await self._sandbox.shell.exec(
-            run_command,
-            timeout=timeout or 30,
-            cwd=cwd,
-        )
+        with anyio.fail_after(timeout_sec or 30):
+            result = await self._sandbox.shell.exec(run_command, cwd=cwd)
         payload = _maybe_model_dump(result)
 
         stdout = payload.get("output", "") or ""
@@ -198,7 +196,7 @@ class NeoBrowserComponent(BrowserComponent):
     async def exec(
         self,
         cmd: str,
-        timeout: int = 30,
+        timeout_sec: int = 30,
         description: str | None = None,
         tags: str | None = None,
         learn: bool = False,
@@ -206,7 +204,7 @@ class NeoBrowserComponent(BrowserComponent):
     ) -> dict[str, Any]:
         result = await self._sandbox.browser.exec(
             cmd,
-            timeout=timeout,
+            timeout_sec=timeout_sec,
             description=description,
             tags=tags,
             learn=learn,
@@ -217,7 +215,7 @@ class NeoBrowserComponent(BrowserComponent):
     async def exec_batch(
         self,
         commands: list[str],
-        timeout: int = 60,
+        timeout_sec: int = 60,
         stop_on_error: bool = True,
         description: str | None = None,
         tags: str | None = None,
@@ -226,7 +224,7 @@ class NeoBrowserComponent(BrowserComponent):
     ) -> dict[str, Any]:
         result = await self._sandbox.browser.exec_batch(
             commands,
-            timeout=timeout,
+            timeout_sec=timeout_sec,
             stop_on_error=stop_on_error,
             description=description,
             tags=tags,
@@ -238,7 +236,7 @@ class NeoBrowserComponent(BrowserComponent):
     async def run_skill(
         self,
         skill_key: str,
-        timeout: int = 60,
+        timeout_sec: int = 60,
         stop_on_error: bool = True,
         include_trace: bool = False,
         description: str | None = None,
@@ -246,7 +244,7 @@ class NeoBrowserComponent(BrowserComponent):
     ) -> dict[str, Any]:
         result = await self._sandbox.browser.run_skill(
             skill_key=skill_key,
-            timeout=timeout,
+            timeout_sec=timeout_sec,
             stop_on_error=stop_on_error,
             include_trace=include_trace,
             description=description,

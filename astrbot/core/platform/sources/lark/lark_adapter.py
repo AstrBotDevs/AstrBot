@@ -26,10 +26,10 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
-from ...register import register_platform_adapter
 from .lark_event import LarkMessageEvent
 from .server import LarkWebhookServer
 

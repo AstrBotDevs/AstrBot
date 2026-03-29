@@ -5,10 +5,9 @@ from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
 from astrbot.core.message.components import Image, Plain, Record
+from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.stage import Stage, register_stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-
-from ..context import PipelineContext
-from ..stage import Stage, register_stage
 
 
 @register_stage

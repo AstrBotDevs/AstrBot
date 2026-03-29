@@ -12,6 +12,11 @@ from uuid import uuid4
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core import sp
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.response import AgentResponseData
+from astrbot.core.agent.run_context import ContextWrapper, TContext
+from astrbot.core.agent.runners.base import AgentResponse, AgentState, BaseAgentRunner
+from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -20,11 +25,6 @@ from astrbot.core.provider.entities import (
 from astrbot.core.provider.provider import Provider
 from astrbot.core.utils.config_number import coerce_int_config
 
-from ...hooks import BaseAgentRunHooks
-from ...response import AgentResponseData
-from ...run_context import ContextWrapper, TContext
-from ...tool_executor import BaseFunctionToolExecutor
-from ..base import AgentResponse, AgentState, BaseAgentRunner
 from .constants import DEERFLOW_SESSION_PREFIX, DEERFLOW_THREAD_ID_KEY
 from .deerflow_api_client import DeerFlowAPIClient
 from .deerflow_content_mapper import (

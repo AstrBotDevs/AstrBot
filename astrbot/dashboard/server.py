@@ -418,7 +418,7 @@ class AstrBotDashboard:
         if request.path.startswith("/api/v1"):
             raw_key = self._extract_raw_api_key()
             if not raw_key:
-                r = jsonify(Response().error("Missing API key").__dict__)
+                r = jsonify(Response().error("Missing API key").to_json())
                 r.status_code = 401
                 return r
             key_hash = hashlib.pbkdf2_hmac(
@@ -429,7 +429,7 @@ class AstrBotDashboard:
             ).hex()
             api_key = await self.db.get_active_api_key_by_hash(key_hash)
             if not api_key:
-                r = jsonify(Response().error("Invalid API key").__dict__)
+                r = jsonify(Response().error("Invalid API key").to_json())
                 r.status_code = 401
                 return r
 
@@ -439,7 +439,7 @@ class AstrBotDashboard:
                 scopes = list(ALL_OPEN_API_SCOPES)
             required_scope = self._get_required_open_api_scope(request.path)
             if required_scope and "*" not in scopes and required_scope not in scopes:
-                r = jsonify(Response().error("Insufficient API key scope").__dict__)
+                r = jsonify(Response().error("Insufficient API key scope").to_json())
                 r.status_code = 403
                 return r
 

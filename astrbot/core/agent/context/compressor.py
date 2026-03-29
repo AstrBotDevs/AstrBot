@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from ..message import Message
+from astrbot.core.agent.message import Message
 
 if TYPE_CHECKING:
     from astrbot import logger
@@ -15,7 +15,7 @@ else:
 if TYPE_CHECKING:
     from astrbot.core.provider.provider import Provider
 
-from ..context.truncator import ContextTruncator
+from astrbot.core.agent.context.truncator import ContextTruncator
 
 
 @runtime_checkable

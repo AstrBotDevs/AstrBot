@@ -24,8 +24,8 @@ from astrbot.api.platform import (
 )
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.register import register_platform_adapter
 
-from ...register import register_platform_adapter
 from .qqofficial_message_event import QQOfficialMessageEvent
 
 # remove logger handler

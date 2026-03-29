@@ -4,9 +4,9 @@ import uuid
 import numpy as np
 
 from astrbot import logger
+from astrbot.core.db.vec_db.base import BaseVecDB, Result
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 
-from ..base import BaseVecDB, Result
 from .document_storage import DocumentStorage
 from .embedding_storage import EmbeddingStorage
 

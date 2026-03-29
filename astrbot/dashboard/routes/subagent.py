@@ -59,16 +59,16 @@ class SubAgentRoute(Route):
                     if isinstance(a, dict):
                         a.setdefault("provider_id", None)
                         a.setdefault("persona_id", None)
-            return jsonify(Response().ok(data=data).__dict__)
+            return jsonify(Response().ok(data=data).to_json())
         except Exception as e:
             logger.error(traceback.format_exc())
-            return jsonify(Response().error(f"获取 subagent 配置失败: {e!s}").__dict__)
+            return jsonify(Response().error(f"获取 subagent 配置失败: {e!s}").to_json())
 
     async def update_config(self):
         try:
             data = await request.json
             if not isinstance(data, dict):
-                return jsonify(Response().error("配置必须为 JSON 对象").__dict__)
+                return jsonify(Response().error("配置必须为 JSON 对象").to_json())
 
             cfg = self.core_lifecycle.astrbot_config
             cfg["subagent_orchestrator"] = data
@@ -82,10 +82,10 @@ class SubAgentRoute(Route):
             if orch is not None:
                 await orch.reload_from_config(data)
 
-            return jsonify(Response().ok(message="保存成功").__dict__)
+            return jsonify(Response().ok(message="保存成功").to_json())
         except Exception as e:
             logger.error(traceback.format_exc())
-            return jsonify(Response().error(f"保存 subagent 配置失败: {e!s}").__dict__)
+            return jsonify(Response().error(f"保存 subagent 配置失败: {e!s}").to_json())
 
     async def get_available_tools(self):
         """Return all registered tools (name/description/parameters/active/origin).
@@ -111,7 +111,7 @@ class SubAgentRoute(Route):
                         "handler_module_path": tool.handler_module_path,
                     }
                 )
-            return jsonify(Response().ok(data=tools_dict).__dict__)
+            return jsonify(Response().ok(data=tools_dict).to_json())
         except Exception as e:
             logger.error(traceback.format_exc())
-            return jsonify(Response().error(f"获取可用工具失败: {e!s}").__dict__)
+            return jsonify(Response().error(f"获取可用工具失败: {e!s}").to_json())

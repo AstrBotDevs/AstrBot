@@ -10,10 +10,12 @@ from astrbot import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.platform import AstrBotMessage, MessageType, Platform, PlatformMetadata
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.register import register_platform_adapter
+from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
+    QQOfficialPlatformAdapter,
+)
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
-from ...register import register_platform_adapter
-from ..qqofficial.qqofficial_platform_adapter import QQOfficialPlatformAdapter
 from .qo_webhook_event import QQOfficialWebhookMessageEvent
 from .qo_webhook_server import QQOfficialWebhook
 

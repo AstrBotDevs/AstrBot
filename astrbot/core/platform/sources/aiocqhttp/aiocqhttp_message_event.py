@@ -87,8 +87,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                         new_seg.file = new_path
                         modified = True
                     except Exception as upload_err:
-                        raise f"NapCat 文件流式上传失败: {upload_err}"
-                        # 上传失败,保留原文件路径,但继续后续 segments 处理
+                        raise RuntimeError(
+                            f"NapCat 文件流式上传失败: {upload_err}"
+                        ) from upload_err
             new_chain.chain.append(new_seg)
         if not modified:
             return False
@@ -112,45 +113,56 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             file_path = path
 
         path = Path(file_path)
-        if not path.exists():
+        if not await asyncio.to_thread(path.exists):
             raise FileNotFoundError(f"文件不存在: {file_path}")
 
         # 第一次遍历:计算文件总大小和 SHA256 哈希
-        hasher = hashlib.sha256()
-        total_size = 0
-        with open(path, "rb") as f:
-            while True:
-                chunk = f.read(CHUNK_SIZE)
-                if not chunk:
-                    break
-                hasher.update(chunk)
-                total_size += len(chunk)
-        sha256_hash = hasher.hexdigest()
+        def _read_all_and_hash():
+            hasher = hashlib.sha256()
+            total_size = 0
+            with open(path, "rb") as f:
+                while True:
+                    chunk = f.read(CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    hasher.update(chunk)
+                    total_size += len(chunk)
+            return hasher.hexdigest(), total_size
+
+        sha256_hash, total_size = await asyncio.to_thread(_read_all_and_hash)
         total_chunks = (total_size + CHUNK_SIZE - 1) // CHUNK_SIZE
 
         # 第二次遍历:逐块上传
         stream_id = str(uuid.uuid4())
-        with open(path, "rb") as f:
-            for i in range(total_chunks):
-                chunk = f.read(CHUNK_SIZE)
-                if not chunk:
-                    break
-                chunk_b64 = base64.b64encode(chunk).decode("utf-8")
-                params = {
-                    "stream_id": stream_id,
-                    "chunk_data": chunk_b64,
-                    "chunk_index": i,
-                    "total_chunks": total_chunks,
-                    "file_size": total_size,
-                    "expected_sha256": sha256_hash,
-                    "filename": path.name,
-                    "file_retention": FILE_RETENTION_MS,  # 单位为毫秒
-                }
-                resp = await bot.call_action("upload_file_stream", **params)
-                if not cls._is_upload_success_response(
-                    resp, expected_statuses=("chunk_received", "file_complete")
-                ):
-                    raise OSError(f"上传分片 {i} 失败: {resp}")
+
+        async def _read_chunk(file_pos: int) -> bytes:
+            def _read_chunk_sync(file_pos: int) -> bytes:
+                with open(path, "rb") as f:
+                    f.seek(file_pos)
+                    return f.read(CHUNK_SIZE)
+
+            return await asyncio.to_thread(_read_chunk_sync, file_pos)
+
+        for i in range(total_chunks):
+            chunk = await _read_chunk(i * CHUNK_SIZE)
+            if not chunk:
+                break
+            chunk_b64 = base64.b64encode(chunk).decode("utf-8")
+            params = {
+                "stream_id": stream_id,
+                "chunk_data": chunk_b64,
+                "chunk_index": i,
+                "total_chunks": total_chunks,
+                "file_size": total_size,
+                "expected_sha256": sha256_hash,
+                "filename": path.name,
+                "file_retention": FILE_RETENTION_MS,  # 单位为毫秒
+            }
+            resp = await bot.call_action("upload_file_stream", **params)
+            if not cls._is_upload_success_response(
+                resp, expected_statuses=("chunk_received", "file_complete")
+            ):
+                raise OSError(f"上传分片 {i} 失败: {resp}")
 
         # 发送完成信号
         complete_params = {"stream_id": stream_id, "is_complete": True}

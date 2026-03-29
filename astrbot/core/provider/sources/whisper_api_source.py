@@ -5,6 +5,9 @@ import anyio
 from openai import NOT_GIVEN, AsyncOpenAI
 
 from astrbot.core import logger
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import STTProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import convert_audio_to_wav
@@ -12,10 +15,6 @@ from astrbot.core.utils.tencent_record_helper import (
     convert_to_pcm_wav,
     tencent_silk_to_wav,
 )
-
-from ..entities import ProviderType
-from ..provider import STTProvider
-from ..register import register_provider_adapter
 
 
 def _open_file_rb(path: str):

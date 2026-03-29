@@ -1,10 +1,9 @@
 import aiohttp
 
 from astrbot import logger
-
-from ..entities import ProviderType, RerankResult
-from ..provider import RerankProvider
-from ..register import register_provider_adapter
+from astrbot.core.provider.entities import ProviderType, RerankResult
+from astrbot.core.provider.provider import RerankProvider
+from astrbot.core.provider.register import register_provider_adapter
 
 
 @register_provider_adapter(

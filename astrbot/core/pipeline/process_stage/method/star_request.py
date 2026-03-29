@@ -6,12 +6,11 @@ from typing import Any
 
 from astrbot.core import logger
 from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.pipeline.context import PipelineContext, call_event_hook, call_handler
+from astrbot.core.pipeline.process_stage.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
-
-from ...context import PipelineContext, call_event_hook, call_handler
-from ..stage import Stage
 
 
 class StarRequestSubStage(Stage):

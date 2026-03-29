@@ -1,9 +1,10 @@
 import base64
 import uuid
 
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
+
 from .mimo_api_common import (
     DEFAULT_MIMO_API_BASE,
     DEFAULT_MIMO_TTS_MODEL,

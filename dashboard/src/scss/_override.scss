@@ -3,6 +3,23 @@
   background: transparent !important;
 }
 
+/* === Color picker preview swatch === */
+.color-preview {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  flex-shrink: 0;
+}
+
+/* === Settings page card layout === */
+.settings-page {
+  .v-card {
+    border: 1px solid rgba(var(--v-theme-borderLight), 0.15) !important;
+    border-radius: 12px !important;
+  }
+}
+
 html {
   .bg-success {
     color: white !important;

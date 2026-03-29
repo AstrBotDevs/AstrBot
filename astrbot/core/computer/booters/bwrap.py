@@ -10,11 +10,15 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any
 
+from astrbot.core.computer.olayer import (
+    FileSystemComponent,
+    PythonComponent,
+    ShellComponent,
+)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_temp_path,
 )
 
-from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
 
 
@@ -34,6 +38,16 @@ def _decode_shell_output(output: bytes | None) -> str:
         pass
 
     return output.decode("utf-8", errors="replace")
+
+
+def _write_file_sync(path: str, content: str, mode: str, encoding: str) -> None:
+    with open(path, mode, encoding=encoding) as f:
+        f.write(content)
+
+
+def _read_file_sync(path: str, encoding: str) -> str:
+    with open(path, encoding=encoding) as f:
+        return f.read()
 
 
 @dataclass
@@ -210,17 +224,15 @@ class HostBackedFileSystemComponent(FileSystemComponent):
         self, path: str, content: str = "", mode: int = 0o644
     ) -> dict[str, Any]:
         p = self._safe_path(path)
-        os.makedirs(os.path.dirname(p), exist_ok=True)
-        with open(p, "w", encoding="utf-8") as f:
-            f.write(content)
-        os.chmod(p, mode)
+        await asyncio.to_thread(os.makedirs, os.path.dirname(p), exist_ok=True)
+        await asyncio.to_thread(_write_file_sync, p, content, "w", "utf-8")
+        await asyncio.to_thread(os.chmod, p, mode)
         return {"success": True, "path": p}
 
     async def read_file(self, path: str, encoding: str = "utf-8") -> dict[str, Any]:
         p = self._safe_path(path)
         try:
-            with open(p, encoding=encoding) as f:
-                content = f.read()
+            content = await asyncio.to_thread(_read_file_sync, p, encoding)
             return {"success": True, "content": content}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -229,10 +241,9 @@ class HostBackedFileSystemComponent(FileSystemComponent):
         self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
     ) -> dict[str, Any]:
         p = self._safe_path(path)
-        os.makedirs(os.path.dirname(p), exist_ok=True)
+        await asyncio.to_thread(os.makedirs, os.path.dirname(p), exist_ok=True)
         try:
-            with open(p, mode, encoding=encoding) as f:
-                f.write(content)
+            await asyncio.to_thread(_write_file_sync, p, content, mode, encoding)
             return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -240,10 +251,10 @@ class HostBackedFileSystemComponent(FileSystemComponent):
     async def delete_file(self, path: str) -> dict[str, Any]:
         p = self._safe_path(path)
         try:
-            if os.path.isdir(p):
-                shutil.rmtree(p)
+            if await asyncio.to_thread(os.path.isdir, p):
+                await asyncio.to_thread(shutil.rmtree, p)
             else:
-                os.remove(p)
+                await asyncio.to_thread(os.remove, p)
             return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -292,10 +303,10 @@ class BwrapBooter(ComputerBooter):
         workspace_dir = os.path.join(
             get_astrbot_temp_path(), f"sandbox_workspace_{session_id}"
         )
-        os.makedirs(workspace_dir, exist_ok=True)
+        await asyncio.to_thread(os.makedirs, workspace_dir, exist_ok=True)
 
         self.config = BwrapConfig(
-            workspace_dir=os.path.abspath(workspace_dir),
+            workspace_dir=await asyncio.to_thread(os.path.abspath, workspace_dir),
             rw_binds=self._rw_binds,
             ro_binds=self._ro_binds,
         )
@@ -320,8 +331,8 @@ class BwrapBooter(ComputerBooter):
             )
 
     async def shutdown(self) -> None:
-        if self.config and os.path.exists(self.config.workspace_dir):
-            shutil.rmtree(self.config.workspace_dir, ignore_errors=True)
+        if self.config and await asyncio.to_thread(os.path.exists, self.config.workspace_dir):
+            await asyncio.to_thread(shutil.rmtree, self.config.workspace_dir, ignore_errors=True)
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         if not self._fs or not self.config:

@@ -17,6 +17,7 @@ Behavior:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shlex
@@ -140,12 +141,13 @@ class ExecuteShellTool(FunctionTool):
         else:
             exec_env = session_env
 
-        # Determine timeout from config (fall back to 30) — use the cast wrapper's context
+        # Determine timeout from config (fall back to 30)
         config = astr_ctx.context.context.get_config(umo=session_id)
+        provider_settings: dict = {}
+        if isinstance(config, dict):
+            provider_settings = config.get("provider_settings") or {}
         try:
-            timeout = int(
-                config.get("provider_settings", {}).get("tool_call_timeout", 30)
-            )
+            timeout = int(provider_settings.get("tool_call_timeout", 30))
         except (ValueError, TypeError):
             timeout = 30
 
@@ -180,18 +182,21 @@ class ExecuteShellTool(FunctionTool):
                 parts = shlex.split(cd_part)
                 # cd with no args -> home
                 if len(parts) == 1:
-                    target = os.path.expanduser("~")
+                    target = await asyncio.to_thread(os.path.expanduser, "~")
                 else:
                     target_raw = parts[1]
                     # expand ~ and variables
-                    target_raw = os.path.expanduser(target_raw)
-                    target = (
-                        target_raw
-                        if os.path.isabs(target_raw)
-                        else os.path.normpath(os.path.join(session_cwd, target_raw))
-                    )
+                    target_raw = await asyncio.to_thread(os.path.expanduser, target_raw)
+                    if await asyncio.to_thread(os.path.isabs, target_raw):
+                        target = target_raw
+                    else:
+                        target = await asyncio.to_thread(
+                            os.path.normpath, os.path.join(session_cwd, target_raw)
+                        )
 
-                if not os.path.exists(target) or not os.path.isdir(target):
+                target_exists = await asyncio.to_thread(os.path.exists, target)
+                target_isdir = await asyncio.to_thread(os.path.isdir, target)
+                if not target_exists or not target_isdir:
                     result = {
                         "success": False,
                         "exit_code": -1,
@@ -225,7 +230,8 @@ class ExecuteShellTool(FunctionTool):
             # Background execution: spawn process and return pid immediately.
             if background:
                 # Start background process; do not wait. Use shell to support pipes/redirects.
-                popen = subprocess.Popen(
+                popen = await asyncio.to_thread(
+                    subprocess.Popen,
                     ["/bin/sh", "-c", command_to_run],
                     cwd=session_cwd,
                     env=exec_env,
@@ -241,7 +247,8 @@ class ExecuteShellTool(FunctionTool):
                 return json.dumps(result)
 
             # Foreground execution: run to completion, capture output.
-            completed = subprocess.run(
+            completed = await asyncio.to_thread(
+                subprocess.run,
                 ["/bin/sh", "-c", command_to_run],
                 cwd=session_cwd,
                 env=exec_env,
@@ -268,7 +275,7 @@ class ExecuteShellTool(FunctionTool):
                 {
                     "success": False,
                     "exit_code": -1,
-                    "stdout": getattr(e, "output", "") or "",
+                    "stdout": e.stdout or "",
                     "stderr": f"Command timed out after {timeout} seconds",
                     "cwd": session_cwd,
                 }

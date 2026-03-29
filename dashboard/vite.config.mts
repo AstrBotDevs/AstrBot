@@ -4,6 +4,8 @@ import { defineConfig, loadEnv } from "vite";
 import vue from "@vitejs/plugin-vue";
 import vuetify from "vite-plugin-vuetify";
 import webfontDl from "vite-plugin-webfont-dl";
+import { cpSync, mkdirSync, existsSync } from "fs";
+import { join, resolve } from "path";
 
 const require = createRequire(import.meta.url);
 
@@ -16,6 +18,28 @@ try {
   // Cloudflare plugin not available, skip
 }
 
+// Vite plugin: download MDI font to public/ at build time (no git binary)
+function mdiFontDownload() {
+  return {
+    name: "vite-plugin-mdi-font-download",
+    async buildStart() {
+      const configDir = fileURLToPath(new URL(".", import.meta.url));
+      const mdiSource = resolve(
+        configDir,
+        "node_modules/.pnpm/@mdi+font@7.4.47/node_modules/@mdi/font/fonts",
+      );
+      const mdiDest = resolve(configDir, "public/fonts");
+      if (!existsSync(mdiSource)) {
+        console.warn("[mdi-font] @mdi/font not found in node_modules, skipping download");
+        return;
+      }
+      mkdirSync(mdiDest, { recursive: true });
+      cpSync(mdiSource, mdiDest, { recursive: true });
+      console.log("[mdi-font] Downloaded MDI fonts to public/fonts/");
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -25,6 +49,7 @@ export default defineConfig(({ command, mode }) => {
     base: command === "build" ? basePath : "/",
 
     plugins: [
+      mdiFontDownload(),
       vue({
         template: {
           compilerOptions: {
@@ -60,13 +85,6 @@ export default defineConfig(({ command, mode }) => {
     server: {
       host: "::",
       port: 3000,
-      proxy: {
-        "/api": {
-          target: env.VITE_DEV_API_PROXY_TARGET || "http://127.0.0.1:6185",
-          changeOrigin: true,
-          ws: true,
-        },
-      },
     },
   };
 });

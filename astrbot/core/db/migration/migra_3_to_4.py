@@ -7,10 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astrbot.api import logger, sp
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.config.default import DB_PATH
+from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ConversationV2, PlatformMessageHistory
 from astrbot.core.platform.astr_message_event import MessageSesion
 
-from .. import BaseDatabase
 from .shared_preferences_v3 import sp as sp_v3
 from .sqlite_v3 import SQLiteDatabase as SQLiteV3DatabaseV3
 

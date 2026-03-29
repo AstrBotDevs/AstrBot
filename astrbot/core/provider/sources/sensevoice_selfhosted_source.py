@@ -13,13 +13,12 @@ from funasr_onnx import SenseVoiceSmall
 from funasr_onnx.utils.postprocess_utils import rich_transcription_postprocess
 
 from astrbot.core import logger
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import STTProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
-
-from ..entities import ProviderType
-from ..provider import STTProvider
-from ..register import register_provider_adapter
 
 
 @register_provider_adapter(

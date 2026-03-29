@@ -3,7 +3,7 @@ from __future__ import annotations
 import abc
 from typing import TYPE_CHECKING
 
-from ..olayer import (
+from astrbot.core.computer.olayer import (
     BrowserComponent,
     FileSystemComponent,
     PythonComponent,

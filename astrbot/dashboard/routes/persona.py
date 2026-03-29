@@ -71,12 +71,11 @@ class PersonaRoute(Route):
                         }
                         for persona in personas
                     ],
-                )
-                .__dict__
+                ).to_json()
             )
         except Exception as e:
             logger.error(f"获取人格列表失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"获取人格列表失败: {e!s}").__dict__
+            return Response().error(f"获取人格列表失败: {e!s}").to_json()
 
     async def get_persona_detail(self):
         """获取指定人格的详细信息"""
@@ -85,11 +84,11 @@ class PersonaRoute(Route):
             persona_id = data.get("persona_id")
 
             if not persona_id:
-                return Response().error("缺少必要参数: persona_id").__dict__
+                return Response().error("缺少必要参数: persona_id").to_json()
 
             persona = await self.persona_mgr.get_persona(persona_id)
             if not persona:
-                return Response().error("人格不存在").__dict__
+                return Response().error("人格不存在").to_json()
 
             return (
                 Response()
@@ -110,12 +109,11 @@ class PersonaRoute(Route):
                         if persona.updated_at
                         else None,
                     },
-                )
-                .__dict__
+                ).to_json()
             )
         except Exception as e:
             logger.error(f"获取人格详情失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"获取人格详情失败: {e!s}").__dict__
+            return Response().error(f"获取人格详情失败: {e!s}").to_json()
 
     async def create_persona(self):
         """创建新人格"""
@@ -131,22 +129,21 @@ class PersonaRoute(Route):
             sort_order = data.get("sort_order", 0)
 
             if not persona_id:
-                return Response().error("人格ID不能为空").__dict__
+                return Response().error("人格ID不能为空").to_json()
 
             if not system_prompt:
-                return Response().error("系统提示词不能为空").__dict__
+                return Response().error("系统提示词不能为空").to_json()
 
             if custom_error_message is not None:
                 if not isinstance(custom_error_message, str):
-                    return Response().error("自定义报错回复信息必须是字符串").__dict__
+                    return Response().error("自定义报错回复信息必须是字符串").to_json()
                 custom_error_message = custom_error_message.strip() or None
 
             # 验证 begin_dialogs 格式
             if begin_dialogs and len(begin_dialogs) % 2 != 0:
                 return (
                     Response()
-                    .error("预设对话数量必须为偶数(用户和助手轮流对话)")
-                    .__dict__
+                    .error("预设对话数量必须为偶数(用户和助手轮流对话)").to_json()
                 )
 
             persona = await self.persona_mgr.create_persona(
@@ -182,14 +179,13 @@ class PersonaRoute(Route):
                             else None,
                         },
                     },
-                )
-                .__dict__
+                ).to_json()
             )
         except ValueError as e:
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
         except Exception as e:
             logger.error(f"创建人格失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"创建人格失败: {e!s}").__dict__
+            return Response().error(f"创建人格失败: {e!s}").to_json()
 
     async def update_persona(self):
         """更新人格信息"""
@@ -206,13 +202,13 @@ class PersonaRoute(Route):
             custom_error_message = data.get("custom_error_message")
 
             if not persona_id:
-                return Response().error("缺少必要参数: persona_id").__dict__
+                return Response().error("缺少必要参数: persona_id").to_json()
 
             if has_custom_error_message:
                 if custom_error_message is not None and not isinstance(
                     custom_error_message, str
                 ):
-                    return Response().error("自定义报错回复信息必须是字符串").__dict__
+                    return Response().error("自定义报错回复信息必须是字符串").to_json()
                 if isinstance(custom_error_message, str):
                     custom_error_message = custom_error_message.strip() or None
 
@@ -220,8 +216,7 @@ class PersonaRoute(Route):
             if begin_dialogs is not None and len(begin_dialogs) % 2 != 0:
                 return (
                     Response()
-                    .error("预设对话数量必须为偶数(用户和助手轮流对话)")
-                    .__dict__
+                    .error("预设对话数量必须为偶数(用户和助手轮流对话)").to_json()
                 )
 
             update_kwargs = {
@@ -238,12 +233,12 @@ class PersonaRoute(Route):
 
             await self.persona_mgr.update_persona(**update_kwargs)
 
-            return Response().ok({"message": "人格更新成功"}).__dict__
+            return Response().ok({"message": "人格更新成功"}).to_json()
         except ValueError as e:
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
         except Exception as e:
             logger.error(f"更新人格失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"更新人格失败: {e!s}").__dict__
+            return Response().error(f"更新人格失败: {e!s}").to_json()
 
     async def delete_persona(self):
         """删除人格"""
@@ -252,16 +247,16 @@ class PersonaRoute(Route):
             persona_id = data.get("persona_id")
 
             if not persona_id:
-                return Response().error("缺少必要参数: persona_id").__dict__
+                return Response().error("缺少必要参数: persona_id").to_json()
 
             await self.persona_mgr.delete_persona(persona_id)
 
-            return Response().ok({"message": "人格删除成功"}).__dict__
+            return Response().ok({"message": "人格删除成功"}).to_json()
         except ValueError as e:
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
         except Exception as e:
             logger.error(f"删除人格失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"删除人格失败: {e!s}").__dict__
+            return Response().error(f"删除人格失败: {e!s}").to_json()
 
     async def clone_persona(self):
         """克隆人格"""
@@ -271,10 +266,10 @@ class PersonaRoute(Route):
             new_persona_id = data.get("new_persona_id", "").strip()
 
             if not source_persona_id:
-                return Response().error("缺少必要参数: source_persona_id").__dict__
+                return Response().error("缺少必要参数: source_persona_id").to_json()
 
             if not new_persona_id:
-                return Response().error("新人格ID不能为空").__dict__
+                return Response().error("新人格ID不能为空").to_json()
 
             persona = await self.persona_mgr.clone_persona(
                 source_persona_id=source_persona_id,
@@ -303,14 +298,13 @@ class PersonaRoute(Route):
                             else None,
                         },
                     },
-                )
-                .__dict__
+                ).to_json()
             )
         except ValueError as e:
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
         except Exception as e:
             logger.error(f"克隆人格失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"克隆人格失败: {e!s}").__dict__
+            return Response().error(f"克隆人格失败: {e!s}").to_json()
 
     async def move_persona(self):
         """移动人格到指定文件夹"""
@@ -320,16 +314,16 @@ class PersonaRoute(Route):
             folder_id = data.get("folder_id")  # None 表示移动到根目录
 
             if not persona_id:
-                return Response().error("缺少必要参数: persona_id").__dict__
+                return Response().error("缺少必要参数: persona_id").to_json()
 
             await self.persona_mgr.move_persona_to_folder(persona_id, folder_id)
 
-            return Response().ok({"message": "人格移动成功"}).__dict__
+            return Response().ok({"message": "人格移动成功"}).to_json()
         except ValueError as e:
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
         except Exception as e:
             logger.error(f"移动人格失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"移动人格失败: {e!s}").__dict__
+            return Response().error(f"移动人格失败: {e!s}").to_json()
 
     # ====
     # Folder Routes
@@ -362,21 +356,20 @@ class PersonaRoute(Route):
                         }
                         for folder in folders
                     ],
-                )
-                .__dict__
+                ).to_json()
             )
         except Exception as e:
             logger.error(f"获取文件夹列表失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"获取文件夹列表失败: {e!s}").__dict__
+            return Response().error(f"获取文件夹列表失败: {e!s}").to_json()
 
     async def get_folder_tree(self):
         """获取文件夹树形结构"""
         try:
             tree = await self.persona_mgr.get_folder_tree()
-            return Response().ok(tree).__dict__
+            return Response().ok(tree).to_json()
         except Exception as e:
             logger.error(f"获取文件夹树失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"获取文件夹树失败: {e!s}").__dict__
+            return Response().error(f"获取文件夹树失败: {e!s}").to_json()
 
     async def get_folder_detail(self):
         """获取指定文件夹的详细信息"""
@@ -385,11 +378,11 @@ class PersonaRoute(Route):
             folder_id = data.get("folder_id")
 
             if not folder_id:
-                return Response().error("缺少必要参数: folder_id").__dict__
+                return Response().error("缺少必要参数: folder_id").to_json()
 
             folder = await self.persona_mgr.get_folder(folder_id)
             if not folder:
-                return Response().error("文件夹不存在").__dict__
+                return Response().error("文件夹不存在").to_json()
 
             return (
                 Response()
@@ -407,12 +400,11 @@ class PersonaRoute(Route):
                         if folder.updated_at
                         else None,
                     },
-                )
-                .__dict__
+                ).to_json()
             )
         except Exception as e:
             logger.error(f"获取文件夹详情失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"获取文件夹详情失败: {e!s}").__dict__
+            return Response().error(f"获取文件夹详情失败: {e!s}").to_json()
 
     async def create_folder(self):
         """创建文件夹"""
@@ -424,7 +416,7 @@ class PersonaRoute(Route):
             sort_order = data.get("sort_order", 0)
 
             if not name:
-                return Response().error("文件夹名称不能为空").__dict__
+                return Response().error("文件夹名称不能为空").to_json()
 
             folder = await self.persona_mgr.create_folder(
                 name=name,
@@ -452,12 +444,11 @@ class PersonaRoute(Route):
                             else None,
                         },
                     },
-                )
-                .__dict__
+                ).to_json()
             )
         except Exception as e:
             logger.error(f"创建文件夹失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"创建文件夹失败: {e!s}").__dict__
+            return Response().error(f"创建文件夹失败: {e!s}").to_json()
 
     async def update_folder(self):
         """更新文件夹信息"""
@@ -470,7 +461,7 @@ class PersonaRoute(Route):
             sort_order = data.get("sort_order")
 
             if not folder_id:
-                return Response().error("缺少必要参数: folder_id").__dict__
+                return Response().error("缺少必要参数: folder_id").to_json()
 
             await self.persona_mgr.update_folder(
                 folder_id=folder_id,
@@ -480,10 +471,10 @@ class PersonaRoute(Route):
                 sort_order=sort_order,
             )
 
-            return Response().ok({"message": "文件夹更新成功"}).__dict__
+            return Response().ok({"message": "文件夹更新成功"}).to_json()
         except Exception as e:
             logger.error(f"更新文件夹失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"更新文件夹失败: {e!s}").__dict__
+            return Response().error(f"更新文件夹失败: {e!s}").to_json()
 
     async def delete_folder(self):
         """删除文件夹"""
@@ -492,14 +483,14 @@ class PersonaRoute(Route):
             folder_id = data.get("folder_id")
 
             if not folder_id:
-                return Response().error("缺少必要参数: folder_id").__dict__
+                return Response().error("缺少必要参数: folder_id").to_json()
 
             await self.persona_mgr.delete_folder(folder_id)
 
-            return Response().ok({"message": "文件夹删除成功"}).__dict__
+            return Response().ok({"message": "文件夹删除成功"}).to_json()
         except Exception as e:
             logger.error(f"删除文件夹失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"删除文件夹失败: {e!s}").__dict__
+            return Response().error(f"删除文件夹失败: {e!s}").to_json()
 
     async def reorder_items(self):
         """批量更新排序顺序
@@ -519,26 +510,24 @@ class PersonaRoute(Route):
             items = data.get("items", [])
 
             if not items:
-                return Response().error("items 不能为空").__dict__
+                return Response().error("items 不能为空").to_json()
 
             # 验证每个 item 的格式
             for item in items:
                 if not all(k in item for k in ("id", "type", "sort_order")):
                     return (
                         Response()
-                        .error("每个 item 必须包含 id, type, sort_order 字段")
-                        .__dict__
+                        .error("每个 item 必须包含 id, type, sort_order 字段").to_json()
                     )
                 if item["type"] not in ("persona", "folder"):
                     return (
                         Response()
-                        .error("type 字段必须是 'persona' 或 'folder'")
-                        .__dict__
+                        .error("type 字段必须是 'persona' 或 'folder'").to_json()
                     )
 
             await self.persona_mgr.batch_update_sort_order(items)
 
-            return Response().ok({"message": "排序更新成功"}).__dict__
+            return Response().ok({"message": "排序更新成功"}).to_json()
         except Exception as e:
             logger.error(f"更新排序失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"更新排序失败: {e!s}").__dict__
+            return Response().error(f"更新排序失败: {e!s}").to_json()

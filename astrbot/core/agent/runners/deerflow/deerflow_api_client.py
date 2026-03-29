@@ -1,5 +1,6 @@
 import codecs
 import json
+import types
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -136,7 +137,7 @@ class DeerFlowAPIClient:
         self,
         exc_type: type[BaseException] | None,
         exc: BaseException | None,
-        tb: object | None,
+        tb: types.TracebackType | None,
     ) -> None:
         await self.close()
 

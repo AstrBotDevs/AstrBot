@@ -97,7 +97,7 @@ class ChatRoute(Route):
     async def get_file(self):
         filename = request.args.get("filename")
         if not filename:
-            return Response().error("Missing key: filename").__dict__
+            return Response().error("Missing key: filename").to_json()
 
         try:
             file_path = os.path.join(self.attachments_dir, os.path.basename(filename))
@@ -116,7 +116,7 @@ class ChatRoute(Route):
             try:
                 resolved_file_path.relative_to(resolved_base_dir)
             except ValueError:
-                return Response().error("Invalid file path").__dict__
+                return Response().error("Invalid file path").to_json()
 
             filename_ext = os.path.splitext(filename)[1].lower()
             if filename_ext == ".wav":
@@ -126,18 +126,18 @@ class ChatRoute(Route):
             return await send_file(str(resolved_file_path))
 
         except (FileNotFoundError, OSError):
-            return Response().error("File access error").__dict__
+            return Response().error("File access error").to_json()
 
     async def get_attachment(self):
         """Get attachment file by attachment_id."""
         attachment_id = request.args.get("attachment_id")
         if not attachment_id:
-            return Response().error("Missing key: attachment_id").__dict__
+            return Response().error("Missing key: attachment_id").to_json()
 
         try:
             attachment = await self.db.get_attachment_by_id(attachment_id)
             if not attachment:
-                return Response().error("Attachment not found").__dict__
+                return Response().error("Attachment not found").to_json()
 
             file_path = attachment.path
             resolved_file_path = _resolve_path(file_path)
@@ -147,13 +147,13 @@ class ChatRoute(Route):
             )
 
         except (FileNotFoundError, OSError):
-            return Response().error("File access error").__dict__
+            return Response().error("File access error").to_json()
 
     async def post_file(self):
         """Upload a file and create an attachment record, return attachment_id."""
         post_data = await request.files
         if "file" not in post_data:
-            return Response().error("Missing key: file").__dict__
+            return Response().error("Missing key: file").to_json()
 
         file = post_data["file"]
         filename = file.filename or f"{uuid.uuid4()!s}"
@@ -180,7 +180,7 @@ class ChatRoute(Route):
         )
 
         if not attachment:
-            return Response().error("Failed to create attachment").__dict__
+            return Response().error("Failed to create attachment").to_json()
 
         filename = os.path.basename(attachment.path)
 
@@ -192,8 +192,7 @@ class ChatRoute(Route):
                     "filename": filename,
                     "type": attach_type,
                 }
-            )
-            .__dict__
+            ).to_json()
         )
 
     async def _build_user_message_parts(self, message: str | list) -> list[dict]:
@@ -313,13 +312,13 @@ class ChatRoute(Route):
         if post_data is None:
             post_data = await request.json
         if post_data is None:
-            return Response().error("Missing JSON body").__dict__
+            return Response().error("Missing JSON body").to_json()
         if "message" not in post_data and "files" not in post_data:
-            return Response().error("Missing key: message or files").__dict__
+            return Response().error("Missing key: message or files").to_json()
 
         if "session_id" not in post_data and "conversation_id" not in post_data:
             return (
-                Response().error("Missing key: session_id or conversation_id").__dict__
+                Response().error("Missing key: session_id or conversation_id").to_json()
             )
 
         message = post_data["message"]
@@ -329,7 +328,7 @@ class ChatRoute(Route):
         enable_streaming = post_data.get("enable_streaming", True)
 
         if not session_id:
-            return Response().error("session_id is empty").__dict__
+            return Response().error("session_id is empty").to_json()
 
         webchat_conv_id = session_id
 
@@ -338,8 +337,7 @@ class ChatRoute(Route):
         if not webchat_message_parts_have_content(message_parts):
             return (
                 Response()
-                .error("Message content is empty (reply only is not allowed)")
-                .__dict__
+                .error("Message content is empty (reply only is not allowed)").to_json()
             )
 
         message_id = str(uuid.uuid4())
@@ -573,18 +571,18 @@ class ChatRoute(Route):
         """Stop active agent runs for a session."""
         post_data = await request.json
         if post_data is None:
-            return Response().error("Missing JSON body").__dict__
+            return Response().error("Missing JSON body").to_json()
 
         session_id = post_data.get("session_id")
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
+            return Response().error("Missing key: session_id").to_json()
 
         username = g.get("username", "guest")
         session = await self.db.get_platform_session_by_id(session_id)
         if not session:
-            return Response().error(f"Session {session_id} not found").__dict__
+            return Response().error(f"Session {session_id} not found").to_json()
         if session.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error("Permission denied").to_json()
 
         message_type = (
             MessageType.GROUP_MESSAGE.value
@@ -597,7 +595,7 @@ class ChatRoute(Route):
         )
         stopped_count = active_event_registry.request_agent_stop_all(umo)
 
-        return Response().ok(data={"stopped_count": stopped_count}).__dict__
+        return Response().ok(data={"stopped_count": stopped_count}).to_json()
 
     async def _delete_session_internal(self, session, username: str) -> None:
         """Delete a single session and all its related data."""
@@ -647,30 +645,30 @@ class ChatRoute(Route):
         """Delete a Platform session and all its related data."""
         session_id = request.args.get("session_id")
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
+            return Response().error("Missing key: session_id").to_json()
         username = g.get("username", "guest")
 
         session = await self.db.get_platform_session_by_id(session_id)
         if not session:
-            return Response().error(f"Session {session_id} not found").__dict__
+            return Response().error(f"Session {session_id} not found").to_json()
         if session.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error("Permission denied").to_json()
 
         await self._delete_session_internal(session, username)
 
-        return Response().ok().__dict__
+        return Response().ok().to_json()
 
     async def batch_delete_sessions(self):
         """Batch delete multiple Platform sessions."""
         post_data = await request.json
         if post_data is None:
-            return Response().error("Missing JSON body").__dict__
+            return Response().error("Missing JSON body").to_json()
         if not isinstance(post_data, dict):
-            return Response().error("Invalid JSON body: expected object").__dict__
+            return Response().error("Invalid JSON body: expected object").to_json()
 
         session_ids = post_data.get("session_ids")
         if not session_ids or not isinstance(session_ids, list):
-            return Response().error("Missing or invalid key: session_ids").__dict__
+            return Response().error("Missing or invalid key: session_ids").to_json()
 
         username = g.get("username", "guest")
         sessions = await self.db.get_platform_sessions_by_ids(session_ids)
@@ -703,8 +701,7 @@ class ChatRoute(Route):
                     "failed_count": len(failed_items),
                     "failed_items": failed_items,
                 }
-            )
-            .__dict__
+            ).to_json()
         )
 
     def _extract_attachment_ids(self, history_list) -> list[str]:
@@ -763,8 +760,7 @@ class ChatRoute(Route):
                     "session_id": session.session_id,
                     "platform_id": session.platform_id,
                 }
-            )
-            .__dict__
+            ).to_json()
         )
 
     async def get_sessions(self):
@@ -799,13 +795,13 @@ class ChatRoute(Route):
                 }
             )
 
-        return Response().ok(data=sessions_data).__dict__
+        return Response().ok(data=sessions_data).to_json()
 
     async def get_session(self):
         """Get session information and message history by session_id."""
         session_id = request.args.get("session_id")
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
+            return Response().error("Missing key: session_id").to_json()
 
         # 获取会话信息以确定 platform_id
         session = await self.db.get_platform_session_by_id(session_id)
@@ -840,7 +836,7 @@ class ChatRoute(Route):
                 "emoji": project_info.emoji,
             }
 
-        return Response().ok(data=response_data).__dict__
+        return Response().ok(data=response_data).to_json()
 
     async def update_session_display_name(self):
         """Update a Platform session's display name."""
@@ -850,18 +846,18 @@ class ChatRoute(Route):
         display_name = post_data.get("display_name")
 
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
+            return Response().error("Missing key: session_id").to_json()
         if display_name is None:
-            return Response().error("Missing key: display_name").__dict__
+            return Response().error("Missing key: display_name").to_json()
 
         username = g.get("username", "guest")
 
         # 验证会话是否存在且属于当前用户
         session = await self.db.get_platform_session_by_id(session_id)
         if not session:
-            return Response().error(f"Session {session_id} not found").__dict__
+            return Response().error(f"Session {session_id} not found").to_json()
         if session.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error("Permission denied").to_json()
 
         # 更新 display_name
         await self.db.update_platform_session(
@@ -869,4 +865,4 @@ class ChatRoute(Route):
             display_name=display_name,
         )
 
-        return Response().ok().__dict__
+        return Response().ok().to_json()

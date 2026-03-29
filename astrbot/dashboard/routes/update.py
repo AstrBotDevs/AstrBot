@@ -37,7 +37,7 @@ class UpdateRoute(Route):
     async def do_migration(self):
         need_migration = await check_migration_needed_v4(self.core_lifecycle.db)
         if not need_migration:
-            return Response().ok(None, "不需要进行迁移｡").__dict__
+            return Response().ok(None, "不需要进行迁移｡").to_json()
         try:
             data = await request.json
             pim = data.get("platform_id_map", {})
@@ -46,10 +46,10 @@ class UpdateRoute(Route):
                 pim,
                 self.core_lifecycle.astrbot_config,
             )
-            return Response().ok(None, "迁移成功｡").__dict__
+            return Response().ok(None, "迁移成功｡").to_json()
         except Exception as e:
             logger.error(f"迁移失败: {traceback.format_exc()}")
-            return Response().error(f"迁移失败: {e!s}").__dict__
+            return Response().error(f"迁移失败: {e!s}").to_json()
 
     async def check_update(self):
         type_ = request.args.get("type", None)
@@ -59,8 +59,7 @@ class UpdateRoute(Route):
             if type_ == "dashboard":
                 return (
                     Response()
-                    .ok({"has_new_version": dv != f"v{VERSION}", "current_version": dv})
-                    .__dict__
+                    .ok({"has_new_version": dv != f"v{VERSION}", "current_version": dv}).to_json()
                 )
             ret = await self.astrbot_updator.check_update(None, None, False)
             return Response(
@@ -72,18 +71,18 @@ class UpdateRoute(Route):
                     "dashboard_version": dv,
                     "dashboard_has_new_version": bool(dv and dv != f"v{VERSION}"),
                 },
-            ).__dict__
+            ).to_json()
         except Exception as e:
             logger.warning(f"检查更新失败: {e!s} (不影响除项目更新外的正常使用)")
-            return Response().error(e.__str__()).__dict__
+            return Response().error(e.__str__()).to_json()
 
     async def get_releases(self):
         try:
             ret = await self.astrbot_updator.get_releases()
-            return Response().ok(ret).__dict__
+            return Response().ok(ret).to_json()
         except Exception as e:
             logger.error(f"/api/update/releases: {traceback.format_exc()}")
-            return Response().error(e.__str__()).__dict__
+            return Response().error(e.__str__()).to_json()
 
     async def update_project(self):
         data = await request.json
@@ -122,19 +121,17 @@ class UpdateRoute(Route):
                 await self.core_lifecycle.restart()
                 ret = (
                     Response()
-                    .ok(None, "更新成功,AstrBot 将在 2 秒内全量重启以应用新的代码｡")
-                    .__dict__
+                    .ok(None, "更新成功,AstrBot 将在 2 秒内全量重启以应用新的代码｡").to_json()
                 )
                 return ret, 200, CLEAR_SITE_DATA_HEADERS
             ret = (
                 Response()
-                .ok(None, "更新成功,AstrBot 将在下次启动时应用新的代码｡")
-                .__dict__
+                .ok(None, "更新成功,AstrBot 将在下次启动时应用新的代码｡").to_json()
             )
             return ret, 200, CLEAR_SITE_DATA_HEADERS
         except Exception as e:
             logger.error(f"/api/update_project: {traceback.format_exc()}")
-            return Response().error(e.__str__()).__dict__
+            return Response().error(e.__str__()).to_json()
 
     async def update_dashboard(self):
         try:
@@ -142,29 +139,28 @@ class UpdateRoute(Route):
                 await download_dashboard(version=f"v{VERSION}", latest=False)
             except Exception as e:
                 logger.error(f"下载管理面板文件失败: {e}｡")
-                return Response().error(f"下载管理面板文件失败: {e}").__dict__
-            ret = Response().ok(None, "更新成功｡刷新页面即可应用新版本面板｡").__dict__
+                return Response().error(f"下载管理面板文件失败: {e}").to_json()
+            ret = Response().ok(None, "更新成功｡刷新页面即可应用新版本面板｡").to_json()
             return ret, 200, CLEAR_SITE_DATA_HEADERS
         except Exception as e:
             logger.error(f"/api/update_dashboard: {traceback.format_exc()}")
-            return Response().error(e.__str__()).__dict__
+            return Response().error(e.__str__()).to_json()
 
     async def install_pip_package(self):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .error("You are not permitted to do this operation in demo mode").to_json()
             )
 
         data = await request.json
         package = data.get("package", "")
         mirror = data.get("mirror", None)
         if not package:
-            return Response().error("缺少参数 package 或不合法｡").__dict__
+            return Response().error("缺少参数 package 或不合法｡").to_json()
         try:
             await pip_installer.install(package, mirror=mirror)
-            return Response().ok(None, "安装成功｡").__dict__
+            return Response().ok(None, "安装成功｡").to_json()
         except Exception as e:
             logger.error(f"/api/update_pip: {traceback.format_exc()}")
-            return Response().error(e.__str__()).__dict__
+            return Response().error(e.__str__()).to_json()
