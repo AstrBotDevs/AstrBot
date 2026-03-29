@@ -44,7 +44,8 @@ class SdkDispatchEngine:
         dispatch_token = self.bridge.get_or_bind_dispatch_token(event)
         overlay = self.bridge._ensure_request_overlay(
             dispatch_token,
-            should_call_llm=not bool(getattr(event, "call_llm", False)),
+            # 使用统一方法获取 LLM 意愿，避免到处重复 not event.call_llm 的反转逻辑
+            should_call_llm=self.bridge.get_effective_should_call_llm(event),
         )
         matches = self.bridge._match_handlers(event)
         permission_denied = self.bridge._resolve_command_permission_denied(event)
@@ -67,7 +68,10 @@ class SdkDispatchEngine:
             self.bridge._set_sdk_origin_plugin_id(event, permission_denied["plugin_id"])
             event.set_result(MessageEventResult().message(permission_denied["message"]))
             event.stop_event()
-            event.should_call_llm(True)
+            self.bridge.request_runtime._set_event_default_llm_blocked(
+                event,
+                blocked=True,
+            )
             overlay.should_call_llm = False
             result.stopped = True
             return result
@@ -91,7 +95,11 @@ class SdkDispatchEngine:
             self.bridge._set_sdk_origin_plugin_id(event, group_fallback["plugin_id"])
             event.set_result(MessageEventResult().message(group_fallback["help_text"]))
             event.stop_event()
-            event.should_call_llm(True)
+            # 群组 fallback（如帮助文本）不应触发 LLM，直接阻止
+            self.bridge.request_runtime._set_event_default_llm_blocked(
+                event,
+                blocked=True,
+            )
             overlay.should_call_llm = False
             result.stopped = True
             return result
@@ -223,13 +231,21 @@ class SdkDispatchEngine:
         if not result.executed_handlers:
             result.skipped_reason = skipped_reason or self.bridge.SKIP_NO_MATCH
         if result.sent_message:
-            event._has_send_oper = True
+            # 已发送消息：同步标记 event 和 overlay 的发送状态，防止 LLM 重复回复
+            self.bridge.request_runtime._mark_event_send_operation(event)
             overlay.should_call_llm = False
-            event.should_call_llm(True)
+            self.bridge.request_runtime._set_event_default_llm_blocked(
+                event,
+                blocked=True,
+            )
         if result.stopped:
             event.stop_event()
+            # 事件被 stop 后 LLM 不应再处理，双重写入 overlay 和 event
             overlay.should_call_llm = False
-            event.should_call_llm(True)
+            self.bridge.request_runtime._set_event_default_llm_blocked(
+                event,
+                blocked=True,
+            )
         return result
 
     async def dispatch_system_event(
@@ -397,7 +413,8 @@ class SdkDispatchEngine:
                         overlay.requested_llm = True
                         overlay.should_call_llm = True
                     if handler_result["sent_message"]:
-                        event._has_send_oper = True
+                        # 系统事件处理中发送了消息，标记到 event 供后续 pipeline 判断
+                        self.bridge.request_runtime._mark_event_send_operation(event)
                     if handler_result["sent_message"] or handler_result["stop"]:
                         overlay.should_call_llm = False
             except Exception as exc:
@@ -418,7 +435,7 @@ class SdkDispatchEngine:
         dispatch_token = self.bridge.get_or_bind_dispatch_token(event)
         overlay = self.bridge._ensure_request_overlay(
             dispatch_token,
-            should_call_llm=not bool(getattr(event, "call_llm", False)),
+            should_call_llm=self.bridge.get_effective_should_call_llm(event),
         )
         request_context = _RequestContext(
             plugin_id="",
@@ -504,11 +521,18 @@ class SdkDispatchEngine:
         if not result.executed_handlers:
             result.skipped_reason = self.bridge.SKIP_NO_MATCH
         if result.sent_message:
-            event._has_send_oper = True
+            # waiter dispatch 同样需要同步发送状态到 event，供后续 pipeline 阶段判断
+            self.bridge.request_runtime._mark_event_send_operation(event)
             overlay.should_call_llm = False
-            event.should_call_llm(True)
+            self.bridge.request_runtime._set_event_default_llm_blocked(
+                event,
+                blocked=True,
+            )
         if result.stopped:
             event.stop_event()
             overlay.should_call_llm = False
-            event.should_call_llm(True)
+            self.bridge.request_runtime._set_event_default_llm_blocked(
+                event,
+                blocked=True,
+            )
         return result

@@ -561,7 +561,9 @@ class TestResultHelpers:
         chain = MessageChain([Plain("Hello"), Plain("World")])
 
         assert len(chain) == 2
-        assert [component.text for component in chain if isinstance(component, Plain)] == [
+        assert [
+            component.text for component in chain if isinstance(component, Plain)
+        ] == [
             "Hello",
             "World",
         ]
@@ -574,7 +576,9 @@ class TestResultHelpers:
 
     def test_outline_chain_accepts_message_chain(self, astr_message_event):
         """Test _outline_chain accepts MessageChain instances from SDK results."""
-        chain = MessageChain([Plain("Hello"), Image.fromURL("http://example.com/a.png")])
+        chain = MessageChain(
+            [Plain("Hello"), Image.fromURL("http://example.com/a.png")]
+        )
 
         outline = astr_message_event._outline_chain(chain)
 
@@ -615,6 +619,12 @@ class TestShouldCallLlm:
         """Test should_call_llm sets call_llm."""
         astr_message_event.should_call_llm(True)
         assert astr_message_event.call_llm is True
+
+    def test_should_call_default_llm_uses_positive_semantics(self, astr_message_event):
+        """Test the positive helper reports whether default LLM execution is allowed."""
+        assert astr_message_event.should_call_default_llm() is True
+        astr_message_event.disable_default_llm(True)
+        assert astr_message_event.should_call_default_llm() is False
 
 
 class TestRequestLlm:
@@ -664,6 +674,12 @@ class TestSendStreaming:
             await astr_message_event.send_streaming(generator())
 
         assert astr_message_event._has_send_oper is True
+
+    def test_mark_send_operation_helper_sets_flag(self, astr_message_event):
+        """Test explicit send-operation marker updates the tracking flag."""
+        assert astr_message_event.has_send_operation() is False
+        astr_message_event.mark_send_operation()
+        assert astr_message_event.has_send_operation() is True
 
 
 class TestSendTyping:

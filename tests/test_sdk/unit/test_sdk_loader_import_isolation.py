@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -7,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from astrbot_sdk.context import CancelToken
 from astrbot_sdk.protocol.descriptors import SessionRef
+from astrbot_sdk.runtime import loader as loader_module
 from astrbot_sdk.runtime.handler_dispatcher import HandlerDispatcher
 from astrbot_sdk.runtime.loader import (
     _plugin_package_name,
@@ -355,3 +357,64 @@ def test_loader_reload_refreshes_namespaced_modules(tmp_path: Path) -> None:
 
     assert first.instances[0].helper_value == "before"
     assert second.instances[0].helper_value == "after"
+
+
+@pytest.mark.unit
+def test_loader_restore_plugin_import_hook_restores_builtin_import() -> None:
+    loader_module._ensure_plugin_import_hook_installed()
+    try:
+        assert builtins.__import__ is loader_module._plugin_scoped_import
+        assert loader_module._PLUGIN_IMPORT_META_FINDER in sys.meta_path
+    finally:
+        loader_module._restore_plugin_import_hook()
+
+    assert builtins.__import__ is loader_module._ORIGINAL_BUILTIN_IMPORT
+    assert loader_module._PLUGIN_IMPORT_META_FINDER is None
+
+
+@pytest.mark.unit
+def test_loader_import_hook_falls_back_to_original_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _boom():
+        raise RuntimeError("namespace lookup failed")
+
+    monkeypatch.setattr(
+        loader_module,
+        "_plugin_import_namespace_for_current_caller",
+        _boom,
+    )
+
+    imported = loader_module._plugin_scoped_import("json")
+
+    assert imported is sys.modules["json"]
+
+
+@pytest.mark.unit
+def test_loader_meta_path_finder_rewrites_plugin_local_imports(tmp_path: Path) -> None:
+    env = SDKTestEnvironment(tmp_path)
+    plugin_dir = _write_sdk_plugin(
+        env.plugin_dir("loader_meta_path_plugin"),
+        name="loader_meta_path_plugin",
+        source="\n".join(
+            [
+                "from astrbot_sdk import Star",
+                "from utils import helper",
+                "",
+                "class DemoPlugin(Star):",
+                "    def __init__(self) -> None:",
+                "        super().__init__()",
+                "        self.helper_value = helper.VALUE",
+            ]
+        ),
+        extra_files={
+            "utils/__init__.py": "",
+            "utils/helper.py": "VALUE = 'meta-path'\n",
+        },
+    )
+
+    loaded = _load_sdk_plugin(plugin_dir)
+
+    assert loaded.instances[0].helper_value == "meta-path"
+    assert "utils" not in sys.modules
+    assert "utils.helper" not in sys.modules

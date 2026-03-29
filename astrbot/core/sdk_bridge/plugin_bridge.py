@@ -6,6 +6,7 @@ import json
 import os
 import re
 import signal
+import subprocess
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
@@ -181,6 +182,23 @@ class SdkPluginBridge:
 
     async def turn_on_plugin(self, plugin_id: str) -> None:
         await self.lifecycle.turn_on_plugin(plugin_id)
+
+    def _snapshot_records(self) -> list[SdkPluginRecord]:
+        with self._store.mutation_lock:
+            return list(self._records.values())
+
+    def _snapshot_records_sorted(self) -> list[SdkPluginRecord]:
+        with self._store.mutation_lock:
+            return sorted(self._records.values(), key=lambda item: item.load_order)
+
+    def _snapshot_http_routes(self, plugin_id: str | None = None) -> list[SdkHttpRoute]:
+        with self._store.mutation_lock:
+            if plugin_id is None:
+                routes: list[SdkHttpRoute] = []
+                for entries in self._http_routes.values():
+                    routes.extend(list(entries))
+                return routes
+            return list(self._http_routes.get(plugin_id, []))
 
     def list_plugins(self) -> list[dict[str, Any]]:
         return self.registry.list_plugins()
@@ -853,7 +871,15 @@ class SdkPluginBridge:
 
     @staticmethod
     def _legacy_has_replied(event: AstrMessageEvent) -> bool:
-        return getattr(event, "_has_send_oper", False)
+        # 按优先级尝试新版方法 → 兼容方法 → 直接读内部字段，
+        # 确保 AstrMessageEvent 的 API 演进不会破坏旧版 bridge 逻辑
+        has_send = getattr(event, "has_send_operation", None)
+        if callable(has_send):
+            return bool(has_send())
+        has_send = getattr(event, "get_send_operation_state", None)
+        if callable(has_send):
+            return bool(has_send())
+        return bool(getattr(event, "_has_send_oper", False))
 
     def _match_handlers(self, event: AstrMessageEvent) -> list[TriggerMatch]:
         matches: list[TriggerMatch] = []
@@ -897,7 +923,7 @@ class SdkPluginBridge:
     def has_active_sdk_command_handlers(self) -> bool:
         if not self._records:
             return False
-        for record in self._records.values():
+        for record in self._snapshot_records():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -922,7 +948,7 @@ class SdkPluginBridge:
         for conflict in conflicts:
             conflict_map.setdefault(conflict.sdk.plugin_name, []).append(conflict)
 
-        for record in self._records.values():
+        for record in self._snapshot_records():
             record.issues = [
                 issue
                 for issue in record.issues
@@ -998,7 +1024,7 @@ class SdkPluginBridge:
 
     def _collect_sdk_command_registrations(self) -> list[Any]:
         registrations: list[Any] = []
-        for record in sorted(self._records.values(), key=lambda item: item.load_order):
+        for record in self._snapshot_records_sorted():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -1170,7 +1196,7 @@ class SdkPluginBridge:
         if not root_name:
             return None
         normalized_platform = self._normalize_platform_name(event.get_platform_name())
-        for record in sorted(self._records.values(), key=lambda item: item.load_order):
+        for record in self._snapshot_records_sorted():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -1374,7 +1400,7 @@ class SdkPluginBridge:
         platform_name: str = "",
     ) -> list[tuple[SdkPluginRecord, HandlerDescriptor]]:
         matches: list[tuple[int, int, int, SdkPluginRecord, HandlerDescriptor]] = []
-        for record in self._records.values():
+        for record in self._snapshot_records():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -1456,7 +1482,7 @@ class SdkPluginBridge:
 
     def get_handlers_by_event_type(self, event_type: str) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
-        for record in sorted(self._records.values(), key=lambda item: item.load_order):
+        for record in self._snapshot_records_sorted():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -1505,7 +1531,7 @@ class SdkPluginBridge:
         entries: list[dict[str, Any]] = []
         seen_names: set[str] = set()
 
-        for record in sorted(self._records.values(), key=lambda item: item.load_order):
+        for record in self._snapshot_records_sorted():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -1543,7 +1569,7 @@ class SdkPluginBridge:
         return entries
 
     def get_handler_by_full_name(self, full_name: str) -> dict[str, Any] | None:
-        for record in self._records.values():
+        for record in self._snapshot_records():
             for handler in record.handlers:
                 if handler.descriptor.id == full_name:
                     return self._descriptor_metadata(
@@ -1554,14 +1580,14 @@ class SdkPluginBridge:
 
     def list_dashboard_commands(self) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
-        for record in sorted(self._records.values(), key=lambda item: item.load_order):
+        for record in self._snapshot_records_sorted():
             items.extend(self._build_dashboard_command_items(record))
         items.sort(key=lambda item: str(item.get("effective_command", "")).lower())
         return items
 
     def list_dashboard_tools(self) -> list[dict[str, Any]]:
         tools: list[dict[str, Any]] = []
-        for record in sorted(self._records.values(), key=lambda item: item.load_order):
+        for record in self._snapshot_records_sorted():
             display_name = str(
                 record.plugin.manifest_data.get("display_name") or record.plugin_id
             )
@@ -1957,6 +1983,35 @@ class SdkPluginBridge:
             lease_path.unlink()
 
     def _terminate_stale_mcp_pid(self, pid: int) -> None:
+        if pid <= 0:
+            return
+        if os.name == "nt":
+            # Windows 没有 SIGTERM，os.kill 在 Windows 上行为不稳定；
+            # 使用 taskkill /T /F 可以递归终止整个进程树，更可靠
+            creation_flags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            completed = subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                capture_output=True,
+                text=True,
+                check=False,
+                creationflags=creation_flags,
+            )
+            combined_output = " ".join(
+                item.strip()
+                for item in (completed.stdout, completed.stderr)
+                if isinstance(item, str) and item.strip()
+            ).lower()
+            # 进程已不存在（"not found"）也视为成功终止，避免误报
+            if completed.returncode == 0 or "not found" in combined_output:
+                return
+            logger.warning(
+                "Failed to terminate stale MCP pid %s on Windows: rc=%s output=%s",
+                pid,
+                completed.returncode,
+                combined_output or "<empty>",
+            )
+            return
+        # 非 Windows 平台使用 SIGTERM，简洁且可移植
         try:
             os.kill(pid, signal.SIGTERM)
         except ProcessLookupError:
@@ -2532,6 +2587,10 @@ class SdkPluginBridge:
                 handler_id,
                 exc,
             )
+        finally:
+            # 无论调度 handler 成功与否，都要关闭 overlay，
+            # 防止已结束的调度任务一直占用 overlay 槽位导致内存泄漏
+            self._close_request_overlay(dispatch_token)
 
     @staticmethod
     def _build_schedule_payload(

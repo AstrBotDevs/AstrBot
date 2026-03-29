@@ -21,6 +21,7 @@ from astrbot_sdk.llm.providers import (
 )
 from astrbot_sdk.protocol.descriptors import CapabilityDescriptor
 from astrbot_sdk.protocol.messages import EventMessage, PeerInfo
+from astrbot_sdk.runtime import peer as peer_module
 from astrbot_sdk.runtime.capability_dispatcher import CapabilityDispatcher
 from astrbot_sdk.runtime.loader import LoadedCapability, LoadedLLMTool
 from astrbot_sdk.runtime.peer import Peer
@@ -474,6 +475,46 @@ async def test_peer_invoke_stream_skips_cancel_after_terminal_event() -> None:
 
     peer.cancel.assert_not_awaited()
     assert consumed == [{"chunk": "first"}]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_peer_handle_raw_message_fails_connection_without_reraising(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    peer = Peer(
+        transport=object(),
+        peer_info=PeerInfo(name="test-peer", role="plugin", version="v4"),
+    )
+    fail_connection = AsyncMock()
+    monkeypatch.setattr(peer, "_fail_connection", fail_connection)
+
+    await peer._handle_raw_message("{bad-json")  # noqa: SLF001
+
+    fail_connection.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_peer_rejects_oversized_raw_message_before_json_parse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    peer = Peer(
+        transport=object(),
+        peer_info=PeerInfo(name="test-peer", role="plugin", version="v4"),
+    )
+    fail_connection = AsyncMock()
+    monkeypatch.setattr(peer, "_fail_connection", fail_connection)
+    monkeypatch.setattr(
+        peer_module,
+        "parse_message",
+        lambda _payload: (_ for _ in ()).throw(AssertionError("unexpected parse")),
+    )
+
+    payload = "x" * (peer_module.MAX_INBOUND_MESSAGE_CHARS + 1)
+    await peer._handle_raw_message(payload)  # noqa: SLF001
+
+    fail_connection.assert_awaited_once()
 
 
 @pytest.mark.unit

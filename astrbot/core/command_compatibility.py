@@ -80,6 +80,18 @@ def commands_overlap(left: str, right: str) -> bool:
     )
 
 
+def _command_prefixes(command_name: str) -> tuple[str, ...]:
+    normalized = normalize_command_name(command_name)
+    if not normalized:
+        return ()
+    prefixes: list[str] = []
+    parts: list[str] = []
+    for token in normalized.split(" "):
+        parts.append(token)
+        prefixes.append(" ".join(parts))
+    return tuple(prefixes)
+
+
 def collect_legacy_command_registrations(
     handlers: Iterable[StarHandlerMetadata] | None = None,
 ) -> list[CommandRegistration]:
@@ -178,14 +190,43 @@ def build_cross_system_conflicts(
 ) -> list[CrossSystemCommandConflict]:
     conflicts: list[CrossSystemCommandConflict] = []
     seen_pairs: set[tuple[str, str, str]] = set()
-    legacy_items = list(legacy_registrations)
+    legacy_by_exact: dict[str, list[CommandRegistration]] = {}
+    legacy_by_prefix: dict[str, list[CommandRegistration]] = {}
+    for legacy_registration in legacy_registrations:
+        normalized_command = normalize_command_name(legacy_registration.command_name)
+        if not normalized_command:
+            continue
+        legacy_by_exact.setdefault(normalized_command, []).append(legacy_registration)
+        for prefix in _command_prefixes(normalized_command):
+            legacy_by_prefix.setdefault(prefix, []).append(legacy_registration)
+
     for sdk_registration in sdk_registrations:
-        for legacy_registration in legacy_items:
-            if not commands_overlap(
+        normalized_sdk_command = normalize_command_name(sdk_registration.command_name)
+        if not normalized_sdk_command:
+            continue
+        candidate_legacy: list[CommandRegistration] = []
+        seen_legacy_commands: set[tuple[str, str]] = set()
+        for prefix in _command_prefixes(normalized_sdk_command):
+            for legacy_registration in legacy_by_exact.get(prefix, []):
+                legacy_key = (
+                    legacy_registration.handler_full_name,
+                    legacy_registration.command_name,
+                )
+                if legacy_key in seen_legacy_commands:
+                    continue
+                seen_legacy_commands.add(legacy_key)
+                candidate_legacy.append(legacy_registration)
+        for legacy_registration in legacy_by_prefix.get(normalized_sdk_command, []):
+            legacy_key = (
+                legacy_registration.handler_full_name,
                 legacy_registration.command_name,
-                sdk_registration.command_name,
-            ):
+            )
+            if legacy_key in seen_legacy_commands:
                 continue
+            seen_legacy_commands.add(legacy_key)
+            candidate_legacy.append(legacy_registration)
+
+        for legacy_registration in candidate_legacy:
             pair_key = (
                 _build_conflict_key(
                     legacy_registration.command_name,

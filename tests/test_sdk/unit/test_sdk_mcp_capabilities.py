@@ -685,9 +685,17 @@ async def test_sdk_plugin_bridge_start_sweeps_stale_mcp_leases_before_reload(
         encoding="utf-8",
     )
     killed: list[int] = []
+    taskkill_calls: list[list[str]] = []
     monkeypatch.setattr(
         "astrbot.core.sdk_bridge.plugin_bridge.os.kill",
         lambda pid, _sig: killed.append(pid),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.subprocess.run",
+        lambda args, **_kwargs: (
+            taskkill_calls.append(list(args))
+            or SimpleNamespace(returncode=0, stdout="", stderr="")
+        ),
     )
 
     bridge = SdkPluginBridge(
@@ -705,5 +713,7 @@ async def test_sdk_plugin_bridge_start_sweeps_stale_mcp_leases_before_reload(
 
     await bridge.start()
 
-    assert killed == [12345]
+    assert killed == [12345] or taskkill_calls == [
+        ["taskkill", "/PID", "12345", "/T", "/F"]
+    ]
     assert lease_path.exists() is False

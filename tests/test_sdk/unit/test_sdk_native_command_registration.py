@@ -396,6 +396,44 @@ def test_cross_system_command_conflicts_detect_command_namespace_overlap() -> No
 
 
 @pytest.mark.unit
+def test_cross_system_command_conflicts_collect_all_prefix_matches_once() -> None:
+    conflicts = build_cross_system_conflicts(
+        [
+            CommandRegistration(
+                runtime_kind="legacy",
+                plugin_name="legacy-demo",
+                plugin_display_name="Legacy Demo",
+                handler_full_name="legacy.demo.gf",
+                command_name="gf",
+            ),
+            CommandRegistration(
+                runtime_kind="legacy",
+                plugin_name="legacy-demo",
+                plugin_display_name="Legacy Demo",
+                handler_full_name="legacy.demo.gf.chat",
+                command_name="gf chat",
+            ),
+        ],
+        [
+            CommandRegistration(
+                runtime_kind="sdk",
+                plugin_name="sdk-demo",
+                plugin_display_name="SDK Demo",
+                handler_full_name="sdk-demo:main.chat",
+                command_name="gf chat daily",
+            )
+        ],
+    )
+
+    assert [
+        (item.legacy.command_name, item.sdk.command_name) for item in conflicts
+    ] == [
+        ("gf", "gf chat daily"),
+        ("gf chat", "gf chat daily"),
+    ]
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_sdk_bridge_group_root_help_hides_admin_commands_for_non_admin(
     tmp_path,

@@ -90,6 +90,7 @@ from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import ProviderRequest as CoreProviderRequest
+from astrbot.core.sdk_bridge import plugin_bridge as plugin_bridge_module
 from astrbot.core.sdk_bridge.event_payload import (
     build_inbound_event_snapshot,
     sanitize_sdk_extras,
@@ -1292,11 +1293,32 @@ async def test_schedule_handler_tracks_request_scope_for_proactive_send() -> Non
     assert star_context.sent_messages[0][0] == "demo-platform:private:user-1"
     assert star_context.sent_messages[0][1].get_plain_text() == "scheduled hello"
     assert session.event_capability_results == [{"supported": False}]
-    request_context = bridge.resolve_request_session(session.request_ids[0])
-    assert request_context is not None
-    assert request_context.has_event is False
-    bridge._close_request_overlay(request_context.dispatch_token)
     assert bridge.resolve_request_session(session.request_ids[0]) is None
+
+
+@pytest.mark.unit
+def test_terminate_stale_mcp_pid_uses_taskkill_on_windows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    captured: dict[str, object] = {}
+
+    def _fake_run(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(plugin_bridge_module.os, "name", "nt", raising=False)
+    monkeypatch.setattr(plugin_bridge_module.subprocess, "run", _fake_run)
+    monkeypatch.setattr(
+        plugin_bridge_module.os,
+        "kill",
+        lambda *_args, **_kwargs: pytest.fail("os.kill should not be used on Windows"),
+    )
+
+    bridge._terminate_stale_mcp_pid(321)
+
+    assert captured["args"] == (["taskkill", "/PID", "321", "/T", "/F"],)
 
 
 @pytest.mark.unit

@@ -116,20 +116,22 @@ class SdkRequestRuntime:
         *,
         should_call_llm: bool,
     ) -> _RequestOverlayState:
-        overlay = self.store.request_overlays.get(dispatch_token)
-        if overlay is not None:
-            if overlay.closed:
-                overlay.closed = False
-            if overlay.cleanup_task is None or overlay.cleanup_task.done():
-                overlay.cleanup_task = self.schedule_overlay_cleanup(dispatch_token)
+        # 整个方法加锁，防止并发调度为同一 token 创建多个 overlay
+        with self.store.mutation_lock:
+            overlay = self.store.request_overlays.get(dispatch_token)
+            if overlay is not None:
+                if overlay.closed:
+                    overlay.closed = False
+                if overlay.cleanup_task is None or overlay.cleanup_task.done():
+                    overlay.cleanup_task = self.schedule_overlay_cleanup(dispatch_token)
+                return overlay
+            overlay = _RequestOverlayState(
+                dispatch_token=dispatch_token,
+                should_call_llm=should_call_llm,
+                cleanup_task=self.schedule_overlay_cleanup(dispatch_token),
+            )
+            self.store.request_overlays[dispatch_token] = overlay
             return overlay
-        overlay = _RequestOverlayState(
-            dispatch_token=dispatch_token,
-            should_call_llm=should_call_llm,
-            cleanup_task=self.schedule_overlay_cleanup(dispatch_token),
-        )
-        self.store.request_overlays[dispatch_token] = overlay
-        return overlay
 
     def track_request_scope(
         self,
@@ -138,37 +140,67 @@ class SdkRequestRuntime:
         request_id: str,
         plugin_id: str,
     ) -> None:
-        self.store.request_id_to_token[request_id] = dispatch_token
-        self.store.request_plugin_ids[request_id] = plugin_id
-        overlay = self.store.request_overlays.get(dispatch_token)
-        if overlay is not None:
-            overlay.request_scope_ids.add(request_id)
+        with self.store.mutation_lock:
+            self.store.request_id_to_token[request_id] = dispatch_token
+            self.store.request_plugin_ids[request_id] = plugin_id
+            overlay = self.store.request_overlays.get(dispatch_token)
+            if overlay is not None:
+                overlay.request_scope_ids.add(request_id)
 
     def close_request_overlay(self, dispatch_token: str) -> None:
-        request_context = self.store.request_contexts.get(dispatch_token)
-        bound_event = None
-        dispatch_state = (
-            getattr(request_context, "dispatch_state", None)
-            if request_context is not None
-            else None
-        )
-        if dispatch_state is not None:
-            bound_event = dispatch_state.event
-            bound_event._result = self.get_effective_result_for_token(dispatch_token)
-            bound_event.call_llm = not self.get_effective_should_call_llm(bound_event)
+        # 第一阶段（加锁）：从 store 中原子性地移除 overlay 和 context，
+        # 确保其他线程在锁释放后无法再读到已关闭的状态
+        with self.store.mutation_lock:
+            request_context = self.store.request_contexts.get(dispatch_token)
+            dispatch_state = (
+                getattr(request_context, "dispatch_state", None)
+                if request_context is not None
+                else None
+            )
+            bound_event = None
+            # 在锁内快照结果和 LLM 状态，锁外再写回 event，避免长耗时操作阻塞其他请求
+            persisted_result: MessageEventResult | None = None
+            default_llm_allowed: bool | None = None
+            if dispatch_state is not None:
+                bound_event = dispatch_state.event
+                persisted_result = self.get_effective_result_for_token(dispatch_token)
+                default_llm_allowed = self.get_effective_should_call_llm(bound_event)
+
+            overlay = self.store.request_overlays.pop(dispatch_token, None)
+            if overlay is not None:
+                overlay.closed = True
+                if overlay.cleanup_task is not None:
+                    overlay.cleanup_task.cancel()
+                for request_id in overlay.request_scope_ids:
+                    self.store.request_id_to_token.pop(request_id, None)
+                    self.store.request_plugin_ids.pop(request_id, None)
+            request_context = self.store.request_contexts.pop(dispatch_token, None)
+            if request_context is not None:
+                request_context.cancelled = True
+
+        # 第二阶段（无锁）：将快照的结果状态写回原始 event 对象。
+        # event 本身不属于 store 共享状态，这里通过鸭子类型适配新老 API，
+        # 保证即使 AstrMessageEvent 接口变更也不会崩溃
+        if bound_event is not None:
             if hasattr(bound_event, "_sdk_result_binding"):
                 delattr(bound_event, "_sdk_result_binding")
-        overlay = self.store.request_overlays.pop(dispatch_token, None)
-        if overlay is not None:
-            overlay.closed = True
-            if overlay.cleanup_task is not None:
-                overlay.cleanup_task.cancel()
-            for request_id in overlay.request_scope_ids:
-                self.store.request_id_to_token.pop(request_id, None)
-                self.store.request_plugin_ids.pop(request_id, None)
-        request_context = self.store.request_contexts.pop(dispatch_token, None)
-        if request_context is not None:
-            request_context.cancelled = True
+            if persisted_result is None:
+                clear_result = getattr(bound_event, "clear_result", None)
+                if callable(clear_result):
+                    clear_result()
+                else:
+                    setattr(bound_event, "_result", None)
+            else:
+                set_result = getattr(bound_event, "set_result", None)
+                if callable(set_result):
+                    set_result(persisted_result)
+                else:
+                    setattr(bound_event, "_result", persisted_result)
+            if default_llm_allowed is not None:
+                self._set_event_default_llm_blocked(
+                    bound_event,
+                    blocked=not default_llm_allowed,
+                )
 
     def close_request_overlay_for_event(self, event: AstrMessageEvent) -> None:
         dispatch_token = self.get_dispatch_token(event)
@@ -176,32 +208,36 @@ class SdkRequestRuntime:
             self.close_request_overlay(dispatch_token)
 
     def resolve_request_plugin_id(self, request_id: str) -> str:
-        plugin_id = self.store.request_plugin_ids.get(request_id)
-        if plugin_id is not None:
-            return plugin_id
-        token = self.store.request_id_to_token.get(request_id)
-        if token is not None and token in self.store.request_contexts:
-            return self.store.request_contexts[token].plugin_id
-        raise AstrBotError.invalid_input(f"Unknown SDK request id: {request_id}")
+        with self.store.mutation_lock:
+            plugin_id = self.store.request_plugin_ids.get(request_id)
+            if plugin_id is not None:
+                return plugin_id
+            token = self.store.request_id_to_token.get(request_id)
+            if token is not None and token in self.store.request_contexts:
+                return self.store.request_contexts[token].plugin_id
+            raise AstrBotError.invalid_input(f"Unknown SDK request id: {request_id}")
 
     def resolve_request_session(self, request_id: str) -> _RequestContext | None:
-        token = self.store.request_id_to_token.get(request_id)
-        if token is None:
-            return None
-        return self.store.request_contexts.get(token)
+        with self.store.mutation_lock:
+            token = self.store.request_id_to_token.get(request_id)
+            if token is None:
+                return None
+            return self.store.request_contexts.get(token)
 
     def get_request_context_by_token(
         self, dispatch_token: str
     ) -> _RequestContext | None:
-        return self.store.request_contexts.get(dispatch_token)
+        with self.store.mutation_lock:
+            return self.store.request_contexts.get(dispatch_token)
 
     def get_request_overlay_by_token(
         self, dispatch_token: str
     ) -> _RequestOverlayState | None:
-        overlay = self.store.request_overlays.get(dispatch_token)
-        if overlay is None or overlay.closed:
-            return None
-        return overlay
+        with self.store.mutation_lock:
+            overlay = self.store.request_overlays.get(dispatch_token)
+            if overlay is None or overlay.closed:
+                return None
+            return overlay
 
     def get_request_overlay_by_request_id(
         self, request_id: str
@@ -226,13 +262,15 @@ class SdkRequestRuntime:
             overlay = self.get_request_overlay_by_token(dispatch_token)
             if overlay is not None:
                 return overlay.should_call_llm
-        return not bool(getattr(event, "call_llm", False))
+        return self._event_should_call_default_llm(event)
 
     def get_should_call_llm_for_request(self, request_id: str) -> bool | None:
-        overlay = self.get_request_overlay_by_request_id(request_id)
-        if overlay is None:
-            return None
-        return overlay.should_call_llm
+        # 读操作也加锁，确保与 close_request_overlay 的写操作互斥
+        with self.store.mutation_lock:
+            overlay = self.get_request_overlay_by_request_id(request_id)
+            if overlay is None:
+                return None
+            return overlay.should_call_llm
 
     @staticmethod
     def set_overlay_stop_state(
@@ -312,33 +350,38 @@ class SdkRequestRuntime:
         self,
         dispatch_token: str,
     ) -> MessageEventResult | None:
-        overlay = self.get_request_overlay_by_token(dispatch_token)
-        if overlay is None or not overlay.result_is_set:
-            request_context = self.store.request_contexts.get(dispatch_token)
-            if (
-                request_context is not None
-                and request_context.dispatch_state is not None
-            ):
-                return request_context.dispatch_state.event._result
-            return None
-        if overlay.result_object is None and overlay.result_payload is not None:
-            chain_payload = overlay.result_payload.get("chain")
-            if isinstance(chain_payload, list):
-                overlay.result_object = self.build_core_result_from_chain_payload(
-                    chain_payload
-                )
-        if overlay.result_object is None:
-            if overlay.result_stopped:
-                stopped_result = MessageEventResult()
-                stopped_result.stop_event()
-                overlay.result_object = stopped_result
-            else:
+        # 整个读取 + 延迟构建过程放在锁内，避免 overlay 在读取过程中被另一个线程关闭
+        with self.store.mutation_lock:
+            overlay = self.get_request_overlay_by_token(dispatch_token)
+            if overlay is None or not overlay.result_is_set:
+                # 没有显式设置结果时，从原始 event 的 get_result() 取，
+                # 兼容老插件直接操作 event._result 的路径
+                request_context = self.store.request_contexts.get(dispatch_token)
+                if (
+                    request_context is not None
+                    and request_context.dispatch_state is not None
+                ):
+                    return request_context.dispatch_state.event.get_result()
                 return None
-        if overlay.result_stopped and not overlay.result_object.is_stopped():
-            overlay.result_object.stop_event()
-        elif not overlay.result_stopped and overlay.result_object.is_stopped():
-            overlay.result_object.continue_event()
-        return overlay.result_object
+            # 延迟反序列化：只在首次访问时从 payload 构建结果对象
+            if overlay.result_object is None and overlay.result_payload is not None:
+                chain_payload = overlay.result_payload.get("chain")
+                if isinstance(chain_payload, list):
+                    overlay.result_object = self.build_core_result_from_chain_payload(
+                        chain_payload
+                    )
+            if overlay.result_object is None:
+                if overlay.result_stopped:
+                    stopped_result = MessageEventResult()
+                    stopped_result.stop_event()
+                    overlay.result_object = stopped_result
+                else:
+                    return None
+            if overlay.result_stopped and not overlay.result_object.is_stopped():
+                overlay.result_object.stop_event()
+            elif not overlay.result_stopped and overlay.result_object.is_stopped():
+                overlay.result_object.continue_event()
+            return overlay.result_object
 
     def set_result_for_dispatch_token(
         self,
@@ -377,14 +420,20 @@ class SdkRequestRuntime:
             overlay.result_object.continue_event()
 
     def is_stopped_for_dispatch_token(self, dispatch_token: str) -> bool:
-        overlay = self.get_request_overlay_by_token(dispatch_token)
-        if overlay is not None and overlay.result_is_set:
-            return overlay.result_stopped
-        request_context = self.store.request_contexts.get(dispatch_token)
-        if request_context is not None and request_context.dispatch_state is not None:
-            result = request_context.dispatch_state.event._result
-            return bool(result is not None and result.is_stopped())
-        return False
+        with self.store.mutation_lock:
+            overlay = self.get_request_overlay_by_token(dispatch_token)
+            if overlay is not None and overlay.result_is_set:
+                return overlay.result_stopped
+            # 回退到 event 的原始结果，使用 get_result() 而非直接访问 _result，
+            # 以兼容 SDK result binding 机制
+            request_context = self.store.request_contexts.get(dispatch_token)
+            if (
+                request_context is not None
+                and request_context.dispatch_state is not None
+            ):
+                result = request_context.dispatch_state.event.get_result()
+                return bool(result is not None and result.is_stopped())
+            return False
 
     def set_result_for_request(
         self,
@@ -756,34 +805,93 @@ class SdkRequestRuntime:
         dispatch_token = self.get_dispatch_token(event)
         if dispatch_token:
             return self.get_effective_result_for_token(dispatch_token)
-        return event._result
+        return event.get_result()
 
     def before_platform_send(self, dispatch_token: str) -> None:
-        request_context = self.store.request_contexts.get(dispatch_token)
-        if request_context is None:
-            raise AstrBotError.invalid_input(
-                "Unknown SDK dispatch token for platform send"
-            )
-        overlay = self.get_request_overlay_by_token(dispatch_token)
-        if overlay is None:
-            raise AstrBotError.cancelled("The SDK request overlay has been closed")
-        if request_context.cancelled:
-            raise AstrBotError.cancelled("The SDK request has been cancelled")
+        # 发送前置校验加锁，防止 overlay 在校验过程中被并发关闭
+        with self.store.mutation_lock:
+            request_context = self.store.request_contexts.get(dispatch_token)
+            if request_context is None:
+                raise AstrBotError.invalid_input(
+                    "Unknown SDK dispatch token for platform send"
+                )
+            overlay = self.get_request_overlay_by_token(dispatch_token)
+            if overlay is None:
+                raise AstrBotError.cancelled("The SDK request overlay has been closed")
+            if request_context.cancelled:
+                raise AstrBotError.cancelled("The SDK request has been cancelled")
 
     def mark_platform_send(self, dispatch_token: str) -> str:
-        request_context = self.store.request_contexts.get(dispatch_token)
-        if request_context is None:
-            raise AstrBotError.invalid_input(
-                "Unknown SDK dispatch token for platform send"
-            )
-        overlay = self.get_request_overlay_by_token(dispatch_token)
-        if overlay is None:
-            raise AstrBotError.cancelled("The SDK request overlay has been closed")
-        if request_context.cancelled:
-            raise AstrBotError.cancelled("The SDK request has been cancelled")
-        if request_context.dispatch_state is not None:
-            request_context.dispatch_state.sent_message = True
-        overlay.should_call_llm = False
-        if request_context.has_event:
-            request_context.event._has_send_oper = True
-        return f"sdk_{dispatch_token}"
+        with self.store.mutation_lock:
+            request_context = self.store.request_contexts.get(dispatch_token)
+            if request_context is None:
+                raise AstrBotError.invalid_input(
+                    "Unknown SDK dispatch token for platform send"
+                )
+            overlay = self.get_request_overlay_by_token(dispatch_token)
+            if overlay is None:
+                raise AstrBotError.cancelled("The SDK request overlay has been closed")
+            if request_context.cancelled:
+                raise AstrBotError.cancelled("The SDK request has been cancelled")
+            if request_context.dispatch_state is not None:
+                request_context.dispatch_state.sent_message = True
+            # 发送消息后默认不再调用 LLM——消息已经发出去了，LLM 调用多余
+            overlay.should_call_llm = False
+            if request_context.has_event:
+                self._mark_event_send_operation(request_context.event)
+            return f"sdk_{dispatch_token}"
+
+    @staticmethod
+    def _event_should_call_default_llm(event: AstrMessageEvent) -> bool:
+        """读取 event 的 LLM 调用意愿，按新 API → 兼容 API → 直接读字段的优先级适配。"""
+        getter = getattr(event, "should_call_default_llm", None)
+        if callable(getter):
+            return bool(getter())
+        # 旧版 event 只有 call_llm 布尔字段，语义反转：True = 阻止 LLM
+        return not bool(getattr(event, "call_llm", False))
+
+    @staticmethod
+    def _set_event_default_llm_blocked(
+        event: AstrMessageEvent,
+        *,
+        blocked: bool,
+    ) -> None:
+        """将 LLM 阻塞状态写回 event，按新 API → 兼容 API → 直接写字段的优先级适配。"""
+        setter = getattr(event, "set_default_llm_blocked", None)
+        if callable(setter):
+            setter(blocked)
+            return
+        setter = getattr(event, "set_default_llm_allowed", None)
+        if callable(setter):
+            setter(not blocked)
+            return
+        setter = getattr(event, "disable_default_llm", None)
+        if callable(setter):
+            setter(blocked)
+            return
+        legacy = getattr(event, "should_call_llm", None)
+        if callable(legacy):
+            legacy(blocked)
+            return
+        setattr(event, "call_llm", bool(blocked))
+
+    @staticmethod
+    def _mark_event_send_operation(event: AstrMessageEvent) -> None:
+        """标记 event 已发送消息，按新 API → 兼容 API → 直接写字段的优先级适配。"""
+        setter = getattr(event, "set_send_operation_state", None)
+        if callable(setter):
+            setter(True)
+            return
+        marker = getattr(event, "mark_send_operation", None)
+        if callable(marker):
+            marker()
+            return
+        setattr(event, "_has_send_oper", True)
+
+    @staticmethod
+    def event_has_send_operation(event: AstrMessageEvent) -> bool:
+        """读取 event 是否已发送消息，按新 API → 直接读字段的优先级适配。"""
+        getter = getattr(event, "has_send_operation", None)
+        if callable(getter):
+            return bool(getter())
+        return bool(getattr(event, "_has_send_oper", False))

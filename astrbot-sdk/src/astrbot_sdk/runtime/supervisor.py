@@ -73,6 +73,10 @@ __all__ = [
     "_wait_for_shutdown",
 ]
 
+# Worker 进程初始化握手超时：60 秒内必须完成 initialize 协议交换，
+# 否则视为进程卡死或挂载过慢，直接报错让上层感知
+WORKER_INITIALIZE_TIMEOUT_SECONDS = 60.0
+
 
 def _install_signal_handlers(stop_event: asyncio.Event) -> None:
     loop = asyncio.get_running_loop()
@@ -190,8 +194,11 @@ class WorkerSession:
         try:
             await self.peer.start()
             # 同时监听初始化完成和连接关闭，避免 worker 崩溃时等满超时
+            # 同时监听初始化完成和连接关闭，避免 worker 崩溃时等满超时
             init_task = asyncio.create_task(
-                self.peer.wait_until_remote_initialized(timeout=None)
+                self.peer.wait_until_remote_initialized(
+                    timeout=WORKER_INITIALIZE_TIMEOUT_SECONDS
+                )
             )
             closed_task = asyncio.create_task(self.peer.wait_closed())
             done, pending = await asyncio.wait(
@@ -206,7 +213,14 @@ class WorkerSession:
                     pass
 
             if init_task in done:
-                await init_task
+                try:
+                    await init_task
+                except TimeoutError as exc:
+                    # 区分"超时"和"崩溃退出"，给用户更精确的错误信息
+                    raise RuntimeError(
+                        f"worker 组 {self.group_id} 初始化超时 "
+                        f"({WORKER_INITIALIZE_TIMEOUT_SECONDS:.0f}s)"
+                    ) from exc
 
             if closed_task in done:
                 raise RuntimeError(f"worker 组 {self.group_id} 在初始化阶段退出")

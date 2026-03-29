@@ -67,7 +67,11 @@ from astrbot_sdk.runtime.loader import (
     load_plugin_spec,
     validate_plugin_spec,
 )
-from astrbot_sdk.runtime.supervisor import SupervisorRuntime
+from astrbot_sdk.runtime.supervisor import (
+    WORKER_INITIALIZE_TIMEOUT_SECONDS,
+    SupervisorRuntime,
+    WorkerSession,
+)
 from astrbot_sdk.runtime.worker import GroupWorkerRuntime
 from astrbot_sdk.star import Star
 from astrbot_sdk.testing import MockClock, SDKTestEnvironment
@@ -126,6 +130,92 @@ class _Peer:
             self.waiter_ops.append({"capability": capability, **payload})
             return {}
         raise AssertionError(f"unexpected capability: {capability}")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_worker_session_start_enforces_initialize_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured_timeout: list[float | None] = []
+
+    class _FakeTransport:
+        async def start(self) -> None:
+            return None
+
+        async def stop(self) -> None:
+            return None
+
+        async def send(self, payload: str) -> None:
+            del payload
+
+        async def wait_closed(self) -> None:
+            await asyncio.Future()
+
+        def set_message_handler(self, _handler) -> None:
+            return None
+
+    class _FakePeer:
+        def __init__(self, *, transport, peer_info) -> None:
+            del peer_info
+            self.transport = transport
+            self.remote_handlers = []
+            self.remote_provided_capabilities = []
+            self.remote_metadata = {}
+            self.stop_calls = 0
+
+        def set_initialize_handler(self, _handler) -> None:
+            return None
+
+        def set_invoke_handler(self, _handler) -> None:
+            return None
+
+        async def start(self) -> None:
+            return None
+
+        async def wait_until_remote_initialized(
+            self,
+            timeout: float | None = 30.0,
+        ) -> None:
+            captured_timeout.append(timeout)
+            raise TimeoutError()
+
+        async def wait_closed(self) -> None:
+            await asyncio.Future()
+
+        async def stop(self) -> None:
+            self.stop_calls += 1
+
+    plugin = SimpleNamespace(name="sdk-demo", plugin_dir=tmp_path)
+    env_manager = SimpleNamespace(
+        prepare_environment=lambda _plugin: tmp_path / "python"
+    )
+    session = WorkerSession(
+        plugin=plugin,
+        repo_root=tmp_path,
+        env_manager=env_manager,
+        capability_router=SimpleNamespace(),
+    )
+
+    monkeypatch.setattr(
+        supervisor_module,
+        "StdioTransport",
+        lambda **_kwargs: _FakeTransport(),
+    )
+    monkeypatch.setattr(supervisor_module, "Peer", _FakePeer)
+    monkeypatch.setattr(
+        session,
+        "_worker_command",
+        lambda: (tmp_path / "python", ["python"], str(tmp_path)),
+    )
+
+    with pytest.raises(RuntimeError, match="初始化超时"):
+        await session.start()
+
+    assert captured_timeout == [WORKER_INITIALIZE_TIMEOUT_SECONDS]
+    assert isinstance(session.peer, _FakePeer)
+    assert session.peer.stop_calls == 1
 
 
 def _event_payload(
@@ -200,7 +290,7 @@ def test_decorator_alias_and_conflict_rules() -> None:
     with pytest.raises(ValueError, match="platforms"):
 
         @platforms("qq")
-        @on_message(platforms=["wechat"])
+        @on_message(keywords=["hello"], platforms=["wechat"])
         async def _platform_conflict(event: MessageEvent, ctx: Context) -> None: ...
 
     with pytest.raises(ValueError, match="消息类型约束"):
@@ -221,6 +311,28 @@ def test_decorator_alias_and_conflict_rules() -> None:
         @rate_limit(1, 60)
         async def _event_limiter_conflict(ctx: Context) -> None: ...
 
+    with pytest.raises(ValueError, match="regex or at least one keyword"):
+
+        @on_message()
+        async def _missing_message_matcher(
+            event: MessageEvent, ctx: Context
+        ) -> None: ...
+
+    with pytest.raises(ValueError, match="non-empty event_type"):
+
+        @on_event("   ")
+        async def _empty_event_type(event: MessageEvent, ctx: Context) -> None: ...
+
+    with pytest.raises(ValueError, match="requires cron or interval_seconds"):
+
+        @on_schedule()
+        async def _missing_schedule_trigger(ctx: Context) -> None: ...
+
+    with pytest.raises(ValueError, match="positive integer"):
+
+        @on_schedule(interval_seconds=0)
+        async def _invalid_schedule_interval(ctx: Context) -> None: ...
+
     @conversation_command("quiz", timeout=12, mode="reject", busy_message="busy")
     async def quiz(
         event: MessageEvent,
@@ -236,6 +348,19 @@ def test_decorator_alias_and_conflict_rules() -> None:
         busy_message="busy",
         grace_period=1.0,
     )
+
+
+@pytest.mark.unit
+def test_conversation_session_preserves_explicit_non_active_state() -> None:
+    conversation = ConversationSession(
+        ctx=SimpleNamespace(),
+        event=SimpleNamespace(unified_msg_origin="demo:group:1"),
+        waiter_manager=SimpleNamespace(),
+        timeout=30,
+        state=ConversationState.REPLACED,
+    )
+
+    assert conversation.state == ConversationState.REPLACED
 
 
 @pytest.mark.unit

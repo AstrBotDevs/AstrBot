@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -184,6 +185,10 @@ class SdkHttpRoute:
 
 @dataclass(slots=True)
 class SdkRuntimeStore:
+    # 可重入锁：保护所有 request_overlays / request_contexts 等字典的并发读写。
+    # 使用 RLock 而非 Lock 是因为同一线程内可能嵌套调用（如 close_request_overlay
+    # 内部调用 get_effective_result_for_token），RLock 允许同线程重入不死锁。
+    mutation_lock: threading.RLock = field(default_factory=threading.RLock)
     records: dict[str, SdkPluginRecord] = field(default_factory=dict)
     request_contexts: dict[str, _RequestContext] = field(default_factory=dict)
     request_id_to_token: dict[str, str] = field(default_factory=dict)
@@ -199,3 +204,20 @@ class SdkRuntimeStore:
     temporary_mcp_sessions: dict[str, _TemporaryMCPSessionRuntime] = field(
         default_factory=dict
     )
+
+    def snapshot_records(self) -> list[SdkPluginRecord]:
+        with self.mutation_lock:
+            return list(self.records.values())
+
+    def snapshot_records_sorted(self) -> list[SdkPluginRecord]:
+        with self.mutation_lock:
+            return sorted(self.records.values(), key=lambda item: item.load_order)
+
+    def snapshot_http_routes(self, plugin_id: str | None = None) -> list[SdkHttpRoute]:
+        with self.mutation_lock:
+            if plugin_id is None:
+                routes: list[SdkHttpRoute] = []
+                for entries in self.http_routes.values():
+                    routes.extend(list(entries))
+                return routes
+            return list(self.http_routes.get(plugin_id, []))

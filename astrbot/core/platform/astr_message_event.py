@@ -90,9 +90,9 @@ class AstrMessageEvent(abc.ABC):
         """事件级 TraceSpan(别名: span)"""
 
         self._has_send_oper = False
-        """在此次事件中是否有过至少一次发送消息的操作"""
+        """底层标记：事件是否已触发至少一次平台发送。新代码应通过 mark_send_operation() / has_send_operation() 操作。"""
         self.call_llm = False
-        """是否在此消息事件中禁止默认的 LLM 请求"""
+        """语义反转的遗留字段：True 表示阻止内置默认 LLM 阶段。新代码应使用 set_default_llm_blocked() / should_call_default_llm()。"""
         self._temporary_local_files: list[str] = []
         """Temporary local files created during this event and safe to delete when it finishes."""
 
@@ -268,6 +268,10 @@ class AstrMessageEvent(abc.ABC):
         """是否是管理员。"""
         return self.role == "admin"
 
+    def has_admin_permission(self) -> bool:
+        """语义更明确的别名：is_admin() 容易被误解为"判断身份"，has_admin_permission 强调权限语义。"""
+        return self.is_admin()
+
     async def process_buffer(self, buffer: str, pattern: re.Pattern) -> str:
         """将消息缓冲区中的文本按指定正则表达式分割后发送至消息平台，作为不支持流式输出平台的Fallback。"""
         while True:
@@ -292,7 +296,7 @@ class AstrMessageEvent(abc.ABC):
         asyncio.create_task(
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
         )
-        self._has_send_oper = True
+        self.mark_send_operation()
 
     async def send_typing(self) -> None:
         """发送输入中状态。
@@ -386,11 +390,43 @@ class AstrMessageEvent(abc.ABC):
         return self._result.is_stopped()
 
     def should_call_llm(self, call_llm: bool) -> None:
-        """是否在此消息事件中禁止默认的 LLM 请求。
+        """向后兼容的包装器：历史调用者传 True 意为“阻止 LLM”，名字语义反转。
 
-        只会阻止 AstrBot 默认的 LLM 请求链路，不会阻止插件中的 LLM 请求。
+        新代码应直接使用 set_default_llm_blocked() 或 should_call_default_llm()。
         """
-        self.call_llm = call_llm
+        self.set_default_llm_blocked(call_llm)
+
+    def disable_default_llm(self, disabled: bool = True) -> None:
+        """向后兼容别名：disabled=True 阻止内置默认 LLM 阶段。"""
+        self.set_default_llm_blocked(disabled)
+
+    def set_default_llm_blocked(self, blocked: bool = True) -> None:
+        """底层写入方法：blocked=True 阻止本事件的内置 LLM 阶段。"""
+        self.call_llm = bool(blocked)
+
+    def set_default_llm_allowed(self, allowed: bool = True) -> None:
+        """allowed=True 表示允许内置 LLM 阶段（等价于 blocked=False）。"""
+        self.set_default_llm_blocked(not allowed)
+
+    def should_call_default_llm(self) -> bool:
+        """返回内置默认 LLM 管道是否仍被允许。call_llm 语义反转：True=阻止。"""
+        return not bool(self.call_llm)
+
+    def mark_send_operation(self) -> None:
+        """标记本事件已至少发送过一条平台消息。"""
+        self.set_send_operation_state(True)
+
+    def set_send_operation_state(self, has_sent: bool) -> None:
+        """底层写入方法：更新事件的发送操作状态。"""
+        self._has_send_oper = bool(has_sent)
+
+    def has_send_operation(self) -> bool:
+        """返回本事件是否已发送过至少一条平台消息。"""
+        return bool(self._has_send_oper)
+
+    def get_send_operation_state(self) -> bool:
+        """向后兼容的读取方法，供 bridge 代码读取原始发送标记。"""
+        return self.has_send_operation()
 
     def get_result(self) -> MessageEventResult | None:
         """获取消息事件的结果。"""
@@ -516,7 +552,7 @@ class AstrMessageEvent(abc.ABC):
                 sid=sid,
             ),
         )
-        self._has_send_oper = True
+        self.mark_send_operation()
 
     async def react(self, emoji: str) -> None:
         """对消息添加表情回应。

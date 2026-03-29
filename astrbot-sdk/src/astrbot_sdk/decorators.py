@@ -396,6 +396,15 @@ def _normalize_description(description: str | None) -> str | None:
     return text or None
 
 
+def _require_handler_callable(
+    target: Any,
+    *,
+    decorator_name: str,
+) -> None:
+    if not callable(target):
+        raise TypeError(f"{decorator_name} can only decorate callables")
+
+
 def _validate_limiter_args(
     *,
     kind: str,
@@ -484,6 +493,9 @@ def on_command(
             await event.reply("已封禁")
     """
 
+    if aliases is not None and not isinstance(aliases, list):
+        raise TypeError("on_command aliases must be a list of strings")
+
     commands = (
         [str(command).strip()]
         if isinstance(command, str)
@@ -516,6 +528,7 @@ def on_command(
     )
 
     def decorator(func: _HandlerT) -> _HandlerT:
+        _require_handler_callable(func, decorator_name="on_command(...)")
         meta = _get_or_create_meta(func)
         normalized_description = _normalize_description(description)
         trigger_command = display_command if group_path else canonical
@@ -570,11 +583,26 @@ def on_message(
             await event.reply("收到了数字")
     """
 
+    if keywords is not None and not isinstance(keywords, list):
+        raise TypeError("on_message keywords must be a list of strings")
+    if platforms is not None and not isinstance(platforms, list):
+        raise TypeError("on_message platforms must be a list of strings")
+    if message_types is not None and not isinstance(message_types, list):
+        raise TypeError("on_message message_types must be a list of strings")
+
+    normalized_regex = None if regex is None else str(regex).strip()
+    normalized_keywords = [
+        str(item).strip() for item in (keywords or []) if str(item).strip()
+    ]
+    if not normalized_regex and not normalized_keywords:
+        raise ValueError("on_message(...) requires regex or at least one keyword")
+
     def decorator(func: _HandlerT) -> _HandlerT:
+        _require_handler_callable(func, decorator_name="on_message(...)")
         meta = _get_or_create_meta(func)
         meta.trigger = MessageTrigger(
-            regex=regex,
-            keywords=keywords or [],
+            regex=normalized_regex,
+            keywords=normalized_keywords,
             platforms=platforms or [],
             message_types=message_types or [],
         )
@@ -640,9 +668,14 @@ def on_event(
             await ctx.platform.send(event.group_id, "欢迎新人!")
     """
 
+    normalized_event_type = str(event_type).strip()
+    if not normalized_event_type:
+        raise ValueError("on_event(...) requires a non-empty event_type")
+
     def decorator(func: _HandlerT) -> _HandlerT:
+        _require_handler_callable(func, decorator_name="on_event(...)")
         meta = _get_or_create_meta(func)
-        meta.trigger = EventTrigger(event_type=event_type)
+        meta.trigger = EventTrigger(event_type=normalized_event_type)
         meta.description = _normalize_description(description)
         _validate_message_trigger_compatibility(meta)
         return func
@@ -684,13 +717,26 @@ def on_schedule(
             pass
     """
 
+    normalized_name = None if name is None else str(name).strip() or None
+    normalized_cron = None if cron is None else str(cron).strip() or None
+    normalized_timezone = None if timezone is None else str(timezone).strip() or None
+    if normalized_cron is None and interval_seconds is None:
+        raise ValueError("on_schedule(...) requires cron or interval_seconds")
+    if interval_seconds is not None and (
+        isinstance(interval_seconds, bool) or int(interval_seconds) <= 0
+    ):
+        raise ValueError("on_schedule(...) interval_seconds must be a positive integer")
+
     def decorator(func: _HandlerT) -> _HandlerT:
+        _require_handler_callable(func, decorator_name="on_schedule(...)")
         meta = _get_or_create_meta(func)
         meta.trigger = ScheduleTrigger(
-            name=name,
-            cron=cron,
-            interval_seconds=interval_seconds,
-            timezone=timezone,
+            name=normalized_name,
+            cron=normalized_cron,
+            interval_seconds=(
+                None if interval_seconds is None else int(interval_seconds)
+            ),
+            timezone=normalized_timezone,
         )
         meta.description = _normalize_description(description)
         _validate_message_trigger_compatibility(meta)
@@ -717,6 +763,7 @@ def http_api(
         raise ValueError("http_api(...) requires at least one HTTP method")
 
     def decorator(func: HandlerCallable) -> HandlerCallable:
+        _require_handler_callable(func, decorator_name="http_api(...)")
         setattr(
             func,
             HTTP_API_META_ATTR,
@@ -755,6 +802,7 @@ def validate_config(
         _validate_validate_config_schema(schema)
 
     def decorator(func: HandlerCallable) -> HandlerCallable:
+        _require_handler_callable(func, decorator_name="validate_config(...)")
         setattr(
             func,
             VALIDATE_CONFIG_META_ATTR,
@@ -779,6 +827,7 @@ def on_provider_change(
     ]
 
     def decorator(func: HandlerCallable) -> HandlerCallable:
+        _require_handler_callable(func, decorator_name="on_provider_change(...)")
         setattr(
             func,
             PROVIDER_CHANGE_META_ATTR,
@@ -799,6 +848,7 @@ def background_task(
         raise ValueError("background_task on_error must be 'log' or 'restart'")
 
     def decorator(func: HandlerCallable) -> HandlerCallable:
+        _require_handler_callable(func, decorator_name="background_task(...)")
         setattr(
             func,
             BACKGROUND_TASK_META_ATTR,
@@ -889,6 +939,7 @@ def require_admin(func: _HandlerT) -> _HandlerT:
         async def admin_only(self, event: MessageEvent, ctx: Context):
             await event.reply("管理员命令执行成功")
     """
+    _require_handler_callable(func, decorator_name="require_admin")
     meta = _get_or_create_meta(func)
     _set_required_role(meta, "admin")
     return func
@@ -906,6 +957,7 @@ def require_permission(
         raise ValueError("require_permission(...) 只支持 'member' 或 'admin'")
 
     def decorator(func: _HandlerT) -> _HandlerT:
+        _require_handler_callable(func, decorator_name="require_permission(...)")
         meta = _get_or_create_meta(func)
         _set_required_role(
             meta,
@@ -917,20 +969,30 @@ def require_permission(
 
 
 def platforms(*names: str) -> Callable[[_HandlerT], _HandlerT]:
+    normalized_names = [str(name).strip() for name in names if str(name).strip()]
+    if not normalized_names:
+        raise ValueError("platforms(...) requires at least one non-empty platform name")
+
     def decorator(func: _HandlerT) -> _HandlerT:
+        _require_handler_callable(func, decorator_name="platforms(...)")
         meta = _get_or_create_meta(func)
-        _set_platform_filter(meta, list(names), source="decorator.platforms")
+        _set_platform_filter(meta, normalized_names, source="decorator.platforms")
         return func
 
     return decorator
 
 
 def message_types(*types: str) -> Callable[[_HandlerT], _HandlerT]:
+    normalized_types = [str(item).strip() for item in types if str(item).strip()]
+    if not normalized_types:
+        raise ValueError("message_types(...) requires at least one non-empty type")
+
     def decorator(func: _HandlerT) -> _HandlerT:
+        _require_handler_callable(func, decorator_name="message_types(...)")
         meta = _get_or_create_meta(func)
         _set_message_type_filter(
             meta,
-            list(types),
+            normalized_types,
             source="decorator.message_types",
         )
         return func
@@ -940,6 +1002,7 @@ def message_types(*types: str) -> Callable[[_HandlerT], _HandlerT]:
 
 def group_only() -> Callable[[_HandlerT], _HandlerT]:
     def decorator(func: _HandlerT) -> _HandlerT:
+        _require_handler_callable(func, decorator_name="group_only()")
         meta = _get_or_create_meta(func)
         _set_message_type_filter(meta, ["group"], source="decorator.group_only")
         return func
@@ -949,6 +1012,7 @@ def group_only() -> Callable[[_HandlerT], _HandlerT]:
 
 def private_only() -> Callable[[_HandlerT], _HandlerT]:
     def decorator(func: _HandlerT) -> _HandlerT:
+        _require_handler_callable(func, decorator_name="private_only()")
         meta = _get_or_create_meta(func)
         _set_message_type_filter(meta, ["private"], source="decorator.private_only")
         return func
@@ -961,6 +1025,7 @@ def priority(value: int) -> Callable[[_HandlerT], _HandlerT]:
         raise ValueError("priority(...) requires an integer")
 
     def decorator(func: _HandlerT) -> _HandlerT:
+        _require_handler_callable(func, decorator_name="priority(...)")
         meta = _get_or_create_meta(func)
         meta.priority = value
         return func
@@ -985,6 +1050,7 @@ def rate_limit(
     )
 
     def decorator(func: _HandlerT) -> _HandlerT:
+        _require_handler_callable(func, decorator_name="rate_limit(...)")
         return _set_limiter(
             func,
             LimiterMeta(
@@ -1016,6 +1082,7 @@ def cooldown(
     )
 
     def decorator(func: _HandlerT) -> _HandlerT:
+        _require_handler_callable(func, decorator_name="cooldown(...)")
         return _set_limiter(
             func,
             LimiterMeta(
@@ -1088,6 +1155,7 @@ def conversation_command(
     )
 
     def decorator(func: _HandlerT) -> _HandlerT:
+        _require_handler_callable(func, decorator_name="conversation_command(...)")
         decorated = command_decorator(func)
         meta = _get_or_create_meta(decorated)
         meta.conversation = ConversationMeta(
@@ -1144,16 +1212,30 @@ def provide_capability(
             return {"result": payload["x"] * 2}
     """
 
+    normalized_name = str(name).strip()
+    if not normalized_name:
+        raise ValueError("provide_capability(...) requires a non-empty name")
+    normalized_description = _normalize_description(description)
+    if normalized_description is None:
+        raise ValueError("provide_capability(...) requires a non-empty description")
+    if input_schema is not None and not isinstance(input_schema, dict):
+        raise TypeError("input_schema must be a dict")
+    if output_schema is not None and not isinstance(output_schema, dict):
+        raise TypeError("output_schema must be a dict")
+
     def decorator(func: HandlerCallable) -> HandlerCallable:
-        if name.startswith(RESERVED_CAPABILITY_PREFIXES):
-            raise ValueError(f"保留 capability 命名空间不能用于插件导出：{name}")
+        _require_handler_callable(func, decorator_name="provide_capability(...)")
+        if normalized_name.startswith(RESERVED_CAPABILITY_PREFIXES):
+            raise ValueError(
+                f"保留 capability 命名空间不能用于插件导出：{normalized_name}"
+            )
         if input_schema is not None and input_model is not None:
             raise ValueError("input_schema 和 input_model 不能同时提供")
         if output_schema is not None and output_model is not None:
             raise ValueError("output_schema 和 output_model 不能同时提供")
         descriptor = CapabilityDescriptor(
-            name=name,
-            description=description,
+            name=normalized_name,
+            description=normalized_description,
             input_schema=(
                 input_schema
                 if input_schema is not None
@@ -1231,7 +1313,13 @@ def register_llm_tool(
     parameters_schema: dict[str, Any] | None = None,
     active: bool = True,
 ) -> Callable[[HandlerCallable], HandlerCallable]:
+    if parameters_schema is not None and not isinstance(parameters_schema, dict):
+        raise TypeError("register_llm_tool parameters_schema must be a dict")
+    if not isinstance(active, bool):
+        raise TypeError("register_llm_tool active must be a bool")
+
     def decorator(func: HandlerCallable) -> HandlerCallable:
+        _require_handler_callable(func, decorator_name="register_llm_tool(...)")
         tool_name = str(name or func.__name__).strip()
         if not tool_name:
             raise ValueError("LLM tool name must not be empty")
@@ -1263,6 +1351,17 @@ def register_agent(
     description: str = "",
     tool_names: list[str] | None = None,
 ) -> Callable[[type[BaseAgentRunner]], type[BaseAgentRunner]]:
+    if tool_names is not None and not isinstance(tool_names, list):
+        raise TypeError("register_agent tool_names must be a list of strings")
+    normalized_name = str(name).strip()
+    if not normalized_name:
+        raise ValueError("register_agent(...) requires a non-empty name")
+    normalized_tool_names = [
+        str(tool_name).strip()
+        for tool_name in dict.fromkeys(tool_names or [])
+        if str(tool_name).strip()
+    ]
+
     def decorator(cls: type[BaseAgentRunner]) -> type[BaseAgentRunner]:
         if not inspect.isclass(cls) or not issubclass(cls, BaseAgentRunner):
             raise TypeError("@register_agent() 只接受 BaseAgentRunner 子类")
@@ -1271,9 +1370,9 @@ def register_agent(
             AGENT_META_ATTR,
             AgentMeta(
                 spec=AgentSpec(
-                    name=name,
+                    name=normalized_name,
                     description=description,
-                    tool_names=list(tool_names or []),
+                    tool_names=normalized_tool_names,
                     runner_class=f"{cls.__module__}.{cls.__qualname__}",
                 )
             ),

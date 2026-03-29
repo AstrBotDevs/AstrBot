@@ -102,6 +102,9 @@ CancelHandler = Callable[[str], Awaitable[None]]
 
 SUPPORTED_PROTOCOL_VERSIONS_METADATA_KEY = "supported_protocol_versions"
 NEGOTIATED_PROTOCOL_VERSION_METADATA_KEY = "negotiated_protocol_version"
+# 入站消息字符数上限（8 MB）。超过此阈值的协议消息会被直接拒绝，
+# 避免恶意或异常的巨型消息耗尽内存或阻塞解析
+MAX_INBOUND_MESSAGE_CHARS = 8 * 1024 * 1024
 
 
 def _dedupe_protocol_versions(
@@ -211,6 +214,8 @@ class Peer:
         self._remote_initialized = asyncio.Event()
         self._remote_initialized_successfully = False
         self._transport_watch_task: asyncio.Task[None] | None = None
+        # 记录当前正在执行 stop() 的 Task，用于防止 stop() 被并发重入
+        self._stop_task: asyncio.Task[None] | None = None
 
     def set_initialize_handler(self, handler: InitializeHandler) -> None:
         """注册处理远端 `initialize` 请求的握手处理器。"""
@@ -240,25 +245,40 @@ class Peer:
         """关闭 `Peer` 并清理所有挂起中的请求、流和入站任务。"""
         if self._closed.is_set():
             return
+        current_task = asyncio.current_task()
+        if self._stopping:
+            # 防止并发重入：如果 stop() 已在其他协程中执行，则等待它完成而不是重复清理
+            stop_task = self._stop_task
+            if stop_task is not None and stop_task is not current_task:
+                await asyncio.shield(stop_task)
+            return
         self._stopping = True
-        # 终止所有挂起的 RPC，避免调用方永久挂起
-        for future in list(self._pending_results.values()):
-            if not future.done():
-                future.set_exception(AstrBotError.internal_error("连接已关闭"))
-        self._pending_results.clear()
+        # 记录当前 task，供后续重入检测和 _schedule_stop() 判定
+        if current_task is not None and self._stop_task is None:
+            self._stop_task = current_task
+        try:
+            # 终止所有挂起的 RPC，避免调用方永久挂起
+            for future in list(self._pending_results.values()):
+                if not future.done():
+                    future.set_exception(AstrBotError.internal_error("连接已关闭"))
+            self._pending_results.clear()
 
-        for queue in list(self._pending_streams.values()):
-            await queue.put(AstrBotError.internal_error("连接已关闭"))
-        self._pending_streams.clear()
+            for queue in list(self._pending_streams.values()):
+                await queue.put(AstrBotError.internal_error("连接已关闭"))
+            self._pending_streams.clear()
 
-        # 取消所有入站任务
-        for task, token, _started in list(self._inbound_tasks.values()):
-            token.cancel()
-            task.cancel()
-        self._inbound_tasks.clear()
+            # 取消所有入站任务
+            for task, token, _started in list(self._inbound_tasks.values()):
+                token.cancel()
+                task.cancel()
+            self._inbound_tasks.clear()
 
-        await self.transport.stop()
-        self._closed.set()
+            await self.transport.stop()
+            self._closed.set()
+        finally:
+            # 只在当前 task 就是 stop_task 时才清除引用，避免误清其他 task 的记录
+            if self._stop_task is current_task:
+                self._stop_task = None
 
     async def wait_closed(self) -> None:
         """等待底层传输彻底关闭。"""
@@ -486,9 +506,10 @@ class Peer:
                             reason="consumer_closed_stream_early",
                         )
                     except Exception as exc:
+                        # 取消失败不应中断整个流处理流程，仅记录日志
                         logger.debug(
                             "Failed to cancel stream after consumer closed early: "
-                            "request_id=%s error=%s",
+                            "request_id={} error={}",
                             request_id,
                             exc,
                         )
@@ -512,6 +533,13 @@ class Peer:
     async def _handle_raw_message(self, payload: str) -> None:
         """解析原始消息并分发到对应的消息处理分支。"""
         try:
+            # 入站消息大小检查：拒绝巨型消息，防止 OOM 和解析阻塞
+            if len(payload) > MAX_INBOUND_MESSAGE_CHARS:
+                raise AstrBotError.protocol_error(
+                    f"协议消息过大，已拒绝处理："
+                    f"当前 {len(payload) / 1024 / 1024:.1f} MB，"
+                    f"上限 {MAX_INBOUND_MESSAGE_CHARS / 1024 / 1024:.0f} MB"
+                )
             message = parse_message(payload)
             if isinstance(message, ResultMessage):
                 await self._handle_result(message)
@@ -568,7 +596,12 @@ class Peer:
             else:
                 error = AstrBotError.protocol_error(f"无法解析协议消息: {exc}")
             await self._fail_connection(error)
-            raise error from exc
+            # 不再向上抛出异常，避免在 transport 读循环中引发未处理的异常导致整个连接崩溃
+            logger.warning(
+                "Peer connection marked unusable after inbound message failure: {}",
+                error,
+            )
+            return
 
     async def _handle_initialize(self, message: InitializeMessage) -> None:
         """处理远端发起的初始化握手并返回握手结果。"""
@@ -784,7 +817,16 @@ class Peer:
             task.cancel()
         self._inbound_tasks.clear()
 
-        asyncio.create_task(self.stop())
+        self._schedule_stop()
+
+    def _schedule_stop(self) -> None:
+        """安全地调度 stop()，避免与正在执行的 stop() 产生并发冲突。"""
+        if self._closed.is_set():
+            return
+        # 已有 stop task 在跑则不重复创建，防止产生竞态条件
+        if self._stop_task is not None and not self._stop_task.done():
+            return
+        self._stop_task = asyncio.create_task(self.stop(), name="astrbot-sdk-peer-stop")
 
     async def _send(self, message) -> None:
         """序列化协议消息并通过底层传输发送出去。"""
