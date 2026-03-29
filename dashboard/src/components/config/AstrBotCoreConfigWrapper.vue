@@ -4,7 +4,7 @@
       v-model="tab"
       :direction="$vuetify.display.mobile ? 'horizontal' : 'vertical'"
       :align-tabs="$vuetify.display.mobile ? 'left' : 'start'"
-      color="deep-purple-accent-4"
+      color="primary"
       class="config-tabs"
     >
       <v-tab

@@ -58,4 +58,110 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
   color: var(--astrbot-code-color);
 }
 
+/* ============================================================
+   REACTOR FORM CONTROLS — Industrial precision overrides
+   ============================================================ */
+
+/* === Switch: MD3 rectangle with Cherenkov glow === */
+.v-switch {
+  .v-switch__track {
+    border-radius: 4px !important;
+    opacity: 1 !important;
+  }
+  &.v-switch--inset .v-switch__track {
+    height: 20px !important;
+    width: 36px !important;
+  }
+}
+
+.v-switch--inset .v-switch__thumb {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+/* === Text fields: transparent glass === */
+.v-field--variant-outlined {
+  .v-field__outline__start,
+  .v-field__outline__end {
+    border-color: rgba(0, 242, 255, 0.12) !important;
+  }
+  .v-field__outline__start {
+    border-radius: 8px 0 0 8px !important;
+  }
+  .v-field__outline__end {
+    border-radius: 0 8px 8px 0 !important;
+  }
+  &:hover .v-field__outline__start,
+  &:hover .v-field__outline__end,
+  &.v-field--focused .v-field__outline__start,
+  &.v-field--focused .v-field__outline__end {
+    border-color: rgba(0, 242, 255, 0.4) !important;
+  }
+  .v-field--focused .v-field__outline__start,
+  .v-field--focused .v-field__outline__end {
+    border-color: #00F2FF !important;
+    box-shadow: 0 0 8px rgba(0, 242, 255, 0.25) !important;
+  }
+}
+
+/* === Select / combobox: glass with bottom line === */
+.v-select__selection-text,
+.v-combobox .v-field__input {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 13px;
+}
+
+/* === Config tabs: reactor styling === */
+.config-tabs {
+  .v-tab {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: rgba(228, 225, 230, 0.5) !important;
+    border-bottom: 2px solid transparent;
+    transition: all 0.25s ease;
+    &:hover {
+      color: rgba(0, 242, 255, 0.7) !important;
+      background: rgba(0, 242, 255, 0.04);
+    }
+    &.v-tab--selected {
+      color: #00F2FF !important;
+      border-bottom-color: #00F2FF;
+      box-shadow: 0 2px 8px rgba(0, 242, 255, 0.3);
+    }
+  }
+  .v-tabs__content {
+    background: transparent;
+  }
+}
+
+/* === Config section dividers === */
+.config-tabs-window {
+  background: transparent !important;
+}
+
+/* === Checkbox: hollow rectangle with cyan check === */
+.v-checkbox .v-selection-control {
+  .v-icon {
+    color: rgba(0, 242, 255, 0.3) !important;
+    border: 1px solid rgba(0, 242, 255, 0.25);
+    border-radius: 3px;
+  }
+  &.mdi-checkbox-blank-outline .v-icon {
+    color: transparent !important;
+  }
+}
+
+/* === Slider: thin track with cyan thumb === */
+.v-slider .v-slider-thumb {
+  &::before {
+    box-shadow: 0 0 10px rgba(0, 242, 255, 0.6) !important;
+  }
+}
+.v-slider .v-slider-track__fill {
+  background: #00F2FF !important;
+}
+
+
 

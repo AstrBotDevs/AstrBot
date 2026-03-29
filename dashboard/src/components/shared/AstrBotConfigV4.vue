@@ -216,20 +216,14 @@ function getSpecialSubtype(value) {
 <template>
   <v-card
     v-if="shouldShowSection()"
-    style="
-      margin-bottom: 16px;
-      padding-bottom: 8px;
-      background-color: rgb(var(--v-theme-background));
-    "
-    rounded="md"
-    variant="outlined"
+    class="config-reactor-card"
   >
     <v-card-text
       v-if="metadata[metadataKey]?.type === 'object'"
       class="config-section"
-      style="padding-bottom: 8px"
     >
       <v-list-item-title class="config-title">
+        <span class="title-glow-bar" />
         {{ translateIfKey(metadata[metadataKey]?.description) }}
       </v-list-item-title>
       <v-list-item-subtitle class="config-hint">
@@ -238,7 +232,7 @@ function getSpecialSubtype(value) {
             metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint
           "
           class="important-hint"
-          >‼️</span
+          >⚠️</span
         >
         <span v-html="renderHint(metadata[metadataKey]?.hint)" />
       </v-list-item-subtitle>
@@ -399,34 +393,68 @@ function getSpecialSubtype(value) {
 </template>
 
 <style scoped>
+/* === Reactor glassmorphism card === */
+.config-reactor-card {
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  background: rgba(15, 15, 22, 0.45) !important;
+  backdrop-filter: blur(20px) saturate(1.2);
+  border: 1px solid rgba(0, 242, 255, 0.08) !important;
+  border-radius: 24px !important;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.6) !important;
+}
+
 .config-section {
   margin-bottom: 4px;
+  padding-bottom: 8px;
 }
 
 .config-title {
-  /* font-weight: 600; */
-  font-size: 1.3rem;
-  color: var(--v-theme-primaryText);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: rgba(0, 242, 255, 0.9) !important;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.title-glow-bar {
+  display: inline-block;
+  width: 3px;
+  height: 1.1em;
+  background: linear-gradient(180deg, #00F2FF 0%, rgba(0, 242, 255, 0.2) 100%);
+  border-radius: 2px;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(0, 242, 255, 0.6);
 }
 
 .config-hint {
   font-size: 0.75rem;
-  color: var(--v-theme-secondaryText);
-  margin-top: 2px;
+  color: rgba(228, 225, 230, 0.5);
+  margin-top: 4px;
+  line-height: 1.5;
 }
 
 .config-hint ::v-deep(a),
 .property-hint ::v-deep(a) {
-  color: var(--v-theme-primary);
-  text-decoration: underline;
+  color: rgba(0, 242, 255, 0.7);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(0, 242, 255, 0.3);
+  transition: border-color 0.2s;
+}
+.config-hint ::v-deep(a:hover),
+.property-hint ::v-deep(a:hover) {
+  border-bottom-color: #00F2FF;
 }
 
 .metadata-key,
 .property-key {
-  font-size: 0.85em;
-  opacity: 0.7;
+  font-size: 0.8em;
+  opacity: 0.45;
   font-weight: normal;
-  display: none;
+  font-family: "JetBrains Mono", monospace;
 }
 
 .important-hint {
@@ -444,23 +472,23 @@ function getSpecialSubtype(value) {
 }
 
 .nested-container {
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
+  border: 1px solid rgba(0, 242, 255, 0.06);
+  border-radius: 12px;
   padding: 12px;
   margin: 12px 0;
-  background-color: rgba(0, 0, 0, 0.02);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  background: rgba(0, 0, 0, 0.2);
 }
 
 .config-row {
   margin: 0;
   align-items: center;
-  padding: 8px 8px;
-  border-radius: 4px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  transition: background 0.2s;
 }
 
 .config-row:hover {
-  background-color: rgba(0, 0, 0, 0.03);
+  background: rgba(0, 242, 255, 0.03);
 }
 
 .property-info {
@@ -469,14 +497,15 @@ function getSpecialSubtype(value) {
 
 .property-name {
   font-size: 0.875rem;
-  /* font-weight: 600; */
-  color: var(--v-theme-primaryText);
+  font-weight: 500;
+  color: rgba(228, 225, 230, 0.85);
 }
 
 .property-hint {
-  font-size: 0.75rem;
-  color: var(--v-theme-secondaryText);
+  font-size: 0.72rem;
+  color: rgba(228, 225, 230, 0.4);
   margin-top: 2px;
+  line-height: 1.4;
 }
 
 .type-indicator {
@@ -485,7 +514,7 @@ function getSpecialSubtype(value) {
 }
 
 .config-input {
-  padding: 4px 8px;
+  padding: 2px 8px;
 }
 
 .config-field {
@@ -493,7 +522,7 @@ function getSpecialSubtype(value) {
 }
 
 .config-divider {
-  border-color: rgba(0, 0, 0, 0.1);
+  border-color: rgba(255, 255, 255, 0.04) !important;
   margin-left: 24px;
 }
 
@@ -535,9 +564,9 @@ function getSpecialSubtype(value) {
 }
 
 .selected-plugins-full-width {
-  background-color: rgba(var(--v-theme-primary), 0.05);
-  border: 1px solid rgba(var(--v-theme-primary), 0.1);
-  border-radius: 8px;
+  background: rgba(0, 242, 255, 0.04);
+  border: 1px solid rgba(0, 242, 255, 0.08);
+  border-radius: 10px;
   padding: 12px;
 }
 
