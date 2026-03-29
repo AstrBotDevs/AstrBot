@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 249 icons */
+/* Auto-generated MDI subset – 250 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -662,6 +662,10 @@
 
 .mdi-minus-box::before {
   content: "\F0375";
+}
+
+.mdi-moon-waning-crescent::before {
+  content: "\F0F65";
 }
 
 .mdi-note-text-outline::before {

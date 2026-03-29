@@ -116,7 +116,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import axios from "axios";
+import axios from "@/utils/request";
 import { useModuleI18n } from "@/i18n/composables";
 import { useToastStore } from "@/stores/toast";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";

@@ -67,14 +67,14 @@
     <!-- Text (Markdown) -->
     <MarkdownRender
       v-else-if="
-        renderPart.part.type === 'plain' &&
-        renderPart.part.text &&
-        renderPart.part.text.trim()
+        renderPart.type === 'part' &&
+        renderPart.part?.type === 'plain' &&
+        renderPart.part?.text?.trim()
       "
       :key="`${renderPart.key}-${isDark ? 'dark' : 'light'}`"
       custom-id="message-list"
       :custom-html-tags="['ref']"
-      :content="normalizeMarkdownContent(renderPart.part.text)"
+      :content="normalizeMarkdownContent(renderPart.part?.text)"
       :typewriter="false"
       class="markdown-content"
       :is-dark="isDark"
@@ -84,14 +84,14 @@
     <!-- Text (Markdown) -->
     <MarkdownRender
       v-else-if="
-        renderPart.part.type === 'plain' &&
-        renderPart.part.text &&
-        renderPart.part.text.trim()
+        renderPart.type === 'part' &&
+        renderPart.part?.type === 'plain' &&
+        renderPart.part?.text?.trim()
       "
       :key="`${renderPart.key}-${isDark ? 'dark' : 'light'}`"
       custom-id="message-list"
       :custom-html-tags="['ref']"
-      :content="renderPart.part.text"
+      :content="renderPart.part?.text"
       :typewriter="false"
       class="markdown-content"
       :is-dark="isDark"
@@ -100,15 +100,16 @@
     <!-- Image -->
     <div
       v-else-if="
-        renderPart.part.type === 'image' && renderPart.part.embedded_url
+        renderPart.type === 'part' &&
+        renderPart.part?.type === 'image' && renderPart.part?.embedded_url
       "
       class="embedded-images"
     >
       <div class="embedded-image">
         <img
-          :src="renderPart.part.embedded_url"
+          :src="renderPart.part?.embedded_url"
           class="bot-embedded-image"
-          @click="emitOpenImage(renderPart.part.embedded_url)"
+          @click="emitOpenImage(renderPart.part?.embedded_url)"
         />
       </div>
     </div>
@@ -116,12 +117,13 @@
     <!-- Audio -->
     <div
       v-else-if="
-        renderPart.part.type === 'record' && renderPart.part.embedded_url
+        renderPart.type === 'part' &&
+        renderPart.part?.type === 'record' && renderPart.part?.embedded_url
       "
       class="embedded-audio"
     >
       <audio controls class="audio-player">
-        <source :src="renderPart.part.embedded_url" type="audio/wav" />
+        <source :src="renderPart.part?.embedded_url" type="audio/wav" />
         {{ t("messages.errors.browser.audioNotSupported") }}
       </audio>
     </div>
@@ -129,15 +131,16 @@
     <!-- Files -->
     <div
       v-else-if="
-        renderPart.part.type === 'file' && renderPart.part.embedded_file
+        renderPart.type === 'part' &&
+        renderPart.part?.type === 'file' && renderPart.part?.embedded_file
       "
       class="embedded-files"
     >
       <div class="embedded-file">
         <a
-          v-if="renderPart.part.embedded_file.url"
-          :href="renderPart.part.embedded_file.url"
-          :download="renderPart.part.embedded_file.filename"
+          v-if="renderPart.part?.embedded_file?.url"
+          :href="renderPart.part?.embedded_file?.url"
+          :download="renderPart.part?.embedded_file?.filename"
           class="file-link"
           :class="{ 'is-dark': isDark }"
           :style="
@@ -157,7 +160,7 @@
             >mdi-file-document-outline</v-icon
           >
           <span class="file-name">{{
-            renderPart.part.embedded_file.filename
+            renderPart.part?.embedded_file?.filename
           }}</span>
         </a>
         <a
@@ -173,7 +176,7 @@
                 }
               : {}
           "
-          @click="emitDownloadFile(renderPart.part.embedded_file)"
+          @click="emitDownloadFile(renderPart.part?.embedded_file)"
         >
           <v-icon
             size="small"
@@ -182,11 +185,11 @@
             >mdi-file-document-outline</v-icon
           >
           <span class="file-name">{{
-            renderPart.part.embedded_file.filename
+            renderPart.part?.embedded_file?.filename
           }}</span>
           <v-icon
             v-if="
-              downloadingFiles?.has(renderPart.part.embedded_file.attachment_id)
+              downloadingFiles?.has(renderPart.part?.embedded_file?.attachment_id)
             "
             size="small"
             class="download-icon"
@@ -346,6 +349,7 @@ const getRenderParts = (messageParts) => {
     }
 
     flushPending(idx - 1);
+    if (!part) return;
     rendered.push({
       type: "part",
       part,

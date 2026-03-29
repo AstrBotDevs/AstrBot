@@ -30,6 +30,43 @@
         :subtitle="tm('theme.subtitle')"
         :title="tm('theme.customize.title')"
       >
+        <!-- Theme Mode Toggle (Light/Dark) -->
+        <v-row class="mt-2" density="compact" align="center">
+          <v-col cols="12" sm="4">
+            <v-btn-toggle
+              v-model="isDarkMode"
+              mandatory
+              density="compact"
+              color="primary"
+              @update:model-value="toggleThemeMode"
+            >
+              <v-btn value="light" size="small">
+                <v-icon class="mr-1">mdi-white-balance-sunny</v-icon>
+                亮色
+              </v-btn>
+              <v-btn value="dark" size="small">
+                <v-icon class="mr-1">mdi-moon-waning-crescent</v-icon>
+                暗色
+              </v-btn>
+            </v-btn-toggle>
+          </v-col>
+        </v-row>
+
+        <!-- Theme Preset Selector -->
+        <v-row class="mt-2" density="compact">
+          <v-col cols="12" sm="6">
+            <v-select
+              v-model="selectedThemePreset"
+              :items="presetOptions"
+              :label="tm('theme.customize.preset')"
+              hide-details
+              variant="outlined"
+              density="compact"
+              @update:model-value="applyThemePreset"
+            />
+          </v-col>
+        </v-row>
+
         <v-row class="mt-2" density="compact">
           <v-col cols="4" sm="2">
             <v-text-field
@@ -286,7 +323,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import axios from "axios";
+import axios from "@/utils/request";
 import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
 import MigrationDialog from "@/components/shared/MigrationDialog.vue";
@@ -296,12 +333,24 @@ import StorageCleanupPanel from "@/components/shared/StorageCleanupPanel.vue";
 import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
 import { useModuleI18n } from "@/i18n/composables";
 import { useTheme } from "vuetify";
-import { PurpleTheme } from "@/theme/LightTheme";
+import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";
+import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
 import { useToastStore } from "@/stores/toast";
+import { useCustomizerStore } from "@/stores/customizer";
 
 const { tm } = useModuleI18n("features/settings");
 const toastStore = useToastStore();
 const theme = useTheme();
+const customizer = useCustomizerStore();
+
+// Theme mode toggle (light/dark)
+const isDarkMode = ref(customizer.isDarkTheme ? "dark" : "light");
+
+const toggleThemeMode = (mode: string) => {
+  const newTheme = mode === "dark" ? DARK_THEME_NAME : LIGHT_THEME_NAME;
+  customizer.SET_UI_THEME(newTheme);
+  vuetify.theme.change(newTheme);
+};
 
 const getStoredColor = (key, fallback) => {
   const stored =
@@ -310,11 +359,91 @@ const getStoredColor = (key, fallback) => {
 };
 
 const primaryColor = ref(
-  getStoredColor("themePrimary", PurpleTheme.colors.primary),
+  getStoredColor("themePrimary", BlueBusinessLightTheme.colors.primary),
 );
 const secondaryColor = ref(
-  getStoredColor("themeSecondary", PurpleTheme.colors.secondary),
+  getStoredColor("themeSecondary", BlueBusinessLightTheme.colors.secondary),
 );
+
+// Theme presets based on MD3 color system
+const themePresets = [
+  {
+    id: "blue-business",
+    name: "活力商务蓝",
+    nameEn: "Business Blue",
+    primary: "#005FB0",
+    secondary: "#565E71",
+    tertiary: "#006B5B",
+  },
+  {
+    id: "purple-default",
+    name: "优雅紫",
+    nameEn: "Elegant Purple",
+    primary: "#6750A4",
+    secondary: "#625B71",
+    tertiary: "#7D5260",
+  },
+  {
+    id: "teal-fresh",
+    name: "自然清新绿",
+    nameEn: "Nature Green",
+    primary: "#386A20",
+    secondary: "#55624C",
+    tertiary: "#19686A",
+  },
+  {
+    id: "orange-warm",
+    name: "温暖橙棕",
+    nameEn: "Warm Orange",
+    primary: "#9C4323",
+    secondary: "#77574E",
+    tertiary: "#6C5D2F",
+  },
+  {
+    id: "ocean-breeze",
+    name: "海洋清风",
+    nameEn: "Ocean Breeze",
+    primary: "#0077B6",
+    secondary: "#4A5568",
+    tertiary: "#00B4D8",
+  },
+  {
+    id: "rose-romantic",
+    name: "浪漫玫瑰",
+    nameEn: "Romantic Rose",
+    primary: "#BE185D",
+    secondary: "#9F1239",
+    tertiary: "#DB2777",
+  },
+];
+
+// Get stored preset or default to blue-business name
+const selectedThemePreset = ref(
+  localStorage.getItem("themePreset") || themePresets[0].name,
+);
+
+// Simple array for dropdown display
+const presetOptions = themePresets.map((p) => p.name);
+
+const applyThemePreset = (presetName: string) => {
+  const preset = themePresets.find((p) => p.name === presetName);
+  if (!preset) return;
+
+  // Store the preset selection (store by name for display consistency)
+  localStorage.setItem("themePreset", presetName);
+  selectedThemePreset.value = presetName;
+
+  // Update primary and secondary colors
+  primaryColor.value = preset.primary;
+  secondaryColor.value = preset.secondary;
+  localStorage.setItem("themePrimary", preset.primary);
+  localStorage.setItem("themeSecondary", preset.secondary);
+
+  // Apply to themes
+  applyThemeColors(preset.primary, preset.secondary);
+
+  toastStore.add({ message: tm("theme.customize.presetApplied") || "主题已应用", color: "success" });
+};
 
 const resolveThemes = () => {
   if (theme?.themes?.value) return theme.themes.value;
@@ -325,7 +454,7 @@ const resolveThemes = () => {
 const applyThemeColors = (primary, secondary) => {
   const themes = resolveThemes();
   if (!themes) return;
-  ["PurpleTheme", "PurpleThemeDark"].forEach((name) => {
+  [LIGHT_THEME_NAME, DARK_THEME_NAME].forEach((name) => {
     const themeDef = themes[name];
     if (!themeDef?.colors) return;
     if (primary) themeDef.colors.primary = primary;
@@ -567,8 +696,8 @@ const openBackupDialog = () => {
 };
 
 const resetThemeColors = () => {
-  primaryColor.value = PurpleTheme.colors.primary;
-  secondaryColor.value = PurpleTheme.colors.secondary;
+  primaryColor.value = BlueBusinessLightTheme.colors.primary;
+  secondaryColor.value = BlueBusinessLightTheme.colors.secondary;
   localStorage.removeItem("themePrimary");
   localStorage.removeItem("themeSecondary");
   applyThemeColors(primaryColor.value, secondaryColor.value);

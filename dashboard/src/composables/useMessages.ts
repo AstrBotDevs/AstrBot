@@ -1,6 +1,6 @@
 import { ref, reactive, type Ref } from "vue";
 import axios from "@/utils/request";
-import { resolveWebSocketUrl } from "@/utils/request";
+import { resolveWebSocketUrl, resolveApiUrl } from "@/utils/request";
 import { useToast } from "@/utils/toast";
 
 // 工具调用信息
@@ -842,7 +842,7 @@ export function useMessages(
     const controller = new AbortController();
     currentRequestController.value = controller;
 
-    const response = await fetch("/api/chat/send", {
+    const response = await fetch(resolveApiUrl("/api/chat/send"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
