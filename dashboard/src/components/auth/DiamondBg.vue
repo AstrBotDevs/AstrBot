@@ -1,56 +1,106 @@
 <template>
-  <div class="bg">
+  <div class="bg" ref="bgEl" @mousemove="onMouseMove" @mouseleave="onMouseLeave">
     <svg class="noise">
       <filter id="grain">
         <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="4" stitchTiles="stitch" />
         <feColorMatrix type="saturate" values="0" />
       </filter>
-      <rect width="100%" height="100%" filter="url(#grain)" opacity="0.04" />
+      <rect width="100%" height="100%" filter="url(#grain)" opacity="0.035" />
     </svg>
     <div class="grid">
       <div
         class="cell"
         v-for="i in total"
         :key="i"
-        :class="{ recessed: isRecessed(i - 1) }"
+        :style="getCellStyle(i - 1)"
       >
-        <div class="socket">
+        <div class="pin">
           <svg class="cross" viewBox="0 0 10 10">
             <line class="h" x1="0" y1="5" x2="10" y2="5" />
             <line class="v" x1="5" y1="0" x2="5" y2="10" />
           </svg>
-          <div class="star"></div>
         </div>
       </div>
     </div>
+    <div class="focus" :style="focusStyle"></div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 
-const cols = 28;
-const rows = 16;
+const bgEl = ref<HTMLElement | null>(null);
+const cols = 32;
+const rows = 18;
 const total = computed(() => cols * rows);
 
-// Center zone where login panel floats
-const centerX = 50; // %
-const centerY = 50; // %
-const zoneW = 18; // %
-const zoneH = 28; // %
+// Mouse position (raw)
+const mouseX = ref(0);
+const mouseY = ref(0);
+// Smooth position (lerped)
+const smoothX = ref(0);
+const smoothY = ref(0);
+// Target position for lerp
+const targetX = ref(0);
+const targetY = ref(0);
+const LERP = 0.08;
 
-const isRecessed = (idx: number) => {
+const focusStyle = computed(() => ({
+  left: `${smoothX.value}px`,
+  top: `${smoothY.value}px`,
+}));
+
+const onMouseMove = (e: MouseEvent) => {
+  targetX.value = e.clientX;
+  targetY.value = e.clientY;
+};
+
+const onMouseLeave = () => {
+  targetX.value = -1000;
+  targetY.value = -1000;
+};
+
+const getCellStyle = (idx: number) => {
   const col = idx % cols;
   const row = Math.floor(idx / cols);
-  const colPct = (col / cols) * 100;
-  const rowPct = (row / rows) * 100;
+  const cellW = window.innerWidth / cols;
+  const cellH = window.innerHeight / rows;
+  const cx = col * cellW + cellW / 2;
+  const cy = row * cellH + cellH / 2;
 
-  const dx = Math.abs(colPct - centerX);
-  const dy = Math.abs(rowPct - centerY);
+  const dx = smoothX.value - cx;
+  const dy = smoothY.value - cy;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const maxDist = Math.min(window.innerWidth, window.innerHeight) * 0.25;
 
-  // Diamond/pit shape: |dx/zoneW| + |dy/zoneH| < 1
-  return (dx / zoneW) + (dy / zoneH) < 0.85;
+  // Scale: 1 at edge, 0.7 at center
+  const scale = 1 - Math.max(0, 1 - dist / maxDist) * 0.3;
+
+  // Depth shadow: darker in center
+  const depth = Math.max(0, 1 - dist / maxDist);
+
+  return {
+    transform: `scale(${scale})`,
+    opacity: 0.7 + (1 - depth) * 0.3,
+  };
 };
+
+let animId: number | null = null;
+
+const loop = () => {
+  // Lerp towards target
+  smoothX.value += (targetX.value - smoothX.value) * LERP;
+  smoothY.value += (targetY.value - smoothY.value) * LERP;
+  animId = requestAnimationFrame(loop);
+};
+
+onMounted(() => {
+  loop();
+});
+
+onUnmounted(() => {
+  if (animId !== null) cancelAnimationFrame(animId);
+});
 </script>
 
 <style scoped>
@@ -59,7 +109,8 @@ const isRecessed = (idx: number) => {
   inset: 0;
   z-index: 0;
   background: #050709;
-  filter: contrast(1.1) brightness(0.85);
+  filter: contrast(1.1) brightness(0.88);
+  cursor: none;
 }
 
 .noise {
@@ -86,66 +137,65 @@ const isRecessed = (idx: number) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
-.socket {
+.pin {
   position: relative;
-  width: 80%;
-  height: 80%;
-  background: #0a0c12;
+  width: 70%;
+  height: 70%;
+}
+
+.pin::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #0a0c14;
   box-shadow:
     inset 0 1px 1px rgba(255, 255, 255, 0.02),
-    inset 0 -1px 1px rgba(0, 0, 0, 0.6);
-}
-
-.cell.recessed .socket {
-  background: #060810;
-  box-shadow:
-    inset 0 3px 10px rgba(0, 0, 0, 0.95),
-    inset 0 0 20px rgba(0, 30, 60, 0.6);
-  transform: scale(0.88);
+    inset 0 -1px 1px rgba(0, 0, 0, 0.5);
 }
 
 .cross {
   position: absolute;
-  inset: 20%;
-  width: 60%;
-  height: 60%;
+  inset: 15%;
+  width: 70%;
+  height: 70%;
+  opacity: 0.4;
 }
 
 .cross line {
-  stroke: #181b24;
+  stroke: #1a1e2a;
   stroke-width: 0.5;
   stroke-linecap: square;
   fill: none;
-  transition: stroke-dasharray 0.3s ease, stroke-dashoffset 0.3s ease;
 }
 
-.cell.recessed .cross line {
-  stroke: #1c2030;
-  stroke-dasharray: 2;
-  stroke-dashoffset: 1;
-}
-
-.star {
-  position: absolute;
-  inset: 35%;
+.focus {
+  position: fixed;
+  width: 4px;
+  height: 4px;
   background: transparent;
-  transition: all 0.3s ease;
-}
-
-.cell.recessed .star {
-  background: #0a2040;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 5;
+  transform: translate(-50%, -50%);
   box-shadow:
-    0 0 3px rgba(30, 120, 255, 0.6),
-    0 0 6px rgba(30, 120, 255, 0.2);
+    0 0 8px 2px rgba(60, 160, 255, 0.6),
+    0 0 20px 4px rgba(60, 160, 255, 0.3),
+    0 0 40px 8px rgba(60, 160, 255, 0.1);
 }
 
-.cell.recessed .star::after {
+.focus::after {
   content: '';
   position: absolute;
-  inset: 30%;
-  background: rgba(100, 200, 255, 0.9);
+  inset: -2px;
+  background: rgba(140, 210, 255, 0.9);
+  border-radius: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  left: 50%;
+  top: 50%;
 }
 </style>
