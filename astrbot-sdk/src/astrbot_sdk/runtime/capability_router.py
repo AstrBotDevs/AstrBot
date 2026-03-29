@@ -346,17 +346,26 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         normalized_metadata.setdefault("support_platforms", [])
         normalized_metadata.setdefault("astrbot_version", None)
         local_mcp_servers = normalized_metadata.pop("local_mcp_servers", {})
-        self._plugins[name] = _RegisteredPlugin(
-            metadata=normalized_metadata,
-            config=dict(config or {}),
-            handlers=[],
-            local_mcp_servers={
+        normalized_servers = (
+            {
                 str(server_name): dict(server_payload)
                 for server_name, server_payload in local_mcp_servers.items()
                 if str(server_name).strip() and isinstance(server_payload, dict)
             }
             if isinstance(local_mcp_servers, dict)
-            else {},
+            else {}
+        )
+        existing = self._plugins.get(name)
+        if existing is not None:
+            existing.metadata = normalized_metadata
+            existing.config = dict(config or {})
+            existing.local_mcp_servers = normalized_servers
+            return
+        self._plugins[name] = _RegisteredPlugin(
+            metadata=normalized_metadata,
+            config=dict(config or {}),
+            handlers=[],
+            local_mcp_servers=normalized_servers,
         )
 
     def set_plugin_handlers(

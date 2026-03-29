@@ -133,6 +133,12 @@ def _select_negotiated_protocol_version(
     remote_metadata: dict[str, Any],
     local_supported_versions: Sequence[str],
 ) -> str | None:
+    """从双方支持的版本中选出最佳兼容版本。
+
+    协商策略：优先精确匹配，否则在同主版本号范围内选双方都支持的最高版本。
+    排除比请求版本更高的候选，因为远端能提供高于我们请求的版本说明我们本地
+    尚未实现该版本协议，无法正确处理对应的协议消息。
+    """
     if requested_version in local_supported_versions:
         return requested_version
     requested_key = _parse_protocol_version(requested_version)
@@ -241,7 +247,15 @@ class Peer:
         self._transport_watch_task = asyncio.create_task(self._watch_transport_closed())
 
     async def stop(self) -> None:
-        """关闭 `Peer` 并清理所有挂起中的请求、流和入站任务。"""
+        """关闭 `Peer` 并清理所有挂起中的请求、流和入站任务。
+
+        重入安全性：transport.stop() 关闭底层连接时会触发原始消息处理器的
+        异常路径，该路径调用 _fail_connection() -> _schedule_stop() -> stop()，
+        形成间接递归。_stopping 标志和 _stop_task 引用共同防止重复清理资源。
+        使用 asyncio.shield 等待是因为：如果当前任务在等待另一个 stop() 完成
+        期间被取消，shield 保护内部 stop_task 不被连带取消，避免 Peer 停留在
+        半关闭状态。
+        """
         if self._closed.is_set():
             return
         current_task = asyncio.current_task()
@@ -275,7 +289,9 @@ class Peer:
             await self.transport.stop()
             self._closed.set()
         finally:
-            # 只在当前 task 就是 stop_task 时才清除引用，避免误清其他 task 的记录
+            # 只在当前 task 就是 stop_task 时才清除引用，避免误清其他 task 的记录。
+            # 场景：A 任务正在 stop() 中，B 任务也进入了 stop() 并等待 A 完成，
+            # 如果 B 在 finally 中清除了 _stop_task，A 还未执行完就会失去引用。
             if self._stop_task is current_task:
                 self._stop_task = None
 
@@ -564,8 +580,12 @@ class Peer:
                     exc = _task.exception()
                     if exc is None:
                         return
-                    # 后台 invoke 理论上应把错误编码成协议消息；若异常仍逃逸，通常说明
-                    # 回复发送失败或连接状态异常，必须立刻标记连接失效，避免对端永久等待。
+                    # 为什么整个连接都要失败？正常情况下 invoke handler 会把错误编码成
+                    # ResultMessage 发回给对端。如果异常仍然逃逸，说明要么回复发送失败
+                    # （transport 已断），要么 handler 实现有 bug。无论哪种情况，连接的
+                    # 消息交换契约已不可靠，继续使用可能导致对端无限等待或数据丢失。
+                    # 采用"单点故障 → 全连接失败"策略而非隔离单个 handler，是因为协议层
+                    # 无法保证后续消息的正确性。
                     logger.error(
                         "Peer inbound invoke task crashed unexpectedly: "
                         "request_id={} error={!r}",

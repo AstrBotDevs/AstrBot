@@ -28,9 +28,9 @@ class AgentSpec(BaseModel):
 
 
 class BaseAgentRunner(ABC):
-    """P0.5 agent registration surface.
+    """ agent registration surface.
 
-    P0.5 only supports agent registration metadata. Actual execution remains
+     only supports agent registration metadata. Actual execution remains
     owned by the core tool loop and is not directly callable from SDK plugins.
     """
 

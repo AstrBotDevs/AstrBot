@@ -51,15 +51,43 @@
 from __future__ import annotations
 
 import asyncio
+import ssl
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Sequence
+from pathlib import Path
 from typing import IO, Any
 
 from .._internal.sdk_logger import logger
 
 MessageHandler = Callable[[str], Awaitable[None]]
 STDIO_SUBPROCESS_STREAM_LIMIT = 8 * 1024 * 1024
+
+
+def build_websocket_server_ssl_context(
+    *,
+    ca_file: str | Path,
+    cert_file: str | Path,
+    key_file: str | Path,
+) -> ssl.SSLContext:
+    """Build a mutual-TLS server SSL context for websocket workers."""
+    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    context.verify_mode = ssl.CERT_REQUIRED
+    context.load_verify_locations(cafile=str(ca_file))
+    context.load_cert_chain(certfile=str(cert_file), keyfile=str(key_file))
+    return context
+
+
+def build_websocket_client_ssl_context(
+    *,
+    ca_file: str | Path,
+    cert_file: str | Path,
+    key_file: str | Path,
+) -> ssl.SSLContext:
+    """Build a mutual-TLS client SSL context for websocket supervisor sessions."""
+    context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=str(ca_file))
+    context.load_cert_chain(certfile=str(cert_file), keyfile=str(key_file))
+    return context
 
 
 def _get_aiohttp():
@@ -336,6 +364,7 @@ class WebSocketServerTransport(Transport):
         port: int = 8765,
         path: str = "/",
         heartbeat: float = 30.0,
+        ssl_context: ssl.SSLContext | None = None,
     ) -> None:
         super().__init__()
         self._host = host
@@ -343,6 +372,7 @@ class WebSocketServerTransport(Transport):
         self._actual_port: int | None = None
         self._path = path
         self._heartbeat = heartbeat
+        self._ssl_context = ssl_context
         self._app: Any | None = None
         self._runner: Any | None = None
         self._site: Any | None = None
@@ -358,7 +388,12 @@ class WebSocketServerTransport(Transport):
         self._app.router.add_get(self._path, self._handle_socket)
         self._runner = web.AppRunner(self._app)
         await self._runner.setup()
-        self._site = web.TCPSite(self._runner, self._host, self._port)
+        self._site = web.TCPSite(
+            self._runner,
+            self._host,
+            self._port,
+            ssl_context=self._ssl_context,
+        )
         await self._site.start()
         if self._site._server and getattr(self._site._server, "sockets", None):
             socket = self._site._server.sockets[0]
@@ -435,7 +470,8 @@ class WebSocketServerTransport(Transport):
 
     @property
     def url(self) -> str:
-        return f"ws://{self._host}:{self.port}{self._path}"
+        scheme = "wss" if self._ssl_context is not None else "ws"
+        return f"{scheme}://{self._host}:{self.port}{self._path}"
 
 
 class WebSocketClientTransport(Transport):
@@ -444,10 +480,14 @@ class WebSocketClientTransport(Transport):
         *,
         url: str,
         heartbeat: float = 30.0,
+        ssl_context: ssl.SSLContext | None = None,
+        server_hostname: str | None = None,
     ) -> None:
         super().__init__()
         self._url = url
         self._heartbeat = heartbeat
+        self._ssl_context = ssl_context
+        self._server_hostname = server_hostname
         self._session: Any | None = None
         self._ws: Any | None = None
         self._reader_task: asyncio.Task[None] | None = None
@@ -459,6 +499,8 @@ class WebSocketClientTransport(Transport):
         self._ws = await self._session.ws_connect(
             self._url,
             heartbeat=self._heartbeat if self._heartbeat > 0 else None,
+            ssl_context=self._ssl_context,
+            server_hostname=self._server_hostname,
         )
         self._reader_task = asyncio.create_task(self._read_loop())
 

@@ -891,9 +891,14 @@ def test_cli_error_render_includes_docs_details_and_context(
 
 
 @pytest.mark.unit
-def test_group_worker_metadata_serializes_issues() -> None:
+def test_group_worker_metadata_serializes_issues(monkeypatch: pytest.MonkeyPatch) -> None:
+    # worker_registry 构建依赖完整的 PluginSpec 和文件系统，mock 掉以保持测试关注点
+    monkeypatch.setattr(
+        "astrbot_sdk.runtime.worker._build_worker_registry_entry",
+        lambda plugin, *, enabled: {"name": plugin.name, "enabled": enabled},
+    )
     runtime = object.__new__(GroupWorkerRuntime)
-    runtime.group_id = "group-1"
+    runtime.worker_id = "group-1"
     runtime.plugins = [SimpleNamespace(name="sdk-demo")]
     runtime.skipped_plugins = {"sdk-broken": "boom"}
     runtime.issues = [
