@@ -14,14 +14,16 @@
         :key="i"
         :style="getCellStyle(i - 1)"
       >
-        <div class="pin">
-          <svg class="cross" viewBox="0 0 10 10">
-            <line class="h" x1="0" y1="5" x2="10" y2="5" />
-            <line class="v" x1="5" y1="0" x2="5" y2="10" />
+        <div class="slot">
+          <svg class="cross" viewBox="0 0 20 20">
+            <rect x="4" y="4" width="12" height="12" />
+            <line x1="10" y1="4" x2="10" y2="16" />
+            <line x1="4" y1="10" x2="16" y2="10" />
           </svg>
         </div>
       </div>
     </div>
+    <div class="glow" :style="glowStyle"></div>
     <div class="focus" :style="focusStyle"></div>
   </div>
 </template>
@@ -30,22 +32,27 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
 const bgEl = ref<HTMLElement | null>(null);
-const cols = 32;
-const rows = 18;
+const cols = 36;
+const rows = 20;
 const total = computed(() => cols * rows);
 
-// Mouse position (raw)
-const mouseX = ref(0);
-const mouseY = ref(0);
-// Smooth position (lerped)
-const smoothX = ref(0);
-const smoothY = ref(0);
-// Target position for lerp
-const targetX = ref(0);
-const targetY = ref(0);
-const LERP = 0.08;
+const loginX = 50;
+const loginY = 50;
+const loginW = 13;
+const loginH = 20;
+
+const targetX = ref(-9999);
+const targetY = ref(-9999);
+const smoothX = ref(-9999);
+const smoothY = ref(-9999);
+const LERP = 0.1;
 
 const focusStyle = computed(() => ({
+  left: `${smoothX.value}px`,
+  top: `${smoothY.value}px`,
+}));
+
+const glowStyle = computed(() => ({
   left: `${smoothX.value}px`,
   top: `${smoothY.value}px`,
 }));
@@ -56,39 +63,45 @@ const onMouseMove = (e: MouseEvent) => {
 };
 
 const onMouseLeave = () => {
-  targetX.value = -1000;
-  targetY.value = -1000;
+  targetX.value = -9999;
+  targetY.value = -9999;
+};
+
+const isInLoginZone = (col: number, row: number) => {
+  const colPct = (col / cols) * 100;
+  const rowPct = (row / rows) * 100;
+  const dx = Math.abs(colPct - loginX);
+  const dy = Math.abs(rowPct - loginY);
+  return (dx / loginW + dy / loginH) < 0.75;
 };
 
 const getCellStyle = (idx: number) => {
   const col = idx % cols;
   const row = Math.floor(idx / cols);
+
   const cellW = window.innerWidth / cols;
   const cellH = window.innerHeight / rows;
   const cx = col * cellW + cellW / 2;
   const cy = row * cellH + cellH / 2;
 
+  const inLogin = isInLoginZone(col, row);
+
   const dx = smoothX.value - cx;
   const dy = smoothY.value - cy;
   const dist = Math.sqrt(dx * dx + dy * dy);
-  const maxDist = Math.min(window.innerWidth, window.innerHeight) * 0.25;
+  const maxDist = Math.min(window.innerWidth, window.innerHeight) * 0.22;
 
-  // Scale: 1 at edge, 0.7 at center
-  const scale = 1 - Math.max(0, 1 - dist / maxDist) * 0.3;
-
-  // Depth shadow: darker in center
-  const depth = Math.max(0, 1 - dist / maxDist);
+  const proximity = Math.max(0, 1 - dist / maxDist);
+  const scale = inLogin ? 0.82 : 1 - proximity * 0.22;
 
   return {
     transform: `scale(${scale})`,
-    opacity: 0.7 + (1 - depth) * 0.3,
   };
 };
 
 let animId: number | null = null;
 
 const loop = () => {
-  // Lerp towards target
   smoothX.value += (targetX.value - smoothX.value) * LERP;
   smoothY.value += (targetY.value - smoothY.value) * LERP;
   animId = requestAnimationFrame(loop);
@@ -108,8 +121,8 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: 0;
-  background: #050709;
-  filter: contrast(1.1) brightness(0.88);
+  background: #050505;
+  filter: contrast(1.06) brightness(0.92);
   cursor: none;
 }
 
@@ -137,65 +150,53 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: transform 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
-.pin {
+.slot {
   position: relative;
-  width: 70%;
-  height: 70%;
-}
-
-.pin::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: #0a0c14;
+  width: 82%;
+  height: 82%;
+  background: #070709;
   box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.02),
-    inset 0 -1px 1px rgba(0, 0, 0, 0.5);
+    inset 0 1px 2px rgba(0, 0, 0, 0.95),
+    inset 0 0 8px rgba(0, 0, 0, 0.7);
 }
 
 .cross {
   position: absolute;
-  inset: 15%;
-  width: 70%;
-  height: 70%;
-  opacity: 0.4;
+  inset: 12%;
+  width: 76%;
+  height: 76%;
 }
 
+.cross rect,
 .cross line {
-  stroke: #1a1e2a;
-  stroke-width: 0.5;
-  stroke-linecap: square;
+  stroke: #181818;
+  stroke-width: 0.35;
   fill: none;
+}
+
+.glow {
+  position: fixed;
+  width: 2px;
+  height: 2px;
+  pointer-events: none;
+  z-index: 5;
+  transform: translate(-50%, -50%);
+  background: rgba(60, 180, 255, 1);
+  box-shadow:
+    0 0 4px 1px rgba(60, 160, 255, 0.9),
+    0 0 8px 1px rgba(60, 160, 255, 0.4);
 }
 
 .focus {
   position: fixed;
-  width: 4px;
-  height: 4px;
-  background: transparent;
-  border-radius: 50%;
+  width: 2px;
+  height: 2px;
   pointer-events: none;
   z-index: 5;
   transform: translate(-50%, -50%);
-  box-shadow:
-    0 0 8px 2px rgba(60, 160, 255, 0.6),
-    0 0 20px 4px rgba(60, 160, 255, 0.3),
-    0 0 40px 8px rgba(60, 160, 255, 0.1);
-}
-
-.focus::after {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  background: rgba(140, 210, 255, 0.9);
-  border-radius: 50%;
-  width: 8px;
-  height: 8px;
-  transform: translate(-50%, -50%);
-  left: 50%;
-  top: 50%;
+  background: rgba(160, 220, 255, 0.9);
 }
 </style>
