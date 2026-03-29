@@ -2563,6 +2563,7 @@ def test_sdk_bridge_list_plugin_metadata_includes_legacy_sdk_and_discovery_entri
         desc="legacy plugin",
         author="tester",
         version="1.0.0",
+        repo="https://example.com/legacy-demo",
         activated=True,
         support_platforms=["qq"],
         astrbot_version="4.0.0",
