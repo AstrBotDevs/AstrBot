@@ -749,6 +749,56 @@ def _render_init_readme(*, plugin_name: str) -> str:
     )
 
 
+def _render_init_gitignore() -> str:
+    return dedent(
+        """\
+        # Python
+        __pycache__/
+        *.py[cod]
+        *.pyo
+        *.egg-info/
+        dist/
+        build/
+        *.egg
+
+        # 虚拟环境
+        .venv/
+        venv/
+        env/
+
+        # IDE
+        .idea/
+        .vscode/
+        *.swp
+        *.swo
+        *~
+
+        # OS
+        .DS_Store
+        Thumbs.db
+        desktop.ini
+
+        # 测试 / 检查缓存
+        .pytest_cache/
+        .ruff_cache/
+        .mypy_cache/
+        .coverage
+        htmlcov/
+
+        # 开发/构建工具
+        /.claude/
+        /.agents/
+        /.opencode/
+
+        # 图床配置（含 API 密钥等敏感信息）
+        /image_host/config.json
+
+        # 插件测试产物
+        /.astrbot_sdk_testing/
+        """
+    )
+
+
 def _render_init_test_py(*, plugin_name: str) -> str:
     class_name = _class_name_for_plugin(plugin_name)
     return dedent(
@@ -1011,6 +1061,10 @@ def _init_plugin(name: str | None, agents: tuple[str, ...] = ()) -> None:
     )
     (target_dir / "README.md").write_text(
         _render_init_readme(plugin_name=plugin_name),
+        encoding="utf-8",
+    )
+    (target_dir / ".gitignore").write_text(
+        _render_init_gitignore(),
         encoding="utf-8",
     )
     (target_dir / "tests" / "test_plugin.py").write_text(

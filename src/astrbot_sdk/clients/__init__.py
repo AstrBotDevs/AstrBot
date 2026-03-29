@@ -1,11 +1,9 @@
-"""Native v4 capability clients.
+"""原生v4能力客户端
 
-These clients provide the narrow, typed surface exposed by `Context` for
-calling remote capabilities. They handle capability names, payload shaping,
-and result decoding, without exposing protocol or transport details.
+这些客户端为 Context 提供了用于调用远程能力的狭窄且具类型化 (typed) 的接口。
+它们负责处理能力名称、载荷格式化（payload shaping）以及结果解码，且不会暴露协议或传输层的具体细节。
 
-Migration shims and higher-level orchestration stay outside these native
-capability clients so `Context` keeps a narrow, stable surface.
+为了保持 Context 接口的精简与稳定，迁移适配层 (Migration shims) 以及高层级编排逻辑 (higher-level orchestration) 均不包含在这些原生能力客户端之内。
 
 当前公开客户端：
     - LLMClient: 文本/结构化/流式 LLM 调用

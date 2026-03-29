@@ -61,6 +61,7 @@ import os
 import re
 import shutil
 import sys
+import threading
 import typing
 from dataclasses import dataclass, field
 from importlib import import_module
@@ -113,6 +114,8 @@ HandlerKind: TypeAlias = Literal["handler", "hook", "tool", "session"]
 DiscoverySeverity: TypeAlias = Literal["warning", "error"]
 DiscoveryPhase: TypeAlias = Literal["discovery", "load", "lifecycle", "reload"]
 _LOGGER = logging.getLogger(__name__)
+_PLUGIN_IMPORT_LOCK = threading.RLock()
+_VALID_HANDLER_KINDS: tuple[HandlerKind, ...] = ("handler", "hook", "tool", "session")
 _GITHUB_REPO_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 _GITHUB_REPO_SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _GITHUB_REPO_URL_RE = re.compile(
@@ -231,6 +234,13 @@ class _ResolvedComponent:
     index: int
 
 
+@dataclass(slots=True)
+class _ParamTypeInfo:
+    type_name: ParamTypeName
+    inner_type: OptionalInnerType
+    required: bool
+
+
 def _iter_handler_names(instance: Any) -> list[str]:
     handler_names = getattr(instance.__class__, "__handlers__", ())
     if handler_names:
@@ -280,20 +290,20 @@ def _is_injected_parameter(annotation: Any, parameter_name: str) -> bool:
     return is_framework_injected_parameter(parameter_name, annotation)
 
 
-def _param_type_name(annotation: Any) -> tuple[ParamTypeName, OptionalInnerType, bool]:
+def _param_type_name(annotation: Any) -> _ParamTypeInfo:
     normalized, is_optional = unwrap_optional(annotation)
     if normalized is GreedyStr:
-        return "greedy_str", None, False
+        return _ParamTypeInfo("greedy_str", None, False)
     if normalized in {int, float, bool, str}:
         normalized_name = cast(
             Literal["str", "int", "float", "bool"], normalized.__name__
         )
         if is_optional:
-            return "optional", normalized_name, False
-        return normalized_name, None, True
+            return _ParamTypeInfo("optional", normalized_name, False)
+        return _ParamTypeInfo(normalized_name, None, True)
     if is_optional:
-        return "optional", "str", False
-    return "str", None, True
+        return _ParamTypeInfo("optional", "str", False)
+    return _ParamTypeInfo("str", None, True)
 
 
 def _build_param_specs(handler: Any) -> list[ParamSpec]:
@@ -306,7 +316,12 @@ def _build_param_specs(handler: Any) -> list[ParamSpec]:
         return []
     try:
         type_hints = typing.get_type_hints(handler)
-    except Exception:
+    except Exception as exc:
+        _LOGGER.warning(
+            "Failed to resolve type hints for handler %s: %s",
+            getattr(handler, "__qualname__", repr(handler)),
+            exc,
+        )
         type_hints = {}
 
     specs: list[ParamSpec] = []
@@ -319,15 +334,16 @@ def _build_param_specs(handler: Any) -> list[ParamSpec]:
         annotation = type_hints.get(parameter.name)
         if _is_injected_parameter(annotation, parameter.name):
             continue
-        param_type, inner_type, required = _param_type_name(annotation)
+        type_info = _param_type_name(annotation)
+        required = type_info.required
         if parameter.default is not inspect.Parameter.empty:
             required = False
         specs.append(
             ParamSpec(
                 name=parameter.name,
-                type=param_type,
+                type=type_info.type_name,
                 required=required,
-                inner_type=inner_type,
+                inner_type=type_info.inner_type,
             )
         )
 
@@ -370,8 +386,13 @@ def _component_context(plugin: PluginSpec, *, class_path: str, index: int) -> st
     return f"{_plugin_context(plugin)} 的 components[{index}].class='{class_path}'"
 
 
-def _resolve_handler_candidate(instance: Any, name: str) -> tuple[Any, Any] | None:
-    """解析 handler 名称，避免在扫描阶段触发无关 descriptor 副作用。"""
+def _resolve_candidate(
+    instance: Any,
+    name: str,
+    meta_getter: typing.Callable[[Any], Any | None],
+    *,
+    predicate: typing.Callable[[Any], bool] | None = None,
+) -> tuple[Any, Any] | None:
     try:
         raw = inspect.getattr_static(instance, name)
     except AttributeError:
@@ -383,46 +404,34 @@ def _resolve_handler_candidate(instance: Any, name: str) -> tuple[Any, Any] | No
         candidates.append(wrapped)
 
     for candidate in candidates:
-        meta = get_handler_meta(candidate)
-        if meta is not None and meta.trigger is not None:
+        meta = meta_getter(candidate)
+        if meta is None:
+            continue
+        if predicate is not None and not predicate(meta):
+            continue
+        try:
             return getattr(instance, name), meta
+        except AttributeError:
+            return None
     return None
+
+
+def _resolve_handler_candidate(instance: Any, name: str) -> tuple[Any, Any] | None:
+    """Resolve handler candidates without triggering unrelated descriptor side effects."""
+    return _resolve_candidate(
+        instance,
+        name,
+        get_handler_meta,
+        predicate=lambda meta: meta.trigger is not None,
+    )
 
 
 def _resolve_capability_candidate(instance: Any, name: str) -> tuple[Any, Any] | None:
-    try:
-        raw = inspect.getattr_static(instance, name)
-    except AttributeError:
-        return None
-
-    candidates = [raw]
-    wrapped = getattr(raw, "__func__", None)
-    if wrapped is not None:
-        candidates.append(wrapped)
-
-    for candidate in candidates:
-        meta = get_capability_meta(candidate)
-        if meta is not None:
-            return getattr(instance, name), meta
-    return None
+    return _resolve_candidate(instance, name, get_capability_meta)
 
 
 def _resolve_llm_tool_candidate(instance: Any, name: str) -> tuple[Any, Any] | None:
-    try:
-        raw = inspect.getattr_static(instance, name)
-    except AttributeError:
-        return None
-
-    candidates = [raw]
-    wrapped = getattr(raw, "__func__", None)
-    if wrapped is not None:
-        candidates.append(wrapped)
-
-    for candidate in candidates:
-        meta = get_llm_tool_meta(candidate)
-        if meta is not None:
-            return getattr(instance, name), meta
-    return None
+    return _resolve_candidate(instance, name, get_llm_tool_meta)
 
 
 def _iter_agent_candidates(component_cls: type[Any]) -> list[tuple[type[Any], Any]]:
@@ -762,7 +771,6 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
     skipped_plugins: dict[str, str] = {}
     issues: list[PluginDiscoveryIssue] = []
     plugins: list[PluginSpec] = []
-    seen_names: set[str] = set()
     # TODO: 改用 dict 记录 name -> plugin_dir 映射，以便在重复时报错时显示冲突路径
     seen_name_sources: dict[str, Path] = {}  # plugin_name -> plugin_dir
 
@@ -812,7 +820,7 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
                 )
             )
             continue
-        if plugin_name in seen_names:
+        if plugin_name in seen_name_sources:
             existing_source = seen_name_sources.get(plugin_name, Path("<unknown>"))
             skipped_plugins[plugin_name] = "duplicate plugin name"
             issues.append(
@@ -826,7 +834,6 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
                 )
             )
             continue
-        seen_names.add(plugin_name)
         seen_name_sources[plugin_name] = plugin.plugin_dir
         plugins.append(plugin)
 
@@ -912,7 +919,15 @@ class PluginEnvironmentManager:
             return {}
         try:
             data = json.loads(state_path.read_text(encoding="utf-8"))
-        except Exception:
+        except json.JSONDecodeError as exc:
+            _LOGGER.warning(
+                "Failed to parse plugin worker state %s: %s", state_path, exc
+            )
+            return {}
+        except OSError as exc:
+            _LOGGER.warning(
+                "Failed to read plugin worker state %s: %s", state_path, exc
+            )
             return {}
         return data if isinstance(data, dict) else {}
 
@@ -945,159 +960,268 @@ class PluginEnvironmentManager:
         return match is not None and match.group(1) == version
 
 
+def _copy_limiter_meta(meta: LimiterMeta | None) -> LimiterMeta | None:
+    if meta is None:
+        return None
+    return LimiterMeta(
+        kind=meta.kind,
+        limit=meta.limit,
+        window=meta.window,
+        scope=meta.scope,
+        behavior=meta.behavior,
+        message=meta.message,
+    )
+
+
+def _copy_conversation_meta(meta: ConversationMeta | None) -> ConversationMeta | None:
+    if meta is None:
+        return None
+    return ConversationMeta(
+        timeout=meta.timeout,
+        mode=meta.mode,
+        busy_message=meta.busy_message,
+        grace_period=meta.grace_period,
+    )
+
+
+def _validate_handler_kind(
+    plugin: PluginSpec,
+    *,
+    resolved_component: _ResolvedComponent,
+    attribute_name: str,
+    kind: str,
+) -> HandlerKind:
+    if kind in _VALID_HANDLER_KINDS:
+        return cast(HandlerKind, kind)
+    raise ValueError(
+        f"{_component_context(plugin, class_path=resolved_component.class_path, index=resolved_component.index)} "
+        f"方法 {attribute_name!r} 的 handler kind {kind!r} 不合法；"
+        f"允许的值为 {', '.join(_VALID_HANDLER_KINDS)}。"
+    )
+
+
+def _load_component_instance(
+    plugin: PluginSpec,
+    resolved_component: _ResolvedComponent,
+) -> Any:
+    component_cls = resolved_component.cls
+    if not _is_new_star_component(component_cls):
+        raise ValueError(
+            f"{_component_context(plugin, class_path=resolved_component.class_path, index=resolved_component.index)} "
+            f"解析到的类 {component_cls.__module__}.{component_cls.__qualname__} "
+            "不是 v4 Star 组件。请继承 astrbot_sdk.Star。"
+        )
+    try:
+        instance = component_cls()
+    except Exception as exc:
+        raise ValueError(
+            f"{_component_context(plugin, class_path=resolved_component.class_path, index=resolved_component.index)} "
+            f"实例化失败：{exc}"
+        ) from exc
+    _LOGGER.debug(
+        "Instantiated SDK plugin component %s for plugin %s",
+        resolved_component.class_path,
+        plugin.name,
+    )
+    return instance
+
+
+def _collect_component_agents(
+    plugin: PluginSpec,
+    component_cls: type[Any],
+    *,
+    seen_agents: set[str],
+) -> list[LoadedAgent]:
+    agents: list[LoadedAgent] = []
+    for runner_class, meta in _iter_agent_candidates(component_cls):
+        runner_key = f"{runner_class.__module__}.{runner_class.__qualname__}"
+        if runner_key in seen_agents:
+            continue
+        seen_agents.add(runner_key)
+        agents.append(
+            LoadedAgent(
+                spec=meta.spec.model_copy(deep=True),
+                runner_class=runner_class,
+                owner=None,
+                plugin_id=plugin.name,
+            )
+        )
+    return agents
+
+
+def _build_loaded_handler(
+    plugin: PluginSpec,
+    *,
+    resolved_component: _ResolvedComponent,
+    instance: Any,
+    attribute_name: str,
+    bound: Any,
+    meta: Any,
+) -> LoadedHandler:
+    handler_kind = _validate_handler_kind(
+        plugin,
+        resolved_component=resolved_component,
+        attribute_name=attribute_name,
+        kind=meta.kind,
+    )
+    handler_id = (
+        f"{plugin.name}:{instance.__class__.__module__}.{instance.__class__.__name__}."
+        f"{attribute_name}"
+    )
+    if isinstance(meta.trigger, ScheduleTrigger):
+        _validate_schedule_signature(bound)
+    param_specs = _build_param_specs(bound)
+    return LoadedHandler(
+        descriptor=HandlerDescriptor(
+            id=handler_id,
+            trigger=meta.trigger,
+            kind=handler_kind,
+            contract=meta.contract,
+            description=meta.description,
+            priority=meta.priority,
+            permissions=meta.permissions.model_copy(deep=True),
+            filters=[item.model_copy(deep=True) for item in meta.filters],
+            param_specs=[item.model_copy(deep=True) for item in param_specs],
+            command_route=(
+                meta.command_route.model_copy(deep=True)
+                if meta.command_route is not None
+                else None
+            ),
+        ),
+        callable=bound,
+        owner=instance,
+        plugin_id=plugin.name,
+        local_filters=list(meta.local_filters),
+        limiter=_copy_limiter_meta(meta.limiter),
+        conversation=_copy_conversation_meta(meta.conversation),
+    )
+
+
+def _collect_component_members(
+    plugin: PluginSpec,
+    *,
+    resolved_component: _ResolvedComponent,
+    instance: Any,
+    seen_capability_sources: dict[str, str],
+) -> tuple[list[LoadedHandler], list[LoadedCapability], list[LoadedLLMTool]]:
+    handlers: list[LoadedHandler] = []
+    capabilities: list[LoadedCapability] = []
+    llm_tools: list[LoadedLLMTool] = []
+
+    for name in _iter_discoverable_names(instance):
+        resolved = _resolve_handler_candidate(instance, name)
+        capability = _resolve_capability_candidate(instance, name)
+        llm_tool = _resolve_llm_tool_candidate(instance, name)
+        if resolved is None and capability is None and llm_tool is None:
+            continue
+        if capability is not None:
+            bound_capability, capability_meta = capability
+            capability_name = capability_meta.descriptor.name
+            _validate_loaded_capability_namespace(
+                plugin,
+                resolved_component=resolved_component,
+                attribute_name=name,
+                capability_name=capability_name,
+            )
+            _register_loaded_capability_name(
+                seen_capability_sources,
+                capability_name=capability_name,
+                source_ref=f"{resolved_component.class_path}.{name}",
+            )
+            capabilities.append(
+                LoadedCapability(
+                    descriptor=capability_meta.descriptor.model_copy(deep=True),
+                    callable=bound_capability,
+                    owner=instance,
+                    plugin_id=plugin.name,
+                )
+            )
+        if llm_tool is not None:
+            bound_tool, tool_meta = llm_tool
+            llm_tools.append(
+                LoadedLLMTool(
+                    spec=tool_meta.spec.model_copy(deep=True),
+                    callable=bound_tool,
+                    owner=instance,
+                    plugin_id=plugin.name,
+                )
+            )
+        if resolved is not None:
+            bound_handler, handler_meta = resolved
+            handlers.append(
+                _build_loaded_handler(
+                    plugin,
+                    resolved_component=resolved_component,
+                    instance=instance,
+                    attribute_name=name,
+                    bound=bound_handler,
+                    meta=handler_meta,
+                )
+            )
+    return handlers, capabilities, llm_tools
+
+
 def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
     """加载插件，返回处理器和能力列表。
 
     仅支持 v4 新版 Star 组件（无参构造函数）。
     """
-    plugin_path = str(plugin.plugin_dir)
-    if plugin_path not in sys.path:
-        sys.path.insert(0, plugin_path)
-    _purge_plugin_bytecode(plugin.plugin_dir)
-    _purge_plugin_modules(plugin.plugin_dir)
+    with _PLUGIN_IMPORT_LOCK:
+        _LOGGER.debug("Loading SDK plugin %s from %s", plugin.name, plugin.plugin_dir)
+        plugin_path = str(plugin.plugin_dir)
+        if plugin_path not in sys.path:
+            sys.path.insert(0, plugin_path)
+        _purge_plugin_bytecode(plugin.plugin_dir)
+        _purge_plugin_modules(plugin.plugin_dir)
 
-    instances: list[Any] = []
-    handlers: list[LoadedHandler] = []
-    capabilities: list[LoadedCapability] = []
-    llm_tools: list[LoadedLLMTool] = []
-    agents: list[LoadedAgent] = []
-    seen_agents: set[str] = set()
-    seen_capability_sources: dict[str, str] = {}
+        instances: list[Any] = []
+        handlers: list[LoadedHandler] = []
+        capabilities: list[LoadedCapability] = []
+        llm_tools: list[LoadedLLMTool] = []
+        agents: list[LoadedAgent] = []
+        seen_agents: set[str] = set()
+        seen_capability_sources: dict[str, str] = {}
+        resolved_components = _plugin_component_classes(plugin)
 
-    for resolved_component in _plugin_component_classes(plugin):
-        component_cls = resolved_component.cls
-        if not _is_new_star_component(component_cls):
-            raise ValueError(
-                f"{_component_context(plugin, class_path=resolved_component.class_path, index=resolved_component.index)} "
-                f"解析到的类 {component_cls.__module__}.{component_cls.__qualname__} "
-                "不是 v4 Star 组件。请继承 astrbot_sdk.Star。"
-            )
-        try:
-            instance = component_cls()
-        except Exception as exc:
-            raise ValueError(
-                f"{_component_context(plugin, class_path=resolved_component.class_path, index=resolved_component.index)} "
-                f"实例化失败：{exc}"
-            ) from exc
-        instances.append(instance)
-
-        for runner_class, meta in _iter_agent_candidates(component_cls):
-            runner_key = f"{runner_class.__module__}.{runner_class.__qualname__}"
-            if runner_key in seen_agents:
-                continue
-            seen_agents.add(runner_key)
-            agents.append(
-                LoadedAgent(
-                    spec=meta.spec.model_copy(deep=True),
-                    runner_class=runner_class,
-                    owner=None,
-                    plugin_id=plugin.name,
+        for resolved_component in resolved_components:
+            instance = _load_component_instance(plugin, resolved_component)
+            instances.append(instance)
+            agents.extend(
+                _collect_component_agents(
+                    plugin,
+                    resolved_component.cls,
+                    seen_agents=seen_agents,
                 )
             )
-
-        for name in _iter_discoverable_names(instance):
-            resolved = _resolve_handler_candidate(instance, name)
-            capability = _resolve_capability_candidate(instance, name)
-            llm_tool = _resolve_llm_tool_candidate(instance, name)
-            if resolved is None and capability is None and llm_tool is None:
-                continue
-            if capability is not None:
-                bound, meta = capability
-                capability_name = meta.descriptor.name
-                _validate_loaded_capability_namespace(
+            component_handlers, component_capabilities, component_tools = (
+                _collect_component_members(
                     plugin,
                     resolved_component=resolved_component,
-                    attribute_name=name,
-                    capability_name=capability_name,
+                    instance=instance,
+                    seen_capability_sources=seen_capability_sources,
                 )
-                _register_loaded_capability_name(
-                    seen_capability_sources,
-                    capability_name=capability_name,
-                    source_ref=f"{resolved_component.class_path}.{name}",
-                )
-                capabilities.append(
-                    LoadedCapability(
-                        descriptor=meta.descriptor.model_copy(deep=True),
-                        callable=bound,
-                        owner=instance,
-                        plugin_id=plugin.name,
-                    )
-                )
-            if llm_tool is not None:
-                bound_tool, tool_meta = llm_tool
-                llm_tools.append(
-                    LoadedLLMTool(
-                        spec=tool_meta.spec.model_copy(deep=True),
-                        callable=bound_tool,
-                        owner=instance,
-                        plugin_id=plugin.name,
-                    ),
-                )
-            if resolved is not None:
-                bound, meta = resolved
-                handler_id = f"{plugin.name}:{instance.__class__.__module__}.{instance.__class__.__name__}.{name}"
-                if isinstance(meta.trigger, ScheduleTrigger):
-                    _validate_schedule_signature(bound)
-                param_specs = _build_param_specs(bound)
-                handlers.append(
-                    LoadedHandler(
-                        descriptor=HandlerDescriptor(
-                            id=handler_id,
-                            trigger=meta.trigger,
-                            kind=cast(HandlerKind, meta.kind),
-                            contract=meta.contract,
-                            description=meta.description,
-                            priority=meta.priority,
-                            permissions=meta.permissions.model_copy(deep=True),
-                            filters=[
-                                item.model_copy(deep=True) for item in meta.filters
-                            ],
-                            param_specs=[
-                                item.model_copy(deep=True) for item in param_specs
-                            ],
-                            command_route=(
-                                meta.command_route.model_copy(deep=True)
-                                if meta.command_route is not None
-                                else None
-                            ),
-                        ),
-                        callable=bound,
-                        owner=instance,
-                        plugin_id=plugin.name,
-                        local_filters=list(meta.local_filters),
-                        limiter=(
-                            None
-                            if meta.limiter is None
-                            else LimiterMeta(
-                                kind=meta.limiter.kind,
-                                limit=meta.limiter.limit,
-                                window=meta.limiter.window,
-                                scope=meta.limiter.scope,
-                                behavior=meta.limiter.behavior,
-                                message=meta.limiter.message,
-                            )
-                        ),
-                        conversation=(
-                            None
-                            if meta.conversation is None
-                            else ConversationMeta(
-                                timeout=meta.conversation.timeout,
-                                mode=meta.conversation.mode,
-                                busy_message=meta.conversation.busy_message,
-                                grace_period=meta.conversation.grace_period,
-                            )
-                        ),
-                    )
-                )
+            )
+            handlers.extend(component_handlers)
+            capabilities.extend(component_capabilities)
+            llm_tools.extend(component_tools)
 
-    return LoadedPlugin(
-        plugin=plugin,
-        handlers=handlers,
-        capabilities=capabilities,
-        llm_tools=llm_tools,
-        agents=agents,
-        instances=instances,
-    )
+        _LOGGER.debug(
+            "Loaded SDK plugin %s: %d components, %d handlers, %d capabilities, %d llm tools, %d agents",
+            plugin.name,
+            len(resolved_components),
+            len(handlers),
+            len(capabilities),
+            len(llm_tools),
+            len(agents),
+        )
+        return LoadedPlugin(
+            plugin=plugin,
+            handlers=handlers,
+            capabilities=capabilities,
+            llm_tools=llm_tools,
+            agents=agents,
+            instances=instances,
+        )
 
 
 def _path_within_root(path: Path, root: Path) -> bool:
@@ -1185,7 +1309,8 @@ def _prepare_plugin_import(module_name: str, plugin_dir: Path | None) -> None:
 
 def import_string(path: str, plugin_dir: Path | None = None) -> Any:
     """通过字符串路径导入对象。"""
-    module_name, attr = path.split(":", 1)
-    _prepare_plugin_import(module_name, plugin_dir)
-    module = import_module(module_name)
-    return getattr(module, attr)
+    with _PLUGIN_IMPORT_LOCK:
+        module_name, attr = path.split(":", 1)
+        _prepare_plugin_import(module_name, plugin_dir)
+        module = import_module(module_name)
+        return getattr(module, attr)
