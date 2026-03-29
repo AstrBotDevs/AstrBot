@@ -52,7 +52,9 @@ plugin.yaml 格式：
 
 from __future__ import annotations
 
+import builtins
 import copy
+import hashlib
 import importlib
 import inspect
 import json
@@ -62,6 +64,7 @@ import re
 import shutil
 import sys
 import threading
+import types
 import typing
 from dataclasses import dataclass, field
 from importlib import import_module
@@ -72,6 +75,7 @@ import yaml
 
 from .._internal.command_model import resolve_command_model_param
 from .._internal.injected_params import is_framework_injected_parameter
+from .._internal.invocation_context import caller_plugin_scope, current_caller_plugin_id
 from .._internal.plugin_ids import (
     capability_belongs_to_plugin,
     plugin_capability_prefix,
@@ -116,12 +120,16 @@ DiscoveryPhase: TypeAlias = Literal["discovery", "load", "lifecycle", "reload"]
 _LOGGER = logging.getLogger(__name__)
 _PLUGIN_IMPORT_LOCK = threading.RLock()
 _VALID_HANDLER_KINDS: tuple[HandlerKind, ...] = ("handler", "hook", "tool", "session")
+_PLUGIN_PACKAGE_PREFIX = "astrbot_ext_"
 _GITHUB_REPO_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 _GITHUB_REPO_SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _GITHUB_REPO_URL_RE = re.compile(
     r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/?$",
     re.IGNORECASE,
 )
+_PLUGIN_IMPORT_NAMESPACES: dict[str, _PluginImportNamespace] = {}
+_ORIGINAL_BUILTIN_IMPORT = builtins.__import__
+_PLUGIN_IMPORT_HOOK_INSTALLED = False
 
 
 def _default_python_version() -> str:
@@ -235,10 +243,32 @@ class _ResolvedComponent:
 
 
 @dataclass(slots=True)
+class _PluginImportNamespace:
+    plugin_id: str
+    plugin_dir: Path
+    package_name: str
+
+
+@dataclass(slots=True)
 class _ParamTypeInfo:
     type_name: ParamTypeName
     inner_type: OptionalInnerType
     required: bool
+
+
+def _sanitize_package_component(plugin_id: str) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9_]+", "_", plugin_id).strip("_")
+    return sanitized or "plugin"
+
+
+def _plugin_package_name(plugin_id: str) -> str:
+    digest = hashlib.sha256(plugin_id.encode("utf-8")).hexdigest()[:8]
+    return f"{_PLUGIN_PACKAGE_PREFIX}{_sanitize_package_component(plugin_id)}_{digest}"
+
+
+def _plugin_module_name(package_name: str, module_name: str) -> str:
+    normalized = module_name.strip()
+    return f"{package_name}.{normalized}" if normalized else package_name
 
 
 def _iter_handler_names(instance: Any) -> list[str]:
@@ -669,7 +699,7 @@ def _plugin_component_classes(plugin: PluginSpec) -> list[_ResolvedComponent]:
                 "必须是 '<module>:<Class>'。"
             )
         try:
-            cls = import_string(class_path, plugin.plugin_dir)
+            cls = _import_plugin_string(class_path, plugin)
         except Exception as exc:
             raise ValueError(
                 f"{_component_context(plugin, class_path=class_path, index=index)} "
@@ -1168,11 +1198,13 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
     """
     with _PLUGIN_IMPORT_LOCK:
         _LOGGER.debug("Loading SDK plugin %s from %s", plugin.name, plugin.plugin_dir)
-        plugin_path = str(plugin.plugin_dir)
-        if plugin_path not in sys.path:
-            sys.path.insert(0, plugin_path)
+        _ensure_plugin_import_hook_installed()
+        namespace = _register_plugin_import_namespace(plugin)
         _purge_plugin_bytecode(plugin.plugin_dir)
+        _purge_plugin_package(namespace.package_name)
         _purge_plugin_modules(plugin.plugin_dir)
+        _ensure_plugin_package(namespace)
+        importlib.invalidate_caches()
 
         instances: list[Any] = []
         handlers: list[LoadedHandler] = []
@@ -1181,29 +1213,30 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
         agents: list[LoadedAgent] = []
         seen_agents: set[str] = set()
         seen_capability_sources: dict[str, str] = {}
-        resolved_components = _plugin_component_classes(plugin)
+        with caller_plugin_scope(plugin.name):
+            resolved_components = _plugin_component_classes(plugin)
 
-        for resolved_component in resolved_components:
-            instance = _load_component_instance(plugin, resolved_component)
-            instances.append(instance)
-            agents.extend(
-                _collect_component_agents(
-                    plugin,
-                    resolved_component.cls,
-                    seen_agents=seen_agents,
+            for resolved_component in resolved_components:
+                instance = _load_component_instance(plugin, resolved_component)
+                instances.append(instance)
+                agents.extend(
+                    _collect_component_agents(
+                        plugin,
+                        resolved_component.cls,
+                        seen_agents=seen_agents,
+                    )
                 )
-            )
-            component_handlers, component_capabilities, component_tools = (
-                _collect_component_members(
-                    plugin,
-                    resolved_component=resolved_component,
-                    instance=instance,
-                    seen_capability_sources=seen_capability_sources,
+                component_handlers, component_capabilities, component_tools = (
+                    _collect_component_members(
+                        plugin,
+                        resolved_component=resolved_component,
+                        instance=instance,
+                        seen_capability_sources=seen_capability_sources,
+                    )
                 )
-            )
-            handlers.extend(component_handlers)
-            capabilities.extend(component_capabilities)
-            llm_tools.extend(component_tools)
+                handlers.extend(component_handlers)
+                capabilities.extend(component_capabilities)
+                llm_tools.extend(component_tools)
 
         _LOGGER.debug(
             "Loaded SDK plugin %s: %d components, %d handlers, %d capabilities, %d llm tools, %d agents",
@@ -1238,6 +1271,45 @@ def _plugin_defines_module_root(plugin_dir: Path, root_name: str) -> bool:
     ).exists()
 
 
+def _register_plugin_import_namespace(plugin: PluginSpec) -> _PluginImportNamespace:
+    existing = _PLUGIN_IMPORT_NAMESPACES.get(plugin.name)
+    package_name = (
+        existing.package_name
+        if existing is not None
+        else _plugin_package_name(plugin.name)
+    )
+    namespace = _PluginImportNamespace(
+        plugin_id=plugin.name,
+        plugin_dir=plugin.plugin_dir.resolve(),
+        package_name=package_name,
+    )
+    _PLUGIN_IMPORT_NAMESPACES[plugin.name] = namespace
+    return namespace
+
+
+def _ensure_plugin_package(namespace: _PluginImportNamespace) -> types.ModuleType:
+    existing = sys.modules.get(namespace.package_name)
+    if isinstance(existing, types.ModuleType):
+        existing.__path__ = [str(namespace.plugin_dir)]
+        existing.__package__ = namespace.package_name
+        return existing
+
+    module = types.ModuleType(namespace.package_name)
+    module.__file__ = str(namespace.plugin_dir)
+    module.__package__ = namespace.package_name
+    module.__path__ = [str(namespace.plugin_dir)]
+    module.__loader__ = None
+    spec = importlib.machinery.ModuleSpec(
+        namespace.package_name,
+        loader=None,
+        is_package=True,
+    )
+    spec.submodule_search_locations = [str(namespace.plugin_dir)]
+    module.__spec__ = spec
+    sys.modules[namespace.package_name] = module
+    return module
+
+
 def _module_belongs_to_plugin(module: Any, plugin_dir: Path) -> bool:
     file_path = getattr(module, "__file__", None)
     if isinstance(file_path, str) and _path_within_root(Path(file_path), plugin_dir):
@@ -1261,6 +1333,12 @@ def _purge_plugin_modules(plugin_dir: Path) -> None:
             sys.modules.pop(module_name, None)
 
 
+def _purge_plugin_package(package_name: str) -> None:
+    for module_name in list(sys.modules):
+        if module_name == package_name or module_name.startswith(f"{package_name}."):
+            sys.modules.pop(module_name, None)
+
+
 def _purge_plugin_bytecode(plugin_dir: Path) -> None:
     plugin_root = plugin_dir.resolve()
     for path in plugin_root.rglob("*"):
@@ -1274,43 +1352,82 @@ def _purge_plugin_bytecode(plugin_dir: Path) -> None:
             continue
 
 
-def _purge_module_root(root_name: str) -> None:
-    for module_name in list(sys.modules):
-        if module_name == root_name or module_name.startswith(f"{root_name}."):
-            sys.modules.pop(module_name, None)
+def _import_plugin_string(path: str, plugin: PluginSpec) -> Any:
+    module_name, attr = path.split(":", 1)
+    namespace = _PLUGIN_IMPORT_NAMESPACES.get(plugin.name)
+    if namespace is None:
+        raise RuntimeError(f"plugin import namespace missing: {plugin.name}")
+    module = import_module(_plugin_module_name(namespace.package_name, module_name))
+    return getattr(module, attr)
 
 
-def _prepare_plugin_import(module_name: str, plugin_dir: Path | None) -> None:
-    if plugin_dir is None:
+def _plugin_import_namespace_for_current_caller() -> _PluginImportNamespace | None:
+    plugin_id = current_caller_plugin_id()
+    if not plugin_id:
+        return None
+    return _PLUGIN_IMPORT_NAMESPACES.get(plugin_id)
+
+
+def _rewrite_plugin_import_name(
+    namespace: _PluginImportNamespace,
+    name: str,
+) -> str | None:
+    normalized = name.strip()
+    if not normalized:
+        return None
+    if normalized.startswith(_PLUGIN_PACKAGE_PREFIX):
+        return None
+    root_name = normalized.split(".", 1)[0]
+    if not _plugin_defines_module_root(namespace.plugin_dir, root_name):
+        return None
+    return _plugin_module_name(namespace.package_name, normalized)
+
+
+def _plugin_scoped_import(
+    name: str,
+    globals: dict[str, Any] | None = None,
+    locals: dict[str, Any] | None = None,
+    fromlist: tuple[Any, ...] | list[Any] = (),
+    level: int = 0,
+) -> Any:
+    with _PLUGIN_IMPORT_LOCK:
+        if level != 0:
+            return _ORIGINAL_BUILTIN_IMPORT(name, globals, locals, fromlist, level)
+
+        namespace = _plugin_import_namespace_for_current_caller()
+        rewritten_name = (
+            None if namespace is None else _rewrite_plugin_import_name(namespace, name)
+        )
+        if rewritten_name is None:
+            return _ORIGINAL_BUILTIN_IMPORT(name, globals, locals, fromlist, level)
+
+        imported = _ORIGINAL_BUILTIN_IMPORT(
+            rewritten_name,
+            globals,
+            locals,
+            fromlist,
+            level,
+        )
+        if fromlist:
+            return imported
+        root_name = name.split(".", 1)[0].strip()
+        root_module = sys.modules.get(
+            _plugin_module_name(namespace.package_name, root_name)
+        )
+        return root_module if root_module is not None else imported
+
+
+def _ensure_plugin_import_hook_installed() -> None:
+    global _PLUGIN_IMPORT_HOOK_INSTALLED
+    if _PLUGIN_IMPORT_HOOK_INSTALLED:
         return
-
-    plugin_root = plugin_dir.resolve()
-    plugin_path = str(plugin_root)
-    sys.path[:] = [entry for entry in sys.path if entry != plugin_path]
-    sys.path.insert(0, plugin_path)
-
-    root_name = module_name.split(".", 1)[0]
-    if not _plugin_defines_module_root(plugin_root, root_name):
-        return
-
-    cached_root = sys.modules.get(root_name)
-    cached_module = sys.modules.get(module_name)
-    if cached_root is not None and not _module_belongs_to_plugin(
-        cached_root, plugin_root
-    ):
-        _purge_module_root(root_name)
-    elif cached_module is not None and not _module_belongs_to_plugin(
-        cached_module, plugin_root
-    ):
-        _purge_module_root(root_name)
-
-    importlib.invalidate_caches()
+    builtins.__import__ = _plugin_scoped_import
+    _PLUGIN_IMPORT_HOOK_INSTALLED = True
 
 
 def import_string(path: str, plugin_dir: Path | None = None) -> Any:
     """通过字符串路径导入对象。"""
     with _PLUGIN_IMPORT_LOCK:
         module_name, attr = path.split(":", 1)
-        _prepare_plugin_import(module_name, plugin_dir)
         module = import_module(module_name)
         return getattr(module, attr)
