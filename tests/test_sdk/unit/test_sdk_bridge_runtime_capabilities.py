@@ -2395,6 +2395,48 @@ async def test_sdk_bridge_reload_plugin_raises_for_unknown_plugin(
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_reload_plugin_operations_are_serialized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    plugin = types.SimpleNamespace(name="sdk-demo")
+    discovered = types.SimpleNamespace(plugins=[plugin], issues=[])
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.discover_plugins",
+        lambda _plugins_dir: discovered,
+    )
+    bridge.env_manager.plan = lambda plugins: None  # type: ignore[method-assign]
+
+    release = asyncio.Event()
+    first_call_started = asyncio.Event()
+    call_order: list[str] = []
+
+    async def _slow_load(*args, **kwargs) -> None:
+        del args, kwargs
+        call_order.append("start")
+        if not first_call_started.is_set():
+            first_call_started.set()
+            await release.wait()
+        call_order.append("end")
+
+    bridge._load_or_reload_plugin = AsyncMock(side_effect=_slow_load)  # type: ignore[method-assign]
+
+    first = asyncio.create_task(bridge.reload_plugin("sdk-demo"))
+    await asyncio.wait_for(first_call_started.wait(), timeout=1)
+    second = asyncio.create_task(bridge.reload_plugin("sdk-demo"))
+    await asyncio.sleep(0)
+
+    assert bridge._load_or_reload_plugin.await_count == 1
+
+    release.set()
+    await asyncio.gather(first, second)
+
+    assert bridge._load_or_reload_plugin.await_count == 2
+    assert call_order == ["start", "end", "start", "end"]
+
+
+@pytest.mark.unit
 def test_sdk_bridge_match_waiter_plugins_returns_load_order_sorted_records() -> None:
     bridge = SdkPluginBridge(_OverlayFakeStarContext())
     bridge._records = {

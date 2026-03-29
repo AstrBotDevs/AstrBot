@@ -244,6 +244,10 @@ class AstrBotDashboard:
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
             return None
+        # SDK plugin HTTP routes are proxied under /api/plug and must be able to
+        # implement their own authentication flow, including public login pages.
+        if request.path.startswith("/api/plug/"):
+            return None
         if request.path.startswith("/api/v1"):
             raw_key = self._extract_raw_api_key()
             if not raw_key:

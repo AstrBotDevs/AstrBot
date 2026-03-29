@@ -76,85 +76,89 @@ class SdkPluginLifecycleManager:
             await self.bridge._refresh_native_platform_commands({"telegram"})
 
     async def reload_plugin(self, plugin_id: str) -> None:
-        discovered = self.bridge._discover_plugins()
-        self.bridge._set_discovery_issues(discovered.issues)
-        self.bridge.env_manager.plan(discovered.plugins)
-        for load_order, plugin in enumerate(discovered.plugins):
-            if plugin.name != plugin_id:
-                continue
-            await self.bridge._load_or_reload_plugin(
-                plugin,
-                load_order=load_order,
-                reset_restart_budget=True,
-            )
-            await self.bridge._refresh_native_platform_commands({"telegram"})
-            return
-        raise ValueError(f"SDK plugin not found: {plugin_id}")
+        async with self._reload_lock:
+            discovered = self.bridge._discover_plugins()
+            self.bridge._set_discovery_issues(discovered.issues)
+            self.bridge.env_manager.plan(discovered.plugins)
+            for load_order, plugin in enumerate(discovered.plugins):
+                if plugin.name != plugin_id:
+                    continue
+                await self.bridge._load_or_reload_plugin(
+                    plugin,
+                    load_order=load_order,
+                    reset_restart_budget=True,
+                )
+                await self.bridge._refresh_native_platform_commands({"telegram"})
+                return
+            raise ValueError(f"SDK plugin not found: {plugin_id}")
 
     async def turn_off_plugin(self, plugin_id: str) -> None:
-        record = self.bridge._records.get(plugin_id)
-        if record is None:
-            raise ValueError(f"SDK plugin not found: {plugin_id}")
-        record.state = self.bridge.SDK_STATE_DISABLED
-        await self.bridge._cancel_plugin_requests(plugin_id)
-        await self.bridge._teardown_plugin(plugin_id)
-        record.failure_reason = ""
-        self.bridge._set_disabled_override(plugin_id, disabled=True)
-        await self.bridge._refresh_native_platform_commands({"telegram"})
+        async with self._reload_lock:
+            record = self.bridge._records.get(plugin_id)
+            if record is None:
+                raise ValueError(f"SDK plugin not found: {plugin_id}")
+            record.state = self.bridge.SDK_STATE_DISABLED
+            await self.bridge._cancel_plugin_requests(plugin_id)
+            await self.bridge._teardown_plugin(plugin_id)
+            record.failure_reason = ""
+            self.bridge._set_disabled_override(plugin_id, disabled=True)
+            await self.bridge._refresh_native_platform_commands({"telegram"})
 
     async def turn_on_plugin(self, plugin_id: str) -> None:
-        discovered = self.bridge._discover_plugins()
-        self.bridge._set_discovery_issues(discovered.issues)
-        self.bridge.env_manager.plan(discovered.plugins)
-        for load_order, plugin in enumerate(discovered.plugins):
-            if plugin.name != plugin_id:
-                continue
-            self.bridge._set_disabled_override(plugin_id, disabled=False)
-            await self.bridge._load_or_reload_plugin(
-                plugin,
-                load_order=load_order,
-                reset_restart_budget=True,
-            )
-            await self.bridge._refresh_native_platform_commands({"telegram"})
-            return
-        raise ValueError(f"SDK plugin not found: {plugin_id}")
+        async with self._reload_lock:
+            discovered = self.bridge._discover_plugins()
+            self.bridge._set_discovery_issues(discovered.issues)
+            self.bridge.env_manager.plan(discovered.plugins)
+            for load_order, plugin in enumerate(discovered.plugins):
+                if plugin.name != plugin_id:
+                    continue
+                self.bridge._set_disabled_override(plugin_id, disabled=False)
+                await self.bridge._load_or_reload_plugin(
+                    plugin,
+                    load_order=load_order,
+                    reset_restart_budget=True,
+                )
+                await self.bridge._refresh_native_platform_commands({"telegram"})
+                return
+            raise ValueError(f"SDK plugin not found: {plugin_id}")
 
     async def handle_worker_closed(self, plugin_id: str) -> None:
-        if self.bridge._stopping:
-            return
-        await self.bridge._cancel_plugin_requests(plugin_id)
-        await self.bridge._close_temporary_mcp_sessions(plugin_id)
-        record = self.bridge._records.get(plugin_id)
-        if record is None:
-            return
-        await self.bridge._shutdown_local_mcp_servers(record)
-        record.session = None
-        if record.state in {
-            self.bridge.SDK_STATE_RELOADING,
-            self.bridge.SDK_STATE_DISABLED,
-        }:
-            return
-        if not record.restart_attempted:
-            record.restart_attempted = True
-            logger.warning(
-                "SDK plugin worker closed unexpectedly, retrying once: %s",
-                plugin_id,
+        async with self._reload_lock:
+            if self.bridge._stopping:
+                return
+            await self.bridge._cancel_plugin_requests(plugin_id)
+            await self.bridge._close_temporary_mcp_sessions(plugin_id)
+            record = self.bridge._records.get(plugin_id)
+            if record is None:
+                return
+            await self.bridge._shutdown_local_mcp_servers(record)
+            record.session = None
+            if record.state in {
+                self.bridge.SDK_STATE_RELOADING,
+                self.bridge.SDK_STATE_DISABLED,
+            }:
+                return
+            if not record.restart_attempted:
+                record.restart_attempted = True
+                logger.warning(
+                    "SDK plugin worker closed unexpectedly, retrying once: %s",
+                    plugin_id,
+                )
+                await self.bridge._load_or_reload_plugin(
+                    record.plugin,
+                    load_order=record.load_order,
+                    reset_restart_budget=False,
+                )
+                return
+            record.state = self.bridge.SDK_STATE_FAILED
+            self.bridge._http_routes.pop(plugin_id, None)
+            self.bridge._session_waiters.pop(plugin_id, None)
+            await self.bridge._unregister_schedule_jobs(plugin_id)
+            await self.bridge._clear_plugin_skills(
+                plugin_id=plugin_id,
+                record=record,
+                reason="worker failure cleanup",
             )
-            await self.bridge._load_or_reload_plugin(
-                record.plugin,
-                load_order=record.load_order,
-                reset_restart_budget=False,
-            )
-            return
-        record.state = self.bridge.SDK_STATE_FAILED
-        self.bridge._http_routes.pop(plugin_id, None)
-        self.bridge._session_waiters.pop(plugin_id, None)
-        await self.bridge._unregister_schedule_jobs(plugin_id)
-        await self.bridge._clear_plugin_skills(
-            plugin_id=plugin_id,
-            record=record,
-            reason="worker failure cleanup",
-        )
 
     def _schedule_background_reload(self, *, reset_restart_budget: bool) -> None:
         if self._startup_task is not None and not self._startup_task.done():

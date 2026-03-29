@@ -706,6 +706,36 @@ def test_invalid_limiter_trigger_combinations_fail_during_plugin_load(
 
 
 @pytest.mark.unit
+def test_invalid_handler_kind_fails_during_plugin_load(tmp_path: Path) -> None:
+    env = SDKTestEnvironment(tmp_path)
+    plugin_dir = _write_sdk_plugin(
+        env.plugin_dir("invalid_handler_kind"),
+        name="invalid_handler_kind",
+        main_source="\n".join(
+            [
+                "from astrbot_sdk import Star, on_command",
+                "from astrbot_sdk.decorators import get_handler_meta",
+                "",
+                "class DemoPlugin(Star):",
+                '    @on_command("hello")',
+                "    async def broken(self) -> None:",
+                "        return None",
+                "",
+                "meta = get_handler_meta(DemoPlugin.broken)",
+                "assert meta is not None",
+                'meta.kind = "broken-kind"',
+            ]
+        ),
+    )
+
+    plugin = load_plugin_spec(plugin_dir)
+    validate_plugin_spec(plugin)
+
+    with pytest.raises(ValueError, match="handler kind"):
+        load_plugin(plugin)
+
+
+@pytest.mark.unit
 def test_cli_error_render_includes_docs_details_and_context(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
