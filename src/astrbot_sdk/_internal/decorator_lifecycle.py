@@ -102,6 +102,58 @@ async def _await_if_needed(value: Any) -> Any:
     return value
 
 
+def _decorator_target_name(instance: Any, method_name: str | None = None) -> str:
+    class_name = instance.__class__.__name__
+    if method_name is None:
+        return class_name
+    return f"{class_name}.{method_name}"
+
+
+def _decorator_error(
+    *,
+    instance: Any,
+    decorator_name: str,
+    exc: Exception,
+    method_name: str | None = None,
+    details: str | None = None,
+) -> RuntimeError:
+    message = f"{_decorator_target_name(instance, method_name)} {decorator_name} failed"
+    if details:
+        message += f" ({details})"
+    message += f": {exc}"
+    return RuntimeError(message)
+
+
+def _http_api_details(meta: HttpApiMeta) -> str:
+    details = [f"route={meta.route!r}", f"methods={list(meta.methods)!r}"]
+    if meta.capability_name:
+        details.append(f"capability_name={meta.capability_name!r}")
+    return ", ".join(details)
+
+
+def _provider_change_details(meta: Any) -> str:
+    return f"provider_types={list(meta.provider_types)!r}"
+
+
+def _background_task_details(meta: BackgroundTaskMeta, method_name: str) -> str:
+    description = meta.description or f"background_task:{method_name}"
+    return (
+        f"description={description!r}, auto_start={meta.auto_start!r}, "
+        f"on_error={meta.on_error!r}"
+    )
+
+
+def _mcp_server_details(meta: MCPServerMeta) -> str:
+    return (
+        f"name={meta.name!r}, scope={meta.scope!r}, timeout={meta.timeout!r}, "
+        f"wait_until_ready={meta.wait_until_ready!r}"
+    )
+
+
+def _skill_details(name: str, path: str) -> str:
+    return f"name={name!r}, path={path!r}"
+
+
 def _normalize_provider_type(value: Any) -> str:
     enum_value = getattr(value, "value", None)
     if isinstance(enum_value, str):
@@ -130,9 +182,7 @@ async def _run_model_validation(
         try:
             validated = meta.model.model_validate(config)
         except ValidationError as exc:
-            raise ValueError(
-                f"{instance.__class__.__name__}.{method_name} validate_config failed: {exc}"
-            ) from exc
+            raise ValueError(str(exc)) from exc
         _validated_config_store(instance)[method_name] = validated
         return
 
@@ -207,21 +257,38 @@ async def _run_validate_config(instance: Any, context: RuntimeContext) -> None:
         meta = get_validate_config_meta(raw)
         if meta is None:
             continue
-        await _run_model_validation(
-            instance=instance,
-            method_name=method_name,
-            meta=meta,
-            config=config,
-        )
+        try:
+            await _run_model_validation(
+                instance=instance,
+                method_name=method_name,
+                meta=meta,
+                config=config,
+            )
+        except Exception as exc:
+            raise _decorator_error(
+                instance=instance,
+                method_name=method_name,
+                decorator_name="@validate_config",
+                exc=exc,
+            ) from exc
 
 
 async def _register_http_apis(instance: Any, context: RuntimeContext) -> None:
     state = _runtime_state(instance)
-    for _method_name, bound, raw in _iter_bound_methods(instance):
+    for method_name, bound, raw in _iter_bound_methods(instance):
         meta = get_http_api_meta(raw)
         if meta is None:
             continue
-        await _register_http_api(bound=bound, meta=meta, context=context)
+        try:
+            await _register_http_api(bound=bound, meta=meta, context=context)
+        except Exception as exc:
+            raise _decorator_error(
+                instance=instance,
+                method_name=method_name,
+                decorator_name="@http_api",
+                details=_http_api_details(meta),
+                exc=exc,
+            ) from exc
         state.http_apis.append((meta.route, list(meta.methods)))
 
 
@@ -252,10 +319,11 @@ async def _register_provider_change_hooks(
     context: RuntimeContext,
 ) -> None:
     state = _runtime_state(instance)
-    for _method_name, bound, raw in _iter_bound_methods(instance):
+    for method_name, bound, raw in _iter_bound_methods(instance):
         meta = get_provider_change_meta(raw)
         if meta is None:
             continue
+        target_name = _decorator_target_name(instance, method_name)
 
         async def callback(
             provider_id: str,
@@ -270,11 +338,29 @@ async def _register_provider_change_hooks(
                 if current_type not in _meta.provider_types:
                     return
             owner = instance if isinstance(instance, Star) else None
-            with bind_star_runtime(owner, context):
-                result = _bound(provider_id, provider_type, umo)
-                await _await_if_needed(result)
+            try:
+                with bind_star_runtime(owner, context):
+                    result = _bound(provider_id, provider_type, umo)
+                    await _await_if_needed(result)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"{target_name} @on_provider_change callback failed "
+                    f"(provider_id={provider_id!r}, provider_type={provider_type!r}, "
+                    f"umo={umo!r}): {exc}"
+                ) from exc
 
-        task = await context.provider_manager.register_provider_change_hook(callback)
+        try:
+            task = await context.provider_manager.register_provider_change_hook(
+                callback
+            )
+        except Exception as exc:
+            raise _decorator_error(
+                instance=instance,
+                method_name=method_name,
+                decorator_name="@on_provider_change",
+                details=_provider_change_details(meta),
+                exc=exc,
+            ) from exc
         # TODO: provider.manager.watch_changes is currently restricted to
         # reserved/system plugins. If this decorator should be public-facing,
         # the capability boundary needs to be widened or a dedicated event feed
@@ -288,17 +374,26 @@ async def _start_background_tasks(instance: Any, context: RuntimeContext) -> Non
         meta = get_background_task_meta(raw)
         if meta is None or not meta.auto_start:
             continue
-        task = await context.register_task(
-            _background_runner(
+        try:
+            task = await context.register_task(
+                _background_runner(
+                    instance=instance,
+                    bound=bound,
+                    context=context,
+                    meta=meta,
+                    method_name=method_name,
+                ),
+                meta.description
+                or f"background_task:{instance.__class__.__name__}.{method_name}",
+            )
+        except Exception as exc:
+            raise _decorator_error(
                 instance=instance,
-                bound=bound,
-                context=context,
-                meta=meta,
                 method_name=method_name,
-            ),
-            meta.description
-            or f"background_task:{instance.__class__.__name__}.{method_name}",
-        )
+                decorator_name="@background_task",
+                details=_background_task_details(meta, method_name),
+                exc=exc,
+            ) from exc
         state.background_tasks.append(task)
 
 
@@ -319,41 +414,68 @@ async def _background_runner(
             return
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
             if meta.on_error != "restart":
-                raise
+                raise _decorator_error(
+                    instance=instance,
+                    method_name=method_name,
+                    decorator_name="@background_task",
+                    details=_background_task_details(meta, method_name),
+                    exc=exc,
+                ) from exc
             context.logger.exception(
-                "SDK decorator background_task restarting after failure: plugin_id={} task={}",
+                "SDK decorator background_task restarting after failure: plugin_id={} task={} details={}",
                 context.plugin_id,
                 f"{instance.__class__.__name__}.{method_name}",
+                _background_task_details(meta, method_name),
             )
 
 
-def _iter_class_and_method_meta(
+def _iter_class_and_method_meta_entries(
     instance: Any,
     getter,
-) -> list[Any]:
-    values = list(getter(instance.__class__))
-    for _method_name, _bound, raw in _iter_bound_methods(instance):
-        values.extend(getter(raw))
+) -> list[tuple[str, Any]]:
+    values = [
+        (_decorator_target_name(instance), meta) for meta in getter(instance.__class__)
+    ]
+    for method_name, _bound, raw in _iter_bound_methods(instance):
+        values.extend(
+            (_decorator_target_name(instance, method_name), meta)
+            for meta in getter(raw)
+        )
     return values
 
 
 async def _register_skills(instance: Any, context: RuntimeContext) -> None:
     state = _runtime_state(instance)
-    for meta in _iter_class_and_method_meta(instance, get_skill_meta):
-        await context.register_skill(
-            name=meta.name,
-            path=meta.path,
-            description=meta.description,
-        )
+    for target_name, meta in _iter_class_and_method_meta_entries(
+        instance, get_skill_meta
+    ):
+        try:
+            await context.register_skill(
+                name=meta.name,
+                path=meta.path,
+                description=meta.description,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"{target_name} @register_skill failed "
+                f"({_skill_details(meta.name, meta.path)}): {exc}"
+            ) from exc
         state.registered_skills.append(meta.name)
 
 
 async def _register_mcp_servers(instance: Any, context: RuntimeContext) -> None:
     state = _runtime_state(instance)
-    for meta in _iter_class_and_method_meta(instance, get_mcp_server_meta):
-        await _register_mcp_server(meta=meta, context=context)
+    for target_name, meta in _iter_class_and_method_meta_entries(
+        instance, get_mcp_server_meta
+    ):
+        try:
+            await _register_mcp_server(meta=meta, context=context)
+        except Exception as exc:
+            raise RuntimeError(
+                f"{target_name} @mcp_server failed ({_mcp_server_details(meta)}): {exc}"
+            ) from exc
         if meta.scope == "global":
             state.global_mcp_servers.append(meta.name)
         else:
@@ -453,6 +575,8 @@ async def run_lifecycle_with_decorators(
     method_name: str,
     context: RuntimeContext,
 ) -> None:
+    # Wrap decorator-managed startup failures with decorator-specific context so
+    # plugin authors do not only see a generic worker initialize timeout.
     # Keep the lifecycle wrapper centralized so decorator-managed resources still
     # work when plugins override on_start/on_stop without calling super().
     if method_name == "on_start":

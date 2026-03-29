@@ -298,13 +298,6 @@ class StdioTransport(Transport):
                     # 帧被截断说明子进程已经异常退出，读循环应终止
                     logger.warning("STDIO subprocess frame truncated before completion")
                     break
-                except ValueError as exc:
-                    # header 解析失败后无法再可靠定位后续帧边界；继续读取只会让协议流长期失同步。
-                    logger.warning(
-                        "Stopping STDIO subprocess read loop after malformed frame: {}",
-                        exc,
-                    )
-                    break
                 except UnicodeDecodeError as exc:
                     # UTF-8 解码失败：跳过本帧继续，避免二进制脏数据导致整个连接断开
                     logger.warning(
@@ -312,6 +305,13 @@ class StdioTransport(Transport):
                         exc,
                     )
                     continue
+                except ValueError as exc:
+                    # header 解析失败后无法再可靠定位后续帧边界；继续读取只会让协议流长期失同步。
+                    logger.warning(
+                        "Stopping STDIO subprocess read loop after malformed frame: {}",
+                        exc,
+                    )
+                    break
         finally:
             self._closed.set()
 
@@ -341,12 +341,6 @@ class StdioTransport(Transport):
                     # 流被截断意味着上游已关闭，读循环应终止
                     logger.warning("{}", exc)
                     break
-                except ValueError as exc:
-                    # 文件模式同样无法从坏 header 中恢复到下一帧边界；直接终止读取更安全。
-                    logger.warning(
-                        "Stopping STDIO file read loop after malformed frame: {}", exc
-                    )
-                    break
                 except UnicodeDecodeError as exc:
                     # UTF-8 解码失败：跳过本帧继续，保留连接可用
                     logger.warning(
@@ -354,6 +348,12 @@ class StdioTransport(Transport):
                         exc,
                     )
                     continue
+                except ValueError as exc:
+                    # 文件模式同样无法从坏 header 中恢复到下一帧边界；直接终止读取更安全。
+                    logger.warning(
+                        "Stopping STDIO file read loop after malformed frame: {}", exc
+                    )
+                    break
         finally:
             self._closed.set()
 
