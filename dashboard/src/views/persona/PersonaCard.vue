@@ -1,5 +1,5 @@
 <template>
-    <v-card class="persona-card" :class="{ 'dragging': isDragging }" rounded="lg" @click="$emit('view')" elevation="1" hover
+    <v-card class="persona-card" :class="{ 'dragging': isDragging }" rounded="lg" @click="$emit('view')" elevation="0"
         draggable="true" @dragstart="handleDragStart" @dragend="handleDragEnd">
         <v-card-title class="d-flex justify-space-between align-center">
             <div class="text-truncate ml-2">{{ persona.persona_id }}</div>
@@ -154,10 +154,6 @@ export default defineComponent({
 .persona-card.dragging {
     opacity: 0.5;
     transform: scale(0.95);
-}
-
-.persona-card:hover {
-    transform: translateY(-2px);
 }
 
 .system-prompt-preview {

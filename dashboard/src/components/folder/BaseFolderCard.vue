@@ -1,6 +1,6 @@
 <template>
     <v-card class="base-folder-card" :class="{ 'drag-over': isDragOver }" rounded="lg" @click="$emit('click')" @contextmenu.prevent="$emit('contextmenu', $event)"
-        elevation="1" hover @dragover.prevent="handleDragOver" @dragleave="handleDragLeave" @drop.prevent="handleDrop">
+        elevation="0" @dragover.prevent="handleDragOver" @dragleave="handleDragLeave" @drop.prevent="handleDrop">
         <v-card-text class="d-flex align-center pa-3">
             <v-icon size="40" color="amber-darken-2" class="mr-3">mdi-folder</v-icon>
             <div class="folder-info flex-grow-1 overflow-hidden">
@@ -125,10 +125,6 @@ export default defineComponent({
 .base-folder-card {
     cursor: pointer;
     transition: all 0.2s ease;
-}
-
-.base-folder-card:hover {
-    transform: translateY(-2px);
 }
 
 .base-folder-card.drag-over {

@@ -43,7 +43,7 @@
                 <v-fade-transition>
                     <div v-if="showSkeleton" class="loading-container">
                         <v-row>
-                            <v-col v-for="n in 6" :key="n" cols="12" sm="6" lg="4" xl="3">
+                            <v-col v-for="n in 6" :key="n" cols="12" sm="6" lg="6" xl="4">
                                 <v-skeleton-loader type="card" rounded="lg" />
                             </v-col>
                         </v-row>
@@ -59,8 +59,8 @@
                             {{ tm('folder.foldersTitle') }} ({{ currentFolders.length }})
                         </h3>
                         <v-row>
-                            <v-col v-for="folder in currentFolders" :key="folder.folder_id" cols="12" sm="6" lg="4"
-                                xl="3">
+                            <v-col v-for="folder in currentFolders" :key="folder.folder_id" cols="12" sm="6" lg="6"
+                                xl="4">
                                 <FolderCard :folder="folder" @click="navigateToFolder(folder.folder_id)"
                                     @open="navigateToFolder(folder.folder_id)" @rename="openRenameFolderDialog(folder)"
                                     @move="openMoveFolderDialog(folder)" @delete="confirmDeleteFolder(folder)"
@@ -76,8 +76,8 @@
                             {{ tm('persona.personasTitle') }} ({{ currentPersonas.length }})
                         </h3>
                         <v-row>
-                            <v-col v-for="persona in currentPersonas" :key="persona.persona_id" cols="12" sm="6" lg="4"
-                                xl="3">
+                            <v-col v-for="persona in currentPersonas" :key="persona.persona_id" cols="12" sm="6" lg="6"
+                                xl="4">
                                 <PersonaCard :persona="persona" @view="viewPersona(persona)"
                                     @edit="editPersona(persona)" @move="openMovePersonaDialog(persona)"
                                     @delete="confirmDeletePersona(persona)" />
