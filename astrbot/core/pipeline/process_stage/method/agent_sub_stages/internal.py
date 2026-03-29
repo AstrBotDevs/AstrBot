@@ -21,6 +21,7 @@ from astrbot.core.message.message_event_result import (
 )
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
+    get_user_facing_error_message,
     resolve_event_conversation_persona_id,
     resolve_persona_custom_error_message,
     set_persona_custom_error_message_on_event,
@@ -418,14 +419,9 @@ class InternalAgentSubStage(Stage):
                     if runner_registered and agent_runner is not None:
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
-        except Exception as e:
-            logger.error(f"Error occurred while processing agent: {e}")
-            custom_error_message = extract_persona_custom_error_message_from_event(
-                event
-            )
-            error_text = custom_error_message or (
-                f"Error occurred while processing agent request: {e}"
-            )
+        except Exception:
+            logger.error("Error occurred while processing agent", exc_info=True)
+            error_text = get_user_facing_error_message(event)
             await event.send(MessageChain().message(error_text))
         finally:
             if typing_requested:

@@ -24,6 +24,7 @@ from astrbot.core.message.message_event_result import (
     ResultContentType,
 )
 from astrbot.core.persona_error_reply import (
+    get_user_facing_error_message,
     resolve_event_conversation_persona_id,
     resolve_persona_custom_error_message,
     set_persona_custom_error_message_on_event,
@@ -79,15 +80,9 @@ async def run_third_party_agent(
                     yield resp.data["chain"], False
             elif resp.type == "err":
                 yield resp.data["chain"], True
-    except Exception as e:
-        logger.error(f"Third party agent runner error: {e}")
-        err_msg = custom_error_message
-        if not err_msg:
-            err_msg = (
-                f"Error occurred during AI execution.\n"
-                f"Error Type: {type(e).__name__} (3rd party)\n"
-                f"Error Message: {str(e)}"
-            )
+    except Exception:
+        logger.error("Third party agent runner error", exc_info=True)
+        err_msg = get_user_facing_error_message(None, custom_error_message)
         yield MessageChain().message(err_msg), True
 
 

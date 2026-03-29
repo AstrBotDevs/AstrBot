@@ -1,7 +1,6 @@
 import asyncio
 import re
 import time
-import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
@@ -15,7 +14,7 @@ from astrbot.core.message.message_event_result import (
     ResultContentType,
 )
 from astrbot.core.persona_error_reply import (
-    extract_persona_custom_error_message_from_event,
+    get_user_facing_error_message,
 )
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.provider import TTSProvider
@@ -234,26 +233,15 @@ async def run_agent(
 
                 break
 
-        except Exception as e:
+        except Exception:
             if "stop_watcher" in locals() and not stop_watcher.done():
                 stop_watcher.cancel()
                 try:
                     await stop_watcher
                 except asyncio.CancelledError:
                     pass
-            logger.error(traceback.format_exc())
-
-            custom_error_message = extract_persona_custom_error_message_from_event(
-                astr_event
-            )
-            if custom_error_message:
-                err_msg = custom_error_message
-            else:
-                err_msg = (
-                    f"Error occurred during AI execution.\n"
-                    f"Error Type: {type(e).__name__}\n"
-                    f"Error Message: {str(e)}"
-                )
+            logger.error("Error occurred during AI execution", exc_info=True)
+            err_msg = get_user_facing_error_message(astr_event)
 
             error_llm_response = LLMResponse(
                 role="err",

@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any
 
 PERSONA_CUSTOM_ERROR_MESSAGE_EXTRA_KEY = "persona_custom_error_message"
+DEFAULT_USER_FACING_ERROR_MESSAGE = "处理请求时出现异常，请稍后再试。"
 
 
 def normalize_persona_custom_error_message(value: object) -> str | None:
@@ -32,6 +33,22 @@ def extract_persona_custom_error_message_from_event(event: Any) -> str | None:
         return normalize_persona_custom_error_message(raw_message)
     except Exception:
         return None
+
+
+def get_user_facing_error_message(
+    event: Any,
+    fallback_message: object = DEFAULT_USER_FACING_ERROR_MESSAGE,
+) -> str:
+    """Resolve the user-facing error message with persona override support."""
+    custom_error_message = extract_persona_custom_error_message_from_event(event)
+    if custom_error_message:
+        return custom_error_message
+
+    normalized_fallback = normalize_persona_custom_error_message(fallback_message)
+    if normalized_fallback:
+        return normalized_fallback
+
+    return DEFAULT_USER_FACING_ERROR_MESSAGE
 
 
 def set_persona_custom_error_message_on_event(
