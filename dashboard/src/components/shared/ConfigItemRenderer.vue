@@ -86,11 +86,13 @@
       ></v-checkbox>
     </div>
 
-    <v-combobox
+    <v-select
       v-else-if="itemMeta?.type === 'list' && itemMeta?.options"
       :model-value="modelValue"
       @update:model-value="emitUpdate"
-      :items="itemMeta.options"
+      :items="getSelectItems(itemMeta)"
+      item-title="title"
+      item-value="value"
       :disabled="itemMeta?.readonly"
       density="compact"
       variant="outlined"
@@ -98,7 +100,7 @@
       hide-details
       chips
       multiple
-    ></v-combobox>
+    ></v-select>
 
     <v-select
       v-else-if="itemMeta?.options"

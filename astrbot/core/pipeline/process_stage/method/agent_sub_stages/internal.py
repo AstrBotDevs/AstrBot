@@ -146,6 +146,7 @@ class InternalAgentSubStage(Stage):
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False
         follow_up_activated = False
+        typing_requested = False
         try:
             streaming_response = self.streaming_response
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
@@ -180,7 +181,11 @@ class InternalAgentSubStage(Stage):
                     )
                     return
 
-            await event.send_typing()
+            try:
+                typing_requested = True
+                await event.send_typing()
+            except Exception:
+                logger.warning("send_typing failed", exc_info=True)
             await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
@@ -396,6 +401,11 @@ class InternalAgentSubStage(Stage):
             )
             await event.send(MessageChain().message(error_text))
         finally:
+            if typing_requested:
+                try:
+                    await event.stop_typing()
+                except Exception:
+                    logger.warning("stop_typing failed", exc_info=True)
             if follow_up_capture:
                 await finalize_follow_up_capture(
                     follow_up_capture,
