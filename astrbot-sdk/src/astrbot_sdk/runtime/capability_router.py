@@ -647,6 +647,11 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
             queue.put_nowait(event)
 
     def descriptors(self) -> list[CapabilityDescriptor]:
+        return [
+            entry.descriptor for entry in self._registrations.values() if entry.exposed
+        ]
+
+    def all_descriptors(self) -> list[CapabilityDescriptor]:
         return [entry.descriptor for entry in self._registrations.values()]
 
     def contains(self, name: str) -> bool:

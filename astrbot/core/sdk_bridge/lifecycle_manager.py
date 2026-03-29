@@ -74,7 +74,7 @@ class SdkPluginLifecycleManager:
                     reset_restart_budget=reset_restart_budget,
                 )
             self.bridge.refresh_command_compatibility_issues()
-            await self.bridge._refresh_native_platform_commands({"telegram"})
+            await self.bridge._refresh_native_platform_commands()
 
     async def reload_plugin(self, plugin_id: str) -> None:
         async with self._reload_lock:
@@ -90,7 +90,7 @@ class SdkPluginLifecycleManager:
                     reset_restart_budget=True,
                 )
                 self.bridge.refresh_command_compatibility_issues()
-                await self.bridge._refresh_native_platform_commands({"telegram"})
+                await self.bridge._refresh_native_platform_commands()
                 return
             raise ValueError(f"SDK plugin not found: {plugin_id}")
 
@@ -105,7 +105,7 @@ class SdkPluginLifecycleManager:
             record.failure_reason = ""
             self.bridge._set_disabled_override(plugin_id, disabled=True)
             self.bridge.refresh_command_compatibility_issues()
-            await self.bridge._refresh_native_platform_commands({"telegram"})
+            await self.bridge._refresh_native_platform_commands()
 
     async def turn_on_plugin(self, plugin_id: str) -> None:
         async with self._reload_lock:
@@ -122,7 +122,7 @@ class SdkPluginLifecycleManager:
                     reset_restart_budget=True,
                 )
                 self.bridge.refresh_command_compatibility_issues()
-                await self.bridge._refresh_native_platform_commands({"telegram"})
+                await self.bridge._refresh_native_platform_commands()
                 return
             raise ValueError(f"SDK plugin not found: {plugin_id}")
 

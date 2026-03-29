@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 from __future__ import annotations
 
 import asyncio
@@ -45,7 +46,14 @@ def _install_optional_dependency_stubs() -> None:
 _install_optional_dependency_stubs()
 
 from astrbot_sdk._internal.invocation_context import current_caller_plugin_id
+from astrbot_sdk._internal.plugin_ids import (
+    capability_belongs_to_plugin,
+    http_route_belongs_to_plugin,
+    plugin_capability_prefix,
+    plugin_http_route_root,
+)
 from astrbot_sdk.context import Context
+from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.message.components import component_to_payload_sync
 from astrbot_sdk.runtime._streaming import StreamExecution
 
@@ -432,6 +440,21 @@ class FakePluginBridge:
     ) -> None:
         normalized_route = self._normalize_route(route)
         normalized_methods = self._normalize_methods(methods)
+        if not http_route_belongs_to_plugin(normalized_route, plugin_id):
+            route_root = plugin_http_route_root(plugin_id)
+            raise AstrBotError.invalid_input(
+                "http.register_api requires route to use the current plugin "
+                f"namespace: route={normalized_route!r}, plugin_id={plugin_id!r}, "
+                f"expected={route_root!r} or {route_root + '/...'}"
+            )
+        if not capability_belongs_to_plugin(str(handler_capability), plugin_id):
+            expected_prefix = plugin_capability_prefix(plugin_id)
+            raise AstrBotError.invalid_input(
+                "http.register_api requires handler_capability to belong to the "
+                "current plugin: "
+                f"capability={handler_capability!r}, plugin_id={plugin_id!r}, "
+                f"expected_prefix={expected_prefix!r}"
+            )
         existing = [
             item
             for item in self.http_routes.get(plugin_id, [])
@@ -1055,7 +1078,7 @@ class BridgeBackedPeer:
         self._request_counter = 0
         self.remote_peer = object()
         self.remote_capability_map = {
-            descriptor.name: descriptor for descriptor in bridge.descriptors()
+            descriptor.name: descriptor for descriptor in bridge.all_descriptors()
         }
 
     def _next_request_id(self) -> str:

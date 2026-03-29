@@ -561,7 +561,7 @@ def test_sdk_bridge_refresh_native_platform_commands_delegates_to_platform_manag
 
 
 @pytest.mark.unit
-def test_sdk_bridge_reload_plugin_refreshes_telegram_commands(
+def test_sdk_bridge_reload_plugin_refreshes_all_native_commands(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bridge = SdkPluginBridge(_BridgeStarContext())
@@ -584,7 +584,7 @@ def test_sdk_bridge_reload_plugin_refreshes_telegram_commands(
         load_order=0,
         reset_restart_budget=True,
     )
-    refresh_mock.assert_awaited_once_with({"telegram"})
+    refresh_mock.assert_awaited_once_with()
 
 
 @pytest.mark.unit

@@ -6,6 +6,12 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from astrbot_sdk._internal.plugin_ids import (
+    capability_belongs_to_plugin,
+    http_route_belongs_to_plugin,
+    plugin_capability_prefix,
+    plugin_http_route_root,
+)
 from astrbot_sdk.errors import AstrBotError
 
 from astrbot.core import logger
@@ -268,6 +274,8 @@ class SdkRegistryManager:
             raise AstrBotError.invalid_input(
                 "http.register_api requires handler_capability"
             )
+        self._validate_http_route_namespace(normalized_route, plugin_id)
+        self._validate_http_handler_namespace(handler_capability, plugin_id)
         self.bridge._ensure_http_route_available(
             plugin_id=plugin_id,
             route=normalized_route,
@@ -295,6 +303,32 @@ class SdkRegistryManager:
             route_entry.route,
             ",".join(route_entry.methods),
             handler_capability,
+        )
+
+    @staticmethod
+    def _validate_http_route_namespace(route: str, plugin_id: str) -> None:
+        if http_route_belongs_to_plugin(route, plugin_id):
+            return
+        route_root = plugin_http_route_root(plugin_id)
+        raise AstrBotError.invalid_input(
+            "http.register_api requires route to use the current plugin namespace: "
+            f"route={route!r}, plugin_id={plugin_id!r}, expected={route_root!r} "
+            f"or {route_root + '/...'}"
+        )
+
+    @staticmethod
+    def _validate_http_handler_namespace(
+        handler_capability: str,
+        plugin_id: str,
+    ) -> None:
+        if capability_belongs_to_plugin(handler_capability, plugin_id):
+            return
+        expected_prefix = plugin_capability_prefix(plugin_id)
+        raise AstrBotError.invalid_input(
+            "http.register_api requires handler_capability to belong to the current "
+            "plugin: "
+            f"capability={handler_capability!r}, plugin_id={plugin_id!r}, "
+            f"expected_prefix={expected_prefix!r}"
         )
 
     def unregister_http_api(

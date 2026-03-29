@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import pytest
-
 from astrbot_sdk.decorators import provide_capability
 
 from tests.test_sdk.unit._context_api_roundtrip import build_roundtrip_runtime
@@ -28,7 +27,7 @@ async def test_context_http_register_and_list_round_trip_via_handler_method(
     owner = _HTTPCapabilityOwner()
 
     await ctx.http.register_api(
-        route="demo-api",
+        route="/sdk-demo/demo-api",
         handler=owner.handle_http_request,
         methods=["post", "GET"],
         description="Demo API",
@@ -36,7 +35,7 @@ async def test_context_http_register_and_list_round_trip_via_handler_method(
 
     assert await ctx.http.list_apis() == [
         {
-            "route": "/demo-api",
+            "route": "/sdk-demo/demo-api",
             "methods": ["GET", "POST"],
             "handler_capability": "sdk-demo.http_handler",
             "description": "Demo API",
@@ -44,7 +43,7 @@ async def test_context_http_register_and_list_round_trip_via_handler_method(
     ]
     assert runtime.plugin_bridge.list_http_apis("sdk-demo") == [
         {
-            "route": "/demo-api",
+            "route": "/sdk-demo/demo-api",
             "methods": ["GET", "POST"],
             "handler_capability": "sdk-demo.http_handler",
             "description": "Demo API",
@@ -63,23 +62,23 @@ async def test_context_http_unregister_preserves_plugin_scope_and_method_semanti
     plugin_b_ctx = runtime.make_context("plugin-b")
 
     await plugin_a_ctx.http.register_api(
-        route="/shared",
+        route="/plugin-a/shared",
         handler_capability="plugin-a.http_handler",
         methods=["GET", "POST"],
         description="Plugin A route",
     )
     await plugin_b_ctx.http.register_api(
-        route="/shared",
+        route="/plugin-b/shared",
         handler_capability="plugin-b.http_handler",
         methods=["GET"],
         description="Plugin B route",
     )
 
-    await plugin_a_ctx.http.unregister_api("/shared", methods=["POST"])
+    await plugin_a_ctx.http.unregister_api("/plugin-a/shared", methods=["POST"])
 
     assert await plugin_a_ctx.http.list_apis() == [
         {
-            "route": "/shared",
+            "route": "/plugin-a/shared",
             "methods": ["GET"],
             "handler_capability": "plugin-a.http_handler",
             "description": "Plugin A route",
@@ -87,13 +86,13 @@ async def test_context_http_unregister_preserves_plugin_scope_and_method_semanti
     ]
     assert await plugin_b_ctx.http.list_apis() == [
         {
-            "route": "/shared",
+            "route": "/plugin-b/shared",
             "methods": ["GET"],
             "handler_capability": "plugin-b.http_handler",
             "description": "Plugin B route",
         }
     ]
 
-    await plugin_a_ctx.http.unregister_api("/shared")
+    await plugin_a_ctx.http.unregister_api("/plugin-a/shared")
 
     assert await plugin_a_ctx.http.list_apis() == []

@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-
 from astrbot_sdk import At, Image, MessageHistorySender, MessageSession, Plain
 from astrbot_sdk.clients.registry import HandlerMetadata
 from astrbot_sdk.llm.entities import ProviderType
@@ -191,29 +190,29 @@ async def test_clients_doc_platform_file_and_http_round_trip_through_core_bridge
     assert [member["user_id"] for member in members] == ["owner-1", "member-1"]
 
     await ctx.http.register_api(
-        route="/status",
+        route="/client-docs/status",
         handler_capability="client-docs.http_handler",
         methods=["GET", "post"],
         description="Status API",
     )
     assert await ctx.http.list_apis() == [
         {
-            "route": "/status",
+            "route": "/client-docs/status",
             "methods": ["GET", "POST"],
             "handler_capability": "client-docs.http_handler",
             "description": "Status API",
         }
     ]
-    await ctx.http.unregister_api("/status", methods=["POST"])
+    await ctx.http.unregister_api("/client-docs/status", methods=["POST"])
     assert await ctx.http.list_apis() == [
         {
-            "route": "/status",
+            "route": "/client-docs/status",
             "methods": ["GET"],
             "handler_capability": "client-docs.http_handler",
             "description": "Status API",
         }
     ]
-    await ctx.http.unregister_api("/status")
+    await ctx.http.unregister_api("/client-docs/status")
     assert await ctx.http.list_apis() == []
 
 

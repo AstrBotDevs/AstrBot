@@ -365,6 +365,7 @@ class SdkDispatchEngine:
                     args={},
                 )
                 if isinstance(output, dict):
+                    handler_result = extract_sdk_handler_result(output)
                     if "sdk_local_extras" in output:
                         self.bridge._persist_sdk_local_extras_from_handler(
                             overlay,
@@ -390,6 +391,15 @@ class SdkDispatchEngine:
                                 event_result,
                                 result_payload,
                             )
+                    if handler_result["stop"]:
+                        event.stop_event()
+                    if handler_result["call_llm"]:
+                        overlay.requested_llm = True
+                        overlay.should_call_llm = True
+                    if handler_result["sent_message"]:
+                        event._has_send_oper = True
+                    if handler_result["sent_message"] or handler_result["stop"]:
+                        overlay.should_call_llm = False
             except Exception as exc:
                 logger.warning(
                     "SDK event handler failed: plugin=%s handler=%s error=%s",
@@ -468,6 +478,13 @@ class SdkDispatchEngine:
             handler_result = extract_sdk_handler_result(
                 output if isinstance(output, dict) else {}
             )
+            if isinstance(output, dict) and "sdk_local_extras" in output:
+                self.bridge._persist_sdk_local_extras_from_handler(
+                    overlay,
+                    output.get("sdk_local_extras"),
+                    plugin_id=record.plugin_id,
+                    handler_id="__sdk_session_waiter__",
+                )
             result.executed_handlers.append(
                 {"plugin_id": record.plugin_id, "handler_id": "__sdk_session_waiter__"}
             )

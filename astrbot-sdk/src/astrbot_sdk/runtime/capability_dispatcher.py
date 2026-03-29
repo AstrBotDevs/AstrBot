@@ -361,6 +361,11 @@ class CapabilityDispatcher:
                 )
             if inspect.isawaitable(result):
                 result = await result
+            if inspect.isasyncgen(result):
+                return StreamExecution(
+                    iterator=self._iterate_generator(result),
+                    finalize=lambda chunks: {"items": chunks},
+                )
             if isinstance(result, StreamExecution):
                 return result
             raise AstrBotError.protocol_error(

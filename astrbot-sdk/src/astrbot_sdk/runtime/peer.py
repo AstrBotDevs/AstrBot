@@ -454,6 +454,7 @@ class Peer:
         )
 
         async def iterator() -> AsyncIterator[EventMessage]:
+            terminal_received = False
             try:
                 while True:
                     item = await queue.get()
@@ -467,15 +468,30 @@ class Peer:
                         yield item
                         continue
                     if item.phase == "completed":
+                        terminal_received = True
                         if include_completed:
                             yield item
                         break
                     if item.phase == "failed":
+                        terminal_received = True
                         raise AstrBotError.from_payload(
                             item.error.model_dump() if item.error else {}
                         )
             finally:
                 self._pending_streams.pop(request_id, None)
+                if not terminal_received:
+                    try:
+                        await self.cancel(
+                            request_id,
+                            reason="consumer_closed_stream_early",
+                        )
+                    except Exception as exc:
+                        logger.debug(
+                            "Failed to cancel stream after consumer closed early: "
+                            "request_id=%s error=%s",
+                            request_id,
+                            exc,
+                        )
 
         return iterator()
 

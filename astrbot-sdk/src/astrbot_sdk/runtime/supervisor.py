@@ -390,7 +390,7 @@ class WorkerSession:
     async def _handle_initialize(self, _message) -> InitializeOutput:
         return InitializeOutput(
             peer=PeerInfo(name="astrbot-supervisor", role="core", version="v4"),
-            capabilities=self.capability_router.descriptors(),
+            capabilities=self.capability_router.all_descriptors(),
             metadata={
                 "group_id": self.group_id,
                 "plugins": [plugin.name for plugin in self.plugins],

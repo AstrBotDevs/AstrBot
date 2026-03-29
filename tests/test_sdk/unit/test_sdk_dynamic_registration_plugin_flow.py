@@ -563,3 +563,21 @@ async def test_plugin_provided_capability_descriptors_do_not_hot_register_after_
             {},
             request_id="core-execute-hot-added-capability",
         )
+
+
+@pytest.mark.unit
+def test_supervisor_public_descriptors_exclude_internal_capabilities(
+    tmp_path: Path,
+) -> None:
+    supervisor = SupervisorRuntime(
+        transport=_DummyTransport(),
+        plugins_dir=tmp_path,
+        env_manager=object(),  # type: ignore[arg-type]
+    )
+
+    assert "handler.invoke" not in {
+        descriptor.name for descriptor in supervisor.capability_router.descriptors()
+    }
+    assert "handler.invoke" in {
+        descriptor.name for descriptor in supervisor.capability_router.all_descriptors()
+    }

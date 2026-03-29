@@ -289,7 +289,10 @@ class SdkRequestRuntime:
             else None
         )
         overlay.result_is_set = True
-        self.set_overlay_stop_state(overlay, stopped=False)
+        self.set_overlay_stop_state(
+            overlay,
+            stopped=bool(normalized_payload.get("stop", False)),
+        )
 
     def sync_overlay_payload_from_result_object(
         self,
@@ -494,10 +497,13 @@ class SdkRequestRuntime:
             if isinstance(result.chain, MessageChain)
             else result.chain
         )
-        return {
+        payload = {
             "type": "chain" if chain else "empty",
             "chain": SdkRequestRuntime.components_to_sdk_payload(chain),
         }
+        if result.is_stopped():
+            payload["stop"] = True
+        return payload
 
     @staticmethod
     def components_to_sdk_payload(
@@ -738,6 +744,10 @@ class SdkRequestRuntime:
         result.chain = updated.chain
         result.use_t2i_ = updated.use_t2i_
         result.type = updated.type
+        if bool(payload.get("stop", False)):
+            result.stop_event()
+        else:
+            result.continue_event()
         return result
 
     def get_effective_result(

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from astrbot_sdk.context import CancelToken
@@ -18,8 +19,11 @@ from astrbot_sdk.llm.providers import (
     STTProvider,
     TTSProvider,
 )
+from astrbot_sdk.protocol.descriptors import CapabilityDescriptor
+from astrbot_sdk.protocol.messages import EventMessage, PeerInfo
 from astrbot_sdk.runtime.capability_dispatcher import CapabilityDispatcher
-from astrbot_sdk.runtime.loader import LoadedLLMTool
+from astrbot_sdk.runtime.loader import LoadedCapability, LoadedLLMTool
+from astrbot_sdk.runtime.peer import Peer
 from astrbot_sdk.testing import MockContext
 
 from astrbot.core.sdk_bridge import capability_bridge as capability_bridge_module
@@ -313,6 +317,52 @@ async def test_registered_llm_tool_rejects_non_mapping_tool_args() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_capability_dispatcher_accepts_awaited_async_generator_for_streams() -> (
+    None
+):
+    async def _stream_impl():
+        yield {"chunk": "one"}
+        yield {"chunk": "two"}
+
+    async def stream_capability() -> object:
+        return _stream_impl()
+
+    dispatcher = CapabilityDispatcher(
+        plugin_id="sdk_demo_agent_tools",
+        peer=object(),
+        capabilities=[
+            LoadedCapability(
+                descriptor=CapabilityDescriptor(
+                    name="sdk_demo_agent_tools.stream_capability",
+                    description="stream capability",
+                    input_schema={"type": "object"},
+                    output_schema={"type": "object"},
+                    supports_stream=True,
+                ),
+                callable=stream_capability,
+                owner=object(),
+                plugin_id="sdk_demo_agent_tools",
+            )
+        ],
+    )
+
+    result = await dispatcher.invoke(
+        SimpleNamespace(
+            id="stream-call-1",
+            capability="sdk_demo_agent_tools.stream_capability",
+            input={},
+            stream=True,
+        ),
+        CancelToken(),
+    )
+
+    chunks = [item async for item in result.iterator]
+    assert chunks == [{"chunk": "one"}, {"chunk": "two"}]
+    assert result.finalize(chunks) == {"items": chunks}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_registered_llm_tool_injects_pep604_optional_event_and_context() -> None:
     async def optional_tool(
         event: MessageEvent | None = None,
@@ -357,6 +407,73 @@ async def test_registered_llm_tool_injects_pep604_optional_event_and_context() -
         "content": "sdk_demo_agent_tools:session-42",
         "success": True,
     }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_peer_invoke_stream_cancels_remote_call_when_consumer_exits_early() -> (
+    None
+):
+    peer = Peer(
+        transport=object(),
+        peer_info=PeerInfo(name="test-peer", role="plugin", version="v4"),
+    )
+    peer._send = AsyncMock()  # type: ignore[method-assign]
+    peer.cancel = AsyncMock()  # type: ignore[method-assign]
+
+    stream = await peer.invoke_stream("sdk_demo_agent_tools.stream_capability", {})
+    queue = peer._pending_streams["msg_0001"]
+    await queue.put(EventMessage(id="msg_0001", phase="started"))
+    await queue.put(
+        EventMessage(
+            id="msg_0001",
+            phase="delta",
+            data={"chunk": "first"},
+        )
+    )
+
+    first_event = await anext(stream)
+    await stream.aclose()
+
+    peer.cancel.assert_awaited_once_with(
+        "msg_0001",
+        reason="consumer_closed_stream_early",
+    )
+    assert first_event.data == {"chunk": "first"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_peer_invoke_stream_skips_cancel_after_terminal_event() -> None:
+    peer = Peer(
+        transport=object(),
+        peer_info=PeerInfo(name="test-peer", role="plugin", version="v4"),
+    )
+    peer._send = AsyncMock()  # type: ignore[method-assign]
+    peer.cancel = AsyncMock()  # type: ignore[method-assign]
+
+    stream = await peer.invoke_stream("sdk_demo_agent_tools.stream_capability", {})
+    queue = peer._pending_streams["msg_0001"]
+    await queue.put(EventMessage(id="msg_0001", phase="started"))
+    await queue.put(
+        EventMessage(
+            id="msg_0001",
+            phase="delta",
+            data={"chunk": "first"},
+        )
+    )
+    await queue.put(
+        EventMessage(
+            id="msg_0001",
+            phase="completed",
+            output={"items": [{"chunk": "first"}]},
+        )
+    )
+
+    consumed = [event.data async for event in stream]
+
+    peer.cancel.assert_not_awaited()
+    assert consumed == [{"chunk": "first"}]
 
 
 @pytest.mark.unit

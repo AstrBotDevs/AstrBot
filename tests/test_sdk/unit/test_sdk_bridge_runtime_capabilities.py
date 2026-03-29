@@ -453,6 +453,38 @@ class _OverlayFakeStarContext:
         return []
 
 
+def _make_sdk_record(
+    plugin_id: str = "sdk-demo",
+    *,
+    plugin: object | None = None,
+    state: str = "enabled",
+    load_order: int = 0,
+    session: object | None = None,
+    restart_attempted: bool = False,
+    issues: list[dict[str, object]] | None = None,
+    handlers: list[object] | None = None,
+    dynamic_command_routes: list[object] | None = None,
+    skills: dict[str, object] | None = None,
+    failure_reason: str = "",
+) -> types.SimpleNamespace:
+    plugin_obj = plugin or types.SimpleNamespace(name=plugin_id, manifest_data={})
+    if not hasattr(plugin_obj, "manifest_data"):
+        plugin_obj.manifest_data = {}
+    return types.SimpleNamespace(
+        plugin_id=plugin_id,
+        plugin=plugin_obj,
+        load_order=load_order,
+        session=session,
+        state=state,
+        restart_attempted=restart_attempted,
+        issues=list(issues or []),
+        handlers=list(handlers or []),
+        dynamic_command_routes=list(dynamic_command_routes or []),
+        skills=dict(skills or {}),
+        failure_reason=failure_reason,
+    )
+
+
 class _ConcreteAstrMessageEvent(AstrMessageEvent):
     async def send(self, message):
         await super().send(message)
@@ -552,6 +584,8 @@ class _TypedHookFakeEvent:
         self._sdk_dispatch_token = "dispatch-typed"
         self._result = MessageEventResult(chain=[Plain("legacy", convert=False)])
         self._extras: dict[str, object] = {}
+        self._stopped = False
+        self._has_send_oper = False
 
     def get_message_type(self):
         return types.SimpleNamespace(value="private")
@@ -593,6 +627,18 @@ class _TypedHookFakeEvent:
 
     def get_result(self) -> MessageEventResult | None:
         return self._result
+
+    def stop_event(self) -> None:
+        self._stopped = True
+
+    def continue_event(self) -> None:
+        self._stopped = False
+
+    def is_stopped(self) -> bool:
+        return self._stopped
+
+    def should_call_llm(self, call_llm: bool) -> None:
+        self.call_llm = call_llm
 
 
 class _TypedHookSession:
@@ -662,6 +708,42 @@ class _ChainedExtrasHookSession:
         if handler_id.endswith("second"):
             return {"sdk_local_extras": {"stage": "second", "shared": "two"}}
         return {}
+
+
+class _WaiterExtrasSession:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object], str]] = []
+
+    async def invoke_handler(
+        self,
+        handler_id: str,
+        event_payload: dict[str, object],
+        *,
+        request_id: str,
+        args: dict[str, object],
+    ) -> dict[str, object]:
+        del args
+        self.calls.append((handler_id, event_payload, request_id))
+        return {"sdk_local_extras": {"waiter_state": "captured"}}
+
+
+class _StoppingHookSession:
+    async def invoke_handler(
+        self,
+        handler_id: str,
+        event_payload: dict[str, object],
+        *,
+        request_id: str,
+        args: dict[str, object],
+    ) -> dict[str, object]:
+        del handler_id, event_payload, request_id, args
+        return {
+            "event_result": {
+                "type": "chain",
+                "chain": [{"type": "text", "data": {"text": "stopped result"}}],
+                "stop": True,
+            }
+        }
 
 
 class _FailThenRecoverHookSession:
@@ -1403,29 +1485,29 @@ def test_unregister_http_api_empty_methods_remove_entire_route() -> None:
     bridge = SdkPluginBridge(_OverlayFakeStarContext())
     bridge.register_http_api(
         plugin_id="sdk-demo",
-        route="/health",
+        route="/sdk-demo/health",
         methods=["GET", "POST"],
-        handler_capability="http.health",
+        handler_capability="sdk-demo.health",
         description="health endpoint",
     )
 
     bridge.unregister_http_api(
         plugin_id="sdk-demo",
-        route="/health",
+        route="/sdk-demo/health",
         methods=["POST"],
     )
     assert bridge.list_http_apis("sdk-demo") == [
         {
-            "route": "/health",
+            "route": "/sdk-demo/health",
             "methods": ["GET"],
-            "handler_capability": "http.health",
+            "handler_capability": "sdk-demo.health",
             "description": "health endpoint",
         }
     ]
 
     bridge.unregister_http_api(
         plugin_id="sdk-demo",
-        route="/health",
+        route="/sdk-demo/health",
         methods=[],
     )
     assert bridge.list_http_apis("sdk-demo") == []
@@ -1611,6 +1693,69 @@ async def test_sdk_bridge_chains_sdk_local_extras_across_matching_handlers() -> 
     overlay = bridge.get_request_overlay_by_token("dispatch-typed")
     assert overlay is not None
     assert overlay.sdk_local_extras == {"stage": "second", "shared": "two"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_dispatch_waiter_event_persists_sdk_local_extras() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    session = _WaiterExtrasSession()
+    record = _make_sdk_record(
+        session=session,
+        handlers=[],
+    )
+
+    event = _TypedHookFakeEvent()
+
+    result = await bridge._dispatch_waiter_event(event, [record])
+
+    assert result.executed_handlers == [
+        {"plugin_id": "sdk-demo", "handler_id": "__sdk_session_waiter__"}
+    ]
+    overlay = bridge.get_request_overlay_by_token("dispatch-typed")
+    assert overlay is not None
+    assert overlay.sdk_local_extras == {"waiter_state": "captured"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_dispatch_message_event_preserves_stop_from_result_payload() -> (
+    None
+):
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    bridge._records = {
+        "sdk-demo": _make_sdk_record(
+            session=_StoppingHookSession(),
+            handlers=[
+                types.SimpleNamespace(
+                    descriptor=HandlerDescriptor(
+                        id="sdk-demo:main.decorate",
+                        trigger=EventTrigger(event_type="decorating_result"),
+                    ),
+                    declaration_order=0,
+                )
+            ],
+        )
+    }
+
+    event = _TypedHookFakeEvent()
+    bridge._request_overlays["dispatch-typed"] = bridge._ensure_request_overlay(
+        "dispatch-typed",
+        should_call_llm=True,
+    )
+    result = MessageEventResult(chain=[Plain("legacy", convert=False)])
+
+    await bridge.dispatch_message_event(
+        "decorating_result",
+        event,
+        {"message_outline": "reply text"},
+        event_result=result,
+    )
+
+    effective_result = bridge.get_effective_result(event)
+    assert effective_result is not None
+    assert effective_result.is_stopped() is True
+    assert effective_result.chain.get_plain_text() == "stopped result"
 
 
 @pytest.mark.unit
@@ -1859,14 +2004,11 @@ async def test_sdk_bridge_cancel_plugin_requests_marks_logical_cancel_without_wo
 @pytest.mark.asyncio
 async def test_sdk_bridge_handle_worker_closed_retries_once() -> None:
     bridge = SdkPluginBridge(_OverlayFakeStarContext())
-    plugin = types.SimpleNamespace(name="sdk-demo")
-    record = types.SimpleNamespace(
-        plugin_id="sdk-demo",
+    plugin = types.SimpleNamespace(name="sdk-demo", manifest_data={})
+    record = _make_sdk_record(
         plugin=plugin,
         load_order=3,
         session=object(),
-        state="enabled",
-        restart_attempted=False,
     )
     bridge._records = {"sdk-demo": record}
     bridge._cancel_plugin_requests = AsyncMock()  # type: ignore[method-assign]
@@ -1895,13 +2037,10 @@ async def test_sdk_bridge_handle_worker_closed_skips_retry_for_non_running_state
     state: str,
 ) -> None:
     bridge = SdkPluginBridge(_OverlayFakeStarContext())
-    record = types.SimpleNamespace(
-        plugin_id="sdk-demo",
-        plugin=types.SimpleNamespace(name="sdk-demo"),
-        load_order=0,
-        session=object(),
+    record = _make_sdk_record(
+        plugin=types.SimpleNamespace(name="sdk-demo", manifest_data={}),
         state=state,
-        restart_attempted=False,
+        session=object(),
     )
     bridge._records = {"sdk-demo": record}
     bridge._cancel_plugin_requests = AsyncMock()  # type: ignore[method-assign]
@@ -1921,12 +2060,9 @@ async def test_sdk_bridge_handle_worker_closed_marks_record_failed_after_retry()
     None
 ):
     bridge = SdkPluginBridge(_OverlayFakeStarContext())
-    record = types.SimpleNamespace(
-        plugin_id="sdk-demo",
-        plugin=types.SimpleNamespace(name="sdk-demo"),
-        load_order=0,
+    record = _make_sdk_record(
+        plugin=types.SimpleNamespace(name="sdk-demo", manifest_data={}),
         session=object(),
-        state="enabled",
         restart_attempted=True,
     )
     bridge._records = {"sdk-demo": record}
@@ -1953,12 +2089,9 @@ async def test_sdk_bridge_handle_worker_closed_clears_registered_skills_on_failu
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bridge = SdkPluginBridge(_OverlayFakeStarContext())
-    record = types.SimpleNamespace(
-        plugin_id="sdk-demo",
-        plugin=types.SimpleNamespace(name="sdk-demo"),
-        load_order=0,
+    record = _make_sdk_record(
+        plugin=types.SimpleNamespace(name="sdk-demo", manifest_data={}),
         session=object(),
-        state="enabled",
         restart_attempted=True,
         skills={
             "sdk-demo.browser-helper": types.SimpleNamespace(
@@ -2001,51 +2134,60 @@ async def test_sdk_bridge_handle_worker_closed_clears_registered_skills_on_failu
 
 
 @pytest.mark.unit
-def test_sdk_bridge_http_route_conflict_and_resolution() -> None:
+def test_sdk_bridge_http_route_validation_and_resolution() -> None:
     star_context = _OverlayFakeStarContext()
     star_context.registered_web_apis = [
-        ("/legacy", object(), ["GET"], "legacy route"),
+        ("/sdk-demo/legacy", object(), ["GET"], "legacy route"),
     ]
     bridge = SdkPluginBridge(star_context)
 
     with pytest.raises(AstrBotError, match="legacy plugin route"):
         bridge.register_http_api(
             plugin_id="sdk-demo",
-            route="/legacy",
+            route="/sdk-demo/legacy",
             methods=["GET"],
-            handler_capability="http.legacy",
+            handler_capability="sdk-demo.legacy",
             description="legacy conflict",
+        )
+
+    with pytest.raises(AstrBotError, match="current plugin namespace"):
+        bridge.register_http_api(
+            plugin_id="sdk-b",
+            route="/sdk-a/health",
+            methods=["GET"],
+            handler_capability="sdk-b.other",
+            description="namespace mismatch",
+        )
+    with pytest.raises(AstrBotError, match="handler_capability to belong"):
+        bridge.register_http_api(
+            plugin_id="sdk-b",
+            route="/sdk-b/health",
+            methods=["GET"],
+            handler_capability="sdk-a.other",
+            description="handler mismatch",
         )
 
     bridge.register_http_api(
         plugin_id="sdk-a",
-        route="health",
+        route="/sdk-a/health",
         methods=["POST", "GET"],
-        handler_capability="http.health",
+        handler_capability="sdk-a.health",
         description="sdk health",
     )
-    with pytest.raises(AstrBotError, match="SDK plugin route"):
-        bridge.register_http_api(
-            plugin_id="sdk-b",
-            route="/health",
-            methods=["GET"],
-            handler_capability="http.other",
-            description="sdk conflict",
-        )
 
-    record_a = types.SimpleNamespace(plugin_id="sdk-a", load_order=1)
+    record_a = _make_sdk_record(plugin_id="sdk-a", load_order=1)
     bridge._records = {
         "sdk-a": record_a,
-        "sdk-b": types.SimpleNamespace(plugin_id="sdk-b", load_order=2),
+        "sdk-b": _make_sdk_record(plugin_id="sdk-b", load_order=2),
     }
 
-    resolved = bridge._resolve_http_route("health", "get")
+    resolved = bridge._resolve_http_route("/sdk-a/health", "get")
     assert resolved is not None
     resolved_record, resolved_route = resolved
     assert resolved_record is record_a
-    assert resolved_route.route == "/health"
+    assert resolved_route.route == "/sdk-a/health"
     assert resolved_route.methods == ("GET", "POST")
-    assert bridge._resolve_http_route("/health", "DELETE") is None
+    assert bridge._resolve_http_route("/sdk-a/health", "DELETE") is None
 
 
 @pytest.mark.unit
@@ -2126,9 +2268,7 @@ def test_plugin_entry_route_prefers_plugin_root() -> None:
 async def test_sdk_bridge_turn_off_plugin_disables_and_tears_down() -> None:
     bridge = SdkPluginBridge(_OverlayFakeStarContext())
     bridge._persist_state_overrides = lambda: None
-    record = types.SimpleNamespace(
-        plugin_id="sdk-demo",
-        state="enabled",
+    record = _make_sdk_record(
         failure_reason="boom",
     )
     bridge._records = {"sdk-demo": record}
@@ -2265,8 +2405,8 @@ async def test_sdk_bridge_reload_all_reloads_discovered_plugins_and_tears_down_m
     bridge._teardown_plugin = AsyncMock()  # type: ignore[method-assign]
     bridge._load_or_reload_plugin = AsyncMock()  # type: ignore[method-assign]
     bridge._records = {
-        "sdk-old": types.SimpleNamespace(plugin_id="sdk-old"),
-        "sdk-a": types.SimpleNamespace(plugin_id="sdk-a"),
+        "sdk-old": _make_sdk_record(plugin_id="sdk-old"),
+        "sdk-a": _make_sdk_record(plugin_id="sdk-a"),
     }
 
     await bridge.reload_all(reset_restart_budget=True)
