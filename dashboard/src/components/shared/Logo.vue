@@ -2,20 +2,22 @@
   <div class="logo-container">
     <div class="logo-content">
       <div class="logo-image">
+        <div class="logo-glow-ring" />
         <img
           width="110"
           src="@/assets/images/astrbot_logo_mini.webp"
           alt="AstrBot Logo"
+          class="logo-img"
         />
       </div>
       <div class="logo-text">
         <h2
-          :style="{ color: 'rgb(var(--v-theme-primary))' }"
+          :style="{ color: 'rgba(0, 242, 255, 0.95)' }"
+          class="logo-title"
           v-html="formatTitle(title || t('core.header.logoTitle'))"
         />
-        <!-- 父子组件传递css变量可能会出错，暂时使用十六进制颜色值 -->
         <h4
-          :style="{ color: 'rgba(var(--v-theme-on-surface), 0.72)' }"
+          :style="{ color: 'rgba(228, 225, 230, 0.45)' }"
           class="hint-text"
         >
           {{ subtitle || t("core.header.accountDialog.title") }}
@@ -36,17 +38,14 @@ const props = withDefaults(
     subtitle?: string;
   }>(),
   {
-    title: "", // 默认为空，组件会使用翻译值
+    title: "",
     subtitle: "",
   },
 );
 
-// 智能格式化标题，在小屏幕上允许在合适位置换行
 const formatTitle = (title: string) => {
-  // 如果标题包含 "AstrBot" 和其他文字，在它们之间添加换行机会
   if (title.includes("AstrBot ") || title.includes("AstrBot")) {
-    // 处理 "AstrBot 仪表盘" 或 "AstrBot Dashboard" 等格式
-    return title.replace(/(AstrBot)\s+(.+)/, "$1<wbr> $2");
+    return title.replace(/(AstrBot)\s+(.+)/, "$1<br> $2");
   }
   return title;
 };
@@ -71,13 +70,38 @@ const formatTitle = (title: string) => {
 }
 
 .logo-image {
+  position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
 }
 
-.logo-image img {
-  transition: transform 0.3s ease;
+/* Radial glow beneath the logo */
+.logo-glow-ring {
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse 70% 50% at 50% 60%,
+    rgba(0, 242, 255, 0.12) 0%,
+    rgba(0, 100, 180, 0.06) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  animation: logoBreath 4s ease-in-out infinite;
+}
+
+.logo-img {
+  position: relative;
+  z-index: 1;
+  filter: brightness(1.6) drop-shadow(0 0 8px rgba(0, 242, 255, 0.5))
+    drop-shadow(0 0 20px rgba(0, 242, 255, 0.2));
+  animation: logoBreath 4s ease-in-out infinite;
+}
+
+@keyframes logoBreath {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
 }
 
 .logo-text {
@@ -88,23 +112,25 @@ const formatTitle = (title: string) => {
   flex: 1;
 }
 
-.logo-text h2 {
+.logo-title {
   margin: 0;
   font-size: 1.8rem;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
   white-space: nowrap;
   min-width: fit-content;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  text-shadow: 0 0 12px rgba(0, 242, 255, 0.5),
+    0 0 30px rgba(0, 242, 255, 0.2);
 }
 
-/* 在小屏幕上允许在指定位置换行 */
 @media (max-width: 420px) {
-  .logo-text h2 {
+  .logo-title {
     line-height: 1.3;
   }
 }
 
-.logo-text h4 {
+.hint-text {
   margin: 4px 0 0 0;
   font-size: 1rem;
   font-weight: 400;
@@ -112,21 +138,20 @@ const formatTitle = (title: string) => {
   white-space: nowrap;
 }
 
-/* 响应式处理 */
 @media (max-width: 520px) {
   .logo-content {
     gap: 15px;
   }
 
-  .logo-text h2 {
+  .logo-title {
     font-size: 1.6rem;
   }
 
-  .logo-text h4 {
+  .hint-text {
     font-size: 0.9rem;
   }
 
-  .logo-image img {
+  .logo-img {
     width: 90px;
   }
 }
