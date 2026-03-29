@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from typing import TYPE_CHECKING
 
 from astrbot.core import logger
@@ -11,18 +13,25 @@ if TYPE_CHECKING:
 class SdkPluginLifecycleManager:
     def __init__(self, *, bridge: SdkPluginBridge) -> None:
         self.bridge = bridge
+        self._reload_lock = asyncio.Lock()
+        self._startup_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
         if self.bridge._started:
             return
         self.bridge._sweep_stale_mcp_leases()
-        await self.reload_all(reset_restart_budget=True)
         self.bridge._started = True
+        self._schedule_background_reload(reset_restart_budget=True)
 
     async def stop(self) -> None:
         if not self.bridge._started and not self.bridge._records:
             return
         self.bridge._stopping = True
+        if self._startup_task is not None:
+            self._startup_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._startup_task
+            self._startup_task = None
         for plugin_id in list(self.bridge._records.keys()):
             await self.bridge._cancel_plugin_requests(plugin_id)
             await self.bridge._close_temporary_mcp_sessions(plugin_id)
@@ -48,22 +57,23 @@ class SdkPluginLifecycleManager:
         self.bridge._stopping = False
 
     async def reload_all(self, *, reset_restart_budget: bool = False) -> None:
-        discovered = self.bridge._discover_plugins()
-        self.bridge._set_discovery_issues(discovered.issues)
-        self.bridge.env_manager.plan(discovered.plugins)
-        known = {plugin.name for plugin in discovered.plugins}
-        self.bridge._make_skill_manager().prune_sdk_plugin_skills(known)
-        for plugin_id in list(self.bridge._records.keys()):
-            if plugin_id not in known:
-                await self.bridge._teardown_plugin(plugin_id)
-                self.bridge._records.pop(plugin_id, None)
-        for load_order, plugin in enumerate(discovered.plugins):
-            await self.bridge._load_or_reload_plugin(
-                plugin,
-                load_order=load_order,
-                reset_restart_budget=reset_restart_budget,
-            )
-        await self.bridge._refresh_native_platform_commands({"telegram"})
+        async with self._reload_lock:
+            discovered = self.bridge._discover_plugins()
+            self.bridge._set_discovery_issues(discovered.issues)
+            self.bridge.env_manager.plan(discovered.plugins)
+            known = {plugin.name for plugin in discovered.plugins}
+            self.bridge._make_skill_manager().prune_sdk_plugin_skills(known)
+            for plugin_id in list(self.bridge._records.keys()):
+                if plugin_id not in known:
+                    await self.bridge._teardown_plugin(plugin_id)
+                    self.bridge._records.pop(plugin_id, None)
+            for load_order, plugin in enumerate(discovered.plugins):
+                await self.bridge._load_or_reload_plugin(
+                    plugin,
+                    load_order=load_order,
+                    reset_restart_budget=reset_restart_budget,
+                )
+            await self.bridge._refresh_native_platform_commands({"telegram"})
 
     async def reload_plugin(self, plugin_id: str) -> None:
         discovered = self.bridge._discover_plugins()
@@ -145,3 +155,21 @@ class SdkPluginLifecycleManager:
             record=record,
             reason="worker failure cleanup",
         )
+
+    def _schedule_background_reload(self, *, reset_restart_budget: bool) -> None:
+        if self._startup_task is not None and not self._startup_task.done():
+            return
+        self._startup_task = asyncio.create_task(
+            self._background_reload(reset_restart_budget=reset_restart_budget),
+            name="sdk_plugin_bridge_startup",
+        )
+
+    async def _background_reload(self, *, reset_restart_budget: bool) -> None:
+        try:
+            await self.reload_all(reset_restart_budget=reset_restart_budget)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error("SDK plugin background startup failed: %s", exc, exc_info=True)
+        finally:
+            self._startup_task = None

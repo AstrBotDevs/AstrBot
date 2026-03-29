@@ -2290,6 +2290,58 @@ async def test_sdk_bridge_reload_all_reloads_discovered_plugins_and_tears_down_m
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_sdk_bridge_start_schedules_background_reload() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _slow_reload(*, reset_restart_budget: bool = False) -> None:
+        assert reset_restart_budget is True
+        started.set()
+        await release.wait()
+
+    bridge.lifecycle.reload_all = _slow_reload  # type: ignore[method-assign]
+
+    await asyncio.wait_for(bridge.start(), timeout=1)
+    await asyncio.wait_for(started.wait(), timeout=1)
+
+    assert bridge._started is True
+    assert bridge.lifecycle._startup_task is not None
+    assert bridge.lifecycle._startup_task.done() is False
+
+    release.set()
+    await asyncio.wait_for(bridge.lifecycle._startup_task, timeout=1)
+    assert bridge.lifecycle._startup_task is None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sdk_bridge_stop_cancels_background_reload_task() -> None:
+    bridge = SdkPluginBridge(_OverlayFakeStarContext())
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def _slow_reload(*, reset_restart_budget: bool = False) -> None:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    bridge.lifecycle.reload_all = _slow_reload  # type: ignore[method-assign]
+
+    await bridge.start()
+    await asyncio.wait_for(started.wait(), timeout=1)
+    await bridge.stop()
+
+    assert cancelled.is_set() is True
+    assert bridge.lifecycle._startup_task is None
+    assert bridge._started is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_sdk_bridge_reload_plugin_updates_discovery_issues_and_loads_match(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
