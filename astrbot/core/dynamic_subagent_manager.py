@@ -164,8 +164,12 @@ If you wish to prevent a certain sub-agent from being automatically cleaned up, 
         cls._shared_context_maxlen = shared_context_maxlen
 
     @classmethod
-    def cleanup_session_turn_start(cls, session_id: str) -> dict:
-        """Cleanup subagents from previous turn when a new turn starts"""
+    def is_auto_cleanup_per_turn(cls):
+        return cls._auto_cleanup_per_turn
+
+    @classmethod
+    def cleanup_session_turn_end(cls, session_id: str) -> dict:
+        """Cleanup subagents from previous turn when a turn ends"""
         session = cls.get_session(session_id)
         if not session:
             return {"status": "no_session", "cleaned": []}

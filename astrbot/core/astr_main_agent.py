@@ -964,8 +964,9 @@ def _apply_enhanced_subagent_tools(
         req.func_tool.add_tool(CREATE_DYNAMIC_SUBAGENT_TOOL)
         req.func_tool.add_tool(CLEANUP_DYNAMIC_SUBAGENT_TOOL)
         req.func_tool.add_tool(LIST_DYNAMIC_SUBAGENTS_TOOL)
-        req.func_tool.add_tool(PROTECT_SUBAGENT_TOOL)
-        req.func_tool.add_tool(UNPROTECT_SUBAGENT_TOOL)
+        if DynamicSubAgentManager.is_auto_cleanup_per_turn():
+            req.func_tool.add_tool(PROTECT_SUBAGENT_TOOL)
+            req.func_tool.add_tool(UNPROTECT_SUBAGENT_TOOL)
         req.func_tool.add_tool(VIEW_SHARED_CONTEXT_TOOL)
         req.func_tool.add_tool(SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT)
 
@@ -1009,14 +1010,6 @@ def _apply_enhanced_subagent_tools(
         for handoff in dynamic_handoffs:
             req.func_tool.add_tool(handoff)
 
-            # Check if we should cleanup subagents from previous turn
-            # This is done at the START of a new turn to clean up from previous turn
-            try:
-                DynamicSubAgentManager.cleanup_session_turn_start(session_id)
-            except Exception as e:
-                from astrbot import logger
-
-                logger.warning(f"[DynamicSubAgent] Cleanup failed: {e}")
     except ImportError as e:
         from astrbot import logger
 
