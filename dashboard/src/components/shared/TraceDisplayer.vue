@@ -1,12 +1,11 @@
-<script setup lang="ts">
-import axios from "@/utils/request";
-import { EventSourcePolyfill } from "event-source-polyfill";
-import { resolveApiUrl } from "@/utils/request";
+<script setup>
+import axios from 'axios';
+import { EventSourcePolyfill } from 'event-source-polyfill';
 </script>
 
 <template>
   <div class="trace-wrapper">
-    <div ref="scrollEl" class="trace-table" :style="{ height: tableHeight }">
+    <div class="trace-table" ref="scrollEl" :style="{ height: tableHeight }">
       <div class="trace-row trace-header">
         <div class="trace-cell time">Time</div>
         <div class="trace-cell span">Event ID</div>
@@ -15,26 +14,18 @@ import { resolveApiUrl } from "@/utils/request";
         <!-- <div class="trace-cell last">Last</div> -->
         <div class="trace-cell sender">Sender</div>
         <div class="trace-cell outline">Outline</div>
-        <div class="trace-cell fields" />
+        <div class="trace-cell fields"></div>
       </div>
-      <div
-        v-for="event in events"
-        :key="event.span_id"
-        class="trace-group"
-        :class="{ highlight: highlightMap[event.span_id] }"
-      >
+      <div class="trace-group" :class="{ highlight: highlightMap[event.span_id] }" v-for="event in events"
+        :key="event.span_id">
         <div class="trace-row trace-event">
-          <div class="trace-cell time">
-            {{ formatTime(event.first_time) }}
-          </div>
+          <div class="trace-cell time">{{ formatTime(event.first_time) }}</div>
           <div class="trace-cell span" :title="event.span_id">
             <div class="event-title">
               {{ shortSpan(event.span_id) }}
             </div>
           </div>
-          <div class="trace-cell umo">
-            {{ event.umo }}
-          </div>
+          <div class="trace-cell umo">{{ event.umo }}</div>
           <!-- <div class="trace-cell count">
             <div class="event-meta">{{ event.records.length }}</div>
           </div> -->
@@ -42,82 +33,49 @@ import { resolveApiUrl } from "@/utils/request";
             <div class="event-meta">{{ formatTime(event.last_time) }}</div>
           </div> -->
           <div class="trace-cell sender">
-            <div
-              class="event-sub"
-              style="
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-              "
-            >
-              {{ event.sender_name || "-" }}
-            </div>
+            <div class="event-sub" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{
+              event.sender_name || '-' }}</div>
           </div>
           <div class="trace-cell outline">
-            <div class="event-sub outline">
-              {{ event.message_outline || "-" }}
-            </div>
+            <div class="event-sub outline">{{ event.message_outline || '-' }}</div>
           </div>
           <div class="trace-cell fields event-controls">
-            <v-btn
-              size="x-small"
-              variant="text"
-              color="primary"
-              @click="toggleEvent(event.span_id)"
-            >
-              {{ event.collapsed ? "Expand" : "Collapse" }}
+            <v-btn size="x-small" variant="text" color="primary" @click="toggleEvent(event.span_id)">
+              {{ event.collapsed ? 'Expand' : 'Collapse' }}
               <span v-if="event.hasAgentPrepare" class="agent-dot" />
             </v-btn>
           </div>
         </div>
-        <div v-if="!event.collapsed" class="trace-records">
-          <div
-            v-for="record in getVisibleRecords(event)"
-            :key="record.key"
-            class="trace-record"
-          >
-            <div class="trace-record-time">
-              {{ record.timeLabel }}
-            </div>
-            <div class="trace-record-action">
-              {{ record.action }}
-            </div>
+        <div class="trace-records" v-if="!event.collapsed">
+          <div class="trace-record" v-for="record in getVisibleRecords(event)" :key="record.key">
+            <div class="trace-record-time">{{ record.timeLabel }}</div>
+            <div class="trace-record-action">{{ record.action }}</div>
             <pre class="trace-record-fields">{{ record.fieldsText }}</pre>
           </div>
-          <div
-            v-if="event.visibleCount < event.records.length"
-            class="event-more"
-          >
-            <v-btn
-              size="x-small"
-              variant="tonal"
-              color="primary"
-              @click="showMore(event.span_id)"
-            >
+          <div class="event-more" v-if="event.visibleCount < event.records.length">
+            <v-btn size="x-small" variant="tonal" color="primary" @click="showMore(event.span_id)">
               Show more
             </v-btn>
           </div>
         </div>
       </div>
-      <div v-if="events.length === 0" class="trace-empty">
-        No trace data yet.
-      </div>
+      <div v-if="events.length === 0" class="trace-empty">No trace data yet.</div>
     </div>
   </div>
 </template>
 
-<script lang="ts">
+<script>
 export default {
-  name: "TraceDisplayer",
+  name: 'TraceDisplayer',
   props: {
     autoScroll: {
       type: Boolean,
-      default: true,
+      default: true
     },
     maxItems: {
       type: Number,
-      default: 300,
-    },
+      default: 300
+    }
   },
   data() {
     return {
@@ -131,14 +89,14 @@ export default {
       maxRetryAttempts: 10,
       baseRetryDelay: 1000,
       lastEventId: null,
-      tableHeight: "auto",
+      tableHeight: 'auto'
     };
   },
   async mounted() {
     await this.fetchTraceHistory();
     this.connectSSE();
     this.updateTableHeight();
-    window.addEventListener("resize", this.updateTableHeight);
+    window.addEventListener('resize', this.updateTableHeight);
   },
   beforeUnmount() {
     if (this.eventSource) {
@@ -150,15 +108,14 @@ export default {
       this.retryTimer = null;
     }
     this.retryAttempts = 0;
-    window.removeEventListener("resize", this.updateTableHeight);
+    window.removeEventListener('resize', this.updateTableHeight);
   },
   methods: {
     updateTableHeight() {
       this.$nextTick(() => {
         const el = this.$refs.scrollEl;
-        if (!el || typeof window === "undefined") return;
-        const viewportHeight =
-          window.innerHeight || document.documentElement.clientHeight;
+        if (!el || typeof window === 'undefined') return;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
         const offsetTop = el.getBoundingClientRect().top;
         const height = Math.max(viewportHeight - offsetTop, 0);
         this.tableHeight = `${height}px`;
@@ -166,12 +123,12 @@ export default {
     },
     async fetchTraceHistory() {
       try {
-        const res = await axios.get("/api/log-history");
+        const res = await axios.get('/api/log-history');
         const logs = res.data?.data?.logs || [];
-        const traces = logs.filter((item) => item.type === "trace");
+        const traces = logs.filter((item) => item.type === 'trace');
         this.processNewTraces(traces);
       } catch (err) {
-        console.error("Failed to fetch trace history:", err);
+        console.error('Failed to fetch trace history:', err);
       }
     },
     connectSSE() {
@@ -180,12 +137,15 @@ export default {
         this.eventSource = null;
       }
 
-      this.eventSource = new EventSourcePolyfill(
-        resolveApiUrl("/api/live-log"),
-        {
-          heartbeatTimeout: 300000,
+      const token = localStorage.getItem('token');
+
+      this.eventSource = new EventSourcePolyfill('/api/live-log', {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : ''
         },
-      );
+        heartbeatTimeout: 300000,
+        withCredentials: true
+      });
 
       this.eventSource.onopen = () => {
         this.retryAttempts = 0;
@@ -201,12 +161,12 @@ export default {
           }
 
           const payload = JSON.parse(event.data);
-          if (payload?.type !== "trace") {
+          if (payload?.type !== 'trace') {
             return;
           }
           this.processNewTraces([payload]);
         } catch (e) {
-          console.error("Failed to parse trace payload:", e);
+          console.error('Failed to parse trace payload:', e);
         }
       };
 
@@ -217,13 +177,13 @@ export default {
         }
 
         if (this.retryAttempts >= this.maxRetryAttempts) {
-          console.error("Trace stream reached max retry attempts.");
+          console.error('Trace stream reached max retry attempts.');
           return;
         }
 
         const delay = Math.min(
           this.baseRetryDelay * Math.pow(2, this.retryAttempts),
-          30000,
+          30000
         );
 
         if (this.retryTimer) {
@@ -261,7 +221,7 @@ export default {
             collapsed: true,
             visibleCount: 20,
             records: [],
-            hasAgentPrepare: trace.action === "astr_agent_prepare",
+            hasAgentPrepare: trace.action === 'astr_agent_prepare'
           };
           this.eventIndex[trace.span_id] = event;
           this.events.push(event);
@@ -276,9 +236,9 @@ export default {
           action: trace.action,
           fieldsText: this.formatFields(trace.fields),
           timeLabel: this.formatTime(trace.time),
-          key: recordKey,
+          key: recordKey
         });
-        if (trace.action === "astr_agent_prepare") {
+        if (trace.action === 'astr_agent_prepare') {
           event.hasAgentPrepare = true;
         }
         if (!event.first_time || trace.time < event.first_time) {
@@ -327,10 +287,7 @@ export default {
     showMore(spanId) {
       const event = this.eventIndex[spanId];
       if (!event) return;
-      event.visibleCount = Math.min(
-        event.records.length,
-        event.visibleCount + 20,
-      );
+      event.visibleCount = Math.min(event.records.length, event.visibleCount + 20);
     },
     pulseEvent(spanId) {
       if (!spanId) return;
@@ -353,18 +310,18 @@ export default {
       return event.records.slice(0, event.visibleCount);
     },
     formatTime(ts) {
-      if (!ts) return "";
+      if (!ts) return '';
       const date = new Date(ts * 1000);
       const base = date.toLocaleString();
-      const ms = String(date.getMilliseconds()).padStart(3, "0");
+      const ms = String(date.getMilliseconds()).padStart(3, '0');
       return `${base}.${ms}`;
     },
     shortSpan(spanId) {
-      if (!spanId) return "";
+      if (!spanId) return '';
       return spanId.slice(0, 8);
     },
     formatFields(fields) {
-      if (!fields) return "";
+      if (!fields) return '';
       try {
         const text = JSON.stringify(fields, null, 2);
         if (text.length > 2000) {
@@ -374,8 +331,8 @@ export default {
       } catch (e) {
         return String(fields);
       }
-    },
-  },
+    }
+  }
 };
 </script>
 
@@ -390,8 +347,8 @@ export default {
   padding: 0;
   height: 100%;
   overflow-y: auto;
-  color: var(--v-theme-on-surface);
-  font-family: "Fira Code", monospace;
+  color: #2b3340;
+  font-family: 'Fira Code', monospace;
 }
 
 .trace-row {
@@ -401,13 +358,13 @@ export default {
 }
 
 .trace-group {
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   background: transparent;
   padding: 8px 0;
 }
 
 .trace-group.highlight {
-  background: rgba(var(--v-theme-primary), 0.08);
+  background: rgba(59, 130, 246, 0.08);
   transition: background 0.6s ease;
 }
 
@@ -417,8 +374,8 @@ export default {
 
 .trace-header {
   font-weight: 600;
-  color: var(--v-theme-on-surface);
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  color: #6b7280;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.12);
   padding-bottom: 10px;
 }
 
@@ -426,25 +383,28 @@ export default {
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 12px;
-  color: var(--v-theme-on-surface);
 }
 
 .event-title {
   font-weight: 600;
-  color: var(--v-theme-on-surface);
+  color: #1f2937;
 }
 
 .event-meta {
   font-size: 12px;
-  color: var(--v-theme-on-surface);
+  color: #6b7280;
   margin-top: 4px;
 }
 
 .event-sub {
   font-size: 12px;
-  color: var(--v-theme-on-surface);
+  color: #4b5563;
   margin-top: 2px;
   word-break: break-word;
+}
+
+.event-sub.outline {
+  color: #6b7280;
 }
 
 .event-controls {
@@ -457,7 +417,7 @@ export default {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--v-theme-success);
+  background: #22c55e;
   margin-left: 6px;
   vertical-align: middle;
 }
@@ -466,13 +426,13 @@ export default {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--v-theme-on-surface);
+  color: #4b5563;
 }
 
 .trace-empty {
   padding: 24px;
   text-align: center;
-  color: var(--v-theme-on-surface);
+  color: #6b7280;
 }
 
 @media (max-width: 1200px) {
@@ -497,12 +457,12 @@ export default {
 }
 
 .trace-record-time {
-  color: var(--v-theme-on-surface);
+  color: #6b7280;
   font-size: 11px;
 }
 
 .trace-record-action {
-  color: var(--v-theme-on-surface);
+  color: #1f2937;
   font-weight: 600;
   font-size: 11px;
 }
@@ -511,7 +471,7 @@ export default {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--v-theme-on-surface);
+  color: #4b5563;
   font-size: 10px;
 }
 

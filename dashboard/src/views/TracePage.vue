@@ -1,10 +1,10 @@
-<script setup lang="ts">
-import TraceDisplayer from "@/components/shared/TraceDisplayer.vue";
-import { useModuleI18n } from "@/i18n/composables";
-import { ref, onMounted } from "vue";
-import axios from "@/utils/request";
+<script setup>
+import TraceDisplayer from '@/components/shared/TraceDisplayer.vue';
+import { useModuleI18n } from '@/i18n/composables';
+import { ref, onMounted } from 'vue';
+import axios from 'axios';
 
-const { tm } = useModuleI18n("features/trace");
+const { tm } = useModuleI18n('features/trace');
 
 const traceEnabled = ref(true);
 const loading = ref(false);
@@ -12,25 +12,25 @@ const traceDisplayerKey = ref(0);
 
 const fetchTraceSettings = async () => {
   try {
-    const res = await axios.get("/api/trace/settings");
-    if (res.data?.status === "ok") {
+    const res = await axios.get('/api/trace/settings');
+    if (res.data?.status === 'ok') {
       traceEnabled.value = res.data.data?.trace_enable ?? true;
     }
   } catch (err) {
-    console.error("Failed to fetch trace settings:", err);
+    console.error('Failed to fetch trace settings:', err);
   }
 };
 
 const updateTraceSettings = async () => {
   loading.value = true;
   try {
-    await axios.post("/api/trace/settings", {
-      trace_enable: traceEnabled.value,
+    await axios.post('/api/trace/settings', {
+      trace_enable: traceEnabled.value
     });
     // Refresh the TraceDisplayer component to reconnect SSE
     traceDisplayerKey.value += 1;
   } catch (err) {
-    console.error("Failed to update trace settings:", err);
+    console.error('Failed to update trace settings:', err);
   } finally {
     loading.value = false;
   }
@@ -42,13 +42,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div style="height: 100%; display: flex; flex-direction: column">
+  <div style="height: 100%; display: flex; flex-direction: column;">
     <div class="trace-header">
       <div class="trace-info">
-        <v-icon size="small" color="info" class="mr-2">
-          mdi-information-outline
-        </v-icon>
-        <span class="trace-hint">{{ tm("hint") }}</span>
+        <v-icon size="small" color="info" class="mr-2">mdi-information-outline</v-icon>
+        <span class="trace-hint">{{ tm('hint') }}</span>
       </div>
       <div class="trace-controls">
         <v-switch
@@ -61,25 +59,23 @@ onMounted(() => {
           @update:model-value="updateTraceSettings"
         >
           <template #label>
-            <span class="switch-label">{{
-              traceEnabled ? tm("recording") : tm("paused")
-            }}</span>
+            <span class="switch-label">{{ traceEnabled ? tm('recording') : tm('paused') }}</span>
           </template>
         </v-switch>
       </div>
     </div>
-    <div style="flex: 1; min-height: 0">
+    <div style="flex: 1; min-height: 0;">
       <TraceDisplayer :key="traceDisplayerKey" />
     </div>
   </div>
 </template>
 
-<script lang="ts">
+<script>
 export default {
-  name: "TracePage",
+  name: 'TracePage',
   components: {
-    TraceDisplayer,
-  },
+    TraceDisplayer
+  }
 };
 </script>
 
@@ -89,8 +85,8 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: rgba(var(--v-theme-primary), 0.05);
-  border-bottom: 1px solid rgba(var(--v-theme-primary), 0.1);
+  background: rgba(59, 130, 246, 0.05);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.1);
   border-radius: 8px 8px 0 0;
   margin-bottom: 8px;
 }
@@ -102,7 +98,7 @@ export default {
 
 .trace-hint {
   font-size: 13px;
-  color: var(--v-theme-on-surface-variant);
+  color: #6b7280;
 }
 
 .trace-controls {
@@ -113,7 +109,7 @@ export default {
 
 .switch-label {
   font-size: 13px;
-  color: var(--v-theme-on-surface);
+  color: #4b5563;
   white-space: nowrap;
 }
 </style>

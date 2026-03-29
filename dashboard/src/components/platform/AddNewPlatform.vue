@@ -47,9 +47,8 @@
                     <v-list-item v-bind="itemProps">
                       <template #prepend>
                         <img
-                          :src="
-                            getPlatformIcon(platformTemplates[item.raw]?.type)
-                          "
+                          v-if="getPlatformIcon(platformTemplates[item.raw]?.type || item.raw)"
+                          :src="getPlatformIcon(platformTemplates[item.raw]?.type || item.raw)"
                           style="
                             width: 32px;
                             height: 32px;
@@ -57,6 +56,7 @@
                             margin-right: 16px;
                           "
                         />
+                        <v-icon v-else>mdi-robot</v-icon>
                       </template>
                     </v-list-item>
                   </template>
