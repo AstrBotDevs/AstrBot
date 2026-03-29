@@ -28,7 +28,10 @@
           <div
             class="message-bubble user-bubble"
             :class="{ 'has-audio': hasAudio(msg.content.message) }"
-            :style="{ backgroundColor: 'rgb(var(--v-theme-chatMessageBubble))' }"
+            :style="{
+              backgroundColor: 'var(--v-theme-chatMessageBubble)',
+              color: 'rgba(228, 225, 230, 0.9) !important',
+            }"
           >
             <!-- 遍历 message parts -->
             <template
@@ -182,7 +185,13 @@
             </v-icon>
           </v-avatar>
           <div class="bot-message-content">
-            <div class="message-bubble bot-bubble">
+            <div
+              class="message-bubble bot-bubble"
+              :style="{
+                backgroundColor: 'var(--v-theme-chatAssistantBubble)',
+                color: 'rgba(228, 225, 230, 0.9) !important',
+              }"
+            >
               <!-- Loading state -->
               <div v-if="msg.content.isLoading" class="loading-container">
                 <span class="loading-text">{{ tm("message.loading") }}</span>

@@ -233,8 +233,8 @@ const emitDeleteSource = (source) => emit("delete-provider-source", source);
 }
 
 .provider-source-list-item--active {
-  background-color: #e8f0fe;
-  border: 1px solid rgba(var(--v-theme-primary), 0.25);
+  background-color: rgba(var(--v-theme-primary), 0.1) !important;
+  border: 1px solid rgba(var(--v-theme-primary), 0.2) !important;
 }
 
 @media (max-width: 960px) {

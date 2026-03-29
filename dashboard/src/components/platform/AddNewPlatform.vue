@@ -48,7 +48,7 @@
                       <template #prepend>
                         <img
                           :src="
-                            getPlatformIcon(platformTemplates[item.raw].type)
+                            getPlatformIcon(platformTemplates[item.raw]?.type)
                           "
                           style="
                             width: 32px;
@@ -543,6 +543,7 @@ import ConfigPage from "@/views/ConfigPage.vue";
 export default {
   name: "AddNewPlatform",
   components: { AstrBotConfig, AstrBotCoreConfigWrapper, ConfigPage },
+  emits: ["update:show", "show-toast", "refresh-config"],
   props: {
     show: {
       type: Boolean,
