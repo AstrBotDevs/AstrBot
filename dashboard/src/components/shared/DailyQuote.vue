@@ -95,7 +95,7 @@ currentQuote.value = getQuoteOfTheDay();
 
 <style scoped>
 .daily-quote {
-  text-align: center;
+  text-align: left;
   padding: 8px 16px;
   max-width: 100%;
 }
