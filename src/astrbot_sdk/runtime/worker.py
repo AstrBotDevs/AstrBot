@@ -30,10 +30,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
-
 from .._internal.decorator_lifecycle import run_lifecycle_with_decorators
 from .._internal.invocation_context import caller_plugin_scope
+from .._internal.sdk_logger import logger
 from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
 from ..protocol.messages import PeerInfo
@@ -43,6 +42,7 @@ from .loader import (
     PluginDiscoveryIssue,
     PluginSpec,
     load_plugin,
+    load_plugin_config,
     load_plugin_spec,
 )
 from .peer import Peer
@@ -51,6 +51,7 @@ __all__ = [
     "GroupPluginRuntimeState",
     "GroupWorkerRuntime",
     "PluginWorkerRuntime",
+    "_load_plugin_specs",
     "_load_group_plugin_specs",
 ]
 
@@ -123,6 +124,30 @@ def _load_group_plugin_specs(group_metadata_path: Path) -> tuple[str, list[Plugi
     return group_id, plugins
 
 
+def _load_plugin_specs(plugin_dirs: list[Path]) -> list[PluginSpec]:
+    if not plugin_dirs:
+        raise RuntimeError("worker requires at least one plugin directory")
+    return [load_plugin_spec(plugin_dir) for plugin_dir in plugin_dirs]
+
+
+def _build_worker_registry_entry(
+    plugin: PluginSpec,
+    *,
+    enabled: bool,
+) -> dict[str, Any]:
+    manifest = plugin.manifest_data
+    return {
+        "name": plugin.name,
+        "display_name": str(manifest.get("display_name") or plugin.name),
+        "description": str(manifest.get("desc") or manifest.get("description") or ""),
+        "repo": str(manifest.get("repo") or ""),
+        "author": str(manifest.get("author") or ""),
+        "version": str(manifest.get("version") or "0.0.0"),
+        "enabled": enabled,
+        "config": load_plugin_config(plugin),
+    }
+
+
 async def run_plugin_lifecycle(
     instances: list[Any],
     method_name: str,
@@ -141,13 +166,37 @@ async def run_plugin_lifecycle(
 
 
 class GroupWorkerRuntime:
-    def __init__(self, *, group_metadata_path: Path, transport) -> None:
-        self.group_metadata_path = group_metadata_path.resolve()
-        self.group_id, self.plugins = _load_group_plugin_specs(self.group_metadata_path)
+    def __init__(
+        self,
+        *,
+        transport,
+        group_metadata_path: Path | None = None,
+        plugin_dirs: list[Path] | None = None,
+        worker_id: str | None = None,
+    ) -> None:
+        if group_metadata_path is None and not plugin_dirs:
+            raise ValueError("group_metadata_path or plugin_dirs is required")
+        if group_metadata_path is not None and plugin_dirs:
+            raise ValueError(
+                "group_metadata_path and plugin_dirs are mutually exclusive"
+            )
+        self.group_metadata_path = (
+            group_metadata_path.resolve() if group_metadata_path is not None else None
+        )
+        if self.group_metadata_path is not None:
+            default_worker_id, plugins = _load_group_plugin_specs(
+                self.group_metadata_path
+            )
+        else:
+            assert plugin_dirs is not None
+            plugins = _load_plugin_specs([path.resolve() for path in plugin_dirs])
+            default_worker_id = plugins[0].name
+        self.plugins = plugins
+        self.worker_id = str(worker_id or default_worker_id)
         self.transport = transport
         self.peer = Peer(
             transport=self.transport,
-            peer_info=PeerInfo(name=self.group_id, role="plugin", version="v4"),
+            peer_info=PeerInfo(name=self.worker_id, role="plugin", version="v4"),
         )
         self.skipped_plugins: dict[str, str] = {}
         self.issues: list[PluginDiscoveryIssue] = []
@@ -174,8 +223,8 @@ class GroupWorkerRuntime:
                     )
                 )
                 logger.exception(
-                    "组 {} 中插件 {} 加载失败，启动时将跳过",
-                    self.group_id,
+                    "worker {} 中插件 {} 加载失败，启动时将跳过",
+                    self.worker_id,
                     plugin.name,
                 )
                 continue
@@ -202,12 +251,12 @@ class GroupWorkerRuntime:
             for capability in state.loaded_plugin.capabilities
         ]
         self.dispatcher = HandlerDispatcher(
-            plugin_id=self.group_id,
+            plugin_id=self.worker_id,
             peer=self.peer,
             handlers=handlers,
         )
         self.capability_dispatcher = CapabilityDispatcher(
-            plugin_id=self.group_id,
+            plugin_id=self.worker_id,
             peer=self.peer,
             capabilities=capabilities,
             llm_tools=[
@@ -237,8 +286,8 @@ class GroupWorkerRuntime:
                         )
                     )
                     logger.exception(
-                        "组 {} 中插件 {} on_start 失败，启动时将跳过",
-                        self.group_id,
+                        "worker {} 中插件 {} on_start 失败，启动时将跳过",
+                        self.worker_id,
                         state.plugin.name,
                     )
                     continue
@@ -248,9 +297,7 @@ class GroupWorkerRuntime:
             self._active_plugin_states = active_states
             self._refresh_dispatchers()
             if not self._active_plugin_states:
-                raise RuntimeError(
-                    f"worker group {self.group_id} has no active plugins"
-                )
+                raise RuntimeError(f"worker {self.worker_id} has no active plugins")
 
             await self.peer.initialize(
                 [
@@ -271,8 +318,8 @@ class GroupWorkerRuntime:
                     await self._run_lifecycle(state, "on_stop")
                 except Exception:
                     logger.exception(
-                        "组 {} 在启动失败清理插件 {} on_stop 时发生异常",
-                        self.group_id,
+                        "worker {} 在启动失败清理插件 {} on_stop 时发生异常",
+                        self.worker_id,
                         state.plugin.name,
                     )
             await self.peer.stop()
@@ -288,8 +335,8 @@ class GroupWorkerRuntime:
                     if first_error is None:
                         first_error = exc
                     logger.exception(
-                        "组 {} 停止插件 {} 时发生异常",
-                        self.group_id,
+                        "worker {} 停止插件 {} 时发生异常",
+                        self.worker_id,
                         state.plugin.name,
                     )
         finally:
@@ -311,12 +358,20 @@ class GroupWorkerRuntime:
 
     def _initialize_metadata(self) -> dict[str, Any]:
         return {
-            "group_id": self.group_id,
+            "worker_id": self.worker_id,
             "plugins": [plugin.name for plugin in self.plugins],
             "loaded_plugins": [
                 state.plugin.name for state in self._active_plugin_states
             ],
             "skipped_plugins": dict(self.skipped_plugins),
+            "worker_registry": [
+                _build_worker_registry_entry(
+                    plugin,
+                    enabled=plugin.name
+                    in {state.plugin.name for state in self._active_plugin_states},
+                )
+                for plugin in self.plugins
+            ],
             "capability_sources": {
                 capability.descriptor.name: state.plugin.name
                 for state in self._active_plugin_states
@@ -358,13 +413,20 @@ class GroupWorkerRuntime:
 
 
 class PluginWorkerRuntime:
-    def __init__(self, *, plugin_dir: Path, transport) -> None:
+    def __init__(
+        self,
+        *,
+        plugin_dir: Path,
+        transport,
+        worker_id: str | None = None,
+    ) -> None:
         self.plugin = load_plugin_spec(plugin_dir)
+        self.worker_id = str(worker_id or self.plugin.name)
         self.transport = transport
         self.loaded_plugin = load_plugin(self.plugin)
         self.peer = Peer(
             transport=self.transport,
-            peer_info=PeerInfo(name=self.plugin.name, role="plugin", version="v4"),
+            peer_info=PeerInfo(name=self.worker_id, role="plugin", version="v4"),
         )
         self.dispatcher = HandlerDispatcher(
             plugin_id=self.plugin.name,
@@ -396,10 +458,13 @@ class PluginWorkerRuntime:
                     item.descriptor for item in self.loaded_plugin.capabilities
                 ],
                 metadata={
-                    "plugin_id": self.plugin.name,
+                    "worker_id": self.worker_id,
                     "plugins": [self.plugin.name],
                     "loaded_plugins": [self.plugin.name],
                     "skipped_plugins": {},
+                    "worker_registry": [
+                        _build_worker_registry_entry(self.plugin, enabled=True)
+                    ],
                     "issues": [issue.to_payload() for issue in self.issues],
                     "capability_sources": {
                         item.descriptor.name: self.plugin.name

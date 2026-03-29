@@ -43,12 +43,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import IO, Any, cast
 
-from loguru import logger
-
 from .._internal.plugin_ids import (
     capability_belongs_to_plugin,
     plugin_capability_prefix,
 )
+from .._internal.sdk_logger import logger
 from ..errors import AstrBotError
 from ..protocol.descriptors import CapabilityDescriptor
 from ..protocol.messages import EventMessage, InitializeOutput, PeerInfo
@@ -62,7 +61,12 @@ from .loader import (
     load_plugin_config,
 )
 from .peer import Peer
-from .transport import StdioTransport
+from .transport import (
+    StdioTransport,
+    WebSocketClientTransport,
+    build_websocket_client_ssl_context,
+)
+from .workers_manifest import RemoteWorkerSpec, load_remote_workers_manifest
 
 __all__ = [
     "SupervisorRuntime",
@@ -72,6 +76,10 @@ __all__ = [
     "_sdk_source_dir",
     "_wait_for_shutdown",
 ]
+
+# Worker 进程初始化握手超时：60 秒内必须完成 initialize 协议交换，
+# 否则视为进程卡死或挂载过慢，直接报错让上层感知
+WORKER_INITIALIZE_TIMEOUT_SECONDS = 60.0
 
 
 def _install_signal_handlers(stop_event: asyncio.Event) -> None:
@@ -129,25 +137,42 @@ class WorkerSession:
         *,
         plugin: PluginSpec | None = None,
         group: EnvironmentGroup | None = None,
+        remote_worker: RemoteWorkerSpec | None = None,
         repo_root: Path,
         env_manager: PluginEnvironmentManager,
         capability_router: CapabilityRouter,
         on_closed: Callable[[], None] | None = None,
     ) -> None:
-        if plugin is None and group is None:
-            raise ValueError("WorkerSession requires either plugin or group")
+        target_count = sum(item is not None for item in (plugin, group, remote_worker))
+        if target_count != 1:
+            raise ValueError(
+                "WorkerSession requires exactly one of plugin, group, or remote_worker"
+            )
         group_ref = group
+        self.remote_worker = remote_worker
+        self.is_remote = remote_worker is not None
         if group_ref is not None:
             primary_plugin = group_ref.plugins[0]
-        else:
-            assert plugin is not None
+        elif plugin is not None:
             primary_plugin = plugin
+        else:
+            primary_plugin = None
         self.group = group
         self.plugins = (
-            list(group_ref.plugins) if group_ref is not None else [primary_plugin]
+            list(group_ref.plugins)
+            if group_ref is not None
+            else ([primary_plugin] if primary_plugin is not None else [])
         )
         self.plugin = primary_plugin
-        self.group_id = group_ref.id if group_ref is not None else primary_plugin.name
+        self.worker_id = (
+            remote_worker.id
+            if remote_worker is not None
+            else (
+                group_ref.id
+                if group_ref is not None
+                else cast(PluginSpec, primary_plugin).name
+            )
+        )
         self.repo_root = repo_root.resolve()
         self.env_manager = env_manager
         self.capability_router = capability_router
@@ -161,9 +186,40 @@ class WorkerSession:
         self.capability_sources: dict[str, str] = {}
         self.llm_tools: list[dict[str, Any]] = []
         self.agents: list[dict[str, Any]] = []
+        self.worker_registry: list[dict[str, Any]] = []
         self._connection_watch_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
+        transport = self._build_transport()
+        self.peer = Peer(
+            transport=transport,
+            peer_info=PeerInfo(name="astrbot-core", role="core", version="v4"),
+        )
+        self.peer.set_initialize_handler(self._handle_initialize)
+        self.peer.set_invoke_handler(self._handle_capability_invoke)
+        try:
+            await self.peer.start()
+            await self._wait_until_initialized()
+            self._sync_remote_state()
+            self._validate_initialized_state()
+
+        except Exception:
+            await self.stop()
+            raise
+
+    def _build_transport(self):
+        if self.remote_worker is not None:
+            ssl_context = build_websocket_client_ssl_context(
+                ca_file=self.remote_worker.tls.ca_file,
+                cert_file=self.remote_worker.tls.cert_file,
+                key_file=self.remote_worker.tls.key_file,
+            )
+            return WebSocketClientTransport(
+                url=self.remote_worker.url,
+                ssl_context=ssl_context,
+                server_hostname=self.remote_worker.tls.server_hostname,
+            )
+
         python_path, command, cwd = self._worker_command()
         repo_src_dir = str(_sdk_source_dir(self.repo_root))
         env = os.environ.copy()
@@ -175,94 +231,168 @@ class WorkerSession:
         )
         env.setdefault("PYTHONIOENCODING", "utf-8")
         env.setdefault("PYTHONUTF8", "1")
+        return StdioTransport(command=command, cwd=cwd, env=env)
 
-        transport = StdioTransport(
-            command=command,
-            cwd=cwd,
-            env=env,
-        )
-        self.peer = Peer(
-            transport=transport,
-            peer_info=PeerInfo(name="astrbot-core", role="core", version="v4"),
-        )
-        self.peer.set_initialize_handler(self._handle_initialize)
-        self.peer.set_invoke_handler(self._handle_capability_invoke)
-        try:
-            await self.peer.start()
-            # 同时监听初始化完成和连接关闭，避免 worker 崩溃时等满超时
-            init_task = asyncio.create_task(
-                self.peer.wait_until_remote_initialized(timeout=None)
+    async def _wait_until_initialized(self) -> None:
+        assert self.peer is not None
+        init_task = asyncio.create_task(
+            self.peer.wait_until_remote_initialized(
+                timeout=WORKER_INITIALIZE_TIMEOUT_SECONDS
             )
-            closed_task = asyncio.create_task(self.peer.wait_closed())
-            done, pending = await asyncio.wait(
-                {init_task, closed_task},
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            for task in pending:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+        )
+        closed_task = asyncio.create_task(self.peer.wait_closed())
+        done, pending = await asyncio.wait(
+            {init_task, closed_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
-            if init_task in done:
+        if init_task in done:
+            try:
                 await init_task
+            except TimeoutError as exc:
+                raise RuntimeError(
+                    f"worker {self.worker_id} 初始化超时 "
+                    f"({WORKER_INITIALIZE_TIMEOUT_SECONDS:.0f}s)"
+                ) from exc
 
-            if closed_task in done:
-                raise RuntimeError(f"worker 组 {self.group_id} 在初始化阶段退出")
+        if closed_task in done:
+            raise RuntimeError(f"worker {self.worker_id} 在初始化阶段退出")
 
-            self.handlers = list(self.peer.remote_handlers)
-            self.provided_capabilities = list(self.peer.remote_provided_capabilities)
-            metadata = dict(self.peer.remote_metadata)
-            remote_loaded_plugins = metadata.get("loaded_plugins")
-            if isinstance(remote_loaded_plugins, list):
-                self.loaded_plugins = [
-                    plugin_name
-                    for plugin_name in remote_loaded_plugins
-                    if isinstance(plugin_name, str)
-                ]
-            else:
-                self.loaded_plugins = [plugin.name for plugin in self.plugins]
-            remote_skipped_plugins = metadata.get("skipped_plugins")
-            if isinstance(remote_skipped_plugins, dict):
-                self.skipped_plugins = {
-                    str(plugin_name): str(reason)
-                    for plugin_name, reason in remote_skipped_plugins.items()
-                }
-            remote_capability_sources = metadata.get("capability_sources")
-            if isinstance(remote_capability_sources, dict):
-                self.capability_sources = {
-                    str(capability_name): str(plugin_name)
-                    for capability_name, plugin_name in remote_capability_sources.items()
-                }
-            remote_issues = metadata.get("issues")
-            if isinstance(remote_issues, list):
-                self.issues = [
-                    PluginDiscoveryIssue(
-                        severity=str(item.get("severity", "error")),  # type: ignore[arg-type]
-                        phase=str(item.get("phase", "load")),  # type: ignore[arg-type]
-                        plugin_id=str(item.get("plugin_id", self.plugin.name)),
-                        message=str(item.get("message", "")),
-                        details=str(item.get("details", "")),
-                        hint=str(item.get("hint", "")),
-                    )
-                    for item in remote_issues
-                    if isinstance(item, dict)
-                ]
-            remote_llm_tools = metadata.get("llm_tools")
-            if isinstance(remote_llm_tools, list):
-                self.llm_tools = [
-                    dict(item) for item in remote_llm_tools if isinstance(item, dict)
-                ]
-            remote_agents = metadata.get("agents")
-            if isinstance(remote_agents, list):
-                self.agents = [
-                    dict(item) for item in remote_agents if isinstance(item, dict)
-                ]
+    def _sync_remote_state(self) -> None:
+        assert self.peer is not None
+        self.handlers = list(self.peer.remote_handlers)
+        self.provided_capabilities = list(self.peer.remote_provided_capabilities)
+        metadata = dict(self.peer.remote_metadata)
 
-        except Exception:
-            await self.stop()
-            raise
+        remote_loaded_plugins = metadata.get("loaded_plugins")
+        if isinstance(remote_loaded_plugins, list):
+            self.loaded_plugins = [
+                plugin_name
+                for plugin_name in remote_loaded_plugins
+                if isinstance(plugin_name, str)
+            ]
+        else:
+            self.loaded_plugins = [plugin.name for plugin in self.plugins]
+
+        remote_skipped_plugins = metadata.get("skipped_plugins")
+        if isinstance(remote_skipped_plugins, dict):
+            self.skipped_plugins = {
+                str(plugin_name): str(reason)
+                for plugin_name, reason in remote_skipped_plugins.items()
+            }
+
+        remote_capability_sources = metadata.get("capability_sources")
+        if isinstance(remote_capability_sources, dict):
+            self.capability_sources = {
+                str(capability_name): str(plugin_name)
+                for capability_name, plugin_name in remote_capability_sources.items()
+            }
+
+        remote_issues = metadata.get("issues")
+        default_issue_owner = (
+            self.plugin.name if self.plugin is not None else self.worker_id
+        )
+        if isinstance(remote_issues, list):
+            self.issues = [
+                PluginDiscoveryIssue(
+                    severity=str(item.get("severity", "error")),  # type: ignore[arg-type]
+                    phase=str(item.get("phase", "load")),  # type: ignore[arg-type]
+                    plugin_id=str(item.get("plugin_id", default_issue_owner)),
+                    message=str(item.get("message", "")),
+                    details=str(item.get("details", "")),
+                    hint=str(item.get("hint", "")),
+                )
+                for item in remote_issues
+                if isinstance(item, dict)
+            ]
+
+        remote_llm_tools = metadata.get("llm_tools")
+        if isinstance(remote_llm_tools, list):
+            self.llm_tools = [
+                dict(item) for item in remote_llm_tools if isinstance(item, dict)
+            ]
+
+        remote_agents = metadata.get("agents")
+        if isinstance(remote_agents, list):
+            self.agents = [
+                dict(item) for item in remote_agents if isinstance(item, dict)
+            ]
+
+        remote_worker_registry = metadata.get("worker_registry")
+        if isinstance(remote_worker_registry, list):
+            self.worker_registry = [
+                dict(item)
+                for item in remote_worker_registry
+                if isinstance(item, dict) and str(item.get("name", "")).strip()
+            ]
+
+    def _validate_initialized_state(self) -> None:
+        assert self.peer is not None
+        if self.remote_worker is not None and self.peer.remote_peer is not None:
+            if self.peer.remote_peer.name != self.worker_id:
+                raise RuntimeError(
+                    "remote worker identity mismatch: "
+                    f"expected {self.worker_id!r}, got {self.peer.remote_peer.name!r}"
+                )
+
+        plugin_ids = {
+            str(item.get("name", "")).strip()
+            for item in self.worker_registry
+            if isinstance(item, dict)
+        }
+        plugin_ids.discard("")
+        if not plugin_ids and self.plugins:
+            plugin_ids = {plugin.name for plugin in self.plugins}
+        if self.remote_worker is not None and not plugin_ids:
+            raise RuntimeError(
+                f"remote worker {self.worker_id} did not provide worker_registry"
+            )
+
+        for plugin_name in self.loaded_plugins:
+            if plugin_ids and plugin_name not in plugin_ids:
+                raise RuntimeError(
+                    f"worker {self.worker_id} reported undeclared loaded plugin: "
+                    f"{plugin_name}"
+                )
+        for plugin_name in self.skipped_plugins:
+            if plugin_ids and plugin_name not in plugin_ids:
+                raise RuntimeError(
+                    f"worker {self.worker_id} reported undeclared skipped plugin: "
+                    f"{plugin_name}"
+                )
+        for capability_name, plugin_name in self.capability_sources.items():
+            if plugin_ids and plugin_name not in plugin_ids:
+                raise RuntimeError(
+                    f"worker {self.worker_id} returned capability source outside "
+                    f"worker_registry: {capability_name} -> {plugin_name}"
+                )
+        for handler in self.handlers:
+            owner_plugin = _plugin_name_from_handler_id(handler.id)
+            if plugin_ids and owner_plugin not in plugin_ids:
+                raise RuntimeError(
+                    f"worker {self.worker_id} returned handler outside worker_registry: "
+                    f"{handler.id}"
+                )
+        for item in self.llm_tools:
+            plugin_name = str(item.get("plugin_id", "")).strip()
+            if plugin_ids and plugin_name and plugin_name not in plugin_ids:
+                raise RuntimeError(
+                    f"worker {self.worker_id} returned llm tool outside worker_registry: "
+                    f"{plugin_name}"
+                )
+        for item in self.agents:
+            plugin_name = str(item.get("plugin_id", "")).strip()
+            if plugin_ids and plugin_name and plugin_name not in plugin_ids:
+                raise RuntimeError(
+                    f"worker {self.worker_id} returned agent outside worker_registry: "
+                    f"{plugin_name}"
+                )
 
     def _worker_command(self) -> tuple[Path, list[str], str]:
         if self.group is not None:
@@ -284,6 +414,7 @@ class WorkerSession:
                 str(self.repo_root),
             )
 
+        assert self.plugin is not None
         plugin = self.plugin
         python_path = self.env_manager.prepare_environment(plugin)
         return (
@@ -318,7 +449,7 @@ class WorkerSession:
                     self.on_closed()
                 except Exception:
                     logger.exception(
-                        "on_closed callback failed for worker group {}", self.group_id
+                        "on_closed callback failed for worker {}", self.worker_id
                     )
         finally:
             current_task = asyncio.current_task()
@@ -390,9 +521,9 @@ class WorkerSession:
     async def _handle_initialize(self, _message) -> InitializeOutput:
         return InitializeOutput(
             peer=PeerInfo(name="astrbot-supervisor", role="core", version="v4"),
-            capabilities=self.capability_router.descriptors(),
+            capabilities=self.capability_router.all_descriptors(),
             metadata={
-                "group_id": self.group_id,
+                "worker_id": self.worker_id,
                 "plugins": [plugin.name for plugin in self.plugins],
             },
         )
@@ -408,7 +539,7 @@ class WorkerSession:
 
     def describe(self) -> dict[str, Any]:
         return {
-            "group_id": self.group_id,
+            "worker_id": self.worker_id,
             "plugins": [plugin.name for plugin in self.plugins],
             "loaded_plugins": list(self.loaded_plugins),
             "skipped_plugins": dict(self.skipped_plugins),
@@ -423,11 +554,13 @@ class SupervisorRuntime:
         transport,
         plugins_dir: Path,
         env_manager: PluginEnvironmentManager | None = None,
+        workers_manifest: Path | None = None,
     ) -> None:
         self.transport = transport
         self.plugins_dir = plugins_dir.resolve()
         self.repo_root = Path(__file__).resolve().parents[3]
         self.env_manager = env_manager or PluginEnvironmentManager(self.repo_root)
+        self.workers_manifest = workers_manifest.resolve() if workers_manifest else None
         self.capability_router = CapabilityRouter()
         self.peer = Peer(
             transport=self.transport,
@@ -485,6 +618,121 @@ class SupervisorRuntime:
             plugins,
             enabled_plugins=set(self.loaded_plugins),
         )
+
+    def _publish_worker_registry(self, entries: list[dict[str, Any]]) -> None:
+        for item in entries:
+            plugin_name = str(item.get("name", "")).strip()
+            if not plugin_name:
+                continue
+            config = item.get("config")
+            metadata = dict(item)
+            metadata.pop("config", None)
+            self.capability_router.upsert_plugin(
+                metadata=metadata,
+                config=dict(config) if isinstance(config, dict) else {},
+            )
+
+    def _publish_session_runtime_metadata(self, session: WorkerSession) -> None:
+        self._publish_worker_registry(session.worker_registry)
+        tools_by_plugin: dict[str, list[dict[str, Any]]] = {}
+        for item in session.llm_tools:
+            plugin_name = str(item.get("plugin_id", "")).strip()
+            if not plugin_name:
+                continue
+            tools_by_plugin.setdefault(plugin_name, []).append(dict(item))
+        for plugin_name, items in tools_by_plugin.items():
+            self.capability_router.set_plugin_llm_tools(plugin_name, items)
+
+        agents_by_plugin: dict[str, list[dict[str, Any]]] = {}
+        for item in session.agents:
+            plugin_name = str(item.get("plugin_id", "")).strip()
+            if not plugin_name:
+                continue
+            agents_by_plugin.setdefault(plugin_name, []).append(dict(item))
+        for plugin_name, items in agents_by_plugin.items():
+            self.capability_router.set_plugin_agents(plugin_name, items)
+
+    @staticmethod
+    def _session_plugin_ids(session: WorkerSession) -> set[str]:
+        plugin_ids = {
+            str(item.get("name", "")).strip()
+            for item in session.worker_registry
+            if isinstance(item, dict)
+        }
+        plugin_ids.discard("")
+        if plugin_ids:
+            return plugin_ids
+        return {plugin.name for plugin in session.plugins}
+
+    def _validate_remote_session_plugins(
+        self,
+        session: WorkerSession,
+        *,
+        local_plugin_ids: set[str],
+    ) -> None:
+        if not session.is_remote:
+            return
+        conflicts = self._session_plugin_ids(session) & (
+            local_plugin_ids | set(self.plugin_to_worker_session)
+        )
+        if not conflicts:
+            return
+        names = ", ".join(sorted(conflicts))
+        raise RuntimeError(
+            f"remote worker {session.worker_id} conflicts with existing plugins: {names}"
+        )
+
+    def _record_session_start_failure(
+        self,
+        session: WorkerSession,
+        exc: Exception,
+    ) -> None:
+        if session.plugins:
+            for plugin in session.plugins:
+                self.skipped_plugins[plugin.name] = str(exc)
+                self.issues.append(
+                    PluginDiscoveryIssue(
+                        severity="error",
+                        phase="load",
+                        plugin_id=plugin.name,
+                        message="插件 worker 启动失败",
+                        details=str(exc),
+                    )
+                )
+            return
+        self.issues.append(
+            PluginDiscoveryIssue(
+                severity="error",
+                phase="load",
+                plugin_id=session.worker_id,
+                message="远程 worker 连接失败",
+                details=str(exc),
+            )
+        )
+
+    def _register_started_session(self, session: WorkerSession) -> None:
+        self.worker_sessions[session.worker_id] = session
+        self.skipped_plugins.update(session.skipped_plugins)
+        self.issues.extend(session.issues)
+        self._publish_session_runtime_metadata(session)
+        for plugin_name in session.loaded_plugins:
+            self.plugin_to_worker_session[plugin_name] = session
+            if plugin_name not in self.loaded_plugins:
+                self.loaded_plugins.append(plugin_name)
+        for handler in session.handlers:
+            self._register_handler(
+                handler,
+                session,
+                _plugin_name_from_handler_id(handler.id),
+            )
+        for descriptor in session.provided_capabilities:
+            plugin_name = session.capability_sources.get(descriptor.name)
+            if plugin_name is None and len(session.loaded_plugins) == 1:
+                plugin_name = session.loaded_plugins[0]
+            if plugin_name is None:
+                plugin_name = session.worker_id
+            self._register_plugin_capability(descriptor, session, plugin_name)
+        session.start_close_watch()
 
     def _register_internal_capabilities(self) -> None:
         self.capability_router.register(
@@ -644,7 +892,13 @@ class SupervisorRuntime:
         discovery = discover_plugins(self.plugins_dir)
         self.skipped_plugins = dict(discovery.skipped_plugins)
         self.issues = list(discovery.issues)
+        local_plugin_ids = {plugin.name for plugin in discovery.plugins}
         plan_result = self.env_manager.plan(discovery.plugins)
+        remote_workers = (
+            load_remote_workers_manifest(self.workers_manifest)
+            if self.workers_manifest is not None
+            else []
+        )
         self.skipped_plugins.update(plan_result.skipped_plugins)
         self.issues.extend(
             PluginDiscoveryIssue(
@@ -668,8 +922,8 @@ class SupervisorRuntime:
                             repo_root=self.repo_root,
                             env_manager=self.env_manager,
                             capability_router=self.capability_router,
-                            on_closed=lambda group_id=group.id: (
-                                self._handle_worker_closed(group_id)
+                            on_closed=lambda worker_id=group.id: (
+                                self._handle_worker_closed(worker_id)
                             ),
                         )
                     )
@@ -681,50 +935,36 @@ class SupervisorRuntime:
                             repo_root=self.repo_root,
                             env_manager=self.env_manager,
                             capability_router=self.capability_router,
-                            on_closed=lambda plugin_name=plugin.name: (
-                                self._handle_worker_closed(plugin_name)
+                            on_closed=lambda worker_id=plugin.name: (
+                                self._handle_worker_closed(worker_id)
                             ),
                         )
                     )
+            for remote_worker in remote_workers:
+                planned_sessions.append(
+                    WorkerSession(
+                        remote_worker=remote_worker,
+                        repo_root=self.repo_root,
+                        env_manager=self.env_manager,
+                        capability_router=self.capability_router,
+                        on_closed=lambda worker_id=remote_worker.id: (
+                            self._handle_worker_closed(worker_id)
+                        ),
+                    )
+                )
 
             for session in planned_sessions:
                 try:
                     await session.start()
+                    self._validate_remote_session_plugins(
+                        session,
+                        local_plugin_ids=local_plugin_ids,
+                    )
                 except Exception as exc:
-                    for plugin in session.plugins:
-                        self.skipped_plugins[plugin.name] = str(exc)
-                        self.issues.append(
-                            PluginDiscoveryIssue(
-                                severity="error",
-                                phase="load",
-                                plugin_id=plugin.name,
-                                message="插件 worker 启动失败",
-                                details=str(exc),
-                            )
-                        )
+                    self._record_session_start_failure(session, exc)
                     await session.stop()
                     continue
-                self.worker_sessions[session.group_id] = session
-                self.skipped_plugins.update(session.skipped_plugins)
-                self.issues.extend(session.issues)
-                for plugin_name in session.loaded_plugins:
-                    self.plugin_to_worker_session[plugin_name] = session
-                    if plugin_name not in self.loaded_plugins:
-                        self.loaded_plugins.append(plugin_name)
-                for handler in session.handlers:
-                    self._register_handler(
-                        handler,
-                        session,
-                        _plugin_name_from_handler_id(handler.id),
-                    )
-                for descriptor in session.provided_capabilities:
-                    plugin_name = session.capability_sources.get(descriptor.name)
-                    if plugin_name is None and len(session.loaded_plugins) == 1:
-                        plugin_name = session.loaded_plugins[0]
-                    if plugin_name is None:
-                        plugin_name = session.group_id
-                    self._register_plugin_capability(descriptor, session, plugin_name)
-                session.start_close_watch()
+                self._register_started_session(session)
 
             # worker 启动后再用实际加载结果刷新 enabled 状态，形成显式两阶段发布。
             self._publish_loaded_plugin_registry(discovery.plugins)
@@ -747,26 +987,26 @@ class SupervisorRuntime:
                     "skipped_plugins": self.skipped_plugins,
                     "issues": [issue.to_payload() for issue in self.issues],
                     "aggregated_handler_ids": aggregated_handlers,
-                    "worker_groups": [
+                    "workers": [
                         session.describe() for session in self.worker_sessions.values()
                     ],
-                    "worker_group_count": len(self.worker_sessions),
+                    "worker_count": len(self.worker_sessions),
                 },
             )
         except Exception:
             await self.stop()
             raise
 
-    def _handle_worker_closed(self, group_id: str) -> None:
+    def _handle_worker_closed(self, worker_id: str) -> None:
         """Worker 连接关闭时的清理回调"""
-        session = self.worker_sessions.pop(group_id, None)
+        session = self.worker_sessions.pop(worker_id, None)
         if session is None:
             return
         # 从 handler_to_worker 中移除该插件注册的 handlers（仅当来源仍为此插件时）
         for handler in session.handlers:
             source_plugin = self._handler_sources.get(handler.id)
             if source_plugin == _plugin_name_from_handler_id(handler.id) or (
-                source_plugin == group_id
+                source_plugin == worker_id
             ):
                 self.handler_to_worker.pop(handler.id, None)
                 self._handler_sources.pop(handler.id, None)
@@ -776,7 +1016,8 @@ class SupervisorRuntime:
             if source_plugin == capability_plugin or (
                 capability_plugin is None
                 and (
-                    source_plugin == group_id or source_plugin in session.loaded_plugins
+                    source_plugin == worker_id
+                    or source_plugin in session.loaded_plugins
                 )
             ):
                 self.capability_to_worker.pop(descriptor.name, None)
@@ -784,7 +1025,7 @@ class SupervisorRuntime:
                 self.capability_router.unregister(descriptor.name)
         session_loaded_plugins = getattr(session, "loaded_plugins", None)
         if not isinstance(session_loaded_plugins, list):
-            session_loaded_plugins = [group_id]
+            session_loaded_plugins = [worker_id]
         for plugin_name in session_loaded_plugins:
             if plugin_name in self.loaded_plugins:
                 self.loaded_plugins.remove(plugin_name)
@@ -798,7 +1039,7 @@ class SupervisorRuntime:
         ]
         for request_id in stale_requests:
             self.active_requests.pop(request_id, None)
-        logger.warning("worker 组 {} 连接已关闭，已清理相关 handlers", group_id)
+        logger.warning("worker {} 连接已关闭，已清理相关 handlers", worker_id)
 
     async def stop(self) -> None:
         for session in list(self.worker_sessions.values()):

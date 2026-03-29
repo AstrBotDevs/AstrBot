@@ -29,9 +29,8 @@ from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar, cast, overload
 
-from loguru import logger
-
 from ._internal.invocation_context import current_caller_plugin_id
+from ._internal.sdk_logger import logger
 from .events import MessageEvent
 
 _OwnerT = TypeVar("_OwnerT")

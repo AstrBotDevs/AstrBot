@@ -30,8 +30,8 @@ from textwrap import dedent
 from typing import Any
 
 import click
-from loguru import logger
 
+from ._internal.sdk_logger import logger
 from .errors import AstrBotError
 from .runtime.bootstrap import run_plugin_worker, run_supervisor, run_websocket_server
 from .runtime.loader import load_plugin, load_plugin_spec, validate_plugin_spec
@@ -1144,6 +1144,39 @@ def _build_plugin(plugin_dir: Path, output_dir: Path | None) -> None:
     click.echo(f"artifact: {archive_path}")
 
 
+def _run_websocket_worker_entrypoint(
+    *,
+    worker_id: str | None,
+    plugin_dirs: tuple[Path, ...],
+    host: str,
+    port: int,
+    path: str,
+    tls_ca_file: Path,
+    tls_cert_file: Path,
+    tls_key_file: Path,
+) -> None:
+    resolved_plugin_dirs = list(plugin_dirs) if plugin_dirs else [Path.cwd()]
+    _run_async_entrypoint(
+        run_websocket_server(
+            worker_id=worker_id,
+            plugin_dirs=resolved_plugin_dirs,
+            host=host,
+            port=port,
+            path=path,
+            tls_ca_file=tls_ca_file,
+            tls_cert_file=tls_cert_file,
+            tls_key_file=tls_key_file,
+        ),
+        log_message=f"启动 WebSocket Worker，端口：{port}",
+        context={
+            "worker_id": worker_id,
+            "plugin_dirs": resolved_plugin_dirs,
+            "port": port,
+            "path": path,
+        },
+    )
+
+
 @click.group()
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output")
 @click.pass_context
@@ -1162,19 +1195,36 @@ def cli(ctx, verbose: bool) -> None:
     help="Directory containing plugin folders",
 )
 @click.option(
+    "--workers-manifest",
+    default=None,
+    type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
+    help="Supervisor manifest describing remote websocket workers",
+)
+@click.option(
     "--protocol-stdout",
     default=None,
     type=str,
     help="Redirect runtime protocol stdout to console, silent, or a file path",
 )
-def run(plugins_dir: Path, protocol_stdout: str | None) -> None:
+def run(
+    plugins_dir: Path,
+    workers_manifest: Path | None,
+    protocol_stdout: str | None,
+) -> None:
     """Start the plugin supervisor over stdio."""
     transport_stdout, opened_stdout = _resolve_protocol_stdout(protocol_stdout)
     try:
         _run_async_entrypoint(
-            run_supervisor(plugins_dir=plugins_dir, stdout=transport_stdout),
+            run_supervisor(
+                plugins_dir=plugins_dir,
+                stdout=transport_stdout,
+                workers_manifest=workers_manifest,
+            ),
             log_message=f"启动插件主管进程，插件目录：{plugins_dir}",
-            context={"plugins_dir": plugins_dir},
+            context={
+                "plugins_dir": plugins_dir,
+                "workers_manifest": workers_manifest,
+            },
         )
     finally:
         if opened_stdout is not None:
@@ -1362,12 +1412,101 @@ def worker(
             opened_stdout.close()
 
 
+@cli.command("serve-worker")
+@click.option("--worker-id", default=None, type=str, help="Stable websocket worker id")
+@click.option(
+    "--plugin-dir",
+    "plugin_dirs",
+    multiple=True,
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+    help="Plugin directory to serve; repeat to host multiple plugins in one worker",
+)
+@click.option("--host", default="127.0.0.1", show_default=True)
+@click.option("--port", default=8765, type=int, show_default=True)
+@click.option("--path", default="/", show_default=True)
+@click.option(
+    "--tls-ca-file",
+    required=True,
+    type=click.Path(file_okay=True, dir_okay=False, exists=True, path_type=Path),
+)
+@click.option(
+    "--tls-cert-file",
+    required=True,
+    type=click.Path(file_okay=True, dir_okay=False, exists=True, path_type=Path),
+)
+@click.option(
+    "--tls-key-file",
+    required=True,
+    type=click.Path(file_okay=True, dir_okay=False, exists=True, path_type=Path),
+)
+def serve_worker(
+    worker_id: str | None,
+    plugin_dirs: tuple[Path, ...],
+    host: str,
+    port: int,
+    path: str,
+    tls_ca_file: Path,
+    tls_cert_file: Path,
+    tls_key_file: Path,
+) -> None:
+    """Serve one or more plugins as a standalone websocket worker."""
+    _run_websocket_worker_entrypoint(
+        worker_id=worker_id,
+        plugin_dirs=plugin_dirs,
+        host=host,
+        port=port,
+        path=path,
+        tls_ca_file=tls_ca_file,
+        tls_cert_file=tls_cert_file,
+        tls_key_file=tls_key_file,
+    )
+
+
 @cli.command(hidden=True)
-@click.option("--port", default=8765, type=int, help="WebSocket server port")
-def websocket(port: int) -> None:
-    """WebSocket runtime entrypoint kept for standalone bridge scenarios."""
-    _run_async_entrypoint(
-        run_websocket_server(port=port),
-        log_message=f"启动 WebSocket 服务器，端口：{port}",
-        context={"port": port},
+@click.option("--worker-id", default=None, type=str)
+@click.option(
+    "--plugin-dir",
+    "plugin_dirs",
+    multiple=True,
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+)
+@click.option("--host", default="127.0.0.1", show_default=True)
+@click.option("--port", default=8765, type=int, show_default=True)
+@click.option("--path", default="/", show_default=True)
+@click.option(
+    "--tls-ca-file",
+    required=True,
+    type=click.Path(file_okay=True, dir_okay=False, exists=True, path_type=Path),
+)
+@click.option(
+    "--tls-cert-file",
+    required=True,
+    type=click.Path(file_okay=True, dir_okay=False, exists=True, path_type=Path),
+)
+@click.option(
+    "--tls-key-file",
+    required=True,
+    type=click.Path(file_okay=True, dir_okay=False, exists=True, path_type=Path),
+)
+def websocket(
+    worker_id: str | None,
+    plugin_dirs: tuple[Path, ...],
+    host: str,
+    port: int,
+    path: str,
+    tls_ca_file: Path,
+    tls_cert_file: Path,
+    tls_key_file: Path,
+) -> None:
+    """Deprecated websocket runtime wrapper for standalone worker scenarios."""
+    logger.warning("'astr websocket' is deprecated; use 'astr serve-worker' instead")
+    _run_websocket_worker_entrypoint(
+        worker_id=worker_id,
+        plugin_dirs=plugin_dirs,
+        host=host,
+        port=port,
+        path=path,
+        tls_ca_file=tls_ca_file,
+        tls_cert_file=tls_cert_file,
+        tls_key_file=tls_key_file,
     )

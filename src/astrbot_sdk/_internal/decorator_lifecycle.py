@@ -6,7 +6,6 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any
 
-from loguru import logger
 from pydantic import ValidationError
 
 from ..context import Context as RuntimeContext
@@ -23,6 +22,7 @@ from ..decorators import (
     get_validate_config_meta,
 )
 from ..star import Star
+from .sdk_logger import logger
 from .star_runtime import bind_star_runtime
 
 _RUNTIME_STATE_ATTR = "__astrbot_decorator_runtime_state__"

@@ -41,8 +41,11 @@ class ConversationSession:
     _owner_task: asyncio.Task[Any] | None = None
 
     def __post_init__(self) -> None:
-        if self.state != ConversationState.ACTIVE:
+        if self.state is None:
             self.state = ConversationState.ACTIVE
+            return
+        if not isinstance(self.state, ConversationState):
+            self.state = ConversationState(str(self.state))
 
     def bind_owner_task(self, task: asyncio.Task[Any]) -> None:
         self._owner_task = task

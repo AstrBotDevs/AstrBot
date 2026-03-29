@@ -51,15 +51,43 @@
 from __future__ import annotations
 
 import asyncio
+import ssl
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Sequence
+from pathlib import Path
 from typing import IO, Any
 
-from loguru import logger
+from .._internal.sdk_logger import logger
 
 MessageHandler = Callable[[str], Awaitable[None]]
 STDIO_SUBPROCESS_STREAM_LIMIT = 8 * 1024 * 1024
+
+
+def build_websocket_server_ssl_context(
+    *,
+    ca_file: str | Path,
+    cert_file: str | Path,
+    key_file: str | Path,
+) -> ssl.SSLContext:
+    """Build a mutual-TLS server SSL context for websocket workers."""
+    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    context.verify_mode = ssl.CERT_REQUIRED
+    context.load_verify_locations(cafile=str(ca_file))
+    context.load_cert_chain(certfile=str(cert_file), keyfile=str(key_file))
+    return context
+
+
+def build_websocket_client_ssl_context(
+    *,
+    ca_file: str | Path,
+    cert_file: str | Path,
+    key_file: str | Path,
+) -> ssl.SSLContext:
+    """Build a mutual-TLS client SSL context for websocket supervisor sessions."""
+    context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=str(ca_file))
+    context.load_cert_chain(certfile=str(cert_file), keyfile=str(key_file))
+    return context
 
 
 def _get_aiohttp():
@@ -84,9 +112,13 @@ def _parse_stdio_header(raw_header: bytes) -> int:
     if not header:
         raise ValueError("STDIO frame header is empty")
     try:
-        return int(header)
+        size = int(header)
     except ValueError as exc:
         raise ValueError(f"Invalid STDIO frame header: {header!r}") from exc
+    # 拒绝负数 size，防止子进程写入畸形 header 导致 readexactly 行为异常
+    if size < 0:
+        raise ValueError(f"STDIO frame size must be non-negative: {size}")
+    return size
 
 
 # TODO 一个更好的解决方案？
@@ -127,6 +159,17 @@ class Transport(ABC):
         """把收到的原始载荷转交给上层处理器。"""
         if self._handler is not None:
             await self._handler(payload)
+
+    async def _dispatch_safely(self, payload: str, *, source: str) -> None:
+        """安全地分发一帧消息：捕获所有非取消异常，避免单帧处理错误拖垮整个读循环。"""
+        try:
+            await self._dispatch(payload)
+        except asyncio.CancelledError:
+            # CancelledError 必须放行，否则无法优雅关闭
+            raise
+        except Exception:
+            # 记录异常后继续读下一帧，而不是让读循环崩溃导致整个 transport 不可用
+            logger.exception("Dropping inbound transport frame from {}", source)
 
 
 class StdioTransport(Transport):
@@ -233,34 +276,84 @@ class StdioTransport(Transport):
         await asyncio.to_thread(_write)
 
     async def _read_process_loop(self) -> None:
+        """从子进程 stdout 持续读取 STDIO 帧，单帧异常不中断整体读取。"""
         assert self._process is not None
         assert self._process.stdout is not None
         try:
             while True:
-                raw_header = await self._process.stdout.readline()
-                if not raw_header:
+                try:
+                    raw_header = await self._process.stdout.readline()
+                    if not raw_header:
+                        break
+                    payload_size = _parse_stdio_header(raw_header)
+                    raw = await self._process.stdout.readexactly(payload_size)
+                    # 使用 _dispatch_safely 而非 _dispatch，确保上层的单帧处理错误不会终结读循环
+                    await self._dispatch_safely(
+                        raw.decode("utf-8"),
+                        source="stdio-process",
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except asyncio.IncompleteReadError:
+                    # 帧被截断说明子进程已经异常退出，读循环应终止
+                    logger.warning("STDIO subprocess frame truncated before completion")
                     break
-                payload_size = _parse_stdio_header(raw_header)
-                raw = await self._process.stdout.readexactly(payload_size)
-                await self._dispatch(raw.decode("utf-8"))
+                except ValueError as exc:
+                    # header 解析失败后无法再可靠定位后续帧边界；继续读取只会让协议流长期失同步。
+                    logger.warning(
+                        "Stopping STDIO subprocess read loop after malformed frame: {}",
+                        exc,
+                    )
+                    break
+                except UnicodeDecodeError as exc:
+                    # UTF-8 解码失败：跳过本帧继续，避免二进制脏数据导致整个连接断开
+                    logger.warning(
+                        "Skipping STDIO subprocess frame with invalid UTF-8 payload: {}",
+                        exc,
+                    )
+                    continue
         finally:
             self._closed.set()
 
     async def _read_file_loop(self) -> None:
+        """从本地 stdin（file 模式）持续读取 STDIO 帧，单帧异常不中断整体读取。"""
         assert self._stdin is not None
         try:
             while True:
-                binary_stdin = getattr(self._stdin, "buffer", None)
-                if binary_stdin is None:
-                    raise RuntimeError("STDIO stdin 必须提供可读取 bytes 的 buffer")
-                raw_header = await asyncio.to_thread(binary_stdin.readline)
-                if not raw_header:
+                try:
+                    binary_stdin = getattr(self._stdin, "buffer", None)
+                    if binary_stdin is None:
+                        raise RuntimeError("STDIO stdin 必须提供可读取 bytes 的 buffer")
+                    raw_header = await asyncio.to_thread(binary_stdin.readline)
+                    if not raw_header:
+                        break
+                    payload_size = _parse_stdio_header(raw_header)
+                    raw = await asyncio.to_thread(binary_stdin.read, payload_size)
+                    if len(raw) != payload_size:
+                        raise EOFError("STDIO frame truncated before payload completed")
+                    await self._dispatch_safely(
+                        raw.decode("utf-8"),
+                        source="stdio-file",
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except EOFError as exc:
+                    # 流被截断意味着上游已关闭，读循环应终止
+                    logger.warning("{}", exc)
                     break
-                payload_size = _parse_stdio_header(raw_header)
-                raw = await asyncio.to_thread(binary_stdin.read, payload_size)
-                if len(raw) != payload_size:
-                    raise EOFError("STDIO frame truncated before payload completed")
-                await self._dispatch(raw.decode("utf-8"))
+                except ValueError as exc:
+                    # 文件模式同样无法从坏 header 中恢复到下一帧边界；直接终止读取更安全。
+                    logger.warning(
+                        "Stopping STDIO file read loop after malformed frame: {}", exc
+                    )
+                    break
+                except UnicodeDecodeError as exc:
+                    # UTF-8 解码失败：跳过本帧继续，保留连接可用
+                    logger.warning(
+                        "Skipping STDIO file frame with invalid UTF-8 payload: {}",
+                        exc,
+                    )
+                    continue
         finally:
             self._closed.set()
 
@@ -273,6 +366,7 @@ class WebSocketServerTransport(Transport):
         port: int = 8765,
         path: str = "/",
         heartbeat: float = 30.0,
+        ssl_context: ssl.SSLContext | None = None,
     ) -> None:
         super().__init__()
         self._host = host
@@ -280,6 +374,7 @@ class WebSocketServerTransport(Transport):
         self._actual_port: int | None = None
         self._path = path
         self._heartbeat = heartbeat
+        self._ssl_context = ssl_context
         self._app: Any | None = None
         self._runner: Any | None = None
         self._site: Any | None = None
@@ -295,7 +390,12 @@ class WebSocketServerTransport(Transport):
         self._app.router.add_get(self._path, self._handle_socket)
         self._runner = web.AppRunner(self._app)
         await self._runner.setup()
-        self._site = web.TCPSite(self._runner, self._host, self._port)
+        self._site = web.TCPSite(
+            self._runner,
+            self._host,
+            self._port,
+            ssl_context=self._ssl_context,
+        )
         await self._site.start()
         if self._site._server and getattr(self._site._server, "sockets", None):
             socket = self._site._server.sockets[0]
@@ -339,9 +439,24 @@ class WebSocketServerTransport(Transport):
         try:
             async for msg in ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
-                    await self._dispatch(msg.data)
+                    # 文本帧直接分发，无需编解码
+                    await self._dispatch_safely(
+                        msg.data, source="websocket-server-text"
+                    )
                 elif msg.type == aiohttp.WSMsgType.BINARY:
-                    await self._dispatch(msg.data.decode("utf-8"))
+                    # 二进制帧需要先尝试 UTF-8 解码；解码失败只跳过本帧，不断开连接
+                    try:
+                        payload = msg.data.decode("utf-8")
+                    except UnicodeDecodeError as exc:
+                        logger.warning(
+                            "Skipping websocket server binary frame with invalid UTF-8 payload: {}",
+                            exc,
+                        )
+                        continue
+                    await self._dispatch_safely(
+                        payload,
+                        source="websocket-server-binary",
+                    )
                 elif msg.type == aiohttp.WSMsgType.ERROR:
                     logger.error("websocket server error: {}", ws.exception())
                     break
@@ -357,7 +472,8 @@ class WebSocketServerTransport(Transport):
 
     @property
     def url(self) -> str:
-        return f"ws://{self._host}:{self.port}{self._path}"
+        scheme = "wss" if self._ssl_context is not None else "ws"
+        return f"{scheme}://{self._host}:{self.port}{self._path}"
 
 
 class WebSocketClientTransport(Transport):
@@ -366,10 +482,14 @@ class WebSocketClientTransport(Transport):
         *,
         url: str,
         heartbeat: float = 30.0,
+        ssl_context: ssl.SSLContext | None = None,
+        server_hostname: str | None = None,
     ) -> None:
         super().__init__()
         self._url = url
         self._heartbeat = heartbeat
+        self._ssl_context = ssl_context
+        self._server_hostname = server_hostname
         self._session: Any | None = None
         self._ws: Any | None = None
         self._reader_task: asyncio.Task[None] | None = None
@@ -381,6 +501,8 @@ class WebSocketClientTransport(Transport):
         self._ws = await self._session.ws_connect(
             self._url,
             heartbeat=self._heartbeat if self._heartbeat > 0 else None,
+            ssl_context=self._ssl_context,
+            server_hostname=self._server_hostname,
         )
         self._reader_task = asyncio.create_task(self._read_loop())
 
@@ -411,9 +533,23 @@ class WebSocketClientTransport(Transport):
         try:
             async for msg in self._ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
-                    await self._dispatch(msg.data)
+                    await self._dispatch_safely(
+                        msg.data, source="websocket-client-text"
+                    )
                 elif msg.type == aiohttp.WSMsgType.BINARY:
-                    await self._dispatch(msg.data.decode("utf-8"))
+                    # 与 server 端一致：二进制帧解码失败仅跳过本帧，保持连接存活
+                    try:
+                        payload = msg.data.decode("utf-8")
+                    except UnicodeDecodeError as exc:
+                        logger.warning(
+                            "Skipping websocket client binary frame with invalid UTF-8 payload: {}",
+                            exc,
+                        )
+                        continue
+                    await self._dispatch_safely(
+                        payload,
+                        source="websocket-client-binary",
+                    )
                 elif msg.type == aiohttp.WSMsgType.ERROR:
                     logger.error("websocket client error: {}", self._ws.exception())
                     break

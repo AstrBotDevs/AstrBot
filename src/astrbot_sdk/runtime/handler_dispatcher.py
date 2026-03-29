@@ -29,8 +29,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, cast, get_type_hints
 
-from loguru import logger
-
 from .._internal.command_model import (
     parse_command_model_remainder,
     resolve_command_model_param,
@@ -38,6 +36,7 @@ from .._internal.command_model import (
 from .._internal.injected_params import legacy_arg_parameter_names
 from .._internal.invocation_context import caller_plugin_scope
 from .._internal.plugin_logger import PluginLogger
+from .._internal.sdk_logger import logger
 from .._internal.star_runtime import bind_star_runtime
 from .._internal.typing_utils import unwrap_optional
 from ..clients.llm import LLMResponse
@@ -411,7 +410,7 @@ class HandlerDispatcher:
         injected_payloads: _InjectedEventPayloads | None = None,
     ) -> list[Any]:
         """构建 handler 参数列表。"""
-        from loguru import logger
+        from .._internal.sdk_logger import logger
 
         signature = inspect.signature(handler)
         injected_args: list[Any] = []

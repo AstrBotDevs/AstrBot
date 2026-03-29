@@ -403,6 +403,10 @@ class MessageEvent:
         """Whether the sender has admin permission."""
         return self._is_admin
 
+    def has_admin_permission(self) -> bool:
+        """Return whether the sender currently has administrator permission."""
+        return self.is_admin()
+
     def get_messages(self) -> list[BaseMessageComponent]:
         """Return SDK message components for the current event."""
         return list(self._messages)

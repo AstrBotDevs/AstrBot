@@ -21,10 +21,9 @@ import typing
 from collections.abc import AsyncIterator, Sequence
 from typing import Any, cast, get_type_hints
 
-from loguru import logger
-
 from .._internal.invocation_context import caller_plugin_scope
 from .._internal.plugin_logger import PluginLogger
+from .._internal.sdk_logger import logger
 from .._internal.star_runtime import bind_star_runtime
 from .._internal.typing_utils import unwrap_optional
 from ..context import CancelToken, Context
@@ -361,6 +360,11 @@ class CapabilityDispatcher:
                 )
             if inspect.isawaitable(result):
                 result = await result
+            if inspect.isasyncgen(result):
+                return StreamExecution(
+                    iterator=self._iterate_generator(result),
+                    finalize=lambda chunks: {"items": chunks},
+                )
             if isinstance(result, StreamExecution):
                 return result
             raise AstrBotError.protocol_error(

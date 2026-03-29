@@ -73,12 +73,11 @@ import inspect
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import Any
 
-from loguru import logger
-
 from .._internal.invocation_context import (
     caller_plugin_scope,
     current_caller_plugin_id,
 )
+from .._internal.sdk_logger import logger
 from ..context import CancelToken
 from ..errors import AstrBotError, ErrorCodes
 from ..protocol.messages import (
@@ -102,6 +101,9 @@ CancelHandler = Callable[[str], Awaitable[None]]
 
 SUPPORTED_PROTOCOL_VERSIONS_METADATA_KEY = "supported_protocol_versions"
 NEGOTIATED_PROTOCOL_VERSION_METADATA_KEY = "negotiated_protocol_version"
+# 入站消息字符数上限（8 MB）。超过此阈值的协议消息会被直接拒绝，
+# 避免恶意或异常的巨型消息耗尽内存或阻塞解析
+MAX_INBOUND_MESSAGE_CHARS = 8 * 1024 * 1024
 
 
 def _dedupe_protocol_versions(
@@ -131,6 +133,12 @@ def _select_negotiated_protocol_version(
     remote_metadata: dict[str, Any],
     local_supported_versions: Sequence[str],
 ) -> str | None:
+    """从双方支持的版本中选出最佳兼容版本。
+
+    协商策略：优先精确匹配，否则在同主版本号范围内选双方都支持的最高版本。
+    排除比请求版本更高的候选，因为远端能提供高于我们请求的版本说明我们本地
+    尚未实现该版本协议，无法正确处理对应的协议消息。
+    """
     if requested_version in local_supported_versions:
         return requested_version
     requested_key = _parse_protocol_version(requested_version)
@@ -211,6 +219,8 @@ class Peer:
         self._remote_initialized = asyncio.Event()
         self._remote_initialized_successfully = False
         self._transport_watch_task: asyncio.Task[None] | None = None
+        # 记录当前正在执行 stop() 的 Task，用于防止 stop() 被并发重入
+        self._stop_task: asyncio.Task[None] | None = None
 
     def set_initialize_handler(self, handler: InitializeHandler) -> None:
         """注册处理远端 `initialize` 请求的握手处理器。"""
@@ -237,28 +247,53 @@ class Peer:
         self._transport_watch_task = asyncio.create_task(self._watch_transport_closed())
 
     async def stop(self) -> None:
-        """关闭 `Peer` 并清理所有挂起中的请求、流和入站任务。"""
+        """关闭 `Peer` 并清理所有挂起中的请求、流和入站任务。
+
+        重入安全性：transport.stop() 关闭底层连接时会触发原始消息处理器的
+        异常路径，该路径调用 _fail_connection() -> _schedule_stop() -> stop()，
+        形成间接递归。_stopping 标志和 _stop_task 引用共同防止重复清理资源。
+        使用 asyncio.shield 等待是因为：如果当前任务在等待另一个 stop() 完成
+        期间被取消，shield 保护内部 stop_task 不被连带取消，避免 Peer 停留在
+        半关闭状态。
+        """
         if self._closed.is_set():
             return
+        current_task = asyncio.current_task()
+        if self._stopping:
+            # 防止并发重入：如果 stop() 已在其他协程中执行，则等待它完成而不是重复清理
+            stop_task = self._stop_task
+            if stop_task is not None and stop_task is not current_task:
+                await asyncio.shield(stop_task)
+            return
         self._stopping = True
-        # 终止所有挂起的 RPC，避免调用方永久挂起
-        for future in list(self._pending_results.values()):
-            if not future.done():
-                future.set_exception(AstrBotError.internal_error("连接已关闭"))
-        self._pending_results.clear()
+        # 记录当前 task，供后续重入检测和 _schedule_stop() 判定
+        if current_task is not None and self._stop_task is None:
+            self._stop_task = current_task
+        try:
+            # 终止所有挂起的 RPC，避免调用方永久挂起
+            for future in list(self._pending_results.values()):
+                if not future.done():
+                    future.set_exception(AstrBotError.internal_error("连接已关闭"))
+            self._pending_results.clear()
 
-        for queue in list(self._pending_streams.values()):
-            await queue.put(AstrBotError.internal_error("连接已关闭"))
-        self._pending_streams.clear()
+            for queue in list(self._pending_streams.values()):
+                await queue.put(AstrBotError.internal_error("连接已关闭"))
+            self._pending_streams.clear()
 
-        # 取消所有入站任务
-        for task, token, _started in list(self._inbound_tasks.values()):
-            token.cancel()
-            task.cancel()
-        self._inbound_tasks.clear()
+            # 取消所有入站任务
+            for task, token, _started in list(self._inbound_tasks.values()):
+                token.cancel()
+                task.cancel()
+            self._inbound_tasks.clear()
 
-        await self.transport.stop()
-        self._closed.set()
+            await self.transport.stop()
+            self._closed.set()
+        finally:
+            # 只在当前 task 就是 stop_task 时才清除引用，避免误清其他 task 的记录。
+            # 场景：A 任务正在 stop() 中，B 任务也进入了 stop() 并等待 A 完成，
+            # 如果 B 在 finally 中清除了 _stop_task，A 还未执行完就会失去引用。
+            if self._stop_task is current_task:
+                self._stop_task = None
 
     async def wait_closed(self) -> None:
         """等待底层传输彻底关闭。"""
@@ -454,6 +489,7 @@ class Peer:
         )
 
         async def iterator() -> AsyncIterator[EventMessage]:
+            terminal_received = False
             try:
                 while True:
                     item = await queue.get()
@@ -467,15 +503,31 @@ class Peer:
                         yield item
                         continue
                     if item.phase == "completed":
+                        terminal_received = True
                         if include_completed:
                             yield item
                         break
                     if item.phase == "failed":
+                        terminal_received = True
                         raise AstrBotError.from_payload(
                             item.error.model_dump() if item.error else {}
                         )
             finally:
                 self._pending_streams.pop(request_id, None)
+                if not terminal_received:
+                    try:
+                        await self.cancel(
+                            request_id,
+                            reason="consumer_closed_stream_early",
+                        )
+                    except Exception as exc:
+                        # 取消失败不应中断整个流处理流程，仅记录日志
+                        logger.debug(
+                            "Failed to cancel stream after consumer closed early: "
+                            "request_id={} error={}",
+                            request_id,
+                            exc,
+                        )
 
         return iterator()
 
@@ -496,6 +548,13 @@ class Peer:
     async def _handle_raw_message(self, payload: str) -> None:
         """解析原始消息并分发到对应的消息处理分支。"""
         try:
+            # 入站消息大小检查：拒绝巨型消息，防止 OOM 和解析阻塞
+            if len(payload) > MAX_INBOUND_MESSAGE_CHARS:
+                raise AstrBotError.protocol_error(
+                    f"协议消息过大，已拒绝处理："
+                    f"当前 {len(payload) / 1024 / 1024:.1f} MB，"
+                    f"上限 {MAX_INBOUND_MESSAGE_CHARS / 1024 / 1024:.0f} MB"
+                )
             message = parse_message(payload)
             if isinstance(message, ResultMessage):
                 await self._handle_result(message)
@@ -521,8 +580,12 @@ class Peer:
                     exc = _task.exception()
                     if exc is None:
                         return
-                    # 后台 invoke 理论上应把错误编码成协议消息；若异常仍逃逸，通常说明
-                    # 回复发送失败或连接状态异常，必须立刻标记连接失效，避免对端永久等待。
+                    # 为什么整个连接都要失败？正常情况下 invoke handler 会把错误编码成
+                    # ResultMessage 发回给对端。如果异常仍然逃逸，说明要么回复发送失败
+                    # （transport 已断），要么 handler 实现有 bug。无论哪种情况，连接的
+                    # 消息交换契约已不可靠，继续使用可能导致对端无限等待或数据丢失。
+                    # 采用"单点故障 → 全连接失败"策略而非隔离单个 handler，是因为协议层
+                    # 无法保证后续消息的正确性。
                     logger.error(
                         "Peer inbound invoke task crashed unexpectedly: "
                         "request_id={} error={!r}",
@@ -552,7 +615,12 @@ class Peer:
             else:
                 error = AstrBotError.protocol_error(f"无法解析协议消息: {exc}")
             await self._fail_connection(error)
-            raise error from exc
+            # 不再向上抛出异常，避免在 transport 读循环中引发未处理的异常导致整个连接崩溃
+            logger.warning(
+                "Peer connection marked unusable after inbound message failure: {}",
+                error,
+            )
+            return
 
     async def _handle_initialize(self, message: InitializeMessage) -> None:
         """处理远端发起的初始化握手并返回握手结果。"""
@@ -768,7 +836,16 @@ class Peer:
             task.cancel()
         self._inbound_tasks.clear()
 
-        asyncio.create_task(self.stop())
+        self._schedule_stop()
+
+    def _schedule_stop(self) -> None:
+        """安全地调度 stop()，避免与正在执行的 stop() 产生并发冲突。"""
+        if self._closed.is_set():
+            return
+        # 已有 stop task 在跑则不重复创建，防止产生竞态条件
+        if self._stop_task is not None and not self._stop_task.done():
+            return
+        self._stop_task = asyncio.create_task(self.stop(), name="astrbot-sdk-peer-stop")
 
     async def _send(self, message) -> None:
         """序列化协议消息并通过底层传输发送出去。"""

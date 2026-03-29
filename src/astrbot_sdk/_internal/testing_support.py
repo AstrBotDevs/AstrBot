@@ -389,7 +389,7 @@ class MockPeer:
             role="core",
             version="local",
         )
-        self.remote_capabilities = list(router.descriptors())
+        self.remote_capabilities = list(router.all_descriptors())
         self.remote_capability_map = {
             item.name: item for item in self.remote_capabilities
         }

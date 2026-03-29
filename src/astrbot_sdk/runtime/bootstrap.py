@@ -28,8 +28,12 @@ from .supervisor import (
     _sdk_source_dir,
     _wait_for_shutdown,
 )
-from .transport import StdioTransport, WebSocketServerTransport
-from .worker import GroupWorkerRuntime, PluginWorkerRuntime
+from .transport import (
+    StdioTransport,
+    WebSocketServerTransport,
+    build_websocket_server_ssl_context,
+)
+from .worker import GroupWorkerRuntime, PluginWorkerRuntime, _load_plugin_specs
 
 __all__ = [
     "GroupWorkerRuntime",
@@ -52,6 +56,7 @@ async def run_supervisor(
     stdin: IO[str] | None = None,
     stdout: IO[str] | None = None,
     env_manager: PluginEnvironmentManager | None = None,
+    workers_manifest: Path | None = None,
 ) -> None:
     transport_stdin, transport_stdout, original_stdout = _prepare_stdio_transport(
         stdin,
@@ -62,6 +67,7 @@ async def run_supervisor(
         transport=transport,
         plugins_dir=plugins_dir,
         env_manager=env_manager,
+        workers_manifest=workers_manifest,
     )
 
     try:
@@ -115,15 +121,47 @@ async def run_plugin_worker(
 
 async def run_websocket_server(
     *,
+    worker_id: str | None = None,
     host: str = "127.0.0.1",
     port: int = 8765,
     path: str = "/",
-    plugin_dir: Path | None = None,
+    plugin_dirs: list[Path] | None = None,
+    tls_ca_file: Path | None = None,
+    tls_cert_file: Path | None = None,
+    tls_key_file: Path | None = None,
 ) -> None:
-    runtime = PluginWorkerRuntime(
-        plugin_dir=plugin_dir or Path.cwd(),
-        transport=WebSocketServerTransport(host=host, port=port, path=path),
+    resolved_plugin_dirs = [path.resolve() for path in (plugin_dirs or [Path.cwd()])]
+    if tls_ca_file is None or tls_cert_file is None or tls_key_file is None:
+        raise ValueError(
+            "tls_ca_file, tls_cert_file, and tls_key_file are required for websocket workers"
+        )
+    transport = WebSocketServerTransport(
+        host=host,
+        port=port,
+        path=path,
+        ssl_context=build_websocket_server_ssl_context(
+            ca_file=tls_ca_file,
+            cert_file=tls_cert_file,
+            key_file=tls_key_file,
+        ),
     )
+    resolved_worker_id = worker_id
+    if resolved_worker_id is None and len(resolved_plugin_dirs) == 1:
+        resolved_worker_id = _load_plugin_specs([resolved_plugin_dirs[0]])[0].name
+    if len(resolved_plugin_dirs) == 1:
+        runtime = PluginWorkerRuntime(
+            plugin_dir=resolved_plugin_dirs[0],
+            worker_id=resolved_worker_id,
+            transport=transport,
+        )
+    else:
+        if resolved_worker_id is None:
+            raise ValueError("worker_id is required when serving multiple plugins")
+        runtime = GroupWorkerRuntime(
+            plugin_dirs=resolved_plugin_dirs,
+            worker_id=resolved_worker_id,
+            transport=transport,
+        )
     try:
         await runtime.start()
         stop_event = asyncio.Event()

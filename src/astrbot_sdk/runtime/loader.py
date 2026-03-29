@@ -53,12 +53,13 @@ plugin.yaml 格式：
 from __future__ import annotations
 
 import builtins
+import contextlib
 import copy
 import hashlib
 import importlib
+import importlib.abc
 import inspect
 import json
-import logging
 import os
 import re
 import shutil
@@ -81,6 +82,7 @@ from .._internal.plugin_ids import (
     plugin_capability_prefix,
     validate_plugin_id,
 )
+from .._internal.sdk_logger import logger
 from .._internal.typing_utils import unwrap_optional
 from ..decorators import (
     ConversationMeta,
@@ -117,7 +119,6 @@ OptionalInnerType: TypeAlias = Literal["str", "int", "float", "bool"] | None
 HandlerKind: TypeAlias = Literal["handler", "hook", "tool", "session"]
 DiscoverySeverity: TypeAlias = Literal["warning", "error"]
 DiscoveryPhase: TypeAlias = Literal["discovery", "load", "lifecycle", "reload"]
-_LOGGER = logging.getLogger(__name__)
 _PLUGIN_IMPORT_LOCK = threading.RLock()
 _VALID_HANDLER_KINDS: tuple[HandlerKind, ...] = ("handler", "hook", "tool", "session")
 _PLUGIN_PACKAGE_PREFIX = "astrbot_ext_"
@@ -130,6 +131,8 @@ _GITHUB_REPO_URL_RE = re.compile(
 _PLUGIN_IMPORT_NAMESPACES: dict[str, _PluginImportNamespace] = {}
 _ORIGINAL_BUILTIN_IMPORT = builtins.__import__
 _PLUGIN_IMPORT_HOOK_INSTALLED = False
+_PLUGIN_IMPORT_META_FINDER: _PluginScopedMetaPathFinder | None = None
+_PLUGIN_IMPORT_ALIAS_STATE = threading.local()
 
 
 def _default_python_version() -> str:
@@ -256,6 +259,68 @@ class _ParamTypeInfo:
     required: bool
 
 
+class _PluginScopedAliasLoader(importlib.abc.Loader):
+    def __init__(self, *, alias_name: str, target_name: str) -> None:
+        self.alias_name = alias_name
+        self.target_name = target_name
+
+    def create_module(self, spec: importlib.machinery.ModuleSpec) -> types.ModuleType:
+        del spec
+        module = sys.modules.get(self.target_name)
+        if not isinstance(module, types.ModuleType):
+            module = import_module(self.target_name)
+        _record_plugin_import_alias(self.alias_name)
+        return module
+
+    def exec_module(self, module: types.ModuleType) -> None:
+        del module
+
+
+class _PluginScopedMetaPathFinder(importlib.abc.MetaPathFinder):
+    def find_spec(
+        self,
+        fullname: str,
+        path: list[str] | None = None,
+        target: types.ModuleType | None = None,
+    ) -> importlib.machinery.ModuleSpec | None:
+        del path, target
+        namespace = _plugin_import_namespace_for_current_caller()
+        if namespace is None:
+            return None
+        rewritten_name = _rewrite_plugin_import_name(namespace, fullname)
+        if rewritten_name is None:
+            return None
+        parent_name, _, _ = rewritten_name.rpartition(".")
+        parent_search_path = None
+        if parent_name:
+            parent_module = sys.modules.get(parent_name)
+            if not isinstance(parent_module, types.ModuleType):
+                parent_module = import_module(parent_name)
+            parent_search_path = getattr(parent_module, "__path__", None)
+        target_spec = importlib.machinery.PathFinder.find_spec(
+            rewritten_name,
+            parent_search_path,
+        )
+        if target_spec is None:
+            return None
+        alias_spec = importlib.machinery.ModuleSpec(
+            fullname,
+            _PluginScopedAliasLoader(
+                alias_name=fullname,
+                target_name=rewritten_name,
+            ),
+            is_package=target_spec.submodule_search_locations is not None,
+        )
+        alias_spec.origin = target_spec.origin
+        alias_spec.cached = target_spec.cached
+        alias_spec.has_location = target_spec.has_location
+        if target_spec.submodule_search_locations is not None:
+            alias_spec.submodule_search_locations = list(
+                target_spec.submodule_search_locations
+            )
+        return alias_spec
+
+
 def _sanitize_package_component(plugin_id: str) -> str:
     sanitized = re.sub(r"[^A-Za-z0-9_]+", "_", plugin_id).strip("_")
     return sanitized or "plugin"
@@ -347,8 +412,8 @@ def _build_param_specs(handler: Any) -> list[ParamSpec]:
     try:
         type_hints = typing.get_type_hints(handler)
     except Exception as exc:
-        _LOGGER.warning(
-            "Failed to resolve type hints for handler %s: %s",
+        logger.warning(
+            "Failed to resolve type hints for handler {}: {}",
             getattr(handler, "__qualname__", repr(handler)),
             exc,
         )
@@ -582,22 +647,22 @@ def load_plugin_config_schema(plugin: PluginSpec) -> dict[str, Any]:
     try:
         schema_payload = json.loads(schema_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        _LOGGER.warning(
-            "Failed to parse SDK plugin config schema %s: %s",
+        logger.warning(
+            "Failed to parse SDK plugin config schema {}: {}",
             schema_path,
             exc,
         )
         return {}
     except OSError as exc:
-        _LOGGER.warning(
-            "Failed to read SDK plugin config schema %s: %s",
+        logger.warning(
+            "Failed to read SDK plugin config schema {}: {}",
             schema_path,
             exc,
         )
         return {}
     if not isinstance(schema_payload, dict):
-        _LOGGER.warning(
-            "SDK plugin config schema %s must be a JSON object, got %s",
+        logger.warning(
+            "SDK plugin config schema {} must be a JSON object, got {}",
             schema_path,
             type(schema_payload).__name__,
         )
@@ -650,15 +715,15 @@ def load_plugin_config(
             else {}
         )
     except json.JSONDecodeError as exc:
-        _LOGGER.warning(
-            "Failed to parse SDK plugin config %s: %s",
+        logger.warning(
+            "Failed to parse SDK plugin config {}: {}",
             config_path,
             exc,
         )
         existing_payload = {}
     except OSError as exc:
-        _LOGGER.warning(
-            "Failed to read SDK plugin config %s: %s",
+        logger.warning(
+            "Failed to read SDK plugin config {}: {}",
             config_path,
             exc,
         )
@@ -794,7 +859,7 @@ def validate_plugin_spec(plugin: PluginSpec) -> None:
             )
 
 
-# TODO: 解决插件名相同可能导致的问题，真有那么一天我们sdk小团体也是好起来了
+# TODO: 不能保证插件和命令冲突消失，真有那么一天我们sdk小团体也是好起来了
 def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
     """扫描目录发现所有插件。"""
     plugins_root = plugins_dir.resolve()
@@ -950,14 +1015,12 @@ class PluginEnvironmentManager:
         try:
             data = json.loads(state_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            _LOGGER.warning(
-                "Failed to parse plugin worker state %s: %s", state_path, exc
+            logger.warning(
+                "Failed to parse plugin worker state {}: {}", state_path, exc
             )
             return {}
         except OSError as exc:
-            _LOGGER.warning(
-                "Failed to read plugin worker state %s: %s", state_path, exc
-            )
+            logger.warning("Failed to read plugin worker state {}: {}", state_path, exc)
             return {}
         return data if isinstance(data, dict) else {}
 
@@ -1048,8 +1111,8 @@ def _load_component_instance(
             f"{_component_context(plugin, class_path=resolved_component.class_path, index=resolved_component.index)} "
             f"实例化失败：{exc}"
         ) from exc
-    _LOGGER.debug(
-        "Instantiated SDK plugin component %s for plugin %s",
+    logger.debug(
+        "Instantiated SDK plugin component {} for plugin {}",
         resolved_component.class_path,
         plugin.name,
     )
@@ -1197,7 +1260,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
     仅支持 v4 新版 Star 组件（无参构造函数）。
     """
     with _PLUGIN_IMPORT_LOCK:
-        _LOGGER.debug("Loading SDK plugin %s from %s", plugin.name, plugin.plugin_dir)
+        logger.debug("Loading SDK plugin {} from {}", plugin.name, plugin.plugin_dir)
         _ensure_plugin_import_hook_installed()
         namespace = _register_plugin_import_namespace(plugin)
         _purge_plugin_bytecode(plugin.plugin_dir)
@@ -1238,8 +1301,8 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                 capabilities.extend(component_capabilities)
                 llm_tools.extend(component_tools)
 
-        _LOGGER.debug(
-            "Loaded SDK plugin %s: %d components, %d handlers, %d capabilities, %d llm tools, %d agents",
+        logger.debug(
+            "Loaded SDK plugin {}: {} components, {} handlers, {} capabilities, {} llm tools, {} agents",
             plugin.name,
             len(resolved_components),
             len(handlers),
@@ -1383,6 +1446,47 @@ def _rewrite_plugin_import_name(
     return _plugin_module_name(namespace.package_name, normalized)
 
 
+def _plugin_import_alias_buckets() -> list[set[str]]:
+    buckets = getattr(_PLUGIN_IMPORT_ALIAS_STATE, "buckets", None)
+    if buckets is None:
+        buckets = []
+        _PLUGIN_IMPORT_ALIAS_STATE.buckets = buckets
+    return buckets
+
+
+def _push_plugin_import_alias_bucket() -> set[str]:
+    bucket: set[str] = set()
+    _plugin_import_alias_buckets().append(bucket)
+    return bucket
+
+
+def _pop_plugin_import_alias_bucket(bucket: set[str]) -> set[str]:
+    buckets = _plugin_import_alias_buckets()
+    if buckets and buckets[-1] is bucket:
+        buckets.pop()
+    else:
+        with contextlib.suppress(ValueError):
+            buckets.remove(bucket)
+    return bucket
+
+
+def _record_plugin_import_alias(alias_name: str) -> None:
+    normalized = alias_name.strip()
+    if not normalized or normalized.startswith(_PLUGIN_PACKAGE_PREFIX):
+        return
+    buckets = _plugin_import_alias_buckets()
+    if not buckets:
+        return
+    buckets[-1].add(normalized)
+
+
+def _cleanup_plugin_import_aliases(alias_names: set[str]) -> None:
+    for alias_name in sorted(
+        alias_names, key=lambda item: item.count("."), reverse=True
+    ):
+        sys.modules.pop(alias_name, None)
+
+
 def _plugin_scoped_import(
     name: str,
     globals: dict[str, Any] | None = None,
@@ -1391,38 +1495,57 @@ def _plugin_scoped_import(
     level: int = 0,
 ) -> Any:
     with _PLUGIN_IMPORT_LOCK:
-        if level != 0:
+        alias_bucket = _push_plugin_import_alias_bucket()
+        try:
             return _ORIGINAL_BUILTIN_IMPORT(name, globals, locals, fromlist, level)
+        finally:
+            _cleanup_plugin_import_aliases(
+                _pop_plugin_import_alias_bucket(alias_bucket)
+            )
 
-        namespace = _plugin_import_namespace_for_current_caller()
-        rewritten_name = (
-            None if namespace is None else _rewrite_plugin_import_name(namespace, name)
-        )
-        if rewritten_name is None:
-            return _ORIGINAL_BUILTIN_IMPORT(name, globals, locals, fromlist, level)
 
-        imported = _ORIGINAL_BUILTIN_IMPORT(
-            rewritten_name,
-            globals,
-            locals,
-            fromlist,
-            level,
-        )
-        if fromlist:
-            return imported
-        root_name = name.split(".", 1)[0].strip()
-        root_module = sys.modules.get(
-            _plugin_module_name(namespace.package_name, root_name)
-        )
-        return root_module if root_module is not None else imported
+def _ensure_plugin_import_meta_finder_installed() -> None:
+    global _PLUGIN_IMPORT_META_FINDER
+    if (
+        _PLUGIN_IMPORT_META_FINDER is not None
+        and _PLUGIN_IMPORT_META_FINDER in sys.meta_path
+    ):
+        return
+    finder = _PluginScopedMetaPathFinder()
+    sys.meta_path.insert(0, finder)
+    _PLUGIN_IMPORT_META_FINDER = finder
 
 
 def _ensure_plugin_import_hook_installed() -> None:
     global _PLUGIN_IMPORT_HOOK_INSTALLED
+    _ensure_plugin_import_meta_finder_installed()
+    # 防御性检查：如果 hook 已在位，只补全标志位，不重复安装
+    if builtins.__import__ is _plugin_scoped_import:
+        _PLUGIN_IMPORT_HOOK_INSTALLED = True
+        return
+    # 标志位声称已安装但实际 builtin 已被外部篡改（如测试框架 monkeypatch），
+    # 需要重置标志位以触发重新安装
+    if (
+        _PLUGIN_IMPORT_HOOK_INSTALLED
+        and builtins.__import__ is not _plugin_scoped_import
+    ):
+        _PLUGIN_IMPORT_HOOK_INSTALLED = False
     if _PLUGIN_IMPORT_HOOK_INSTALLED:
         return
     builtins.__import__ = _plugin_scoped_import
     _PLUGIN_IMPORT_HOOK_INSTALLED = True
+
+
+def _restore_plugin_import_hook() -> None:
+    """还原 builtin __import__，用于插件卸载或测试 teardown 时清理全局状态。"""
+    global _PLUGIN_IMPORT_HOOK_INSTALLED, _PLUGIN_IMPORT_META_FINDER
+    if builtins.__import__ is _plugin_scoped_import:
+        builtins.__import__ = _ORIGINAL_BUILTIN_IMPORT
+    if _PLUGIN_IMPORT_META_FINDER is not None:
+        with contextlib.suppress(ValueError):
+            sys.meta_path.remove(_PLUGIN_IMPORT_META_FINDER)
+        _PLUGIN_IMPORT_META_FINDER = None
+    _PLUGIN_IMPORT_HOOK_INSTALLED = False
 
 
 def import_string(path: str, plugin_dir: Path | None = None) -> Any:
