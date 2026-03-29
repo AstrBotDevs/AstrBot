@@ -147,43 +147,48 @@
     transition="dialog-bottom-transition"
     scrollable
   >
-    <v-card>
-      <v-toolbar color="primary" dark>
-        <v-btn icon @click="codeEditorDialog = false">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
-        <v-toolbar-title>{{ tm("codeEditor.title") }}</v-toolbar-title>
-        <v-spacer />
-        <v-toolbar-items style="display: flex; align-items: center">
-          <v-btn
-            style="margin-left: 16px"
-            size="small"
-            @click="configToString()"
-          >
-            {{ tm("editor.revertCode") }}
+    <div class="editor-reactor-container">
+      <v-card class="editor-glass-card">
+        <v-toolbar
+          class="editor-toolbar"
+          elevation="0"
+        >
+          <v-btn icon @click="codeEditorDialog = false">
+            <v-icon>mdi-close</v-icon>
           </v-btn>
-          <v-btn
-            v-if="config_data_has_changed"
-            style="margin-left: 16px"
-            size="small"
-            @click="applyStrConfig()"
-          >
-            {{ tm("editor.applyConfig") }}
-          </v-btn>
-          <small style="margin-left: 16px"
-            >💡 {{ tm("editor.applyTip") }}</small
-          >
-        </v-toolbar-items>
-      </v-toolbar>
-      <v-card-text class="pa-0">
-        <VueMonacoEditor
-          v-model:value="config_data_str"
-          language="json"
-          theme="vs-dark"
-          style="height: calc(100vh - 64px)"
-        />
-      </v-card-text>
-    </v-card>
+          <v-toolbar-title>{{ tm("codeEditor.title") }}</v-toolbar-title>
+          <v-spacer />
+          <v-toolbar-items style="display: flex; align-items: center">
+            <v-btn
+              style="margin-left: 16px"
+              size="small"
+              @click="configToString()"
+            >
+              {{ tm("editor.revertCode") }}
+            </v-btn>
+            <v-btn
+              v-if="config_data_has_changed"
+              style="margin-left: 16px"
+              size="small"
+              @click="applyStrConfig()"
+            >
+              {{ tm("editor.applyConfig") }}
+            </v-btn>
+            <small style="margin-left: 16px"
+              >💡 {{ tm("editor.applyTip") }}</small
+            >
+          </v-toolbar-items>
+        </v-toolbar>
+        <v-card-text class="pa-0 editor-monaco-wrapper">
+          <VueMonacoEditor
+            v-model:value="config_data_str"
+            language="json"
+            theme="reactor-dark"
+            style="height: calc(100vh - 64px)"
+          />
+        </v-card-text>
+      </v-card>
+    </div>
   </v-dialog>
 
   <!-- Config Management Dialog -->
@@ -337,6 +342,7 @@ import {
 } from "@/utils/confirmDialog";
 import UnsavedChangesConfirmDialog from "@/components/config/UnsavedChangesConfirmDialog.vue";
 import { normalizeTextInput } from "@/utils/inputValue";
+import { defineReactorMonacoTheme } from "@/utils/monacoTheme";
 
 export default {
   name: "ConfigPage",
@@ -497,6 +503,9 @@ export default {
         this.getConfigInfoList(newVal);
       }
     },
+  },
+  beforeMount() {
+    defineReactorMonacoTheme();
   },
   mounted() {
     const hashConfigType = this.extractConfigTypeFromHash(
@@ -1104,5 +1113,48 @@ export default {
   overflow: hidden;
   padding: 0;
   border-radius: 0 0 16px 16px;
+}
+
+/* Reactor glassmorphism editor container */
+.editor-reactor-container {
+  width: 100vw;
+  height: 100vh;
+  background: rgba(10, 10, 12, 0.92);
+  backdrop-filter: blur(40px) saturate(1.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  box-sizing: border-box;
+}
+
+.editor-glass-card {
+  width: 100%;
+  max-width: 1400px;
+  height: calc(100vh - 64px);
+  background: rgba(15, 15, 22, 0.55) !important;
+  backdrop-filter: blur(24px) saturate(1.2);
+  border: 1px solid rgba(0, 242, 255, 0.15);
+  border-radius: 28px !important;
+  box-shadow:
+    inset 0 0 40px rgba(0, 0, 0, 0.6),
+    0 0 80px rgba(0, 26, 51, 0.4),
+    0 0 0 0.5px rgba(0, 242, 255, 0.05);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-toolbar {
+  background: rgba(10, 10, 16, 0.8) !important;
+  border-bottom: 1px solid rgba(0, 242, 255, 0.08) !important;
+  backdrop-filter: blur(12px);
+  flex-shrink: 0;
+}
+
+.editor-monaco-wrapper {
+  flex: 1;
+  overflow: hidden;
+  border-radius: 0 0 28px 28px;
 }
 </style>
