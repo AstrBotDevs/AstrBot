@@ -74,7 +74,7 @@ from astrbot_sdk.runtime.supervisor import (
 )
 from astrbot_sdk.runtime.worker import GroupWorkerRuntime
 from astrbot_sdk.star import Star
-from astrbot_sdk.testing import MockClock, SDKTestEnvironment
+from astrbot_sdk.testing import MockClock, PluginHarness, SDKTestEnvironment
 from click.testing import CliRunner
 from pydantic import BaseModel, Field
 
@@ -891,7 +891,9 @@ def test_cli_error_render_includes_docs_details_and_context(
 
 
 @pytest.mark.unit
-def test_group_worker_metadata_serializes_issues(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_group_worker_metadata_serializes_issues(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # worker_registry 构建依赖完整的 PluginSpec 和文件系统，mock 掉以保持测试关注点
     monkeypatch.setattr(
         "astrbot_sdk.runtime.worker._build_worker_registry_entry",
@@ -943,6 +945,89 @@ def test_validate_schema_config_reports_invalid_type_entry() -> None:
             {"name": {"type": "string"}},
             {"name": "demo"},
         )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_plugin_harness_surfaces_validate_config_decorator_context(
+    tmp_path: Path,
+) -> None:
+    env = SDKTestEnvironment(tmp_path)
+    plugin_dir = _write_sdk_plugin(
+        env.plugin_dir("validate_config_error"),
+        name="validate_config_error",
+        main_source="\n".join(
+            [
+                "from astrbot_sdk import Context, Star, validate_config",
+                "",
+                "class DemoPlugin(Star):",
+                '    @validate_config(schema={"token": {"type": str, "required": True}})',
+                "    async def check_config(self, ctx: Context) -> None:",
+                "        return None",
+            ]
+        ),
+    )
+
+    harness = PluginHarness.from_plugin_dir(plugin_dir)
+    with pytest.raises(RuntimeError) as exc_info:
+        await harness.start()
+    assert "DemoPlugin.check_config @validate_config failed" in str(exc_info.value)
+    assert "token: is required" in str(exc_info.value)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_plugin_harness_surfaces_http_api_decorator_context(
+    tmp_path: Path,
+) -> None:
+    env = SDKTestEnvironment(tmp_path)
+    plugin_dir = _write_sdk_plugin(
+        env.plugin_dir("http_api_error"),
+        name="http_api_error",
+        main_source="\n".join(
+            [
+                "from astrbot_sdk import Context, Star, http_api",
+                "",
+                "class DemoPlugin(Star):",
+                '    @http_api("/wrong/export", methods=["GET"])',
+                "    async def export_markdown(self, ctx: Context) -> dict[str, bool]:",
+                '        return {"ok": True}',
+            ]
+        ),
+    )
+
+    harness = PluginHarness.from_plugin_dir(plugin_dir)
+    with pytest.raises(RuntimeError) as exc_info:
+        await harness.start()
+    assert "DemoPlugin.export_markdown @http_api failed" in str(exc_info.value)
+    assert "route='/wrong/export', methods=['GET']" in str(exc_info.value)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_plugin_harness_surfaces_mcp_server_decorator_context(
+    tmp_path: Path,
+) -> None:
+    env = SDKTestEnvironment(tmp_path)
+    plugin_dir = _write_sdk_plugin(
+        env.plugin_dir("mcp_server_error"),
+        name="mcp_server_error",
+        main_source="\n".join(
+            [
+                "from astrbot_sdk import Star, mcp_server",
+                "",
+                '@mcp_server(name="demo-local", scope="local", config={"command": "demo"})',
+                "class DemoPlugin(Star):",
+                "    pass",
+            ]
+        ),
+    )
+
+    harness = PluginHarness.from_plugin_dir(plugin_dir)
+    with pytest.raises(RuntimeError) as exc_info:
+        await harness.start()
+    assert "DemoPlugin @mcp_server failed" in str(exc_info.value)
+    assert "scope='local'" in str(exc_info.value)
 
 
 @pytest.mark.unit

@@ -242,7 +242,8 @@ class WorkerSession:
         except TimeoutError as exc:
             raise RuntimeError(
                 f"worker {self.worker_id} 初始化超时 "
-                f"({WORKER_INITIALIZE_TIMEOUT_SECONDS:.0f}s)"
+                f"({WORKER_INITIALIZE_TIMEOUT_SECONDS:.0f}s)；"
+                "请检查 worker 日志中的 on_start / 装饰器初始化错误"
             ) from exc
         except AstrBotError as exc:
             raise RuntimeError(f"worker {self.worker_id} 在初始化阶段退出") from exc

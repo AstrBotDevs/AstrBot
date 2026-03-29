@@ -491,6 +491,17 @@ class PluginWorkerRuntime:
             )
         except Exception:
             if lifecycle_started:
+                logger.exception(
+                    "插件 {} 在向 supervisor 上报 initialize 时失败",
+                    self.plugin.name,
+                )
+            else:
+                logger.exception(
+                    "插件 {} 在 on_start / 装饰器初始化阶段失败；"
+                    "supervisor 可能随后只看到初始化超时，请优先检查这条异常",
+                    self.plugin.name,
+                )
+            if lifecycle_started:
                 try:
                     await self._run_lifecycle("on_stop")
                 except Exception:
