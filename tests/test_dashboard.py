@@ -673,6 +673,64 @@ async def test_plugin_readme_api_supports_sdk_plugins(
 
 
 @pytest.mark.asyncio
+async def test_sdk_plugin_on_returns_structured_error_on_runtime_failure(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    old_bridge = getattr(core_lifecycle_td, "sdk_plugin_bridge", None)
+
+    try:
+        core_lifecycle_td.sdk_plugin_bridge = SimpleNamespace(
+            list_plugins=lambda: [{"name": "sdk_demo"}],
+            turn_on_plugin=AsyncMock(side_effect=RuntimeError("worker init timeout")),
+        )
+
+        response = await test_client.post(
+            "/api/plugin/on",
+            json={"name": "sdk_demo"},
+            headers=authenticated_header,
+        )
+
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "error"
+        assert data["message"] == "worker init timeout"
+    finally:
+        core_lifecycle_td.sdk_plugin_bridge = old_bridge
+
+
+@pytest.mark.asyncio
+async def test_sdk_plugin_off_returns_structured_error_on_runtime_failure(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    old_bridge = getattr(core_lifecycle_td, "sdk_plugin_bridge", None)
+
+    try:
+        core_lifecycle_td.sdk_plugin_bridge = SimpleNamespace(
+            list_plugins=lambda: [{"name": "sdk_demo"}],
+            turn_off_plugin=AsyncMock(side_effect=RuntimeError("worker stop timeout")),
+        )
+
+        response = await test_client.post(
+            "/api/plugin/off",
+            json={"name": "sdk_demo"},
+            headers=authenticated_header,
+        )
+
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "error"
+        assert data["message"] == "worker stop timeout"
+    finally:
+        core_lifecycle_td.sdk_plugin_bridge = old_bridge
+
+
+@pytest.mark.asyncio
 async def test_plugin_readme_api_supports_remote_github_repo(
     app: Quart,
     authenticated_header: dict,
