@@ -15,6 +15,7 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent.tool_session_manager import ToolSessionManager
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
@@ -1337,6 +1338,7 @@ async def build_main_agent(
         run_context=AgentContextWrapper(
             context=astr_agent_ctx,
             tool_call_timeout=config.tool_call_timeout,
+            session_manager=ToolSessionManager(),
         ),
         tool_executor=FunctionToolExecutor(),
         agent_hooks=MAIN_AGENT_HOOKS,

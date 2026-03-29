@@ -205,6 +205,7 @@ class Context:
             Exception: For other errors during LLM generation
         """
         # Import here to avoid circular imports
+        from astrbot.core.agent.tool_session_manager import ToolSessionManager
         from astrbot.core.astr_agent_context import (
             AgentContextWrapper,
             AstrAgentContext,
@@ -245,6 +246,7 @@ class Context:
             run_context=AgentContextWrapper(
                 context=agent_context,
                 tool_call_timeout=tool_call_timeout,
+                session_manager=ToolSessionManager(),
             ),
             tool_executor=tool_executor,
             agent_hooks=agent_hooks,

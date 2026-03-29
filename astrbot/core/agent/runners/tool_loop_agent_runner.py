@@ -767,6 +767,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 executor = self.tool_executor.execute(
                     tool=func_tool,
                     run_context=self.run_context,
+                    session_manager=self.run_context.session_manager,
                     **valid_params,  # 只传递有效的参数
                 )
 

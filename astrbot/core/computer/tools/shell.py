@@ -22,7 +22,7 @@ import os
 import shlex
 import subprocess
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any
 
 from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
@@ -67,6 +67,7 @@ class ExecuteShellTool(FunctionTool):
     )
 
     is_local: bool = False
+    is_stateful: bool = True
     # session_id -> {"cwd": str, "env": dict}
     _sessions: dict[str, dict[str, Any]] = field(
         default_factory=dict, init=False, repr=False
@@ -87,6 +88,18 @@ class ExecuteShellTool(FunctionTool):
             }
         return self._sessions[session_id]
 
+    def _get_framework_session_state(
+        self, context: ContextWrapper[AstrAgentContext], session_id: str
+    ) -> dict[str, Any]:
+        """
+        Get session state via the framework's ToolSessionManager if available.
+        Falls back to the tool's own _sessions if session_manager is not set.
+        """
+        session_mgr = getattr(context, "session_manager", None)
+        if session_mgr is None:
+            return self._get_session_state(session_id)
+        return session_mgr.get_state(session_id, self.name)
+
     async def call(  # type: ignore[override]
         self, context: ContextWrapper[AstrAgentContext], **kwargs: Any
     ) -> ToolExecResult:
@@ -98,9 +111,8 @@ class ExecuteShellTool(FunctionTool):
         - background (bool): whether to run in background
         - env (dict): environment variables to merge for this execution
         """
-        # Cast the generic ContextWrapper to the concrete AstrAgentContext wrapper so
-        # subsequent permission checks and attribute access use the expected type.
-        astr_ctx = cast(ContextWrapper[AstrAgentContext], context)
+        # Use the context directly - already typed as ContextWrapper[AstrAgentContext]
+        astr_ctx = context
 
         # Permission check (use the cast wrapper)
         if permission_error := check_admin_permission(astr_ctx, "Shell execution"):
@@ -113,9 +125,13 @@ class ExecuteShellTool(FunctionTool):
 
         # Resolve session id and session state (use the cast wrapper)
         session_id = astr_ctx.context.event.unified_msg_origin
-        state = self._get_session_state(session_id)
-        session_cwd = state["cwd"]
-        session_env = state["env"].copy()
+        # Use framework ToolSessionManager if available, otherwise fall back
+        if astr_ctx.session_manager is not None:
+            state = self._get_framework_session_state(astr_ctx, session_id)
+        else:
+            state = self._get_session_state(session_id)
+        session_cwd = state.get("cwd", os.getcwd())
+        session_env = state.get("env", dict(os.environ)).copy()
 
         # Merge provided env into execution env (do not mutate saved session env)
         if env:

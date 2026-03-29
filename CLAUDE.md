@@ -107,6 +107,38 @@ Stars are plugins in `astrbot/builtin_stars/`:
 - Use decorators for command handlers: `@star.on_command`, `@star.on_message`, etc.
 - Access via `context` object
 
+### Stateful Tool Execution (Session Lifecycle)
+
+Tools can maintain state across conversation turns within a session via `ToolSessionManager`.
+
+**Key classes:**
+- `ToolSessionManager` (`astrbot/core/agent/tool_session_manager.py`) — central manager, keyed by `(umo, tool_name)`
+- `ToolSessionState` — dict-like per-tool session state with `set_persistent(key)` support
+- `FunctionTool.is_stateful` — opt-in flag for stateful tools
+- `FunctionTool.get_session_state(umo)` — get/create session state dict
+
+**Usage in a tool:**
+```python
+@dataclass
+class MyTool(FunctionTool):
+    is_stateful = True  # declare stateful
+
+    async def call(self, context, **kwargs):
+        umo = context.context.event.unified_msg_origin
+        state = self.get_session_state(umo)
+        state["counter"] = state.get("counter", 0) + 1
+        # Mark to survive session clear:
+        state.set_persistent("persistent_data")
+```
+
+**Architecture flow:**
+```
+AgentContextWrapper(session_manager=ToolSessionManager())
+    → ToolLoopAgentRunner.run_context.session_manager
+    → executor.execute(..., session_manager=run_context.session_manager)
+    → tool.call(context)  # context.session_manager available
+```
+
 ## Testing
 
 1. Tests go in `tests/` directory

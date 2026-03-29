@@ -114,11 +114,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         return sanitized
 
     @classmethod
-    async def execute(cls, tool, run_context, **tool_args):
+    async def execute(cls, tool, run_context, session_manager=None, **tool_args):
         """执行函数调用｡
 
         Args:
-            event (AstrMessageEvent): 事件对象, 当 origin 为 local 时必须提供｡
+            tool: The tool to execute.
+            run_context: The run context.
+            session_manager: Optional ToolSessionManager for stateful tool execution.
+            **tool_args: Tool-specific arguments.
             **kwargs: 函数调用的参数｡
 
         Returns:

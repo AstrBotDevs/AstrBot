@@ -1,5 +1,6 @@
 import copy
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from dataclasses import field
 from typing import Any, Generic
 
 import jsonschema
@@ -68,6 +69,27 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     Origin of this tool: 'plugin' (from star plugins), 'internal' (AstrBot built-in),
     or 'mcp' (from MCP servers). Used by WebUI for display grouping.
     """
+    is_stateful: bool = False
+    """
+    Declare this tool as stateful. Stateful tools maintain state
+    across conversation turns within the same session (UMO).
+    When True, the tool can use get_session_state(umo) to access
+    per-session state that persists across tool calls.
+    """
+    _session_state: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
+    """
+    Internal: per-UMO session state storage for stateful tools.
+    Managed by ToolSessionManager; use get_session_state(umo) instead.
+    """
+
+    def get_session_state(self, umo: str) -> dict[str, Any]:
+        """Get or create session state for the given UMO.
+
+        Only valid when is_stateful=True. Otherwise returns empty dict.
+        """
+        if umo not in self._session_state:
+            self._session_state[umo] = {}
+        return self._session_state[umo]
 
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
