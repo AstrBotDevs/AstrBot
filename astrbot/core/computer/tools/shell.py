@@ -101,7 +101,7 @@ class ExecuteShellTool(FunctionTool):
             return self._get_session_state(session_id)
         return session_mgr.get_state(session_id, self.name)
 
-    async def call(  # type: ignore[override]
+    async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs: Any
     ) -> ToolExecResult:
         """
