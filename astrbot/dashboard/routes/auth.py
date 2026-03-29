@@ -46,9 +46,11 @@ class AuthRoute(Route):
         # Check if password has been configured via CLI
         if not self._is_password_set(stored_password_hash):
             await asyncio.sleep(3)
-            return Response().error(
-                "管理员密码未设置，请先运行 'astrbot conf admin' 命令设置密码"
-            ).__dict__
+            return (
+                Response()
+                .error("管理员密码未设置，请先运行 'astrbot conf admin' 命令设置密码")
+                .__dict__
+            )
 
         # Normal login flow - credentials must match stored admin account
         if input_username == stored_username and self._matches_dashboard_password(

@@ -40,12 +40,18 @@ class T2iRoute(Route):
 
     async def _reload_all_pipeline_schedulers(self) -> None:
         """热重载所有配置对应的 pipeline scheduler。"""
-        for conf_id in self.core_lifecycle.astrbot_config_mgr.confs:
+        confs = getattr(self.core_lifecycle, "astrbot_config_mgr", None)
+        if not confs:
+            return
+        for conf_id in confs.confs:
             await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
 
     async def _sync_active_template_to_all_configs(self, name: str) -> None:
         """同步当前激活模板到所有配置文件，并热重载对应流水线。"""
-        for config in self.core_lifecycle.astrbot_config_mgr.confs.values():
+        confs = getattr(self.core_lifecycle, "astrbot_config_mgr", None)
+        if not confs:
+            return
+        for config in confs.confs.values():
             config["t2i_active_template"] = name
             config.save_config()
         await self._reload_all_pipeline_schedulers()

@@ -44,11 +44,11 @@ const BlueBusinessLightTheme: ThemeTypes = {
     "error-container": "#FFDAD6", // Light red container
     "on-error-container": "#410002", // Text on error container
 
-    // === MD3 Surface Colors ===
-    surface: "#FEF7FF", // Page background
-    "on-surface": "#1B1B1F", // Text on surface
-    "surface-variant": "#E1E2EC", // Elevated surface variant
-    "on-surface-variant": "#44474F", // Text on surface variant
+    // === MD3 Surface Colors (Blueprint/Lab White) ===
+    surface: "#F0F4F8", // Cool blue-gray lab white
+    "on-surface": "#1A2B3C", // Deep indigo text
+    "surface-variant": "#E4E9F2", // Slightly deeper surface
+    "on-surface-variant": "#3A4A5C", // Muted indigo text
     surfaceTint: "#005FB0", // Tint overlay for elevation
 
     // === MD3 Outline Colors ===
@@ -60,8 +60,8 @@ const BlueBusinessLightTheme: ThemeTypes = {
     "inverse-on-surface": "#F3F0F4", // Text on inverse surface
     "inverse-primary": "#A1C9FF", // Primary on dark backgrounds
 
-    // === Additional UI Colors ===
-    background: "#FEF7FF", // Page background (same as surface)
+    // === Additional UI Colors (Lab White) ===
+    background: "#F0F4F8", // Cool blue-gray lab white
     accent: "#FFAB91", // Peach accent (Vuetify legacy)
 
     // === Light Variant Colors ===
@@ -81,8 +81,8 @@ const BlueBusinessLightTheme: ThemeTypes = {
     inputBorder: "#74777F", // Input field borders
 
     // === Container/Card Colors ===
-    containerBg: "#F5F7FF", // Card backgrounds
-    "on-surface-variant-bg": "#F8F9FF", // Slightly tinted background
+    containerBg: "rgba(240, 244, 248, 0.75)", // Translucent lab glass
+    "on-surface-variant-bg": "rgba(228, 233, 242, 0.8)", // Slightly deeper
 
     // === Social Colors ===
     facebook: "#4267B2",

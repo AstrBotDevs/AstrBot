@@ -86,5 +86,5 @@ class CustomBuildHook(BuildHookInterface):
             shutil.rmtree(dist_target)
         shutil.copytree(dist_src, dist_target)
         logger.info(
-            f"[hatch_build] Dashboard dist copied → {dist_target.relative_to(root)}"
+            f"[hatch_build] Dashboard dist copied ￫ {dist_target.relative_to(root)}"
         )

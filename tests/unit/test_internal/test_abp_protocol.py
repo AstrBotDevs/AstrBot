@@ -1,12 +1,12 @@
 """
 ABP (AstrBot Protocol) 协议测试套件
 
-ABP 是内置插件协议，用于进程内 star (插件) 通信。
+ABP 是内置插件协议,用于进程内 star (插件) 通信｡
 
 目标:
 1. 验证 ABP 协议实现的正确性
 2. 确保类型标注完整
-3. 验证代码美观（符合 ruff 规范）
+3. 验证代码美观(符合 ruff 规范)
 4. 为迁移现有功能到新架构提供指导
 """
 
@@ -100,7 +100,7 @@ class TestAbpStarRegistration:
 
     @pytest.mark.asyncio
     async def test_unregister_is_idempotent(self, abp_client):
-        """Unregister 应该是幂等的（多次调用不会报错）"""
+        """Unregister 应该是幂等的(多次调用不会报错)"""
         await abp_client.connect()
 
         # 未注册的 star 应该能正常 unregister
@@ -120,8 +120,8 @@ class TestAbpProtocolCompliance:
     """测试 ABP 协议是否符合规范
 
     根据 openspec:
-    - ABP: AstrBot Protocol (客户端+服务端，相当于内置插件)
-    - 协议层只管传输，runtime 负责响应和调度
+    - ABP: AstrBot Protocol (客户端+服务端,相当于内置插件)
+    - 协议层只管传输,runtime 负责响应和调度
     """
 
     @pytest.fixture
@@ -171,7 +171,7 @@ class TestAbpCodeQuality:
         return AstrbotAbpClient()
 
     def test_no_any_in_method_signatures(self, abp_client):
-        """验证方法签名中没有 Any 类型（除了必要的地方）"""
+        """验证方法签名中没有 Any 类型(除了必要的地方)"""
         import inspect
 
         # 检查主要方法的签名
@@ -190,7 +190,7 @@ class TestAbpCodeQuality:
                 # 参数类型不应该是 Any
                 if param.annotation != inspect.Parameter.empty:
                     annotation_str = str(param.annotation)
-                    # 注意：这里是宽松检查，因为 call_star_tool 的 arguments 确实是 dict[str, Any]
+                    # 注意:这里是宽松检查,因为 call_star_tool 的 arguments 确实是 dict[str, Any]
                     # 但调用者应该尽量避免传递 Any
 
     def test_return_type_annotations_present(self, abp_client):
@@ -220,7 +220,7 @@ class TestAbpCodeQuality:
 class TestAbpMigrationReadiness:
     """测试 ABP 协议对迁移现有功能的准备程度
 
-    目标：将现有功能迁移到新架构
+    目标:将现有功能迁移到新架构
     """
 
     @pytest.fixture

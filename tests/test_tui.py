@@ -46,7 +46,7 @@ class TestTuiBoxDrawing:
     def test_box_vertical(self):
         """Test vertical box character."""
         from astrbot.tui.screen import BOX_VERT
-        assert BOX_VERT == "│"
+        assert BOX_VERT == "￨"
 
     def test_box_horizontal(self):
         """Test horizontal box character."""

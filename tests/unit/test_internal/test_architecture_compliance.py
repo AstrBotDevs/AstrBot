@@ -2,10 +2,10 @@
 新架构合规性测试套件
 
 根据 openspec 最高旨意:
-1. 使用 anyio 作为异步库（不是 asyncio）
+1. 使用 anyio 作为异步库(不是 asyncio)
 2. 类型标注完整
 3. 代码美观
-4. 最终目标：实现 ABP 协议
+4. 最终目标:实现 ABP 协议
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ class TestAnyioCompliance:
     - 异步库使用 anyio
     - 不是 asyncio
 
-    注意: 这些测试验证是否使用 anyio，当发现使用 asyncio 时会失败。
-    这正是我们想要的行为 - 测试驱动开发。
+    注意: 这些测试验证是否使用 anyio,当发现使用 asyncio 时会失败｡
+    这正是我们想要的行为 - 测试驱动开发｡
     """
 
     def test_orchestrator_run_loop_documents_asyncio_violation(self):
@@ -43,7 +43,7 @@ class TestAnyioCompliance:
 
         if uses_asyncio:
             pytest.fail(
-                "orchestrator.run_loop 使用了 asyncio.sleep，违反 openspec 指令\n"
+                "orchestrator.run_loop 使用了 asyncio.sleep,违反 openspec 指令\n"
                 "应该使用 anyio.sleep\n"
                 "per openspec directive: '异步库使用anyio'"
             )
@@ -62,7 +62,7 @@ class TestAnyioCompliance:
 
         if uses_asyncio_cancelled:
             pytest.fail(
-                "orchestrator 捕获了 asyncio.CancelledError，违反 openspec 指令\n"
+                "orchestrator 捕获了 asyncio.CancelledError,违反 openspec 指令\n"
                 "应该捕获 anyio.CancelledError\n"
                 "per openspec directive: '异步库使用anyio'"
             )
@@ -82,7 +82,7 @@ class TestAnyioCompliance:
 
         if uses_asyncio_lock:
             pytest.fail(
-                "MCP 客户端使用了 asyncio.Lock，违反 openspec 指令\n"
+                "MCP 客户端使用了 asyncio.Lock,违反 openspec 指令\n"
                 "应该使用 anyio.Lock\n"
                 "per openspec directive: '异步库使用anyio'"
             )
@@ -154,7 +154,7 @@ class TestArchitectureGoals:
     """测试架构目标
 
     根据 openspec:
-    - 最终目标：实现 ABP 协议
+    - 最终目标:实现 ABP 协议
     - 代码美观
     - 类型标注完美
     - 将现有功能迁移到新架构

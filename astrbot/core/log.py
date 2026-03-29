@@ -7,7 +7,7 @@ import sys
 import time
 from asyncio import Queue
 from collections import deque
-from typing import ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from loguru import logger as _raw_loguru_logger
 
