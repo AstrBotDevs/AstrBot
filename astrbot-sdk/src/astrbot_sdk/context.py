@@ -85,6 +85,32 @@ PlatformCompatContent = (
 )
 
 
+def _context_call_label(method_name: str, details: str | None = None) -> str:
+    label = f"Context.{method_name}"
+    if details:
+        return f"{label} ({details})"
+    return label
+
+
+def _wrap_context_exception(
+    *,
+    method_name: str,
+    exc: Exception,
+    details: str | None = None,
+) -> Exception:
+    message = f"{_context_call_label(method_name, details)} failed: {exc}"
+    if isinstance(exc, AstrBotError):
+        return AstrBotError(
+            code=exc.code,
+            message=message,
+            hint=exc.hint,
+            retryable=exc.retryable,
+            docs_url=exc.docs_url,
+            details=exc.details,
+        )
+    return RuntimeError(message)
+
+
 @dataclass(slots=True)
 class PlatformCompatFacade:
     """兼容层平台入口，仅暴露安全元信息和主动发送能力。"""
@@ -144,17 +170,31 @@ class PlatformCompatFacade:
 
     async def clear_errors(self) -> None:
         async with self._state_lock:
-            await self._ctx._proxy.call(
-                "platform.manager.clear_errors",
-                {"platform_id": self.id},
-            )
-            await self._refresh_locked()
+            try:
+                await self._ctx._proxy.call(
+                    "platform.manager.clear_errors",
+                    {"platform_id": self.id},
+                )
+                await self._refresh_locked()
+            except Exception as exc:
+                raise _wrap_context_exception(
+                    method_name="platform.clear_errors",
+                    details=f"platform_id={self.id!r}",
+                    exc=exc,
+                ) from exc
 
     async def get_stats(self) -> PlatformStats | None:
-        output = await self._ctx._proxy.call(
-            "platform.manager.get_stats",
-            {"platform_id": self.id},
-        )
+        try:
+            output = await self._ctx._proxy.call(
+                "platform.manager.get_stats",
+                {"platform_id": self.id},
+            )
+        except Exception as exc:
+            raise _wrap_context_exception(
+                method_name="platform.get_stats",
+                details=f"platform_id={self.id!r}",
+                exc=exc,
+            ) from exc
         return PlatformStats.from_payload(output.get("stats"))
 
     def _apply_snapshot(self, payload: Any) -> None:
@@ -177,10 +217,17 @@ class PlatformCompatFacade:
         self.unified_webhook = bool(payload.get("unified_webhook", False))
 
     async def _refresh_locked(self) -> None:
-        output = await self._ctx._proxy.call(
-            "platform.manager.get_by_id",
-            {"platform_id": self.id},
-        )
+        try:
+            output = await self._ctx._proxy.call(
+                "platform.manager.get_by_id",
+                {"platform_id": self.id},
+            )
+        except Exception as exc:
+            raise _wrap_context_exception(
+                method_name="platform.refresh",
+                details=f"platform_id={self.id!r}",
+                exc=exc,
+            ) from exc
         self._apply_snapshot(output.get("platform"))
 
 
@@ -335,7 +382,13 @@ class Context:
 
     async def get_data_dir(self) -> Path:
         """Return the plugin-scoped data directory path."""
-        output = await self._proxy.call("system.get_data_dir", {})
+        try:
+            output = await self._proxy.call("system.get_data_dir", {})
+        except Exception as exc:
+            raise _wrap_context_exception(
+                method_name="get_data_dir",
+                exc=exc,
+            ) from exc
         return Path(str(output.get("path", "")))
 
     async def _register_file_url(
@@ -343,7 +396,14 @@ class Context:
         path: str,
         timeout: float | None = None,
     ) -> str:
-        return await self.files.register_file_url(path, timeout=timeout)
+        try:
+            return await self.files.register_file_url(path, timeout=timeout)
+        except Exception as exc:
+            raise _wrap_context_exception(
+                method_name="register_file_url",
+                details=f"path={str(path)!r}, timeout={timeout!r}",
+                exc=exc,
+            ) from exc
 
     async def text_to_image(
         self,
@@ -352,10 +412,17 @@ class Context:
         return_url: bool = True,
     ) -> str:
         """Render plain text into an image using the host renderer."""
-        output = await self._proxy.call(
-            "system.text_to_image",
-            {"text": text, "return_url": return_url},
-        )
+        try:
+            output = await self._proxy.call(
+                "system.text_to_image",
+                {"text": text, "return_url": return_url},
+            )
+        except Exception as exc:
+            raise _wrap_context_exception(
+                method_name="text_to_image",
+                details=f"return_url={return_url!r}",
+                exc=exc,
+            ) from exc
         return str(output.get("result", ""))
 
     async def html_render(
@@ -367,25 +434,39 @@ class Context:
         options: dict[str, Any] | None = None,
     ) -> str:
         """Render an HTML template using the host renderer."""
-        output = await self._proxy.call(
-            "system.html_render",
-            {
-                "tmpl": tmpl,
-                "data": dict(data),
-                "return_url": return_url,
-                "options": options,
-            },
-        )
+        try:
+            output = await self._proxy.call(
+                "system.html_render",
+                {
+                    "tmpl": tmpl,
+                    "data": dict(data),
+                    "return_url": return_url,
+                    "options": options,
+                },
+            )
+        except Exception as exc:
+            raise _wrap_context_exception(
+                method_name="html_render",
+                details=f"tmpl={tmpl!r}, return_url={return_url!r}",
+                exc=exc,
+            ) from exc
         return str(output.get("result", ""))
 
     async def get_using_provider(self, umo: str | None = None) -> ProviderMeta | None:
         return await self.providers.get_using_chat(umo)
 
     async def get_current_chat_provider_id(self, umo: str | None = None) -> str | None:
-        output = await self._proxy.call(
-            "provider.get_current_chat_provider_id",
-            {"umo": umo},
-        )
+        try:
+            output = await self._proxy.call(
+                "provider.get_current_chat_provider_id",
+                {"umo": umo},
+            )
+        except Exception as exc:
+            raise _wrap_context_exception(
+                method_name="get_current_chat_provider_id",
+                details=f"umo={umo!r}",
+                exc=exc,
+            ) from exc
         value = output.get("provider_id")
         return str(value) if value else None
 
@@ -523,10 +604,14 @@ class Context:
             )
         try:
             return await self._llm_tool_manager.add(tool_spec)
-        except Exception:
+        except Exception as exc:
             if dispatcher is not None and hasattr(dispatcher, "remove_llm_tool"):
                 dispatcher.remove_llm_tool(self.plugin_id, tool_name)
-            raise
+            raise _wrap_context_exception(
+                method_name="register_llm_tool",
+                details=f"name={tool_name!r}, active={bool(active)!r}",
+                exc=exc,
+            ) from exc
 
     async def unregister_llm_tool(self, name: str) -> bool:
         removed = await self._llm_tool_manager.remove(str(name))
@@ -542,14 +627,28 @@ class Context:
         path: str | Path,
         description: str = "",
     ) -> SkillRegistration:
-        return await self.skills.register(
-            name=name,
-            path=str(path),
-            description=description,
-        )
+        try:
+            return await self.skills.register(
+                name=name,
+                path=str(path),
+                description=description,
+            )
+        except Exception as exc:
+            raise _wrap_context_exception(
+                method_name="register_skill",
+                details=f"name={name!r}, path={str(path)!r}",
+                exc=exc,
+            ) from exc
 
     async def unregister_skill(self, name: str) -> bool:
-        return await self.skills.unregister(name)
+        try:
+            return await self.skills.unregister(name)
+        except Exception as exc:
+            raise _wrap_context_exception(
+                method_name="unregister_skill",
+                details=f"name={name!r}",
+                exc=exc,
+            ) from exc
 
     async def tool_loop_agent(
         self,
@@ -567,7 +666,17 @@ class Context:
             # Preserve the original message target so core can recover the
             # dispatch token for message-bound tool loop execution.
             payload["target"] = dict(target_payload)
-        output = await self._proxy.call("agent.tool_loop.run", payload)
+        try:
+            output = await self._proxy.call("agent.tool_loop.run", payload)
+        except Exception as exc:
+            raise _wrap_context_exception(
+                method_name="tool_loop_agent",
+                details=(
+                    f"session_id={provider_request.session_id!r}, "
+                    f"contexts={len(provider_request.contexts)!r}"
+                ),
+                exc=exc,
+            ) from exc
         return LLMResponse.model_validate(output)
 
     def _source_event_type(self) -> str:
@@ -607,18 +716,30 @@ class Context:
             raise AstrBotError.invalid_input(
                 "register_commands priority must be an integer"
             )
-        await self._proxy.call(
-            "registry.command.register",
-            {
-                "command_name": str(command_name),
-                "handler_full_name": str(handler_full_name),
-                "source_event_type": source_event_type,
-                "desc": str(desc),
-                "priority": priority,
-                "use_regex": bool(use_regex),
-                "ignore_prefix": False,
-            },
-        )
+        normalized_command_name = str(command_name)
+        normalized_handler_name = str(handler_full_name)
+        try:
+            await self._proxy.call(
+                "registry.command.register",
+                {
+                    "command_name": normalized_command_name,
+                    "handler_full_name": normalized_handler_name,
+                    "source_event_type": source_event_type,
+                    "desc": str(desc),
+                    "priority": priority,
+                    "use_regex": bool(use_regex),
+                    "ignore_prefix": False,
+                },
+            )
+        except Exception as exc:
+            raise _wrap_context_exception(
+                method_name="register_commands",
+                details=(
+                    f"command_name={normalized_command_name!r}, "
+                    f"handler_full_name={normalized_handler_name!r}"
+                ),
+                exc=exc,
+            ) from exc
 
     async def register_task(
         self,
@@ -651,7 +772,10 @@ class Context:
         elif asyncio.iscoroutine(task):
             background_task = asyncio.create_task(task)
         else:
-            raise TypeError("register_task requires an awaitable task object")
+            raise TypeError(
+                "Context.register_task requires an awaitable task object; "
+                f"got {type(task).__name__} for desc={task_desc!r}"
+            )
 
         _mark_session_waiter_background_task(background_task)
 
@@ -668,20 +792,27 @@ class Context:
                 return
             try:
                 done_task.result()
-            except Exception:
+            except Exception as exc:
                 exception_logger = getattr(self.logger, "exception", None)
                 if callable(exception_logger):
                     exception_logger(
-                        "SDK background task failed: plugin_id={} desc={}",
+                        "SDK background task failed: plugin_id={} desc={} error={}",
                         self.plugin_id,
                         task_desc,
+                        str(exc),
                     )
 
         background_task.add_done_callback(_on_done)
         return background_task
 
     async def _list_platform_instances(self) -> list[dict[str, Any]]:
-        output = await self._proxy.call("platform.list_instances", {})
+        try:
+            output = await self._proxy.call("platform.list_instances", {})
+        except Exception as exc:
+            raise _wrap_context_exception(
+                method_name="list_platforms",
+                exc=exc,
+            ) from exc
         items = output.get("platforms")
         if not isinstance(items, list):
             return []

@@ -891,11 +891,130 @@ async def test_context_register_task_logs_background_exceptions() -> None:
     await asyncio.sleep(0)
     assert task.done() is True
     assert len(logger.exception_calls) == 1
-    msg, plugin_id, desc = logger.exception_calls[0][0]
+    msg, plugin_id, desc, error = logger.exception_calls[0][0]
     assert "background task failed" in str(msg).lower()
     assert plugin_id == "sdk-demo"
     assert desc == "probe-task"
+    assert error == "boom"
     assert logger.debug_calls == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_context_register_commands_wraps_bridge_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx = Context(
+        peer=_DummyPeer(),
+        plugin_id="sdk-demo",
+        source_event_payload={"event_type": "astrbot_loaded"},
+    )
+
+    async def _boom(_capability: str, _payload: dict[str, object]) -> dict[str, object]:
+        raise AstrBotError.invalid_input("bridge rejected")
+
+    monkeypatch.setattr(ctx._proxy, "call", _boom)  # noqa: SLF001
+
+    with pytest.raises(AstrBotError) as exc_info:
+        await ctx.register_commands("hello", "sdk-demo:demo.handler")
+
+    assert exc_info.value.code == "invalid_input"
+    assert "Context.register_commands (" in str(exc_info.value)
+    assert "command_name='hello'" in str(exc_info.value)
+    assert "handler_full_name='sdk-demo:demo.handler'" in str(exc_info.value)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_context_register_skill_wraps_client_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    ctx = Context(peer=_DummyPeer(), plugin_id="sdk-demo")
+    skill_dir = tmp_path / "writer_helper"
+
+    async def _boom(**_kwargs):
+        raise ValueError("missing SKILL.md")
+
+    monkeypatch.setattr(ctx.skills, "register", _boom)
+
+    with pytest.raises(RuntimeError, match="Context.register_skill") as exc_info:
+        await ctx.register_skill(name="sdk-demo.writer-helper", path=skill_dir)
+
+    assert "name='sdk-demo.writer-helper'" in str(exc_info.value)
+    assert "path='" in str(exc_info.value)
+    assert "writer_helper" in str(exc_info.value)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_context_register_llm_tool_wraps_errors_and_cleans_dispatcher(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Dispatcher:
+        def __init__(self) -> None:
+            self.add_calls: list[tuple[str, str]] = []
+            self.remove_calls: list[tuple[str, str]] = []
+
+        def add_dynamic_llm_tool(self, *, plugin_id, spec, callable_obj, owner) -> None:
+            del callable_obj, owner
+            self.add_calls.append((plugin_id, spec.name))
+
+        def remove_llm_tool(self, plugin_id: str, tool_name: str) -> None:
+            self.remove_calls.append((plugin_id, tool_name))
+
+    peer = _DummyPeer()
+    dispatcher = _Dispatcher()
+    peer._sdk_capability_dispatcher = dispatcher  # type: ignore[attr-defined]
+    ctx = Context(peer=peer, plugin_id="sdk-demo")
+
+    async def _boom(*_tools):
+        raise ValueError("tool registry down")
+
+    monkeypatch.setattr(ctx._llm_tool_manager, "add", _boom)  # noqa: SLF001
+
+    async def _tool() -> dict[str, bool]:
+        return {"ok": True}
+
+    with pytest.raises(RuntimeError, match="Context.register_llm_tool") as exc_info:
+        await ctx.register_llm_tool(
+            "demo-tool",
+            {"type": "object"},
+            "demo",
+            _tool,
+        )
+
+    assert "name='demo-tool'" in str(exc_info.value)
+    assert dispatcher.add_calls == [("sdk-demo", "demo-tool")]
+    assert dispatcher.remove_calls == [("sdk-demo", "demo-tool")]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_context_list_platforms_wraps_proxy_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx = Context(peer=_DummyPeer(), plugin_id="sdk-demo")
+
+    async def _boom(_capability: str, _payload: dict[str, object]) -> dict[str, object]:
+        raise AstrBotError.invalid_input("platform backend unavailable")
+
+    monkeypatch.setattr(ctx._proxy, "call", _boom)  # noqa: SLF001
+
+    with pytest.raises(AstrBotError) as exc_info:
+        await ctx.list_platforms()
+
+    assert exc_info.value.code == "invalid_input"
+    assert "Context.list_platforms failed" in str(exc_info.value)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_context_register_task_rejects_non_awaitable_with_desc() -> None:
+    ctx = Context(peer=_DummyPeer(), plugin_id="sdk-demo")
+
+    with pytest.raises(TypeError, match="Context.register_task requires an awaitable"):
+        await ctx.register_task(123, "probe-task")  # type: ignore[arg-type]
 
 
 @pytest.mark.unit
