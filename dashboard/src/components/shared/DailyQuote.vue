@@ -6,7 +6,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "@/i18n/composables";
 
 const { locale } = useI18n();
@@ -84,13 +84,14 @@ const getQuoteOfTheDay = (): Quote => {
   return langQuotes[index];
 };
 
-onMounted(() => {
-  currentQuote.value = getQuoteOfTheDay();
-});
-
 // Update quote when locale changes
-locale.value; // track dependency
-currentQuote.value = getQuoteOfTheDay();
+watch(
+  locale,
+  () => {
+    currentQuote.value = getQuoteOfTheDay();
+  },
+  { immediate: true }
+);
 </script>
 
 <style scoped>

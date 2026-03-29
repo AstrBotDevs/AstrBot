@@ -8,7 +8,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useApiStore } from "@/stores/api";
 import { useRouter } from "vue-router";
 import { useCustomizerStore } from "@/stores/customizer";
-import { useModuleI18n } from "@/i18n/composables";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useToast } from "@/utils/toast";
 import { getApiBaseUrlValidationError } from "@/utils/request";
 
@@ -17,6 +17,7 @@ const router = useRouter();
 const authStore = useAuthStore();
 const apiStore = useApiStore();
 const customizer = useCustomizerStore();
+const { locale } = useI18n();
 const { tm: t } = useModuleI18n("features/auth");
 const toast = useToast();
 
@@ -116,7 +117,7 @@ onMounted(() => {
   <div class="login-page-container">
     <DiamondBg />
     <v-card class="login-card" elevation="1">
-      <v-card-title>
+      <v-card-title :key="locale">
         <div class="d-flex justify-space-between align-center w-100">
           <img
             width="80"
