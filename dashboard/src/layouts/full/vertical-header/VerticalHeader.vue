@@ -394,7 +394,6 @@ getVersion();
 checkUpdate();
 
 const commonStore = useCommonStore();
-commonStore.createEventSource(); // log
 commonStore.getStartTime();
 
 // 视图模式切换
