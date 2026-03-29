@@ -697,7 +697,6 @@ onBeforeUnmount(() => {
   --stats-border-strong: rgba(var(--v-theme-on-surface), 0.14);
   --stats-soft: rgba(var(--v-theme-primary), 0.08);
   --stats-soft-strong: rgba(var(--v-theme-primary), 0.14);
-  --stats-shadow: 0 12px 40px rgba(var(--v-theme-on-surface), 0.04);
   min-height: 100%;
   background: var(--stats-bg);
 }
@@ -707,7 +706,6 @@ onBeforeUnmount(() => {
   --stats-border-strong: rgba(var(--v-theme-on-surface), 0.18);
   --stats-soft: rgba(var(--v-theme-primary), 0.12);
   --stats-soft-strong: rgba(var(--v-theme-primary), 0.2);
-  --stats-shadow: none;
 }
 
 .stats-shell {
@@ -818,15 +816,13 @@ onBeforeUnmount(() => {
 
 .stat-card {
   border: 1px solid var(--stats-border);
-  border-radius: 28px;
+  border-radius: 16px;
   background: var(--stats-surface);
-  box-shadow: var(--stats-shadow);
 }
 
 .stats-page.is-dark .stat-card {
   border-color: var(--stats-border-strong);
   background: var(--stats-surface);
-  box-shadow: var(--stats-shadow);
 }
 
 .overview-card {
@@ -1168,7 +1164,7 @@ onBeforeUnmount(() => {
   .provider-list-card,
   .token-total-card {
     padding: 18px;
-    border-radius: 22px;
+    border-radius: 14px;
   }
 }
 </style>
