@@ -146,8 +146,8 @@
     >
       <v-slider
         v-if="itemMeta?.slider"
-        :model-value="toNumber(modelValue)"
-        @update:model-value="val => emitUpdate(toNumber(val))"
+        :model-value="toNumber(numericTemp ?? modelValue)"
+        @update:model-value="val => { numericTemp = val; emitUpdate(toNumber(val)) }"
         :min="itemMeta?.slider?.min ?? 0"
         :max="itemMeta?.slider?.max ?? 100"
         :step="itemMeta?.slider?.step ?? 1"
@@ -157,8 +157,9 @@
         style="flex: 1"
       ></v-slider>
       <v-text-field
-        :model-value="modelValue"
-        @update:model-value="val => emitUpdate(toNumber(val))"
+        :model-value="numericTemp ?? modelValue"
+        @update:model-value="val => (numericTemp = val)"
+        @blur="e => { emitUpdate(toNumber(e.target.value)); numericTemp = null }"
         density="compact"
         variant="outlined"
         class="config-field"
@@ -235,7 +236,10 @@ import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
+import { ref } from 'vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
+
+const numericTemp = ref(null)
 
 const props = defineProps({
   modelValue: {
@@ -357,5 +361,14 @@ function getSpecialSubtype(value) {
 
 :deep(.v-field__input) {
   font-size: 14px;
+}
+
+:deep(input[type='number']::-webkit-inner-spin-button),
+:deep(input[type='number']::-webkit-outer-spin-button) {
+  -webkit-appearance: none;
+}
+
+:deep(input[type='number']) {
+  -moz-appearance: textfield;
 }
 </style>
