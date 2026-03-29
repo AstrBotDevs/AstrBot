@@ -32,6 +32,7 @@ class TriggerMatch:
     priority: int
     load_order: int
     declaration_order: int
+    matched_command_name: str | None = None
 
 
 class TriggerConverter:
@@ -270,6 +271,7 @@ class TriggerConverter:
                     priority=descriptor.priority,
                     load_order=load_order,
                     declaration_order=declaration_order,
+                    matched_command_name=str(command_name).strip() or None,
                 )
             return None
 

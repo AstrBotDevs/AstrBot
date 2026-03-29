@@ -825,6 +825,55 @@ async def test_commands_api_includes_sdk_dashboard_items(
 
 
 @pytest.mark.asyncio
+async def test_commands_conflicts_api_includes_sdk_legacy_incompatibility(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    old_bridge = getattr(core_lifecycle_td, "sdk_plugin_bridge", None)
+
+    class _Conflict:
+        def to_dashboard_payload(self):
+            return {
+                "conflict_key": "hello",
+                "handlers": [
+                    {
+                        "handler_full_name": "legacy.demo.hello",
+                        "plugin": "legacy-demo",
+                        "current_name": "hello",
+                        "runtime_kind": "legacy",
+                    },
+                    {
+                        "handler_full_name": "sdk-demo:main.hello",
+                        "plugin": "sdk-demo",
+                        "current_name": "hello",
+                        "runtime_kind": "sdk",
+                    },
+                ],
+            }
+
+    try:
+        core_lifecycle_td.sdk_plugin_bridge = SimpleNamespace(
+            list_cross_system_command_conflicts=lambda: [_Conflict()]
+        )
+
+        response = await test_client.get(
+            "/api/commands/conflicts", headers=authenticated_header
+        )
+
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert any(
+            item.get("conflict_key") == "hello" and len(item.get("handlers", [])) == 2
+            for item in data["data"]
+        )
+    finally:
+        core_lifecycle_td.sdk_plugin_bridge = old_bridge
+
+
+@pytest.mark.asyncio
 async def test_tools_api_includes_and_toggles_sdk_tools(
     app: Quart,
     authenticated_header: dict,

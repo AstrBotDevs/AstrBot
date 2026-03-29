@@ -73,6 +73,7 @@ class SdkPluginLifecycleManager:
                     load_order=load_order,
                     reset_restart_budget=reset_restart_budget,
                 )
+            self.bridge.refresh_command_compatibility_issues()
             await self.bridge._refresh_native_platform_commands({"telegram"})
 
     async def reload_plugin(self, plugin_id: str) -> None:
@@ -88,6 +89,7 @@ class SdkPluginLifecycleManager:
                     load_order=load_order,
                     reset_restart_budget=True,
                 )
+                self.bridge.refresh_command_compatibility_issues()
                 await self.bridge._refresh_native_platform_commands({"telegram"})
                 return
             raise ValueError(f"SDK plugin not found: {plugin_id}")
@@ -102,6 +104,7 @@ class SdkPluginLifecycleManager:
             await self.bridge._teardown_plugin(plugin_id)
             record.failure_reason = ""
             self.bridge._set_disabled_override(plugin_id, disabled=True)
+            self.bridge.refresh_command_compatibility_issues()
             await self.bridge._refresh_native_platform_commands({"telegram"})
 
     async def turn_on_plugin(self, plugin_id: str) -> None:
@@ -118,6 +121,7 @@ class SdkPluginLifecycleManager:
                     load_order=load_order,
                     reset_restart_budget=True,
                 )
+                self.bridge.refresh_command_compatibility_issues()
                 await self.bridge._refresh_native_platform_commands({"telegram"})
                 return
             raise ValueError(f"SDK plugin not found: {plugin_id}")
@@ -137,6 +141,7 @@ class SdkPluginLifecycleManager:
                 self.bridge.SDK_STATE_RELOADING,
                 self.bridge.SDK_STATE_DISABLED,
             }:
+                self.bridge.refresh_command_compatibility_issues()
                 return
             if not record.restart_attempted:
                 record.restart_attempted = True
@@ -149,6 +154,7 @@ class SdkPluginLifecycleManager:
                     load_order=record.load_order,
                     reset_restart_budget=False,
                 )
+                self.bridge.refresh_command_compatibility_issues()
                 return
             record.state = self.bridge.SDK_STATE_FAILED
             self.bridge._http_routes.pop(plugin_id, None)
@@ -159,6 +165,7 @@ class SdkPluginLifecycleManager:
                 record=record,
                 reason="worker failure cleanup",
             )
+            self.bridge.refresh_command_compatibility_issues()
 
     def _schedule_background_reload(self, *, reset_restart_budget: bool) -> None:
         if self._startup_task is not None and not self._startup_task.done():

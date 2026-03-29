@@ -18,6 +18,10 @@ from astrbot_sdk.protocol.descriptors import (
     ScheduleTrigger,
 )
 
+from astrbot.core.command_compatibility import (
+    CommandRegistration,
+    build_cross_system_conflicts,
+)
 from astrbot.core.sdk_bridge.plugin_bridge import SdkHandlerRef, SdkPluginBridge
 
 pytest_plugins = (
@@ -293,6 +297,102 @@ async def test_sdk_bridge_dispatch_message_returns_permission_denied_for_admin_s
     assert event._stopped is True
     assert event._result is not None
     assert event._result.get_plain_text() == "权限不足：`/gf sync` 需要管理员权限。"
+
+
+@pytest.mark.unit
+def test_sdk_bridge_refresh_command_compatibility_issues_keeps_existing_state(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.get_astrbot_data_path",
+        lambda: str(tmp_path),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.collect_legacy_command_registrations",
+        lambda *args, **kwargs: [
+            CommandRegistration(
+                runtime_kind="legacy",
+                plugin_name="legacy-demo",
+                plugin_display_name="Legacy Demo",
+                handler_full_name="legacy.demo.hello",
+                command_name="hello",
+            )
+        ],
+    )
+
+    bridge = SdkPluginBridge(_BridgeStarContext())
+    record = SimpleNamespace(
+        plugin=SimpleNamespace(
+            name="sdk-demo",
+            manifest_data={
+                "display_name": "SDK Demo",
+                "support_platforms": ["telegram"],
+            },
+        ),
+        plugin_id="sdk-demo",
+        load_order=0,
+        state="custom_partial_state",
+        unsupported_features=[],
+        handlers=[
+            SdkHandlerRef(
+                descriptor=HandlerDescriptor(
+                    id="sdk-demo:main.hello",
+                    trigger=CommandTrigger(command="hello"),
+                ),
+                declaration_order=0,
+            )
+        ],
+        dynamic_command_routes=[],
+        issues=[],
+    )
+    bridge._records = {"sdk-demo": record}  # noqa: SLF001
+
+    bridge.refresh_command_compatibility_issues()
+
+    assert record.state == "custom_partial_state"
+    assert record.issues[0]["warning_type"] == bridge.COMMAND_OVERRIDE_WARNING_TYPE
+    assert "overrides legacy plugin" in record.issues[0]["details"]
+    assert record.issues[0]["command_name"] == "hello"
+
+    monkeypatch.setattr(
+        "astrbot.core.sdk_bridge.plugin_bridge.collect_legacy_command_registrations",
+        lambda *args, **kwargs: [],
+    )
+
+    bridge.refresh_command_compatibility_issues()
+
+    assert record.state == "custom_partial_state"
+    assert record.issues == []
+
+
+@pytest.mark.unit
+def test_cross_system_command_conflicts_detect_command_namespace_overlap() -> None:
+    conflicts = build_cross_system_conflicts(
+        [
+            CommandRegistration(
+                runtime_kind="legacy",
+                plugin_name="legacy-demo",
+                plugin_display_name="Legacy Demo",
+                handler_full_name="legacy.demo.gf",
+                command_name="gf",
+            )
+        ],
+        [
+            CommandRegistration(
+                runtime_kind="sdk",
+                plugin_name="sdk-demo",
+                plugin_display_name="SDK Demo",
+                handler_full_name="sdk-demo:main.chat",
+                command_name="gf chat",
+            )
+        ],
+    )
+
+    assert len(conflicts) == 1
+    assert conflicts[0].command_name == "gf <> gf chat"
+    assert conflicts[0].legacy.command_name == "gf"
+    assert conflicts[0].sdk.command_name == "gf chat"
 
 
 @pytest.mark.unit

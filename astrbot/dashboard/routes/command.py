@@ -45,7 +45,7 @@ class CommandRoute(Route):
         return Response().ok({"items": commands, "summary": summary}).__dict__
 
     async def get_conflicts(self):
-        conflicts = await list_command_conflicts()
+        conflicts = await _list_dashboard_conflicts(self.core_lifecycle)
         return Response().ok(conflicts).__dict__
 
     async def toggle_command(self):
@@ -147,6 +147,22 @@ async def _list_dashboard_commands(
     _apply_conflict_flags(commands)
     commands.sort(key=lambda item: str(item.get("effective_command", "")).lower())
     return commands
+
+
+async def _list_dashboard_conflicts(
+    core_lifecycle: AstrBotCoreLifecycle,
+) -> list[dict]:
+    conflicts = list(await list_command_conflicts())
+    sdk_bridge = getattr(core_lifecycle, "sdk_plugin_bridge", None)
+    if sdk_bridge is None or not hasattr(
+        sdk_bridge, "list_cross_system_command_conflicts"
+    ):
+        return conflicts
+    conflicts.extend(
+        conflict.to_dashboard_payload()
+        for conflict in sdk_bridge.list_cross_system_command_conflicts()
+    )
+    return conflicts
 
 
 def _decorate_legacy_commands(commands: list[dict]) -> list[dict]:

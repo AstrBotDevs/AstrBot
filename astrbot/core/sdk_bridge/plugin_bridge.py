@@ -38,6 +38,14 @@ from astrbot_sdk.runtime.supervisor import WorkerSession
 
 from astrbot.core import astrbot_config, logger
 from astrbot.core.agent.mcp_client import MCPClient
+from astrbot.core.command_compatibility import (
+    CommandRegistration,
+    CrossSystemCommandConflict,
+    build_cross_system_conflicts,
+    collect_legacy_command_registrations,
+    collect_sdk_command_registrations,
+    match_legacy_command_registrations,
+)
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import LLMResponse as CoreLLMResponse
@@ -103,6 +111,7 @@ SUPPORTED_SYSTEM_EVENTS = {
     "plugin_loaded",
     "plugin_unloaded",
 }
+COMMAND_OVERRIDE_WARNING_TYPE = "legacy_sdk_command_override"
 
 
 class SdkPluginBridge:
@@ -116,6 +125,7 @@ class SdkPluginBridge:
     SKIP_SDK_RELOADING = SKIP_SDK_RELOADING
     SKIP_NO_MATCH = SKIP_NO_MATCH
     SKIP_WORKER_FAILED = SKIP_WORKER_FAILED
+    COMMAND_OVERRIDE_WARNING_TYPE = COMMAND_OVERRIDE_WARNING_TYPE
     SDK_SKILL_NAME_RE = SDK_SKILL_NAME_RE
 
     def __init__(self, star_context) -> None:
@@ -875,6 +885,244 @@ class SdkPluginBridge:
                     matches.append(match)
         matches.sort(key=TriggerConverter.sort_key)
         return matches
+
+    def list_cross_system_command_conflicts(
+        self,
+    ) -> list[CrossSystemCommandConflict]:
+        return build_cross_system_conflicts(
+            collect_legacy_command_registrations(),
+            self._collect_sdk_command_registrations(),
+        )
+
+    def has_active_sdk_command_handlers(self) -> bool:
+        if not self._records:
+            return False
+        for record in self._records.values():
+            if record.state in {
+                SDK_STATE_DISABLED,
+                SDK_STATE_FAILED,
+                SDK_STATE_RELOADING,
+            }:
+                continue
+            if any(
+                isinstance(handler.descriptor.trigger, CommandTrigger)
+                for handler in record.handlers
+            ):
+                return True
+            if any(
+                not route.use_regex
+                for route in getattr(record, "dynamic_command_routes", [])
+            ):
+                return True
+        return False
+
+    def refresh_command_compatibility_issues(self) -> None:
+        conflicts = self.list_cross_system_command_conflicts()
+        conflict_map: dict[str, list[CrossSystemCommandConflict]] = {}
+        for conflict in conflicts:
+            conflict_map.setdefault(conflict.sdk.plugin_name, []).append(conflict)
+
+        for record in self._records.values():
+            record.issues = [
+                issue
+                for issue in record.issues
+                if issue.get("warning_type") != self.COMMAND_OVERRIDE_WARNING_TYPE
+            ]
+            record_conflicts = conflict_map.get(record.plugin_id, [])
+            if record_conflicts:
+                for issue in self._build_command_compatibility_issues(
+                    record.plugin_id,
+                    record_conflicts,
+                ):
+                    record.issues.append(issue)
+                logger.warning(
+                    "SDK plugin command overrides legacy handlers: plugin=%s commands=%s",
+                    record.plugin_id,
+                    ", ".join(
+                        sorted({conflict.command_name for conflict in record_conflicts})
+                    ),
+                )
+
+    def detect_legacy_command_conflict(
+        self,
+        event: AstrMessageEvent,
+        legacy_handlers: list[Any],
+    ) -> CrossSystemCommandConflict | None:
+        if not legacy_handlers or not self.has_active_sdk_command_handlers():
+            return None
+        sdk_matches = self._match_handlers(event)
+        if not sdk_matches:
+            return None
+        legacy_registrations = match_legacy_command_registrations(
+            legacy_handlers,
+            event.get_message_str(),
+        )
+        if not legacy_registrations:
+            return None
+        sdk_registrations = self._matched_sdk_command_registrations(sdk_matches)
+        if not sdk_registrations:
+            return None
+        conflicts = build_cross_system_conflicts(
+            legacy_registrations,
+            sdk_registrations,
+        )
+        if not conflicts:
+            return None
+        conflicts.sort(
+            key=lambda item: (
+                item.command_name,
+                item.legacy.plugin_name,
+                item.sdk.plugin_name,
+                item.sdk.handler_full_name,
+            )
+        )
+        return conflicts[0]
+
+    def format_legacy_command_conflict_message(
+        self,
+        conflict: CrossSystemCommandConflict,
+    ) -> str:
+        legacy_name = conflict.legacy.plugin_display_name or conflict.legacy.plugin_name
+        sdk_name = conflict.sdk.plugin_display_name or conflict.sdk.plugin_name
+        if conflict.legacy.command_name == conflict.sdk.command_name:
+            command_detail = f"`/{conflict.legacy.command_name}`"
+        else:
+            command_detail = (
+                f"`/{conflict.legacy.command_name}` 与 `/{conflict.sdk.command_name}`"
+            )
+        return (
+            "检测到旧插件与 SDK 插件存在命令冲突，当前不兼容："
+            f"{command_detail} 分别来自 {legacy_name} 和 {sdk_name}。"
+            "请停用、卸载或重命名其中一个插件后再使用。"
+        )
+
+    def _collect_sdk_command_registrations(self) -> list[Any]:
+        registrations: list[Any] = []
+        for record in sorted(self._records.values(), key=lambda item: item.load_order):
+            if record.state in {
+                SDK_STATE_DISABLED,
+                SDK_STATE_FAILED,
+                SDK_STATE_RELOADING,
+            }:
+                continue
+            registrations.extend(self._sdk_record_command_registrations(record))
+        return registrations
+
+    def _sdk_record_command_registrations(self, record: SdkPluginRecord) -> list[Any]:
+        registrations: list[Any] = []
+        plugin_display_name = str(
+            record.plugin.manifest_data.get("display_name") or record.plugin_id
+        )
+        for handler in record.handlers:
+            registrations.extend(
+                collect_sdk_command_registrations(
+                    plugin_name=record.plugin_id,
+                    plugin_display_name=plugin_display_name,
+                    handler_full_name=handler.descriptor.id,
+                    descriptor=handler.descriptor,
+                )
+            )
+        for route in getattr(record, "dynamic_command_routes", []):
+            descriptor = self._build_dynamic_route_descriptor(record, route)
+            if descriptor is None:
+                continue
+            registrations.extend(
+                collect_sdk_command_registrations(
+                    plugin_name=record.plugin_id,
+                    plugin_display_name=plugin_display_name,
+                    handler_full_name=descriptor.id,
+                    descriptor=descriptor,
+                )
+            )
+        return registrations
+
+    def _matched_sdk_command_registrations(
+        self,
+        matches: list[TriggerMatch],
+    ) -> list[CommandRegistration]:
+        registrations: list[CommandRegistration] = []
+        for match in matches:
+            if not match.matched_command_name:
+                continue
+            record = self._records.get(match.plugin_id)
+            if record is None:
+                continue
+            descriptor = self._descriptor_from_match(record, match)
+            if descriptor is None:
+                continue
+            registrations.append(
+                CommandRegistration(
+                    runtime_kind="sdk",
+                    plugin_name=record.plugin_id,
+                    plugin_display_name=str(
+                        record.plugin.manifest_data.get("display_name")
+                        or record.plugin_id
+                    ),
+                    handler_full_name=descriptor.id,
+                    command_name=match.matched_command_name,
+                )
+            )
+        return registrations
+
+    def _descriptor_from_match(
+        self,
+        record: SdkPluginRecord,
+        match: TriggerMatch,
+    ) -> HandlerDescriptor | None:
+        for handler in record.handlers:
+            if (
+                handler.descriptor.id == match.handler_id
+                and handler.declaration_order == match.declaration_order
+            ):
+                return handler.descriptor
+
+        dynamic_order = match.declaration_order - len(record.handlers)
+        if dynamic_order < 0:
+            return None
+        for route in getattr(record, "dynamic_command_routes", []):
+            if route.declaration_order != dynamic_order:
+                continue
+            return self._build_dynamic_route_descriptor(record, route)
+        return None
+
+    def _build_command_compatibility_issues(
+        self,
+        plugin_id: str,
+        conflicts: list[CrossSystemCommandConflict],
+    ) -> list[dict[str, Any]]:
+        issues: list[dict[str, Any]] = []
+        for conflict in conflicts:
+            legacy_name = (
+                conflict.legacy.plugin_display_name or conflict.legacy.plugin_name
+            )
+            if conflict.legacy.command_name == conflict.sdk.command_name:
+                conflict_detail = f"Command '/{conflict.legacy.command_name}'"
+            else:
+                conflict_detail = (
+                    f"Commands '/{conflict.legacy.command_name}' and "
+                    f"'/{conflict.sdk.command_name}'"
+                )
+            issues.append(
+                {
+                    "severity": "warning",
+                    "phase": "compatibility",
+                    "plugin_id": plugin_id,
+                    "message": "SDK plugin command overrides a legacy plugin command",
+                    "details": (
+                        f"{conflict_detail} are registered by both systems. "
+                        f"The SDK plugin overrides legacy plugin '{legacy_name}' at runtime."
+                    ),
+                    "warning_type": self.COMMAND_OVERRIDE_WARNING_TYPE,
+                    "command_name": conflict.command_name,
+                    "legacy_command_name": conflict.legacy.command_name,
+                    "sdk_command_name": conflict.sdk.command_name,
+                    "legacy_plugin_name": conflict.legacy.plugin_name,
+                    "legacy_plugin_display_name": conflict.legacy.plugin_display_name,
+                    "legacy_handler_full_name": conflict.legacy.handler_full_name,
+                    "sdk_handler_full_name": conflict.sdk.handler_full_name,
+                }
+            )
+        return issues
 
     @staticmethod
     def _descriptor_root_candidates(descriptor: HandlerDescriptor) -> list[str]:

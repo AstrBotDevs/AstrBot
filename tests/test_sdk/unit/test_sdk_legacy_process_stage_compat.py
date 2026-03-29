@@ -4,11 +4,17 @@ from __future__ import annotations
 import sys
 import types
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+
+from astrbot.core.command_compatibility import (
+    CommandRegistration,
+    CrossSystemCommandConflict,
+)
 
 
 def _install_optional_dependency_stubs() -> None:
@@ -56,6 +62,7 @@ class _FakeEvent:
     def __init__(self, *, stopped: bool = False, has_send_oper: bool = False) -> None:
         self._extras = {"activated_handlers": ["legacy-handler"]}
         self._stopped = stopped
+        self._result = None
         self._has_send_oper = has_send_oper
         self.call_llm = False
         self.is_at_or_wake_command = True
@@ -73,8 +80,11 @@ class _FakeEvent:
     def is_stopped(self) -> bool:
         return self._stopped
 
+    def set_result(self, result) -> None:
+        self._result = result
+
     def get_result(self):
-        return None
+        return self._result
 
     def should_call_llm(self, call_llm: bool) -> None:
         self.call_llm = call_llm
@@ -83,6 +93,11 @@ class _FakeEvent:
 class _FakeStarContext:
     def get_all_stars(self) -> list:
         return []
+
+
+@dataclass
+class _FakeHandler:
+    handler_full_name: str
 
 
 async def _drain(generator: AsyncGenerator[None, None] | None) -> int:
@@ -173,6 +188,125 @@ async def test_process_stage_keeps_default_llm_suppressed_after_legacy_reply() -
     assert event._has_send_oper is True
     assert event.call_llm is False
     assert agent_process.await_count == 0
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_process_stage_filters_conflicting_legacy_handler_and_runs_sdk() -> None:
+    async def sdk_dispatch(event):
+        event._has_send_oper = True
+        return SimpleNamespace(sent_message=True, stopped=False)
+
+    sdk_bridge = SimpleNamespace(
+        COMMAND_OVERRIDE_WARNING_TYPE="legacy_sdk_command_override",
+        detect_legacy_command_conflict=lambda _event, _handlers: (
+            CrossSystemCommandConflict(
+                command_name="hello",
+                legacy=CommandRegistration(
+                    runtime_kind="legacy",
+                    plugin_name="legacy-demo",
+                    plugin_display_name="Legacy Demo",
+                    handler_full_name="legacy.demo.hello",
+                    command_name="hello",
+                ),
+                sdk=CommandRegistration(
+                    runtime_kind="sdk",
+                    plugin_name="sdk-demo",
+                    plugin_display_name="SDK Demo",
+                    handler_full_name="sdk-demo:main.hello",
+                    command_name="hello",
+                ),
+            )
+        ),
+        dispatch_message=AsyncMock(side_effect=sdk_dispatch),
+    )
+    legacy_called = False
+    agent_process_calls = 0
+
+    async def legacy_process(_event):
+        nonlocal legacy_called
+        legacy_called = True
+        yield None
+
+    async def agent_process_gen(_event):
+        nonlocal agent_process_calls
+        agent_process_calls += 1
+        if False:  # pragma: no cover
+            yield None
+
+    stage = _make_process_stage(
+        sdk_bridge=sdk_bridge,
+        star_process=legacy_process,
+        agent_process=agent_process_gen,
+    )
+    event = _FakeEvent()
+    event.set_extra(
+        "activated_handlers",
+        [_FakeHandler("legacy.demo.hello")],
+    )
+    event.set_extra(
+        "handlers_parsed_params",
+        {"legacy.demo.hello": {"name": "old"}},
+    )
+
+    yielded = await _drain(stage.process(event))
+
+    assert yielded == 1
+    assert legacy_called is False
+    sdk_bridge.dispatch_message.assert_awaited_once_with(event)
+    assert event.is_stopped() is False
+    assert event.get_extra("activated_handlers") == []
+    assert event.get_extra("handlers_parsed_params") == {}
+    assert agent_process_calls == 0
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_process_stage_skips_conflict_detection_without_active_sdk_commands() -> (
+    None
+):
+    detect_calls = 0
+    sdk_bridge = SimpleNamespace(
+        has_active_sdk_command_handlers=lambda: False,
+        detect_legacy_command_conflict=lambda _event, _handlers: _increment_calls(),
+        dispatch_message=AsyncMock(
+            return_value=SimpleNamespace(sent_message=False, stopped=False)
+        ),
+    )
+
+    def _increment_calls():
+        nonlocal detect_calls
+        detect_calls += 1
+        return None
+
+    legacy_called = False
+
+    async def legacy_process(_event):
+        nonlocal legacy_called
+        legacy_called = True
+        yield None
+
+    async def agent_process_gen(_event):
+        if False:  # pragma: no cover
+            yield None
+
+    stage = _make_process_stage(
+        sdk_bridge=sdk_bridge,
+        star_process=legacy_process,
+        agent_process=agent_process_gen,
+    )
+    event = _FakeEvent()
+    event.set_extra(
+        "activated_handlers",
+        [_FakeHandler("legacy.demo.hello")],
+    )
+
+    yielded = await _drain(stage.process(event))
+
+    assert yielded == 1
+    assert legacy_called is True
+    assert detect_calls == 0
+    sdk_bridge.dispatch_message.assert_awaited_once_with(event)
 
 
 @pytest.mark.unit
