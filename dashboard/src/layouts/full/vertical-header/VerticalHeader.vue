@@ -28,6 +28,7 @@ const theme = useTheme();
 const { t } = useI18n();
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = 'astrbot:last_bot_route';
+const LAST_CHAT_ROUTE_KEY = 'astrbot:last_chat_route';
 let dialog = ref(false);
 let accountWarning = ref(false)
 let updateStatusDialog = ref(false);
@@ -58,7 +59,9 @@ const desktopUpdateHasNewVersion = ref(false);
 const desktopUpdateCurrentVersion = ref('-');
 const desktopUpdateLatestVersion = ref('-');
 const desktopUpdateStatus = ref('');
-
+const isChatPath = computed(() =>
+  route.path === '/chat' || route.path.startsWith('/chat/')
+);
 const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
   if (typeof window === 'undefined') {
     return null;
@@ -380,7 +383,7 @@ function openReleaseNotesDialog(body: string, tag: string) {
 }
 
 function handleLogoClick() {
-  if (customizer.viewMode === 'chat') {
+  if (isChatPath.value) {
     aboutDialog.value = true;
   } else {
     router.push('/about');
@@ -395,10 +398,22 @@ commonStore.createEventSource(); // log
 commonStore.getStartTime();
 
 // 视图模式切换
-const viewMode = computed({
-  get: () => customizer.viewMode,
-  set: (value: 'bot' | 'chat') => {
-    customizer.SET_VIEW_MODE(value);
+onMounted(() => {
+  // 初次加載時保存當前路由
+  if (typeof window !== 'undefined') {
+    if (isChatPath.value) {
+      // 保存 chat ID
+      const parts = route.fullPath.split('/');
+      const sessionId = parts[2];
+      if (sessionId) {
+        sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
+        console.log('Initial save chat ID:', sessionId);
+      }
+    } else {
+      // 保存 bot 路由（非 chat 頁面）
+      sessionStorage.setItem(LAST_BOT_ROUTE_KEY, route.fullPath);
+      console.log('Initial save bot route:', route.fullPath);
+    }
   }
 });
 
@@ -406,26 +421,61 @@ const viewMode = computed({
 // 保存 bot 模式的最後路由
 // 監聽 route 變化，保存最後一次 bot 路由
 watch(() => route.fullPath, (newPath) => {
-  if (customizer.viewMode === 'bot' && typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
-    } catch (e) {
-      console.error('Failed to save last bot route to localStorage:', e);
+  if (typeof window === 'undefined') return;
+  console.log('Route changed:', {
+    newPath,
+    isChat: isChatPath.value,
+    currentChatId: route.params.id
+  });
+  try {
+    // 使用現有的 isChatPath 計算屬性來避免名稱衝突
+    const isChat = isChatPath.value; // 這裡使用已經計算好的 isChatPath
+
+    // ✅ bot：只存「非 chat 頁」
+    if (!isChat) {
+      sessionStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
     }
+
+    // ✅ chat：只存 sessionId
+    if (isChat) {
+      const parts = newPath.split('/');
+      const sessionId = parts[2];
+
+      if (sessionId) {
+        sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
+      }
+    }
+
+  } catch (e) {
+    console.error('Failed to save route:', e);
   }
 });
 
-// 監聽 viewMode 切換
-watch(() => customizer.viewMode, (newMode, oldMode) => {
-  if (newMode === 'bot' && oldMode === 'chat' && typeof window !== 'undefined') {
-    // 從 chat 切換回 bot，跳轉到最後一次的 bot 路由
-    let lastBotRoute = '/';
+const currentMode = computed({
+  get: () => (isChatPath.value ? 'chat' : 'bot'),
+  set: (val: 'chat' | 'bot') => {
     try {
-      lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+      // 檢查 window 和 sessionStorage 是否存在
+      if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+        // 如果在非瀏覽器環境中，不做任何 sessionStorage 操作
+        console.warn('sessionStorage is not available in this environment');
+        return;
+      }
+
+      if (val === 'chat') {
+        const lastSessionId = sessionStorage.getItem(LAST_CHAT_ROUTE_KEY);
+        router.push(lastSessionId ? `/chat/${lastSessionId}` : '/chat');
+      } else {
+        let lastBotRoute = sessionStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+        if (lastBotRoute.startsWith('/chat')) {
+          lastBotRoute = '/';
+        }
+        router.push(lastBotRoute);
+      }
     } catch (e) {
-      console.error('Failed to read last bot route from localStorage:', e);
+      // 在受限隱私模式等環境中，sessionStorage 操作可能會拋出 SecurityError
+      console.warn('Failed to access sessionStorage in currentMode setter:', e);
     }
-    router.push(lastBotRoute);
   }
 });
 
@@ -465,29 +515,46 @@ onMounted(async () => {
   <v-app-bar elevation="0" height="50" class="top-header">
 
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot'"
-      style="margin-left: 16px;"
-      class="hidden-md-and-down" icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
-    <!-- 移动端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot'" class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_SIDEBAR_DRAWER">
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
+<v-btn
+  v-if="!isChatPath"
+  style="margin-left: 16px;"
+  class="hidden-md-and-down"
+  icon
+  rounded="sm"
+  variant="flat"
+  @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)"
+>
+  <v-icon>mdi-menu</v-icon>
+</v-btn>
 
-    <!-- 移动端 chat sidebar 展开按钮 - 仅在 chat 模式下的小屏幕显示 -->
-    <v-btn v-if="customizer.viewMode === 'chat'" class="hidden-lg-and-up ms-1" icon rounded="sm" variant="flat"
-      @click.stop="customizer.TOGGLE_CHAT_SIDEBAR()">
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
+<!-- 移动端 menu 按钮 -->
+<v-btn
+  v-if="!isChatPath"
+  class="hidden-lg-and-up ms-3"
+  icon
+  rounded="sm"
+  variant="flat"
+  @click.stop="customizer.SET_SIDEBAR_DRAWER"
+>
+  <v-icon>mdi-menu</v-icon>
+</v-btn>
 
-    <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs, 'chat-mode-logo': customizer.viewMode === 'chat' }" @click="handleLogoClick">
+<v-btn
+  v-if="isChatPath"
+  class="hidden-lg-and-up ms-1"
+  icon
+  rounded="sm"
+  variant="flat"
+  @click.stop="customizer.TOGGLE_CHAT_SIDEBAR()"
+>
+  <v-icon>mdi-menu</v-icon>
+</v-btn>
+
+    <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs, 'chat-mode-logo': isChatPath }" @click="handleLogoClick">
       <span class="logo-text Outfit">Astr<span class="logo-text bot-text-wrapper">Bot
         <img v-if="isChristmas" src="@/assets/images/xmas-hat.png" alt="Christmas hat" class="xmas-hat" />
       </span></span>
-      <span class="logo-text logo-text-light Outfit" style="color: grey;" v-if="customizer.viewMode === 'chat'">ChatUI</span>
+      <span class="logo-text logo-text-light Outfit" style="color: grey;" v-if="isChatPath">ChatUI</span>
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
 
@@ -504,23 +571,23 @@ onMounted(async () => {
     </div>
     
     <!-- Bot/Chat 模式切换按钮 - 手机端隐藏，移入 ... 菜单 -->
-    <v-btn-toggle
-      v-model="viewMode"
-      mandatory
-      variant="outlined"
-      density="compact"
-      class="mr-4 hidden-xs"
-      color="primary"
-    >
-      <v-btn value="bot" size="small">
-        <v-icon start>mdi-robot</v-icon>
-        Bot
-      </v-btn>
-      <v-btn value="chat" size="small">
-        <v-icon start>mdi-chat</v-icon>
-        Chat
-      </v-btn>
-    </v-btn-toggle>
+<v-btn-toggle
+  v-model="currentMode"
+  mandatory
+  variant="outlined"
+  density="compact"
+  class="mr-4 hidden-xs"
+  color="primary"
+>
+  <v-btn value="bot" size="small">
+    <v-icon start>mdi-robot</v-icon>
+    Bot
+  </v-btn>
+  <v-btn value="chat" size="small">
+    <v-icon start>mdi-chat</v-icon>
+    Chat
+  </v-btn>
+</v-btn-toggle>
 
 
     <!-- 功能菜单 -->
@@ -542,14 +609,14 @@ onMounted(async () => {
       <!-- Bot/Chat 模式切换 - 仅在手机端显示 -->
       <template v-if="$vuetify.display.xs">
         <div class="mobile-mode-toggle-wrapper">
-          <v-btn-toggle
-            v-model="viewMode"
-            mandatory
-            variant="outlined"
-            density="compact"
-            color="primary"
-            class="mobile-mode-toggle"
-          >
+<v-btn-toggle
+  v-model="currentMode"
+  mandatory
+  variant="outlined"
+  density="compact"
+  class="mobile-mode-toggle"
+  color="primary"
+>
             <v-btn value="bot" size="small">
               <v-icon start>mdi-robot</v-icon>
               Bot

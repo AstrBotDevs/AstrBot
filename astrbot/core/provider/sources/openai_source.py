@@ -26,6 +26,7 @@ from astrbot import logger
 from astrbot.api.provider import Provider
 from astrbot.core.agent.message import ContentPart, ImageURLPart, Message, TextPart
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.io import download_image_by_url
@@ -436,6 +437,7 @@ class ProviderOpenAIOfficial(Provider):
             )
             if tool_list:
                 payloads["tools"] = tool_list
+                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         # 不在默认参数中的参数放在 extra_body 中
         extra_body = {}
@@ -486,6 +488,7 @@ class ProviderOpenAIOfficial(Provider):
             )
             if tool_list:
                 payloads["tools"] = tool_list
+                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         # 不在默认参数中的参数放在 extra_body 中
         extra_body = {}
@@ -694,7 +697,9 @@ class ProviderOpenAIOfficial(Provider):
         llm_response = LLMResponse("assistant")
 
         if not completion.choices:
-            raise Exception("API 返回的 completion 为空。")
+            raise EmptyModelOutputError(
+                f"OpenAI completion has no choices. response_id={completion.id}"
+            )
         choice = completion.choices[0]
 
         # parse the text completion
@@ -712,6 +717,10 @@ class ProviderOpenAIOfficial(Provider):
             # Also clean up orphan </think> tags that may leak from some models
             completion_text = re.sub(r"</think>\s*$", "", completion_text).strip()
             llm_response.result_chain = MessageChain().message(completion_text)
+        elif refusal := getattr(choice.message, "refusal", None):
+            refusal_text = self._normalize_content(refusal)
+            if refusal_text:
+                llm_response.result_chain = MessageChain().message(refusal_text)
 
         # parse the reasoning content if any
         # the priority is higher than the <think> tag extraction
@@ -759,9 +768,18 @@ class ProviderOpenAIOfficial(Provider):
             raise Exception(
                 "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。",
             )
-        if llm_response.completion_text is None and not llm_response.tools_call_args:
-            logger.error(f"API 返回的 completion 无法解析：{completion}。")
-            raise Exception(f"API 返回的 completion 无法解析：{completion}。")
+        has_text_output = bool((llm_response.completion_text or "").strip())
+        has_reasoning_output = bool(llm_response.reasoning_content.strip())
+        if (
+            not has_text_output
+            and not has_reasoning_output
+            and not llm_response.tools_call_args
+        ):
+            logger.error(f"OpenAI completion has no usable output: {completion}.")
+            raise EmptyModelOutputError(
+                "OpenAI completion has no usable output. "
+                f"response_id={completion.id}, finish_reason={choice.finish_reason}"
+            )
 
         llm_response.raw_completion = completion
         llm_response.id = completion.id
@@ -812,7 +830,8 @@ class ProviderOpenAIOfficial(Provider):
             context_query = await self._materialize_context_image_parts(context_query)
 
         model = model or self.get_model()
-        payloads = {**kwargs, "messages": context_query, "model": model}
+
+        payloads = {"messages": context_query, "model": model}
 
         self._finally_convert_payload(payloads)
 
@@ -964,6 +983,7 @@ class ProviderOpenAIOfficial(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> LLMResponse:
         payloads, context_query = await self._prepare_chat_payload(
@@ -976,6 +996,8 @@ class ProviderOpenAIOfficial(Provider):
             extra_user_content_parts=extra_user_content_parts,
             **kwargs,
         )
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         llm_response = None
         max_retries = 10
@@ -1031,6 +1053,7 @@ class ProviderOpenAIOfficial(Provider):
         system_prompt=None,
         tool_calls_result=None,
         model=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式对话，与服务商交互并逐步返回结果"""
@@ -1043,6 +1066,8 @@ class ProviderOpenAIOfficial(Provider):
             model=model,
             **kwargs,
         )
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         max_retries = 10
         available_api_keys = self.api_keys.copy()
