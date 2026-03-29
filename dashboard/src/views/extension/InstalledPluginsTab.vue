@@ -848,7 +848,6 @@ const pinnedPlugins = computed(() => {
         </button>
       </template>
     </v-tooltip>
-  </div>
 </template>
 
 <style scoped>
