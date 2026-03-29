@@ -992,6 +992,54 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
       border-radius: 6px !important;
     }
   }
+
+  /* === ChatUI chat-page-card: clean white glass === */
+  .chat-page-card {
+    background: rgba(255, 255, 255, 0.8) !important;
+    backdrop-filter: blur(20px) saturate(1.1) !important;
+    border: 1px solid rgba(0, 49, 83, 0.08) !important;
+    box-shadow: 0 2px 12px rgba(26, 46, 60, 0.06) !important;
+  }
+
+  /* === ChatUI message-list-wrapper: pure white === */
+  .message-list-wrapper {
+    background: #FFFFFF !important;
+  }
+
+  /* === ConversationSidebar in ChatUI: frosted white === */
+  .conversation-sidebar,
+  .chat-conversation-list {
+    background: rgba(255, 255, 255, 0.7) !important;
+    border-right: 1px solid rgba(0, 49, 83, 0.08) !important;
+  }
+
+  /* === ChatInput panel: clean white === */
+  .chat-input-panel,
+  .chat-input-container {
+    background: rgba(255, 255, 255, 0.85) !important;
+    border-top: 1px solid rgba(0, 49, 83, 0.08) !important;
+    backdrop-filter: blur(12px) !important;
+  }
+
+  /* === ChatInput placeholder: readable gray === */
+  .chat-textarea::placeholder {
+    color: rgba(26, 46, 80, 0.35) !important;
+  }
+
+  /* === ChatUI session list items === */
+  .v-list-item {
+    &.conversation-item,
+    .conversation-item {
+      color: rgba(26, 46, 80, 0.8) !important;
+      &:hover {
+        background: rgba(0, 49, 83, 0.04) !important;
+      }
+      &.v-list-item--active {
+        background: rgba(0, 49, 83, 0.08) !important;
+        color: #003153 !important;
+      }
+    }
+  }
 }
 
 
