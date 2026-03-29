@@ -42,7 +42,8 @@
     "advanced": "Advanced Settings",
     "security": "Security Settings",
     "appearance": "Appearance Settings",
-    "notification": "Notification Settings"
+    "notification": "Notification Settings",
+    "moreConfig": "More Settings"
   },
   "general": {
     "botName": "Bot Name",
