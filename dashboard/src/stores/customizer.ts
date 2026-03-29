@@ -40,19 +40,17 @@ export const useCustomizerStore = defineStore("customizer", {
       this.autoSwitchTheme = payload;
       localStorage.setItem("autoSwitchTheme", String(payload));
     },
-    // 新增：手动切换主题（同时关闭自动同步）
-    // 工业精密风格仅支持暗色主题，强制锁定暗色模式
+    // 手动切换主题（同时关闭自动同步）
     TOGGLE_DARK_MODE() {
       this.SET_AUTO_SYNC(false);
-      // Force lock to dark theme — industrial aesthetic is dark-only
-      this.SET_UI_THEME(DARK_THEME_NAME);
+      const newTheme = this.isDarkTheme ? LIGHT_THEME_NAME : DARK_THEME_NAME;
+      this.SET_UI_THEME(newTheme);
     },
-    // 新增：应用系统主题（用于自动同步）
-    // 工业精密风格仅支持暗色主题，强制锁定暗色模式
+    // 应用系统主题（用于自动同步）
     APPLY_SYSTEM_THEME() {
       if (typeof window === "undefined") return;
-      // Always lock to dark regardless of system preference
-      this.SET_UI_THEME(DARK_THEME_NAME);
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      this.SET_UI_THEME(prefersDark ? DARK_THEME_NAME : LIGHT_THEME_NAME);
     },
     TOGGLE_CHAT_SIDEBAR() {
       this.chatSidebarOpen = !this.chatSidebarOpen;

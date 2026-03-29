@@ -33,7 +33,7 @@ function draw() {
   const isDark = customizer.isDarkTheme;
 
   // Background
-  ctx.fillStyle = isDark ? "#0A0A0C" : "#F0F4F8";
+  ctx.fillStyle = isDark ? "#050507" : "#F2F5F8";
   ctx.fillRect(0, 0, W, H);
 
   const cols = Math.ceil(W / GRID) + 1;
@@ -45,7 +45,7 @@ function draw() {
   // Grid lines — dark mode: faint white, light mode: faint deep-blue
   ctx.strokeStyle = isDark
     ? "rgba(255, 255, 255, 0.025)"
-    : "rgba(26, 46, 60, 0.06)";
+    : "rgba(26, 46, 60, 0.04)";
   ctx.lineWidth = 0.5;
   for (let x = 0; x <= W; x += GRID) {
     ctx.beginPath();
@@ -81,10 +81,11 @@ function draw() {
       let crossAlpha = isDark ? 0.04 : 0.06;
       let crossScale = 1.0;
       let accent = 0; // 0=neutral, 1=cyan dark, 2=blue light
+      let eased = 0;
 
       if (dist < ENERGY_RADIUS) {
         const t = 1 - dist / ENERGY_RADIUS;
-        const eased = t * t * (3 - 2 * t);
+        eased = t * t * (3 - 2 * t);
 
         if (isDark) {
           // Dark mode: crosses glow cyan (Cherenkov)

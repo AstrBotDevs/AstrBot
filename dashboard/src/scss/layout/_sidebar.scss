@@ -9,11 +9,39 @@
   backdrop-filter: blur(16px) saturate(1.2);
 }
 
-/* Light mode: keep sidebar as dark blueprint panel */
+/* Light mode: blueprint glass sidebar — light content + deep indigo border */
 .v-theme--light {
   .leftSidebar {
-    background: rgba(12, 18, 28, 0.92) !important;
-    border-right-color: rgba(0, 200, 255, 0.08) !important;
+    background: rgba(228, 233, 242, 0.7) !important;
+    backdrop-filter: blur(20px) saturate(1.3);
+    border-right: 1px solid rgba(26, 46, 80, 0.15) !important;
+    box-shadow: 2px 0 12px rgba(26, 46, 80, 0.08) !important;
+  }
+
+  .listitem {
+    .v-list-item {
+      color: rgba(26, 46, 80, 0.7) !important;
+      &:hover {
+        background: rgba(26, 46, 80, 0.05) !important;
+        color: #1A2B3C !important;
+      }
+      &.v-list-item--active {
+        background: rgba(26, 46, 80, 0.08) !important;
+        color: #1A2B3C !important;
+        border-left: 3px solid #1A2B3C;
+      }
+    }
+    .v-list-item-title {
+      color: inherit !important;
+    }
+    .v-icon {
+      color: rgba(26, 46, 80, 0.6) !important;
+    }
+  }
+
+  .sidebar-footer-btn {
+    color: rgba(26, 46, 80, 0.7) !important;
+    border-color: rgba(26, 46, 80, 0.2) !important;
   }
 }
 
