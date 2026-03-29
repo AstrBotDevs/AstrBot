@@ -60,7 +60,6 @@ import importlib
 import importlib.abc
 import inspect
 import json
-import logging
 import os
 import re
 import shutil
@@ -83,6 +82,7 @@ from .._internal.plugin_ids import (
     plugin_capability_prefix,
     validate_plugin_id,
 )
+from .._internal.sdk_logger import logger
 from .._internal.typing_utils import unwrap_optional
 from ..decorators import (
     ConversationMeta,
@@ -119,7 +119,6 @@ OptionalInnerType: TypeAlias = Literal["str", "int", "float", "bool"] | None
 HandlerKind: TypeAlias = Literal["handler", "hook", "tool", "session"]
 DiscoverySeverity: TypeAlias = Literal["warning", "error"]
 DiscoveryPhase: TypeAlias = Literal["discovery", "load", "lifecycle", "reload"]
-_LOGGER = logging.getLogger(__name__)
 _PLUGIN_IMPORT_LOCK = threading.RLock()
 _VALID_HANDLER_KINDS: tuple[HandlerKind, ...] = ("handler", "hook", "tool", "session")
 _PLUGIN_PACKAGE_PREFIX = "astrbot_ext_"
@@ -413,8 +412,8 @@ def _build_param_specs(handler: Any) -> list[ParamSpec]:
     try:
         type_hints = typing.get_type_hints(handler)
     except Exception as exc:
-        _LOGGER.warning(
-            "Failed to resolve type hints for handler %s: %s",
+        logger.warning(
+            "Failed to resolve type hints for handler {}: {}",
             getattr(handler, "__qualname__", repr(handler)),
             exc,
         )
@@ -648,22 +647,22 @@ def load_plugin_config_schema(plugin: PluginSpec) -> dict[str, Any]:
     try:
         schema_payload = json.loads(schema_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        _LOGGER.warning(
-            "Failed to parse SDK plugin config schema %s: %s",
+        logger.warning(
+            "Failed to parse SDK plugin config schema {}: {}",
             schema_path,
             exc,
         )
         return {}
     except OSError as exc:
-        _LOGGER.warning(
-            "Failed to read SDK plugin config schema %s: %s",
+        logger.warning(
+            "Failed to read SDK plugin config schema {}: {}",
             schema_path,
             exc,
         )
         return {}
     if not isinstance(schema_payload, dict):
-        _LOGGER.warning(
-            "SDK plugin config schema %s must be a JSON object, got %s",
+        logger.warning(
+            "SDK plugin config schema {} must be a JSON object, got {}",
             schema_path,
             type(schema_payload).__name__,
         )
@@ -716,15 +715,15 @@ def load_plugin_config(
             else {}
         )
     except json.JSONDecodeError as exc:
-        _LOGGER.warning(
-            "Failed to parse SDK plugin config %s: %s",
+        logger.warning(
+            "Failed to parse SDK plugin config {}: {}",
             config_path,
             exc,
         )
         existing_payload = {}
     except OSError as exc:
-        _LOGGER.warning(
-            "Failed to read SDK plugin config %s: %s",
+        logger.warning(
+            "Failed to read SDK plugin config {}: {}",
             config_path,
             exc,
         )
@@ -1016,14 +1015,12 @@ class PluginEnvironmentManager:
         try:
             data = json.loads(state_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            _LOGGER.warning(
-                "Failed to parse plugin worker state %s: %s", state_path, exc
+            logger.warning(
+                "Failed to parse plugin worker state {}: {}", state_path, exc
             )
             return {}
         except OSError as exc:
-            _LOGGER.warning(
-                "Failed to read plugin worker state %s: %s", state_path, exc
-            )
+            logger.warning("Failed to read plugin worker state {}: {}", state_path, exc)
             return {}
         return data if isinstance(data, dict) else {}
 
@@ -1114,8 +1111,8 @@ def _load_component_instance(
             f"{_component_context(plugin, class_path=resolved_component.class_path, index=resolved_component.index)} "
             f"实例化失败：{exc}"
         ) from exc
-    _LOGGER.debug(
-        "Instantiated SDK plugin component %s for plugin %s",
+    logger.debug(
+        "Instantiated SDK plugin component {} for plugin {}",
         resolved_component.class_path,
         plugin.name,
     )
@@ -1263,7 +1260,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
     仅支持 v4 新版 Star 组件（无参构造函数）。
     """
     with _PLUGIN_IMPORT_LOCK:
-        _LOGGER.debug("Loading SDK plugin %s from %s", plugin.name, plugin.plugin_dir)
+        logger.debug("Loading SDK plugin {} from {}", plugin.name, plugin.plugin_dir)
         _ensure_plugin_import_hook_installed()
         namespace = _register_plugin_import_namespace(plugin)
         _purge_plugin_bytecode(plugin.plugin_dir)
@@ -1304,8 +1301,8 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                 capabilities.extend(component_capabilities)
                 llm_tools.extend(component_tools)
 
-        _LOGGER.debug(
-            "Loaded SDK plugin %s: %d components, %d handlers, %d capabilities, %d llm tools, %d agents",
+        logger.debug(
+            "Loaded SDK plugin {}: {} components, {} handlers, {} capabilities, {} llm tools, {} agents",
             plugin.name,
             len(resolved_components),
             len(handlers),

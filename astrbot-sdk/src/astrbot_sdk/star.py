@@ -7,8 +7,7 @@ import traceback
 from contextvars import ContextVar, Token
 from typing import TYPE_CHECKING, Any, cast
 
-from loguru import logger
-
+from ._internal.sdk_logger import logger
 from .errors import AstrBotError
 from .plugin_kv import PluginKVStoreMixin
 

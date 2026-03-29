@@ -30,10 +30,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
-
 from .._internal.decorator_lifecycle import run_lifecycle_with_decorators
 from .._internal.invocation_context import caller_plugin_scope
+from .._internal.sdk_logger import logger
 from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
 from ..protocol.messages import PeerInfo

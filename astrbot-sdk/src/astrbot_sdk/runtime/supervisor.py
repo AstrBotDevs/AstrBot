@@ -43,12 +43,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import IO, Any, cast
 
-from loguru import logger
-
 from .._internal.plugin_ids import (
     capability_belongs_to_plugin,
     plugin_capability_prefix,
 )
+from .._internal.sdk_logger import logger
 from ..errors import AstrBotError
 from ..protocol.descriptors import CapabilityDescriptor
 from ..protocol.messages import EventMessage, InitializeOutput, PeerInfo

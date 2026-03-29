@@ -21,10 +21,9 @@ import typing
 from collections.abc import AsyncIterator, Sequence
 from typing import Any, cast, get_type_hints
 
-from loguru import logger
-
 from .._internal.invocation_context import caller_plugin_scope
 from .._internal.plugin_logger import PluginLogger
+from .._internal.sdk_logger import logger
 from .._internal.star_runtime import bind_star_runtime
 from .._internal.typing_utils import unwrap_optional
 from ..context import CancelToken, Context

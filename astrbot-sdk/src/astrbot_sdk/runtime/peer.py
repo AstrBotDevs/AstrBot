@@ -73,12 +73,11 @@ import inspect
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import Any
 
-from loguru import logger
-
 from .._internal.invocation_context import (
     caller_plugin_scope,
     current_caller_plugin_id,
 )
+from .._internal.sdk_logger import logger
 from ..context import CancelToken
 from ..errors import AstrBotError, ErrorCodes
 from ..protocol.messages import (

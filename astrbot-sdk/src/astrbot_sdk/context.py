@@ -37,9 +37,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from loguru import logger as base_logger
-
 from ._internal.plugin_logger import PluginLogger
+from ._internal.sdk_logger import logger as base_logger
 from ._internal.star_runtime import current_star_instance
 from ._message_types import normalize_message_type
 from .clients import (

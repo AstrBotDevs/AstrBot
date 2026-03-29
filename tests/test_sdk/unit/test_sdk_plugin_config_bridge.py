@@ -1,11 +1,11 @@
 # ruff: noqa: E402
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
+import astrbot_sdk.runtime.loader as loader_module
 import pytest
 from astrbot_sdk.runtime.loader import (
     PluginSpec,
@@ -91,12 +91,18 @@ def _build_config_route(
 @pytest.mark.unit
 def test_load_plugin_config_schema_logs_invalid_json(
     tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plugin_dir = tmp_path / "sdk_demo"
     plugin_dir.mkdir()
     schema_path = plugin_dir / "_conf_schema.json"
     schema_path.write_text('{"count": {"type": "int",},}', encoding="utf-8")
+    warnings: list[tuple[str, tuple[Any, ...]]] = []
+
+    def _capture_warning(message: str, *args: Any) -> None:
+        warnings.append((message, args))
+
+    monkeypatch.setattr(loader_module.logger, "warning", _capture_warning)
 
     plugin = PluginSpec(
         name="sdk-demo",
@@ -107,12 +113,13 @@ def test_load_plugin_config_schema_logs_invalid_json(
         manifest_data={},
     )
 
-    with caplog.at_level(logging.WARNING):
-        schema = load_plugin_config_schema(plugin)
+    schema = load_plugin_config_schema(plugin)
 
     assert schema == {}
-    assert "Failed to parse SDK plugin config schema" in caplog.text
-    assert str(schema_path) in caplog.text
+    assert warnings
+    message, args = warnings[0]
+    assert message == "Failed to parse SDK plugin config schema {}: {}"
+    assert args[0] == schema_path
 
 
 @pytest.mark.unit

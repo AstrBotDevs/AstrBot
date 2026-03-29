@@ -30,8 +30,8 @@ from textwrap import dedent
 from typing import Any
 
 import click
-from loguru import logger
 
+from ._internal.sdk_logger import logger
 from .errors import AstrBotError
 from .runtime.bootstrap import run_plugin_worker, run_supervisor, run_websocket_server
 from .runtime.loader import load_plugin, load_plugin_spec, validate_plugin_spec

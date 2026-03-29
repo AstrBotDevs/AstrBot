@@ -56,7 +56,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Sequence
 from typing import IO, Any
 
-from loguru import logger
+from .._internal.sdk_logger import logger
 
 MessageHandler = Callable[[str], Awaitable[None]]
 STDIO_SUBPROCESS_STREAM_LIMIT = 8 * 1024 * 1024
