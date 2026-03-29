@@ -56,7 +56,6 @@
                             margin-right: 16px;
                           "
                         />
-                        <v-icon v-else>mdi-robot</v-icon>
                       </template>
                     </v-list-item>
                   </template>
