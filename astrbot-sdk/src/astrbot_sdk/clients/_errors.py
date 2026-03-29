@@ -31,6 +31,12 @@ def wrap_client_exception(
             docs_url=exc.docs_url,
             details=exc.details,
         )
+    try:
+        rebuilt = exc.__class__(message)
+    except Exception:
+        return RuntimeError(message)
+    if isinstance(rebuilt, Exception):
+        return rebuilt
     return RuntimeError(message)
 
 
