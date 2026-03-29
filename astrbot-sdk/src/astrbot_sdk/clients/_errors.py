@@ -31,6 +31,12 @@ def wrap_client_exception(
             docs_url=exc.docs_url,
             details=exc.details,
         )
+    # 保留核心层抛出的语义化标准异常类型（如 PermissionError、ValueError），
+    # 避免调用方依赖 isinstance 检查时因被包装为 RuntimeError 而失效
+    if isinstance(exc, PermissionError):
+        return PermissionError(message)
+    if isinstance(exc, (ValueError, TypeError)):
+        return type(exc)(message)
     return RuntimeError(message)
 
 

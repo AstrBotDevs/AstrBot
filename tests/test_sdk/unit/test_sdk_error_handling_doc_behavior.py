@@ -248,7 +248,7 @@ async def test_client_error_wrapping_uses_runtime_error_for_skill_client() -> No
     proxy = _FailingProxy(ValueError("missing SKILL.md"))
     client = SkillClient(proxy)
 
-    with pytest.raises(RuntimeError) as exc_info:
+    with pytest.raises(ValueError, match="SkillClient.register") as exc_info:
         await client.register(
             name="sdk-demo.writer-helper",
             path="skills/writer-helper",
@@ -289,7 +289,7 @@ async def test_client_error_wrapping_covers_platform_and_mcp_calls() -> None:
     mcp_proxy = _FailingProxy(ValueError("server not found"))
     mcp_client = MCPManagerClient(mcp_proxy)
 
-    with pytest.raises(RuntimeError) as mcp_exc:
+    with pytest.raises(ValueError, match="MCPManagerClient.enable_server") as mcp_exc:
         await mcp_client.enable_server("demo-local")
 
     assert "MCPManagerClient.enable_server" in str(mcp_exc.value)
