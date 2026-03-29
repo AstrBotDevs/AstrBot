@@ -157,7 +157,10 @@ class AstrBotDashboard:
         self._init_jwt_secret()
 
     async def srv_plug_route(self, subpath, *args, **kwargs):
-        """插件路由"""
+        """插件路由（需要认证）"""
+        auth_error = self._require_bearer_auth()
+        if auth_error is not None:
+            return auth_error
         output = await self._dispatch_plugin_route(subpath, *args, **kwargs)
         if output is not None:
             return self._build_sdk_plugin_response(output)
@@ -240,6 +243,23 @@ class AstrBotDashboard:
         for key, value in headers.items():
             response.headers[str(key)] = str(value)
         return response
+
+    def _require_bearer_auth(self):
+        """检查 Bearer token，无效时返回 401 响应，有效时返回 None。"""
+        token = request.headers.get("Authorization")
+        if not token:
+            r = jsonify(Response().error("未授权").__dict__)
+            r.status_code = 401
+            return r
+        token = token.removeprefix("Bearer ")
+        try:
+            payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
+            g.username = payload["username"]
+        except (jwt.InvalidTokenError, KeyError):
+            r = jsonify(Response().error("未授权").__dict__)
+            r.status_code = 401
+            return r
+        return None
 
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
