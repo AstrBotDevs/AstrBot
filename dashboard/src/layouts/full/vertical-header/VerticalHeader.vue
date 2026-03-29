@@ -1201,10 +1201,6 @@ const isChristmas = computed(() => {
             class="mb-3"
           />
         </v-form>
-
-        <div class="text-caption text-medium-emphasis mt-2">
-          {{ t("core.header.accountDialog.form.defaultCredentials") }}
-        </div>
       </v-card-text>
 
       <v-divider />

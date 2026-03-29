@@ -5,6 +5,7 @@ export type ThemeTypes = {
   colors: {
     primary?: string;
     secondary?: string;
+    tertiary?: string;
     info?: string;
     success?: string;
     accent?: string;
@@ -23,6 +24,7 @@ export type ThemeTypes = {
     border?: string;
     inputBorder?: string;
     containerBg?: string;
+    "on-surface-variant-bg"?: string;
     surface?: string;
     background?: string;
     overlay?: string;
@@ -47,6 +49,7 @@ export type ThemeTypes = {
     "on-surface"?: string;
     "surface-variant"?: string;
     surfaceTint?: string;
+    outline?: string;
     "outline-variant"?: string;
     "inverse-surface"?: string;
     "inverse-on-surface"?: string;

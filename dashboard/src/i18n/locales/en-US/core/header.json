@@ -90,8 +90,7 @@
       "newUsername": "New Username (Optional)",
       "passwordHint": "Password must be at least 8 characters",
       "confirmPasswordHint": "Please enter new password again to confirm",
-      "usernameHint": "Leave blank to keep current username",
-      "defaultCredentials": "Default username: astrbot. Use `astrbot conf admin` to set your password"
+      "usernameHint": "Leave blank to keep current username"
     },
     "validation": {
       "passwordRequired": "Please enter password",

@@ -662,13 +662,12 @@ watch(showProviderDialog, async (visible, wasVisible) => {
   font-family: "JetBrains Mono", "Fira Code", monospace !important;
   font-size: clamp(1.8rem, 4vw, 3rem) !important;
   font-weight: 700 !important;
-  /* Restrained precision — readable gray, not flashy neon */
-  color: rgba(228, 225, 230, 0.85) !important;
+  color: var(--v-theme-on-surface) !important;
   letter-spacing: 0.5px;
   position: relative;
   padding-left: 16px;
   animation: welcomeFadeIn 0.8s ease-out both;
-  /* 2px thin precision tick mark (not a glowing bar) */
+  /* Dark: cyan tick mark; Light: prussian blue tick mark */
   &::before {
     content: "";
     position: absolute;
@@ -677,7 +676,7 @@ watch(showProviderDialog, async (visible, wasVisible) => {
     transform: translateY(-50%);
     width: 2px;
     height: 55%;
-    background: rgba(0, 242, 255, 0.45);
+    background: rgba(var(--v-theme-primary), 0.45);
     border-radius: 1px;
   }
 }
@@ -685,7 +684,7 @@ watch(showProviderDialog, async (visible, wasVisible) => {
 .welcome-page .text-subtitle-1 {
   font-family: "JetBrains Mono", monospace !important;
   font-size: 0.9rem !important;
-  color: rgba(228, 225, 230, 0.4) !important;
+  color: var(--v-theme-on-surface-variant) !important;
   animation: welcomeFadeIn 0.8s ease-out 0.3s both;
   letter-spacing: 0.3px;
 }
@@ -693,11 +692,11 @@ watch(showProviderDialog, async (visible, wasVisible) => {
 .welcome-page .text-h3 {
   font-family: "JetBrains Mono", monospace !important;
   font-weight: 600 !important;
-  color: rgba(228, 225, 230, 0.75) !important;
+  color: var(--v-theme-on-surface) !important;
   font-size: 1rem !important;
   letter-spacing: 0.5px;
   text-transform: uppercase;
-  border-left: 2px solid rgba(0, 242, 255, 0.3) !important;
+  border-left: 2px solid rgba(var(--v-theme-primary), 0.3) !important;
   padding-left: 10px !important;
 }
 

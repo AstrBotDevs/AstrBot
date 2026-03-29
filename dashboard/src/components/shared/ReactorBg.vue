@@ -33,7 +33,7 @@ function draw() {
   const isDark = customizer.isDarkTheme;
 
   // Background
-  ctx.fillStyle = isDark ? "#050507" : "#F2F5F8";
+  ctx.fillStyle = isDark ? "#050507" : "#FFFFFF";
   ctx.fillRect(0, 0, W, H);
 
   const cols = Math.ceil(W / GRID) + 1;
@@ -42,10 +42,10 @@ function draw() {
   const mx = smoothX;
   const my = smoothY;
 
-  // Grid lines — dark mode: faint white, light mode: faint deep-blue
+  // Grid lines — dark mode: faint white, light mode: nearly invisible
   ctx.strokeStyle = isDark
     ? "rgba(255, 255, 255, 0.025)"
-    : "rgba(26, 46, 60, 0.04)";
+    : "rgba(0, 49, 83, 0.03)";
   ctx.lineWidth = 0.5;
   for (let x = 0; x <= W; x += GRID) {
     ctx.beginPath();

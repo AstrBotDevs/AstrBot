@@ -208,7 +208,7 @@ export default {
       }
     },
 
-    parseAnsiLog(log: string): { text: string; color: string } {
+    parseAnsiLog(log: string): { text: string; color: string; borderColor?: string } {
       // ANSI color code map
       const ansiMap: Record<string, string> = {
         "\u001b[1;34m": "#39C5BB",
@@ -219,6 +219,29 @@ export default {
         "\u001b[0m": "inherit",
         "\u001b[32m": "#69F0AE",
       };
+
+      // Content-based color differentiation: system, private, group, platform
+      const lowerLog = log.toLowerCase();
+      if (lowerLog.includes("· astrbot") || lowerLog.includes("· reactor")) {
+        // System messages: cyan-teal
+        return { text: log, color: "#00F2FF", borderColor: "system" };
+      }
+      if (lowerLog.includes("[private")) {
+        // Private messages: warm green
+        return { text: log, color: "#69F0AE", borderColor: "private" };
+      }
+      if (lowerLog.includes("[group")) {
+        // Group messages: soft periwinkle blue
+        return { text: log, color: "#8fb6d2", borderColor: "group" };
+      }
+      if (lowerLog.includes("telegram") || lowerLog.includes("discord") || lowerLog.includes("qq ") || lowerLog.includes("onebot")) {
+        // Platform adapter messages: soft purple
+        return { text: log, color: "#B39DDB", borderColor: "platform" };
+      }
+      if (lowerLog.includes("error") || lowerLog.includes("failed") || lowerLog.includes("exception")) {
+        // Error indicators keep default treatment
+      }
+
       let color = "rgba(255,255,255,0.75)";
       for (const [code, c] of Object.entries(ansiMap)) {
         if (log.startsWith(code)) {
@@ -234,13 +257,16 @@ export default {
       const ele = document.getElementById("term");
       if (!ele) return;
 
-      const { text, color } = this.parseAnsiLog(log);
+      const { text, color, borderColor } = this.parseAnsiLog(log);
 
       const line = document.createElement("div");
       line.classList.add("log-line");
 
       if (level) {
         line.classList.add(`log-line-${level.toLowerCase()}`);
+      }
+      if (borderColor) {
+        line.classList.add(`log-line-${borderColor}`);
       }
 
       line.innerText = text;
@@ -429,6 +455,20 @@ export default {
 :deep(.log-line-info) {
   background: rgba(0, 242, 255, 0.02);
   box-shadow: inset 2px 0 0 rgba(0, 242, 255, 0.3);
+}
+
+/* Content-type left border indicators */
+:deep(.log-line-system) {
+  box-shadow: inset 3px 0 0 #00F2FF !important;
+}
+:deep(.log-line-private) {
+  box-shadow: inset 3px 0 0 #69F0AE !important;
+}
+:deep(.log-line-group) {
+  box-shadow: inset 3px 0 0 #8fb6d2 !important;
+}
+:deep(.log-line-platform) {
+  box-shadow: inset 3px 0 0 #B39DDB !important;
 }
 
 /* New entry pulse animation */

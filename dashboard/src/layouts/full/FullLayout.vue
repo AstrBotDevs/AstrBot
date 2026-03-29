@@ -52,7 +52,7 @@ const checkMigration = async (): Promise<boolean> => {
       return true;
     }
   } catch (error) {
-    console.error("Failed to check migration status:", error);
+    console.warn("Failed to check migration status (backend may not be running):", error);
   }
   return false;
 };
@@ -78,7 +78,7 @@ const maybeShowFirstNotice = async () => {
 
     localStorage.setItem(FIRST_NOTICE_SEEN_KEY, "1");
   } catch (error) {
-    console.error("Failed to load first notice:", error);
+    console.warn("Failed to load first notice (backend may not be running):", error);
   }
 };
 

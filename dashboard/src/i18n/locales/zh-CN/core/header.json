@@ -90,8 +90,7 @@
       "newUsername": "新用户名 (可选)",
       "passwordHint": "密码长度至少 8 位",
       "confirmPasswordHint": "请再次输入新密码以确认",
-      "usernameHint": "留空表示不修改用户名",
-      "defaultCredentials": "初始用户名：astrbot，请使用 `astrbot conf admin` 设置密码"
+      "usernameHint": "留空表示不修改用户名"
     },
     "validation": {
       "passwordRequired": "请输入密码",

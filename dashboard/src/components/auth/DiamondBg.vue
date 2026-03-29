@@ -6,7 +6,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, computed } from "vue";
+import { useCustomizerStore } from "@/stores/customizer";
+
+const customizer = useCustomizerStore();
+const isDark = computed(() => customizer.isDarkTheme);
 
 const bgEl = ref<HTMLElement | null>(null);
 const canvasEl = ref<HTMLCanvasElement | null>(null);
@@ -44,9 +48,10 @@ function draw() {
 
   const W = width;
   const H = height;
+  const dark = isDark.value;
 
   // clear
-  ctx.fillStyle = "#0A0A0C";
+  ctx.fillStyle = dark ? "#0A0A0C" : "#FFFFFF";
   ctx.fillRect(0, 0, W, H);
 
   const cols = Math.ceil(W / GRID) + 1;
@@ -56,7 +61,7 @@ function draw() {
   const my = smoothY.value;
 
   // draw static base grid (very faint)
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.03)";
+  ctx.strokeStyle = dark ? "rgba(255, 255, 255, 0.03)" : "rgba(0, 49, 83, 0.03)";
   ctx.lineWidth = 0.5;
   for (let x = 0; x <= W; x += GRID) {
     ctx.beginPath();
@@ -95,11 +100,12 @@ function draw() {
 
       if (dist < ENERGY_RADIUS) {
         const t = 1 - dist / ENERGY_RADIUS;
-        // eased
         const eased = t * t * (3 - 2 * t);
-        crossAlpha = 0.05 + eased * 0.35;
+        crossAlpha = dark
+          ? 0.05 + eased * 0.35
+          : 0.04 + eased * 0.4;
         crossScale = 1.0 - eased * SINK_DEPTH;
-        crossBlue = Math.floor(eased * 180);
+        crossBlue = dark ? Math.floor(eased * 180) : 0;
       }
 
       if (crossAlpha < 0.01) continue;
@@ -107,7 +113,9 @@ function draw() {
       const halfLen = CROSS_SIZE * crossScale;
       const strokeColor = crossBlue > 0
         ? `rgba(${crossBlue * 0.3}, ${crossBlue * 0.8}, ${crossBlue}, ${crossAlpha})`
-        : `rgba(255, 255, 255, ${crossAlpha})`;
+        : dark
+          ? `rgba(255, 255, 255, ${crossAlpha})`
+          : `rgba(26, 46, 60, ${crossAlpha})`;
 
       ctx.strokeStyle = strokeColor;
       ctx.lineWidth = 0.4;
@@ -120,13 +128,21 @@ function draw() {
     }
   }
 
-  // core Cherenkov dot at exact mouse position
+  // core mouse dot at exact mouse position
   if (mx > 0 && my > 0 && mx < W && my < H) {
-    const grad = ctx.createRadialGradient(mx, my, 0, mx, my, 6);
-    grad.addColorStop(0, "rgba(0, 242, 255, 0.95)");
-    grad.addColorStop(0.3, "rgba(0, 210, 255, 0.6)");
-    grad.addColorStop(1, "rgba(0, 180, 255, 0)");
-    ctx.fillStyle = grad;
+    if (dark) {
+      const grad = ctx.createRadialGradient(mx, my, 0, mx, my, 6);
+      grad.addColorStop(0, "rgba(0, 242, 255, 0.95)");
+      grad.addColorStop(0.3, "rgba(0, 210, 255, 0.6)");
+      grad.addColorStop(1, "rgba(0, 180, 255, 0)");
+      ctx.fillStyle = grad;
+    } else {
+      const grad = ctx.createRadialGradient(mx, my, 0, mx, my, 6);
+      grad.addColorStop(0, "rgba(0, 49, 83, 0.4)");
+      grad.addColorStop(0.3, "rgba(0, 49, 83, 0.15)");
+      grad.addColorStop(1, "rgba(0, 49, 83, 0)");
+      ctx.fillStyle = grad;
+    }
     ctx.beginPath();
     ctx.arc(mx, my, 6, 0, Math.PI * 2);
     ctx.fill();
@@ -171,6 +187,11 @@ onUnmounted(() => {
   inset: 0;
   z-index: 0;
   background: #0a0a0c;
+}
+
+/* Light mode: clean white */
+.v-theme--bluebusinesstheme .bg {
+  background: #FFFFFF;
 }
 
 .bg-canvas {
