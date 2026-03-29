@@ -148,6 +148,7 @@
         v-if="itemMeta?.slider"
         :model-value="toNumber(numericTemp ?? modelValue)"
         @update:model-value="val => { numericTemp = val; emitUpdate(toNumber(val)) }"
+        @end="numericTemp = null"
         :min="itemMeta?.slider?.min ?? 0"
         :max="itemMeta?.slider?.max ?? 100"
         :step="itemMeta?.slider?.step ?? 1"
@@ -159,7 +160,7 @@
       <v-text-field
         :model-value="numericTemp ?? modelValue"
         @update:model-value="val => (numericTemp = val)"
-        @blur="e => { emitUpdate(toNumber(e.target.value)); numericTemp = null }"
+        @blur="() => { emitUpdate(toNumber(numericTemp)); numericTemp = null }"
         density="compact"
         variant="outlined"
         class="config-field"
@@ -363,12 +364,12 @@ function getSpecialSubtype(value) {
   font-size: 14px;
 }
 
-:deep(input[type='number']::-webkit-inner-spin-button),
-:deep(input[type='number']::-webkit-outer-spin-button) {
+:deep(.config-field input[type='number']::-webkit-inner-spin-button),
+:deep(.config-field input[type='number']::-webkit-outer-spin-button) {
   -webkit-appearance: none;
 }
 
-:deep(input[type='number']) {
+:deep(.config-field input[type='number']) {
   -moz-appearance: textfield;
 }
 </style>
