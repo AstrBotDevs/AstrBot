@@ -39,9 +39,11 @@
     "subtitle": "Customize theme primary and secondary colors. Changes apply immediately and are stored locally in your browser.",
     "customize": {
       "title": "Theme Colors",
+      "preset": "Color Scheme",
       "primary": "Primary Color",
       "secondary": "Secondary Color",
-      "reset": "Reset to Default"
+      "reset": "Reset to Default",
+      "presetApplied": "Theme applied"
     }
   },
   "style": {

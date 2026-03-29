@@ -39,9 +39,11 @@
     "subtitle": "自定义主题主色与辅助色。修改后立即生效，并保存在浏览器本地。",
     "customize": {
       "title": "主题颜色",
+      "preset": "配色方案",
       "primary": "主色",
       "secondary": "辅助色",
-      "reset": "恢复默认"
+      "reset": "恢复默认",
+      "presetApplied": "主题已应用"
     }
   },
   "style": {
