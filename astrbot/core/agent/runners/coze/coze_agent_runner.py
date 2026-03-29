@@ -1,7 +1,6 @@
 import base64
 import json
 import sys
-from collections.abc import AsyncGenerator
 from typing import Any
 
 import astrbot.core.message.components as Comp
@@ -86,7 +85,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         self.file_id_cache: dict[str, dict[str, str]] = {}
 
     @override
-    async def step(self) -> AsyncGenerator[AgentResponse, None]:
+    async def step(self):
         """
         执行 Coze Agent 的一个步骤
         """
@@ -122,9 +121,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             await self.api_client.close()
 
     @override
-    async def step_until_done(
-        self, max_step: int
-    ) -> AsyncGenerator[AgentResponse, None]:
+    async def step_until_done(self, max_step: int):
         while not self.done():
             async for resp in self.step():
                 yield resp

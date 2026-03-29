@@ -114,9 +114,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             await self.api_client.close()
 
     @override
-    async def step_until_done(
-        self, max_step: int
-    ) -> AsyncGenerator[AgentResponse, None]:
+    async def step_until_done(self, max_step: int):
         while not self.done():
             async for resp in self.step():
                 yield resp
@@ -174,7 +172,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             key="session_variables",
             default={},
         )
-        payload_vars.update(session_var)
+        payload_vars.update(session_var)  # type: ignore[arg-type]
         payload_vars["system_prompt"] = system_prompt
 
         # 处理不同的 API 类型
@@ -189,7 +187,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     },
                     query=prompt,
                     user=session_id,
-                    conversation_id=conversation_id,
+                    conversation_id=conversation_id or "",
                     files=files_payload,
                     request_timeout=self.timeout,
                 ):

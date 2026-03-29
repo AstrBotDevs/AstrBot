@@ -25,9 +25,8 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Any
 
-from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import ToolExecResult
+from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 
 from .permissions import check_admin_permission

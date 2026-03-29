@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 # Re-export from base
-from astrbot._internal.tools.base import FunctionTool, ToolSet
+from astrbot._internal.tools.base import FunctionTool, ToolSchema, ToolSet
 
 __all__ = [
     "DEFAULT_MCP_CONFIG",
@@ -48,19 +48,19 @@ class FunctionToolManager:
     """Central registry for all function tools."""
 
     def __init__(self) -> None:
-        self._func_list: list[FunctionTool] = []
+        self._func_list: list[ToolSchema] = []
 
     @property
-    def func_list(self) -> list[FunctionTool]:
+    def func_list(self) -> list[ToolSchema]:
         """Get the list of function tools."""
         return self._func_list
 
     @func_list.setter
-    def func_list(self, value: list[FunctionTool]) -> None:
+    def func_list(self, value: list[ToolSchema]) -> None:
         """Set the list of function tools."""
         self._func_list = value
 
-    def add(self, tool: FunctionTool) -> None:
+    def add(self, tool: ToolSchema) -> None:
         """Add a tool to the registry."""
         self._func_list.append(tool)
 
@@ -72,9 +72,9 @@ class FunctionToolManager:
                 return True
         return False
 
-    def get_func(self, name: str) -> FunctionTool | None:
+    def get_func(self, name: str) -> ToolSchema | None:
         """Get a tool by name. Returns the last active tool if multiple match."""
-        last_match: FunctionTool | None = None
+        last_match: ToolSchema | None = None
         for f in reversed(self._func_list):
             if f.name == name:
                 if getattr(f, "active", True):
@@ -85,7 +85,7 @@ class FunctionToolManager:
 
     def get_full_tool_set(self) -> ToolSet:
         """Return a ToolSet with all active tools, deduplicated by name."""
-        seen: dict[str, FunctionTool] = {}
+        seen: dict[str, ToolSchema] = {}
         for tool in reversed(self._func_list):
             if tool.name not in seen and getattr(tool, "active", True):
                 seen[tool.name] = tool
@@ -98,7 +98,7 @@ class FunctionToolManager:
 
         for tool in get_all_tools():
             if self.get_func(tool.name) is None:
-                self.add(tool)
+                self.add(tool)  # type: ignore[arg-type]
 
     # MCP-related stub methods for base class compatibility
     async def enable_mcp_server(
@@ -205,7 +205,7 @@ class FuncCall(FunctionToolManager):
         """Remove a function tool by name (deprecated, use remove() instead)."""
         self.remove(name)
 
-    def get_func(self, name: str) -> FunctionTool | None:
+    def get_func(self, name: str) -> ToolSchema | None:
         """Get a function tool by name."""
         return super().get_func(name)
 

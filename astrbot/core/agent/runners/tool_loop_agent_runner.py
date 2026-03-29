@@ -6,7 +6,7 @@ import traceback
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, TypeVar, cast
 
 from mcp.types import (
     BlobResourceContents,
@@ -609,9 +609,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             self.req.append_tool_calls_result(tool_calls_result)
 
-    async def step_until_done(
-        self, max_step: int
-    ) -> AsyncGenerator[AgentResponse, None]:
+    async def step_until_done(self, max_step: int):
         """Process steps until the agent is done."""
         step_count = 0
         max_step = min(max_step, 3)
@@ -772,7 +770,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
 
                 _final_resp: CallToolResult | None = None
-                async for resp in self._iter_tool_executor_results(executor):
+                async for resp in self._iter_tool_executor_results(executor):  # type: ignore[arg-type]
                     if isinstance(resp, CallToolResult):
                         res = resp
                         _final_resp = resp

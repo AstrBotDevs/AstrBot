@@ -21,7 +21,7 @@ import sys
 import warnings
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Any, Generic
+from typing import Any, Generic, cast
 
 from tenacity import (
     before_sleep_log,
@@ -265,7 +265,7 @@ class MCPClient:
                     mcp.ClientSession(
                         *streams,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,
+                        logging_callback=logging_callback,  # type: ignore[arg-type]
                     ),
                 )
             else:
@@ -291,7 +291,7 @@ class MCPClient:
                         read_stream=read_s,
                         write_stream=write_s,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,
+                        logging_callback=logging_callback,  # type: ignore[arg-type]
                     ),
                 )
 
@@ -317,11 +317,14 @@ class MCPClient:
             stdio_transport = await self.exit_stack.enter_async_context(
                 mcp.stdio_client(
                     server_params,
-                    errlog=LogPipe(
-                        level=logging.INFO,
-                        logger=logger,
-                        identifier=f"MCPServer-{name}",
-                        callback=callback,
+                    errlog=cast(
+                        Any,
+                        LogPipe(
+                            level=logging.INFO,
+                            logger=logger,
+                            identifier=f"MCPServer-{name}",
+                            callback=callback,
+                        ),
                     ),
                 ),
             )

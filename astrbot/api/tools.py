@@ -22,10 +22,10 @@ from functools import wraps
 from typing import Any
 
 # Import from _internal package (the canonical source)
-from astrbot._internal.tools.base import FunctionTool, ToolSet
+from astrbot._internal.tools.base import FunctionTool, ToolSchema, ToolSet
 from astrbot._internal.tools.registry import FunctionToolManager
 
-__all__ = ["FunctionTool", "ToolRegistry", "ToolSet", "get_registry", "tool"]
+__all__ = ["FunctionTool", "ToolRegistry", "ToolSet", "get_registry", "tool", "ToolSchema"]
 
 
 class ToolRegistry:
@@ -62,11 +62,11 @@ class ToolRegistry:
                 return True
         return False
 
-    def list_tools(self) -> list[FunctionTool]:
+    def list_tools(self) -> list[ToolSchema]:
         """List all registered tools."""
         return self._manager.func_list.copy()
 
-    def get_tool(self, name: str) -> FunctionTool | None:
+    def get_tool(self, name: str) -> ToolSchema | None:
         """Get a tool by name."""
         return self._manager.get_func(name)
 

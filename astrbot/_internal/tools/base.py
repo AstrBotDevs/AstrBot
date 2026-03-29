@@ -27,6 +27,9 @@ class ToolSchema:
     parameters: ParametersType = field(default_factory=dict)
     """The parameters of the tool, in JSON Schema format."""
 
+    active: bool = True
+    """Whether the tool is active."""
+
     @model_validator(mode="after")
     def validate_parameters(self) -> "ToolSchema":
         """Validate the parameters JSON schema."""
@@ -52,12 +55,6 @@ class FunctionTool(ToolSchema):
     The module path of the handler function. This is empty when the origin is mcp.
     This field must be retained, as the handler will be wrapped in functools.partial during initialization,
     causing the handler's __module__ to be functools
-    """
-
-    active: bool = True
-    """
-    Whether the tool is active. This field is a special field for AstrBot.
-    You can ignore it when integrating with other frameworks.
     """
 
     is_background_task: bool = False
@@ -90,22 +87,22 @@ class ToolSet:
     as "namespace/tool_name" when calling.
     """
 
-    def __init__(self, namespace: str, tools: list[FunctionTool] | None = None) -> None:
+    def __init__(self, namespace: str, tools: list[ToolSchema] | None = None) -> None:
         self.namespace = namespace
-        self._tools: dict[str, FunctionTool] = {}
+        self._tools: dict[str, ToolSchema] = {}
         if tools:
             for tool in tools:
                 self.add(tool)
 
-    def add(self, tool: FunctionTool) -> None:
+    def add(self, tool: ToolSchema) -> None:
         """Add a tool to the set."""
         self._tools[tool.name] = tool
 
-    def add_tool(self, tool: FunctionTool) -> None:
+    def add_tool(self, tool: ToolSchema) -> None:
         """Add a tool to the set (alias for add())."""
         self.add(tool)
 
-    def remove(self, name: str) -> FunctionTool | None:
+    def remove(self, name: str) -> ToolSchema | None:
         """Remove and return a tool by name."""
         return self._tools.pop(name, None)
 
@@ -113,19 +110,19 @@ class ToolSet:
         """Remove a tool by its name."""
         self._tools.pop(name, None)
 
-    def get(self, name: str) -> FunctionTool | None:
+    def get(self, name: str) -> ToolSchema | None:
         """Get a tool by name."""
         return self._tools.get(name)
 
-    def get_tool(self, name: str) -> FunctionTool | None:
+    def get_tool(self, name: str) -> ToolSchema | None:
         """Get a tool by name (alias for get)."""
         return self.get(name)
 
-    def list_tools(self) -> list[FunctionTool]:
+    def list_tools(self) -> list[ToolSchema]:
         """List all tools in this set."""
         return list(self._tools.values())
 
-    def __iter__(self) -> Iterator[FunctionTool]:
+    def __iter__(self) -> Iterator[ToolSchema]:
         return iter(self._tools.values())
 
     def __len__(self) -> int:
@@ -195,7 +192,7 @@ class ToolSet:
         return ToolSet("default", param_tools)
 
     @property
-    def tools(self) -> list[FunctionTool]:
+    def tools(self) -> list[ToolSchema]:
         """List all tools in this set."""
         return list(self._tools.values())
 
@@ -205,18 +202,20 @@ class ToolSet:
         """Convert tools to OpenAI API function calling schema format."""
         result: list[dict[str, Any]] = []
         for tool in self._tools.values():
-            func_def: dict[str, Any] = {
-                "type": "function",
-                "function": {"name": tool.name},
-            }
+            func_dict: dict[str, Any] = {"name": tool.name}
             if tool.description:
-                func_def["function"]["description"] = tool.description
+                func_dict["description"] = tool.description
 
             if tool.parameters is not None:
                 if (
                     tool.parameters.get("properties")
                 ) or not omit_empty_parameter_field:
-                    func_def["function"]["parameters"] = tool.parameters
+                    func_dict["parameters"] = tool.parameters
+
+            func_def: dict[str, Any] = {
+                "type": "function",
+                "function": func_dict,
+            }
 
             result.append(func_def)
         return result

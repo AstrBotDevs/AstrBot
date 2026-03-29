@@ -6,11 +6,12 @@ from typing import TYPE_CHECKING, Any
 try:
     import mcp
 except (ModuleNotFoundError, ImportError):
-    mcp = None  # type: ignore
+    mcp: Any = None
 
 from astrbot._internal.tools.base import FunctionTool
 
 if TYPE_CHECKING:
+    from mcp.types import Tool as MCPTool_T
     from astrbot._internal.protocols.mcp.client import McpClient
 
 
@@ -19,8 +20,8 @@ class MCPTool(FunctionTool):
 
     def __init__(
         self,
-        mcp_tool: "mcp.types.Tool",
-        mcp_client: "McpClient",
+        mcp_tool: MCPTool_T,
+        mcp_client: McpClient,
         mcp_server_name: str,
         **kwargs: Any,
     ) -> None:

@@ -131,9 +131,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             )
 
     @override
-    async def step_until_done(
-        self, max_step: int
-    ) -> AsyncGenerator[AgentResponse, None]:
+    async def step_until_done(self, max_step: int):
         while not self.done():
             async for resp in self.step():
                 yield resp
@@ -260,7 +258,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             key="session_variables",
             default={},
         )
-        payload_vars.update(session_var)
+        payload_vars.update(session_var)  # type: ignore[arg-type]
 
         if (
             self.dashscope_app_type in ["agent", "dialog-workflow"]
