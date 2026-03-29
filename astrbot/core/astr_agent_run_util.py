@@ -8,6 +8,7 @@ from astrbot.core import logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.config.default import DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD
 from astrbot.core.message.components import BaseMessageComponent, Json, Plain
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -19,12 +20,25 @@ from astrbot.core.persona_error_reply import (
 )
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.provider import TTSProvider
-from astrbot.core.repeat_reply_guard import (
-    DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD,
-    normalize_repeat_reply_guard_threshold,
-)
 
 AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
+
+
+def normalize_repeat_reply_guard_threshold(value, *, invalid_fallback: int = 0) -> int:
+    if isinstance(value, bool):
+        return invalid_fallback
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return invalid_fallback
+    return max(0, parsed)
+
+
+def normalize_config_repeat_reply_guard_threshold(value) -> int:
+    return normalize_repeat_reply_guard_threshold(
+        value,
+        invalid_fallback=DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD,
+    )
 
 
 def _should_stop_agent(astr_event) -> bool:
@@ -232,9 +246,10 @@ async def run_agent(
                                     Message(
                                         role="user",
                                         content=(
-                                            "检测到你连续多次输出相同回复。"
-                                            "请停止重复，基于已有信息给出最终答复，"
-                                            "不要再次调用工具。"
+                                            "You have repeated the same reply multiple times. "
+                                            "Stop repeating yourself, provide a final answer "
+                                            "based on the information you already have, and do "
+                                            "not call tools again."
                                         ),
                                     )
                                 )

@@ -3,11 +3,11 @@
 import os
 from typing import Any, TypedDict
 
-from astrbot.core.repeat_reply_guard import DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 VERSION = "4.22.0"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
+DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD = 3
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
         "description": "Base URL",

@@ -1,12 +1,13 @@
 import inspect
 
-from astrbot.core.astr_agent_run_util import run_agent, run_live_agent
-from astrbot.core.config.default import DEFAULT_CONFIG
-from astrbot.core.repeat_reply_guard import (
+from astrbot.core.astr_agent_run_util import (
     DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD,
     normalize_config_repeat_reply_guard_threshold,
     normalize_repeat_reply_guard_threshold,
+    run_agent,
+    run_live_agent,
 )
+from astrbot.core.config.default import DEFAULT_CONFIG
 
 
 def test_runtime_repeat_reply_guard_threshold_normalization():

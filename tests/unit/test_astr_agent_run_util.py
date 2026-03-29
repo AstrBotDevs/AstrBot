@@ -113,7 +113,8 @@ async def test_repeat_reply_guard_forces_convergence():
     ]
     assert runner.req.func_tool is None
     assert any(
-        msg.role == "user" and "检测到你连续多次输出相同回复" in str(msg.content)
+        msg.role == "user"
+        and "You have repeated the same reply multiple times." in str(msg.content)
         for msg in runner.run_context.messages
     )
 

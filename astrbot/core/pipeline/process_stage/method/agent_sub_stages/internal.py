@@ -8,6 +8,10 @@ from dataclasses import replace
 from astrbot.core import logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.astr_agent_run_util import (
+    DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD,
+    normalize_config_repeat_reply_guard_threshold,
+)
 from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
     MainAgentBuildResult,
@@ -27,10 +31,6 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
-)
-from astrbot.core.repeat_reply_guard import (
-    DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD,
-    normalize_config_repeat_reply_guard_threshold,
 )
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.metrics import Metric
