@@ -14,7 +14,7 @@ const fetchTraceSettings = async () => {
   try {
     const res = await axios.get('/api/trace/settings');
     if (res.data?.status === 'ok') {
-      traceEnabled.value = res.data.data?.trace_enable ?? true;
+      traceEnabled.value = res.data?.data?.trace_enable ?? true;
     }
   } catch (err) {
     console.error('Failed to fetch trace settings:', err);
@@ -27,7 +27,6 @@ const updateTraceSettings = async () => {
     await axios.post('/api/trace/settings', {
       trace_enable: traceEnabled.value
     });
-    // Refresh the TraceDisplayer component to reconnect SSE
     traceDisplayerKey.value += 1;
   } catch (err) {
     console.error('Failed to update trace settings:', err);
@@ -43,28 +42,26 @@ onMounted(() => {
 
 <template>
   <div style="height: 100%; display: flex; flex-direction: column;">
-    <div class="trace-header">
-      <div class="trace-info">
-        <v-icon size="small" color="info" class="mr-2">mdi-information-outline</v-icon>
-        <span class="trace-hint">{{ tm('hint') }}</span>
+    <div class="trace-topbar">
+      <div class="topbar-left">
+        <div class="topbar-title">{{ tm('title') || '追踪' }}</div>
+        <div class="topbar-desc">{{ tm('hint') }}</div>
       </div>
-      <div class="trace-controls">
-        <v-switch
-          v-model="traceEnabled"
-          :loading="loading"
-          :disabled="loading"
-          color="primary"
-          hide-details
-          density="compact"
-          @update:model-value="updateTraceSettings"
-        >
-          <template #label>
-            <span class="switch-label">{{ traceEnabled ? tm('recording') : tm('paused') }}</span>
-          </template>
-        </v-switch>
+      <div class="topbar-right">
+        <div class="switch-wrap">
+          <span class="switch-label">{{ traceEnabled ? tm('recording') : tm('paused') }}</span>
+          <button
+            class="switch-btn"
+            :class="{ 'switch-btn-on': traceEnabled }"
+            @click="updateTraceSettings"
+            :disabled="loading"
+          >
+            <span class="switch-knob"></span>
+          </button>
+        </div>
       </div>
     </div>
-    <div style="flex: 1; min-height: 0;">
+    <div style="flex: 1; min-height: 0; overflow: hidden;">
       <TraceDisplayer :key="traceDisplayerKey" />
     </div>
   </div>
@@ -73,43 +70,92 @@ onMounted(() => {
 <script>
 export default {
   name: 'TracePage',
-  components: {
-    TraceDisplayer
-  }
+  components: { TraceDisplayer }
 };
 </script>
 
 <style scoped>
-.trace-header {
+.trace-topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  background: rgba(59, 130, 246, 0.05);
-  border-bottom: 1px solid rgba(59, 130, 246, 0.1);
-  border-radius: 8px 8px 0 0;
-  margin-bottom: 8px;
+  padding: 14px 32px;
+  background: #0a0a0f;
+  border-bottom: 1px solid rgba(0, 242, 255, 0.1);
+  flex-shrink: 0;
 }
 
-.trace-info {
+.topbar-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.topbar-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #00F2FF;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 1px;
+}
+
+.topbar-desc {
+  font-size: 11px;
+  color: #4b5563;
+}
+
+.topbar-right {
   display: flex;
   align-items: center;
 }
 
-.trace-hint {
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.trace-controls {
+.switch-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .switch-label {
-  font-size: 13px;
-  color: #4b5563;
-  white-space: nowrap;
+  font-size: 12px;
+  color: #9ca3af;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.switch-btn {
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.3s ease;
+  padding: 0;
+}
+
+.switch-btn:hover {
+  border-color: rgba(0, 242, 255, 0.3);
+}
+
+.switch-btn-on {
+  background: rgba(0, 242, 255, 0.15);
+  border-color: rgba(0, 242, 255, 0.4);
+}
+
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #475569;
+  transition: all 0.3s ease;
+}
+
+.switch-btn-on .switch-knob {
+  left: 20px;
+  background: #00F2FF;
+  box-shadow: 0 0 8px rgba(0, 242, 255, 0.5);
 }
 </style>
