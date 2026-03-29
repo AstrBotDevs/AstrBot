@@ -2,12 +2,11 @@
   <div class="bg" ref="bgEl" @mousemove="onMouseMove" @mouseleave="onMouseLeave">
     <canvas ref="canvasEl" class="bg-canvas"></canvas>
     <div class="gravity-well"></div>
-    <div class="focus-dot" :style="focusStyle"></div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 
 const bgEl = ref<HTMLElement | null>(null);
 const canvasEl = ref<HTMLCanvasElement | null>(null);
@@ -25,15 +24,6 @@ const targetY = ref(-9999);
 const smoothX = ref(-9999);
 const smoothY = ref(-9999);
 
-// exact mouse for core dot
-const exactX = ref(-9999);
-const exactY = ref(-9999);
-
-const focusStyle = computed(() => ({
-  left: `${exactX.value}px`,
-  top: `${exactY.value}px`,
-}));
-
 let ctx: CanvasRenderingContext2D | null = null;
 let animId: number | null = null;
 let width = 0;
@@ -42,8 +32,6 @@ let height = 0;
 const onMouseMove = (e: MouseEvent) => {
   targetX.value = e.clientX;
   targetY.value = e.clientY;
-  exactX.value = e.clientX;
-  exactY.value = e.clientY;
 };
 
 const onMouseLeave = () => {
@@ -183,7 +171,6 @@ onUnmounted(() => {
   inset: 0;
   z-index: 0;
   background: #0a0a0c;
-  cursor: none;
 }
 
 .bg-canvas {
@@ -209,18 +196,5 @@ onUnmounted(() => {
   );
   pointer-events: none;
   z-index: 1;
-}
-
-.focus-dot {
-  position: fixed;
-  width: 2px;
-  height: 2px;
-  z-index: 10;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-  background: rgba(0, 242, 255, 0.95);
-  box-shadow:
-    0 0 4px 1px rgba(0, 210, 255, 0.9),
-    0 0 12px 2px rgba(0, 210, 255, 0.3);
 }
 </style>
