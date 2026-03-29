@@ -42,7 +42,8 @@
     "advanced": "高级设置",
     "security": "安全设置",
     "appearance": "外观设置",
-    "notification": "通知设置"
+    "notification": "通知设置",
+    "moreConfig": "更多配置"
   },
   "general": {
     "botName": "机器人名称",

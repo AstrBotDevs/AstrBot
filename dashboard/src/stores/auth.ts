@@ -25,7 +25,8 @@ export const useAuthStore = defineStore({
         localStorage.setItem('user', this.username);
         localStorage.setItem('token', res.data.data.token);
         localStorage.setItem('change_pwd_hint', res.data.data?.change_pwd_hint);
-        router.push(this.returnUrl || '/dashboard/default');
+        this.returnUrl = null;
+        router.push('/welcome');
       } catch (error) {
         return Promise.reject(error);
       }

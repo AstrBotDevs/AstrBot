@@ -62,7 +62,15 @@ When the code editor is enabled, it looks like this:
 
 ![editor_mode_fullscreen](https://files.astrbot.app/docs/source/images/plugin/image-7.png)
 
-The **_special** field is only available after v4.0.0. Currently supports `select_provider`, `select_provider_tts`, `select_provider_stt`, `select_persona`, allowing users to quickly select model providers, personas, and other data already configured in the WebUI. Results are all strings. Using select_provider as an example, it will present the following effect:
+The **_special** field is only available after v4.0.0. Common values include `select_provider`, `select_provider_tts`, `select_provider_stt`, `select_persona`, and `select_knowledgebase`, allowing users to quickly select model providers, personas, knowledge bases, and other data already configured in the WebUI.
+
+- `select_provider`, `select_provider_tts`, `select_provider_stt`, and `select_persona` return strings.
+- `select_knowledgebase` returns a `list` and supports multiple selection, so the corresponding config item should use `type: list` with a default value of `[]`.
+
+> [!NOTE]
+> For reference, AstrBot Core also uses other internal `_special` values, such as `select_providers`, `provider_pool`, `persona_pool`, `select_plugin_set`, `t2i_template`, `get_embedding_dim`, and `select_agent_runner_provider:*` (where `*` is a placeholder for the runner type). These are internal implementations and may change at any time — please avoid using them in plugins.
+
+Using `select_provider` as an example, it will display as follows:
 
 ![image](https://files.astrbot.app/docs/source/images/plugin/image-select-provider.png)
 
