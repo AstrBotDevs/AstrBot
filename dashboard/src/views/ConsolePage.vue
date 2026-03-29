@@ -8,19 +8,7 @@ const { tm } = useModuleI18n("features/console");
 
 <template>
   <div style="height: 100%">
-    <div
-      style="
-        background-color: var(--v-theme-surface);
-        padding: 8px;
-        padding-left: 16px;
-        border-radius: 8px;
-        margin-bottom: 16px;
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-      "
-    >
+    <div class="console-toolbar">
       <div>
         <h4>{{ tm("title") }}</h4>
         <v-alert
@@ -154,5 +142,18 @@ export default {
 
 .fade-in {
   animation: fadeIn 0.2s ease-in-out;
+}
+
+.console-toolbar {
+  background: rgba(15, 15, 22, 0.55);
+  backdrop-filter: blur(16px);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 242, 255, 0.06);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
 }
 </style>
