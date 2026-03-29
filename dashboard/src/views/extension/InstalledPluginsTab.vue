@@ -360,7 +360,7 @@ const pinnedPlugins = computed(() => {
             </v-row>
 
             <!-- 置顶插件列表 -->
-            <v-row class="mb-4">
+            <v-row v-if="pinnedPlugins.length > 0" class="mb-4">
               <v-col cols="12">
                 <v-card class="rounded-lg overflow-hidden elevation-0" variant="flat">
                   <v-card-text class="pa-4">
@@ -369,11 +369,6 @@ const pinnedPlugins = computed(() => {
                     </div>
 
                     <v-row class="mt-3 relative" dense align="center" style="gap:12px">
-                      <template v-if="!pinnedPlugins || pinnedPlugins.length === 0">
-                        <v-col cols="auto" v-for="n in 4" :key="n">
-                        </v-col>
-                      </template>
-
                       <transition-group name="list" class="v-row v-row--dense">
                         <v-col
                           cols="auto"

@@ -10,24 +10,11 @@
 
 Open the service provider page, click "Add Service Provider", and select Embedding.
 
-AstrBot now includes built-in presets for OpenAI-compatible Embedding, Zhipu Embedding, Volcengine Embedding, Ollama Embedding, and Gemini Embedding.
-
-If you want to connect another OpenAI-compatible embedding service, use `OpenAI Compatible Embedding` first. When `embedding api base` only contains the host, AstrBot automatically appends `/v1`. If the URL already contains a path such as Zhipu `/api/paas/v4` or Volcengine Ark `/api/v3`, AstrBot preserves that path as-is.
-
-The legacy `OpenAI Embedding` preset is still kept for backward compatibility with existing configurations. It remains a good fit for standard OpenAI-style `/v1` endpoints and keeps the previous behavior of forwarding `dimensions` whenever `embedding_dimensions` is configured. `OpenAI Compatible Embedding` targets broader compatibility by preserving provider-specific path prefixes and making `dimensions` forwarding opt-in, so the two presets are intentionally not interchangeable.
+Currently, AstrBot supports embedding vector services compatible with OpenAI API and Gemini API.
 
 Click on the provider card above to enter the configuration page and fill in the configuration.
 
 After completing the configuration, click Save.
-
-> [!NOTE]
-> `OpenAI Compatible Embedding` includes a `send_dimensions_param` switch. When enabled, AstrBot sends `embedding_dimensions` to the upstream embedding API as the `dimensions` parameter. Disable it for OpenAI-compatible services that only need the local vector size and do not support `dimensions`.
-
-> [!NOTE]
-> The Volcengine preset defaults to `doubao-embedding-vision`. AstrBot's knowledge-base pipeline is still text chunking plus text embedding only, so this integration uses the model with text input only and does not add multimodal knowledge-base support yet, although it is a multimodal embedding model.
-
-> [!NOTE]
-> The Ollama preset defaults to local `http://127.0.0.1:11434`, model `embeddinggemma`, and 768 dimensions. Before using it, run `ollama pull embeddinggemma` locally and make sure the Ollama service is running.
 
 ## Configuring Reranker Model (Optional)
 
@@ -66,7 +53,7 @@ In the configuration file, you can specify different knowledge bases for differe
 2. Go to the [Model Marketplace](https://ppio.cn/model-api/console) and click on Embedding Models.
 3. Click on BAAI:BGE-M3 (as of 2025-06-02, this model is free on this platform).
 4. Find the API integration guide and apply for a Key.
-5. Fill in the AstrBot `OpenAI Compatible Embedding` model provider configuration:
+5. Fill in the AstrBot OpenAI Embedding model provider configuration:
    1. API Key is the PPIO API Key you just applied for
    2. embedding api base: enter `https://api.ppinfra.com/v3/openai`
    3. model: enter the model you selected, in this example `baai/bge-m3`.

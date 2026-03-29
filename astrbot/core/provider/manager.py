@@ -455,10 +455,6 @@ class ProviderManager:
                 from .sources.openai_embedding_source import (
                     OpenAIEmbeddingProvider as OpenAIEmbeddingProvider,
                 )
-            case "openai_compatible_embedding":
-                from .sources.openai_compatible_embedding_source import (
-                    OpenAICompatibleEmbeddingProvider as OpenAICompatibleEmbeddingProvider,
-                )
             case "gemini_embedding":
                 from .sources.gemini_embedding_source import (
                     GeminiEmbeddingProvider as GeminiEmbeddingProvider,

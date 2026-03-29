@@ -1236,24 +1236,8 @@
       "embedding_api_base": {
         "description": "API Base URL"
       },
-      "send_dimensions_param": {
-        "description": "Forward dimensions parameter",
-        "hint": "When enabled, sends embedding_dimensions to the upstream API as the dimensions parameter. This allows dimension reduction on services that support it (OpenAI, Zhipu, Volcengine). Leave disabled if the upstream does not support custom dimensions."
-      },
       "openai_embedding": {
-        "hint": "OpenAI Embedding is kept for existing configs and standard /v1 endpoints. It automatically appends /v1 and still forwards dimensions whenever embedding_dimensions is configured."
-      },
-      "openai_compatible_embedding": {
-        "hint": "Use this for broader OpenAI-compatible embedding services. AstrBot appends /v1 only when the API Base URL has no path, and preserves existing paths such as /api/paas/v4 or /api/v3. Unlike the legacy OpenAI Embedding preset, dimensions forwarding is explicitly configurable here."
-      },
-      "zhipu_embedding": {
-        "hint": "The Zhipu preset defaults to https://open.bigmodel.cn/api/paas/v4 and embedding-3, and keeps the /api/paas/v4 path unchanged."
-      },
-      "volcengine_embedding": {
-        "hint": "The Volcengine preset defaults to https://ark.cn-beijing.volces.com/api/v3 and doubao-embedding-vision, and keeps the /api/v3 path unchanged. AstrBot still uses this model for text input only."
-      },
-      "ollama_embedding": {
-        "hint": "The Ollama preset defaults to local http://127.0.0.1:11434, model embeddinggemma, and 768 dimensions. The API key defaults to ollama only for OpenAI SDK compatibility, and Ollama ignores it."
+        "hint": "If testing fails, try adding /v1 at the end to be compatible with some OpenAI API versions."
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding does not require manually adding /v1beta."

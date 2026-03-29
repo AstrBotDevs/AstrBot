@@ -16,7 +16,6 @@ from werkzeug.datastructures import FileStorage
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
-from astrbot.core.provider.sources import openai_compatible_embedding_source
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.pip_installer import PipInstallError
@@ -110,84 +109,48 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
-async def test_provider_template_exposes_openai_compatible_embedding_presets(
-    app: Quart,
-    authenticated_header: dict,
+async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
 ):
-    test_client = app.test_client()
-    response = await test_client.get(
-        "/api/config/provider/template",
-        headers=authenticated_header,
+    shutdown_event = asyncio.Event()
+    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config.get("dashboard", {}),
     )
+    warning_messages = []
+    info_messages = []
 
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
+    async def fake_serve(app, config, shutdown_trigger):
+        return config
 
-    templates = data["data"]["config_schema"]["provider"]["config_template"]
-    assert "OpenAI Compatible Embedding" in templates
-    assert "Zhipu Embedding" in templates
-    assert "Volcengine Embedding" in templates
-    assert "Ollama Embedding" in templates
-    assert templates["OpenAI Compatible Embedding"]["type"] == (
-        "openai_compatible_embedding"
-    )
-    assert templates["Ollama Embedding"]["provider"] == "ollama"
-
-
-class _FakeDashboardEmbeddingsAPI:
-    async def create(self, **kwargs):
-        return SimpleNamespace(
-            data=[SimpleNamespace(embedding=[0.1, 0.2, 0.3, 0.4])],
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["ssl"] = {
+            "enable": True,
+            "cert_file": "",
+            "key_file": "",
+        }
+        monkeypatch.setattr(server, "check_port_in_use", lambda port: False)
+        monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
+        monkeypatch.setattr(
+            "astrbot.dashboard.server.logger.warning",
+            lambda message: warning_messages.append(message),
+        )
+        monkeypatch.setattr(
+            "astrbot.dashboard.server.logger.info",
+            lambda message: info_messages.append(message),
         )
 
+        config = await server.run()
 
-class _FakeDashboardAsyncOpenAI:
-    def __init__(self, **kwargs) -> None:
-        self.kwargs = kwargs
-        self.embeddings = _FakeDashboardEmbeddingsAPI()
-
-    async def close(self):
-        return None
-
-
-@pytest.mark.asyncio
-async def test_get_embedding_dim_supports_openai_compatible_embedding(
-    app: Quart,
-    authenticated_header: dict,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    test_client = app.test_client()
-    monkeypatch.setattr(
-        openai_compatible_embedding_source,
-        "AsyncOpenAI",
-        _FakeDashboardAsyncOpenAI,
-    )
-
-    response = await test_client.post(
-        "/api/config/provider/get_embedding_dim",
-        json={
-            "provider_config": {
-                "id": "dashboard-openai-compatible-embedding",
-                "type": "openai_compatible_embedding",
-                "provider_type": "embedding",
-                "embedding_api_key": "test-key",
-                "embedding_api_base": "https://example.com",
-                "embedding_model": "text-embedding-3-small",
-                "embedding_dimensions": 2048,
-                "send_dimensions_param": False,
-                "timeout": 20,
-                "proxy": "",
-                "enable": True,
-            }
-        },
-        headers=authenticated_header,
-    )
-
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert data["data"]["embedding_dimensions"] == 4
+        assert getattr(config, "certfile", None) is None
+        assert getattr(config, "keyfile", None) is None
+        assert any("cert_file 和 key_file" in message for message in warning_messages)
+        assert any(
+            "正在启动 WebUI, 监听地址: http://" in message for message in info_messages
+        )
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
 
 
 @pytest.mark.asyncio

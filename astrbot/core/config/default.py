@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.22.1"
+VERSION = "4.22.2"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -1623,10 +1623,14 @@ CONFIG_METADATA_2 = {
                         "type": "gsvi_tts_api",
                         "provider": "gpt_sovits_inference",
                         "provider_type": "text_to_speech",
-                        "api_base": "http://127.0.0.1:5000",
-                        "character": "",
-                        "emotion": "default",
                         "enable": False,
+                        "api_key": "",
+                        "api_base": "http://127.0.0.1:8000",
+                        "version": "v4",
+                        "character": "",
+                        "prompt_text_lang": "中文",
+                        "emotion": "默认",
+                        "text_lang": "中文",
                         "timeout": 20,
                     },
                     "FishAudio TTS(API)": {
@@ -1721,63 +1725,17 @@ CONFIG_METADATA_2 = {
                         "gemini_tts_voice_name": "Leda",
                         "proxy": "",
                     },
-                    "OpenAI Compatible Embedding": {
-                        "id": "openai_compatible_embedding",
-                        "type": "openai_compatible_embedding",
+                    "OpenAI Embedding": {
+                        "id": "openai_embedding",
+                        "type": "openai_embedding",
                         "provider": "openai",
                         "provider_type": "embedding",
-                        "hint": "provider_group.provider.openai_compatible_embedding.hint",
+                        "hint": "provider_group.provider.openai_embedding.hint",
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "",
                         "embedding_model": "",
                         "embedding_dimensions": 1024,
-                        "send_dimensions_param": False,
-                        "timeout": 20,
-                        "proxy": "",
-                    },
-                    "Zhipu Embedding": {
-                        "id": "zhipu_embedding",
-                        "type": "openai_compatible_embedding",
-                        "provider": "zhipu",
-                        "provider_type": "embedding",
-                        "hint": "provider_group.provider.zhipu_embedding.hint",
-                        "enable": True,
-                        "embedding_api_key": "",
-                        "embedding_api_base": "https://open.bigmodel.cn/api/paas/v4",
-                        "embedding_model": "embedding-3",
-                        "embedding_dimensions": 2048,
-                        "send_dimensions_param": True,
-                        "timeout": 20,
-                        "proxy": "",
-                    },
-                    "Volcengine Embedding": {
-                        "id": "volcengine_embedding",
-                        "type": "openai_compatible_embedding",
-                        "provider": "volcengine",
-                        "provider_type": "embedding",
-                        "hint": "provider_group.provider.volcengine_embedding.hint",
-                        "enable": True,
-                        "embedding_api_key": "",
-                        "embedding_api_base": "https://ark.cn-beijing.volces.com/api/v3",
-                        "embedding_model": "doubao-embedding-vision",
-                        "embedding_dimensions": 2048,
-                        "send_dimensions_param": True,
-                        "timeout": 20,
-                        "proxy": "",
-                    },
-                    "Ollama Embedding": {
-                        "id": "ollama_embedding",
-                        "type": "openai_compatible_embedding",
-                        "provider": "ollama",
-                        "provider_type": "embedding",
-                        "hint": "provider_group.provider.ollama_embedding.hint",
-                        "enable": True,
-                        "embedding_api_key": "ollama",
-                        "embedding_api_base": "http://127.0.0.1:11434",
-                        "embedding_model": "embeddinggemma",
-                        "embedding_dimensions": 768,
-                        "send_dimensions_param": False,
                         "timeout": 20,
                         "proxy": "",
                     },
@@ -2087,12 +2045,6 @@ CONFIG_METADATA_2 = {
                     "embedding_api_base": {
                         "description": "API Base URL",
                         "type": "string",
-                    },
-                    "send_dimensions_param": {
-                        "description": "透传 dimensions 参数",
-                        "type": "bool",
-                        "hint": "启用后，将 embedding_dimensions 作为 dimensions 参数发送给上游 API。支持自定义维度的服务（OpenAI、智谱、火山等）可开启此项以实现降维；若上游不支持自定义维度则关闭。",
-                        "condition": {"type": "openai_compatible_embedding"},
                     },
                     "volcengine_cluster": {
                         "type": "string",
@@ -2549,9 +2501,9 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                     },
                     "proxy": {
-                        "description": "代理地址",
+                        "description": "provider_group.provider.proxy.description",
                         "type": "string",
-                        "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。",
+                        "hint": "provider_group.provider.proxy.hint",
                     },
                     "model": {
                         "description": "模型 ID",
@@ -3535,11 +3487,13 @@ CONFIG_METADATA_3 = {
                     "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
                         "type": "bool",
+                        "collapsed": True,
                     },
                     "provider_settings.reachability_check": {
                         "description": "提供商可达性检测",
                         "type": "bool",
                         "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
+                        "collapsed": True,
                     },
                     "provider_settings.max_quoted_fallback_images": {
                         "description": "引用图片回退解析上限",
@@ -3548,6 +3502,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.max_component_chain_depth": {
                         "description": "引用解析组件链深度",
@@ -3556,6 +3511,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.max_forward_node_depth": {
                         "description": "引用解析转发节点深度",
@@ -3564,6 +3520,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.max_forward_fetch": {
                         "description": "引用解析转发拉取上限",
@@ -3572,6 +3529,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.warn_on_action_failure": {
                         "description": "引用解析 action 失败告警",
@@ -3580,6 +3538,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                 },
                 "condition": {

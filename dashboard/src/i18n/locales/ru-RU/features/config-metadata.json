@@ -1233,24 +1233,8 @@
             "embedding_api_base": {
                 "description": "Адрес прокси-сервера"
             },
-            "send_dimensions_param": {
-                "description": "Передавать параметр dimensions",
-                "hint": "Если включено, отправляет embedding_dimensions в upstream API как параметр dimensions. Это позволяет уменьшить размерность для сервисов, которые это поддерживают (OpenAI, Zhipu, Volcengine). Отключите, если upstream не поддерживает пользовательскую размерность."
-            },
             "openai_embedding": {
-                "hint": "OpenAI Embedding сохранён для существующих конфигураций и стандартных /v1 endpoint-ов. Он автоматически добавляет /v1 и по-прежнему отправляет dimensions, если задан embedding_dimensions."
-            },
-            "openai_compatible_embedding": {
-                "hint": "Используйте этот вариант для более широкого круга OpenAI-совместимых embedding-сервисов. AstrBot добавляет /v1 только если в API Base URL нет пути, а уже заданные пути, такие как /api/paas/v4 или /api/v3, сохраняются без изменений. В отличие от старого OpenAI Embedding, здесь можно явно управлять передачей dimensions."
-            },
-            "zhipu_embedding": {
-                "hint": "Пресет Zhipu по умолчанию использует https://open.bigmodel.cn/api/paas/v4 и embedding-3, сохраняя путь /api/paas/v4 без изменений."
-            },
-            "volcengine_embedding": {
-                "hint": "Пресет Volcengine по умолчанию использует https://ark.cn-beijing.volces.com/api/v3 и doubao-embedding-vision, сохраняя путь /api/v3 без изменений. Сейчас AstrBot использует эту модель только для текстового ввода."
-            },
-            "ollama_embedding": {
-                "hint": "Пресет Ollama по умолчанию использует локальный http://127.0.0.1:11434, модель embeddinggemma и размерность 768. API key по умолчанию равен ollama только для совместимости с OpenAI SDK; сам Ollama его игнорирует."
+                "hint": "Если тест не проходит, попробуйте добавить /v1 в конец embedding_api_base для совместимости с некоторыми версиями OpenAI API."
             },
             "gemini_embedding": {
                 "hint": "Gemini Embedding не требует ручного добавления /v1beta."
