@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AuthLogin from "../authForms/AuthLogin.vue";
 import DailyQuote from "@/components/shared/DailyQuote.vue";
+import DiamondBg from "@/components/auth/DiamondBg.vue";
 import LanguageSwitcher from "@/components/shared/LanguageSwitcher.vue";
 import { onMounted, ref } from "vue";
 import { useAuthStore } from "@/stores/auth";
@@ -113,6 +114,7 @@ onMounted(() => {
 
 <template>
   <div class="login-page-container">
+    <DiamondBg />
     <v-card class="login-card" elevation="1">
       <v-card-title>
         <div class="d-flex justify-space-between align-center w-100">
@@ -314,5 +316,8 @@ onMounted(() => {
 .login-card {
   width: 400px;
   padding: 8px;
+  background: rgba(30, 41, 59, 0.85) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 </style>
