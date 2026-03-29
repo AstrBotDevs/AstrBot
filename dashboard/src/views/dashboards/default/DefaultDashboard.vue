@@ -14,24 +14,24 @@
       </v-row>
     </v-slide-y-transition>
 
-    <!-- 主指标卡片行 -->
+    <!-- 主指标卡片行: 2x2 grid -->
     <v-row class="stats-row">
-      <v-col cols="12" md="3">
+      <v-col cols="12" sm="6" lg="3">
         <v-slide-y-transition>
           <TotalMessage :stat="stat" />
         </v-slide-y-transition>
       </v-col>
-      <v-col cols="12" md="3">
+      <v-col cols="12" sm="6" lg="3">
         <v-slide-y-transition>
           <OnlinePlatform :stat="stat" />
         </v-slide-y-transition>
       </v-col>
-      <v-col cols="12" md="3">
+      <v-col cols="12" sm="6" lg="3">
         <v-slide-y-transition>
           <RunningTime :stat="stat" />
         </v-slide-y-transition>
       </v-col>
-      <v-col cols="12" md="3">
+      <v-col cols="12" sm="6" lg="3">
         <v-slide-y-transition>
           <MemoryUsage :stat="stat" />
         </v-slide-y-transition>

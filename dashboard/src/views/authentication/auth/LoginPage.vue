@@ -3,11 +3,15 @@ import AuthLogin from "../authForms/AuthLogin.vue";
 import DailyQuote from "@/components/shared/DailyQuote.vue";
 import DiamondBg from "@/components/auth/DiamondBg.vue";
 import LanguageSwitcher from "@/components/shared/LanguageSwitcher.vue";
-import { onMounted, ref } from "vue";
+import { onMounted, ref, computed } from "vue";
 import { useAuthStore } from "@/stores/auth";
 import { useApiStore } from "@/stores/api";
 import { useRouter } from "vue-router";
 import { useCustomizerStore } from "@/stores/customizer";
+import { useTheme } from "vuetify";
+
+const vuetifyTheme = useTheme();
+const isDark = computed(() => vuetifyTheme.global.name.value === 'BlueBusinessDarkTheme');
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useToast } from "@/utils/toast";
 import { getApiBaseUrlValidationError } from "@/utils/request";
@@ -115,7 +119,7 @@ onMounted(() => {
 
 <template>
   <div class="login-page-container">
-    <DiamondBg />
+    <DiamondBg v-if="isDark" />
     <v-card class="login-card" elevation="1">
       <v-card-title :key="locale">
         <div class="d-flex justify-space-between align-center w-100">
@@ -178,7 +182,7 @@ onMounted(() => {
         <div class="ml-2" style="font-size: 26px">
           {{ t("logo.title") }}
         </div>
-        <div class="mt-2 ml-2" style="font-size: 14px; color: grey">
+        <div class="mt-2 ml-2" style="font-size: 14px; color: var(--v-theme-on-surface-variant)">
           <DailyQuote />
         </div>
       </v-card-title>
@@ -190,68 +194,24 @@ onMounted(() => {
     <v-dialog v-model="serverConfigDialog" max-width="450">
       <v-card>
         <v-card-title>{{ t("serverConfig.title") }}</v-card-title>
-        <v-card-text>
+        <v-card-text class="pt-0">
           <div class="text-body-2 text-medium-emphasis mb-4">
             {{ t("serverConfig.description") }}
           </div>
 
-          <div
-            v-if="
-              (apiStore.presets && apiStore.presets.length > 0) ||
-              apiStore.customPresets
-            "
-            class="mb-4"
-          >
+          <!-- Presets section -->
+          <div class="mb-4">
             <div class="d-flex justify-space-between align-center mb-2">
               <div class="text-caption text-medium-emphasis">
                 {{ t("serverConfig.presetLabel") }}
               </div>
-              <v-btn
-                size="x-small"
-                variant="text"
-                icon
-                @click="showAddPreset = !showAddPreset"
-              >
-                <v-icon>mdi-plus</v-icon>
-              </v-btn>
             </div>
 
-            <v-expand-transition>
-              <div
-                v-if="showAddPreset"
-                class="mb-2 pa-2 bg-grey-lighten-4 rounded border"
-              >
-                <v-text-field
-                  v-model="newPresetName"
-                  label="Name"
-                  density="compact"
-                  hide-details
-                  class="mb-2"
-                  variant="outlined"
-                  bg-color="white"
-                />
-                <v-text-field
-                  v-model="newPresetUrl"
-                  label="URL"
-                  density="compact"
-                  hide-details
-                  class="mb-2"
-                  variant="outlined"
-                  bg-color="white"
-                />
-                <v-btn
-                  size="small"
-                  block
-                  color="primary"
-                  variant="flat"
-                  @click="savePreset"
-                >
-                  Add Preset
-                </v-btn>
-              </div>
-            </v-expand-transition>
-
-            <v-chip-group column>
+            <v-chip-group
+              v-if="apiStore.presets.length > 0 || apiStore.customPresets.length > 0"
+              column
+              class="mb-2"
+            >
               <v-chip
                 v-for="preset in apiStore.presets"
                 :key="preset.name"
@@ -265,8 +225,58 @@ onMounted(() => {
                 {{ preset.name }}
               </v-chip>
             </v-chip-group>
+
+            <!-- Add preset inline form -->
+            <div v-if="showAddPreset" class="preset-add-form rounded pa-3 mb-2">
+              <div class="d-flex align-center gap-2 mb-2">
+                <v-text-field
+                  v-model="newPresetName"
+                  :label="t('presetName')"
+                  density="compact"
+                  hide-details
+                  variant="outlined"
+                  class="flex-1"
+                />
+                <v-text-field
+                  v-model="newPresetUrl"
+                  :label="t('presetUrl')"
+                  density="compact"
+                  hide-details
+                  variant="outlined"
+                  class="flex-1"
+                />
+                <v-btn
+                  size="small"
+                  color="primary"
+                  variant="flat"
+                  icon
+                  @click="savePreset"
+                >
+                  <v-icon size="18">mdi-check</v-icon>
+                </v-btn>
+                <v-btn
+                  size="small"
+                  variant="text"
+                  icon
+                  @click="showAddPreset = false"
+                >
+                  <v-icon size="18">mdi-close</v-icon>
+                </v-btn>
+              </div>
+            </div>
+
+            <v-btn
+              v-if="!showAddPreset"
+              size="x-small"
+              variant="tonal"
+              prepend-icon="mdi-plus"
+              @click="showAddPreset = true"
+            >
+              {{ t("addPreset") }}
+            </v-btn>
           </div>
 
+          <!-- API URL field -->
           <v-text-field
             v-model="apiUrl"
             :label="t('serverConfig.label')"
@@ -275,18 +285,33 @@ onMounted(() => {
             persistent-hint
             variant="outlined"
             density="compact"
+            class="mb-3"
           />
 
+          <!-- Share link button -->
           <v-btn
             variant="tonal"
             size="small"
             block
-            class="mt-2"
+            class="mb-3"
             prepend-icon="mdi-share-variant"
             @click="copyShareableUrl"
           >
             {{ t("shareLink") }}
           </v-btn>
+
+          <!-- Auto theme switch -->
+          <div class="d-flex align-center justify-space-between preset-auto-switch">
+            <div class="text-caption">{{ t('autoTheme') }}</div>
+            <v-switch
+              v-model="customizer.autoSwitchTheme"
+              color="primary"
+              density="compact"
+              hide-details
+              inset
+              @update:model-value="customizer.SET_AUTO_SYNC($event)"
+            />
+          </div>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -312,29 +337,59 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
-  // Radial fade mask around login card area
-  mask-image: radial-gradient(
-    ellipse 60% 70% at 50% 50%,
-    black 30%,
-    transparent 70%
-  );
-  -webkit-mask-image: radial-gradient(
-    ellipse 60% 70% at 50% 50%,
-    black 30%,
-    transparent 70%
-  );
+}
+
+// Dark mode: radial mask + DiamondBg
+.v-theme--bluebusinessdarktheme .login-page-container {
+  background-color: rgb(var(--v-theme-containerBg));
+  mask-image: radial-gradient(ellipse 60% 70% at 50% 50%, black 30%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse 60% 70% at 50% 50%, black 30%, transparent 70%);
+}
+
+// Light mode: pure white
+.v-theme--bluebusinesstheme .login-page-container {
+  background-color: #FFFFFF;
+  mask-image: none;
+  -webkit-mask-image: none;
 }
 
 .login-card {
   width: 400px;
   padding: 8px;
-  background: rgba(6, 8, 14, 0.82) !important;
+  background: var(--v-theme-surface) !important;
   backdrop-filter: blur(28px) saturate(1.1);
-  border: 1px solid rgba(0, 242, 255, 0.2);
+  border: 1px solid rgba(var(--v-theme-primary), 0.2);
   box-shadow:
-    0 0 80px rgba(0, 26, 51, 0.95),
-    0 0 120px rgba(0, 26, 51, 0.6),
-    0 0 0 0.5px rgba(255, 255, 255, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    0 0 80px rgba(var(--v-theme-on-surface), 0.3),
+    0 0 120px rgba(var(--v-theme-on-surface), 0.15),
+    inset 0 0 20px rgba(0, 0, 0, 0.1);
+}
+
+// Light mode: clean white card
+.v-theme--bluebusinesstheme .login-card {
+  background: #FFFFFF !important;
+  border: 1px solid rgba(0, 49, 83, 0.12) !important;
+  box-shadow: 0 4px 24px rgba(0, 49, 83, 0.08) !important;
+  backdrop-filter: none;
+}
+
+// Dark mode: preset add form
+.v-theme--bluebusinessdarktheme .preset-add-form {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(0, 242, 255, 0.15);
+}
+
+// Light mode: preset add form
+.v-theme--bluebusinesstheme .preset-add-form {
+  background: rgba(0, 49, 83, 0.04);
+  border: 1px solid rgba(0, 49, 83, 0.12);
+}
+
+// Auto switch row
+.preset-auto-switch {
+  padding: 8px 12px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.02);
 }
 </style>

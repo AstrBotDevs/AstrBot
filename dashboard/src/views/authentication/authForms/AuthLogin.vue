@@ -85,7 +85,7 @@ async function validate(_values: any, { setErrors }: any) {
     />
 
     <div class="mt-2">
-      <small style="color: grey">{{ t("defaultHint") }}</small>
+      <small class="hint-label">{{ t("defaultHint") }}</small>
     </div>
 
     <v-btn
@@ -178,8 +178,8 @@ async function validate(_values: any, { setErrors }: any) {
     }
   }
 
-  .hint-text {
-    color: var(--v-theme-secondaryText);
+  .hint-label {
+    color: var(--v-theme-on-surface-variant);
     padding-left: 5px;
   }
 

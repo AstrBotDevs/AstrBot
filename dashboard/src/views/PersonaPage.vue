@@ -5,7 +5,7 @@
       <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-6">
         <div>
           <h1 class="text-h1 font-weight-bold mb-2">
-            <v-icon color="black" class="me-2"> mdi-heart </v-icon
+            <v-icon color="primary" class="me-2"> mdi-heart </v-icon
             >{{ t("core.navigation.persona") }}
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-0">

@@ -390,7 +390,7 @@ export default {
   padding: 0;
   height: 100%;
   overflow-y: auto;
-  color: #2b3340;
+  color: var(--v-theme-on-surface);
   font-family: "Fira Code", monospace;
 }
 
@@ -401,13 +401,13 @@ export default {
 }
 
 .trace-group {
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   background: transparent;
   padding: 8px 0;
 }
 
 .trace-group.highlight {
-  background: rgba(59, 130, 246, 0.08);
+  background: rgba(var(--v-theme-primary), 0.08);
   transition: background 0.6s ease;
 }
 
@@ -417,8 +417,8 @@ export default {
 
 .trace-header {
   font-weight: 600;
-  color: #6b7280;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.12);
+  color: var(--v-theme-on-surface);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   padding-bottom: 10px;
 }
 
@@ -426,28 +426,25 @@ export default {
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 12px;
+  color: var(--v-theme-on-surface);
 }
 
 .event-title {
   font-weight: 600;
-  color: #1f2937;
+  color: var(--v-theme-on-surface);
 }
 
 .event-meta {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--v-theme-on-surface);
   margin-top: 4px;
 }
 
 .event-sub {
   font-size: 12px;
-  color: #4b5563;
+  color: var(--v-theme-on-surface);
   margin-top: 2px;
   word-break: break-word;
-}
-
-.event-sub.outline {
-  color: #6b7280;
 }
 
 .event-controls {
@@ -460,7 +457,7 @@ export default {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #22c55e;
+  background: var(--v-theme-success);
   margin-left: 6px;
   vertical-align: middle;
 }
@@ -469,13 +466,13 @@ export default {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #4b5563;
+  color: var(--v-theme-on-surface);
 }
 
 .trace-empty {
   padding: 24px;
   text-align: center;
-  color: #6b7280;
+  color: var(--v-theme-on-surface);
 }
 
 @media (max-width: 1200px) {
@@ -500,12 +497,12 @@ export default {
 }
 
 .trace-record-time {
-  color: #6b7280;
+  color: var(--v-theme-on-surface);
   font-size: 11px;
 }
 
 .trace-record-action {
-  color: #1f2937;
+  color: var(--v-theme-on-surface);
   font-weight: 600;
   font-size: 11px;
 }
@@ -514,7 +511,7 @@ export default {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #4b5563;
+  color: var(--v-theme-on-surface);
   font-size: 10px;
 }
 

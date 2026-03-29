@@ -12,14 +12,10 @@
       </div>
       <div class="logo-text">
         <h2
-          :style="{ color: 'rgba(0, 242, 255, 0.95)' }"
           class="logo-title"
           v-html="formatTitle(title || t('core.header.logoTitle'))"
         />
-        <h4
-          :style="{ color: 'rgba(228, 225, 230, 0.45)' }"
-          class="hint-text"
-        >
+        <h4 class="hint-text">
           {{ subtitle || t("core.header.accountDialog.title") }}
         </h4>
       </div>
@@ -120,14 +116,19 @@ const formatTitle = (title: string) => {
   white-space: nowrap;
   min-width: fit-content;
   font-family: "JetBrains Mono", "Fira Code", monospace;
+}
+
+/* Dark mode: cyan glow */
+.v-theme--bluebusinessdarktheme .logo-title {
+  color: rgba(0, 242, 255, 0.95) !important;
   text-shadow: 0 0 12px rgba(0, 242, 255, 0.5),
     0 0 30px rgba(0, 242, 255, 0.2);
 }
 
-@media (max-width: 420px) {
-  .logo-title {
-    line-height: 1.3;
-  }
+/* Light mode: prussian blue, subtle shadow */
+.v-theme--bluebusinesstheme .logo-title {
+  color: #003153 !important;
+  text-shadow: 0 0 8px rgba(0, 49, 83, 0.2);
 }
 
 .hint-text {
@@ -137,6 +138,22 @@ const formatTitle = (title: string) => {
   letter-spacing: 0.3px;
   white-space: nowrap;
 }
+
+/* Dark: faint gray text; Light: dark prussian */
+.v-theme--bluebusinessdarktheme .hint-text {
+  color: rgba(228, 225, 230, 0.45) !important;
+}
+
+.v-theme--bluebusinesstheme .hint-text {
+  color: rgba(0, 49, 83, 0.5) !important;
+}
+
+@media (max-width: 420px) {
+  .logo-title {
+    line-height: 1.3;
+  }
+}
+
 
 @media (max-width: 520px) {
   .logo-content {

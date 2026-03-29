@@ -1,7 +1,11 @@
 <template>
   <div class="daily-quote">
-    <div class="quote-text">"{{ currentQuote.text }}"</div>
-    <div class="quote-author">— {{ currentQuote.author }}</div>
+    <div class="quote-text" :style="{ color: 'var(--v-theme-on-surface)', opacity: 0.75 }">
+      "{{ currentQuote.text }}"
+    </div>
+    <div class="quote-author" :style="{ color: 'var(--v-theme-on-surface)', opacity: 0.5 }">
+      — {{ currentQuote.author }}
+    </div>
   </div>
 </template>
 
@@ -103,7 +107,6 @@ watch(
 
 .quote-text {
   font-size: 14px;
-  color: rgba(var(--v-theme-on-surface), 0.75);
   font-style: italic;
   line-height: 1.5;
   margin-bottom: 4px;
@@ -111,6 +114,6 @@ watch(
 
 .quote-author {
   font-size: 12px;
-  color: rgba(var(--v-theme-on-surface), 0.5);
+  opacity: 0.5;
 }
 </style>

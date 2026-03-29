@@ -16,6 +16,9 @@ const BlueBusinessDarkTheme: ThemeTypes = {
   variables: {
     "border-color": "#1F2124",
     "carousel-control-size": 10,
+    // Aliases for custom text colors — maps to standard MD3 on-surface
+    "primaryText": "rgba(226, 226, 231, 0.92)",
+    "secondaryText": "rgba(226, 226, 231, 0.65)",
   },
   colors: {
     // === MD3 Core Colors (Cherenkov Energy - Deep Reactor) ===

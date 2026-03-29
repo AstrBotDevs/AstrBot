@@ -662,7 +662,6 @@ watch(showProviderDialog, async (visible, wasVisible) => {
   font-family: "JetBrains Mono", "Fira Code", monospace !important;
   font-size: clamp(1.8rem, 4vw, 3rem) !important;
   font-weight: 700 !important;
-  color: var(--v-theme-on-surface) !important;
   letter-spacing: 0.5px;
   position: relative;
   padding-left: 16px;
@@ -684,7 +683,7 @@ watch(showProviderDialog, async (visible, wasVisible) => {
 .welcome-page .text-subtitle-1 {
   font-family: "JetBrains Mono", monospace !important;
   font-size: 0.9rem !important;
-  color: var(--v-theme-on-surface-variant) !important;
+  color: var(--v-theme-on-surface-variant);
   animation: welcomeFadeIn 0.8s ease-out 0.3s both;
   letter-spacing: 0.3px;
 }
@@ -692,7 +691,7 @@ watch(showProviderDialog, async (visible, wasVisible) => {
 .welcome-page .text-h3 {
   font-family: "JetBrains Mono", monospace !important;
   font-weight: 600 !important;
-  color: var(--v-theme-on-surface) !important;
+  color: var(--v-theme-on-surface);
   font-size: 1rem !important;
   letter-spacing: 0.5px;
   text-transform: uppercase;

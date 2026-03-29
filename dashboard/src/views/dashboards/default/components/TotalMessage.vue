@@ -52,22 +52,17 @@ export default {
 </script>
 
 <style scoped>
+/* Shared Lattice Flux styles applied via OnlinePlatform.vue */
 .stat-card {
   height: 100%;
-  transition:
-    transform 0.2s,
-    box-shadow 0.2s;
+  border-radius: 16px;
   overflow: hidden;
+  position: relative;
+  transition: transform 0.25s ease;
 }
 
 .stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
-}
-
-.message-card {
-  background-color: #5e35b1;
-  color: white;
+  transform: translateY(-3px);
 }
 
 .icon-wrapper {
@@ -78,11 +73,16 @@ export default {
   height: 48px;
   border-radius: 8px;
   margin-right: 16px;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.18);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 3;
 }
 
 .stat-content {
   flex: 1;
+  position: relative;
+  z-index: 3;
 }
 
 .stat-title {
@@ -96,13 +96,13 @@ export default {
   display: flex;
   align-items: baseline;
   margin-bottom: 4px;
+  gap: 6px;
 }
 
 .stat-value {
   font-size: 32px;
   font-weight: 600;
   line-height: 1.2;
-  margin-right: 8px;
 }
 
 .trend-chip {

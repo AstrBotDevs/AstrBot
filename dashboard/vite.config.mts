@@ -16,18 +16,6 @@ try {
   // Cloudflare plugin not available, skip
 }
 
-// Vite plugin: run MDI icon font subsetting (build only)
-function mdiSubset() {
-  return {
-    name: "vite-plugin-mdi-subset",
-    async buildStart() {
-      const { runMdiSubset } = await import("./scripts/subset-mdi-font.mjs");
-      console.log("\n🔧 Running MDI icon font subsetting...");
-      await runMdiSubset();
-    },
-  };
-}
-
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -37,8 +25,6 @@ export default defineConfig(({ command, mode }) => {
     base: command === "build" ? basePath : "/",
 
     plugins: [
-      // Only run MDI subsetting during production builds, skip in dev server
-      ...(command === "build" ? [mdiSubset()] : []),
       vue({
         template: {
           compilerOptions: {

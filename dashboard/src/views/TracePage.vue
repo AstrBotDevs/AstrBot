@@ -89,8 +89,8 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: rgba(59, 130, 246, 0.05);
-  border-bottom: 1px solid rgba(59, 130, 246, 0.1);
+  background: rgba(var(--v-theme-primary), 0.05);
+  border-bottom: 1px solid rgba(var(--v-theme-primary), 0.1);
   border-radius: 8px 8px 0 0;
   margin-bottom: 8px;
 }
@@ -102,7 +102,7 @@ export default {
 
 .trace-hint {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--v-theme-on-surface-variant);
 }
 
 .trace-controls {
@@ -113,7 +113,7 @@ export default {
 
 .switch-label {
   font-size: 13px;
-  color: #4b5563;
+  color: var(--v-theme-on-surface);
   white-space: nowrap;
 }
 </style>
