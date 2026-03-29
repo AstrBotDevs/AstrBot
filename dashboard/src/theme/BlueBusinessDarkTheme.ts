@@ -43,9 +43,9 @@ const BlueBusinessDarkTheme: ThemeTypes = {
     "on-error-container": "#FFDAD6", // Light text on container
 
     // === MD3 Surface Colors (Dark Mode) ===
-    surface: "#141218", // Very dark purple-gray background
+    surface: "#0F0F12", // Very dark background for reactor aesthetic
     "on-surface": "#E4E1E6", // Light text on dark surface
-    "surface-variant": "#43444E", // Elevated dark surface
+    "surface-variant": "#1A1A22", // Elevated dark surface (glassmorphism layer)
     "on-surface-variant": "#C4C6D0", // Light text on variant
     surfaceTint: "#A1C9FF", // Blue tint for elevation
 
@@ -59,7 +59,7 @@ const BlueBusinessDarkTheme: ThemeTypes = {
     "inverse-primary": "#005FB0", // Dark primary on light
 
     // === Additional UI Colors ===
-    background: "#141218", // Same as surface
+    background: "#0A0A0C", // Deep reactor black
     accent: "#FFAB91", // Peach accent
 
     // === Light Variant Colors (inverted for dark mode) ===
@@ -79,8 +79,8 @@ const BlueBusinessDarkTheme: ThemeTypes = {
     inputBorder: "#8E9099", // Input borders
 
     // === Container/Card Colors ===
-    containerBg: "#1A1A1F", // Dark card backgrounds
-    "on-surface-variant-bg": "#1E1E24", // Slightly lighter background
+    containerBg: "rgba(20, 20, 25, 0.4)", // Translucent glassmorphism cards
+    "on-surface-variant-bg": "rgba(26, 26, 34, 0.5)", // Slightly lighter glassmorphism
 
     // === Social Colors ===
     facebook: "#5388D4",

@@ -2,9 +2,9 @@
 
 // Outline Card
 .v-card--variant-outlined {
-  border-color: rgba(var(--v-theme-borderLight), 0.36);
+  border-color: rgba(0, 242, 255, 0.12);
   .v-divider {
-    border-color: rgba(var(--v-theme-borderLight), 0.36);
+    border-color: rgba(0, 242, 255, 0.12);
   }
 }
 
@@ -15,8 +15,20 @@
 .v-card {
   width: 100%;
   overflow: visible;
+  border-radius: 24px;
+  background: rgba(20, 20, 25, 0.4) !important;
+  backdrop-filter: blur(12px) saturate(1.1);
+  border: 1px solid rgba(0, 242, 255, 0.1);
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5) !important;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    border-color: rgba(0, 242, 255, 0.35);
+    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5), 0 0 30px rgba(0, 242, 255, 0.08) !important;
+  }
+
   &.withbg {
-    background-color: rgb(var(--v-theme-background));
+    background-color: rgba(10, 10, 12, 0.6) !important;
   }
   &.overflow-hidden {
     overflow: hidden;

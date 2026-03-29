@@ -7,6 +7,7 @@ import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
 import MigrationDialog from "@/components/shared/MigrationDialog.vue";
 import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import Chat from "@/components/chat/Chat.vue";
+import ReactorBg from "@/components/shared/ReactorBg.vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useRouterLoadingStore } from "@/stores/routerLoading";
 import { useI18n } from "@/i18n/composables";
@@ -108,6 +109,7 @@ onMounted(() => {
         customizer.inputBg ? 'inputWithbg' : '',
       ]"
     >
+      <ReactorBg />
       <v-progress-linear
         v-if="routerLoadingStore.isLoading"
         :model-value="routerLoadingStore.progress"

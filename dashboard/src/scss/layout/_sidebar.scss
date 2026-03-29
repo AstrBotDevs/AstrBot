@@ -3,8 +3,10 @@
 /*This is for the logo*/
 .leftSidebar {
   border: 0px;
-  border-right: 1px solid rgba(var(--v-theme-borderLight), 0.45);
+  border-right: 1px solid rgba(0, 242, 255, 0.1) !important;
   box-shadow: none !important;
+  background: rgba(15, 15, 18, 0.75) !important;
+  backdrop-filter: blur(16px) saturate(1.2);
 }
 .listitem {
   overflow-y: auto;
