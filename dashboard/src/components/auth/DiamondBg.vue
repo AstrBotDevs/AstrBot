@@ -1,18 +1,8 @@
 <template>
   <div class="bg" ref="bgEl" @mousemove="onMouseMove" @mouseleave="onMouseLeave">
-    <div class="torch" :style="torchStyle"></div>
-    <div class="grid">
-      <div class="cell" v-for="i in total" :key="i" :style="getCellStyle(i - 1)">
-        <div class="socket">
-          <svg viewBox="0 0 20 20" class="etch">
-            <rect x="5" y="5" width="10" height="10" />
-            <line x1="10" y1="5" x2="10" y2="15" />
-            <line x1="5" y1="10" x2="15" y2="10" />
-          </svg>
-        </div>
-      </div>
-    </div>
-    <div class="core" :style="coreStyle"></div>
+    <canvas ref="canvasEl" class="bg-canvas"></canvas>
+    <div class="gravity-well"></div>
+    <div class="focus-dot" :style="focusStyle"></div>
   </div>
 </template>
 
@@ -20,29 +10,40 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
 const bgEl = ref<HTMLElement | null>(null);
-const cols = 40;
-const rows = 22;
-const total = computed(() => cols * rows);
+const canvasEl = ref<HTMLCanvasElement | null>(null);
 
+const GRID = 24; // grid cell size in px
+const CROSS_SIZE = 5; // crosshair half-length
+const SOCKET_RADIUS = 1.5; // recessed socket dot radius
+const ENERGY_RADIUS = 150; // mouse energy field radius
+const LERP = 0.1; // follow speed
+const SINK_DEPTH = 0.4; // how much crosses shrink when pressed
+
+// mouse tracking with lerp
 const targetX = ref(-9999);
 const targetY = ref(-9999);
 const smoothX = ref(-9999);
 const smoothY = ref(-9999);
-const LERP = 0.12;
 
-const torchStyle = computed(() => ({
-  "--x": `${smoothX.value}px`,
-  "--y": `${smoothY.value}px`,
+// exact mouse for core dot
+const exactX = ref(-9999);
+const exactY = ref(-9999);
+
+const focusStyle = computed(() => ({
+  left: `${exactX.value}px`,
+  top: `${exactY.value}px`,
 }));
 
-const coreStyle = computed(() => ({
-  left: `${smoothX.value}px`,
-  top: `${smoothY.value}px`,
-}));
+let ctx: CanvasRenderingContext2D | null = null;
+let animId: number | null = null;
+let width = 0;
+let height = 0;
 
 const onMouseMove = (e: MouseEvent) => {
   targetX.value = e.clientX;
   targetY.value = e.clientY;
+  exactX.value = e.clientX;
+  exactY.value = e.clientY;
 };
 
 const onMouseLeave = () => {
@@ -50,39 +51,130 @@ const onMouseLeave = () => {
   targetY.value = -9999;
 };
 
-const getCellStyle = (idx: number) => {
-  const col = idx % cols;
-  const row = Math.floor(idx / cols);
-  const cellW = window.innerWidth / cols;
-  const cellH = window.innerHeight / rows;
-  const cx = col * cellW + cellW / 2;
-  const cy = row * cellH + cellH / 2;
+function draw() {
+  if (!ctx || !canvasEl.value) return;
 
-  const dx = smoothX.value - cx;
-  const dy = smoothY.value - cy;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  const maxDist = 180;
+  const W = width;
+  const H = height;
 
-  if (dist > maxDist) {
-    return { opacity: "0" };
+  // clear
+  ctx.fillStyle = "#0A0A0C";
+  ctx.fillRect(0, 0, W, H);
+
+  const cols = Math.ceil(W / GRID) + 1;
+  const rows = Math.ceil(H / GRID) + 1;
+
+  const mx = smoothX.value;
+  const my = smoothY.value;
+
+  // draw static base grid (very faint)
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.03)";
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x <= W; x += GRID) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, H);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= H; y += GRID) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+    ctx.stroke();
   }
 
-  const reveal = 1 - dist / maxDist;
-  return {
-    opacity: String(reveal * 0.4),
-    transform: `scale(${0.9 + reveal * 0.1})`,
-  };
-};
+  // draw crosshairs + sockets with interaction
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cx = c * GRID;
+      const cy = r * GRID;
 
-let animId: number | null = null;
-const loop = () => {
-  smoothX.value += (targetX.value - smoothX.value) * LERP;
-  smoothY.value += (targetY.value - smoothY.value) * LERP;
+      const dx = mx - cx;
+      const dy = my - cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      // socket dot at intersection (always visible, very subtle)
+      const socketAlpha = 0.08;
+      ctx.fillStyle = `rgba(5, 5, 8, ${socketAlpha})`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, SOCKET_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+
+      // crosshair
+      let crossAlpha = 0.05;
+      let crossScale = 1.0;
+      let crossBlue = 0;
+
+      if (dist < ENERGY_RADIUS) {
+        const t = 1 - dist / ENERGY_RADIUS;
+        // eased
+        const eased = t * t * (3 - 2 * t);
+        crossAlpha = 0.05 + eased * 0.35;
+        crossScale = 1.0 - eased * SINK_DEPTH;
+        crossBlue = Math.floor(eased * 180);
+      }
+
+      if (crossAlpha < 0.01) continue;
+
+      const halfLen = CROSS_SIZE * crossScale;
+      const strokeColor = crossBlue > 0
+        ? `rgba(${crossBlue * 0.3}, ${crossBlue * 0.8}, ${crossBlue}, ${crossAlpha})`
+        : `rgba(255, 255, 255, ${crossAlpha})`;
+
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 0.4;
+      ctx.beginPath();
+      ctx.moveTo(cx - halfLen, cy);
+      ctx.lineTo(cx + halfLen, cy);
+      ctx.moveTo(cx, cy - halfLen);
+      ctx.lineTo(cx, cy + halfLen);
+      ctx.stroke();
+    }
+  }
+
+  // core Cherenkov dot at exact mouse position
+  if (mx > 0 && my > 0 && mx < W && my < H) {
+    const grad = ctx.createRadialGradient(mx, my, 0, mx, my, 6);
+    grad.addColorStop(0, "rgba(0, 242, 255, 0.95)");
+    grad.addColorStop(0.3, "rgba(0, 210, 255, 0.6)");
+    grad.addColorStop(1, "rgba(0, 180, 255, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(mx, my, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function loop() {
+  // lerp follow
+  if (targetX.value !== -9999) {
+    smoothX.value += (targetX.value - smoothX.value) * LERP;
+    smoothY.value += (targetY.value - smoothY.value) * LERP;
+  }
+  draw();
   animId = requestAnimationFrame(loop);
-};
+}
 
-onMounted(() => { loop(); });
-onUnmounted(() => { if (animId) cancelAnimationFrame(animId); });
+function resize() {
+  if (!canvasEl.value || !bgEl.value) return;
+  width = window.innerWidth;
+  height = window.innerHeight;
+  canvasEl.value.width = width;
+  canvasEl.value.height = height;
+}
+
+onMounted(() => {
+  if (!canvasEl.value) return;
+  ctx = canvasEl.value.getContext("2d");
+  resize();
+  window.addEventListener("resize", resize);
+  loop();
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", resize);
+  if (animId) cancelAnimationFrame(animId);
+});
 </script>
 
 <style scoped>
@@ -90,73 +182,45 @@ onUnmounted(() => { if (animId) cancelAnimationFrame(animId); });
   position: fixed;
   inset: 0;
   z-index: 0;
-  background: #050505;
+  background: #0a0a0c;
   cursor: none;
-  overflow: hidden;
 }
 
-.torch {
-  position: fixed;
+.bg-canvas {
+  position: absolute;
   inset: 0;
-  z-index: 5;
-  background: radial-gradient(
-    circle at var(--x) var(--y),
-    rgba(0, 200, 255, 0.08) 0%,
-    rgba(0, 150, 255, 0.03) 80px,
-    transparent 180px
-  );
+  width: 100%;
+  height: 100%;
   pointer-events: none;
 }
 
-.grid {
-  position: relative;
-  z-index: 0;
-  display: grid;
-  grid-template-columns: repeat(v-bind(cols), 1fr);
-  grid-template-rows: repeat(v-bind(rows), 1fr);
-  width: 100%;
-  height: 100vh;
+.gravity-well {
+  position: fixed;
+  bottom: -200px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  height: 400px;
+  background: radial-gradient(
+    ellipse 50% 40% at 50% 100%,
+    rgba(0, 26, 51, 0.7) 0%,
+    rgba(0, 40, 60, 0.3) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 1;
 }
 
-.cell {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 0.15s ease;
-}
-
-.socket {
-  width: 70%;
-  height: 70%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.etch {
-  width: 100%;
-  height: 100%;
-  opacity: 0.6;
-}
-
-.etch rect,
-.etch line {
-  stroke: #1a1a1a;
-  stroke-width: 0.3;
-  fill: none;
-}
-
-.core {
+.focus-dot {
   position: fixed;
   width: 2px;
   height: 2px;
   z-index: 10;
   pointer-events: none;
   transform: translate(-50%, -50%);
-  background: rgba(0, 220, 255, 0.95);
+  background: rgba(0, 242, 255, 0.95);
   box-shadow:
-    0 0 4px 1px rgba(0, 200, 255, 0.8),
-    0 0 10px 2px rgba(0, 200, 255, 0.3);
+    0 0 4px 1px rgba(0, 210, 255, 0.9),
+    0 0 12px 2px rgba(0, 210, 255, 0.3);
 }
 </style>

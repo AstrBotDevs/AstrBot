@@ -312,6 +312,17 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
+  // Radial fade mask around login card area
+  mask-image: radial-gradient(
+    ellipse 60% 70% at 50% 50%,
+    black 30%,
+    transparent 70%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse 60% 70% at 50% 50%,
+    black 30%,
+    transparent 70%
+  );
 }
 
 .login-card {
@@ -319,9 +330,10 @@ onMounted(() => {
   padding: 8px;
   background: rgba(6, 8, 14, 0.82) !important;
   backdrop-filter: blur(28px) saturate(1.1);
-  border: 0.5px solid rgba(200, 220, 255, 0.08);
+  border: 1px solid rgba(0, 242, 255, 0.2);
   box-shadow:
-    0 0 60px rgba(0, 0, 0, 0.95),
+    0 0 80px rgba(0, 26, 51, 0.95),
+    0 0 120px rgba(0, 26, 51, 0.6),
     0 0 0 0.5px rgba(255, 255, 255, 0.04),
     inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
