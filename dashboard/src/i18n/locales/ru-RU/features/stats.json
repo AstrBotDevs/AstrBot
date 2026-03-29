@@ -1,0 +1,104 @@
+{
+  "header": {
+    "eyebrow": "Dashboard",
+    "title": "Статистика системы",
+    "subtitle": "Единый обзор платформ, сообщений и вызовов моделей.",
+    "notUpdated": "Еще не обновлялось"
+  },
+  "ranges": {
+    "oneDay": "1 день",
+    "threeDays": "3 дня",
+    "oneWeek": "1 неделя"
+  },
+  "rangeLabels": {
+    "oneDay": "За 1 день",
+    "threeDays": "За 3 дня",
+    "oneWeek": "За 1 неделю"
+  },
+  "overviewCards": {
+    "platformCount": {
+      "label": "Платформы",
+      "note": "Настроенные и запущенные экземпляры платформ"
+    },
+    "messageCount": {
+      "label": "Сообщения",
+      "note": "Общее число сообщений"
+    },
+    "todayModelCalls": {
+      "label": "Вызовы моделей сегодня",
+      "note": "Tokens"
+    },
+    "cpu": {
+      "label": "CPU",
+      "note": "Использование CPU AstrBot"
+    },
+    "memory": {
+      "label": "Память процесса",
+      "note": "Системная память {systemMemory}"
+    },
+    "uptime": {
+      "label": "Время работы",
+      "note": "Запущен в {startTime}"
+    }
+  },
+  "messageOverview": {
+    "title": "Обзор сообщений",
+    "subtitle": "Статистика сообщений бота"
+  },
+  "messageTrend": {
+    "title": "Динамика сообщений",
+    "subtitle": "{range}, агрегация по часам",
+    "totalMessages": "Всего сообщений"
+  },
+  "platformRanking": {
+    "title": "Рейтинг платформ по сообщениям",
+    "subtitle": "{range}, сортировка по общему числу сообщений"
+  },
+  "modelCalls": {
+    "title": "Вызовы моделей",
+    "subtitle": "Статистика вызовов моделей"
+  },
+  "modelTrend": {
+    "title": "Динамика вызовов моделей",
+    "subtitle": "Динамика токенов вызовов моделей"
+  },
+  "modelTotal": {
+    "title": "{range} всего вызовов моделей",
+    "callCount": "{count} вызовов",
+    "avgTtft": "Средний TTFT",
+    "avgDuration": "Среднее время ответа",
+    "avgTpm": "Средний TPM",
+    "successRate": "Доля успешных вызовов"
+  },
+  "modelRanking": {
+    "title": "{range} рейтинг вызовов моделей",
+    "subtitle": "Рейтинг по токенам вызовов моделей"
+  },
+  "sessionRanking": {
+    "title": "{range} топ-10 сессий по токенам",
+    "subtitle": "Сессии с наибольшим расходом токенов"
+  },
+  "empty": {
+    "platformStats": "Статистика сообщений по платформам отсутствует.",
+    "modelCalls": "Нет данных по вызовам моделей за период {range}.",
+    "sessionCalls": "Нет данных по сессиям за период {range}."
+  },
+  "chart": {
+    "messages": "Сообщения",
+    "others": "Другое"
+  },
+  "units": {
+    "tokens": "Tokens",
+    "tpm": "TPM",
+    "gb": "ГБ",
+    "mb": "МБ",
+    "ms": "мс",
+    "hoursShort": "ч",
+    "minutesShort": "м",
+    "secondsShort": "с"
+  },
+  "errors": {
+    "loadFailed": "Не удалось загрузить статистику. Повторите попытку позже.",
+    "rangeFailed": "Не удалось переключить диапазон статистики. Повторите попытку позже."
+  }
+}

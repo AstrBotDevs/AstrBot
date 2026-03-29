@@ -21,6 +21,7 @@ from astrbot.core.db.po import (
     PlatformSession,
     PlatformStat,
     Preference,
+    ProviderStat,
     SessionProjectRelation,
     Stats,
 )
@@ -103,6 +104,21 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def get_platform_stats(self, offset_sec: int = 86400) -> list[PlatformStat]:
         """Get platform statistics within the specified offset in seconds and group by platform_id."""
+        ...
+
+    @abc.abstractmethod
+    async def insert_provider_stat(
+        self,
+        *,
+        umo: str,
+        provider_id: str,
+        provider_model: str | None = None,
+        conversation_id: str | None = None,
+        status: str = "completed",
+        stats: dict | None = None,
+        agent_type: str = "internal",
+    ) -> ProviderStat:
+        """Insert a per-response provider stat record."""
         ...
 
     @abc.abstractmethod

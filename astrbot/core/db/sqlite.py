@@ -23,6 +23,7 @@ from astrbot.core.db.po import (
     PlatformSession,
     PlatformStat,
     Preference,
+    ProviderStat,
     SessionProjectRelation,
     SQLModel,
 )
@@ -168,6 +169,51 @@ class SQLiteDatabase(BaseDatabase):
                 {"start_time": start_time},
             )
             return list(result.scalars().all())
+
+    async def insert_provider_stat(
+        self,
+        *,
+        umo: str,
+        provider_id: str,
+        provider_model: str | None = None,
+        conversation_id: str | None = None,
+        status: str = "completed",
+        stats: dict | None = None,
+        agent_type: str = "internal",
+    ) -> ProviderStat:
+        """Insert a provider stat record for a single agent response."""
+        stats = stats or {}
+        token_usage = stats.get("token_usage", {})
+
+        token_input_other = int(token_usage.get("input_other", 0) or 0)
+        token_input_cached = int(token_usage.get("input_cached", 0) or 0)
+        token_output = int(token_usage.get("output", 0) or 0)
+
+        start_time = float(stats.get("start_time", 0.0) or 0.0)
+        end_time = float(stats.get("end_time", 0.0) or 0.0)
+        time_to_first_token = float(stats.get("time_to_first_token", 0.0) or 0.0)
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                record = ProviderStat(
+                    agent_type=agent_type,
+                    status=status,
+                    umo=umo,
+                    conversation_id=conversation_id,
+                    provider_id=provider_id,
+                    provider_model=provider_model,
+                    token_input_other=token_input_other,
+                    token_input_cached=token_input_cached,
+                    token_output=token_output,
+                    start_time=start_time,
+                    end_time=end_time,
+                    time_to_first_token=time_to_first_token,
+                )
+                session.add(record)
+                await session.flush()
+                await session.refresh(record)
+                return record
 
     # ====
     # Conversation Management
