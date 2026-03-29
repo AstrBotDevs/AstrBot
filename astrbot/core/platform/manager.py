@@ -151,65 +151,65 @@ class PlatformManager:
             )
             match platform_config["type"]:
                 case "aiocqhttp":
-                    from .sources.aiocqhttp.aiocqhttp_platform_adapter import (
+                    from .sources.aiocqhttp.aiocqhttp_platform_adapter import (  # noqa: F401
                         AiocqhttpAdapter,
                     )
                 case "qq_official":
-                    from .sources.qqofficial.qqofficial_platform_adapter import (
+                    from .sources.qqofficial.qqofficial_platform_adapter import (  # noqa: F401
                         QQOfficialPlatformAdapter,
                     )
                 case "qq_official_webhook":
-                    from .sources.qqofficial_webhook.qo_webhook_adapter import (
+                    from .sources.qqofficial_webhook.qo_webhook_adapter import (  # noqa: F401
                         QQOfficialWebhookPlatformAdapter,
                     )
                 case "lark":
-                    from .sources.lark.lark_adapter import (
+                    from .sources.lark.lark_adapter import (  # noqa: F401
                         LarkPlatformAdapter,
                     )
                 case "dingtalk":
-                    from .sources.dingtalk.dingtalk_adapter import (
+                    from .sources.dingtalk.dingtalk_adapter import (  # noqa: F401
                         DingtalkPlatformAdapter,
                     )
                 case "telegram":
-                    from .sources.telegram.tg_adapter import (
+                    from .sources.telegram.tg_adapter import (  # noqa: F401
                         TelegramPlatformAdapter,
                     )
                 case "wecom":
-                    from .sources.wecom.wecom_adapter import (
+                    from .sources.wecom.wecom_adapter import (  # noqa: F401
                         WecomPlatformAdapter,
                     )
                 case "wecom_ai_bot":
-                    from .sources.wecom_ai_bot.wecomai_adapter import (
+                    from .sources.wecom_ai_bot.wecomai_adapter import (  # noqa: F401
                         WecomAIBotAdapter,
                     )
                 case "weixin_official_account":
-                    from .sources.weixin_official_account.weixin_offacc_adapter import (
+                    from .sources.weixin_official_account.weixin_offacc_adapter import (  # noqa: F401
                         WeixinOfficialAccountPlatformAdapter,
                     )
                 case "discord":
-                    from .sources.discord.discord_platform_adapter import (
+                    from .sources.discord.discord_platform_adapter import (  # noqa: F401
                         DiscordPlatformAdapter,
                     )
                 case "misskey":
-                    from .sources.misskey.misskey_adapter import (
+                    from .sources.misskey.misskey_adapter import (  # noqa: F401
                         MisskeyPlatformAdapter,
                     )
                 case "weixin_oc":
-                    from .sources.weixin_oc.weixin_oc_adapter import (
+                    from .sources.weixin_oc.weixin_oc_adapter import (  # noqa: F401
                         WeixinOCAdapter,
                     )
                 case "slack":
-                    from .sources.slack.slack_adapter import SlackAdapter
+                    from .sources.slack.slack_adapter import SlackAdapter  # noqa: F401
                 case "satori":
-                    from .sources.satori.satori_adapter import (
+                    from .sources.satori.satori_adapter import (  # noqa: F401
                         SatoriPlatformAdapter,
                     )
                 case "line":
-                    from .sources.line.line_adapter import (
+                    from .sources.line.line_adapter import (  # noqa: F401
                         LinePlatformAdapter,
                     )
                 case "kook":
-                    from .sources.kook.kook_adapter import (
+                    from .sources.kook.kook_adapter import (  # noqa: F401
                         KookPlatformAdapter,
                     )
         except (ImportError, ModuleNotFoundError) as e:

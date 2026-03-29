@@ -16,25 +16,25 @@ const BlueBusinessLightTheme: ThemeTypes = {
   name: LIGHT_THEME_NAME,
   dark: false,
   variables: {
-    "border-color": "#005FB0",
+    "border-color": "#003153",
     "carousel-control-size": 10,
   },
   colors: {
-    // === MD3 Core Colors (Business Blue) ===
-    primary: "#005FB0", // Deep blue - main brand color
-    "primary-darken-1": "#004A8F", // Darker primary for hover states
-    secondary: "#565E71", // Cool gray-blue - secondary components
-    "secondary-darken-1": "#454859", // Darker secondary
-    tertiary: "#006B5B", // Teal - tertiary accent
+    // === MD3 Core Colors (Blueprint Prussian Blue) ===
+    primary: "#003153", // Prussian Blue — serious, not flashy
+    "primary-darken-1": "#001F33", // Darker for hover states
+    secondary: "#3A4A5C", // Cool gray-blue — restrained
+    "secondary-darken-1": "#2A3A4C", // Darker secondary
+    tertiary: "#006B5B", // Teal — restrained accent
     "tertiary-darken-1": "#00574A", // Darker tertiary
 
-    // === MD3 Semantic Colors ===
-    info: "#03C9D7", // Cyan - informational
-    success: "#00C853", // Green - success states
-    warning: "#FFB300", // Amber - warnings
-    error: "#BA1A1A", // Red - errors
+    // === MD3 Semantic Colors (Industrial — muted, not flashy) ===
+    info: "#00B2D4", // Arc cyan — 高亮交互点
+    success: "#00C7BE", // Mint — industrial precision
+    warning: "#FF9500", // Amber —仪表盘警示感
+    error: "#8B0000", // Deep red —严肃感
 
-    // === MD3 Container Colors (lighter tones) ===
+    // === MD3 Container Colors (Blueprint — subtle tonal elevation) ===
     "primary-container": "#D8E2FF", // Light blue container
     "on-primary-container": "#001A41", // Text on primary container
     "secondary-container": "#D8E2EC", // Light gray-blue container
@@ -44,12 +44,12 @@ const BlueBusinessLightTheme: ThemeTypes = {
     "error-container": "#FFDAD6", // Light red container
     "on-error-container": "#410002", // Text on error container
 
-    // === MD3 Surface Colors (Blueprint/Lab White) ===
+    // === MD3 Surface Colors (Blueprint Lab) ===
     surface: "#F0F4F8", // Cool blue-gray lab white
     "on-surface": "#1A2B3C", // Deep indigo text
     "surface-variant": "#E4E9F2", // Slightly deeper surface
     "on-surface-variant": "#3A4A5C", // Muted indigo text
-    surfaceTint: "#005FB0", // Tint overlay for elevation
+    surfaceTint: "#003153", // Prussian Blue tint overlay
 
     // === MD3 Outline Colors ===
     outline: "#74777F", // Borders and dividers
@@ -128,9 +128,9 @@ const BlueBusinessLightTheme: ThemeTypes = {
     preBg: "#F8F9FF",
     code: "#1B1B1F",
 
-    // === Chat Bubble Colors ===
-    chatMessageBubble: "#E8EDF5", // User message bubble
-    chatAssistantBubble: "#D8E2FF", // Assistant message bubble
+    // === Chat Bubble Colors (Blueprint — tinted, not white) ===
+    chatMessageBubble: "#DDE3ED", // User bubble — cool blue-gray
+    chatAssistantBubble: "#EEF2FA", // Assistant bubble — blueprint paper
 
     // === Component Specific ===
     mcpCardBg: "#F5F7FF",

@@ -656,4 +656,70 @@ watch(showProviderDialog, async (visible, wasVisible) => {
   border-radius: 4px;
   font-weight: bold;
 }
+
+/* === Welcome hero text: industrial precision — restrained monospace === */
+.welcome-page .text-h1 {
+  font-family: "JetBrains Mono", "Fira Code", monospace !important;
+  font-size: clamp(1.8rem, 4vw, 3rem) !important;
+  font-weight: 700 !important;
+  /* Restrained precision — readable gray, not flashy neon */
+  color: rgba(228, 225, 230, 0.85) !important;
+  letter-spacing: 0.5px;
+  position: relative;
+  padding-left: 16px;
+  animation: welcomeFadeIn 0.8s ease-out both;
+  /* 2px thin precision tick mark (not a glowing bar) */
+  &::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2px;
+    height: 55%;
+    background: rgba(0, 242, 255, 0.45);
+    border-radius: 1px;
+  }
+}
+
+.welcome-page .text-subtitle-1 {
+  font-family: "JetBrains Mono", monospace !important;
+  font-size: 0.9rem !important;
+  color: rgba(228, 225, 230, 0.4) !important;
+  animation: welcomeFadeIn 0.8s ease-out 0.3s both;
+  letter-spacing: 0.3px;
+}
+
+.welcome-page .text-h3 {
+  font-family: "JetBrains Mono", monospace !important;
+  font-weight: 600 !important;
+  color: rgba(228, 225, 230, 0.75) !important;
+  font-size: 1rem !important;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-left: 2px solid rgba(0, 242, 255, 0.3) !important;
+  padding-left: 10px !important;
+}
+
+@keyframes welcomeFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes energyPulse {
+  0%, 100% {
+    opacity: 0.6;
+    box-shadow: 0 0 6px rgba(0, 242, 255, 0.4);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 14px rgba(0, 242, 255, 0.8);
+  }
+}
 </style>
