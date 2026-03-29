@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import axios from "@/utils/request";
+import axios, { resolveApiUrl } from "@/utils/request";
 
 interface LogObject {
   uuid?: string;
@@ -51,7 +51,7 @@ export const useCommonStore = defineStore("common", () => {
       Authorization: "Bearer " + localStorage.getItem("token"),
     };
 
-    fetch("/api/live-log", {
+    fetch(resolveApiUrl("/api/live-log"), {
       method: "GET",
       headers,
       signal,

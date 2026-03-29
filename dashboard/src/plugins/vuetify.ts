@@ -2,8 +2,8 @@ import { createVuetify } from "vuetify";
 import "@/assets/mdi-subset/materialdesignicons-subset.css";
 import * as components from "vuetify/components";
 import * as directives from "vuetify/directives";
-import { PurpleTheme } from "@/theme/LightTheme";
-import { PurpleThemeDark } from "@/theme/DarkTheme";
+import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";
+import { BlueBusinessDarkTheme } from "@/theme/BlueBusinessDarkTheme";
 import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
 
 export default createVuetify({
@@ -13,8 +13,8 @@ export default createVuetify({
   theme: {
     defaultTheme: LIGHT_THEME_NAME,
     themes: {
-      [LIGHT_THEME_NAME]: PurpleTheme,
-      [DARK_THEME_NAME]: PurpleThemeDark,
+      [LIGHT_THEME_NAME]: BlueBusinessLightTheme,
+      [DARK_THEME_NAME]: BlueBusinessDarkTheme,
     },
   },
   defaults: {
