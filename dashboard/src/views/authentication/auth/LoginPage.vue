@@ -317,12 +317,12 @@ onMounted(() => {
 .login-card {
   width: 400px;
   padding: 8px;
-  background: rgba(8, 10, 18, 0.75) !important;
-  backdrop-filter: blur(24px) saturate(1.2);
-  border: 0.5px solid rgba(100, 160, 255, 0.12);
+  background: rgba(6, 8, 14, 0.82) !important;
+  backdrop-filter: blur(28px) saturate(1.1);
+  border: 0.5px solid rgba(200, 220, 255, 0.08);
   box-shadow:
-    0 0 0 0.5px rgba(60, 120, 255, 0.08),
-    0 16px 48px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    0 0 60px rgba(0, 0, 0, 0.95),
+    0 0 0 0.5px rgba(255, 255, 255, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 </style>
