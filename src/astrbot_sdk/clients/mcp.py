@@ -1,8 +1,14 @@
+"""MCP 管理客户端。
+
+提供本地 MCP 服务、全局 MCP 服务和临时 MCP session 的 SDK 封装。
+"""
+
 from __future__ import annotations
 
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
 from enum import Enum
+from types import TracebackType
 from typing import Any
 
 from ..errors import AstrBotError
@@ -16,6 +22,8 @@ class MCPServerScope(str, Enum):
 
 @dataclass(slots=True)
 class MCPServerRecord:
+    """MCP 服务快照。"""
+
     name: str
     scope: MCPServerScope
     active: bool
@@ -69,7 +77,33 @@ class MCPServerRecord:
         )
 
 
+def _server_records_from_payload(items: Any) -> list[MCPServerRecord]:
+    if not isinstance(items, list):
+        return []
+    return [
+        record
+        for record in (
+            MCPServerRecord.from_payload(item) if isinstance(item, dict) else None
+            for item in items
+        )
+        if record is not None
+    ]
+
+
+def _require_server_record(
+    payload: dict[str, Any],
+    *,
+    action: str,
+) -> MCPServerRecord:
+    record = MCPServerRecord.from_payload(payload.get("server"))
+    if record is None:
+        raise ValueError(f"{action} returned no server")
+    return record
+
+
 class MCPSession(AbstractAsyncContextManager["MCPSession"]):
+    """临时 MCP session 的异步上下文封装。"""
+
     def __init__(
         self,
         proxy: CapabilityProxy,
@@ -106,7 +140,12 @@ class MCPSession(AbstractAsyncContextManager["MCPSession"]):
         )
         return self
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         session_id = self._session_id
         self._session_id = None
         self._tools = []
@@ -162,6 +201,8 @@ class MCPSession(AbstractAsyncContextManager["MCPSession"]):
 
 
 class MCPManagerClient:
+    """MCP 服务管理客户端。"""
+
     def __init__(self, proxy: CapabilityProxy) -> None:
         self._proxy = proxy
 
@@ -171,31 +212,15 @@ class MCPManagerClient:
 
     async def list_servers(self) -> list[MCPServerRecord]:
         output = await self._proxy.call("mcp.local.list", {})
-        items = output.get("servers")
-        if not isinstance(items, list):
-            return []
-        return [
-            record
-            for record in (
-                MCPServerRecord.from_payload(item) if isinstance(item, dict) else None
-                for item in items
-            )
-            if record is not None
-        ]
+        return _server_records_from_payload(output.get("servers"))
 
     async def enable_server(self, name: str) -> MCPServerRecord:
         output = await self._proxy.call("mcp.local.enable", {"name": str(name)})
-        record = MCPServerRecord.from_payload(output.get("server"))
-        if record is None:
-            raise ValueError("mcp.local.enable returned no server")
-        return record
+        return _require_server_record(output, action="mcp.local.enable")
 
     async def disable_server(self, name: str) -> MCPServerRecord:
         output = await self._proxy.call("mcp.local.disable", {"name": str(name)})
-        record = MCPServerRecord.from_payload(output.get("server"))
-        if record is None:
-            raise ValueError("mcp.local.disable returned no server")
-        return record
+        return _require_server_record(output, action="mcp.local.disable")
 
     async def wait_until_ready(
         self,
@@ -207,10 +232,7 @@ class MCPManagerClient:
             "mcp.local.wait_until_ready",
             {"name": str(name), "timeout": float(timeout)},
         )
-        record = MCPServerRecord.from_payload(output.get("server"))
-        if record is None:
-            raise ValueError("mcp.local.wait_until_ready returned no server")
-        return record
+        return _require_server_record(output, action="mcp.local.wait_until_ready")
 
     def session(
         self,
@@ -241,10 +263,7 @@ class MCPManagerClient:
                 "timeout": float(timeout),
             },
         )
-        record = MCPServerRecord.from_payload(output.get("server"))
-        if record is None:
-            raise ValueError("mcp.global.register returned no server")
-        return record
+        return _require_server_record(output, action="mcp.global.register")
 
     async def get_global_server(self, name: str) -> MCPServerRecord | None:
         output = await self._proxy.call("mcp.global.get", {"name": str(name)})
@@ -252,17 +271,7 @@ class MCPManagerClient:
 
     async def list_global_servers(self) -> list[MCPServerRecord]:
         output = await self._proxy.call("mcp.global.list", {})
-        items = output.get("servers")
-        if not isinstance(items, list):
-            return []
-        return [
-            record
-            for record in (
-                MCPServerRecord.from_payload(item) if isinstance(item, dict) else None
-                for item in items
-            )
-            if record is not None
-        ]
+        return _server_records_from_payload(output.get("servers"))
 
     async def enable_global_server(
         self,
@@ -274,24 +283,15 @@ class MCPManagerClient:
             "mcp.global.enable",
             {"name": str(name), "timeout": float(timeout)},
         )
-        record = MCPServerRecord.from_payload(output.get("server"))
-        if record is None:
-            raise ValueError("mcp.global.enable returned no server")
-        return record
+        return _require_server_record(output, action="mcp.global.enable")
 
     async def disable_global_server(self, name: str) -> MCPServerRecord:
         output = await self._proxy.call("mcp.global.disable", {"name": str(name)})
-        record = MCPServerRecord.from_payload(output.get("server"))
-        if record is None:
-            raise ValueError("mcp.global.disable returned no server")
-        return record
+        return _require_server_record(output, action="mcp.global.disable")
 
     async def unregister_global_server(self, name: str) -> MCPServerRecord:
         output = await self._proxy.call("mcp.global.unregister", {"name": str(name)})
-        record = MCPServerRecord.from_payload(output.get("server"))
-        if record is None:
-            raise ValueError("mcp.global.unregister returned no server")
-        return record
+        return _require_server_record(output, action="mcp.global.unregister")
 
 
 __all__ = [

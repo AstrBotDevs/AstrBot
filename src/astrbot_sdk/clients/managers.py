@@ -649,7 +649,7 @@ class MessageHistoryManagerClient:
         session: MessageSession,
         *,
         parts: list[BaseMessageComponent],
-        sender: MessageHistorySender,
+        sender: MessageHistorySender | dict[str, Any],
         metadata: dict[str, Any] | None = None,
         idempotency_key: str | None = None,
     ) -> MessageHistoryRecord:

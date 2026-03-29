@@ -63,6 +63,8 @@ class HandlerMetadata:
 
 
 class RegistryClient:
+    """只读 handler 注册表客户端。"""
+
     def __init__(self, proxy: CapabilityProxy) -> None:
         self._proxy = proxy
 

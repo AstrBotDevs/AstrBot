@@ -56,7 +56,7 @@ class MemoryClient:
         self._namespace = join_memory_namespace(namespace)
 
     def namespace(self, *parts: Any) -> MemoryClient:
-        """Create a derived client that operates inside a child namespace."""
+        """创建一个工作在子命名空间中的派生客户端。"""
 
         return MemoryClient(
             self._proxy,
@@ -203,7 +203,7 @@ class MemoryClient:
         *,
         namespace: str | None = None,
     ) -> list[str]:
-        """List keys in the exact namespace using case-insensitive ordering."""
+        """列出指定精确命名空间下的全部键。"""
 
         payload: dict[str, Any] = {
             "namespace": self._resolve_exact_namespace(namespace)
@@ -220,7 +220,7 @@ class MemoryClient:
         *,
         namespace: str | None = None,
     ) -> bool:
-        """Check whether a key exists in the exact namespace."""
+        """检查指定精确命名空间中是否存在某个键。"""
 
         payload: dict[str, Any] = {"key": key}
         payload["namespace"] = self._resolve_exact_namespace(namespace)
@@ -251,7 +251,7 @@ class MemoryClient:
         namespace: str | None = None,
         include_descendants: bool = False,
     ) -> int:
-        """Delete memories in a namespace and optionally its descendants."""
+        """清空命名空间中的记忆项，可选递归清空子命名空间。"""
 
         payload: dict[str, Any] = {
             "namespace": self._resolve_exact_namespace(namespace),
@@ -364,7 +364,7 @@ class MemoryClient:
         namespace: str | None = None,
         include_descendants: bool = False,
     ) -> int:
-        """Count memories in a namespace and optionally its descendants."""
+        """统计命名空间中的记忆项数量，可选包含子命名空间。"""
 
         payload: dict[str, Any] = {
             "namespace": self._resolve_exact_namespace(namespace),
@@ -409,24 +409,18 @@ class MemoryClient:
             "total_items": output.get("total_items", 0),
             "total_bytes": output.get("total_bytes"),
         }
-        if "namespace" in output:
-            stats["namespace"] = output.get("namespace")
-        if "namespace_count" in output:
-            stats["namespace_count"] = output.get("namespace_count")
-        if "fts_enabled" in output:
-            stats["fts_enabled"] = output.get("fts_enabled")
-        if "vector_backend" in output:
-            stats["vector_backend"] = output.get("vector_backend")
-        if "vector_indexes" in output:
-            stats["vector_indexes"] = output.get("vector_indexes")
-        if "plugin_id" in output:
-            stats["plugin_id"] = output.get("plugin_id")
-        if "ttl_entries" in output:
-            stats["ttl_entries"] = output.get("ttl_entries")
-        if "indexed_items" in output:
-            stats["indexed_items"] = output.get("indexed_items")
-        if "embedded_items" in output:
-            stats["embedded_items"] = output.get("embedded_items")
-        if "dirty_items" in output:
-            stats["dirty_items"] = output.get("dirty_items")
+        for key in (
+            "namespace",
+            "namespace_count",
+            "fts_enabled",
+            "vector_backend",
+            "vector_indexes",
+            "plugin_id",
+            "ttl_entries",
+            "indexed_items",
+            "embedded_items",
+            "dirty_items",
+        ):
+            if key in output:
+                stats[key] = output.get(key)
         return stats

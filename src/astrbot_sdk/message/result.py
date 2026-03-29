@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Iterator
 from typing import Any
 
 from .components import (
@@ -50,7 +51,7 @@ class MessageChain:
         self.components.extend(components)
         return self
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[BaseMessageComponent]:
         return iter(self.components)
 
     def __len__(self) -> int:

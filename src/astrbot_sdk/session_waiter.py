@@ -147,8 +147,10 @@ class SessionController:
                 self.stop()
                 return
         else:
-            assert self.timeout is not None
-            assert self.ts is not None
+            if self.timeout is None or self.ts is None:
+                raise RuntimeError(
+                    "session waiter keep(reset_timeout=False) requires an active timeout"
+                )
             left_timeout = self.timeout - (new_ts - self.ts)
             timeout = left_timeout + timeout
             if timeout <= 0:

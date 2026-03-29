@@ -19,8 +19,10 @@ CommandGroup 允许以嵌套方式定义命令树，例如：
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from itertools import product
+from typing import Any
 
 from .decorators import on_command, set_command_route_meta
 from .protocol.descriptors import CommandRouteSpec
@@ -74,7 +76,7 @@ class CommandGroup:
         *,
         aliases: list[str] | None = None,
         description: str | None = None,
-    ):
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         full_command = " ".join([*self.path, name])
         full_aliases = self._expand_aliases(name=name, aliases=aliases or [])
         display_command = full_command
@@ -84,7 +86,7 @@ class CommandGroup:
             group_help=self.description,
         )
 
-        def decorator(func):
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             decorated = on_command(
                 full_command,
                 aliases=full_aliases,

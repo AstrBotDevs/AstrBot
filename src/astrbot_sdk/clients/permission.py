@@ -1,4 +1,4 @@
-"""Permission capability clients."""
+"""权限能力客户端。"""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from ._proxy import CapabilityProxy
 
 
 class PermissionCheckResult(BaseModel):
+    """权限检查结果。"""
+
     model_config = ConfigDict(extra="forbid")
 
     is_admin: bool
@@ -26,6 +28,8 @@ class PermissionCheckResult(BaseModel):
 
 
 class PermissionClient:
+    """权限查询客户端。"""
+
     def __init__(self, proxy: CapabilityProxy) -> None:
         self._proxy = proxy
 
@@ -52,6 +56,8 @@ class PermissionClient:
 
 
 class PermissionManagerClient:
+    """权限管理客户端。"""
+
     def __init__(
         self,
         proxy: CapabilityProxy,
