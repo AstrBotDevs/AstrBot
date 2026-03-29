@@ -151,6 +151,7 @@ DEFAULT_CONFIG = {
         "max_agent_step": 30,
         "tool_call_timeout": 120,
         "tool_schema_mode": "full",
+        "tool_capability_strategy": "fallback_provider",
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
         "file_extract": {
@@ -2695,6 +2696,9 @@ CONFIG_METADATA_2 = {
                     "tool_schema_mode": {
                         "type": "string",
                     },
+                    "tool_capability_strategy": {
+                        "type": "string",
+                    },
                     "file_extract": {
                         "type": "object",
                         "items": {
@@ -3447,6 +3451,24 @@ CONFIG_METADATA_3 = {
                         "options": ["skills_like", "full"],
                         "labels": ["Skills-like（两阶段）", "Full（完整参数）"],
                         "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.tool_capability_strategy": {
+                        "description": "模型不支持工具调用时的处理策略",
+                        "type": "string",
+                        "options": [
+                            "fallback_provider",
+                            "chat_only",
+                            "hard_fail",
+                        ],
+                        "labels": [
+                            "自动切换回退模型",
+                            "降级为纯文本聊天",
+                            "直接报错",
+                        ],
+                        "hint": "当当前模型不支持函数工具调用时，优先切换到回退模型；也可以直接降级为纯文本聊天或中止请求。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },

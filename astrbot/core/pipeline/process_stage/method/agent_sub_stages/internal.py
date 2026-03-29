@@ -56,6 +56,10 @@ class InternalAgentSubStage(Stage):
         self.max_step: int = settings.get("max_agent_step", 30)
         self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
         self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
+        self.tool_capability_strategy: str = settings.get(
+            "tool_capability_strategy",
+            "fallback_provider",
+        )
         if self.tool_schema_mode not in ("skills_like", "full"):
             logger.warning(
                 "Unsupported tool_schema_mode: %s, fallback to skills_like",
@@ -116,6 +120,7 @@ class InternalAgentSubStage(Stage):
         self.main_agent_cfg = MainAgentBuildConfig(
             tool_call_timeout=self.tool_call_timeout,
             tool_schema_mode=self.tool_schema_mode,
+            tool_capability_strategy=self.tool_capability_strategy,
             sanitize_context_by_modalities=self.sanitize_context_by_modalities,
             kb_agentic_mode=self.kb_agentic_mode,
             file_extract_enabled=self.file_extract_enabled,
@@ -235,8 +240,9 @@ class InternalAgentSubStage(Stage):
                     if reset_coro:
                         await reset_coro
 
-                    register_active_runner(event.unified_msg_origin, agent_runner)
-                    runner_registered = True
+                    if build_result.allow_follow_up:
+                        register_active_runner(event.unified_msg_origin, agent_runner)
+                        runner_registered = True
                     action_type = event.get_extra("action_type")
 
                     event.trace.record(

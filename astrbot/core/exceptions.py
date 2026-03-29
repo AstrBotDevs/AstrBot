@@ -11,3 +11,7 @@ class ProviderNotFoundError(AstrBotError):
 
 class EmptyModelOutputError(AstrBotError):
     """Raised when the model response contains no usable assistant output."""
+
+
+class UnsupportedToolCapabilityError(AstrBotError):
+    """Raised when the selected model cannot satisfy the requested tool mode."""

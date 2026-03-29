@@ -51,6 +51,7 @@ from astrbot.core.astr_main_agent_resources import (
     retrieve_knowledge_base,
 )
 from astrbot.core.conversation_mgr import Conversation
+from astrbot.core.exceptions import UnsupportedToolCapabilityError
 from astrbot.core.message.components import File, Image, Reply
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
@@ -99,6 +100,10 @@ class MainAgentBuildConfig:
     """
     tool_schema_mode: str = "full"
     """The tool schema mode, can be 'full' or 'skills-like'."""
+    tool_capability_strategy: str = "fallback_provider"
+    """How to handle tool requests when the selected model does not support tool calls.
+    Supported values: fallback_provider, chat_only, hard_fail.
+    """
     provider_wake_prefix: str = ""
     """The wake prefix for the provider. If the user message does not start with this prefix,
     the main agent will not be triggered."""
@@ -151,6 +156,7 @@ class MainAgentBuildResult:
     provider_request: ProviderRequest
     provider: Provider
     reset_coro: Coroutine | None = None
+    allow_follow_up: bool = True
 
 
 def _select_provider(
@@ -759,13 +765,81 @@ def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
             else:
                 req.prompt = placeholder
             req.image_urls = []
-    if req.func_tool:
-        provider_cfg = provider.provider_config.get("modalities", ["tool_use"])
-        if "tool_use" not in provider_cfg:
-            logger.debug(
-                "Provider %s does not support tool_use, clearing tools.", provider
-            )
-            req.func_tool = None
+
+
+def _request_has_tools(req: ProviderRequest) -> bool:
+    return req.func_tool is not None and not req.func_tool.empty()
+
+
+def _get_effective_model_name(
+    provider: Provider,
+    requested_model: str | None = None,
+) -> str:
+    model_name = (
+        requested_model
+        or provider.get_model()
+        or provider.provider_config.get("model", "")
+    )
+    return str(model_name or "")
+
+
+def _get_tool_call_support(
+    provider: Provider,
+    *,
+    requested_model: str | None = None,
+) -> bool | None:
+    modalities = provider.provider_config.get("modalities", None)
+    if isinstance(modalities, list) and "tool_use" not in modalities:
+        return False
+
+    model_name = _get_effective_model_name(provider, requested_model)
+    if not model_name:
+        return None
+
+    metadata = LLM_METADATAS.get(model_name)
+    if metadata is None:
+        return None
+    return bool(metadata["tool_call"])
+
+
+def _strip_tool_state_from_request(req: ProviderRequest) -> None:
+    req.func_tool = None
+    req.tool_calls_result = None
+
+    if not isinstance(req.contexts, list) or not req.contexts:
+        return
+
+    sanitized_contexts: list[dict] = []
+    for message in req.contexts:
+        if not isinstance(message, dict):
+            continue
+        role = message.get("role")
+        if role == "tool":
+            continue
+
+        new_message = copy.deepcopy(message)
+        if role == "assistant":
+            new_message.pop("tool_calls", None)
+            new_message.pop("tool_call_id", None)
+            content = new_message.get("content")
+            if not content:
+                continue
+            if isinstance(content, str) and not content.strip():
+                continue
+
+        sanitized_contexts.append(new_message)
+
+    req.contexts = sanitized_contexts
+
+
+def _normalize_tool_capability_strategy(strategy: str) -> str:
+    if strategy in {"fallback_provider", "chat_only", "hard_fail"}:
+        return strategy
+    logger.warning(
+        "Unsupported tool_capability_strategy `%s`, fallback to `fallback_provider`.",
+        strategy,
+    )
+    return "fallback_provider"
 
 
 def _sanitize_context_by_modalities(
@@ -1071,6 +1145,93 @@ def _get_fallback_chat_providers(
     return fallbacks
 
 
+def _get_tool_capable_fallback_provider(
+    provider: Provider,
+    plugin_context: Context,
+    provider_settings: dict,
+) -> tuple[Provider | None, bool]:
+    unknown_capability_provider: Provider | None = None
+
+    for fallback_provider in _get_fallback_chat_providers(
+        provider, plugin_context, provider_settings
+    ):
+        support = _get_tool_call_support(fallback_provider)
+        if support is True:
+            return fallback_provider, True
+        if support is None and unknown_capability_provider is None:
+            unknown_capability_provider = fallback_provider
+
+    return unknown_capability_provider, False
+
+
+def _resolve_tool_capability_strategy(
+    *,
+    provider: Provider,
+    req: ProviderRequest,
+    plugin_context: Context,
+    config: MainAgentBuildConfig,
+) -> tuple[Provider, bool]:
+    if not _request_has_tools(req):
+        return provider, True
+
+    support = _get_tool_call_support(provider, requested_model=req.model)
+    if support is not False:
+        return provider, True
+
+    strategy = _normalize_tool_capability_strategy(config.tool_capability_strategy)
+    model_name = _get_effective_model_name(provider, req.model)
+    provider_id = str(provider.provider_config.get("id", ""))
+
+    if strategy == "fallback_provider":
+        fallback_provider, confirmed = _get_tool_capable_fallback_provider(
+            provider,
+            plugin_context,
+            config.provider_settings,
+        )
+        if fallback_provider is not None:
+            fallback_model = _get_effective_model_name(fallback_provider)
+            if confirmed:
+                logger.info(
+                    "Model `%s` on provider `%s` does not support tool calls, "
+                    "switching to fallback provider `%s` (%s).",
+                    model_name,
+                    provider_id,
+                    fallback_provider.provider_config.get("id", ""),
+                    fallback_model,
+                )
+            else:
+                logger.info(
+                    "Model `%s` on provider `%s` does not support tool calls, "
+                    "trying fallback provider `%s` without explicit tool metadata.",
+                    model_name,
+                    provider_id,
+                    fallback_provider.provider_config.get("id", ""),
+                )
+            req.model = fallback_model or None
+            return fallback_provider, True
+
+        logger.warning(
+            "Model `%s` on provider `%s` does not support tool calls and no suitable "
+            "fallback provider was found; degrading to chat_only.",
+            model_name,
+            provider_id,
+        )
+        strategy = "chat_only"
+
+    if strategy == "hard_fail":
+        raise UnsupportedToolCapabilityError(
+            f"Model `{model_name}` on provider `{provider_id}` does not support tool calls."
+        )
+
+    logger.info(
+        "Model `%s` on provider `%s` does not support tool calls, degrading to chat_only.",
+        model_name,
+        provider_id,
+    )
+    _strip_tool_state_from_request(req)
+    return provider, False
+
+
 async def build_main_agent(
     *,
     event: AstrMessageEvent,
@@ -1242,9 +1403,7 @@ async def build_main_agent(
     if not req.session_id:
         req.session_id = event.unified_msg_origin
 
-    _modalities_fix(provider, req)
     _plugin_tool_fix(event, req)
-    _sanitize_context_by_modalities(config, provider, req)
 
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
@@ -1267,6 +1426,16 @@ async def build_main_agent(
         if req.func_tool is None:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
+
+    provider, allow_follow_up = _resolve_tool_capability_strategy(
+        provider=provider,
+        req=req,
+        plugin_context=plugin_context,
+        config=config,
+    )
+
+    _modalities_fix(provider, req)
+    _sanitize_context_by_modalities(config, provider, req)
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()
@@ -1319,4 +1488,5 @@ async def build_main_agent(
         provider_request=req,
         provider=provider,
         reset_coro=reset_coro if not apply_reset else None,
+        allow_follow_up=allow_follow_up,
     )
