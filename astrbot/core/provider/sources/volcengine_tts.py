@@ -68,7 +68,7 @@ class ProviderVolcengineTTS(TTSProvider):
 
         payload = self._build_request_payload(text)
 
-        logger.debug(f"请求头: {headers}")
+        # Don't log headers as they contain sensitive API key info
         logger.debug(f"请求 URL: {self.api_base}")
         logger.debug(f"请求体: {json.dumps(payload, ensure_ascii=False)[:100]}...")
 

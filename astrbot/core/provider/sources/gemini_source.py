@@ -112,12 +112,12 @@ class ProviderGoogleGenAI(Provider):
             if len(keys) > 0:
                 self.set_key(random.choice(keys))
                 logger.info(
-                    f"检测到 Key 异常({e.message}),正在尝试更换 API Key 重试... 当前 Key: {self.chosen_api_key[:12]}...",
+                    f"检测到 Key 异常({e.message}),正在尝试更换 API Key 重试...",
                 )
                 await asyncio.sleep(1)
                 return True
             logger.error(
-                f"检测到 Key 异常({e.message}),且已没有可用的 Key｡ 当前 Key: {self.chosen_api_key[:12]}...",
+                f"检测到 Key 异常({e.message}),且已没有可用的 Key｡",
             )
             raise Exception("达到了 Gemini 速率限制, 请稍后再试...")
 
