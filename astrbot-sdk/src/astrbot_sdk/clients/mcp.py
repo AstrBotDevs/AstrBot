@@ -12,6 +12,7 @@ from types import TracebackType
 from typing import Any
 
 from ..errors import AstrBotError
+from ._errors import wrap_client_exception
 from ._proxy import CapabilityProxy
 
 
@@ -120,14 +121,22 @@ class MCPSession(AbstractAsyncContextManager["MCPSession"]):
         self._tools: list[str] = []
 
     async def __aenter__(self) -> MCPSession:
-        output = await self._proxy.call(
-            "mcp.session.open",
-            {
-                "name": self._name,
-                "config": dict(self._config),
-                "timeout": self._timeout,
-            },
-        )
+        try:
+            output = await self._proxy.call(
+                "mcp.session.open",
+                {
+                    "name": self._name,
+                    "config": dict(self._config),
+                    "timeout": self._timeout,
+                },
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MCPSession",
+                method_name="open",
+                details=f"name={self._name!r}, timeout={self._timeout!r}",
+                exc=exc,
+            ) from exc
         session_id = str(output.get("session_id", "")).strip()
         if not session_id:
             raise ValueError("mcp.session.open returned no session_id")
@@ -167,14 +176,22 @@ class MCPSession(AbstractAsyncContextManager["MCPSession"]):
         args: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         session_id = self._require_session_id()
-        output = await self._proxy.call(
-            "mcp.session.call_tool",
-            {
-                "session_id": session_id,
-                "tool_name": str(tool_name),
-                "args": dict(args or {}),
-            },
-        )
+        try:
+            output = await self._proxy.call(
+                "mcp.session.call_tool",
+                {
+                    "session_id": session_id,
+                    "tool_name": str(tool_name),
+                    "args": dict(args or {}),
+                },
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MCPSession",
+                method_name="call_tool",
+                details=f"session_id={session_id!r}, tool_name={str(tool_name)!r}",
+                exc=exc,
+            ) from exc
         result = output.get("result")
         if not isinstance(result, dict):
             raise ValueError("mcp.session.call_tool returned no result object")
@@ -182,10 +199,18 @@ class MCPSession(AbstractAsyncContextManager["MCPSession"]):
 
     async def list_tools(self) -> list[str]:
         session_id = self._require_session_id()
-        output = await self._proxy.call(
-            "mcp.session.list_tools",
-            {"session_id": session_id},
-        )
+        try:
+            output = await self._proxy.call(
+                "mcp.session.list_tools",
+                {"session_id": session_id},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MCPSession",
+                method_name="list_tools",
+                details=f"session_id={session_id!r}",
+                exc=exc,
+            ) from exc
         tools = output.get("tools")
         self._tools = (
             [str(item) for item in tools if isinstance(item, str)]
@@ -207,19 +232,50 @@ class MCPManagerClient:
         self._proxy = proxy
 
     async def get_server(self, name: str) -> MCPServerRecord | None:
-        output = await self._proxy.call("mcp.local.get", {"name": str(name)})
+        try:
+            output = await self._proxy.call("mcp.local.get", {"name": str(name)})
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MCPManagerClient",
+                method_name="get_server",
+                details=f"name={str(name)!r}",
+                exc=exc,
+            ) from exc
         return MCPServerRecord.from_payload(output.get("server"))
 
     async def list_servers(self) -> list[MCPServerRecord]:
-        output = await self._proxy.call("mcp.local.list", {})
+        try:
+            output = await self._proxy.call("mcp.local.list", {})
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MCPManagerClient",
+                method_name="list_servers",
+                exc=exc,
+            ) from exc
         return _server_records_from_payload(output.get("servers"))
 
     async def enable_server(self, name: str) -> MCPServerRecord:
-        output = await self._proxy.call("mcp.local.enable", {"name": str(name)})
+        try:
+            output = await self._proxy.call("mcp.local.enable", {"name": str(name)})
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MCPManagerClient",
+                method_name="enable_server",
+                details=f"name={str(name)!r}",
+                exc=exc,
+            ) from exc
         return _require_server_record(output, action="mcp.local.enable")
 
     async def disable_server(self, name: str) -> MCPServerRecord:
-        output = await self._proxy.call("mcp.local.disable", {"name": str(name)})
+        try:
+            output = await self._proxy.call("mcp.local.disable", {"name": str(name)})
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MCPManagerClient",
+                method_name="disable_server",
+                details=f"name={str(name)!r}",
+                exc=exc,
+            ) from exc
         return _require_server_record(output, action="mcp.local.disable")
 
     async def wait_until_ready(
@@ -228,10 +284,18 @@ class MCPManagerClient:
         *,
         timeout: float = 30.0,
     ) -> MCPServerRecord:
-        output = await self._proxy.call(
-            "mcp.local.wait_until_ready",
-            {"name": str(name), "timeout": float(timeout)},
-        )
+        try:
+            output = await self._proxy.call(
+                "mcp.local.wait_until_ready",
+                {"name": str(name), "timeout": float(timeout)},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MCPManagerClient",
+                method_name="wait_until_ready",
+                details=f"name={str(name)!r}, timeout={float(timeout)!r}",
+                exc=exc,
+            ) from exc
         return _require_server_record(output, action="mcp.local.wait_until_ready")
 
     def session(
@@ -255,22 +319,45 @@ class MCPManagerClient:
         *,
         timeout: float = 30.0,
     ) -> MCPServerRecord:
-        output = await self._proxy.call(
-            "mcp.global.register",
-            {
-                "name": str(name),
-                "config": dict(config),
-                "timeout": float(timeout),
-            },
-        )
+        try:
+            output = await self._proxy.call(
+                "mcp.global.register",
+                {
+                    "name": str(name),
+                    "config": dict(config),
+                    "timeout": float(timeout),
+                },
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MCPManagerClient",
+                method_name="register_global_server",
+                details=f"name={str(name)!r}, timeout={float(timeout)!r}",
+                exc=exc,
+            ) from exc
         return _require_server_record(output, action="mcp.global.register")
 
     async def get_global_server(self, name: str) -> MCPServerRecord | None:
-        output = await self._proxy.call("mcp.global.get", {"name": str(name)})
+        try:
+            output = await self._proxy.call("mcp.global.get", {"name": str(name)})
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MCPManagerClient",
+                method_name="get_global_server",
+                details=f"name={str(name)!r}",
+                exc=exc,
+            ) from exc
         return MCPServerRecord.from_payload(output.get("server"))
 
     async def list_global_servers(self) -> list[MCPServerRecord]:
-        output = await self._proxy.call("mcp.global.list", {})
+        try:
+            output = await self._proxy.call("mcp.global.list", {})
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MCPManagerClient",
+                method_name="list_global_servers",
+                exc=exc,
+            ) from exc
         return _server_records_from_payload(output.get("servers"))
 
     async def enable_global_server(
@@ -279,18 +366,44 @@ class MCPManagerClient:
         *,
         timeout: float = 30.0,
     ) -> MCPServerRecord:
-        output = await self._proxy.call(
-            "mcp.global.enable",
-            {"name": str(name), "timeout": float(timeout)},
-        )
+        try:
+            output = await self._proxy.call(
+                "mcp.global.enable",
+                {"name": str(name), "timeout": float(timeout)},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MCPManagerClient",
+                method_name="enable_global_server",
+                details=f"name={str(name)!r}, timeout={float(timeout)!r}",
+                exc=exc,
+            ) from exc
         return _require_server_record(output, action="mcp.global.enable")
 
     async def disable_global_server(self, name: str) -> MCPServerRecord:
-        output = await self._proxy.call("mcp.global.disable", {"name": str(name)})
+        try:
+            output = await self._proxy.call("mcp.global.disable", {"name": str(name)})
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MCPManagerClient",
+                method_name="disable_global_server",
+                details=f"name={str(name)!r}",
+                exc=exc,
+            ) from exc
         return _require_server_record(output, action="mcp.global.disable")
 
     async def unregister_global_server(self, name: str) -> MCPServerRecord:
-        output = await self._proxy.call("mcp.global.unregister", {"name": str(name)})
+        try:
+            output = await self._proxy.call(
+                "mcp.global.unregister", {"name": str(name)}
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MCPManagerClient",
+                method_name="unregister_global_server",
+                details=f"name={str(name)!r}",
+                exc=exc,
+            ) from exc
         return _require_server_record(output, action="mcp.global.unregister")
 
 

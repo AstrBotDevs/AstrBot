@@ -20,6 +20,7 @@ from ..message.components import BaseMessageComponent, Plain
 from ..message.result import MessageChain
 from ..message.session import MessageSession
 from ..protocol.descriptors import SessionRef
+from ._errors import wrap_client_exception
 from ._proxy import CapabilityProxy
 
 
@@ -160,10 +161,18 @@ class PlatformClient:
             await ctx.platform.send(event.session_id, "收到您的消息！")
         """
         session_id, extra = self._build_target_payload(session)
-        return await self._proxy.call(
-            "platform.send",
-            {"session": session_id, "text": text, **extra},
-        )
+        try:
+            return await self._proxy.call(
+                "platform.send",
+                {"session": session_id, "text": text, **extra},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="PlatformClient",
+                method_name="send",
+                details=f"session={session_id!r}",
+                exc=exc,
+            ) from exc
 
     async def send_image(
         self,
@@ -188,10 +197,18 @@ class PlatformClient:
             )
         """
         session_id, extra = self._build_target_payload(session)
-        return await self._proxy.call(
-            "platform.send_image",
-            {"session": session_id, "image_url": image_url, **extra},
-        )
+        try:
+            return await self._proxy.call(
+                "platform.send_image",
+                {"session": session_id, "image_url": image_url, **extra},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="PlatformClient",
+                method_name="send_image",
+                details=f"session={session_id!r}",
+                exc=exc,
+            ) from exc
 
     async def send_chain(
         self,
@@ -209,10 +226,18 @@ class PlatformClient:
         """
         session_id, extra = self._build_target_payload(session)
         chain_payload = await self._coerce_chain_payload(chain)
-        return await self._proxy.call(
-            "platform.send_chain",
-            {"session": session_id, "chain": chain_payload, **extra},
-        )
+        try:
+            return await self._proxy.call(
+                "platform.send_chain",
+                {"session": session_id, "chain": chain_payload, **extra},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="PlatformClient",
+                method_name="send_chain",
+                details=f"session={session_id!r}, items={len(chain_payload)!r}",
+                exc=exc,
+            ) from exc
 
     async def send_by_session(
         self,
@@ -231,10 +256,18 @@ class PlatformClient:
         """
         chain_payload = await self._coerce_chain_payload(content)
         session_id = str(session)
-        return await self._proxy.call(
-            "platform.send_by_session",
-            {"session": session_id, "chain": chain_payload},
-        )
+        try:
+            return await self._proxy.call(
+                "platform.send_by_session",
+                {"session": session_id, "chain": chain_payload},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="PlatformClient",
+                method_name="send_by_session",
+                details=f"session={session_id!r}, items={len(chain_payload)!r}",
+                exc=exc,
+            ) from exc
 
     async def send_by_id(
         self,
@@ -280,10 +313,18 @@ class PlatformClient:
                 print(f"{member['nickname']} ({member['user_id']})")
         """
         session_id, extra = self._build_target_payload(session)
-        output = await self._proxy.call(
-            "platform.get_members",
-            {"session": session_id, **extra},
-        )
+        try:
+            output = await self._proxy.call(
+                "platform.get_members",
+                {"session": session_id, **extra},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="PlatformClient",
+                method_name="get_members",
+                details=f"session={session_id!r}",
+                exc=exc,
+            ) from exc
         members = output.get("members")
         if not isinstance(members, (list, tuple)):
             return []

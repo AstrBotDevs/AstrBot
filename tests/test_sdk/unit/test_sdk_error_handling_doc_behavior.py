@@ -5,7 +5,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
+from astrbot_sdk.clients.http import HTTPClient
+from astrbot_sdk.clients.mcp import MCPManagerClient
+from astrbot_sdk.clients.metadata import MetadataClient
+from astrbot_sdk.clients.platform import PlatformClient
+from astrbot_sdk.clients.skills import SkillClient
 from astrbot_sdk.context import CancelToken, Context
 from astrbot_sdk.errors import AstrBotError, ErrorCodes
 
@@ -20,6 +24,16 @@ def _plugin_metadata(name: str) -> dict[str, Any]:
         "author": "tests",
         "version": "1.0.0",
     }
+
+
+class _FailingProxy:
+    def __init__(self, exc: Exception) -> None:
+        self.exc = exc
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def call(self, capability: str, payload: dict[str, Any]) -> dict[str, Any]:
+        self.calls.append((capability, dict(payload)))
+        raise self.exc
 
 
 @pytest.mark.unit
@@ -114,12 +128,10 @@ async def test_error_handling_doc_retry_and_capability_missing_round_trip_throug
         *,
         max_retries: int = 3,
     ) -> str:
-        last_error: AstrBotError | None = None
         for attempt in range(max_retries):
             try:
                 return await operation()
             except AstrBotError as error:
-                last_error = error
                 await ctx.db.set(f"retry_attempt_{attempt + 1}", error.code)
                 if not error.retryable or attempt == max_retries - 1:
                     raise
@@ -178,7 +190,9 @@ async def test_error_handling_doc_cancel_token_and_debug_logging_use_real_contex
         ctx.logger.info("cancelled={}", ctx.cancel_token.cancelled)
         try:
             for step in range(10):
-                ctx.logger.debug("step {} cancelled={}", step, ctx.cancel_token.cancelled)
+                ctx.logger.debug(
+                    "step {} cancelled={}", step, ctx.cancel_token.cancelled
+                )
                 await ctx.db.set("last_step", step)
                 if step == 0:
                     progressed.set()
@@ -208,3 +222,75 @@ async def test_error_handling_doc_cancel_token_and_debug_logging_use_real_contex
     ]
     assert await ctx.db.get("last_step") == 0
 
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_client_error_wrapping_preserves_astrbot_error_context_for_http() -> None:
+    proxy = _FailingProxy(AstrBotError.invalid_input("bridge rejected"))
+    client = HTTPClient(proxy)
+
+    with pytest.raises(AstrBotError) as exc_info:
+        await client.register_api(
+            "/sdk-demo/api/test",
+            handler_capability="sdk-demo.http_handler",
+            methods=["GET", "POST"],
+        )
+
+    assert exc_info.value.code == ErrorCodes.INVALID_INPUT
+    assert "HTTPClient.register_api" in str(exc_info.value)
+    assert "route='/sdk-demo/api/test'" in str(exc_info.value)
+    assert "methods=['GET', 'POST']" in str(exc_info.value)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_client_error_wrapping_uses_runtime_error_for_skill_client() -> None:
+    proxy = _FailingProxy(ValueError("missing SKILL.md"))
+    client = SkillClient(proxy)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await client.register(
+            name="sdk-demo.writer-helper",
+            path="skills/writer-helper",
+        )
+
+    assert "SkillClient.register" in str(exc_info.value)
+    assert "name='sdk-demo.writer-helper'" in str(exc_info.value)
+    assert "path='skills/writer-helper'" in str(exc_info.value)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_client_error_wrapping_preserves_metadata_error_details() -> None:
+    proxy = _FailingProxy(AstrBotError.invalid_input("config unavailable"))
+    client = MetadataClient(proxy, "sdk-demo")
+
+    with pytest.raises(AstrBotError) as exc_info:
+        await client.get_plugin_config()
+
+    assert exc_info.value.code == ErrorCodes.INVALID_INPUT
+    assert "MetadataClient.get_plugin_config" in str(exc_info.value)
+    assert "name='sdk-demo'" in str(exc_info.value)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_client_error_wrapping_covers_platform_and_mcp_calls() -> None:
+    platform_proxy = _FailingProxy(AstrBotError.network_error("send failed"))
+    platform_client = PlatformClient(platform_proxy)
+
+    with pytest.raises(AstrBotError) as platform_exc:
+        await platform_client.send("demo:private:user-1", "hello")
+
+    assert platform_exc.value.code == ErrorCodes.NETWORK_ERROR
+    assert "PlatformClient.send" in str(platform_exc.value)
+    assert "session='demo:private:user-1'" in str(platform_exc.value)
+
+    mcp_proxy = _FailingProxy(ValueError("server not found"))
+    mcp_client = MCPManagerClient(mcp_proxy)
+
+    with pytest.raises(RuntimeError) as mcp_exc:
+        await mcp_client.enable_server("demo-local")
+
+    assert "MCPManagerClient.enable_server" in str(mcp_exc.value)
+    assert "name='demo-local'" in str(mcp_exc.value)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from ._errors import wrap_client_exception
 from ._proxy import CapabilityProxy
 
 
@@ -40,22 +41,45 @@ class SkillClient:
         path: str,
         description: str = "",
     ) -> SkillRegistration:
-        output = await self._proxy.call(
-            "skill.register",
-            {
-                "name": name,
-                "path": path,
-                "description": description,
-            },
-        )
+        try:
+            output = await self._proxy.call(
+                "skill.register",
+                {
+                    "name": name,
+                    "path": path,
+                    "description": description,
+                },
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="SkillClient",
+                method_name="register",
+                details=f"name={name!r}, path={path!r}",
+                exc=exc,
+            ) from exc
         return SkillRegistration.from_dict(output)
 
     async def unregister(self, name: str) -> bool:
-        output = await self._proxy.call("skill.unregister", {"name": name})
+        try:
+            output = await self._proxy.call("skill.unregister", {"name": name})
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="SkillClient",
+                method_name="unregister",
+                details=f"name={name!r}",
+                exc=exc,
+            ) from exc
         return bool(output.get("removed", False))
 
     async def list(self) -> list[SkillRegistration]:
-        output = await self._proxy.call("skill.list", {})
+        try:
+            output = await self._proxy.call("skill.list", {})
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="SkillClient",
+                method_name="list",
+                exc=exc,
+            ) from exc
         return [
             SkillRegistration.from_dict(item)
             for item in output.get("skills", [])

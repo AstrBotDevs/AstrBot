@@ -41,6 +41,7 @@ from typing import Any
 
 from ..decorators import get_capability_meta
 from ..errors import AstrBotError
+from ._errors import wrap_client_exception
 from ._proxy import CapabilityProxy
 
 
@@ -116,16 +117,23 @@ class HTTPClient:
         if methods is None:
             methods = ["GET"]
         resolved_handler = _resolve_handler_capability(handler_capability, handler)
-
-        await self._proxy.call(
-            "http.register_api",
-            {
-                "route": route,
-                "methods": methods,
-                "handler_capability": resolved_handler,
-                "description": description,
-            },
-        )
+        try:
+            await self._proxy.call(
+                "http.register_api",
+                {
+                    "route": route,
+                    "methods": methods,
+                    "handler_capability": resolved_handler,
+                    "description": description,
+                },
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="HTTPClient",
+                method_name="register_api",
+                details=f"route={route!r}, methods={list(methods)!r}",
+                exc=exc,
+            ) from exc
 
     async def unregister_api(
         self, route: str, methods: list[str] | None = None
@@ -141,11 +149,18 @@ class HTTPClient:
         """
         if methods is None:
             methods = []
-
-        await self._proxy.call(
-            "http.unregister_api",
-            {"route": route, "methods": methods},
-        )
+        try:
+            await self._proxy.call(
+                "http.unregister_api",
+                {"route": route, "methods": methods},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="HTTPClient",
+                method_name="unregister_api",
+                details=f"route={route!r}, methods={list(methods)!r}",
+                exc=exc,
+            ) from exc
 
     async def list_apis(self) -> list[dict[str, Any]]:
         """列出当前插件注册的所有 API。
@@ -158,8 +173,15 @@ class HTTPClient:
             for api in apis:
                 print(f"{api['route']}: {api['methods']}")
         """
-        output = await self._proxy.call(
-            "http.list_apis",
-            {},
-        )
+        try:
+            output = await self._proxy.call(
+                "http.list_apis",
+                {},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="HTTPClient",
+                method_name="list_apis",
+                exc=exc,
+            ) from exc
         return output.get("apis", [])
