@@ -47,12 +47,15 @@ def build_dashboard():
             capture_output=True,
             text=True,
         )
-        print("[maturin-hook] npm install output:", subprocess.run(
-            ["npm", "install"],
-            cwd=dashboard_src,
-            capture_output=True,
-            text=True,
-        ).stderr)
+        print(
+            "[maturin-hook] npm install output:",
+            subprocess.run(
+                ["npm", "install"],
+                cwd=dashboard_src,
+                capture_output=True,
+                text=True,
+            ).stderr,
+        )
 
     # Build dashboard
     print("[maturin-hook] Building Vue dashboard (npm run build)...")
@@ -71,7 +74,6 @@ def build_dashboard():
 
 def copy_dashboard_dist():
     """Copy dashboard dist to Python package."""
-    root = get_root()
     dist_src = get_dashboard_dist()
     dist_target = get_dashboard_target()
 
@@ -96,7 +98,6 @@ def copy_dashboard_dist():
 
 def generate_placeholder():
     """Generate placeholder if no dashboard."""
-    root = get_root()
     dist_target = get_dashboard_target()
 
     # Remove broken symlink if present so we can create a real directory
@@ -123,7 +124,9 @@ class MaturinBuildHook:
         print("[maturin-hook] pre_build called!")
         print(f"[maturin-hook] Current dir: {os.getcwd()}")
         print(f"[maturin-hook] sys.argv: {sys.argv}")
-        print(f"[maturin-hook] ASTRBOT_BUILD_DASHBOARD: {os.environ.get('ASTRBOT_BUILD_DASHBOARD', 'NOT SET')}")
+        print(
+            f"[maturin-hook] ASTRBOT_BUILD_DASHBOARD: {os.environ.get('ASTRBOT_BUILD_DASHBOARD', 'NOT SET')}"
+        )
 
         root = get_root()
         print(f"[maturin-hook] Project root: {root}")
@@ -133,7 +136,9 @@ class MaturinBuildHook:
             if build_dashboard():
                 copy_dashboard_dist()
         else:
-            print("[maturin-hook] Skipping dashboard build (ASTRBOT_BUILD_DASHBOARD != 1)")
+            print(
+                "[maturin-hook] Skipping dashboard build (ASTRBOT_BUILD_DASHBOARD != 1)"
+            )
             generate_placeholder()
 
         return 0

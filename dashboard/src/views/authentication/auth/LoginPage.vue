@@ -316,8 +316,9 @@ onMounted(() => {
 .login-card {
   width: 400px;
   padding: 8px;
-  background: rgba(30, 41, 59, 0.85) !important;
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(10, 14, 26, 0.7) !important;
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(120, 180, 255, 0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 </style>

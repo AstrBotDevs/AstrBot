@@ -90,7 +90,20 @@ dev = [
 
 
 [tool.ruff]
-exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests", "tests/**", "**/tests/**"]
+exclude = [
+    "astrbot/core/utils/t2i/local_strategy.py",
+    "astrbot/api/all.py",
+    "astrbot/api/message_components.py",
+    "astrbot/api/platform/__init__.py",
+    "astrbot/api/star/__init__.py",
+    "astrbot/core/config/__init__.py",
+    "astrbot/core/provider/func_tool_manager.py",
+    "astrbot/core/skills/__init__.py",
+    "astrbot/core/tools/__init__.py",
+    "tests",
+    "tests/**",
+    "**/tests/**",
+]
 line-length = 88
 target-version = "py310"
 

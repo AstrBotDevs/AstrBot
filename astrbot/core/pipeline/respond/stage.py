@@ -2,6 +2,7 @@ import asyncio
 import math
 import random
 from collections.abc import AsyncGenerator
+from typing import ClassVar
 
 import astrbot.core.message.components as Comp
 from astrbot.core import logger
@@ -18,7 +19,7 @@ from ..stage import Stage, register_stage
 @register_stage
 class RespondStage(Stage):
     # 组件类型到其非空判断函数的映射
-    _component_validators = {
+    _component_validators: ClassVar[dict[type, lambda comp: bool]] = {
         Comp.Plain: lambda comp: bool(
             comp.text and comp.text.strip(),
         ),  # 纯文本消息需要strip

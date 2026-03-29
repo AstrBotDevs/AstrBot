@@ -1,5 +1,5 @@
 <template>
-  <div class="diamond-bg">
+  <div class="star-bg">
     <canvas ref="canvas"></canvas>
   </div>
 </template>
@@ -8,75 +8,63 @@
 import { onMounted, onUnmounted, ref } from "vue";
 
 const canvas = ref<HTMLCanvasElement | null>(null);
-let animationId: number | null = null;
+let animId: number | null = null;
 
-interface Diamond {
+interface Star {
   x: number;
   y: number;
-  size: number;
+  s: number;
   phase: number;
-  speed: number;
+  spd: number;
 }
 
-const createDiamonds = (w: number, h: number): Diamond[] => {
-  const diamonds: Diamond[] = [];
-  const spacing = 48;
-  const cols = Math.ceil(w / spacing) + 2;
-  const rows = Math.ceil(h / spacing) + 2;
+const createGrid = (w: number, h: number): Star[] => {
+  const stars: Star[] = [];
+  const s = 28;
+  const hStep = s * 0.866;
+  const cols = Math.ceil(w / s) + 2;
+  const rows = Math.ceil(h / hStep) + 2;
 
   for (let i = 0; i < cols; i++) {
     for (let j = 0; j < rows; j++) {
-      const offset = (j % 2) * (spacing / 2);
-      diamonds.push({
-        x: i * spacing + offset,
-        y: j * spacing * 0.75,
-        size: 8 + Math.random() * 6,
-        phase: (i + j * 0.5) * 0.8,
-        speed: 0.4 + Math.random() * 0.3,
+      stars.push({
+        x: i * s + (j % 2) * (s / 2),
+        y: j * hStep,
+        s: 5 + Math.random() * 3,
+        phase: Math.random() * Math.PI * 2,
+        spd: 0.3 + Math.random() * 0.4,
       });
     }
   }
-  return diamonds;
+  return stars;
 };
 
-const drawDiamond = (
+const draw = (
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  size: number,
-  alpha: number,
-  raised: boolean
+  s: number,
+  a: number,
+  up: boolean
 ) => {
-  const d = size / 2;
-  const depth = raised ? 0 : size * 0.25;
+  const h = s * 0.5;
+  const d = up ? 0 : h * 0.4;
 
-  // Main body
   ctx.beginPath();
-  ctx.moveTo(x, y - d + depth);
-  ctx.lineTo(x + d + depth, y);
-  ctx.lineTo(x, y + d - depth);
-  ctx.lineTo(x - d - depth, y);
+  ctx.moveTo(x, y - h + d);
+  ctx.lineTo(x + s * 0.5 + d, y);
+  ctx.lineTo(x, y + h - d);
+  ctx.lineTo(x - s * 0.5 - d, y);
   ctx.closePath();
 
-  // Fill with subtle gradient
-  const grad = ctx.createLinearGradient(x - d, y - d, x + d, y + d);
-  if (raised) {
-    grad.addColorStop(0, `rgba(147, 197, 253, ${alpha})`);
-    grad.addColorStop(1, `rgba(59, 130, 246, ${alpha * 0.8})`);
-  } else {
-    grad.addColorStop(0, `rgba(30, 64, 175, ${alpha * 0.6})`);
-    grad.addColorStop(1, `rgba(30, 58, 138, ${alpha * 0.4})`);
-  }
-  ctx.fillStyle = grad;
+  const g = ctx.createLinearGradient(x, y - h, x, y + h);
+  g.addColorStop(0, `rgba(180, 210, 255, ${a})`);
+  g.addColorStop(1, `rgba(80, 140, 220, ${a * 0.6})`);
+  ctx.fillStyle = g;
   ctx.fill();
 
-  // Top edge highlight
-  ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * (raised ? 0.5 : 0.2)})`;
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  ctx.moveTo(x - d + depth, y);
-  ctx.lineTo(x, y - d + depth);
-  ctx.lineTo(x + d + depth, y);
+  ctx.strokeStyle = `rgba(220, 240, 255, ${a * 0.4})`;
+  ctx.lineWidth = 0.5;
   ctx.stroke();
 };
 
@@ -85,47 +73,47 @@ onMounted(() => {
   const ctx = canvas.value.getContext("2d");
   if (!ctx) return;
 
-  let diamonds: Diamond[] = [];
+  let stars: Star[] = [];
   let t = 0;
 
   const resize = () => {
     if (!canvas.value) return;
     canvas.value.width = window.innerWidth;
     canvas.value.height = window.innerHeight;
-    diamonds = createDiamonds(canvas.value.width, canvas.value.height);
+    stars = createGrid(canvas.value.width, canvas.value.height);
   };
 
-  const animate = () => {
+  const loop = () => {
     if (!canvas.value || !ctx) return;
     ctx.clearRect(0, 0, canvas.value.width, canvas.value.height);
-    t += 0.015;
+    t += 0.012;
 
-    diamonds.forEach((d) => {
-      const floatY = Math.sin(t * d.speed + d.phase) * 5;
-      const raised = Math.sin(t * d.speed + d.phase) > 0;
-      const alpha = 0.25 + Math.abs(Math.sin(t * d.speed + d.phase)) * 0.35;
-      drawDiamond(ctx, d.x, d.y + floatY, d.size, alpha, raised);
+    stars.forEach((st) => {
+      const fy = Math.sin(t * st.spd + st.phase) * 3;
+      const up = Math.sin(t * st.spd + st.phase) > 0;
+      const a = 0.2 + Math.abs(Math.sin(t * st.spd + st.phase)) * 0.5;
+      draw(ctx, st.x, st.y + fy, st.s, a, up);
     });
 
-    animationId = requestAnimationFrame(animate);
+    animId = requestAnimationFrame(loop);
   };
 
   resize();
-  animate();
+  loop();
   window.addEventListener("resize", resize);
 });
 
 onUnmounted(() => {
-  if (animationId !== null) cancelAnimationFrame(animationId);
+  if (animId !== null) cancelAnimationFrame(animId);
 });
 </script>
 
 <style scoped>
-.diamond-bg {
+.star-bg {
   position: fixed;
   inset: 0;
   z-index: 0;
-  background: linear-gradient(145deg, #0c1322 0%, #1a2744 40%, #0c1322 100%);
+  background: #0a0e1a;
 }
 
 canvas {

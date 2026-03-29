@@ -6,6 +6,7 @@ from quart import request
 
 from astrbot.cli.commands.cmd_conf import (
     hash_dashboard_password_secure,
+    is_dashboard_password_hash,
     verify_dashboard_password,
 )
 from astrbot.core import DEMO_MODE
@@ -22,27 +23,51 @@ class AuthRoute(Route):
         }
         self.register_routes()
 
+    def _is_password_set(self, stored_password_hash: str) -> bool:
+        """
+        Check if the password has been set (not empty and is a valid hash).
+        """
+        if not stored_password_hash:
+            return False
+        # Must be a valid argon2 or pbkdf2 hash
+        return is_dashboard_password_hash(stored_password_hash)
+
     async def login(self):
-        username = self.config["dashboard"]["username"]
+        stored_username = self.config["dashboard"]["username"]
         stored_password_hash = self.config["dashboard"]["password"]
         post_data = await request.json
-        if post_data["username"] == username and self._matches_dashboard_password(
+        input_username = post_data.get("username", "")
+        input_password = post_data.get("password", "")
+
+        # Security: Require non-empty credentials
+        if not input_username or not input_password:
+            return Response().error("用户名和密码不能为空").__dict__
+
+        # Check if password has been configured via CLI
+        if not self._is_password_set(stored_password_hash):
+            await asyncio.sleep(3)
+            return Response().error(
+                "管理员密码未设置，请先运行 'astrbot conf admin' 命令设置密码"
+            ).__dict__
+
+        # Normal login flow - credentials must match stored admin account
+        if input_username == stored_username and self._matches_dashboard_password(
             stored_password_hash,
             post_data,
         ):
-            change_pwd_hint = False
-
             return (
                 Response()
                 .ok(
                     {
-                        "token": self.generate_jwt(username),
-                        "username": username,
-                        "change_pwd_hint": change_pwd_hint,
+                        "token": self.generate_jwt(stored_username),
+                        "username": stored_username,
+                        "change_pwd_hint": False,
                     },
                 )
                 .__dict__
             )
+
+        # Security: Don't reveal whether it's username or password error
         await asyncio.sleep(3)
         return Response().error("用户名或密码错误").__dict__
 

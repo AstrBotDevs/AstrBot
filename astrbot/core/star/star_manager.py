@@ -108,9 +108,10 @@ async def _temporary_filtered_requirements_file(
         try:
             yield filtered_requirements_path
         finally:
-            if filtered_requirements_path and await anyio.Path(
+            if (
                 filtered_requirements_path
-            ).exists():
+                and await anyio.Path(filtered_requirements_path).exists()
+            ):
                 try:
                     await to_thread.run_sync(os.remove, filtered_requirements_path)
                 except OSError as exc:

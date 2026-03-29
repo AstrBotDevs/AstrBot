@@ -266,7 +266,9 @@ class ToolSet:
 
             if target_type in supported_types:
                 result["type"] = target_type
-                if "format" in schema and schema["format"] in supported_formats.get(result["type"], set()):
+                if "format" in schema and schema["format"] in supported_formats.get(
+                    result["type"], set()
+                ):
                     result["format"] = schema["format"]
             else:
                 result["type"] = "null"

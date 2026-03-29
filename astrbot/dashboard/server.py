@@ -378,8 +378,7 @@ class AstrBotDashboard:
 
     def _should_bypass_runtime_guard(self, path: str) -> bool:
         return any(
-            path.startswith(prefix)
-            for prefix in self.RUNTIME_BYPASS_ENDPOINT_PREFIXES
+            path.startswith(prefix) for prefix in self.RUNTIME_BYPASS_ENDPOINT_PREFIXES
         )
 
     def _should_allow_failed_runtime_recovery(self, path: str) -> bool:

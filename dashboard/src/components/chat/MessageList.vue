@@ -28,7 +28,7 @@
           <div
             class="message-bubble user-bubble"
             :class="{ 'has-audio': hasAudio(msg.content.message) }"
-            :style="{ backgroundColor: isDark ? '#2d2e30' : '#e7ebf4' }"
+            :style="{ backgroundColor: 'rgb(var(--v-theme-chatMessageBubble))' }"
           >
             <!-- 遍历 message parts -->
             <template

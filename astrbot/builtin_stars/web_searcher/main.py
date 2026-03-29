@@ -2,6 +2,7 @@ import asyncio
 import json
 import random
 import uuid
+from typing import ClassVar
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -18,7 +19,7 @@ from .engines.sogo import Sogo
 
 
 class Main(star.Star):
-    TOOLS = [
+    TOOLS: ClassVar[list[str]] = [
         "web_search",
         "fetch_url",
         "web_search_tavily",

@@ -15,7 +15,9 @@ RUNTIME_FAILED_MESSAGE = "Runtime bootstrap failed. Please check logs and retry.
 
 
 def is_runtime_request_ready(core_lifecycle: "AstrBotCoreLifecycle") -> bool:
-    return getattr(core_lifecycle, "runtime_request_ready", core_lifecycle.runtime_ready)
+    return getattr(
+        core_lifecycle, "runtime_request_ready", core_lifecycle.runtime_ready
+    )
 
 
 def get_runtime_guard_message(core_lifecycle: "AstrBotCoreLifecycle") -> str:
