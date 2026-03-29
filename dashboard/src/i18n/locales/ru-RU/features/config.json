@@ -42,7 +42,8 @@
         "advanced": "Расширенные",
         "security": "Безопасность",
         "appearance": "Внешний вид",
-        "notification": "Уведомления"
+        "notification": "Уведомления",
+        "moreConfig": "Дополнительные настройки"
     },
     "general": {
         "botName": "Имя бота",

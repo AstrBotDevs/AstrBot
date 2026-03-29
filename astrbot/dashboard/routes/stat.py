@@ -4,18 +4,22 @@ import re
 import threading
 import time
 import traceback
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from functools import cmp_to_key
 from pathlib import Path
 
 import aiohttp
 import psutil
 from quart import request
+from sqlmodel import select
 
 from astrbot.core import DEMO_MODE, logger
 from astrbot.core.config import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.migration.helper import check_migration_needed_v4
+from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.io import get_dashboard_version
 from astrbot.core.utils.storage_cleaner import StorageCleaner
@@ -34,6 +38,7 @@ class StatRoute(Route):
         super().__init__(context)
         self.routes = {
             "/stat/get": ("GET", self.get_stat),
+            "/stat/provider-tokens": ("GET", self.get_provider_token_stats),
             "/stat/version": ("GET", self.get_version),
             "/stat/start-time": ("GET", self.get_start_time),
             "/stat/restart-core": ("POST", self.restart_core),
@@ -187,6 +192,207 @@ class StatRoute(Route):
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(e.__str__()).__dict__
+
+    @staticmethod
+    def _ensure_aware_utc(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+    async def get_provider_token_stats(self):
+        try:
+            try:
+                days = int(request.args.get("days", 1))
+            except (TypeError, ValueError):
+                days = 1
+            if days not in (1, 3, 7):
+                days = 1
+
+            local_tz = datetime.now().astimezone().tzinfo or timezone.utc
+            now_local = datetime.now(local_tz)
+            range_start_local = (now_local - timedelta(days=days)).replace(
+                minute=0, second=0, microsecond=0
+            )
+            today_start_local = now_local.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            query_start_local = min(range_start_local, today_start_local)
+            query_start_utc = query_start_local.astimezone(timezone.utc)
+
+            async with self.db_helper.get_db() as session:
+                result = await session.execute(
+                    select(ProviderStat)
+                    .where(
+                        ProviderStat.agent_type == "internal",
+                        ProviderStat.created_at >= query_start_utc,
+                    )
+                    .order_by(ProviderStat.created_at.asc())
+                )
+                records = result.scalars().all()
+
+            bucket_timestamps: list[int] = []
+            bucket_cursor = range_start_local
+            while bucket_cursor <= now_local:
+                bucket_timestamps.append(int(bucket_cursor.timestamp() * 1000))
+                bucket_cursor += timedelta(hours=1)
+
+            trend_by_provider: dict[str, dict[int, int]] = defaultdict(
+                lambda: defaultdict(int)
+            )
+            total_by_provider: dict[str, int] = defaultdict(int)
+            total_by_umo: dict[str, int] = defaultdict(int)
+            total_by_bucket: dict[int, int] = defaultdict(int)
+            range_total_tokens = 0
+            range_total_calls = 0
+            range_success_calls = 0
+            range_ttft_total_ms = 0.0
+            range_ttft_samples = 0
+            range_duration_total_ms = 0.0
+            range_duration_samples = 0
+            today_by_model: dict[str, int] = defaultdict(int)
+            today_by_provider: dict[str, int] = defaultdict(int)
+            today_total_tokens = 0
+            today_total_calls = 0
+
+            for record in records:
+                created_at_utc = self._ensure_aware_utc(record.created_at)
+                created_at_local = created_at_utc.astimezone(local_tz)
+                token_total = (
+                    record.token_input_other
+                    + record.token_input_cached
+                    + record.token_output
+                )
+                provider_id = record.provider_id or "unknown"
+                provider_model = record.provider_model or "Unknown"
+
+                if created_at_local >= range_start_local:
+                    bucket_local = created_at_local.replace(
+                        minute=0, second=0, microsecond=0
+                    )
+                    bucket_ts = int(bucket_local.timestamp() * 1000)
+                    trend_by_provider[provider_id][bucket_ts] += token_total
+                    total_by_provider[provider_id] += token_total
+                    total_by_umo[record.umo or "unknown"] += token_total
+                    total_by_bucket[bucket_ts] += token_total
+                    range_total_tokens += token_total
+                    range_total_calls += 1
+                    if record.status != "error":
+                        range_success_calls += 1
+                    if record.time_to_first_token > 0:
+                        range_ttft_total_ms += record.time_to_first_token * 1000
+                        range_ttft_samples += 1
+                    if record.end_time > record.start_time:
+                        range_duration_total_ms += (
+                            record.end_time - record.start_time
+                        ) * 1000
+                        range_duration_samples += 1
+
+                if created_at_local >= today_start_local:
+                    today_total_calls += 1
+                    today_total_tokens += token_total
+                    today_by_model[provider_model] += token_total
+                    today_by_provider[provider_id] += token_total
+
+            sorted_provider_ids = sorted(
+                total_by_provider.keys(),
+                key=lambda item: total_by_provider[item],
+                reverse=True,
+            )
+
+            series = [
+                {
+                    "name": provider_id,
+                    "data": [
+                        [bucket_ts, trend_by_provider[provider_id].get(bucket_ts, 0)]
+                        for bucket_ts in bucket_timestamps
+                    ],
+                    "total_tokens": total_by_provider[provider_id],
+                }
+                for provider_id in sorted_provider_ids
+            ]
+
+            total_series = [
+                [bucket_ts, total_by_bucket.get(bucket_ts, 0)]
+                for bucket_ts in bucket_timestamps
+            ]
+
+            today_by_model_data = [
+                {"provider_model": model_name, "tokens": tokens}
+                for model_name, tokens in sorted(
+                    today_by_model.items(),
+                    key=lambda item: item[1],
+                    reverse=True,
+                )
+            ]
+            today_by_provider_data = [
+                {"provider_id": provider_id, "tokens": tokens}
+                for provider_id, tokens in sorted(
+                    today_by_provider.items(),
+                    key=lambda item: item[1],
+                    reverse=True,
+                )
+            ]
+            range_by_provider_data = [
+                {"provider_id": provider_id, "tokens": tokens}
+                for provider_id, tokens in sorted(
+                    total_by_provider.items(),
+                    key=lambda item: item[1],
+                    reverse=True,
+                )
+            ]
+            range_by_umo_data = [
+                {"umo": umo, "tokens": tokens}
+                for umo, tokens in sorted(
+                    total_by_umo.items(),
+                    key=lambda item: item[1],
+                    reverse=True,
+                )
+            ]
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "days": days,
+                        "trend": {
+                            "series": series,
+                            "total_series": total_series,
+                        },
+                        "range_total_tokens": range_total_tokens,
+                        "range_total_calls": range_total_calls,
+                        "range_avg_ttft_ms": (
+                            range_ttft_total_ms / range_ttft_samples
+                            if range_ttft_samples
+                            else 0
+                        ),
+                        "range_avg_duration_ms": (
+                            range_duration_total_ms / range_duration_samples
+                            if range_duration_samples
+                            else 0
+                        ),
+                        "range_avg_tpm": (
+                            range_total_tokens / (range_duration_total_ms / 1000 / 60)
+                            if range_duration_total_ms > 0
+                            else 0
+                        ),
+                        "range_success_rate": (
+                            range_success_calls / range_total_calls
+                            if range_total_calls
+                            else 0
+                        ),
+                        "range_by_provider": range_by_provider_data,
+                        "range_by_umo": range_by_umo_data,
+                        "today_total_tokens": today_total_tokens,
+                        "today_total_calls": today_total_calls,
+                        "today_by_model": today_by_model_data,
+                        "today_by_provider": today_by_provider_data,
+                    }
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"Error: {e!s}").__dict__
 
     async def test_ghproxy_connection(self):
         """测试 GitHub 代理连接是否可用。"""
