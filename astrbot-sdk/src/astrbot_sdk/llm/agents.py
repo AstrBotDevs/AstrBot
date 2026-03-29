@@ -28,9 +28,9 @@ class AgentSpec(BaseModel):
 
 
 class BaseAgentRunner(ABC):
-    """ agent registration surface.
+    """agent registration surface.
 
-     only supports agent registration metadata. Actual execution remains
+    only supports agent registration metadata. Actual execution remains
     owned by the core tool loop and is not directly callable from SDK plugins.
     """
 
