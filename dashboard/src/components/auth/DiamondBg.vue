@@ -1,108 +1,56 @@
 <template>
   <div class="bg">
-    <canvas ref="canvas"></canvas>
+    <svg class="noise">
+      <filter id="grain">
+        <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="4" stitchTiles="stitch" />
+        <feColorMatrix type="saturate" values="0" />
+      </filter>
+      <rect width="100%" height="100%" filter="url(#grain)" opacity="0.04" />
+    </svg>
+    <div class="grid">
+      <div
+        class="cell"
+        v-for="i in total"
+        :key="i"
+        :class="{ recessed: isRecessed(i - 1) }"
+      >
+        <div class="socket">
+          <svg class="cross" viewBox="0 0 10 10">
+            <line class="h" x1="0" y1="5" x2="10" y2="5" />
+            <line class="v" x1="5" y1="0" x2="5" y2="10" />
+          </svg>
+          <div class="star"></div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { computed } from "vue";
 
-const canvas = ref<HTMLCanvasElement | null>(null);
-let animId: number | null = null;
+const cols = 28;
+const rows = 16;
+const total = computed(() => cols * rows);
 
-interface Cross {
-  x: number;
-  y: number;
-  phase: number;
-}
+// Center zone where login panel floats
+const centerX = 50; // %
+const centerY = 50; // %
+const zoneW = 18; // %
+const zoneH = 28; // %
 
-const createGrid = (w: number, h: number): Cross[] => {
-  const grid: Cross[] = [];
-  const s = 32;
-  for (let i = 0; i < Math.ceil(w / s) + 2; i++) {
-    for (let j = 0; j < Math.ceil(h / s) + 2; j++) {
-      grid.push({
-        x: i * s + (j % 2) * (s / 2),
-        y: j * s * 0.75,
-        phase: (i + j * 0.5) * 0.25,
-      });
-    }
-  }
-  return grid;
+const isRecessed = (idx: number) => {
+  const col = idx % cols;
+  const row = Math.floor(idx / cols);
+  const colPct = (col / cols) * 100;
+  const rowPct = (row / rows) * 100;
+
+  const dx = Math.abs(colPct - centerX);
+  const dy = Math.abs(rowPct - centerY);
+
+  // Diamond/pit shape: |dx/zoneW| + |dy/zoneH| < 1
+  return (dx / zoneW) + (dy / zoneH) < 0.85;
 };
-
-const draw = (ctx: CanvasRenderingContext2D, w: number, h: number, t: number) => {
-  ctx.fillStyle = "#090a0d";
-  ctx.fillRect(0, 0, w, h);
-
-  const s = 32;
-  const arm = 5;
-  const barH = 2;
-  const barW = 10;
-
-  for (let i = 0; i < Math.ceil(w / s) + 2; i++) {
-    for (let j = 0; j < Math.ceil(h / (s * 0.75)) + 2; j++) {
-      const x = i * s + (j % 2) * (s / 2);
-      const y = j * s * 0.75;
-      const pulse = 0.4 + 0.4 * Math.sin(t * 0.15 + (i + j) * 0.3);
-
-      // Recessed socket (square notch)
-      ctx.strokeStyle = "#1a1c22";
-      ctx.lineWidth = 0.5;
-      ctx.strokeRect(x - 6, y - 6, 12, 12);
-
-      // Cross arms
-      ctx.strokeStyle = "#1e2028";
-      ctx.lineWidth = barH;
-      ctx.lineCap = "square";
-      // Horizontal
-      ctx.beginPath();
-      ctx.moveTo(x - arm, y);
-      ctx.lineTo(x + arm, y);
-      ctx.stroke();
-      // Vertical
-      ctx.beginPath();
-      ctx.moveTo(x, y - arm);
-      ctx.lineTo(x, y + arm);
-      ctx.stroke();
-
-      // Diamond spark at center
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(Math.PI / 4);
-      const sparkSize = 1 + pulse;
-      ctx.fillStyle = `rgba(180, 210, 255, ${pulse})`;
-      ctx.fillRect(-sparkSize / 2, -sparkSize / 2, sparkSize, sparkSize);
-      ctx.restore();
-    }
-  }
-};
-
-onMounted(() => {
-  if (!canvas.value) return;
-  const ctx = canvas.value.getContext("2d");
-  if (!ctx) return;
-
-  let t = 0;
-  const resize = () => {
-    if (!canvas.value) return;
-    canvas.value.width = window.innerWidth;
-    canvas.value.height = window.innerHeight;
-  };
-  const loop = () => {
-    if (!canvas.value || !ctx) return;
-    draw(ctx, canvas.value.width, canvas.value.height, t);
-    t += 0.01;
-    animId = requestAnimationFrame(loop);
-  };
-  resize();
-  loop();
-  window.addEventListener("resize", resize);
-});
-
-onUnmounted(() => {
-  if (animId !== null) cancelAnimationFrame(animId);
-});
 </script>
 
 <style scoped>
@@ -110,11 +58,94 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: 0;
-  background: #090a0d;
+  background: #050709;
+  filter: contrast(1.1) brightness(0.85);
 }
-canvas {
-  display: block;
+
+.noise {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.grid {
+  position: relative;
+  z-index: 0;
+  display: grid;
+  grid-template-columns: repeat(v-bind(cols), 1fr);
+  grid-template-rows: repeat(v-bind(rows), 1fr);
+  width: 100%;
+  height: 100vh;
+}
+
+.cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.socket {
+  position: relative;
+  width: 80%;
+  height: 80%;
+  background: #0a0c12;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.02),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.6);
+}
+
+.cell.recessed .socket {
+  background: #060810;
+  box-shadow:
+    inset 0 3px 10px rgba(0, 0, 0, 0.95),
+    inset 0 0 20px rgba(0, 30, 60, 0.6);
+  transform: scale(0.88);
+}
+
+.cross {
+  position: absolute;
+  inset: 20%;
+  width: 60%;
+  height: 60%;
+}
+
+.cross line {
+  stroke: #181b24;
+  stroke-width: 0.5;
+  stroke-linecap: square;
+  fill: none;
+  transition: stroke-dasharray 0.3s ease, stroke-dashoffset 0.3s ease;
+}
+
+.cell.recessed .cross line {
+  stroke: #1c2030;
+  stroke-dasharray: 2;
+  stroke-dashoffset: 1;
+}
+
+.star {
+  position: absolute;
+  inset: 35%;
+  background: transparent;
+  transition: all 0.3s ease;
+}
+
+.cell.recessed .star {
+  background: #0a2040;
+  box-shadow:
+    0 0 3px rgba(30, 120, 255, 0.6),
+    0 0 6px rgba(30, 120, 255, 0.2);
+}
+
+.cell.recessed .star::after {
+  content: '';
+  position: absolute;
+  inset: 30%;
+  background: rgba(100, 200, 255, 0.9);
 }
 </style>
