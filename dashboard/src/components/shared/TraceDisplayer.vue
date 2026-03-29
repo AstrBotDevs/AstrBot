@@ -1,6 +1,6 @@
 <script setup>
-import axios from 'axios';
-import { EventSourcePolyfill } from 'event-source-polyfill';
+import axios from "axios";
+import { EventSourcePolyfill } from "event-source-polyfill";
 import { resolveApiUrl } from "@/utils/request";
 </script>
 
@@ -11,14 +11,16 @@ import { resolveApiUrl } from "@/utils/request";
         <div class="trace-cell time">Time</div>
         <div class="trace-cell span">Event ID</div>
         <div class="trace-cell umo">UMO</div>
-        <!-- <div class="trace-cell count">Records</div> -->
-        <!-- <div class="trace-cell last">Last</div> -->
         <div class="trace-cell sender">Sender</div>
         <div class="trace-cell outline">Outline</div>
         <div class="trace-cell fields"></div>
       </div>
-      <div class="trace-group" :class="{ highlight: highlightMap[event.span_id] }" v-for="event in events"
-        :key="event.span_id">
+      <div
+        class="trace-group"
+        :class="{ highlight: highlightMap[event.span_id] }"
+        v-for="event in events"
+        :key="event.span_id"
+      >
         <div class="trace-row trace-event">
           <div class="trace-cell time">{{ formatTime(event.first_time) }}</div>
           <div class="trace-cell span" :title="event.span_id">
@@ -27,58 +29,73 @@ import { resolveApiUrl } from "@/utils/request";
             </div>
           </div>
           <div class="trace-cell umo">{{ event.umo }}</div>
-          <!-- <div class="trace-cell count">
-            <div class="event-meta">{{ event.records.length }}</div>
-          </div> -->
-          <!-- <div class="trace-cell last">
-            <div class="event-meta">{{ formatTime(event.last_time) }}</div>
-          </div> -->
           <div class="trace-cell sender">
-            <div class="event-sub" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{
-              event.sender_name || '-' }}</div>
+            <div
+              class="event-sub"
+              style="
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+              "
+            >
+              {{ event.sender_name || "-" }}
+            </div>
           </div>
           <div class="trace-cell outline">
-            <div class="event-sub outline">{{ event.message_outline || '-' }}</div>
+            <div class="event-sub outline">
+              {{ event.message_outline || "-" }}
+            </div>
           </div>
           <div class="trace-cell fields event-controls">
-            <v-btn size="x-small" variant="text" color="primary" @click="toggleEvent(event.span_id)">
-              {{ event.collapsed ? 'Expand' : 'Collapse' }}
+            <v-btn
+              size="x-small"
+              variant="text"
+              color="primary"
+              @click="toggleEvent(event.span_id)"
+            >
+              {{ event.collapsed ? "Expand" : "Collapse" }}
               <span v-if="event.hasAgentPrepare" class="agent-dot" />
             </v-btn>
           </div>
         </div>
         <div class="trace-records" v-if="!event.collapsed">
-          <div class="trace-record" v-for="record in getVisibleRecords(event)" :key="record.key">
+          <div
+            class="trace-record"
+            v-for="record in getVisibleRecords(event)"
+            :key="record.key"
+          >
             <div class="trace-record-time">{{ record.timeLabel }}</div>
             <div class="trace-record-action">{{ record.action }}</div>
             <pre class="trace-record-fields">{{ record.fieldsText }}</pre>
           </div>
-          <div class="event-more" v-if="event.visibleCount < event.records.length">
-            <v-btn size="x-small" variant="tonal" color="primary" @click="showMore(event.span_id)">
+          <div
+            class="event-more"
+            v-if="event.visibleCount < event.records.length"
+          >
+            <v-btn
+              size="x-small"
+              variant="tonal"
+              color="primary"
+              @click="showMore(event.span_id)"
+            >
               Show more
             </v-btn>
           </div>
         </div>
       </div>
-      <div v-if="events.length === 0" class="trace-empty">No trace data yet.</div>
+      <div v-if="events.length === 0" class="trace-empty">
+        No trace data yet.
+      </div>
     </div>
   </div>
 </template>
 
 <script>
-import { resolveApiUrl } from "@/utils/request";
-
 export default {
-  name: 'TraceDisplayer',
+  name: "TraceDisplayer",
   props: {
-    autoScroll: {
-      type: Boolean,
-      default: true
-    },
-    maxItems: {
-      type: Number,
-      default: 300
-    }
+    autoScroll: { type: Boolean, default: true },
+    maxItems: { type: Number, default: 300 },
   },
   data() {
     return {
@@ -92,14 +109,14 @@ export default {
       maxRetryAttempts: 10,
       baseRetryDelay: 1000,
       lastEventId: null,
-      tableHeight: 'auto'
+      tableHeight: "auto",
     };
   },
   async mounted() {
     await this.fetchTraceHistory();
     this.connectSSE();
     this.updateTableHeight();
-    window.addEventListener('resize', this.updateTableHeight);
+    window.addEventListener("resize", this.updateTableHeight);
   },
   beforeUnmount() {
     if (this.eventSource) {
@@ -111,27 +128,27 @@ export default {
       this.retryTimer = null;
     }
     this.retryAttempts = 0;
-    window.removeEventListener('resize', this.updateTableHeight);
+    window.removeEventListener("resize", this.updateTableHeight);
   },
   methods: {
     updateTableHeight() {
       this.$nextTick(() => {
         const el = this.$refs.scrollEl;
-        if (!el || typeof window === 'undefined') return;
-        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+        if (!el || typeof window === "undefined") return;
+        const viewportHeight =
+          window.innerHeight || document.documentElement.clientHeight;
         const offsetTop = el.getBoundingClientRect().top;
-        const height = Math.max(viewportHeight - offsetTop, 0);
-        this.tableHeight = `${height}px`;
+        this.tableHeight = `${Math.max(viewportHeight - offsetTop, 0)}px`;
       });
     },
     async fetchTraceHistory() {
       try {
-        const res = await axios.get('/api/log-history');
+        const res = await axios.get("/api/log-history");
         const logs = res.data?.data?.logs || [];
-        const traces = logs.filter((item) => item.type === 'trace');
+        const traces = logs.filter((item) => item.type === "trace");
         this.processNewTraces(traces);
       } catch (err) {
-        console.error('Failed to fetch trace history:', err);
+        console.error("Failed to fetch trace history:", err);
       }
     },
     connectSSE() {
@@ -139,72 +156,54 @@ export default {
         this.eventSource.close();
         this.eventSource = null;
       }
-
-      const token = localStorage.getItem('token');
-
-      this.eventSource = new EventSourcePolyfill(resolveApiUrl("/api/live-log"), {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : ''
+      const token = localStorage.getItem("token");
+      this.eventSource = new EventSourcePolyfill(
+        resolveApiUrl("/api/live-log"),
+        {
+          headers: { Authorization: token ? `Bearer ${token}` : "" },
+          heartbeatTimeout: 300000,
         },
-        heartbeatTimeout: 300000
-      });
-
+      );
       this.eventSource.onopen = () => {
         this.retryAttempts = 0;
-        if (!this.lastEventId) {
-          this.fetchTraceHistory();
-        }
+        if (!this.lastEventId) this.fetchTraceHistory();
       };
-
       this.eventSource.onmessage = (event) => {
         try {
-          if (event.lastEventId) {
-            this.lastEventId = event.lastEventId;
-          }
-
+          if (event.lastEventId) this.lastEventId = event.lastEventId;
           const payload = JSON.parse(event.data);
-          if (payload?.type !== 'trace') {
-            return;
-          }
+          if (payload?.type !== "trace") return;
           this.processNewTraces([payload]);
         } catch (e) {
-          console.error('Failed to parse trace payload:', e);
+          console.error("Failed to parse trace payload:", e);
         }
       };
-
-      this.eventSource.onerror = (err) => {
+      this.eventSource.onerror = () => {
         if (this.eventSource) {
           this.eventSource.close();
           this.eventSource = null;
         }
-
         if (this.retryAttempts >= this.maxRetryAttempts) {
-          console.error('Trace stream reached max retry attempts.');
+          console.error("Trace stream reached max retry attempts.");
           return;
         }
-
         const delay = Math.min(
           this.baseRetryDelay * Math.pow(2, this.retryAttempts),
-          30000
+          30000,
         );
-
         if (this.retryTimer) {
           clearTimeout(this.retryTimer);
           this.retryTimer = null;
         }
-
         this.retryTimer = setTimeout(async () => {
           this.retryAttempts++;
-          if (!this.lastEventId) {
-            await this.fetchTraceHistory();
-          }
+          if (!this.lastEventId) await this.fetchTraceHistory();
           this.connectSSE();
         }, delay);
       };
     },
     processNewTraces(newTraces) {
       if (!newTraces || newTraces.length === 0) return;
-
       let hasUpdate = false;
       const touched = new Set();
       newTraces.forEach((trace) => {
@@ -223,42 +222,33 @@ export default {
             collapsed: true,
             visibleCount: 20,
             records: [],
-            hasAgentPrepare: trace.action === 'astr_agent_prepare'
+            hasAgentPrepare: trace.action === "astr_agent_prepare",
           };
           this.eventIndex[trace.span_id] = event;
           this.events.push(event);
           hasUpdate = true;
         }
-
         const exists = event.records.some((item) => item.key === recordKey);
         if (exists) return;
-
         event.records.push({
           time: trace.time,
           action: trace.action,
           fieldsText: this.formatFields(trace.fields),
           timeLabel: this.formatTime(trace.time),
-          key: recordKey
+          key: recordKey,
         });
-        if (trace.action === 'astr_agent_prepare') {
-          event.hasAgentPrepare = true;
-        }
-        if (!event.first_time || trace.time < event.first_time) {
+        if (trace.action === "astr_agent_prepare") event.hasAgentPrepare = true;
+        if (!event.first_time || trace.time < event.first_time)
           event.first_time = trace.time;
-        }
-        if (!event.last_time || trace.time > event.last_time) {
+        if (!event.last_time || trace.time > event.last_time)
           event.last_time = trace.time;
-        }
-        if (!event.sender_name && trace.sender_name) {
+        if (!event.sender_name && trace.sender_name)
           event.sender_name = trace.sender_name;
-        }
-        if (!event.message_outline && trace.message_outline) {
+        if (!event.message_outline && trace.message_outline)
           event.message_outline = trace.message_outline;
-        }
         touched.add(trace.span_id);
         hasUpdate = true;
       });
-
       if (hasUpdate) {
         this.events.forEach((event) => {
           event.records.sort((a, b) => b.time - a.time);
@@ -278,24 +268,24 @@ export default {
     },
     scrollToBottom() {
       const el = this.$refs.scrollEl;
-      if (!el) return;
-      el.scrollTop = el.scrollHeight;
+      if (el) el.scrollTop = el.scrollHeight;
     },
     toggleEvent(spanId) {
       const event = this.eventIndex[spanId];
-      if (!event) return;
-      event.collapsed = !event.collapsed;
+      if (event) event.collapsed = !event.collapsed;
     },
     showMore(spanId) {
       const event = this.eventIndex[spanId];
-      if (!event) return;
-      event.visibleCount = Math.min(event.records.length, event.visibleCount + 20);
+      if (event)
+        event.visibleCount = Math.min(
+          event.records.length,
+          event.visibleCount + 20,
+        );
     },
     pulseEvent(spanId) {
       if (!spanId) return;
-      if (this.highlightTimers[spanId]) {
+      if (this.highlightTimers[spanId])
         clearTimeout(this.highlightTimers[spanId]);
-      }
       this.highlightMap = { ...this.highlightMap, [spanId]: true };
       const remove = setTimeout(() => {
         const next = { ...this.highlightMap };
@@ -312,31 +302,33 @@ export default {
       return event.records.slice(0, event.visibleCount);
     },
     formatTime(ts) {
-      if (!ts) return '';
+      if (!ts) return "";
       const date = new Date(ts * 1000);
-      const base = date.toLocaleString();
-      const ms = String(date.getMilliseconds()).padStart(3, '0');
-      return `${base}.${ms}`;
+      return `${date.toLocaleString()}.${String(date.getMilliseconds()).padStart(3, "0")}`;
     },
     shortSpan(spanId) {
-      if (!spanId) return '';
-      return spanId.slice(0, 8);
+      return spanId ? spanId.slice(0, 8) : "";
     },
     formatFields(fields) {
-      if (!fields) return '';
+      if (!fields) return "";
       try {
         const text = JSON.stringify(fields, null, 2);
-        if (text.length > 2000) {
-          return `${text}`;
-        }
-        return text;
+        return text.length > 2000 ? text : text;
       } catch (e) {
         return String(fields);
       }
-    }
-  }
+    },
+  },
 };
 </script>
+
+<style>
+.trace-cell { color: #e2e2e7 !important; }
+.trace-header { color: #e2e2e7 !important; }
+.trace-table { background: rgba(13,13,15,0.95) !important; }
+.trace-group { background: rgba(13,13,15,0.5) !important; }
+.trace-empty { color: #e2e2e7 !important; }
+</style>
 
 <style scoped>
 .trace-wrapper {
@@ -344,30 +336,27 @@ export default {
 }
 
 .trace-table {
-  background: transparent;
+  background: var(--v-theme-surface);
   border-radius: 0;
   padding: 0;
   height: 100%;
   overflow-y: auto;
-  color: #2b3340;
-  font-family: 'Fira Code', monospace;
+  font-family: "Fira Code", monospace;
 }
 
 .trace-row {
   display: grid;
-  grid-template-columns: 200px 100px 300px 90px 180px 140px 200px 1fr;
+  grid-template-columns: 200px 100px 300px 90px 180px 140px;
   gap: 12px;
 }
 
 .trace-group {
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  background: transparent;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
   padding: 8px 0;
 }
 
 .trace-group.highlight {
-  background: rgba(59, 130, 246, 0.08);
-  transition: background 0.6s ease;
+  background: rgba(59, 130, 246, 0.12);
 }
 
 .trace-event {
@@ -376,8 +365,7 @@ export default {
 
 .trace-header {
   font-weight: 600;
-  color: #e2e2e7;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.12);
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
   padding-bottom: 10px;
 }
 
@@ -385,30 +373,22 @@ export default {
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 12px;
+  color: var(--v-theme-primaryText);
 }
 
 .event-title {
   font-weight: 600;
-  color: #1f2937;
 }
-
 .event-meta {
   font-size: 12px;
-  color: #6b7280;
   margin-top: 4px;
 }
-
 .event-sub {
   font-size: 12px;
-  color: #4b5563;
   margin-top: 2px;
   word-break: break-word;
+  color: var(--v-theme-primaryText);
 }
-
-.event-sub.outline {
-  color: #6b7280;
-}
-
 .event-controls {
   display: flex;
   justify-content: flex-end;
@@ -428,20 +408,19 @@ export default {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #4b5563;
+  color: var(--v-theme-primaryText);
 }
 
 .trace-empty {
   padding: 24px;
   text-align: center;
-  color: #e2e2e7;
+  color: var(--v-theme-secondaryText);
 }
 
 @media (max-width: 1200px) {
   .trace-row {
     grid-template-columns: 140px 160px 300px 70px 140px 180px 1fr;
   }
-
   .trace-cell.fields {
     grid-column: 1 / -1;
   }
@@ -453,36 +432,30 @@ export default {
   gap: 8px;
   padding: 2px 0;
 }
-
 .trace-record:last-child {
   border-bottom: none;
 }
-
 .trace-record-time {
-  color: #6b7280;
   font-size: 11px;
+  color: var(--v-theme-secondaryText);
 }
-
 .trace-record-action {
-  color: #1f2937;
   font-weight: 600;
   font-size: 11px;
+  color: var(--v-theme-primaryText);
 }
-
 .trace-record-fields {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #4b5563;
   font-size: 10px;
+  color: var(--v-theme-primaryText);
 }
-
 .event-more {
   display: flex;
   justify-content: center;
   padding: 6px 0 2px;
 }
-
 .trace-records {
   padding: 4px 0 2px 0;
 }
