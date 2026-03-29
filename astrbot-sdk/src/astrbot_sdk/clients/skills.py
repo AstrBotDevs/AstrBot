@@ -1,3 +1,5 @@
+"""技能注册客户端。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,6 +10,8 @@ from ._proxy import CapabilityProxy
 
 @dataclass(slots=True)
 class SkillRegistration:
+    """已注册技能的元数据。"""
+
     name: str
     description: str
     path: str
@@ -24,6 +28,8 @@ class SkillRegistration:
 
 
 class SkillClient:
+    """技能管理能力客户端。"""
+
     def __init__(self, proxy: CapabilityProxy) -> None:
         self._proxy = proxy
 

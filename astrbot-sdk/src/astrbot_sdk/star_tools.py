@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ._internal.star_runtime import current_star_context
 from .context import Context
 from .message.components import BaseMessageComponent
 from .message.result import MessageChain
 from .message.session import MessageSession
+
+if TYPE_CHECKING:
+    from .clients.skills import SkillRegistration
+    from .llm.tools import LLMToolManager
 
 
 class _StarToolsContextDescriptor:
@@ -41,7 +45,7 @@ class StarTools:
         return ctx
 
     @classmethod
-    def get_llm_tool_manager(cls):
+    def get_llm_tool_manager(cls) -> LLMToolManager:
         return cls._require_context().get_llm_tool_manager()
 
     @classmethod
@@ -115,7 +119,7 @@ class StarTools:
         name: str,
         path: str,
         description: str = "",
-    ):
+    ) -> SkillRegistration:
         return await cls._require_context().skills.register(
             name=name,
             path=path,

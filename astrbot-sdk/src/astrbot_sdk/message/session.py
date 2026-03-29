@@ -40,7 +40,14 @@ class MessageSession:
 
     @classmethod
     def from_str(cls, session: str) -> MessageSession:
-        platform_id, message_type, session_id = str(session).split(":", 2)
+        raw_session = str(session)
+        parts = raw_session.split(":", 2)
+        if len(parts) != 3 or any(part == "" for part in parts):
+            raise ValueError(
+                "invalid message session format, expected "
+                "'platform_id:message_type:session_id'"
+            )
+        platform_id, message_type, session_id = parts
         return cls(
             platform_id=platform_id,
             message_type=message_type,

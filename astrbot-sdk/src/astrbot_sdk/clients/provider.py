@@ -62,6 +62,8 @@ class ProviderChangeEvent(_ProviderModel):
 
 
 class ProviderClient:
+    """Provider 查询客户端。"""
+
     def __init__(self, proxy: CapabilityProxy) -> None:
         self._proxy = proxy
 
@@ -146,6 +148,8 @@ class ProviderClient:
 
 
 class ProviderManagerClient:
+    """Provider 管理客户端。"""
+
     def __init__(
         self,
         proxy: CapabilityProxy,

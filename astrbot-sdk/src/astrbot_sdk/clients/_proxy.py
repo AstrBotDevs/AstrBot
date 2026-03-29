@@ -80,7 +80,7 @@ class CapabilityProxy:
         self._caller_plugin_id = caller_plugin_id
         self._request_scope_id = request_scope_id
 
-    def _get_descriptor(self, name: str):
+    def _get_descriptor(self, name: str) -> _CapabilityDescriptorLike | None:
         """获取能力描述符。
 
         Args:

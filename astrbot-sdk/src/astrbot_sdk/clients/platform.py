@@ -72,9 +72,7 @@ class PlatformStats(_PlatformModel):
             return None
         normalized = dict(payload)
         normalized["status"] = PlatformStatus.from_value(payload.get("status"))
-        normalized["last_error"] = PlatformError.from_payload(
-            payload.get("last_error") if isinstance(payload, dict) else None
-        )
+        normalized["last_error"] = PlatformError.from_payload(payload.get("last_error"))
         meta = payload.get("meta")
         normalized["meta"] = dict(meta) if isinstance(meta, dict) else {}
         return cls.model_validate(normalized)
