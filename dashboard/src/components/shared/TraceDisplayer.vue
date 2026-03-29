@@ -1,6 +1,7 @@
 <script setup>
 import axios from 'axios';
 import { EventSourcePolyfill } from 'event-source-polyfill';
+import { resolveApiUrl } from "@/utils/request";
 </script>
 
 <template>
@@ -65,6 +66,8 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
 </template>
 
 <script>
+import { resolveApiUrl } from "@/utils/request";
+
 export default {
   name: 'TraceDisplayer',
   props: {
@@ -139,12 +142,11 @@ export default {
 
       const token = localStorage.getItem('token');
 
-      this.eventSource = new EventSourcePolyfill('/api/live-log', {
+      this.eventSource = new EventSourcePolyfill(resolveApiUrl("/api/live-log"), {
         headers: {
           Authorization: token ? `Bearer ${token}` : ''
         },
-        heartbeatTimeout: 300000,
-        withCredentials: true
+        heartbeatTimeout: 300000
       });
 
       this.eventSource.onopen = () => {
@@ -374,7 +376,7 @@ export default {
 
 .trace-header {
   font-weight: 600;
-  color: #6b7280;
+  color: #e2e2e7;
   border-bottom: 1px solid rgba(15, 23, 42, 0.12);
   padding-bottom: 10px;
 }
@@ -432,7 +434,7 @@ export default {
 .trace-empty {
   padding: 24px;
   text-align: center;
-  color: #6b7280;
+  color: #e2e2e7;
 }
 
 @media (max-width: 1200px) {
