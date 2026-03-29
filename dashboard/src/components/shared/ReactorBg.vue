@@ -4,10 +4,10 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { useReactorBg } from "@/composables/useReactorBg";
+import { useCustomizerStore } from "@/stores/customizer";
 
 const canvasEl = ref<HTMLCanvasElement | null>(null);
-const { mouseX, mouseY, onMouseMove, onMouseLeave } = useReactorBg();
+const customizer = useCustomizerStore();
 
 const GRID = 24;
 const CROSS_SIZE = 4;
@@ -30,8 +30,10 @@ function draw() {
 
   const W = width;
   const H = height;
+  const isDark = customizer.isDarkTheme;
 
-  ctx.fillStyle = "#0A0A0C";
+  // Background
+  ctx.fillStyle = isDark ? "#0A0A0C" : "#F0F4F8";
   ctx.fillRect(0, 0, W, H);
 
   const cols = Math.ceil(W / GRID) + 1;
@@ -40,8 +42,10 @@ function draw() {
   const mx = smoothX;
   const my = smoothY;
 
-  // faint base grid
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.025)";
+  // Grid lines — dark mode: faint white, light mode: faint deep-blue
+  ctx.strokeStyle = isDark
+    ? "rgba(255, 255, 255, 0.025)"
+    : "rgba(26, 46, 60, 0.06)";
   ctx.lineWidth = 0.5;
   for (let x = 0; x <= W; x += GRID) {
     ctx.beginPath();
@@ -56,7 +60,7 @@ function draw() {
     ctx.stroke();
   }
 
-  // crosshairs + sockets with energy interaction
+  // Crosshairs + sockets with energy interaction
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const cx = c * GRID;
@@ -66,33 +70,57 @@ function draw() {
       const dy = my - cy;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      // socket dot
-      ctx.fillStyle = "rgba(5, 5, 8, 0.1)";
+      // Socket dot — dark: deeper black, light: deeper white
+      ctx.fillStyle = isDark
+        ? "rgba(5, 5, 8, 0.1)"
+        : "rgba(240, 244, 248, 0.6)";
       ctx.beginPath();
       ctx.arc(cx, cy, SOCKET_RADIUS, 0, Math.PI * 2);
       ctx.fill();
 
-      let crossAlpha = 0.04;
+      let crossAlpha = isDark ? 0.04 : 0.06;
       let crossScale = 1.0;
-      let crossBlue = 0;
+      let accent = 0; // 0=neutral, 1=cyan dark, 2=blue light
 
       if (dist < ENERGY_RADIUS) {
         const t = 1 - dist / ENERGY_RADIUS;
         const eased = t * t * (3 - 2 * t);
-        crossAlpha = 0.04 + eased * 0.4;
-        crossScale = 1.0 - eased * 0.35;
-        crossBlue = Math.floor(eased * 200);
+
+        if (isDark) {
+          // Dark mode: crosses glow cyan (Cherenkov)
+          crossAlpha = 0.04 + eased * 0.4;
+          crossScale = 1.0 - eased * 0.35;
+          accent = 1;
+        } else {
+          // Light mode: crosses darken + depress (ink shadow)
+          crossAlpha = 0.06 + eased * 0.5;
+          crossScale = 1.0 - eased * 0.3;
+          accent = 2;
+        }
       }
 
       if (crossAlpha < 0.01) continue;
 
       const halfLen = CROSS_SIZE * crossScale;
-      const strokeColor = crossBlue > 0
-        ? `rgba(${Math.floor(crossBlue * 0.3)}, ${Math.floor(crossBlue * 0.85)}, ${crossBlue}, ${crossAlpha})`
-        : `rgba(255, 255, 255, ${crossAlpha})`;
+      let strokeColor: string;
+
+      if (accent === 1) {
+        // Dark mode: cyan glow
+        const b = Math.floor(eased * 200);
+        strokeColor = `rgba(${Math.floor(b * 0.3)}, ${Math.floor(b * 0.85)}, ${b}, ${crossAlpha})`;
+      } else if (accent === 2) {
+        // Light mode: deep indigo ink
+        const ink = Math.floor(80 + eased * 100);
+        strokeColor = `rgba(${ink}, ${Math.floor(ink * 0.6)}, ${Math.floor(ink * 0.4)}, ${crossAlpha})`;
+      } else {
+        // Idle: neutral gray
+        strokeColor = isDark
+          ? `rgba(255, 255, 255, ${crossAlpha})`
+          : `rgba(26, 46, 60, ${crossAlpha})`;
+      }
 
       ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 0.35;
+      ctx.lineWidth = isDark ? 0.35 : 0.4;
       ctx.beginPath();
       ctx.moveTo(cx - halfLen, cy);
       ctx.lineTo(cx + halfLen, cy);
@@ -101,20 +129,37 @@ function draw() {
       ctx.stroke();
     }
   }
+
+  // Mouse ink-drop radial gradient (light mode) / Cherenkov glow (dark mode)
+  if (mx > 0 && my > 0 && mx < W && my < H) {
+    if (isDark) {
+      // Cherenkov glow
+      const grad = ctx.createRadialGradient(mx, my, 0, mx, my, 80);
+      grad.addColorStop(0, "rgba(0, 242, 255, 0.1)");
+      grad.addColorStop(0.5, "rgba(0, 180, 255, 0.04)");
+      grad.addColorStop(1, "rgba(0, 100, 200, 0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(mx, my, 80, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Light mode: soft indigo ink-drop shadow
+      const grad = ctx.createRadialGradient(mx, my, 0, mx, my, 100);
+      grad.addColorStop(0, "rgba(26, 46, 80, 0.06)");
+      grad.addColorStop(0.6, "rgba(26, 46, 80, 0.02)");
+      grad.addColorStop(1, "rgba(26, 46, 80, 0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(mx, my, 100, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 }
 
 function loop() {
   if (targetX !== -9999) {
     smoothX += (targetX - smoothX) * LERP;
     smoothY += (targetY - smoothY) * LERP;
-  }
-  // Sync from global mouse tracking
-  if (mouseX.value !== -9999) {
-    targetX = mouseX.value;
-    targetY = mouseY.value;
-  } else {
-    targetX = -9999;
-    targetY = -9999;
   }
   draw();
   animId = requestAnimationFrame(loop);
@@ -133,18 +178,27 @@ onMounted(() => {
   ctx = canvasEl.value.getContext("2d");
   resize();
   window.addEventListener("resize", resize);
-  // Track global mouse
-  window.addEventListener("mousemove", onMouseMove as EventListener);
+  window.addEventListener("mousemove", onMouseMove);
   window.addEventListener("mouseleave", onMouseLeave);
   loop();
 });
 
 onUnmounted(() => {
   window.removeEventListener("resize", resize);
-  window.removeEventListener("mousemove", onMouseMove as EventListener);
+  window.removeEventListener("mousemove", onMouseMove);
   window.removeEventListener("mouseleave", onMouseLeave);
   if (animId) cancelAnimationFrame(animId);
 });
+
+function onMouseMove(e: MouseEvent) {
+  targetX = e.clientX;
+  targetY = e.clientY;
+}
+
+function onMouseLeave() {
+  targetX = -9999;
+  targetY = -9999;
+}
 </script>
 
 <style scoped>

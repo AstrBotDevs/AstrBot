@@ -8,6 +8,15 @@
   background: rgba(15, 15, 18, 0.75) !important;
   backdrop-filter: blur(16px) saturate(1.2);
 }
+
+/* Light mode: keep sidebar as dark blueprint panel */
+.v-theme--light {
+  .leftSidebar {
+    background: rgba(12, 18, 28, 0.92) !important;
+    border-right-color: rgba(0, 200, 255, 0.08) !important;
+  }
+}
+
 .listitem {
   overflow-y: auto;
   .v-list {
