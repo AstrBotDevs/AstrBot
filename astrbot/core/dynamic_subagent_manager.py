@@ -213,7 +213,7 @@ If you wish to prevent a certain sub-agent from being automatically cleaned up, 
         session.agent_histories.pop(agent_name, None)
         SubAgentLogger.info(
             session_id,
-            "DynamicSubAgentManager:auto_cleanup",
+            "DynamicSubAgentrManager:auto_cleanup",
             f"Auto cleaned: {agent_name}",
             agent_name,
         )
@@ -309,19 +309,25 @@ If you wish to prevent a certain sub-agent from being automatically cleaned up, 
         return config.tools
 
     @classmethod
-    def clear_subagent_history(cls, session_id: str, agent_name: str) -> None:
+    def clear_subagent_history(cls, session_id: str, agent_name: str) -> str:
         """Clear conversation history for a subagent"""
         session = cls.get_session(session_id)
         if not session:
-            return
+            return f"__HISTORY_CLEARED_FAILED_: Session_id {session_id} does not exist."
         if agent_name in session.agent_histories:
             session.agent_histories.pop(agent_name)
+
+            if session.shared_context_enabled:
+                cls.cleanup_shared_context_by_agent(session_id, agent_name)
             SubAgentLogger.debug(
                 session_id,
                 "DynamicSubAgentManager:history",
                 f"Cleared history for: {agent_name}",
                 agent_name,
             )
+            return "__HISTORY_CLEARED__"
+        else:
+            return f"__HISTORY_CLEARED_FAILED_: Agent name {agent_name} not found. Available names {list(session.agents.keys())}"
 
     @classmethod
     def set_shared_context_enabled(cls, session_id: str, enabled: bool) -> None:
@@ -342,7 +348,7 @@ If you wish to prevent a certain sub-agent from being automatically cleaned up, 
         context_type: str,
         content: str,
         target: str = "all",
-    ) -> None:
+    ) -> str:
         """Add a message to the shared context
 
         Args:
@@ -355,7 +361,11 @@ If you wish to prevent a certain sub-agent from being automatically cleaned up, 
 
         session = cls.get_or_create_session(session_id)
         if not session.shared_context_enabled:
-            return
+            return "__SHARED_CONTEXT_ADDED_FAILED__: Shared context disabled."
+        if (sender not in list(session.agents.keys())) and (sender != "System"):
+            return f"__SHARED_CONTEXT_ADDED_FAILED__: Sender name {sender} not found. Available names {list(session.agents.keys())}"
+        if (target not in list(session.agents.keys())) and (target != "all"):
+            return f"__SHARED_CONTEXT_ADDED_FAILED__: Target name {sender} not found. Available names {list(session.agents.keys())} and 'all' "
 
         if len(session.shared_context) >= cls._shared_context_maxlen:
             # 删除最旧的消息
@@ -378,6 +388,7 @@ If you wish to prevent a certain sub-agent from being automatically cleaned up, 
             f"[{context_type}] {sender} -> {target}: {content[:50]}...",
             sender,
         )
+        return "__SHARED_CONTEXT_ADDED__"
 
     @classmethod
     def get_shared_context(cls, session_id: str, filter_by_agent: str = None) -> list:
@@ -582,22 +593,30 @@ These may be messages sent to you by other subagents, messages you send to other
         return {"status": "cleaned", "cleaned_agents": cleaned}
 
     @classmethod
-    async def cleanup_subagent(cls, session_id: str, agent_name: str) -> bool:
+    def remove_subagent(cls, session_id: str, agent_name: str) -> str:
         session = cls.get_session(session_id)
-        if not session or agent_name not in session.agents:
-            return False
-        session.agents.pop(agent_name, None)
-        session.handoff_tools.pop(agent_name, None)
-        session.agent_histories.pop(agent_name, None)
-        # 清理公共上下文中包含该Agent的内容
-        cls.cleanup_shared_context_by_agent(session_id, agent_name)
-        SubAgentLogger.info(
-            session_id,
-            "DynamicSubAgentManager:cleanup",
-            f"Cleaned: {agent_name}",
-            agent_name,
-        )
-        return True
+        if agent_name == "all":
+            session.agents.clear()
+            session.handoff_tools.clear()
+            session.agent_histories.clear()
+            session.shared_context.clear()
+            return "__SUBAGENT_REMOVED__"
+        else:
+            if agent_name not in session.agents:
+                return f"__SUBAGENT_REMOVE_FAILED__: {agent_name} not found. Available subagent names {list(session.agents.keys())}"
+            else:
+                session.agents.pop(agent_name, None)
+                session.handoff_tools.pop(agent_name, None)
+                session.agent_histories.pop(agent_name, None)
+                # 清理公共上下文中包含该Agent的内容
+                cls.cleanup_shared_context_by_agent(session_id, agent_name)
+                SubAgentLogger.info(
+                    session_id,
+                    "DynamicSubAgentManager:cleanup",
+                    f"Cleaned: {agent_name}",
+                    agent_name,
+                )
+                return "__SUBAGENT_REMOVED__"
 
     @classmethod
     def get_handoff_tools_for_session(cls, session_id: str) -> list:
@@ -681,17 +700,22 @@ class CreateDynamicSubAgentTool(FunctionTool):
         if handoff_tool:
             return f"__DYNAMIC_TOOL_CREATED__:{tool_name}:{handoff_tool.name}:Created. Use {tool_name} to delegate."
         else:
-            return f"__FAILED_TO_CREATE_DYNAMIC_TOOL__:{tool_name}"
+            return f"__DYNAMIC_TOOL_CREATE_FAILED_:{tool_name}"
 
 
 @dataclass
-class CleanupDynamicSubagentTool(FunctionTool):
-    name: str = "cleanup_dynamic_subagent"
-    description: str = "Clean up dynamic subagent."
+class RemoveDynamicSubagentTool(FunctionTool):
+    name: str = "remove_dynamic_subagent"
+    description: str = "Remove dynamic subagent by name."
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
-            "properties": {"name": {"type": "string"}},
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Subagent name to remove. Use 'all' to remove all dynamic subagents.",
+                }
+            },
             "required": ["name"],
         }
     )
@@ -701,8 +725,11 @@ class CleanupDynamicSubagentTool(FunctionTool):
         if not name:
             return "Error: name required"
         session_id = context.context.event.unified_msg_origin
-        success = await DynamicSubAgentManager.cleanup_subagent(session_id, name)
-        return f"Cleaned {name}" if success else f"Not found: {name}"
+        remove_status = DynamicSubAgentManager.remove_subagent(session_id, name)
+        if remove_status == "__SUBAGENT_REMOVED__":
+            return f"Cleaned {name} Subagent"
+        else:
+            return remove_status
 
 
 @dataclass
@@ -748,7 +775,7 @@ class ProtectSubagentTool(FunctionTool):
         session_id = context.context.event.unified_msg_origin
         session = DynamicSubAgentManager.get_or_create_session(session_id)
         if name not in session.agents:
-            return f"Error: Subagent {name} not found"
+            return f"Error: Subagent {name} not found. Available subagents: {session.agents.keys()}"
         DynamicSubAgentManager.protect_subagent(session_id, name)
         return f"Subagent {name} is now protected from auto cleanup"
 
@@ -783,12 +810,32 @@ class UnprotectSubagentTool(FunctionTool):
         return f"Subagent {name} was not protected"
 
 
-# Tool instances
-CREATE_DYNAMIC_SUBAGENT_TOOL = CreateDynamicSubAgentTool()
-CLEANUP_DYNAMIC_SUBAGENT_TOOL = CleanupDynamicSubagentTool()
-LIST_DYNAMIC_SUBAGENTS_TOOL = ListDynamicSubagentsTool()
-PROTECT_SUBAGENT_TOOL = ProtectSubagentTool()
-UNPROTECT_SUBAGENT_TOOL = UnprotectSubagentTool()
+@dataclass
+class ResetSubAgentTool(FunctionTool):
+    """Tool to reset a subagent"""
+
+    name: str = "reset_subagent"
+    description: str = "Reset an existing subagent. This will clean the dialog history of the subagent."
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Subagent name to reset"},
+            },
+            "required": ["name"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> str:
+        name = kwargs.get("name", "")
+        if not name:
+            return "Error: name required"
+        session_id = context.context.event.unified_msg_origin
+        reset_status = DynamicSubAgentManager.clear_subagent_history(session_id, name)
+        if reset_status == "__HISTORY_CLEARED__":
+            return f"Subagent {name} was reset"
+        else:
+            return reset_status
 
 
 # Shared Context Tools
@@ -826,10 +873,13 @@ Types: 'message' (to other agents), 'system' (global announcements)."""
         if not content:
             return "Error: content is required"
         session_id = context.context.event.unified_msg_origin
-        DynamicSubAgentManager.add_shared_context(
+        add_status = DynamicSubAgentManager.add_shared_context(
             session_id, "System", context_type, content, target
         )
-        return f"Shared context updated: [{context_type}] System -> {target}: {content[:100]}{'...' if len(content) > 100 else ''}"
+        if add_status == "__SHARED_CONTEXT_ADDED__":
+            return f"Shared context updated: [{context_type}] System -> {target}: {content[:100]}{'...' if len(content) > 100 else ''}"
+        else:
+            return add_status
 
 
 @dataclass
@@ -873,10 +923,13 @@ Types: 'status' (your current task/progress), 'message' (to other agents)"""
         if not content:
             return "Error: content is required"
         session_id = context.context.event.unified_msg_origin
-        DynamicSubAgentManager.add_shared_context(
+        add_status = DynamicSubAgentManager.add_shared_context(
             session_id, sender, context_type, content, target
         )
-        return f"Shared context updated: [{context_type}] {sender} -> {target}: {content[:100]}{'...' if len(content) > 100 else ''}"
+        if add_status == "__SHARED_CONTEXT_ADDED__":
+            return f"Shared context updated: [{context_type}] {sender} -> {target}: {content[:100]}{'...' if len(content) > 100 else ''}"
+        else:
+            return add_status
 
 
 @dataclass
@@ -914,7 +967,13 @@ inter-agent messages, and system announcements."""
         return "\n".join(lines)
 
 
-# Shared context tool instances
+# Tool instances
+CREATE_DYNAMIC_SUBAGENT_TOOL = CreateDynamicSubAgentTool()
+REMOVE_DYNAMIC_SUBAGENT_TOOL = RemoveDynamicSubagentTool()
+LIST_DYNAMIC_SUBAGENTS_TOOL = ListDynamicSubagentsTool()
+RESET_SUBAGENT_TOOL = ResetSubAgentTool()
+PROTECT_SUBAGENT_TOOL = ProtectSubagentTool()
+UNPROTECT_SUBAGENT_TOOL = UnprotectSubagentTool()
 SEND_SHARED_CONTEXT_TOOL = SendSharedContextTool()
 SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT = SendSharedContextToolForMainAgent()
 VIEW_SHARED_CONTEXT_TOOL = ViewSharedContextTool()
