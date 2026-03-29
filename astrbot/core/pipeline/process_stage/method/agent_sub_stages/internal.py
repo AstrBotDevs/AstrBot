@@ -5,7 +5,7 @@ import base64
 from collections.abc import AsyncGenerator
 from dataclasses import replace
 
-from astrbot.core import logger
+from astrbot.core import db_helper, logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_main_agent import (
@@ -352,6 +352,15 @@ class InternalAgentSubStage(Stage):
                         resp=final_resp.completion_text if final_resp else None,
                     )
 
+                    asyncio.create_task(
+                        _record_internal_agent_stats(
+                            event,
+                            req,
+                            agent_runner,
+                            final_resp,
+                        )
+                    )
+
                     # 检查事件是否被停止，如果被停止则不保存历史记录
                     if not event.is_stopped() or agent_runner.was_aborted():
                         await self._save_to_history(
@@ -481,3 +490,46 @@ class InternalAgentSubStage(Stage):
 # these hosts are base64 encoded
 BLOCKED = {"dGZid2h2d3IuY2xvdWQuc2VhbG9zLmlv", "a291cmljaGF0"}
 decoded_blocked = [base64.b64decode(b).decode("utf-8") for b in BLOCKED]
+
+
+async def _record_internal_agent_stats(
+    event: AstrMessageEvent,
+    req: ProviderRequest | None,
+    agent_runner: AgentRunner | None,
+    final_resp: LLMResponse | None,
+) -> None:
+    """Persist internal agent stats without affecting the user response flow."""
+    if agent_runner is None:
+        return
+
+    provider = agent_runner.provider
+    stats = agent_runner.stats
+    if provider is None or stats is None:
+        return
+
+    try:
+        provider_config = getattr(provider, "provider_config", {}) or {}
+        conversation_id = (
+            req.conversation.cid
+            if req is not None and req.conversation is not None
+            else None
+        )
+
+        if agent_runner.was_aborted():
+            status = "aborted"
+        elif final_resp is not None and final_resp.role == "err":
+            status = "error"
+        else:
+            status = "completed"
+
+        await db_helper.insert_provider_stat(
+            umo=event.unified_msg_origin,
+            conversation_id=conversation_id,
+            provider_id=provider_config.get("id", "") or provider.meta().id,
+            provider_model=provider.get_model(),
+            status=status,
+            stats=stats.to_dict(),
+            agent_type="internal",
+        )
+    except Exception as e:
+        logger.warning("Persist provider stats failed: %s", e, exc_info=True)

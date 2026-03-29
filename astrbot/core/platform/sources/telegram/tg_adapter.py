@@ -458,9 +458,9 @@ class TelegramPlatformAdapter(Platform):
             )
             path_wav = await convert_audio_to_wav(temp_path, path_wav)
 
-            message.message = [
-                Comp.Record(file=path_wav, url=path_wav),
-            ]
+            record = Comp.Record(file=path_wav, url=path_wav)
+            record.path = path_wav
+            message.message = [record]
 
         elif update.message.photo:
             photo = update.message.photo[-1]  # get the largest photo
