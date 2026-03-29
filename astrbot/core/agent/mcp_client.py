@@ -152,7 +152,7 @@ def _sanitize_mcp_arguments(value: Any) -> Any:
             if cleaned_item is _EMPTY_MCP_ARGUMENT:
                 continue
             cleaned_dict[key] = cleaned_item
-        return cleaned_dict
+        return cleaned_dict if cleaned_dict else _EMPTY_MCP_ARGUMENT
 
     return value
 
