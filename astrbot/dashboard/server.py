@@ -575,6 +575,69 @@ class AstrBotDashboard:
             return f"获取进程信息失败: {e!s}"
         return "未知进程"
 
+    @staticmethod
+    def _resolve_dashboard_ssl_config(
+        ssl_config: dict,
+    ) -> tuple[bool, dict[str, str]]:
+        cert_file = (
+            os.environ.get("DASHBOARD_SSL_CERT")
+            or os.environ.get("ASTRBOT_DASHBOARD_SSL_CERT")
+            or os.environ.get("ASTRBOT_SSL_CERT")
+            or ssl_config.get("cert_file", "")
+        )
+        cert_file = _resolve_dashboard_value(cert_file, field_name="ssl.cert_file")
+
+        key_file = (
+            os.environ.get("DASHBOARD_SSL_KEY")
+            or os.environ.get("ASTRBOT_DASHBOARD_SSL_KEY")
+            or os.environ.get("ASTRBOT_SSL_KEY")
+            or ssl_config.get("key_file", "")
+        )
+        key_file = _resolve_dashboard_value(key_file, field_name="ssl.key_file")
+
+        ca_certs = (
+            os.environ.get("DASHBOARD_SSL_CA_CERTS")
+            or os.environ.get("ASTRBOT_DASHBOARD_SSL_CA_CERTS")
+            or os.environ.get("ASTRBOT_SSL_CA_CERTS")
+            or ssl_config.get("ca_certs", "")
+        )
+        ca_certs = _resolve_dashboard_value(ca_certs, field_name="ssl.ca_certs")
+
+        if not cert_file or not key_file:
+            logger.warning(
+                "dashboard.ssl.enable 已启用，但未同时配置 cert_file 和 key_file，SSL 配置将不会生效。",
+            )
+            return False, {}
+
+        cert_path = Path(str(cert_file)).expanduser()
+        key_path = Path(str(key_file)).expanduser()
+        if not cert_path.is_file():
+            logger.warning(
+                f"dashboard.ssl.enable 已启用，但 SSL 证书文件不存在: {cert_path}，SSL 配置将不会生效。",
+            )
+            return False, {}
+        if not key_path.is_file():
+            logger.warning(
+                f"dashboard.ssl.enable 已启用，但 SSL 私钥文件不存在: {key_path}，SSL 配置将不会生效。",
+            )
+            return False, {}
+
+        resolved_ssl_config = {
+            "certfile": str(cert_path.resolve()),
+            "keyfile": str(key_path.resolve()),
+        }
+
+        if ca_certs:
+            ca_path = Path(str(ca_certs)).expanduser()
+            if not ca_path.is_file():
+                logger.warning(
+                    f"dashboard.ssl.enable 已启用，但 SSL CA 证书文件不存在: {ca_path}，SSL 配置将不会生效。",
+                )
+                return False, {}
+            resolved_ssl_config["ca_certs"] = str(ca_path.resolve())
+
+        return True, resolved_ssl_config
+
     async def run(self) -> None:
         """Run dashboard server (blocking)"""
         if self._webui_fallback:
@@ -613,9 +676,16 @@ class AstrBotDashboard:
         port = int(resolved_port)
         ssl_config = dashboard_config.get("ssl", {})
         ssl_enable = _parse_env_bool(
-            os.environ.get("ASTRBOT_SSL_ENABLE"),
-            ssl_config.get("enable", False),
+            os.environ.get("DASHBOARD_SSL_ENABLE")
+            or os.environ.get("ASTRBOT_DASHBOARD_SSL_ENABLE")
+            or os.environ.get("ASTRBOT_SSL_ENABLE"),
+            bool(ssl_config.get("enable", False)),
         )
+        resolved_ssl_config: dict[str, str] = {}
+        if ssl_enable:
+            ssl_enable, resolved_ssl_config = self._resolve_dashboard_ssl_config(
+                ssl_config,
+            )
 
         scheme = "https" if ssl_enable else "http"
         binds: list[str] = [self._build_bind(host, port)]
@@ -648,35 +718,10 @@ class AstrBotDashboard:
         config.bind = binds
 
         if ssl_enable:
-            cert_file = os.environ.get("ASTRBOT_SSL_CERT") or ssl_config.get(
-                "cert_file", ""
-            )
-            cert_file = _resolve_dashboard_value(cert_file, field_name="ssl.cert_file")
-            key_file = os.environ.get("ASTRBOT_SSL_KEY") or ssl_config.get(
-                "key_file", ""
-            )
-            key_file = _resolve_dashboard_value(key_file, field_name="ssl.key_file")
-            ca_certs = os.environ.get("ASTRBOT_SSL_CA_CERTS") or ssl_config.get(
-                "ca_certs", ""
-            )
-            ca_certs = _resolve_dashboard_value(ca_certs, field_name="ssl.ca_certs")
-
-            if cert_file and key_file:
-                cert_path = await anyio.Path(str(cert_file)).expanduser()
-                key_path = await anyio.Path(str(key_file)).expanduser()
-                if not await cert_path.is_file():
-                    raise ValueError(f"SSL 证书文件不存在: {cert_path}")
-                if not await key_path.is_file():
-                    raise ValueError(f"SSL 私钥文件不存在: {key_path}")
-
-                config.certfile = str(await cert_path.resolve())
-                config.keyfile = str(await key_path.resolve())
-
-            if ca_certs:
-                ca_path = await anyio.Path(str(ca_certs)).expanduser()
-                if not await ca_path.is_file():
-                    raise ValueError(f"SSL CA 证书文件不存在: {ca_path}")
-                config.ca_certs = str(await ca_path.resolve())
+            config.certfile = resolved_ssl_config["certfile"]
+            config.keyfile = resolved_ssl_config["keyfile"]
+            if "ca_certs" in resolved_ssl_config:
+                config.ca_certs = resolved_ssl_config["ca_certs"]
 
         # 根据配置决定是否禁用访问日志
         disable_access_log = dashboard_config.get("disable_access_log", True)
