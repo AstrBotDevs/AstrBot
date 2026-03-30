@@ -533,7 +533,7 @@ class AstrBotDashboard:
 
         return True, resolved_ssl_config
 
-    def run(self):
+    async def run(self):
         ip_addr = []
         dashboard_config = self.core_lifecycle.astrbot_config.get("dashboard", {})
         host_value = (
