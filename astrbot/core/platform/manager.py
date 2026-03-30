@@ -262,18 +262,12 @@ class PlatformManager:
         if platform_id in self._inst_map:
             logger.info(f"正在尝试终止 {platform_id} 平台适配器 ...")
 
-            # client_id = self._inst_map.pop(platform_id, None)
             info = self._inst_map.pop(platform_id)
-            client_id = info["client_id"]
             inst: Platform = info["inst"]
             try:
-                self.platform_insts.remove(
-                    next(
-                        inst
-                        for inst in self.platform_insts
-                        if inst.client_self_id == client_id
-                    ),
-                )
+                # Remove the exact adapter instance so reload remains safe
+                # even when client_self_id changes during the adapter lifecycle.
+                self.platform_insts.remove(inst)
             except Exception:
                 logger.warning(f"可能未完全移除 {platform_id} 平台适配器")
 
