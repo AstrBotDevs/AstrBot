@@ -1,39 +1,39 @@
 {
   "network": {
-    "timeout": "Network request timeout，請遲啲再試",
-    "connection": "Connect 唔到 Network，請 Check 吓網絡",
-    "server": "Server error，請搵 Support 幫手",
-    "unavailable": "Service 暫時 Unavailable",
-    "forbidden": "Access 被拒絕"
+    "timeout": "網絡請求逾時，請稍後再試",
+    "connection": "無法連線至網絡，請檢查網絡設定",
+    "server": "伺服器錯誤，請聯絡技術支援",
+    "unavailable": "服務暫時無法使用",
+    "forbidden": "存取被拒"
   },
   "validation": {
-    "required": "呢個 Field 係必填",
-    "invalid": "Input format 錯咗",
-    "tooLong": "入嘅內容太長",
-    "tooShort": "入嘅內容太短",
-    "email": "請入個 valid 嘅 Email",
-    "url": "請入個 valid 嘅 URL",
-    "number": "請入個 valid 嘅數字"
+    "required": "此欄位為必填",
+    "invalid": "輸入格式錯誤",
+    "tooLong": "輸入內容過長",
+    "tooShort": "輸入內容過短",
+    "email": "請輸入有效的電郵地址",
+    "url": "請輸入有效的網址 (URL)",
+    "number": "請輸入有效的數字"
   },
   "auth": {
-    "unauthorized": "Unauthorized Access，請重新 Login",
-    "forbidden": "Permission denied，做唔到呢個 Action",
-    "tokenExpired": "Login expire 咗，請重新 Login",
-    "invalidCredentials": "Username 或者密碼錯"
+    "unauthorized": "未授權存取，請重新登入",
+    "forbidden": "權限不足，無法執行此操作",
+    "tokenExpired": "登入已過期，請重新登入",
+    "invalidCredentials": "使用者名稱或密碼錯誤"
   },
   "file": {
-    "uploadFailed": "File upload 失敗",
-    "invalidFormat": "唔 Support 呢種 File format",
-    "tooLarge": "File size 超過 limit",
-    "notFound": "搵唔到 File"
+    "uploadFailed": "檔案上載失敗",
+    "invalidFormat": "不支援此檔案格式",
+    "tooLarge": "檔案大小超過限制",
+    "notFound": "找不到檔案"
   },
   "operation": {
     "failed": "操作失敗",
-    "cancelled": "操作 Cancel 咗",
-    "notSupported": "唔 Support 呢個 Action",
-    "conflict": "Action 有 Conflict，請遲啲再試"
+    "cancelled": "操作已取消",
+    "notSupported": "不支援此操作",
+    "conflict": "操作發生衝突，請稍後再試"
   },
   "browser": {
-    "audioNotSupported": "你個 Browser 唔 support 播 Audio。"
+    "audioNotSupported": "你的瀏覽器不支援播放音訊。"
   }
 }

@@ -1,13 +1,13 @@
 {
   "ai_group": {
-    "name": "AI Config",
+    "name": "AI 設定",
     "agent_runner": {
       "description": "Agent 執行方式",
-      "hint": "揀 AI 對話嘅執行器，預設係 AstrBot 內置 Agent 執行器，可以用 AstrBot 入面嘅 Knowledge Base、人格同 Tool calling 功能。如果唔打算駁 Dify、Coze、DeerFlow 呢啲 3rd-party Agent 執行器，就唔使改呢 part。",
+      "hint": "選擇 AI 對話的執行器，預設為 AstrBot 內置 Agent 執行器，可以使用 AstrBot 內的知識庫 (Knowledge Base)、人格與 Tool calling 功能。如果不打算連接 Dify、Coze、DeerFlow 這些第三方 Agent 執行器，則無須修改此部分。",
       "provider_settings": {
         "enable": {
-          "description": "Enable",
-          "hint": "AI 對話大掣"
+          "description": "啟用",
+          "hint": "AI 對話總開關"
         },
         "agent_runner_type": {
           "description": "執行器",
@@ -34,45 +34,45 @@
       }
     },
     "ai": {
-      "description": "Model",
-      "hint": "當用非內置 Agent 執行器嗰陣，Default 對話 Model 同 Default 圖片轉述 Model 可能會冇效，但有啲 Plugin 會靠呢個 Config 嚟 call AI 能力。",
+      "description": "模型",
+      "hint": "當使用非內置 Agent 執行器時，預設對話模型與預設圖片轉述模型可能會失效，但部分插件會依賴此設定來呼叫 AI 能力。",
       "provider_settings": {
         "default_provider_id": {
-          "description": "Default 對話 Model",
-          "hint": "留空會用第一個 Model"
+          "description": "預設對話模型",
+          "hint": "留空將使用第一個模型"
         },
         "fallback_chat_models": {
-          "description": "Fallback 對話 Model 列表",
-          "hint": "Main 對話 Model request 失敗嗰陣，會按順序 switch 去呢啲對話 Model。"
+          "description": "備用對話模型列表",
+          "hint": "主要對話模型請求失敗時，會按順序切換至這些對話模型。"
         },
         "default_image_caption_provider_id": {
-          "description": "Default 圖片轉述 Model",
-          "hint": "留空代表唔用，可以用落非 Multi-modal 嘅 Model 度"
+          "description": "預設圖片轉述模型",
+          "hint": "留空代表不使用，可用於非多模態 (Multi-modal) 的模型上"
         },
         "image_caption_prompt": {
-          "description": "圖片轉述 Prompt"
+          "description": "圖片轉述提示詞 (Prompt)"
         }
       },
       "provider_stt_settings": {
         "enable": {
-          "description": "Enable 語音轉文字",
-          "hint": "STT 大掣"
+          "description": "啟用語音轉文字",
+          "hint": "STT 總開關"
         },
         "provider_id": {
-          "description": "Default 語音轉文字 Model",
-          "hint": "User 都可以用 /provider 指令單獨幫個 Session 揀 STT Model。"
+          "description": "預設語音轉文字模型",
+          "hint": "用戶也可以使用 /provider 指令單獨為該工作階段 (Session) 選擇 STT 模型。"
         }
       },
       "provider_tts_settings": {
         "enable": {
-          "description": "Enable 文字轉語音",
-          "hint": "TTS 大掣"
+          "description": "啟用文字轉語音",
+          "hint": "TTS 總開關"
         },
         "provider_id": {
-          "description": "Default 文字轉語音 Model"
+          "description": "預設文字轉語音模型"
         },
         "trigger_probability": {
-          "description": "TTS Trigger 概率"
+          "description": "TTS 觸發機率"
         }
       }
     },
@@ -81,66 +81,66 @@
       "hint": "賦予 AstrBot 人格。",
       "provider_settings": {
         "default_personality": {
-          "description": "Default 用嘅人格"
+          "description": "預設使用的人格"
         }
       }
     },
     "knowledgebase": {
-      "description": "Knowledge Base",
-      "hint": "AstrBot 嘅「外置大腦」。",
+      "description": "知識庫",
+      "hint": "AstrBot 的「外置大腦」。",
       "kb_names": {
-        "description": "Knowledge Base 列表",
-        "hint": "Support 多選"
+        "description": "知識庫列表",
+        "hint": "支援多選"
       },
       "kb_fusion_top_k": {
         "description": "Fusion 檢索結果數量",
-        "hint": "多個 Knowledge Base 檢索結果 fusion 之後 return 嘅結果數量"
+        "hint": "多個知識庫檢索結果融合 (Fusion) 後回傳的結果數量"
       },
       "kb_final_top_k": {
-        "description": "最終 return 結果數量",
-        "hint": "喺 Knowledge Base 檢索到嘅結果數量，越大可能攞到越多相關 Info，但亦可能引入 Noise。建議根據實際需要調較"
+        "description": "最終回傳結果數量",
+        "hint": "在知識庫中檢索到的結果數量，數值越大可能取得越多相關資訊，但也可能引入雜訊 (Noise)。建議根據實際需求調整"
       },
       "kb_agentic_mode": {
-        "description": "Agentic Knowledge Base 檢索",
-        "hint": "Enable 之後，Knowledge Base 檢索會當做 LLM Tool，由 Model 自己決定幾時 call Knowledge Base 嚟 search。需要 Model support function calling 能力。"
+        "description": "Agentic 知識庫檢索",
+        "hint": "啟用後，知識庫檢索會作為 LLM 工具，由模型自行決定何時呼叫知識庫進行搜尋。需要模型支援函數呼叫 (Function calling) 能力。"
       }
     },
     "websearch": {
-      "description": "網頁 Search",
-      "hint": "等 AstrBot 可以上網，知多啲時事。",
+      "description": "網頁搜尋",
+      "hint": "讓 AstrBot 可以連接網絡，獲取更多時事資訊。",
       "provider_settings": {
         "web_search": {
-          "description": "Enable 網頁 Search"
+          "description": "啟用網頁搜尋"
         },
         "websearch_provider": {
-          "description": "網頁 Search Provider"
+          "description": "網頁搜尋供應商"
         },
         "websearch_tavily_key": {
           "description": "Tavily API Key",
-          "hint": "可以加多個 Key 嚟做 Polling。"
+          "hint": "可以加入多個 Key 以進行輪詢 (Polling)。"
         },
         "websearch_bocha_key": {
           "description": "BoCha API Key",
-          "hint": "可以加多個 Key 嚟做 Polling。"
+          "hint": "可以加入多個 Key 以進行輪詢 (Polling)。"
         },
         "websearch_baidu_app_builder_key": {
           "description": "百度千帆智能雲 APP Builder API Key",
           "hint": "參考：[https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
         },
         "web_search_link": {
-          "description": "顯示 Source 引用"
+          "description": "顯示來源引用"
         }
       }
     },
     "file_extract": {
-      "description": "Document 解析能力",
+      "description": "文件解析能力",
       "provider_settings": {
         "file_extract": {
           "enable": {
-            "description": "Enable Document 解析能力"
+            "description": "啟用文件解析能力"
           },
           "provider": {
-            "description": "Document 解析 Provider"
+            "description": "文件解析供應商"
           },
           "moonshotai_api_key": {
             "description": "Moonshot AI API Key"
@@ -149,644 +149,644 @@
       }
     },
     "agent_computer_use": {
-      "description": "用電腦能力",
-      "hint": "等 AstrBot 訪問同埋用你部電腦或者隔離嘅 Sandbox 環境，嚟做啲複雜啲嘅任務。詳情睇：[沙盒模式](https://docs.astrbot.app/use/astrbot-agent-sandbox.html)、[Skills](https://docs.astrbot.app/use/skills.html)。",
+      "description": "使用電腦能力",
+      "hint": "讓 AstrBot 存取並使用你的電腦或獨立的沙盒 (Sandbox) 環境，來執行較複雜的任務。詳情請參閱：[沙盒模式](https://docs.astrbot.app/use/astrbot-agent-sandbox.html)、[技能 (Skills)](https://docs.astrbot.app/use/skills.html)。",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "運行環境",
-          "hint": "sandbox 代表喺 Sandbox 環境度 run，local 代表喺 Local 環境度 run，none 代表唔 Enable。如果 Upload 咗 skills，揀 none 會令 Agent 用唔到佢哋。"
+          "hint": "sandbox 代表在沙盒環境中執行，local 代表在本機環境中執行，none 代表不啟用。如果上載了技能 (Skills)，選擇 none 會導致 Agent 無法使用它們。"
         },
         "computer_use_require_admin": {
-          "description": "需要 AstrBot Admin 權限",
-          "hint": "開咗之後，要 AstrBot Admin 權限先 call 到用電腦能力。喺平台 Config->管理員度可以加 Admin。用 /sid 指令睇 Admin ID。"
+          "description": "需要 AstrBot 管理員權限",
+          "hint": "啟用後，需要擁有 AstrBot 管理員權限才能呼叫使用電腦的能力。可在平台設定->管理員中新增管理員。使用 /sid 指令可查看管理員 ID。"
         },
         "sandbox": {
           "booter": {
-            "description": "Sandbox 環境 Drive"
+            "description": "沙盒環境啟動器"
           },
           "shipyard_neo_endpoint": {
             "description": "Shipyard Neo API Endpoint",
-            "hint": "Shipyard Neo (Bay) 服務嘅 API 地址，預設 http://127.0.0.1:8114。"
+            "hint": "Shipyard Neo (Bay) 服務的 API 地址，預設為 http://127.0.0.1:8114。"
           },
           "shipyard_neo_access_token": {
             "description": "Shipyard Neo Access Token",
-            "hint": "Bay 嘅 API Key（sk-bay-...）。留空嗰陣自動由 credentials.json 搵。"
+            "hint": "Bay 的 API Key（sk-bay-...）。留空時會自動從 credentials.json 中讀取。"
           },
           "shipyard_neo_profile": {
             "description": "Shipyard Neo Profile",
-            "hint": "Shipyard Neo Sandbox Profile，例如 python-default。"
+            "hint": "Shipyard Neo 沙盒 Profile，例如 python-default。"
           },
           "shipyard_neo_ttl": {
-            "description": "Shipyard Neo Sandbox 存活時間(秒)",
-            "hint": "Shipyard Neo Sandbox 嘅生存時間（秒）。"
+            "description": "Shipyard Neo 沙盒存活時間 (秒)",
+            "hint": "Shipyard Neo 沙盒的生存時間 (秒)。"
           },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
-            "hint": "Shipyard 服務嘅 API 訪問地址。"
+            "hint": "Shipyard 服務的 API 存取地址。"
           },
           "shipyard_access_token": {
             "description": "Shipyard Access Token",
-            "hint": "用嚟 Access Shipyard 服務嘅 Access Token。"
+            "hint": "用於存取 Shipyard 服務的 Access Token。"
           },
           "shipyard_ttl": {
-            "description": "Shipyard Ship 存活時間(秒)",
-            "hint": "Shipyard Session 嘅生存時間（秒）。"
+            "description": "Shipyard Ship 存活時間 (秒)",
+            "hint": "Shipyard 工作階段 (Session) 的生存時間 (秒)。"
           },
           "shipyard_max_sessions": {
-            "description": "Shipyard Ship Session 復用上限",
-            "hint": "決定咗一個 Instance 承載嘅最大 Session 數量。"
+            "description": "Shipyard Ship 工作階段重用上限",
+            "hint": "決定了一個實例 (Instance) 所能承載的最大工作階段數量。"
           }
         }
       }
     },
     "proactive_capability": {
       "description": "主動型能力",
-      "hint": "等 AstrBot 能夠喺某個時間自動 Wake up，幫你搞掂任務。詳情睇：[主動型 Agent](https://docs.astrbot.app/use/proactive-agent.html)。",
+      "hint": "讓 AstrBot 能夠在特定時間自動喚醒 (Wake up)，協助你完成任務。詳情請參閱：[主動型 Agent](https://docs.astrbot.app/use/proactive-agent.html)。",
       "provider_settings": {
         "proactive_capability": {
           "add_cron_tools": {
-            "description": "Enable",
-            "hint": "Enable 之後，會 pass 相關 Tools 畀 Agent 嚟實現主動型 Agent。你可以同 AstrBot 講未來某個時間要做咩，佢會定時 Trigger 去做，做完將結果 send 畀你。"
+            "description": "啟用",
+            "hint": "啟用後，會將相關工具提供給 Agent 以實現主動型 Agent。你可以告訴 AstrBot 在未來某個時間要完成甚麼工作，它會定時觸發執行，完成後將結果傳送給你。"
           }
         }
       }
     },
     "truncate_and_compress": {
-      "hint": "AstrBot 點樣 Manage 工作記憶。詳情睇：[上下文管理策略](https://docs.astrbot.app/use/context-compress.html)。",
-      "description": "Context 管理策略",
+      "hint": "AstrBot 如何管理工作記憶。詳情請參閱：[上下文管理策略](https://docs.astrbot.app/use/context-compress.html)。",
+      "description": "上下文管理策略",
       "provider_settings": {
         "max_context_length": {
-          "description": "最多帶幾多輪對話",
-          "hint": "超出呢個數量嗰陣丟咗最舊嗰 part，一輪對話計 1 條，-1 代表唔 limit"
+          "description": "最多保留的對話輪數",
+          "hint": "超出此數量時會捨棄最舊的部分，一輪對話計為 1 條，-1 代表不限制"
         },
         "dequeue_context_length": {
-          "description": "丟幾多輪對話",
-          "hint": "超出最多帶嘅對話輪數嗰陣，一次丟幾多輪對話"
+          "description": "捨棄的對話輪數",
+          "hint": "超出最多保留的對話輪數時，每次捨棄的對話輪數"
         },
         "context_limit_reached_strategy": {
-          "description": "超出 Model Context Window 嗰陣點處理",
+          "description": "超出模型上下文視窗時的處理方式",
           "labels":[
             "按對話輪數截斷",
-            "由 LLM 壓縮 Context"
+            "由 LLM 壓縮上下文"
           ],
-          "hint": "當按對話輪數截斷嗰陣，會根據上面「丟幾多輪對話」嘅 Config 丟咗最舊嗰 N 輪對話。當由 LLM 壓縮 Context 嗰陣，會用指定嘅 Model 做 Context 壓縮。"
+          "hint": "當按對話輪數截斷時，會根據上方「捨棄的對話輪數」的設定，捨棄最舊的 N 輪對話。當由 LLM 壓縮上下文時，會使用指定的模型進行上下文壓縮。"
         },
         "llm_compress_instruction": {
-          "description": "Context 壓縮 Prompt",
-          "hint": "留空就用 Default Prompt。"
+          "description": "上下文壓縮提示詞",
+          "hint": "留空則使用預設提示詞。"
         },
         "llm_compress_keep_recent": {
-          "description": "壓縮嗰陣 Keep 住最近幾多輪對話",
-          "hint": "永遠 Keep 住最近嘅 N 輪對話。"
+          "description": "壓縮時保留最近的對話輪數",
+          "hint": "永遠保留最近的 N 輪對話。"
         },
         "llm_compress_provider_id": {
-          "description": "用嚟壓縮 Context 嘅 Model Provider ID",
-          "hint": "留空嗰陣會 fallback 去「按對話輪數截斷」嘅策略。"
+          "description": "用於壓縮上下文的模型供應商 ID",
+          "hint": "留空時將退回使用「按對話輪數截斷」的策略。"
         }
       }
     },
     "others": {
-      "description": "其他 Config",
+      "description": "其他設定",
       "provider_settings": {
         "display_reasoning_text": {
           "description": "顯示思考內容"
         },
         "llm_safety_mode": {
-          "description": "健康 Mode",
-          "hint": "Guide 個 Model 畀啲健康、安全、Positive 嘅內容，避開有害或者敏感話題。"
+          "description": "健康模式",
+          "hint": "引導模型提供健康、安全、正面的內容，避開有害或敏感話題。"
         },
         "safety_mode_strategy": {
-          "description": "健康 Mode 策略",
-          "hint": "揀健康 Mode 點樣 Implement。"
+          "description": "健康模式策略",
+          "hint": "選擇健康模式的實作方式。"
         },
         "identifier": {
-          "description": "User 識別",
-          "hint": "Enable 之後，喺 Prompt 前面會包埋 User ID Info。"
+          "description": "用戶識別",
+          "hint": "啟用後，在提示詞前方會包含用戶的 ID 資訊。"
         },
         "group_name_display": {
-          "description": "顯示 Group 名",
-          "hint": "Enable 之後，喺 Support 嘅平台(OneBot v11)上，Prompt 前面會包埋 Group 名。"
+          "description": "顯示群組名稱",
+          "hint": "啟用後，在支援的平台 (如 OneBot v11) 上，提示詞前方會包含群組名稱。"
         },
         "datetime_system_prompt": {
           "description": "現實時間感知",
-          "hint": "Enable 之後，會喺 System Prompt 包埋目前時間 Info。"
+          "hint": "啟用後，會在系統提示詞中包含目前的時間資訊。"
         },
         "show_tool_use_status": {
           "description": "顯示 Function Calling 狀態"
         },
         "show_tool_call_result": {
-          "description": "顯示 Function Calling Return 結果",
-          "hint": "淨係喺 Enable 咗「顯示 Function Calling 狀態」嗰陣先有用，最多 display 70 個字。"
+          "description": "顯示 Function Calling 回傳結果",
+          "hint": "僅在啟用「顯示 Function Calling 狀態」時生效，最多顯示 70 個字元。"
         },
         "sanitize_context_by_modalities": {
-          "description": "按 Model 能力清歷史 Context",
-          "hint": "開咗之後，每次 request LLM 前會按目前揀嘅 Model 能力，Del 咗對話入面唔 support 嘅圖片/Tool calling 結構（會改變 Model 睇到嘅歷史）"
+          "description": "按模型能力清理歷史上下文",
+          "hint": "啟用後，每次請求 LLM 前會根據目前選擇的模型能力，刪除對話中不支援的圖片或 Tool calling 結構（會改變模型讀取到的歷史紀錄）"
         },
         "max_quoted_fallback_images": {
-          "description": "Forward Message 入面攞圖上限",
-          "hint": "Forward Message 解析到嘅圖最多 Inject 幾多張，多出嚟嘅會被飛走。"
+          "description": "轉發訊息中提取圖片的上限",
+          "hint": "轉發訊息中解析到的圖片最多注入的數量，多餘的將被忽略。"
         },
         "quoted_message_parser": {
           "max_component_chain_depth": {
-            "description": "Forward Message 富文本解析深度",
-            "hint": "解析 Forward Message 入面嘅富文本 Component Chain 嗰陣容許嘅最大遞迴深度。"
+            "description": "轉發訊息富文本解析深度",
+            "hint": "解析轉發訊息中的富文本組件鏈時容許的最大遞迴深度。"
           },
           "max_forward_node_depth": {
-            "description": "Forward Message 嵌套解析深度",
-            "hint": "解析嵌套 Forward Node 嗰陣容許嘅最大遞迴深度。"
+            "description": "轉發訊息嵌套解析深度",
+            "hint": "解析嵌套的轉發節點時容許的最大遞迴深度。"
           },
           "max_forward_fetch": {
-            "description": "Forward Message 遞迴拉取上限",
-            "hint": "遞迴 call get_forward_msg 拉取 Forward 內容嘅最大次數。"
+            "description": "轉發訊息遞迴提取上限",
+            "hint": "遞迴呼叫 get_forward_msg 提取轉發內容的最大次數。"
           },
           "warn_on_action_failure": {
-            "description": "Forward Message 解析失敗 Warning",
-            "hint": "開咗之後，get_msg/get_forward_msg 全部試勻都失敗嗰陣會出 warning log。"
+            "description": "轉發訊息解析失敗警告",
+            "hint": "啟用後，當 get_msg/get_forward_msg 全部嘗試失敗時會輸出警告日誌 (Warning log)。"
           }
         },
         "max_agent_step": {
           "description": "Tool Calling 輪數上限"
         },
         "tool_call_timeout": {
-          "description": "Tool Calling Timeout 時間(秒)"
+          "description": "Tool Calling 逾時時間 (秒)"
         },
         "tool_schema_mode": {
-          "description": "Tool Calling Mode",
-          "hint": "skills-like 先派 Tool 名同 Description，再派 Parameter；full 就一次過派齊 Parameter。",
+          "description": "Tool Calling 模式",
+          "hint": "skills-like 會先傳送工具名稱與描述，再傳送參數；full 則會一次過傳送完整參數。",
           "labels":[
             "Skills-like（兩階段）",
-            "Full（齊 Parameter）"
+            "Full（完整參數）"
           ]
         },
         "streaming_response": {
-          "description": "Streaming 輸出"
+          "description": "串流 (Streaming) 輸出"
         },
         "unsupported_streaming_strategy": {
-          "description": "唔 Support Streaming 嘅平台點搞",
-          "hint": "揀喺唔 support Streaming 嘅平台上點處理。Real-time 分段回覆會喺系統收到 Streaming response 嗰陣，detect 到好似標點符號呢啲分段點，即刻 send 已經收到嘅內容",
+          "description": "不支援串流的平台處理方式",
+          "hint": "選擇在不支援串流 (Streaming) 的平台上如何處理。即時分段回覆會在系統收到串流回應時，偵測到如標點符號等分段點，即時發送已收到的內容",
           "labels":[
-            "Real-time 分段回覆",
-            "閂咗 Streaming 回覆"
+            "即時分段回覆",
+            "關閉串流回覆"
           ]
         },
         "wake_prefix": {
-          "description": "LLM 傾偈額外 Wake up prefix",
-          "hint": "如果 Wake up prefix 係 /，額外傾偈 Wake up prefix 係 chat，咁要 /chat 先會 trigger LLM request"
+          "description": "LLM 聊天額外喚醒前綴",
+          "hint": "如果喚醒前綴是 /，額外聊天喚醒前綴是 chat，則需要輸入 /chat 才會觸發 LLM 請求"
         },
         "prompt_prefix": {
-          "description": "User Prompt",
-          "hint": "可以用 {{prompt}} 做 User input 嘅 Placeholder。如果唔打 Placeholder 就代表加喺 User input 前面。"
+          "description": "用戶提示詞 (Prompt)",
+          "hint": "可以使用 {{prompt}} 作為用戶輸入的佔位符 (Placeholder)。如果不填寫佔位符，則代表會加在用戶輸入的前方。"
         },
         "image_compress_enabled": {
-          "description": "Enable 圖片壓縮",
-          "hint": "Enable 之後，send 畀 Multi-modal model 之前會先壓縮 Local 大圖。"
+          "description": "啟用圖片壓縮",
+          "hint": "啟用後，發送給多模態 (Multi-modal) 模型前會先壓縮本機的大型圖片。"
         },
         "image_compress_options": {
-          "description": "圖片壓縮 Config",
-          "hint": "用嚟控制圖片壓縮嘅 Size、Quality 同 Trigger Threshold。",
+          "description": "圖片壓縮設定",
+          "hint": "用於控制圖片壓縮的尺寸、品質與觸發門檻。",
           "max_size": {
             "description": "最大邊長",
-            "hint": "壓縮完張圖最長嗰條邊，單位係 Pixel。過咗呢個 Size 會按比例 Scale。"
+            "hint": "壓縮後圖片最長的一邊，單位為像素 (Pixel)。超過此尺寸會按比例縮放。"
           },
           "quality": {
-            "description": "JPEG Quality",
-            "hint": "JPEG 輸出 Quality，範圍係 1-100。數值越大畫質越靚，File 都越大。"
+            "description": "JPEG 品質",
+            "hint": "JPEG 輸出品質，範圍為 1-100。數值越大畫質越好，檔案也越大。"
           }
         },
         "reachability_check": {
-          "description": "Provider 連通性檢測",
-          "hint": "/provider 指令 list Model 嗰陣併發 check 連通性。開咗會主動 call Model 試連通性，可能會有額外 Token 消耗。"
+          "description": "供應商連通性檢測",
+          "hint": "使用 /provider 指令列出模型時並發檢查連通性。啟用後會主動呼叫模型測試連通性，可能會產生額外的 Token 消耗。"
         }
       },
       "provider_tts_settings": {
         "dual_output": {
-          "description": "開咗 TTS 嗰陣同時出聲同字"
+          "description": "開啟 TTS 時同時輸出語音與文字"
         }
       }
     }
   },
   "platform_group": {
-    "name": "平台 Config",
+    "name": "平台設定",
     "platform": {
-      "description": "Message 平台 Adapter",
+      "description": "訊息平台 Adapter",
       "active_send_mode": {
-        "description": "係咪轉用主動 Send 接口"
+        "description": "是否轉用主動發送接口"
       },
       "appid": {
         "description": "appid",
-        "hint": "必填項。QQ 官方機械人平台嘅 appid。點攞請參考 Document。"
+        "hint": "必填項目。QQ 官方機械人平台的 appid。獲取方法請參考官方文件。"
       },
       "callback_server_host": {
         "description": "Callback Server Host",
-        "hint": "Callback Server Host。留空就唔 Enable Callback Server。"
+        "hint": "Callback Server Host。留空則不啟用 Callback Server。"
       },
       "card_template_id": {
         "description": "卡片 Template ID",
-        "hint": "Optional。釘釘互動卡片 Template ID。Enable 後會用互動卡片做 Streaming 回覆。"
+        "hint": "選填。釘釘互動卡片 Template ID。啟用後將使用互動卡片進行串流回覆。"
       },
       "discord_activity_name": {
-        "description": "Discord Activity 名",
-        "hint": "Optional 嘅 Discord Activity 名。留空就唔 set。"
+        "description": "Discord Activity 名稱",
+        "hint": "選填的 Discord Activity 名稱。留空則不設定。"
       },
       "discord_command_register": {
-        "description": "Register Discord 指令",
-        "hint": "Enable 之後，自動將 Plugin 指令 Register 做 Discord Slash 指令"
+        "description": "註冊 Discord 指令",
+        "hint": "啟用後，會自動將插件指令註冊為 Discord Slash 指令"
       },
       "discord_proxy": {
         "description": "Discord Proxy 地址",
-        "hint": "Optional 嘅 Proxy 地址：http://ip:port"
+        "hint": "選填的 Proxy 地址：http://ip:port"
       },
       "discord_token": {
         "description": "Discord Bot Token",
-        "hint": "喺呢度入你嘅 Discord Bot Token"
+        "hint": "請在此處輸入你的 Discord Bot Token"
       },
       "enable": {
-        "description": "Enable",
-        "hint": "係咪 Enable 呢個 Adapter。冇 Enable 嘅 Adapter 對應嘅 Message 平台會收唔到 Message。"
+        "description": "啟用",
+        "hint": "是否啟用此 Adapter。未啟用的 Adapter 對應的訊息平台將無法接收訊息。"
       },
       "enable_group_c2c": {
-        "description": "Enable 消息列表單聊",
-        "hint": "Enable 之後，機械人可以收到 QQ 消息列表入面嘅 PM。你可能需要喺 QQ 機械人平台 scan QR Code 加機械人做 Friend。詳情睇 Document。"
+        "description": "啟用訊息列表私訊",
+        "hint": "啟用後，機械人可以接收到 QQ 訊息列表中的私訊。你可能需要在 QQ 機械人平台掃描 QR Code 新增機械人為好友。詳情請參閱官方文件。"
       },
       "enable_guild_direct_message": {
-        "description": "Enable Channel PM",
-        "hint": "Enable 之後，機械人可以收到 Channel 嘅 PM。"
+        "description": "啟用頻道私訊",
+        "hint": "啟用後，機械人可以接收到頻道的私訊。"
       },
       "id": {
-        "description": "機械人名",
-        "hint": "機械人名"
+        "description": "機械人名稱",
+        "hint": "機械人名稱"
       },
       "is_sandbox": {
-        "description": "Sandbox Mode"
+        "description": "沙盒模式 (Sandbox Mode)"
       },
       "kf_name": {
-        "description": "WeChat 客服 Account 名",
-        "hint": "如果填呢度，即係代表你會用 Enterprise WeChat 客服，而唔係 Enterprise WeChat App。可以喺 https://kf.weixin.qq.com/kf/frame#/accounts 度攞。"
+        "description": "WeChat 客服帳戶名稱",
+        "hint": "如果在這邊填寫，代表你使用的是企業微信客服，而非企業微信應用程式。可以在 https://kf.weixin.qq.com/kf/frame#/accounts 獲取。"
       },
       "lark_bot_name": {
-        "description": "飛書機械人名",
-        "hint": "請務必填啱，唔係 @ 機械人就 Wake up 唔到，淨係可以靠 Prefix Wake up。"
+        "description": "飛書機械人名稱",
+        "hint": "請務必填寫正確，否則 @ 機械人時無法喚醒，只能依靠前綴喚醒。"
       },
       "lark_connection_mode": {
-        "description": "Subscribe 方式",
+        "description": "訂閱方式",
         "labels":[
-          "Long Connection Mode",
-          "Push 去 Server Mode"
+          "長連線模式 (Long Connection)",
+          "推播至伺服器模式 (Push to Server)"
         ]
       },
       "lark_encrypt_key": {
         "description": "Encrypt Key",
-        "hint": "用嚟 Decrypt 飛書 Callback Data 嘅 Encrypt Key"
+        "hint": "用於解密飛書回呼數據的 Encrypt Key"
       },
       "lark_verification_token": {
         "description": "Verification Token",
-        "hint": "用嚟 Verify 飛書 Callback Request 嘅 Token"
+        "hint": "用於驗證飛書回呼請求的 Token"
       },
       "misskey_allow_insecure_downloads": {
-        "description": "容許 Insecure 下載（Disable SSL Verification）",
-        "hint": "當 Remote Server 有 Cert 問題搞到 Download 唔到嗰陣，自動 Disable SSL Verification 做 Fallback。適用於某啲圖床嘅 Cert Config 問題。Enable 有 Security risk，必要時先用。"
+        "description": "容許不安全下載 (停用 SSL 驗證)",
+        "hint": "當遠端伺服器憑證出現問題導致無法下載時，自動停用 SSL 驗證作為備用方案 (Fallback)。適用於部分圖床的憑證設定問題。啟用此功能存在安全風險，請僅在必要時使用。"
       },
       "misskey_default_visibility": {
-        "description": "Default Post Visibility",
-        "hint": "機械人出 Post 嗰陣嘅 Default Visibility。public：公開，home：Home Timeline，followers：淨係 Followers。"
+        "description": "預設發文可見度",
+        "hint": "機械人發文時的預設可見度。public：公開，home：首頁時間軸，followers：僅限追蹤者。"
       },
       "misskey_download_chunk_size": {
-        "description": "Streaming Download Chunk Size（Bytes）",
-        "hint": "Streaming Download 同計 MD5 嗰陣每次 Read 嘅 Bytes 數，太細會增加 Overhead，太大會食 Memory。"
+        "description": "串流下載區塊大小 (Bytes)",
+        "hint": "串流下載與計算 MD5 時每次讀取的位元組數，太小會增加效能消耗，太大會佔用記憶體。"
       },
       "misskey_download_timeout": {
-        "description": "Remote Download Timeout 時間（秒）",
-        "hint": "Download Remote File 嗰陣嘅 Timeout 時間（秒），用嚟處理 Async Upload Fallback 去 Local Upload 嘅場景。"
+        "description": "遠端下載逾時時間 (秒)",
+        "hint": "下載遠端檔案時的逾時時間 (秒)，用於處理非同步上載失敗時退回本機上載的情境。"
       },
       "misskey_enable_chat": {
-        "description": "Enable Chat Message 回應",
-        "hint": "Enable 之後，機械人會 Listen 同回應 PM 聊天消息"
+        "description": "啟用聊天訊息回應",
+        "hint": "啟用後，機械人將會監聽並回應私訊聊天訊息"
       },
       "misskey_enable_file_upload": {
-        "description": "Enable File Upload 去 Misskey",
-        "hint": "Enable 之後，Adapter 會試吓將 Message Chain 入面嘅 File Upload 去 Misskey。URL File 會先試 Server-side Upload，Async Upload 失敗嗰陣會 Fallback 去 Download 完再 Local Upload。"
+        "description": "啟用檔案上載至 Misskey",
+        "hint": "啟用後，Adapter 會嘗試將訊息鏈中的檔案上載至 Misskey。URL 檔案會先嘗試伺服器端上載，非同步上載失敗時會改為下載後再於本機上載。"
       },
       "misskey_instance_url": {
-        "description": "Misskey Instance URL",
-        "hint": "例如 https://misskey.example，填 Bot Account 喺嘅 Misskey Instance 地址"
+        "description": "Misskey 實例 URL",
+        "hint": "例如 https://misskey.example，填寫 Bot 帳戶所在的 Misskey 實例地址"
       },
       "misskey_local_only": {
-        "description": "Local Only（唔參與 Federation）",
-        "hint": "Enable 之後，機械人出嘅 Post 淨係喺呢個 Instance 睇到，唔會 Federate 去其他 Instance"
+        "description": "僅限本站 (不參與聯邦傳輸)",
+        "hint": "啟用後，機械人發佈的內容僅能在目前實例中查看，不會傳輸至其他實例"
       },
       "misskey_max_download_bytes": {
-        "description": "Max 容許 Download Bytes 數（超咗就 Abort）",
-        "hint": "如果想 Limit Download File 嘅最大 Size 防止 OOM，請填 Max Bytes 數；留空或者 null 代表唔 Limit。"
+        "description": "最大容許下載位元組數 (超過即中止)",
+        "hint": "如果希望限制下載檔案的最大尺寸以防止記憶體不足 (OOM)，請填寫最大位元組數；留空或 null 代表不限制。"
       },
       "misskey_token": {
         "description": "Misskey Access Token",
-        "hint": "Connect 服務 Setting 生出嚟嘅 API Access token"
+        "hint": "連接服務設定所生成的 API Access token"
       },
       "misskey_upload_concurrency": {
-        "description": "Concurrency Upload Limit",
-        "hint": "同時進行嘅 File Upload 任務上限（整數，Default 3）。"
+        "description": "並行上載上限",
+        "hint": "同時執行的檔案上載任務上限 (整數，預設為 3)。"
       },
       "misskey_upload_folder": {
-        "description": "Upload 去 Drive 嘅 Target Folder ID",
-        "hint": "Optional：填 Misskey Drive 入面 Target Folder 嘅 ID，Upload 嘅 File 會放落呢個 Folder 度。留空就用 Account Drive 根目錄。"
+        "description": "上載至雲端硬碟的目標資料夾 ID",
+        "hint": "選填：填寫 Misskey 雲端硬碟中目標資料夾的 ID，上載的檔案會存放在該資料夾中。留空則使用帳戶雲端硬碟根目錄。"
       },
       "port": {
         "description": "Callback Server Port",
-        "hint": "Callback Server Port。留空就唔 Enable Callback Server。"
+        "hint": "Callback Server Port。留空則不啟用 Callback Server。"
       },
       "satori_api_base_url": {
         "description": "Satori API Endpoint",
-        "hint": "Satori API 嘅 Base URL。"
+        "hint": "Satori API 的 Base URL。"
       },
       "satori_auto_reconnect": {
-        "description": "Enable Auto Reconnect",
-        "hint": "Disconnect 嗰陣係咪自動 Reconnect WebSocket。"
+        "description": "啟用自動重新連線",
+        "hint": "斷線時是否自動重新連線 WebSocket。"
       },
       "satori_endpoint": {
         "description": "Satori WebSocket Endpoint",
-        "hint": "Satori Event 嘅 WebSocket Endpoint。"
+        "hint": "Satori Event 的 WebSocket Endpoint。"
       },
       "satori_heartbeat_interval": {
-        "description": "Satori Heartbeat Interval",
-        "hint": "Send Heartbeat 消息嘅 Interval（秒）。"
+        "description": "Satori 心跳間隔",
+        "hint": "發送心跳訊息的間隔 (秒)。"
       },
       "satori_reconnect_delay": {
-        "description": "Satori Reconnect Delay",
-        "hint": "試 Reconnect 前嘅 Delay 時間（秒）。"
+        "description": "Satori 重新連線延遲",
+        "hint": "嘗試重新連線前的延遲時間 (秒)。"
       },
       "satori_token": {
         "description": "Satori Token",
-        "hint": "用嚟做 Satori API Auth 嘅 Token。"
+        "hint": "用於進行 Satori API 授權的 Token。"
       },
       "secret": {
         "description": "secret",
-        "hint": "必填項。"
+        "hint": "必填項目。"
       },
       "slack_connection_mode": {
-        "description": "Slack Connection Mode",
-        "hint": "Slack 嘅 Connection Mode。`webhook` 會用 Webhook server，`socket` 會用 Slack 嘅 Socket Mode。"
+        "description": "Slack 連線模式",
+        "hint": "Slack 的連線模式。`webhook` 將使用 Webhook server，`socket` 將使用 Slack 的 Socket 模式。"
       },
       "slack_webhook_host": {
         "description": "Slack Webhook Host",
-        "hint": "淨係 Slack connection mode 係 `webhook` 嗰陣有用。"
+        "hint": "僅在 Slack 連線模式為 `webhook` 時生效。"
       },
       "slack_webhook_path": {
         "description": "Slack Webhook Path",
-        "hint": "淨係 Slack connection mode 係 `webhook` 嗰陣有用。"
+        "hint": "僅在 Slack 連線模式為 `webhook` 時生效。"
       },
       "slack_webhook_port": {
         "description": "Slack Webhook Port",
-        "hint": "淨係 Slack connection mode 係 `webhook` 嗰陣有用。"
+        "hint": "僅在 Slack 連線模式為 `webhook` 時生效。"
       },
       "telegram_command_auto_refresh": {
-        "description": "Telegram 指令 Auto Refresh",
-        "hint": "Enable 之後，AstrBot 會喺 Run 嗰陣自動 Refresh Telegram 指令。(單獨 Set 呢個冇效)"
+        "description": "Telegram 指令自動重整",
+        "hint": "啟用後，AstrBot 會在運行時自動重整 Telegram 指令。(單獨設定此項無效)"
       },
       "telegram_command_register": {
-        "description": "Telegram 指令 Register",
-        "hint": "Enable 之後，AstrBot 會自動 Register Telegram 指令。"
+        "description": "Telegram 指令註冊",
+        "hint": "啟用後，AstrBot 會自動註冊 Telegram 指令。"
       },
       "telegram_command_register_interval": {
-        "description": "Telegram 指令 Auto Refresh Interval",
-        "hint": "Telegram 指令 Auto Refresh Interval，單位係秒。"
+        "description": "Telegram 指令自動重整間隔",
+        "hint": "Telegram 指令自動重整的間隔時間，單位為秒。"
       },
       "telegram_polling_restart_delay": {
-        "description": "Telegram Polling Restart Delay",
-        "hint": "當 Polling 意外完咗試自動 Restart 嘅 Delay 時間，單位係秒。Default 係 5s。"
+        "description": "Telegram 輪詢重啟延遲",
+        "hint": "當輪詢異常結束時，嘗試自動重啟的延遲時間，單位為秒。預設為 5 秒。"
       },
       "telegram_token": {
         "description": "Bot Token",
-        "hint": "如果你嘅 Network 環境喺中國大陸，請喺 `其他 Config` 度 Set Proxy 或者改 api_base。"
+        "hint": "如果你的網絡環境在中國大陸，請在 `其他設定` 中設定 Proxy 或修改 api_base。"
       },
       "type": {
-        "description": "Adapter Type"
+        "description": "Adapter 類型"
       },
       "unified_webhook_mode": {
-        "description": "Unified Webhook Mode",
-        "hint": "Webhook Mode 下用 AstrBot Unified Webhook 入口，唔使單獨開 Port。Callback 地址係 /api/platform/webhook/{webhook_uuid}。"
+        "description": "統一 Webhook 模式",
+        "hint": "Webhook 模式下使用 AstrBot 統一 Webhook 入口，無須單獨開啟 Port。回呼地址為 /api/platform/webhook/{webhook_uuid}。"
       },
       "webhook_uuid": {
         "description": "Webhook UUID",
-        "hint": "Unified Webhook Mode 下嘅 Unique Identifier，Create 平台嗰陣自動 Generate。"
+        "hint": "統一 Webhook 模式下的唯一識別碼，建立平台時會自動生成。"
       },
       "wecom_ai_bot_name": {
-        "description": "WeCom AI Bot 名",
-        "hint": "請務必填啱，唔係有啲指令會用唔到。"
+        "description": "WeCom AI Bot 名稱",
+        "hint": "請務必填寫正確，否則部分指令將無法使用。"
       },
       "wecom_ai_bot_connection_mode": {
-        "description": "WeCom AI Bot Connection Mode",
-        "hint": "Webhook Callback Mode 要 Config Token/EncodingAESKey；Long Connection Mode 要 Config BotID/Secret。"
+        "description": "WeCom AI Bot 連線模式",
+        "hint": "Webhook Callback 模式需設定 Token/EncodingAESKey；長連線模式需設定 BotID/Secret。"
       },
       "wecomaibot_friend_message_welcome_text": {
-        "description": "WeCom AI Bot PM Welcome 語",
-        "hint": "Optional。當 User 當日入 AI Bot PM Session，覆 Welcome 語，例如「💭 思考緊...」。留空就唔覆。"
+        "description": "WeCom AI Bot 私訊歡迎語",
+        "hint": "選填。當用戶當日進入 AI Bot 私訊工作階段時，回覆的歡迎語，例如「💭 思考中...」。留空則不回覆。"
       },
       "wecomaibot_init_respond_text": {
-        "description": "WeCom AI Bot 初始回應 Text",
-        "hint": "Optional。當機械人收到 Message 嗰陣，第一吓覆嘅 Text。留空就唔 Set。"
+        "description": "WeCom AI Bot 初始回應文字",
+        "hint": "選填。當機械人收到訊息時，第一時間回覆的文字。留空則不設定。"
       },
       "wecomaibot_token": {
         "description": "WeCom AI Bot Token",
-        "hint": "用嚟做 Webhook Callback Mode 嘅 Auth。"
+        "hint": "用於進行 Webhook Callback 模式的驗證。"
       },
       "wecomaibot_encoding_aes_key": {
         "description": "WeCom AI Bot EncodingAESKey",
-        "hint": "用嚟做 Webhook Callback Mode 嘅 Message Encrypt/Decrypt。"
+        "hint": "用於進行 Webhook Callback 模式的訊息加密/解密。"
       },
       "wecomaibot_ws_bot_id": {
-        "description": "Long Connection BotID",
-        "hint": "WeCom AI Bot Long Connection Mode 憑證 BotID。"
+        "description": "長連線 BotID",
+        "hint": "WeCom AI Bot 長連線模式憑證 BotID。"
       },
       "wecomaibot_ws_secret": {
-        "description": "Long Connection Secret",
-        "hint": "WeCom AI Bot Long Connection Mode 憑證 Secret。"
+        "description": "長連線 Secret",
+        "hint": "WeCom AI Bot 長連線模式憑證 Secret。"
       },
       "wecomaibot_ws_url": {
-        "description": "Long Connection WebSocket URL",
-        "hint": "Default 係 wss://openws.work.weixin.qq.com，平時唔使改。"
+        "description": "長連線 WebSocket URL",
+        "hint": "預設為 wss://openws.work.weixin.qq.com，一般情況下無須修改。"
       },
       "wecomaibot_heartbeat_interval": {
-        "description": "Long Connection Heartbeat Interval",
-        "hint": "Long Connection Mode Heartbeat Interval（秒），建議 30 秒。"
+        "description": "長連線心跳間隔",
+        "hint": "長連線模式心跳間隔 (秒)，建議設定為 30 秒。"
       },
       "wpp_active_message_poll": {
-        "description": "係咪 Enable 主動 Message Polling",
-        "hint": "得當你發現 WeChat Message 冇準時 Sync 去 AstrBot 嗰陣，先需要 Enable 呢個 Function，Default 唔 Enable。"
+        "description": "是否啟用主動訊息輪詢",
+        "hint": "只有當你發現 WeChat 訊息沒有準時同步至 AstrBot 時，才需要啟用此功能，預設不啟用。"
       },
       "wpp_active_message_poll_interval": {
-        "description": "主動 Message Polling Interval",
-        "hint": "主動 Message Polling Interval，單位係秒，Default 3 秒，最大唔好過 60 秒，唔係可能會當做舊 Message。"
+        "description": "主動訊息輪詢間隔",
+        "hint": "主動訊息輪詢間隔，單位為秒，預設 3 秒，最大不建議超過 60 秒，否則可能會被當作舊訊息。"
       },
       "ws_reverse_host": {
-        "description": "Reverse Websocket Host",
-        "hint": "AstrBot 會做 Server 端。"
+        "description": "反向 Websocket Host",
+        "hint": "AstrBot 將作為伺服器端。"
       },
       "ws_reverse_port": {
-        "description": "Reverse Websocket Port"
+        "description": "反向 Websocket Port"
       },
       "ws_reverse_token": {
-        "description": "Reverse Websocket Token",
-        "hint": "Reverse Websocket Token。冇 Set 就唔 Enable Token Verify。"
+        "description": "反向 Websocket Token",
+        "hint": "反向 Websocket Token。未設定則不啟用 Token 驗證。"
       },
       "msg_push_webhook_url": {
-        "description": "WeCom Message Push Webhook URL",
-        "hint": "Optional。用嚟主動 Push Message，請喺企微群->消息推送攞 URL。建議 Set 呢個以獲得更好嘅 Send Message 體驗。"
+        "description": "WeCom 訊息推播 Webhook URL",
+        "hint": "選填。用於主動推播訊息，請在企業微信群組->訊息推播中獲取 URL。建議設定此項以獲得更好的訊息發送體驗。"
       },
       "only_use_webhook_url_to_send": {
-        "description": "淨係用 Webhook Send Message",
-        "hint": "Optional。Enable 之後，WeCom AI Bot 嘅所有回覆都會改為經消息推送 Webhook Send。消息推送 Webhook Support 更多 Message 類型（例如圖、File 等）。如果唔使 Typewriter Effect，強烈建議用呢個 Option。"
+        "description": "僅使用 Webhook 發送訊息",
+        "hint": "選填。啟用後，WeCom AI Bot 的所有回覆都會改為經由訊息推播 Webhook 發送。訊息推播 Webhook 支援更多訊息類型（例如圖片、檔案等）。如果不需要打字機效果 (Typewriter Effect)，強烈建議使用此選項。"
       },
       "weixin_oc_base_url": {
         "description": "Base URL 地址",
-        "hint": "Default: https://ilinkai.weixin.qq.com"
+        "hint": "預設: https://ilinkai.weixin.qq.com"
       },
       "weixin_oc_bot_type": {
-        "description": "Scan QR Code Parameter bot_type",
-        "hint": "Default: 3"
+        "description": "掃描 QR Code 參數 bot_type",
+        "hint": "預設: 3"
       },
       "weixin_oc_qr_poll_interval": {
-        "description": "QR Code 狀態 Polling Interval（秒）",
-        "hint": "每隔幾多秒 Poll 一次 QR Code 狀態。"
+        "description": "QR Code 狀態輪詢間隔 (秒)",
+        "hint": "每隔多少秒輪詢一次 QR Code 狀態。"
       },
       "weixin_oc_long_poll_timeout_ms": {
-        "description": "getUpdates Long Polling Timeout 時間（ms）",
-        "hint": "Session Message Pull Interface Timeout Parameter。"
+        "description": "getUpdates 長輪詢逾時時間 (ms)",
+        "hint": "工作階段訊息拉取接口的逾時參數。"
       },
       "weixin_oc_api_timeout_ms": {
-        "description": "HTTP Request Timeout（ms）",
-        "hint": "通用 API Request Timeout Parameter。"
+        "description": "HTTP 請求逾時時間 (ms)",
+        "hint": "通用的 API 請求逾時參數。"
       },
       "weixin_oc_token": {
-        "description": "Login 後 token（可以留空）",
-        "hint": "Scan QR Code Login 成功後會自動寫入；Advanced 場景可以 Manually 填。"
+        "description": "登入後的 token (可留空)",
+        "hint": "掃描 QR Code 登入成功後會自動寫入；在進階情境下可手動填寫。"
       },
       "kook_bot_token": {
         "description": "機械人 Token",
         "type": "string",
-        "hint": "必填項。喺 KOOK Developer Platform 攞嘅機械人 Token"
+        "hint": "必填項目。在 KOOK 開發者平台獲取的機械人 Token"
       },
       "kook_reconnect_delay": {
-        "description": "Reconnect Delay",
+        "description": "重新連線延遲",
         "type": "int",
-        "hint": "Reconnect Delay 時間（秒），用 Exponential Backoff 策略"
+        "hint": "重新連線的延遲時間 (秒)，採用指數退避 (Exponential Backoff) 策略"
       },
       "kook_max_reconnect_delay": {
-        "description": "最大 Reconnect Delay",
+        "description": "最大重新連線延遲",
         "type": "int",
-        "hint": "Reconnect Delay 嘅最大值（秒）"
+        "hint": "重新連線延遲的最大值 (秒)"
       },
       "kook_max_retry_delay": {
-        "description": "最大 Retry Delay",
+        "description": "最大重試延遲",
         "type": "int",
-        "hint": "Retry 嘅最大 Delay 時間（秒）"
+        "hint": "重試的最大延遲時間 (秒)"
       },
       "kook_heartbeat_interval": {
-        "description": "Heartbeat Interval",
+        "description": "心跳間隔",
         "type": "int",
-        "hint": "Heartbeat Check Interval 時間（秒）"
+        "hint": "心跳檢測的間隔時間 (秒)"
       },
       "kook_heartbeat_timeout": {
-        "description": "Heartbeat Timeout 時間",
+        "description": "心跳逾時時間",
         "type": "int",
-        "hint": "Heartbeat Check Timeout 時間（秒）"
+        "hint": "心跳檢測的逾時時間 (秒)"
       },
       "kook_max_heartbeat_failures": {
-        "description": "最大 Heartbeat Failure 次數",
+        "description": "最大心跳失敗次數",
         "type": "int",
-        "hint": "容許嘅最大 Heartbeat Failure 次數，超咗會 Disconnect"
+        "hint": "容許的最大心跳失敗次數，超過後將中斷連線"
       },
       "kook_max_consecutive_failures": {
-        "description": "最大連續 Failure 次數",
+        "description": "最大連續失敗次數",
         "type": "int",
-        "hint": "容許嘅最大連續 Failure 次數，超咗會停 Retry"
+        "hint": "容許的最大連續失敗次數，超過後將停止重試"
       }
     },
     "general": {
-      "description": "基本",
+      "description": "基本設定",
       "admins_id": {
-        "description": "Admin ID"
+        "description": "管理員 ID"
       },
       "platform_settings": {
         "unique_session": {
-          "description": "隔離 Session",
-          "hint": "Enable 之後，Group Member 嘅 Context 會獨立。"
+          "description": "隔離工作階段",
+          "hint": "啟用後，群組成員的上下文將會各自獨立。"
         },
         "friend_message_needs_wake_prefix": {
-          "description": "PM 需要 Wake up prefix"
+          "description": "私訊需要喚醒前綴"
         },
         "reply_prefix": {
-          "description": "覆嗰陣嘅 Text prefix"
+          "description": "回覆時的文字前綴"
         },
         "reply_with_mention": {
-          "description": "覆嗰陣 @ Sender"
+          "description": "回覆時 @ 發送者"
         },
         "reply_with_quote": {
-          "description": "覆嗰陣 Quote Sender Message"
+          "description": "回覆時引用發送者的訊息"
         },
         "forward_threshold": {
-          "description": "Forward Message 嘅字數 Threshold"
+          "description": "轉發訊息的字數門檻"
         },
         "empty_mention_waiting": {
-          "description": "淨係 @ 機械人係咪 Trigger 等待"
+          "description": "只有 @ 機械人時是否觸發等待"
         }
       },
       "wake_prefix": {
-        "description": "Wake up prefix"
+        "description": "喚醒前綴"
       },
       "disable_builtin_commands": {
-        "description": "Disable Built-in 指令",
-        "hint": "Disable 晒所有 AstrBot 內置指令，例如 help, provider, model 等"
+        "description": "停用內建指令",
+        "hint": "停用所有 AstrBot 內建指令，例如 help, provider, model 等"
       }
     },
     "whitelist": {
-      "description": "Whitelist",
+      "description": "白名單",
       "platform_settings": {
         "enable_id_white_list": {
-          "description": "Enable ID Whitelist",
-          "hint": "Enable 之後，得喺 Whitelist 內嘅 Session 先會 Respond，Whitelist 空代表唔 Enable Whitelist（所有 ID 都過到）。"
+          "description": "啟用 ID 白名單",
+          "hint": "啟用後，只有在白名單內的工作階段 (Session) 才會回應，白名單留空代表不啟用白名單（所有 ID 皆可通過）。"
         },
         "id_whitelist": {
-          "description": "Whitelist ID List",
-          "hint": "用 /sid 攞 ID。List 係空嗰陣代表唔 Enable（即係所有 ID 都喺 Whitelist 入面）。"
+          "description": "白名單 ID 列表",
+          "hint": "使用 /sid 獲取 ID。列表為空時代表不啟用（即所有 ID 皆在白名單內）。"
         },
         "id_whitelist_log": {
-          "description": "出 Log",
-          "hint": "Enable 之後，當一條 Message 過唔到 Whitelist 嗰陣，會出 INFO level 嘅 Log。"
+          "description": "輸出日誌",
+          "hint": "啟用後，當一則訊息無法通過白名單時，會輸出 INFO 級別的日誌 (Log)。"
         },
         "wl_ignore_admin_on_group": {
-          "description": "Admin Group Message 無視 ID Whitelist"
+          "description": "管理員群組訊息無視 ID 白名單"
         },
         "wl_ignore_admin_on_friend": {
-          "description": "Admin PM 無視 ID Whitelist"
+          "description": "管理員私訊無視 ID 白名單"
         }
       }
     },
     "rate_limit": {
-      "description": "Rate Limit",
+      "description": "頻率限制",
       "platform_settings": {
         "rate_limit": {
           "time": {
-            "description": "Message Rate Limit 時間(秒)"
+            "description": "訊息頻率限制時間 (秒)"
           },
           "count": {
-            "description": "Message Rate Limit 計數"
+            "description": "訊息頻率限制次數"
           },
           "strategy": {
-            "description": "Rate Limit Strategy"
+            "description": "頻率限制策略"
           }
         }
       }
     },
     "content_safety": {
-      "description": "Content Safety",
+      "description": "內容安全",
       "content_safety": {
         "also_use_in_response": {
-          "description": "同時 Check Model 嘅 Response 內容"
+          "description": "同時檢查模型的輸出內容"
         },
         "baidu_aip": {
           "enable": {
-            "description": "用百度內容安全審核",
-            "hint": "你需要手動 Install baidu-aip Library。"
+            "description": "使用百度內容安全審核",
+            "hint": "你需要手動安裝 (Install) baidu-aip 函式庫。"
           },
           "app_id": {
             "description": "App ID"
@@ -800,68 +800,68 @@
         },
         "internal_keywords": {
           "enable": {
-            "description": "Keyword Check"
+            "description": "關鍵字檢查"
           },
           "extra_keywords": {
-            "description": "額外 Keyword",
-            "hint": "額外嘅 Block Keyword List，Support Regular Expression。"
+            "description": "額外關鍵字",
+            "hint": "額外的封鎖關鍵字列表，支援正規表示式 (Regular Expression)。"
           }
         }
       }
     },
     "t2i": {
-      "description": "Text 轉圖",
+      "description": "文字轉圖片",
       "t2i": {
-        "description": "Text 轉圖 Output"
+        "description": "文字轉圖片輸出"
       },
       "t2i_word_threshold": {
-        "description": "Text 轉圖字數 Threshold"
+        "description": "文字轉圖片字數門檻"
       }
     },
     "others": {
-      "description": "其他 Config",
+      "description": "其他設定",
       "platform_settings": {
         "ignore_bot_self_message": {
-          "description": "係咪 Ignore 機械人自己嘅 Message"
+          "description": "是否忽略機械人自身的訊息"
         },
         "ignore_at_all": {
-          "description": "係咪 Ignore @All Event"
+          "description": "是否忽略 @All 標記"
         },
         "no_permission_reply": {
-          "description": "User 冇 Permission 嗰陣覆唔覆"
+          "description": "用戶無權限時是否回覆"
         }
       },
       "platform_specific": {
         "lark": {
           "pre_ack_emoji": {
             "enable": {
-              "description": "[飛書] Enable Pre-Ack Emoji"
+              "description": "[飛書] 啟用確認前 Emoji 回應"
             },
             "emojis": {
-              "description": "Emoji 列表(飛書 Emoji 枚舉名)",
-              "hint": "Emoji 枚舉名參考：[https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce](https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce)"
+              "description": "Emoji 列表 (飛書 Emoji 枚舉名稱)",
+              "hint": "Emoji 枚舉名稱請參考：[https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce](https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce)"
             }
           }
         },
         "telegram": {
           "pre_ack_emoji": {
             "enable": {
-              "description": "[Telegram] Enable Pre-Ack Emoji"
+              "description": "[Telegram] 啟用確認前 Emoji 回應"
             },
             "emojis": {
-              "description": "Emoji 列表(Unicode)",
-              "hint": "Telegram 淨係 Support 固定 Reaction 集合，參考：[https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)"
+              "description": "Emoji 列表 (Unicode)",
+              "hint": "Telegram 僅支援固定的 Reaction 集合，請參考：[https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)"
             }
           }
         },
         "discord": {
           "pre_ack_emoji": {
             "enable": {
-              "description": "[Discord] Enable Pre-Ack Emoji"
+              "description": "[Discord] 啟用確認前 Emoji 回應"
             },
             "emojis": {
-              "description": "Emoji 列表（Unicode 或者 Custom Emoji 名）",
-              "hint": "填 Unicode Emoji，例如：👍、🤔、⏳"
+              "description": "Emoji 列表 (Unicode 或自訂 Emoji 名稱)",
+              "hint": "請填寫 Unicode Emoji，例如：👍、🤔、⏳"
             }
           }
         }
@@ -869,319 +869,319 @@
     }
   },
   "plugin_group": {
-    "name": "Plugin Config",
+    "name": "插件設定",
     "plugin": {
-      "description": "Plugin",
+      "description": "插件",
       "plugin_set": {
-        "description": "可用 Plugin",
-        "hint": "預設 Enable 晒所有冇 Disable 嘅 Plugin。如果 Plugin 喺 Plugin 頁面 Disable 咗，喺呢度揀都唔會生效。"
+        "description": "可用插件",
+        "hint": "預設啟用所有未停用的插件。如果插件在插件管理頁面中被停用，在此處選擇也不會生效。"
       }
     }
   },
   "ext_group": {
-    "name": "Extension 功能",
+    "name": "擴充功能",
     "segmented_reply": {
       "description": "分段回覆",
       "platform_settings": {
         "segmented_reply": {
           "enable": {
-            "description": "Enable 分段回覆"
+            "description": "啟用分段回覆"
           },
           "only_llm_result": {
-            "description": "淨係對 LLM Result 分段"
+            "description": "僅對 LLM 結果分段"
           },
           "interval_method": {
-            "description": "Interval Method",
-            "hint": "random 係 Random 時間，log 係根據 Message 長度計，$y=log_<log_base>(x)$，x 係字數，y 嘅單位係秒。"
+            "description": "間隔方式",
+            "hint": "random 為隨機時間，log 則根據訊息長度計算，$y=log_<log_base>(x)$，x 為字數，y 的單位為秒。"
           },
           "interval": {
-            "description": "Random Interval 時間",
-            "hint": "Format：Min,Max (例如：1.5,3.5)"
+            "description": "隨機間隔時間",
+            "hint": "格式：Min,Max (例如：1.5,3.5)"
           },
           "log_base": {
-            "description": "Log Base",
-            "hint": "Log Interval 嘅 Base，Default 係 2.6。範圍係 1.0-10.0。"
+            "description": "對數底數 (Log Base)",
+            "hint": "Log 間隔的底數，預設為 2.6。範圍為 1.0-10.0。"
           },
           "words_count_threshold": {
-            "description": "分段回覆字數 Threshold",
-            "hint": "分段回覆嘅字數上限。得字數細過呢個 Value 嘅 Message 先會被分段，過咗呢個 Value 嘅長文會直接 Send（唔分段），Default 係 150。"
+            "description": "分段回覆字數門檻",
+            "hint": "分段回覆的字數上限。只有字數小於此數值的訊息才會被分段，超過此數值的長文會直接發送（不分段），預設為 150。"
           },
           "split_mode": {
-            "description": "分段 Mode",
-            "hint": "用嚟拆開一段 Message。Default 情況下會根據句號、問號等標點符號拆。好似填 `[。？！]` 會 Remove 晒啲句號、問號、感嘆號。re.findall(r'<regex>', text)",
+            "description": "分段模式",
+            "hint": "用於拆分一段訊息。預設情況下會根據句號、問號等標點符號拆分。例如填寫 `[。？！]` 會移除所有的句號、問號與感嘆號。re.findall(r'<regex>', text)",
             "labels":[
-              "Regular Expression",
-              "分段詞 List"
+              "正規表示式",
+              "分段詞列表"
             ]
           },
           "regex": {
-            "description": "分段 Regular Expression",
-            "hint": "用嚟按 Regex 規則認分段點。建議用可以 Match 到 Separator 嘅 Expression。"
+            "description": "分段正規表示式",
+            "hint": "用於依據 Regex 規則識別分段點。建議使用能夠配對到分隔符號的表達式。"
           },
           "split_words": {
-            "description": "分段詞 List",
-            "hint": "Detect 到 List 入面是但一隻詞就分段"
+            "description": "分段詞列表",
+            "hint": "偵測到列表中任何一個詞彙即進行分段"
           },
           "content_cleanup_rule": {
-            "description": "內容過濾 Regular Expression",
-            "hint": "Remove 分段後內容入面指定嘅內容。好似填 `[。?!]` 會 Remove 晒啲句號、問號、感嘆號。"
+            "description": "內容過濾正規表示式",
+            "hint": "移除分段後內容中指定的部分。例如填寫 `[。?!]` 會移除所有的句號、問號與感嘆號。"
           }
         }
       }
     },
     "ltm": {
-      "description": "Group Chat Context 感知(原 Chat Memory 增強)",
+      "description": "群聊上下文感知 (原對話記憶增強)",
       "provider_ltm_settings": {
         "group_icl_enable": {
-          "description": "Enable Group Chat Context 感知"
+          "description": "啟用群聊上下文感知"
         },
         "group_message_max_cnt": {
-          "description": "最大 Message 數量"
+          "description": "最大訊息數量"
         },
         "image_caption": {
           "description": "自動理解圖片",
-          "hint": "需要 Set Group Chat 圖片轉述 Model。"
+          "hint": "需要設定群聊圖片轉述模型。"
         },
         "image_caption_provider_id": {
-          "description": "Group Chat 圖片轉述 Model",
-          "hint": "用嚟畀 Group Chat Context 感知做圖片理解，同 Default 圖片轉述 Model 分開 Config。"
+          "description": "群聊圖片轉述模型",
+          "hint": "用於提供給群聊上下文感知功能進行圖片理解，與預設圖片轉述模型分開設定。"
         },
         "active_reply": {
           "enable": {
             "description": "主動回覆"
           },
           "method": {
-            "description": "主動回覆 Method"
+            "description": "主動回覆方式"
           },
           "possibility_reply": {
-            "description": "回覆 Probability",
-            "hint": "0.0-1.0 之間嘅數值"
+            "description": "回覆機率",
+            "hint": "介於 0.0-1.0 之間的數值"
           },
           "whitelist": {
-            "description": "主動回覆 Whitelist",
-            "hint": "空嗰陣唔 Enable Whitelist Filter。用 /sid 攞 ID。"
+            "description": "主動回覆白名單",
+            "hint": "留空則不啟用白名單過濾。使用 /sid 獲取 ID。"
           }
         }
       }
     }
   },
   "system_group": {
-    "name": "System Config",
+    "name": "系統設定",
     "system": {
-      "description": "System Config",
+      "description": "系統設定",
       "t2i_strategy": {
-        "description": "Text 轉圖 Strategy",
-        "hint": "Text 轉圖 Strategy。`remote` 係用 Remote 基於 HTML 嘅 Render 服務，`local` 係用 PIL Local Render。當用 local 嗰陣，將 ttf 字體改名做 'font.ttf' 放喺 data/ 目錄可以 Custom 字體。"
+        "description": "文字轉圖片策略",
+        "hint": "文字轉圖片策略。`remote` 為使用遠端基於 HTML 的渲染服務，`local` 為使用 PIL 本機渲染。當使用 local 時，將 ttf 字體重新命名為 'font.ttf' 並放置於 data/ 目錄中即可自訂字體。"
       },
       "t2i_endpoint": {
-        "description": "Text 轉圖服務 API 地址",
-        "hint": "空嗰陣用 AstrBot API 服務"
+        "description": "文字轉圖片服務 API 地址",
+        "hint": "留空時將使用 AstrBot API 服務"
       },
       "t2i_template": {
-        "description": "Text 轉圖 Custom Template",
-        "hint": "Enable 後可以 Custom HTML Template 用嚟文轉圖 Render。"
+        "description": "文字轉圖片自訂模板",
+        "hint": "啟用後可自訂用於文字轉圖片渲染的 HTML 模板。"
       },
       "t2i_active_template": {
-        "description": "目前 Apply 緊嘅文轉圖 Render Template",
-        "hint": "呢度嘅 Value 由文轉圖 Template 管理頁面 Maintain。"
+        "description": "目前套用中的文字轉圖片渲染模板",
+        "hint": "此處的數值由文字轉圖片模板管理頁面負責維護。"
       },
       "log_level": {
-        "description": "Console Log Level",
-        "hint": "Console 出 Log 嘅 Level。"
+        "description": "終端機日誌級別",
+        "hint": "終端機 (Console) 輸出日誌的級別。"
       },
       "log_file_enable": {
-        "description": "Enable File Log",
-        "hint": "喺 Console 出 Log 同時，將 Log 寫入 File。"
+        "description": "啟用檔案日誌",
+        "hint": "在終端機輸出日誌的同時，將日誌寫入檔案中。"
       },
       "log_file_path": {
-        "description": "Log File Path",
-        "hint": "Relative Path 以 data 目錄做 Base，例如 logs/astrbot.log；Support Absolute Path。"
+        "description": "日誌檔案路徑",
+        "hint": "相對路徑以 data 目錄為基準，例如 logs/astrbot.log；支援絕對路徑。"
       },
       "log_file_max_mb": {
-        "description": "Log File Size 上限 (MB)",
-        "hint": "過咗 Size 自動 Rotate，Default 20MB。"
+        "description": "日誌檔案大小上限 (MB)",
+        "hint": "超過大小限制會自動輪替 (Rotate)，預設為 20MB。"
       },
       "temp_dir_max_size": {
-        "description": "Temp 目錄 Size 上限 (MB)",
-        "hint": "用嚟 Limit data/temp 目錄總 Size，單位係 MB。系統每 10 分鐘 Check 一次，超咗 limit 會按 File 修改時間由舊到新 Delete，釋放大概 30% 目前 Size。"
+        "description": "暫存目錄大小上限 (MB)",
+        "hint": "用於限制 data/temp 目錄總大小，單位為 MB。系統每 10 分鐘檢查一次，超過限制會依檔案修改時間由舊到新刪除，釋放約 30% 目前大小。"
       },
       "trace_log_enable": {
-        "description": "Enable Trace File Log",
-        "hint": "將 Trace Event 寫入獨立 File（唔影響 Console 輸出）。"
+        "description": "啟用追蹤檔案日誌",
+        "hint": "將追蹤事件 (Trace Event) 寫入獨立檔案中（不影響終端機輸出）。"
       },
       "trace_log_path": {
-        "description": "Trace Log File Path",
-        "hint": "Relative Path 以 data 目錄做 Base，例如 logs/astrbot.trace.log；Support Absolute Path。"
+        "description": "追蹤日誌檔案路徑",
+        "hint": "相對路徑以 data 目錄為基準，例如 logs/astrbot.trace.log；支援絕對路徑。"
       },
       "trace_log_max_mb": {
-        "description": "Trace Log Size 上限 (MB)",
-        "hint": "過咗 Size 自動 Rotate，Default 20MB。"
+        "description": "追蹤日誌大小上限 (MB)",
+        "hint": "超過大小限制會自動輪替 (Rotate)，預設為 20MB。"
       },
       "pip_install_arg": {
-        "description": "pip Install 額外 Parameter",
-        "hint": "Install Plugin Dependency 嗰陣，會用 Python 嘅 pip Tool。呢度可以填額外 Parameter，例如 `--break-system-package` 等。"
+        "description": "pip 安裝額外參數",
+        "hint": "安裝插件依賴項 (Dependency) 時，會使用 Python 的 pip 工具。此處可以填寫額外參數，例如 `--break-system-package` 等。"
       },
       "pypi_index_url": {
-        "description": "PyPI Repo 地址",
-        "hint": "Install Python Dependency 嗰陣 Request 嘅 PyPI Repo 地址。Default 係[https://mirrors.aliyun.com/pypi/simple/](https://mirrors.aliyun.com/pypi/simple/)"
+        "description": "PyPI 套件庫地址",
+        "hint": "安裝 Python 依賴項時請求的 PyPI 套件庫地址。預設為 [https://mirrors.aliyun.com/pypi/simple/](https://mirrors.aliyun.com/pypi/simple/)"
       },
       "callback_api_base": {
-        "description": "對外可達嘅 Callback API 地址",
-        "hint": "外部服務可能會經 AstrBot Generate 嘅 Callback Link(例如 File Download Link) Access AstrBot Backend。因為 AstrBot 冇得自動判斷 Deploy 環境入面對外可達嘅 Host 地址，所以要經呢個 Config 顯式指定外部服務點 Access AstrBot。例如[http://localhost:6185](http://localhost:6185)，[https://example.com](https://example.com) 等。"
+        "description": "對外可達的 Callback API 地址",
+        "hint": "外部服務可能會透過 AstrBot 產生的 Callback 連結 (例如檔案下載連結) 存取 AstrBot 後端。由於 AstrBot 無法自動判斷部署環境中對外可達的主機地址，因此需要透過此設定明確指定外部服務如何存取 AstrBot。例如 [http://localhost:6185](http://localhost:6185)，[https://example.com](https://example.com) 等。"
       },
       "dashboard": {
         "ssl": {
           "enable": {
-            "description": "Enable WebUI HTTPS",
-            "hint": "Enable 之後，WebUI 會直接用 HTTPS Serve。"
+            "description": "啟用 WebUI HTTPS",
+            "hint": "啟用後，WebUI 會直接以 HTTPS 提供服務。"
           },
           "cert_file": {
-            "description": "SSL Cert File Path",
-            "hint": "Cert File Path（PEM）。Support Absolute Path 同 Relative Path（相對目前 Working Directory）。"
+            "description": "SSL 憑證檔案路徑",
+            "hint": "憑證檔案路徑 (PEM)。支援絕對路徑與相對路徑（相對於目前工作目錄）。"
           },
           "key_file": {
-            "description": "SSL Private Key File Path",
-            "hint": "Private Key File Path（PEM）。Support Absolute Path 同 Relative Path（相對目前 Working Directory）。"
+            "description": "SSL 私密金鑰檔案路徑",
+            "hint": "私密金鑰檔案路徑 (PEM)。支援絕對路徑與相對路徑（相對於目前工作目錄）。"
           },
           "ca_certs": {
-            "description": "SSL CA Cert File Path",
-            "hint": "Optional。用嚟指定 CA Cert File Path。"
+            "description": "SSL CA 憑證檔案路徑",
+            "hint": "選填。用於指定 CA 憑證檔案路徑。"
           }
         }
       },
       "timezone": {
-        "description": "Timezone",
-        "hint": "Timezone Set。請填 IANA Timezone 名，例如 Asia/Hong_Kong，空嗰陣用 System Default Timezone。所有 Timezone 請睇：[https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab](https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab)"
+        "description": "時區",
+        "hint": "時區設定。請填寫 IANA 時區名稱，例如 Asia/Hong_Kong，留空時將使用系統預設時區。所有時區請參閱：[https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab](https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab)"
       },
       "http_proxy": {
         "description": "HTTP Proxy",
-        "hint": "Enable 之後，會以加 Environment Variable 嘅方式 Set Proxy。Format 係 `http://ip:port`"
+        "hint": "啟用後，會以加入環境變數的方式設定 Proxy。格式為 `http://ip:port`"
       },
       "no_proxy": {
-        "description": "Direct 連接地址 List"
+        "description": "直連地址列表"
       }
     }
   },
   "provider_group": {
     "provider": {
       "genie_onnx_model_dir": {
-        "description": "ONNX Model Directory",
+        "description": "ONNX 模型目錄",
         "hint": "The directory path containing the ONNX model files"
       },
       "genie_language": {
-        "description": "Language"
+        "description": "語言"
       },
       "xai_native_search": {
-        "description": "Enable Native Search 功能",
-        "hint": "Enable 之後，會經 xAI 嘅 Chat Completions Native Live Search 做上網 Search（按量收費）。淨係對 xAI Provider 生效。"
+        "description": "啟用原生搜尋功能",
+        "hint": "啟用後，會透過 xAI 的 Chat Completions Native Live Search 進行上網搜尋（按量收費）。僅對 xAI 供應商生效。"
       },
       "rerank_api_base": {
-        "description": "Rerank Model API Base URL",
-        "hint": "AstrBot 會喺 Request 嗰陣喺尾加 /v1/rerank。"
+        "description": "Rerank 模型 API Base URL",
+        "hint": "AstrBot 會在請求時於結尾加上 /v1/rerank。"
       },
       "rerank_api_key": {
         "description": "API Key",
-        "hint": "如果唔使 API Key，請留空。"
+        "hint": "如果不需使用 API Key，請留空。"
       },
       "rerank_model": {
-        "description": "Rerank Model 名"
+        "description": "Rerank 模型名稱"
       },
       "return_documents": {
-        "description": "係咪喺 Sorting 結果入面 Return Document 原文",
-        "hint": "Default false，減少 Network Transfer Overhead。"
+        "description": "是否在排序結果中回傳文件原文",
+        "hint": "預設為 False，以減少網絡傳輸負載 (Overhead)。"
       },
       "instruct": {
-        "description": "Custom Sorting Task Type 說明",
-        "hint": "淨係用 qwen3-rerank Model 嗰陣生效。建議用英文寫。"
+        "description": "自訂排序任務類型說明",
+        "hint": "僅在使用 qwen3-rerank 模型時生效。建議以英文填寫。"
       },
       "launch_model_if_not_running": {
-        "description": "Model 未 Run 嗰陣自動 Start",
-        "hint": "如果 Model 目前未喺 Xinference 服務入面 Run，係咪試吓自動 Start 佢。喺 Production 環境建議閂咗佢。"
+        "description": "模型未運行時自動啟動",
+        "hint": "如果模型目前未在 Xinference 服務中運行，是否嘗試自動啟動它。在正式 (Production) 環境中建議關閉此選項。"
       },
       "modalities": {
-        "description": "Model 能力",
-        "hint": "Model Support 嘅 Modality。如果填嘅 Model 唔 support 圖像，請 Uncheck 圖像。",
+        "description": "模型能力",
+        "hint": "模型支援的模態 (Modality)。如果填寫的模型不支援圖像，請取消勾選圖像。",
         "labels": [
-          "Text",
-          "Image",
+          "文本 (Text)",
+          "圖像 (Image)",
           "Tool Calling"
         ]
       },
       "custom_headers": {
-        "description": "Custom 加 Request Header",
-        "hint": "呢度加嘅 Key-value Pair 會 Merge 入 OpenAI SDK 嘅 default_headers，用嚟 Custom HTTP Request Header。Value 一定要係 String。"
+        "description": "自訂加入 Request Header",
+        "hint": "此處加入的 Key-value 對會合併至 OpenAI SDK 的 default_headers，用於自訂 HTTP Request Header。Value 必須為字串 (String)。"
       },
       "ollama_disable_thinking": {
-        "description": "閂 Thinking Mode",
-        "hint": "閂 Ollama 思考 Mode。"
+        "description": "關閉思考模式",
+        "hint": "關閉 Ollama 思考模式。"
       },
       "custom_extra_body": {
-        "description": "Custom Request Body Parameter",
-        "hint": "用嚟 Request 嗰陣加額外 Parameter，例如 temperature、top_p、max_tokens 等。",
+        "description": "自訂 Request Body 參數",
+        "hint": "用於在請求時加入額外參數，例如 temperature、top_p、max_tokens 等。",
         "template_schema": {
           "temperature": {
-            "description": "Temperature",
-            "hint": "控制 Output 嘅 Randomness，範圍通常係 0-2。數值越大越 Random。",
+            "description": "溫度 (Temperature)",
+            "hint": "控制輸出的隨機性，範圍通常為 0-2。數值越大越隨機。",
             "name": "Temperature"
           },
           "top_p": {
-            "description": "Top-p Sampling",
-            "hint": "Nucleus Sampling Parameter，範圍通常係 0-1。控制 Model 考慮嘅 Probability Mass。",
+            "description": "Top-p 採樣",
+            "hint": "核採樣參數 (Nucleus Sampling Parameter)，範圍通常為 0-1。控制模型考慮的機率質量 (Probability Mass)。",
             "name": "Top-p"
           },
           "max_tokens": {
-            "description": "Max Tokens",
-            "hint": "Generate 嘅最大 Token 數。",
+            "description": "最大 Token 數",
+            "hint": "生成的最大 Token 數量。",
             "name": "Max Tokens"
           }
         }
       },
       "gpt_weights_path": {
-        "description": "GPT Model File Path",
-        "hint": "即係「.ckpt」後綴嘅 File，請用 Absolute Path，Path 兩邊唔好帶雙引號，唔填就預設用 GPT_SoVITS 內置嘅 SoVITS Model(建議直接喺 GPT_SoVITS 度改 Default Model)"
+        "description": "GPT 模型檔案路徑",
+        "hint": "即「.ckpt」後綴的檔案，請使用絕對路徑，路徑兩邊不要加上雙引號，留空則預設使用 GPT_SoVITS 內建的 SoVITS 模型 (建議直接在 GPT_SoVITS 中修改預設模型)"
       },
       "sovits_weights_path": {
-        "description": "SoVITS Model File Path",
-        "hint": "即係「.pth」後綴嘅 File，請用 Absolute Path，Path 兩邊唔好帶雙引號，唔填就預設用 GPT_SoVITS 內置嘅 SoVITS Model(建議直接喺 GPT_SoVITS 度改 Default Model)"
+        "description": "SoVITS 模型檔案路徑",
+        "hint": "即「.pth」後綴的檔案，請使用絕對路徑，路徑兩邊不要加上雙引號，留空則預設使用 GPT_SoVITS 內建的 SoVITS 模型 (建議直接在 GPT_SoVITS 中修改預設模型)"
       },
       "gsv_default_parms": {
-        "description": "GPT_SoVITS Default Parameter",
-        "hint": "Reference Audio File Path、Reference Audio Text 必填，其他 Parameter 睇個人喜好自己填",
+        "description": "GPT_SoVITS 預設參數",
+        "hint": "參考音訊檔案路徑、參考音訊文字為必填，其他參數請依個人需求填寫",
         "gsv_ref_audio_path": {
-          "description": "Reference Audio File Path",
-          "hint": "必填！請用 Absolute Path！Path 兩邊唔好帶雙引號！"
+          "description": "參考音訊檔案路徑",
+          "hint": "必填！請使用絕對路徑！路徑兩邊不要加上雙引號！"
         },
         "gsv_prompt_text": {
-          "description": "Reference Audio Text",
-          "hint": "必填！請填 Reference Audio 講嘅 Text"
+          "description": "參考音訊文字",
+          "hint": "必填！請填寫參考音訊中所講的文字"
         },
         "gsv_prompt_lang": {
-          "description": "Reference Audio Text Language",
-          "hint": "請填 Reference Audio 講嘅 Text 嘅語言，預設係中文"
+          "description": "參考音訊文字語言",
+          "hint": "請填寫參考音訊文字的語言，預設為中文"
         },
         "gsv_aux_ref_audio_paths": {
-          "description": "Auxiliary Reference Audio File Path",
-          "hint": "Auxiliary Reference Audio File，可以唔填"
+          "description": "輔助參考音訊檔案路徑",
+          "hint": "輔助參考音訊檔案，可不填"
         },
         "gsv_text_lang": {
-          "description": "Text Language",
-          "hint": "預設係中文"
+          "description": "文字語言",
+          "hint": "預設為中文"
         },
         "gsv_top_k": {
-          "description": "Generate 語音嘅多樣性",
+          "description": "生成語音的多樣性",
           "hint": ""
         },
         "gsv_top_p": {
-          "description": "Nucleus Sampling Threshold",
+          "description": "核採樣閾值 (Nucleus Sampling Threshold)",
           "hint": ""
         },
         "gsv_temperature": {
-          "description": "Generate 語音嘅隨機性",
+          "description": "生成語音的隨機性",
           "hint": ""
         },
         "gsv_text_split_method": {
-          "description": "切 Text 嘅方法",
-          "hint": "可選值：  `cut0`：唔切    `cut1`：四句一切   `cut2`：50 字一切    `cut3`：按中文句號切    `cut4`：按英文句號切    `cut5`：按標點符號切"
+          "description": "文字切割方式",
+          "hint": "可選值：  `cut0`：不切割    `cut1`：四句一切割   `cut2`：50 字一切割    `cut3`：按中文句號切割    `cut4`：按英文句號切割    `cut5`：按標點符號切割"
         },
         "gsv_batch_size": {
           "description": "Batch Size",
@@ -1192,45 +1192,45 @@
           "hint": ""
         },
         "gsv_split_bucket": {
-          "description": "將 Text 切開做 Bucket 方便 Parallel Process",
+          "description": "將文字分塊 (Bucket) 以利於平行處理",
           "hint": ""
         },
         "gsv_speed_factor": {
-          "description": "語音播放 Speed",
-          "hint": "1 係原 Speed"
+          "description": "語音播放速度",
+          "hint": "1 為原速"
         },
         "gsv_fragment_interval": {
-          "description": "語音 Fragment 之間嘅 Interval 時間",
+          "description": "語音片段之間的間隔時間",
           "hint": ""
         },
         "gsv_streaming_mode": {
-          "description": "Enable Streaming Mode",
+          "description": "啟用串流模式",
           "hint": ""
         },
         "gsv_seed": {
-          "description": "Random Seed",
-          "hint": "用嚟確保 Result 可重複"
+          "description": "隨機種子",
+          "hint": "用於確保結果可重現"
         },
         "gsv_parallel_infer": {
-          "description": "Parallel 做 Inference",
+          "description": "平行執行推論",
           "hint": ""
         },
         "gsv_repetition_penalty": {
-          "description": "Repetition Penalty Factor",
+          "description": "重複懲罰系數",
           "hint": ""
         },
         "gsv_media_type": {
-          "description": "Output Media Type",
-          "hint": "建議用 wav"
+          "description": "輸出媒體格式",
+          "hint": "建議使用 wav"
         }
       },
       "embedding_dimensions": {
-        "description": "Embedding Dimensions",
-        "hint": "Embedding Vector 嘅 Dimension。根據唔同 Model 可能要調，請睇具體 Model 嘅 Document。呢個 Config 請務必填啱，唔係會搞到 Vector Database 用唔到。"
+        "description": "Embedding 維度",
+        "hint": "Embedding 向量的維度。根據不同模型可能需要調整，請參閱具體模型的文件。此設定請務必填寫正確，否則將導致向量資料庫無法使用。"
       },
       "embedding_model": {
-        "description": "Embedding Model",
-        "hint": "Embedding Model 名。"
+        "description": "Embedding 模型",
+        "hint": "Embedding 模型名稱。"
       },
       "embedding_api_key": {
         "description": "API Key"
@@ -1239,259 +1239,259 @@
         "description": "API Base URL"
       },
       "openai_embedding": {
-        "hint": "如果 Test 唔 pass，可以試吓喺尾加 /v1 兼容部分 OpenAI API Version。"
+        "hint": "如果測試不通過，可以嘗試在結尾加上 /v1 以兼容部分 OpenAI API 版本。"
       },
       "gemini_embedding": {
-        "hint": "Gemini Embedding 唔使手動加 /v1beta。"
+        "hint": "Gemini Embedding 無須手動加上 /v1beta。"
       },
       "volcengine_cluster": {
         "description": "Volcengine Cluster",
-        "hint": "如果用 Voice Clone 大 Model，可選 volcano_icl 或 volcano_icl_concurr，預設用 volcano_tts"
+        "hint": "如果使用 Voice Clone 大模型，可選 volcano_icl 或 volcano_icl_concurr，預設使用 volcano_tts"
       },
       "volcengine_voice_type": {
         "description": "Volcengine Voice Type",
-        "hint": "入聲音 ID (Voice_type)"
+        "hint": "輸入聲音 ID (Voice_type)"
       },
       "volcengine_speed_ratio": {
-        "description": "語速 Set",
-        "hint": "語速 Set，範圍 0.2 到 3.0，預設 1.0"
+        "description": "語速設定",
+        "hint": "語速設定，範圍 0.2 到 3.0，預設為 1.0"
       },
       "volcengine_volume_ratio": {
-        "description": "音量 Set",
-        "hint": "音量 Set，範圍 0.0 到 2.0，預設 1.0"
+        "description": "音量設定",
+        "hint": "音量設定，範圍 0.0 到 2.0，預設為 1.0"
       },
       "azure_tts_voice": {
-        "description": "Voice Type Set",
-        "hint": "API Voice Type"
+        "description": "語音類型設定",
+        "hint": "API 語音類型"
       },
       "azure_tts_style": {
-        "description": "Style Set",
-        "hint": "聲音特定講嘢 Style。可以表達 Happy、Sympathy 同 Calm 呢啲情緒。"
+        "description": "風格設定",
+        "hint": "聲音特定的說話風格。可以表達 Happy、Sympathy 與 Calm 等情緒。"
       },
       "azure_tts_role": {
-        "description": "Imitation Set (Optional)",
-        "hint": "講嘢 Role-play。聲音可以扮唔同年紀同性別，但 Voice 名唔會變。例如男人聲可以提高 Pitch 同改 Intonation 扮女人聲，但 Voice 名唔會變。如果 Role 冇或者唔 Support，就會 Ignore。"
+        "description": "角色扮演設定 (選填)",
+        "hint": "說話角色扮演。聲音可以模仿不同年紀與性別，但語音名稱不會改變。例如男性聲音可以提高音調與改變語調來模仿女性聲音，但語音名稱不會改變。如果角色不存在或不支援，則會被忽略。"
       },
       "azure_tts_rate": {
-        "description": "語速 Set",
-        "hint": "指示 Text 講出嚟嘅 Rate。可以喺字詞或句子層面 Apply。Rate 變化應該係原 Audio 嘅 0.5 到 2 倍。"
+        "description": "語速設定",
+        "hint": "指示文字發音的語速。可以在單字或句子層面套用。語速變化應為原音訊的 0.5 到 2 倍。"
       },
       "azure_tts_volume": {
-        "description": "語音音量 Set",
-        "hint": "指示語音嘅音量 Level。可以喺句子層面 Apply。用 0.0 到 100.0 (最靜到最大聲，例如 75) 嘅數字表示。預設 100.0。"
+        "description": "語音音量設定",
+        "hint": "指示語音的音量級別。可以在句子層面套用。以 0.0 到 100.0 (最靜到最大聲，例如 75) 的數字表示。預設為 100.0。"
       },
       "azure_tts_region": {
-        "description": "API Region",
-        "hint": "Azure_TTS 處理 Data 嘅 Region，具體睇 https://learn.microsoft.com/zh-cn/azure/ai-services/speech-service/regions"
+        "description": "API 區域",
+        "hint": "Azure_TTS 處理數據的區域，詳情請參閱 https://learn.microsoft.com/zh-cn/azure/ai-services/speech-service/regions"
       },
       "azure_tts_subscription_key": {
-        "description": "Service Subscription Key",
-        "hint": "Azure_TTS 服務嘅 Subscription Key (注意唔係 Token)"
+        "description": "服務訂閱密鑰",
+        "hint": "Azure_TTS 服務的訂閱密鑰 (注意不是 Token)"
       },
       "dashscope_tts_voice": {
-        "description": "Voice Type"
+        "description": "語音類型"
       },
       "gm_resp_image_modal": {
-        "description": "Enable Image Modality",
-        "hint": "Enable 之後，會 Support Return 圖片內容。需要 Model support，唔係會報錯。具體 Support Model 請睇 Google Gemini 官網。溫馨提示，如果你要 Generate 圖，請閂咗 `Enable Group Member 識別` Config 攞到更好效果。"
+        "description": "啟用圖像模態",
+        "hint": "啟用後，將支援回傳圖片內容。需要模型支援，否則會報錯。具體支援的模型請參閱 Google Gemini 官網。溫馨提示，如果你需要生成圖片，請關閉 `啟用群組成員識別` 設定以獲得更好的效果。"
       },
       "gm_native_search": {
-        "description": "Enable Native Search 功能",
-        "hint": "Enable 之後所有 Function Tool 會全部失效，免費次數 Limit 請睇官方 Document"
+        "description": "啟用原生搜尋功能",
+        "hint": "啟用後所有 Function Tool 將會失效，免費次數限制請參閱官方文件"
       },
       "gm_native_coderunner": {
-        "description": "Enable Native Code Runner",
-        "hint": "Enable 之後所有 Function Tool 會全部失效"
+        "description": "啟用原生 Code Runner",
+        "hint": "啟用後所有 Function Tool 將會失效"
       },
       "gm_url_context": {
-        "description": "Enable URL Context 功能",
-        "hint": "Enable 之後所有 Function Tool 會全部失效"
+        "description": "啟用 URL 內容感知",
+        "hint": "啟用後所有 Function Tool 將會失效"
       },
       "gm_safety_settings": {
-        "description": "Safety Filter",
-        "hint": "Set Model 輸入內容嘅 Security Filter Level。Filter Level 分做 NONE(唔 Block)、HIGH(高風險 Block)、MEDIUM_AND_ABOVE(中等風險及以上 Block)、LOW_AND_ABOVE(低風險及以上 Block)，具體睇 Gemini API Document。",
+        "description": "安全過濾器",
+        "hint": "設定模型輸入內容的安全性過濾等級。過濾等級分為 NONE(不封鎖)、HIGH(高風險封鎖)、MEDIUM_AND_ABOVE(中等風險及以上封鎖)、LOW_AND_ABOVE(低風險及以上封鎖)，具體請參閱 Gemini API 文件。",
         "harassment": {
-          "description": "Harassment 內容",
-          "hint": "負面或有害 Comment"
+          "description": "騷擾內容",
+          "hint": "負面或有害的評論"
         },
         "hate_speech": {
-          "description": "Hate Speech",
-          "hint": "粗魯、無禮或褻瀆性質內容"
+          "description": "仇恨言論",
+          "hint": "粗魯、無禮或褻瀆性質的內容"
         },
         "sexually_explicit": {
-          "description": "Sexually Explicit 內容",
-          "hint": "包含性行為或其他淫穢內容嘅 Reference"
+          "description": "色情內容",
+          "hint": "包含性行為或其他淫穢內容的提及"
         },
         "dangerous_content": {
-          "description": "Dangerous 內容",
-          "hint": "宣揚、助長或鼓勵有害行為嘅 Info"
+          "description": "危險內容",
+          "hint": "宣揚、助長或鼓勵有害行為的資訊"
         }
       },
       "gm_thinking_config": {
-        "description": "Thinking Config",
+        "description": "思考配置",
         "budget": {
           "description": "思考預算",
-          "hint": "用嚟指定 Model Inference 嗰陣用嘅 Thinking Token 數量上限。睇：https://ai.google.dev/gemini-api/docs/thinking#set-budget"
+          "hint": "用於指定模型推論時使用的 Thinking Token 數量上限。參閱：https://ai.google.dev/gemini-api/docs/thinking#set-budget"
         },
         "level": {
-          "description": "思考 Level",
-          "hint": "推薦用喺 Gemini 3 及以上 Model，可以控制 Inference 行為。睇：https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
+          "description": "思考級別",
+          "hint": "推薦用於 Gemini 3 及以上模型，可以控制推論行為。參閱：https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
         }
       },
       "anth_thinking_config": {
-        "description": "Thinking Config",
+        "description": "思考配置",
         "type": {
-          "description": "Thinking Type",
-          "hint": "Set 做 'adaptive' 嚟用 Adaptive Thinking (推薦 Opus 4.6+ / Sonnet 4.6+)。留空就用 Manual Budget Mode。睇：https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking"
+          "description": "思考類型",
+          "hint": "設定為 'adaptive' 以使用適應性思考 (推薦 Opus 4.6+ / Sonnet 4.6+)。留空則使用手動預算模式。參閱：https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking"
         },
         "budget": {
-          "description": "Thinking Budget",
-          "hint": "Anthropic thinking.budget_tokens Parameter。要 >= 1024。淨係喺 Thinking Type 空嗰陣生效。Opus 4.6 / Sonnet 4.6 已經 Deprecate 咗。睇：https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+          "description": "思考預算",
+          "hint": "Anthropic thinking.budget_tokens 參數。必須 >= 1024。僅在思考類型留空時生效。Opus 4.6 / Sonnet 4.6 已經棄用此項目。參閱：https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
         },
         "effort": {
-          "description": "Thinking Effort",
-          "hint": "當 Thinking Type 係 'adaptive' 嗰陣控制 Thinking 深度。'high' 係 Default。'max' 淨係 Opus 4.6。睇：https://platform.claude.com/docs/en/build-with-claude/effort"
+          "description": "思考強度",
+          "hint": "當思考類型為 'adaptive' 時控制思考深度。'high' 為預設值。'max' 僅適用於 Opus 4.6。參閱：https://platform.claude.com/docs/en/build-with-claude/effort"
         }
       },
       "minimax-group-id": {
-        "description": "User Group",
-        "hint": "喺 Account 管理->基本信息度睇到"
+        "description": "用戶群組",
+        "hint": "可在帳戶管理->基本資訊中查看"
       },
       "minimax-langboost": {
         "description": "指定語言/方言",
-        "hint": "Boost 對指定少數語言同方言嘅識別能力，Set 完可以提升喺指定語言/方言場景嘅語音表現"
+        "hint": "增強對指定少數語言與方言的識別能力，設定後可提升在指定語言/方言場景的語音表現"
       },
       "minimax-voice-speed": {
         "description": "語速",
-        "hint": "Generate 聲音嘅語速，Value [0.5, 2]，預設 1.0，越大越快"
+        "hint": "生成聲音的語速，數值 [0.5, 2]，預設為 1.0，數值越大越快"
       },
       "minimax-voice-vol": {
         "description": "音量",
-        "hint": "Generate 聲音嘅音量，Value (0, 10]，預設 1.0，越大越大聲"
+        "hint": "生成聲音的音量，數值 (0, 10]，預設為 1.0，數值越大越大聲"
       },
       "minimax-voice-pitch": {
         "description": "語調",
-        "hint": "Generate 聲音嘅語調，Value [-12, 12]，預設 0"
+        "hint": "生成聲音的語調，數值 [-12, 12]，預設為 0"
       },
       "minimax-is-timber-weight": {
-        "description": "Enable Mixed Timbre",
-        "hint": "Enable 混合音色，Support 自定 Weight 溝最多四隻音色，Enable 後自動 Ignore 單一音色 Set"
+        "description": "啟用混合音色",
+        "hint": "啟用混合音色，支援自訂權重混合最多四種音色，啟用後會自動忽略單一音色設定"
       },
       "minimax-timber-weight": {
         "description": "混合音色",
-        "hint": "混合音色同佢嘅 Weight，最多 Support 四隻音色，Weight 係整數，Value [1, 100]。可以去官網 API 語音 Debug 預覽 Code 攞 Preset 同 Template，要嚴格跟 JSON String Format 寫，可以睇 Console 判斷 Parse 唔 Parse 到。具體 Structure 參考 Default 同官網 Code Preview。"
+        "hint": "混合音色及其權重，最多支援四種音色，權重為整數，數值範圍 [1, 100]。可前往官網 API 語音 Debug 預覽程式碼獲取預設與模板，必須嚴格依照 JSON 字串格式填寫，可查看 Console 判斷是否解析成功。具體結構參考預設值與官網程式碼預覽。"
       },
       "minimax-voice-id": {
         "description": "單一音色",
-        "hint": "單一音色 ID，詳情睇官網 Document"
+        "hint": "單一音色 ID，詳情請參閱官網文件"
       },
       "minimax-voice-emotion": {
         "description": "情緒",
-        "hint": "控制合成語音嘅情緒。如果係 auto，會根據 Text 內容自動揀情緒。"
+        "hint": "控制合成語音的情緒。如果是 auto，會根據文字內容自動選擇情緒。"
       },
       "minimax-voice-latex": {
-        "description": "Support 讀 LaTeX Formula",
-        "hint": "讀 LaTeX Formula，但要 Ensure Input Text 跟官網要求 Format"
+        "description": "支援朗讀 LaTeX 公式",
+        "hint": "朗讀 LaTeX 公式，但須確保輸入的文字符合官網要求的格式"
       },
       "minimax-voice-english-normalization": {
-        "description": "Support 英文 Text Normalization",
-        "hint": "可以提升數字閱讀場景嘅 Performance，但會稍微加 Delay"
+        "description": "支援英文文字標準化 (Text Normalization)",
+        "hint": "可以提升數字閱讀場景的表現，但會稍微增加延遲"
       },
       "rag_options": {
-        "description": "RAG Options",
-        "hint": "檢索 Knowledge Base Setting，Optional。得 Agent App Type Support (Agent App，包括 RAG App)。阿里雲百鍊 App 開咗呢個會做唔到 Multi-turn Chat。",
+        "description": "RAG 選項",
+        "hint": "檢索知識庫設定，選填。僅限 Agent App 類型支援 (Agent App，包括 RAG App)。阿里雲百鍊 App 開啟此項將無法進行多輪對話 (Multi-turn Chat)。",
         "pipeline_ids": {
-          "description": "Knowledge Base ID List",
-          "hint": "對指定 Knowledge Base 入面所有 Document 做檢索，去 https://bailian.console.aliyun.com/ 數據應用->知識索引 Create 同攞 ID。"
+          "description": "知識庫 ID 列表",
+          "hint": "對指定知識庫內所有文件進行檢索，前往 https://bailian.console.aliyun.com/ 數據應用->知識索引 建立並獲取 ID。"
         },
         "file_ids": {
-          "description": "Unstructured Document ID，傳呢個 Parameter 會對指定 Unstructured Document 做檢索。",
-          "hint": "對指定 Unstructured Document 做檢索。去 https://bailian.console.aliyun.com/ 數據管理 Create 同攞 ID。"
+          "description": "非結構化文件 ID，傳送此參數會對指定的非結構化文件進行檢索。",
+          "hint": "對指定的非結構化文件進行檢索。前往 https://bailian.console.aliyun.com/ 數據管理 建立並獲取 ID。"
         },
         "output_reference": {
-          "description": "係咪 Output Knowledge Base/Document 嘅 Quote",
-          "hint": "每次答完加埋 Quote Source。預設 False。"
+          "description": "是否輸出知識庫/文件的引用來源",
+          "hint": "每次回答後附上引用來源。預設為 False。"
         }
       },
       "sensevoice_hint": {
-        "description": "Deploy SenseVoice",
-        "hint": "Enable 前請 pip Install funasr、funasr_onnx、torchaudio、torch、modelscope、jieba Library (預設用 CPU，大約 Download 1 GB)，同埋 Install ffmpeg。唔係轉唔到字。"
+        "description": "部署 SenseVoice",
+        "hint": "啟用前請 pip Install funasr、funasr_onnx、torchaudio、torch、modelscope、jieba 函式庫 (預設使用 CPU，大約下載 1 GB)，以及安裝 ffmpeg。否則無法轉換文字。"
       },
       "is_emotion": {
         "description": "情緒識別",
-        "hint": "係咪開情緒識別。happy｜sad｜angry｜neutral｜fearful｜disgusted｜surprised｜unknown"
+        "hint": "是否開啟情緒識別。happy｜sad｜angry｜neutral｜fearful｜disgusted｜surprised｜unknown"
       },
       "stt_model": {
-        "description": "Model 名",
-        "hint": "modelscope 嘅 Model 名。Default：iic/SenseVoiceSmall。"
+        "description": "模型名稱",
+        "hint": "modelscope 的模型名稱。預設：iic/SenseVoiceSmall。"
       },
       "variables": {
-        "description": "Workflow 固定 Input Variable",
-        "hint": "Optional。Workflow 固定 Input Variable，會做 Workflow Input。都可以傾偈用 /set 指令動態 Set Variable。如果 Variable 名撞咗，優先用動態 Set 嘅 Variable。"
+        "description": "Workflow 固定的輸入變數",
+        "hint": "選填。Workflow 固定的輸入變數 (Input Variable)，將作為 Workflow 的輸入。也可以在聊天時使用 /set 指令動態設定變數。如果變數名稱重複，會優先使用動態設定的變數。"
       },
       "dashscope_app_type": {
-        "description": "App Type",
-        "hint": "百鍊 App 嘅 App Type。"
+        "description": "應用程式類型",
+        "hint": "百鍊 App 的應用程式類型。"
       },
       "timeout": {
-        "description": "Timeout",
-        "hint": "Timeout 時間，單位秒。"
+        "description": "逾時時間",
+        "hint": "逾時時間，單位為秒。"
       },
       "mimo-stt-system-prompt": {
-        "description": "System Prompt",
-        "hint": "Guide MiMo STT Transcript 行為嘅 system prompt。"
+        "description": "系統提示詞 (System Prompt)",
+        "hint": "引導 MiMo STT 轉錄行為的系統提示詞。"
       },
       "mimo-stt-user-prompt": {
-        "description": "User Prompt",
-        "hint": "附加畀 MiMo STT 嘅 user prompt，用嚟 Constraint Return 結果 Format。"
+        "description": "用戶提示詞 (User Prompt)",
+        "hint": "附加給 MiMo STT 的用戶提示詞，用於限制回傳結果的格式。"
       },
       "openai-tts-voice": {
-        "description": "voice",
-        "hint": "OpenAI TTS 嘅聲。OpenAI Default Support: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
+        "description": "聲音",
+        "hint": "OpenAI TTS 的聲音。OpenAI 預設支援: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
       },
       "mimo-tts-voice": {
-        "description": "Voice Type",
-        "hint": "MiMo TTS 嘅音色名。可選值包括 'mimo_default'、'default_en'、'default_zh'。"
+        "description": "語音類型",
+        "hint": "MiMo TTS 的音色名稱。可選值包括 'mimo_default'、'default_en'、'default_zh'。"
       },
       "mimo-tts-format": {
-        "description": "Output Format",
-        "hint": "MiMo TTS Generate Audio 嘅 Format。Support 'wav'、'mp3'、'pcm'。"
+        "description": "輸出格式",
+        "hint": "MiMo TTS 生成音訊的格式。支援 'wav'、'mp3'、'pcm'。"
       },
       "mimo-tts-style-prompt": {
-        "description": "Style Prompt",
-        "hint": "會用 <style>...</style> Tag 加喺 Text 開頭，用嚟控制語速、情緒、角色或者 Style，例如 開心、變快、孫悟空、悄悄話。可以留空。"
+        "description": "風格提示詞",
+        "hint": "將使用 <style>...</style> 標籤加在文字開頭，用於控制語速、情緒、角色或風格，例如 開心、變快、孫悟空、悄悄話。可以留空。"
       },
       "mimo-tts-dialect": {
-        "description": "Dialect",
-        "hint": "會同 Style Prompt 一齊寫入開頭嘅 <style>...</style> Tag，例如 東北話、四川話、河南話、粵語。可以留空。"
+        "description": "方言",
+        "hint": "會與風格提示詞一起寫入開頭的 <style>...</style> 標籤，例如 東北話、四川話、河南話、粵語。可以留空。"
       },
       "mimo-tts-seed-text": {
-        "description": "Seed Text",
-        "hint": "做 Optional 嘅 user message send，用嚟輔助調 Tone 同 Style，唔會拼落合成 Text 度。"
+        "description": "種子文字 (Seed Text)",
+        "hint": "作為選填的 user message 發送，用於輔助調整語氣與風格，不會拼接至合成的文字中。"
       },
       "fishaudio-tts-character": {
-        "description": "character",
-        "hint": "fishaudio TTS 嘅角色。Default 係可莉。更多角色請去：https://fish.audio/zh-CN/discovery"
+        "description": "角色",
+        "hint": "fishaudio TTS 的角色。預設為可莉。更多角色請前往：https://fish.audio/zh-CN/discovery"
       },
       "fishaudio-tts-reference-id": {
         "description": "reference_id",
-        "hint": "fishaudio TTS 嘅 Reference Model ID (Optional)。如果入呢個 Field，會直接用 Model ID 唔靠角色名查。例如：626bb6d3f3364c9cbc3aa6a67300a664。更多 Model 請去：https://fish.audio/zh-CN/discovery，入 Model Details 面可以 Copy Model ID"
+        "hint": "fishaudio TTS 的參考模型 ID (選填)。如果填寫此欄位，會直接使用模型 ID 而不依賴角色名稱查詢。例如：626bb6d3f3364c9cbc3aa6a67300a664。更多模型請前往：https://fish.audio/zh-CN/discovery，進入模型詳情頁面可以複製模型 ID"
       },
       "whisper_hint": {
-        "description": "Local Deploy Whisper Model 須知",
-        "hint": "Enable 前請 pip install openai-whisper Library (N 卡 User 大約 Download 2GB，主要 torch 同 cuda，CPU User 大約 1 GB)，同埋 Install ffmpeg。唔係轉唔到字。"
+        "description": "本地部署 Whisper 模型須知",
+        "hint": "啟用前請 pip install openai-whisper 函式庫 (NVIDIA 顯示卡用戶大約需下載 2GB，主要是 torch 與 cuda，CPU 用戶大約 1 GB)，以及安裝 ffmpeg。否則無法轉換文字。"
       },
       "id": {
         "description": "ID"
       },
       "type": {
-        "description": "Model Provider 種類"
+        "description": "模型供應商種類"
       },
       "provider_type": {
-        "description": "Model Provider 能力種類"
+        "description": "模型供應商能力種類"
       },
       "enable": {
-        "description": "Enable"
+        "description": "啟用"
       },
       "key": {
         "description": "API Key"
@@ -1501,99 +1501,99 @@
       },
       "proxy": {
         "description": "Proxy 地址",
-        "hint": "HTTP/HTTPS Proxy 地址，Format 例如 http://127.0.0.1:7890。淨係對呢個 Provider 嘅 API Request 生效，唔影響 Docker 內網通信。"
+        "hint": "HTTP/HTTPS Proxy 地址，格式例如 http://127.0.0.1:7890。僅對此供應商的 API 請求生效，不影響 Docker 內網通訊。"
       },
       "model": {
-        "description": "Model ID",
-        "hint": "Model 名，例如 gpt-4o-mini, deepseek-chat。"
+        "description": "模型 ID",
+        "hint": "模型名稱，例如 gpt-4o-mini, deepseek-chat。"
       },
       "max_context_tokens": {
-        "description": "Model Context Window Size",
-        "hint": "Model 最大 Context Token 大小。如果係 0，會自動喺 Model Metadata 填（如果有），都可以手動改。"
+        "description": "模型上下文視窗大小",
+        "hint": "模型最大上下文 Token 大小。如果是 0，會自動填入模型 Metadata（如果有），也可以手動修改。"
       },
       "dify_api_key": {
         "description": "API Key",
-        "hint": "Dify API Key。呢項必填。"
+        "hint": "Dify API Key。此項必填。"
       },
       "dify_api_base": {
         "description": "API Base URL",
-        "hint": "Dify API Base URL。預設係 https://api.dify.ai/v1"
+        "hint": "Dify API Base URL。預設為 https://api.dify.ai/v1"
       },
       "dify_api_type": {
-        "description": "Dify App 類型",
-        "hint": "Dify API Type。根據 Dify 官網，目前 Support chat, chatflow, agent, workflow 四種 App 類型。"
+        "description": "Dify 應用程式類型",
+        "hint": "Dify API 類型。根據 Dify 官網，目前支援 chat, chatflow, agent, workflow 四種應用程式類型。"
       },
       "dify_workflow_output_key": {
-        "description": "Dify Workflow Output Variable 名",
-        "hint": "Dify Workflow Output Variable 名。當 App Type 係 workflow 先用。預設係 astrbot_wf_output。"
+        "description": "Dify Workflow 輸出變數名稱",
+        "hint": "Dify Workflow 輸出變數名稱。僅當應用程式類型為 workflow 時使用。預設為 astrbot_wf_output。"
       },
       "dify_query_input_key": {
-        "description": "Prompt Input Variable 名",
-        "hint": "Send 出去嘅 Message Text 內容對應嘅 Input Variable 名。預設係 astrbot_text_query。"
+        "description": "提示詞輸入變數名稱",
+        "hint": "發送出去的訊息文字內容對應的輸入變數名稱。預設為 astrbot_text_query。"
       },
       "coze_api_key": {
         "description": "Coze API Key",
-        "hint": "Coze API Key，用嚟 Access Coze 服務。"
+        "hint": "Coze API Key，用於存取 Coze 服務。"
       },
       "bot_id": {
         "description": "Bot ID",
-        "hint": "Coze 機械人嘅 ID，喺 Coze 平台 Create 完會攞到。"
+        "hint": "Coze 機械人的 ID，在 Coze 平台建立後可獲取。"
       },
       "coze_api_base": {
         "description": "API Base URL",
-        "hint": "Coze API 嘅 Base URL，預設係 https://api.coze.cn"
+        "hint": "Coze API 的 Base URL，預設為 https://api.coze.cn"
       },
       "deerflow_api_base": {
         "description": "API Base URL",
-        "hint": "DeerFlow API Gateway 地址，預設係 http://127.0.0.1:2026"
+        "hint": "DeerFlow API Gateway 地址，預設為 http://127.0.0.1:2026"
       },
       "deerflow_api_key": {
         "description": "DeerFlow API Key",
-        "hint": "Optional。如果 DeerFlow Gateway config 咗 Bearer Auth，喺呢度填。"
+        "hint": "選填。如果 DeerFlow Gateway 設定了 Bearer Auth，請在此處填寫。"
       },
       "deerflow_auth_header": {
         "description": "Authorization Header",
-        "hint": "Optional。Custom Authorization Request Header，Priority 高過 DeerFlow API Key。"
+        "hint": "選填。自訂 Authorization Request Header，優先級高於 DeerFlow API Key。"
       },
       "deerflow_assistant_id": {
         "description": "Assistant ID",
-        "hint": "LangGraph assistant_id，預設係 lead_agent。"
+        "hint": "LangGraph assistant_id，預設為 lead_agent。"
       },
       "deerflow_model_name": {
-        "description": "Model 名 Override",
-        "hint": "Optional。Override DeerFlow 預設 Model（對應 runtime context 嘅 model_name）。"
+        "description": "覆寫模型名稱",
+        "hint": "選填。覆寫 DeerFlow 預設模型（對應 runtime context 的 model_name）。"
       },
       "deerflow_thinking_enabled": {
-        "description": "Enable Thinking Mode"
+        "description": "啟用思考模式"
       },
       "deerflow_plan_mode": {
-        "description": "Enable Plan Mode",
-        "hint": "對應 DeerFlow 嘅 is_plan_mode。"
+        "description": "啟用計劃模式",
+        "hint": "對應 DeerFlow 的 is_plan_mode。"
       },
       "deerflow_subagent_enabled": {
-        "description": "Enable SubAgent",
-        "hint": "對應 DeerFlow 嘅 subagent_enabled。"
+        "description": "啟用 SubAgent",
+        "hint": "對應 DeerFlow 的 subagent_enabled。"
       },
       "deerflow_max_concurrent_subagents": {
-        "description": "SubAgent 最大 Concurrency",
-        "hint": "對應 DeerFlow 嘅 max_concurrent_subagents。淨係喺 Enable SubAgent 嗰陣生效，預設 3。"
+        "description": "SubAgent 最大並行數",
+        "hint": "對應 DeerFlow 的 max_concurrent_subagents。僅在啟用 SubAgent 時生效，預設為 3。"
       },
       "deerflow_recursion_limit": {
-        "description": "Recursive 深度上限",
-        "hint": "對應 LangGraph recursion_limit。"
+        "description": "遞迴深度上限",
+        "hint": "對應 LangGraph 的 recursion_limit。"
       },
       "auto_save_history": {
-        "description": "由 Coze Manage 對話 History",
-        "hint": "Enable 之後，會由 Coze 做對話 History 管理，呢個時候 AstrBot Local Save 嘅 Context 唔會生效(淨係畀你睇)，對 AstrBot Context 嘅操作都唔會生效。如果 Disable，就用 AstrBot Manage Context。"
+        "description": "由 Coze 管理對話歷史",
+        "hint": "啟用後，將由 Coze 進行對話歷史紀錄管理，此時 AstrBot 本機儲存的上下文將不會生效 (僅供檢視)，對 AstrBot 上下文的操作也不會生效。如果停用，則使用 AstrBot 管理上下文。"
       }
     }
   },
   "help": {
-    "documentation": "官方 Document",
-    "support": "入 Group 問",
-    "helpText": "唔明 Config 點 Set？請睇 {documentation} 或者 {support}。",
-    "helpPrefix": "唔明 Config 點 Set？請睇",
-    "helpMiddle": "或者",
+    "documentation": "官方文件",
+    "support": "加入社群發問",
+    "helpText": "不清楚如何配置設定？請參考 {documentation} 或 {support}。",
+    "helpPrefix": "不清楚如何配置設定？請參考",
+    "helpMiddle": "或",
     "helpSuffix": "。"
   }
 }

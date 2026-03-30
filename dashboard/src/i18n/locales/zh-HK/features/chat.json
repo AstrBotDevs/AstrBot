@@ -1,161 +1,161 @@
 {
   "title": "傾偈啦！",
-  "subtitle": "同 AI 助手傾偈",
+  "subtitle": "與 AI 助手對話",
   "input": {
-    "placeholder": "開始打字...",
-    "send": "Send",
-    "clear": "Clear",
-    "upload": "Upload File",
-    "voice": "語音 Input",
-    "recordingPrompt": "錄音緊，請講嘢...",
-    "chatPrompt": "傾偈啦！",
-    "dropToUpload": "放開 Mouse Upload File",
-    "stopGenerating": "Stop Generate"
+    "placeholder": "開始輸入...",
+    "send": "傳送",
+    "clear": "清除",
+    "upload": "上載檔案",
+    "voice": "語音輸入",
+    "recordingPrompt": "正在錄音，請說話...",
+    "chatPrompt": "開始聊天！",
+    "dropToUpload": "放開滑鼠以上載檔案",
+    "stopGenerating": "停止生成"
   },
   "message": {
-    "user": "User",
-    "assistant": "Assistant",
-    "system": "System",
-    "error": "Error Message",
-    "loading": "諗緊..."
+    "user": "用戶",
+    "assistant": "AI 助手",
+    "system": "系統",
+    "error": "錯誤訊息",
+    "loading": "思考中..."
   },
   "voice": {
     "start": "開始錄音",
-    "stop": "Stop 錄音",
+    "stop": "停止錄音",
     "recording": "新錄音",
-    "processing": "Process 緊...",
+    "processing": "處理中...",
     "error": "錄音失敗",
-    "listening": "等緊講嘢...",
-    "speaking": "講緊嘢",
-    "startRecording": "開始語音 Input",
-    "liveMode": "Live 對話"
+    "listening": "等待說話中...",
+    "speaking": "說話中",
+    "startRecording": "開始語音輸入",
+    "liveMode": "即時對話"
   },
   "welcome": {
-    "title": "歡迎用 AstrBot",
-    "subtitle": "你嘅 AI 助手",
-    "quickActions": "Quick Action",
-    "examples": "Example 問題"
+    "title": "歡迎使用 AstrBot",
+    "subtitle": "你的 AI 助手",
+    "quickActions": "快速操作",
+    "examples": "範例問題"
   },
   "actions": {
-    "copy": "Copy",
-    "regenerate": "Regenerate",
-    "like": "Like",
-    "dislike": "Dislike",
-    "share": "Share",
-    "newChat": "Create 對話",
-    "deleteChat": "Delete 呢個對話",
-    "editTitle": "Edit Title",
-    "fullscreen": "Full Screen",
-    "exitFullscreen": "Exit Full Screen",
-    "reply": "Quote Reply",
-    "providerConfig": "AI Config",
-    "toolsUsed": "用咗嘅 Tools",
-    "toolCallUsed": "用咗 {name} Tool",
-    "pythonCodeAnalysis": "用咗 Python Code 分析"
+    "copy": "複製",
+    "regenerate": "重新生成",
+    "like": "讚好",
+    "dislike": "倒讚",
+    "share": "分享",
+    "newChat": "建立對話",
+    "deleteChat": "刪除此對話",
+    "editTitle": "編輯標題",
+    "fullscreen": "全螢幕",
+    "exitFullscreen": "離開全螢幕",
+    "reply": "引用回覆",
+    "providerConfig": "AI 設定",
+    "toolsUsed": "已使用的工具",
+    "toolCallUsed": "使用了 {name} 工具",
+    "pythonCodeAnalysis": "使用了 Python 程式碼分析"
   },
   "ipython": {
-    "output": "Output"
+    "output": "輸出"
   },
   "conversation": {
-    "newConversation": "New Chat",
-    "noHistory": "暫時冇對話 History",
-    "systemStatus": "System Status",
-    "llmService": "LLM Service",
-    "speechToText": "Speech to Text",
-    "editDisplayName": "Edit Session 名",
-    "displayName": "Session 名",
-    "displayNameUpdated": "Session 名 Update 咗",
-    "displayNameUpdateFailed": "Update Session 名失敗",
-    "confirmDelete": "肯定要 Delete '{name}'？呢個 Action 冇得 Undo。"
+    "newConversation": "新增對話",
+    "noHistory": "暫無對話紀錄",
+    "systemStatus": "系統狀態",
+    "llmService": "LLM 服務",
+    "speechToText": "語音轉文字",
+    "editDisplayName": "編輯工作階段名稱",
+    "displayName": "工作階段名稱",
+    "displayNameUpdated": "工作階段名稱已更新",
+    "displayNameUpdateFailed": "更新工作階段名稱失敗",
+    "confirmDelete": "確定要刪除 '{name}'？此操作無法復原。"
   },
   "modes": {
-    "darkMode": "轉 Dark Mode",
-    "lightMode": "轉 Light Mode"
+    "darkMode": "切換深色模式",
+    "lightMode": "切換淺色模式"
   },
   "shortcuts": {
-    "help": "Help",
+    "help": "說明",
     "voiceRecord": "錄音",
-    "pasteImage": "Paste 圖",
+    "pasteImage": "貼上圖片",
     "sendKey": {
-      "title": "Send Shortcut",
-      "enterToSend": "Enter Send",
-      "shiftEnterToSend": "Shift+Enter Send"
+      "title": "傳送捷徑",
+      "enterToSend": "按 Enter 傳送",
+      "shiftEnterToSend": "按 Shift+Enter 傳送"
     }
   },
   "streaming": {
-    "enabled": "Streaming Response 開咗",
-    "disabled": "Streaming Response 閂咗",
-    "on": "Streaming",
-    "off": "Normal"
+    "enabled": "已啟用串流回應 (Streaming)",
+    "disabled": "已停用串流回應 (Streaming)",
+    "on": "串流",
+    "off": "一般"
   },
   "transport": {
-    "title": "Transport Mode",
+    "title": "傳輸模式",
     "sse": "SSE",
     "websocket": "WebSocket"
   },
   "config": {
-    "title": "Config File"
+    "title": "設定檔"
   },
   "reasoning": {
-    "thinking": "Thinking Process"
+    "thinking": "思考過程"
   },
   "reply": {
-    "replyTo": "Quote",
-    "notFound": "搵唔到 Message"
+    "replyTo": "引用",
+    "notFound": "找不到訊息"
   },
   "project": {
-    "title": "Project",
-    "create": "Create Project",
-    "edit": "Edit Project",
-    "name": "Project 名",
-    "emoji": "Icon (Emoji)",
-    "description": "Project Description（Optional）",
-    "noSessions": "呢個 Project 暫時冇對話",
-    "confirmDelete": "肯定要 Delete Project \"{title}\"？Project 入面嘅對話唔會 Delete。"
+    "title": "專案",
+    "create": "建立專案",
+    "edit": "編輯專案",
+    "name": "專案名稱",
+    "emoji": "圖示 (Emoji)",
+    "description": "專案描述 (選填)",
+    "noSessions": "此專案暫無對話",
+    "confirmDelete": "確定要刪除專案 \"{title}\"？專案內的對話不會被刪除。"
   },
   "time": {
-    "today": "今日",
-    "yesterday": "尋日"
+    "today": "今天",
+    "yesterday": "昨天"
   },
   "stats": {
     "tokens": "Token",
-    "inputTokens": "Input Token",
-    "outputTokens": "Output Token",
-    "cachedTokens": "Cached Token",
-    "duration": "用時",
-    "ttft": "TTFT (First Token)"
+    "inputTokens": "輸入 Token",
+    "outputTokens": "輸出 Token",
+    "cachedTokens": "快取 Token",
+    "duration": "耗時",
+    "ttft": "首字延遲 (TTFT)"
   },
   "refs": {
-    "title": "Reference",
-    "sources": "Source"
+    "title": "參考資料",
+    "sources": "來源"
   },
   "connection": {
-    "title": "Connect Status 提醒",
-    "message": "System Detect 到 Chat Connection 要 Reconnect。",
-    "reasons": "可能係因為：",
-    "reasonWindowResize": "Resize 咗 Chat Window（正常現象）",
-    "reasonMultipleTabs": "喺其他 Tab 開咗 Chat 頁面",
-    "reasonNetworkIssue": "Network 斷咗陣",
-    "notice": "留意：為咗 Ensure 收到 Message，System 淨係容許同時 Keep 一個 Chat Connection。如果你開咗多個 Tab 傾偈，建議淨係 Keep 一版。",
-    "understand": "知道",
+    "title": "連線狀態提醒",
+    "message": "系統偵測到對話連線需要重新連接。",
+    "reasons": "可能是因為：",
+    "reasonWindowResize": "調整了聊天視窗大小 (正常現象)",
+    "reasonMultipleTabs": "在其他分頁開啟了聊天頁面",
+    "reasonNetworkIssue": "網絡曾短暫中斷",
+    "notice": "注意：為了確保能正常接收訊息，系統僅容許同時保持一個對話連線。如果你開啟了多個分頁進行對話，建議只保留一個。",
+    "understand": "我知道了",
     "status": {
-      "reconnecting": "Reconnect 緊...",
-      "reconnected": "Chat Connection 已經 Reconnect",
-      "failed": "Connect 失敗，請 Refresh 頁面再試"
+      "reconnecting": "重新連線中...",
+      "reconnected": "對話連線已恢復",
+      "failed": "連線失敗，請重新整理頁面再試"
     }
   },
   "errors": {
-    "sendMessageFailed": "Send Message 失敗，請再試",
-    "createSessionFailed": "Create Session 失敗，請 Refresh 頁面再試"
+    "sendMessageFailed": "傳送訊息失敗，請再試",
+    "createSessionFailed": "建立工作階段失敗，請重新整理頁面再試"
   },
   "batch": {
-    "selected": "揀咗 {count} 個",
-    "confirmDelete": "肯定要 Delete {count} 個對話？呢個 Action 冇得 Undo。",
-    "selectAll": "Select All",
-    "deselectAll": "Deselect All",
-    "delete": "Delete",
-    "exit": "Exit",
-    "partialFailure": "{total} 個對話入面有 {failed} 個 Delete 失敗",
-    "requestFailed": "Delete 對話失敗，請再試。"
+    "selected": "已選擇 {count} 個",
+    "confirmDelete": "確定要刪除 {count} 個對話？此操作無法復原。",
+    "selectAll": "全選",
+    "deselectAll": "取消全選",
+    "delete": "刪除",
+    "exit": "離開",
+    "partialFailure": "{total} 個對話中有 {failed} 個刪除失敗",
+    "requestFailed": "刪除對話失敗，請再試。"
   }
 }

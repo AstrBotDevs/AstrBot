@@ -1,67 +1,67 @@
 {
-  "title": "Knowledge Base 管理",
-  "subtitle": "統一管理同 Search Knowledge Base 內容",
+  "title": "知識庫管理",
+  "subtitle": "統一管理與搜尋知識庫內容",
   "list": {
-    "title": "我嘅 Knowledge Base",
-    "subtitle": "Manage 你所有嘅 Knowledge Base 集合",
-    "create": "Create Knowledge Base",
-    "refresh": "Refresh List",
-    "empty": "暫時冇 Knowledge Base",
-    "loading": "Load 緊...",
-    "documents": "Document",
+    "title": "我的知識庫",
+    "subtitle": "管理你所有的知識庫集合",
+    "create": "建立知識庫",
+    "refresh": "重新整理列表",
+    "empty": "暫無知識庫",
+    "loading": "載入中...",
+    "documents": "文件",
     "chunks": "Chunk",
-    "sessionConfig": "Session Config"
+    "sessionConfig": "工作階段設定"
   },
   "card": {
-    "edit": "Edit",
-    "delete": "Delete",
-    "open": "Open",
-    "docCount": "{count} 個 Document",
+    "edit": "編輯",
+    "delete": "刪除",
+    "open": "開啟",
+    "docCount": "{count} 個文件",
     "chunkCount": "{count} 個 Chunk"
   },
   "create": {
-    "title": "Create Knowledge Base",
-    "nameLabel": "Knowledge Base 名",
-    "namePlaceholder": "幫 Knowledge Base 起個名",
-    "descriptionLabel": "Description",
-    "descriptionPlaceholder": "簡單 Description 吓呢個 Knowledge Base 嘅用途...",
-    "emojiLabel": "Icon",
-    "embeddingModelLabel": "Embedding Model",
-    "rerankModelLabel": "Rerank Model (Optional)",
-    "providerInfo": "Provider: {id} | Dimension: {dimensions}",
-    "rerankProviderInfo": "Provider: {id}",
-    "cancel": "Cancel",
-    "submit": "Create",
-    "nameRequired": "請入 Knowledge Base 名"
+    "title": "建立知識庫",
+    "nameLabel": "知識庫名稱",
+    "namePlaceholder": "為知識庫命名",
+    "descriptionLabel": "描述",
+    "descriptionPlaceholder": "簡單描述此知識庫的用途...",
+    "emojiLabel": "圖示",
+    "embeddingModelLabel": "Embedding 模型",
+    "rerankModelLabel": "Rerank 模型 (選填)",
+    "providerInfo": "供應商: {id} | 維度: {dimensions}",
+    "rerankProviderInfo": "供應商: {id}",
+    "cancel": "取消",
+    "submit": "建立",
+    "nameRequired": "請輸入知識庫名稱"
   },
   "edit": {
-    "title": "Edit Knowledge Base",
-    "submit": "Save"
+    "title": "編輯知識庫",
+    "submit": "儲存"
   },
   "delete": {
-    "title": "Delete Knowledge Base",
-    "confirmText": "肯定要 Delete Knowledge Base「{name}」？",
-    "warning": "呢個 Action 冇得 Undo，所有 Document、Chunk 同關聯 Config 都會永遠 Delete 晒。",
-    "cancel": "Cancel",
-    "confirm": "Delete"
+    "title": "刪除知識庫",
+    "confirmText": "確定要刪除知識庫「{name}」？",
+    "warning": "此操作無法復原，所有文件、Chunk 與相關設定將被永久刪除。",
+    "cancel": "取消",
+    "confirm": "刪除"
   },
   "emoji": {
-    "title": "揀 Icon",
-    "close": "Close",
+    "title": "選擇圖示",
+    "close": "關閉",
     "categories": {
-      "books": "書同 Document",
-      "emotions": "Emoji 同 Emotion",
-      "objects": "物件同 Tool",
-      "symbols": "Symbol 同 Sign"
+      "books": "書籍與文件",
+      "emotions": "表情與情感",
+      "objects": "物件與工具",
+      "symbols": "符號與標誌"
     }
   },
   "messages": {
-    "createSuccess": "Knowledge Base Create 成功",
-    "createFailed": "Create 失敗",
-    "updateSuccess": "Knowledge Base Update 成功",
-    "updateFailed": "Update 失敗",
-    "deleteSuccess": "Knowledge Base Delete 成功",
-    "deleteFailed": "Delete 失敗",
-    "loadError": "Load Knowledge Base List 失敗"
+    "createSuccess": "知識庫建立成功",
+    "createFailed": "建立失敗",
+    "updateSuccess": "知識庫更新成功",
+    "updateFailed": "更新失敗",
+    "deleteSuccess": "知識庫刪除成功",
+    "deleteFailed": "刪除失敗",
+    "loadError": "載入知識庫列表失敗"
   }
 }

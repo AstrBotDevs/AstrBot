@@ -1,66 +1,66 @@
 {
   "page": {
     "title": "未來任務管理",
-    "beta": "Experimental",
-    "subtitle": "睇吓畀 AstrBot Set 嘅未來任務。AstrBot 會自動 Wake up 去做 Task，做完會通知 Set Task 嗰個人。要先喺 Config Enable「主動型能力」。",
+    "beta": "實驗性功能",
+    "subtitle": "查看為 AstrBot 設定的未來任務。AstrBot 會自動喚醒執行任務，完成後會通知設定該任務的用戶。需要先在設定檔中啟用「主動型能力」。",
     "proactive": {
-      "supported": "主動 Send 結果淨係 Support 以下你已經 Config 咗嘅平台：{platforms}",
-      "unsupported": "暫時冇 Support 主動 Message 嘅平台，請喺平台 Config 度開。"
+      "supported": "主動傳送結果僅支援以下你已設定的平台：{platforms}",
+      "unsupported": "暫無支援主動發送訊息的平台，請在平台設定中開啟。"
     }
   },
   "actions": {
-    "create": "Create 任務",
-    "refresh": "Refresh",
-    "delete": "Delete",
-    "cancel": "Cancel",
-    "submit": "Create"
+    "create": "建立任務",
+    "refresh": "重新整理",
+    "delete": "刪除",
+    "cancel": "取消",
+    "submit": "建立"
   },
   "table": {
-    "title": "Register 咗嘅任務",
-    "empty": "暫時冇任務。",
+    "title": "已註冊的任務",
+    "empty": "暫無任務。",
     "headers": {
-      "name": "名",
-      "type": "Type",
+      "name": "名稱",
+      "type": "類型",
       "cron": "Cron",
       "session": "Session ID",
-      "nextRun": "下一次 Execute",
-      "lastRun": "最近 Execute",
+      "nextRun": "下一次執行",
+      "lastRun": "最近一次執行",
       "note": "說明",
-      "actions": "Action"
+      "actions": "操作"
     },
     "type": {
       "once": "一次性",
-      "recurring": "Looping",
+      "recurring": "循環",
       "activeAgent": "Active Agent",
       "workflow": "Workflow",
       "unknown": "{type}"
     },
-    "timezoneLocal": "Local Timezone",
+    "timezoneLocal": "本機時區",
     "notAvailable": "—"
   },
   "form": {
-    "title": "Create 任務",
-    "chatHint": "可以直接同 AstrBot 傾偈叫佢 Create 未來任務，唔使喺度 Add。",
+    "title": "建立任務",
+    "chatHint": "可以直接與 AstrBot 聊天並要求建立未來任務，無須在此新增。",
     "runOnce": "一次性任務",
-    "name": "任務名",
+    "name": "任務名稱",
     "note": "任務說明",
-    "cron": "Cron Expression",
+    "cron": "Cron 表示式",
     "cronPlaceholder": "0 9 * * *",
-    "runAt": "Execute 時間",
-    "session": "Target session (platform_id:message_type:session_id)",
-    "timezone": "Timezone（Optional，例如 Asia/Hong_Kong）",
-    "enabled": "Enable"
+    "runAt": "執行時間",
+    "session": "目標工作階段 (platform_id:message_type:session_id)",
+    "timezone": "時區（選填，例如 Asia/Hong_Kong）",
+    "enabled": "啟用"
   },
   "messages": {
-    "loadFailed": "攞任務失敗",
-    "updateFailed": "Update 失敗",
-    "deleteSuccess": "Delete 咗",
-    "deleteFailed": "Delete 失敗",
-    "sessionRequired": "請填 session",
-    "noteRequired": "請填說明",
-    "cronRequired": "請填 Cron Expression",
-    "runAtRequired": "請揀 Execute 時間",
-    "createSuccess": "Create 成功",
-    "createFailed": "Create 失敗"
+    "loadFailed": "獲取任務失敗",
+    "updateFailed": "更新失敗",
+    "deleteSuccess": "已刪除",
+    "deleteFailed": "刪除失敗",
+    "sessionRequired": "請填寫工作階段 (Session)",
+    "noteRequired": "請填寫說明",
+    "cronRequired": "請填寫 Cron 表示式",
+    "runAtRequired": "請選擇執行時間",
+    "createSuccess": "建立成功",
+    "createFailed": "建立失敗"
   }
 }

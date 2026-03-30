@@ -1,214 +1,214 @@
 {
   "network": {
-    "title": "Network",
+    "title": "網絡",
     "githubProxy": {
-      "title": "GitHub 加速地址",
-      "subtitle": "Set Download Plugin 或者 Update AstrBot 嗰陣用嘅 GitHub 加速地址。呢個喺中國大陸 Network 環境有用。可以 Custom，入完即刻生效。所有地址都唔 Guarantee 穩定性，如果 Update Plugin/Project 嗰陣出 Error，請首先 Check 吓加速地址用唔用得。",
-      "label": "揀 GitHub 加速地址"
+      "title": "GitHub 加速網址",
+      "subtitle": "設定下載插件或更新 AstrBot 時使用的 GitHub 加速網址。這在中國大陸網絡環境較為有用。可以自訂，輸入後即時生效。所有網址皆不保證穩定性，如果更新插件/專案時發生錯誤，請先檢查加速網址是否可用。",
+      "label": "選擇 GitHub 加速網址"
     },
     "proxySelector": {
       "title": "GitHub 加速",
-      "noProxy": "唔用 GitHub 加速",
-      "useProxy": "用 GitHub 加速",
-      "testConnection": "Test Proxy Connection",
-      "available": "Available",
-      "unavailable": "Unavailable",
-      "custom": "Custom"
+      "noProxy": "不使用 GitHub 加速",
+      "useProxy": "使用 GitHub 加速",
+      "testConnection": "測試 Proxy 連線",
+      "available": "可用",
+      "unavailable": "無法使用",
+      "custom": "自訂"
     }
   },
   "theme": {
-    "title": "Theme",
-    "subtitle": "Custom Theme 主色同輔助色。改完即刻生效，而且會 Save 喺 Browser Local Storage。",
+    "title": "主題",
+    "subtitle": "自訂主題主色與輔助色。更改後即時生效，並且會儲存在瀏覽器的 Local Storage 中。",
     "customize": {
-      "title": "Theme Color",
+      "title": "主題顏色",
       "primary": "主色",
       "secondary": "輔助色",
-      "reset": "Reset Default"
+      "reset": "重設為預設"
     }
   },
   "system": {
-    "title": "System",
+    "title": "系統",
     "restart": {
-      "title": "Restart",
-      "subtitle": "Restart AstrBot",
-      "button": "Restart"
+      "title": "重新啟動",
+      "subtitle": "重新啟動 AstrBot",
+      "button": "重新啟動"
     },
     "migration": {
-      "title": "Data Migrate 去 v4.0.0 Format",
-      "subtitle": "如果你撞到 Data Compatibility 問題，可以手動 Start Database Migration 助手",
-      "button": "Start Migrate 助手"
+      "title": "資料遷移至 v4.0.0 格式",
+      "subtitle": "如果你遇到資料相容性問題，可以手動啟動資料庫遷移助手",
+      "button": "啟動遷移助手"
     },
     "backup": {
-      "title": "Data Backup 同 Restore",
-      "subtitle": "Export 或者 Import AstrBot 嘅所有 Data，方便 Migrate 去新 Server",
-      "button": "Backup 管理"
+      "title": "資料備份與還原",
+      "subtitle": "匯出或匯入 AstrBot 的所有資料，方便遷移至新伺服器",
+      "button": "備份管理"
     },
     "cleanup": {
-      "title": "Log 同 Cache Clear",
-      "subtitle": "睇吓而家 Log 同 Cache 食咗幾多位，可以一 Click Clear。",
-      "refresh": "Refresh Size",
-      "cleanAll": "全部 Clear",
+      "title": "日誌與快取清除",
+      "subtitle": "查看目前日誌與快取佔用的空間，可以一鍵清除。",
+      "refresh": "重新整理大小",
+      "cleanAll": "全部清除",
       "panel": {
-        "title": "Clear Details",
-        "subtitle": "而家佔用 {size}"
+        "title": "清除詳情",
+        "subtitle": "目前佔用 {size}"
       },
-      "fileCount": "{count} 個 File",
-      "confirm": "肯定要 Clear {target}？",
+      "fileCount": "{count} 個檔案",
+      "confirm": "確定要清除 {target}？",
       "targetNames": {
-        "cache": "Cache",
-        "logs": "Log",
-        "all": "Log 同 Cache"
+        "cache": "快取",
+        "logs": "日誌",
+        "all": "日誌與快取"
       },
       "targets": {
         "cache": {
-          "title": "Cache",
-          "subtitle": "Clear Temp File、Plugin Market Cache 同 Skill Cache。",
-          "button": "Clear Cache"
+          "title": "快取",
+          "subtitle": "清除暫存檔案、插件市場快取與技能快取。",
+          "button": "清除快取"
         },
         "logs": {
-          "title": "Log",
-          "subtitle": "Clear 歷史 Log，同埋清空寫緊嘅 Log File 內容。",
-          "button": "Clear Log"
+          "title": "日誌",
+          "subtitle": "清除歷史日誌，並清空目前寫入中的日誌檔案內容。",
+          "button": "清除日誌"
         }
       },
       "messages": {
-        "statusFailed": "Load Storage Size 失敗",
-        "cleanupSuccess": "Clear 咗 {count} 個 File，放返 {size} 出嚟",
-        "cleanupFailed": "Clear 失敗"
+        "statusFailed": "取得儲存空間大小失敗",
+        "cleanupSuccess": "已清除 {count} 個檔案，釋放了 {size} 空間",
+        "cleanupFailed": "清除失敗"
       }
     }
   },
   "sidebar": {
-    "title": "Sidebar",
+    "title": "側邊欄",
     "customize": {
-      "title": "Custom Sidebar",
-      "subtitle": "Drag 嚟改 Module 順序，或者將 Module 拉出/拉入「更多功能」Group。Setting 淨係 Save 喺 Browser Local Storage。",
-      "reset": "Reset Default",
-      "mainItems": "主要 Module",
+      "title": "自訂側邊欄",
+      "subtitle": "拖曳以更改模組順序，或者將模組拉出/拉入「更多功能」群組。設定僅儲存於瀏覽器的 Local Storage 中。",
+      "reset": "重設為預設",
+      "mainItems": "主要模組",
       "moreItems": "更多功能"
     }
   },
   "backup": {
     "dialog": {
-      "title": "Backup 管理"
+      "title": "備份管理"
     },
     "tabs": {
-      "export": "Export Backup",
-      "import": "Import Backup",
-      "list": "Backup List"
+      "export": "匯出備份",
+      "import": "匯入備份",
+      "list": "備份列表"
     },
     "export": {
-      "title": "Create Backup",
-      "description": "將所有 Data Export 做 ZIP Backup File，包埋 Database、Knowledge Base、Config 同 Attachment。",
-      "includes": "Backup 包埋：Main Database、Knowledge Base（Metadata + Vector Index + Document）、Config File、Attachment File",
-      "button": "開始 Export",
-      "processing": "Export 緊...",
-      "wait": "等多陣，Zip 緊 Data...",
-      "completed": "Export 搞掂！",
-      "download": "Download Backup",
-      "another": "Create 新 Backup",
-      "failed": "Export 失敗",
-      "retry": "Retry"
+      "title": "建立備份",
+      "description": "將所有資料匯出為 ZIP 備份檔，包含資料庫、知識庫、設定檔與附件。",
+      "includes": "備份包含：主資料庫、知識庫（Metadata + 向量索引 + 文件）、設定檔、附件檔案",
+      "button": "開始匯出",
+      "processing": "正在匯出...",
+      "wait": "請稍候，正在壓縮資料...",
+      "completed": "匯出完成！",
+      "download": "下載備份",
+      "another": "建立新備份",
+      "failed": "匯出失敗",
+      "retry": "重試"
     },
     "import": {
-      "title": "Import Backup",
-      "warning": "⚠️ Import 會清空同 Overwrite 現有 Data！請確保已經 Backup 咗而家嘅 Data。",
-      "selectFile": "揀 Backup File (.zip)",
-      "uploadAndCheck": "Upload 兼 Check",
-      "uploading": "Upload 緊...",
-      "uploadWait": "等多陣，Upload 緊 Backup File...",
-      "uploadInit": "Initialize 緊 Upload...",
-      "uploadingChunks": "Upload 緊 Chunk...",
-      "uploadComplete": "Upload 搞掂，Merge 緊 File...",
-      "checking": "Check 緊 Backup File...",
-      "invalidBackup": "Invalid 嘅 Backup File",
-      "backupContents": "Backup 內容",
-      "tables": "個 Data Table",
-      "knowledgeBases": "Knowledge Base",
-      "configFiles": "Config File",
-      "confirmImport": "Confirm Import",
-      "button": "開始 Import",
-      "processing": "Import 紧...",
-      "wait": "等多陣，Restore 緊 Data...",
-      "completed": "Import 搞掂！",
-      "restartRequired": "Data 已經 Import 成功。建議即刻 Restart AstrBot 等啲改動生效。",
-      "restartNow": "即刻 Restart",
-      "failed": "Import 失敗",
-      "retry": "Retry",
+      "title": "匯入備份",
+      "warning": "⚠️ 匯入將會清空並覆寫現有資料！請確保已備份目前的資料。",
+      "selectFile": "選擇備份檔 (.zip)",
+      "uploadAndCheck": "上載並檢查",
+      "uploading": "正在上載...",
+      "uploadWait": "請稍候，正在上載備份檔...",
+      "uploadInit": "正在初始化上載...",
+      "uploadingChunks": "正在上載分塊...",
+      "uploadComplete": "上載完成，正在合併檔案...",
+      "checking": "正在檢查備份檔...",
+      "invalidBackup": "無效的備份檔",
+      "backupContents": "備份內容",
+      "tables": "個資料表",
+      "knowledgeBases": "知識庫",
+      "configFiles": "設定檔",
+      "confirmImport": "確認匯入",
+      "button": "開始匯入",
+      "processing": "正在匯入...",
+      "wait": "請稍候，正在還原資料...",
+      "completed": "匯入完成！",
+      "restartRequired": "資料已經匯入成功。建議立即重新啟動 AstrBot 以使變更生效。",
+      "restartNow": "立即重新啟動",
+      "failed": "匯入失敗",
+      "retry": "重試",
       "version": {
-        "backupVersion": "Backup Version",
-        "currentVersion": "目前 Version",
-        "backupTime": "Backup 時間",
-        "matchTitle": "✅ Version Match",
-        "matchMessage": "Import 會清空同 Overwrite 現有所有 Data，包埋：\n• Main Database（對話 Record、Config 等）\n• Knowledge Base Data\n• Plugin 同 Plugin Data\n• Config File\n\n呢個 Action 冇得 Undo！係咪確認繼續？",
-        "minorDiffTitle": "⚠️ Version 差異 Warning",
-        "minorDiffMessage": "Minor Version 差異通常係 Compatible 嘅，但可能有少少 Data Structure 變動。\nImport 會清空同 Overwrite 現有所有 Data！\n\n係咪確認繼續 Import？",
-        "majorDiffTitle": "⛔ Import 唔到",
-        "majorDiffMessage": "Major Version 唔同，跨 Major Version Import 可能搞到 Data Corrupt。\n請用同一個 Major Version 嘅 AstrBot 嚟 Import。"
+        "backupVersion": "備份版本",
+        "currentVersion": "目前版本",
+        "backupTime": "備份時間",
+        "matchTitle": "✅ 版本相符",
+        "matchMessage": "匯入將會清空並覆寫現有所有資料，包含：\n• 主資料庫（對話紀錄、設定等）\n• 知識庫資料\n• 插件與插件資料\n• 設定檔\n\n此操作無法復原！確定要繼續嗎？",
+        "minorDiffTitle": "⚠️ 版本差異警告",
+        "minorDiffMessage": "次要版本差異通常是相容的，但可能會有少許資料結構變動。\n匯入將會清空並覆寫現有所有資料！\n\n確定要繼續匯入嗎？",
+        "majorDiffTitle": "⛔ 無法匯入",
+        "majorDiffMessage": "主要版本不同，跨主要版本匯入可能會導致資料損毀。\n請使用相同主要版本的 AstrBot 進行匯入。"
       }
     },
     "list": {
-      "empty": "暫時冇 Backup File",
-      "refresh": "Refresh List",
-      "confirmDelete": "肯定要 Delete 呢個 Backup File？呢個 Action 冇得 Undo。",
-      "uploaded": "Upload 咗",
-      "restore": "Restore 呢個 Backup",
-      "rename": "Rename",
-      "renameTitle": "Rename Backup File",
-      "newName": "新 File 名",
-      "renameHint": "File 名淨係可以有字母、數字、Underline、Dash 同點",
-      "renameRequired": "請入 File 名",
-      "renameInvalidChars": "File 名有 Illegal Character",
-      "renameFailed": "Rename 失敗",
-      "ftpHint": "對於大嘅 Backup File，都可以經 FTP/SFTP 等方法直接 Upload 去 data/backups 目錄"
+      "empty": "暫無備份檔",
+      "refresh": "重新整理列表",
+      "confirmDelete": "確定要刪除此備份檔？此操作無法復原。",
+      "uploaded": "已上載",
+      "restore": "還原此備份",
+      "rename": "重新命名",
+      "renameTitle": "重新命名備份檔",
+      "newName": "新檔案名稱",
+      "renameHint": "檔案名稱僅容許字母、數字、底線、破折號與小數點",
+      "renameRequired": "請輸入檔案名稱",
+      "renameInvalidChars": "檔案名稱包含不合法字元",
+      "renameFailed": "重新命名失敗",
+      "ftpHint": "對於較大的備份檔，也可以透過 FTP/SFTP 等方式直接上載至 data/backups 目錄"
     }
   },
   "apiKey": {
     "title": "API Key",
-    "manageTitle": "Developer Access Key",
-    "subtitle": "為外部 Developer Create API Key，用嚟 Call Open HTTP API。",
-    "name": "Key 名",
-    "expiresInDays": "Expire 時間",
+    "manageTitle": "開發者 Access Key",
+    "subtitle": "為外部開發者建立 API Key，用於呼叫 Open HTTP API。",
+    "name": "金鑰名稱",
+    "expiresInDays": "過期時間",
     "expiryOptions": {
-      "day1": "1 日",
-      "day7": "7 日",
-      "day30": "30 日",
-      "day90": "90 日",
-      "permanent": "Permanent"
+      "day1": "1 天",
+      "day7": "7 天",
+      "day30": "30 天",
+      "day90": "90 天",
+      "permanent": "永久"
     },
-    "permanentWarning": "Permanent 嘅 API Key Risk 比較高，請 Save 好同建議淨係喺必要場景用。",
-    "scopes": "Permission Scope",
-    "create": "Create API Key",
-    "revoke": "Revoke",
-    "delete": "Delete",
-    "copy": "Copy",
-    "docsLink": "睇 Document",
-    "plaintextHint": "請即刻 Save 低呢條 Key，Close 咗之後就睇唔返明文。",
-    "empty": "暫時冇 API Key",
+    "permanentWarning": "永久的 API Key 風險較高，請妥善儲存並建議僅在必要場景使用。",
+    "scopes": "權限範圍",
+    "create": "建立 API Key",
+    "revoke": "撤銷",
+    "delete": "刪除",
+    "copy": "複製",
+    "docsLink": "查看文件",
+    "plaintextHint": "請即時儲存此金鑰，關閉視窗後將無法再次查看明文。",
+    "empty": "暫無 API Key",
     "status": {
-      "active": "Active",
-      "inactive": "Inactive"
+      "active": "啟用中",
+      "inactive": "未啟用"
     },
     "table": {
-      "name": "名",
-      "prefix": "Prefix",
-      "scopes": "Permission",
+      "name": "名稱",
+      "prefix": "前綴",
+      "scopes": "權限",
       "status": "狀態",
-      "lastUsed": "最近用過",
-      "createdAt": "Create 時間",
-      "actions": "Action"
+      "lastUsed": "最後使用",
+      "createdAt": "建立時間",
+      "actions": "操作"
     },
     "messages": {
-      "loadFailed": "Load API Key 失敗",
-      "scopeRequired": "請最少揀一個 Permission",
-      "createSuccess": "API Key Create 成功",
-      "createFailed": "Create API Key 失敗",
-      "revokeSuccess": "API Key 已經 Revoke",
-      "revokeFailed": "Revoke API Key 失敗",
-      "deleteSuccess": "API Key 已經 Delete",
-      "deleteFailed": "Delete API Key 失敗",
-      "copySuccess": "Copy 咗 API Key",
-      "copyFailed": "Copy API Key 失敗"
+      "loadFailed": "載入 API Key 失敗",
+      "scopeRequired": "請最少選擇一個權限",
+      "createSuccess": "API Key 建立成功",
+      "createFailed": "建立 API Key 失敗",
+      "revokeSuccess": "API Key 已撤銷",
+      "revokeFailed": "撤銷 API Key 失敗",
+      "deleteSuccess": "API Key 已刪除",
+      "deleteFailed": "刪除 API Key 失敗",
+      "copySuccess": "已複製 API Key",
+      "copyFailed": "複製 API Key 失敗"
     }
   }
 }

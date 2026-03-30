@@ -1,17 +1,17 @@
 {
   "hero": {
     "title": "AstrBot",
-    "subtitle": "A project out of interests and loves ❤️",
-    "starButton": "Star 呢個 Project! 🌟",
-    "issueButton": "開 Issue"
+    "subtitle": "一個出於興趣與熱愛的開源專案 ❤️",
+    "starButton": "為這個專案給顆星 (Star)! 🌟",
+    "issueButton": "提交 Issue"
   },
   "contributors": {
-    "title": "Contributors",
-    "description": "呢個 Project 由好多 Open Source Community 嘅人一齊 Maintain。多謝每一位 Contributor 嘅幫手！",
-    "viewLink": "睇 AstrBot 嘅 Contributors"
+    "title": "貢獻者",
+    "description": "這個專案由開源社群的許多開發者共同維護。感謝每一位貢獻者 (Contributor) 的幫忙！",
+    "viewLink": "查看 AstrBot 的貢獻者"
   },
   "stats": {
-    "title": "Global Deploy",
-    "license": "AstrBot 用 AGPL v3 License Open Source"
+    "title": "全球部署",
+    "license": "AstrBot 使用 AGPL v3 授權條款開源"
   }
 }

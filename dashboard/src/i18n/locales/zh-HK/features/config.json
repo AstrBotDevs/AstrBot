@@ -1,129 +1,129 @@
 {
-  "title": "Config File",
-  "subtitle": "Manage System Config 同 Setting",
+  "title": "設定檔",
+  "subtitle": "管理系統設定與配置",
   "editor": {
-    "visual": "GUI Edit",
-    "code": "Code Edit",
-    "revertCode": "Revert 去改之前嘅 Code",
-    "applyConfig": "Apply 呢個 Config",
-    "applyTip": "`Apply 呢個 Config` 會將 Config 暫存並 Apply 去 GUI。要 Save 嘅話，要再撳右下角嘅 Save Button。"
+    "visual": "視覺化編輯",
+    "code": "原始碼編輯",
+    "revertCode": "還原至修改前的原始碼",
+    "applyConfig": "套用此設定",
+    "applyTip": "「套用此設定」會將設定暫存並套用至介面。要實際儲存的話，需要點擊右下角的儲存按鈕。"
   },
   "actions": {
-    "save": "Save Config",
-    "delete": "Delete 呢項",
-    "add": "Add",
-    "reset": "Reset 做 Default",
-    "export": "Export Config",
-    "import": "Import Config",
-    "validate": "Validate Config"
+    "save": "儲存設定",
+    "delete": "刪除此項",
+    "add": "新增",
+    "reset": "重設為預設值",
+    "export": "匯出設定",
+    "import": "匯入設定",
+    "validate": "驗證設定"
   },
   "help": {
-    "documentation": "官方 Document",
-    "support": "入 Group 問",
-    "helpText": "唔明點 Set Config？請睇 {documentation} 或者 {support}。",
-    "helpPrefix": "唔明點 Set Config？請睇",
-    "helpMiddle": "或者",
+    "documentation": "官方文件",
+    "support": "加入社群發問",
+    "helpText": "不清楚如何配置設定？請參考 {documentation} 或 {support}。",
+    "helpPrefix": "不清楚如何配置設定？請參考",
+    "helpMiddle": "或",
     "helpSuffix": "。"
   },
   "messages": {
-    "configApplied": "Config Apply 成功。要 Save 嘅話，要再撳右下角嘅 Save Button。",
-    "configApplyError": "Config Apply 唔到，JSON Format 錯。",
-    "unsavedChangesNotice": "目前 Config 有未 Save 嘅修改。請撳右下角 Save Button 嚟生效。",
-    "saveSuccess": "Config Save 成功",
-    "saveError": "Config Save 失敗",
-    "loadError": "Config Load 失敗",
-    "deleteSuccess": "Delete 成功",
-    "deleteError": "Delete 失敗",
-    "updateSuccess": "Update 成功",
-    "updateError": "Update 失敗"
+    "configApplied": "設定套用成功。如需儲存，請點擊右下角的儲存按鈕。",
+    "configApplyError": "設定無法套用，JSON 格式錯誤。",
+    "unsavedChangesNotice": "目前設定有未儲存的修改。請點擊右下角的儲存按鈕以生效。",
+    "saveSuccess": "設定儲存成功",
+    "saveError": "設定儲存失敗",
+    "loadError": "設定載入失敗",
+    "deleteSuccess": "刪除成功",
+    "deleteError": "刪除失敗",
+    "updateSuccess": "更新成功",
+    "updateError": "更新失敗"
   },
   "sections": {
-    "general": "General Setting",
-    "advanced": "Advanced Setting",
-    "security": "Security Setting",
-    "appearance": "Appearance Setting",
-    "notification": "Notification Setting"
+    "general": "一般設定",
+    "advanced": "進階設定",
+    "security": "安全性設定",
+    "appearance": "外觀設定",
+    "notification": "通知設定"
   },
   "general": {
-    "botName": "Bot 名",
-    "language": "UI Language",
-    "timezone": "Timezone",
-    "autoSave": "Auto Save",
-    "debugMode": "Debug Mode"
+    "botName": "機械人名稱",
+    "language": "介面語言",
+    "timezone": "時區",
+    "autoSave": "自動儲存",
+    "debugMode": "除錯模式"
   },
   "advanced": {
-    "logLevel": "Log Level",
-    "maxConnections": "Max Connection",
-    "timeout": "Timeout 時間",
-    "retryAttempts": "Retry 次數",
-    "cacheSize": "Cache Size"
+    "logLevel": "日誌級別 (Log Level)",
+    "maxConnections": "最大連線數",
+    "timeout": "逾時時間",
+    "retryAttempts": "重試次數",
+    "cacheSize": "快取大小"
   },
   "security": {
-    "apiKey": "API Key",
-    "allowedHosts": "Allowed Host",
-    "rateLimit": "Rate Limit",
-    "encryption": "Encryption Setting"
+    "apiKey": "API 密鑰",
+    "allowedHosts": "允許的網域",
+    "rateLimit": "頻率限制",
+    "encryption": "加密設定"
   },
   "configSelection": {
-    "selectConfig": "揀 Config File",
-    "normalConfig": "Normal",
-    "systemConfig": "System"
+    "selectConfig": "選擇設定檔",
+    "normalConfig": "一般",
+    "systemConfig": "系統"
   },
   "search": {
-    "placeholder": "Search Config 項（Field名/Description/Hint）",
-    "noResult": "搵唔到 Match 嘅 Config 項"
+    "placeholder": "搜尋設定項目 (欄位名稱/描述/提示)",
+    "noResult": "找不到符合的設定項目"
   },
   "configManagement": {
-    "title": "Config File 管理",
-    "description": "AstrBot Support 針對唔同 Bot 分別 Set Config File。Default 會用 `default` Config。",
-    "newConfig": "New Config File",
-    "editConfig": "Edit Config File",
-    "manageConfigs": "Manage Config File...",
-    "configName": "名",
-    "fillConfigName": "填 Config File 名",
-    "confirmDelete": "肯定要 Delete Config File \"{name}\"？呢個 Action 冇得 Undo。",
-    "pleaseEnterName": "請填 Config 名",
-    "createFailed": "New Config File Create 失敗",
-    "deleteFailed": "Delete Config File 失敗",
-    "updateFailed": "Update Config File 失敗"
+    "title": "設定檔管理",
+    "description": "AstrBot 支援為不同的機械人分別配置設定檔。預設會使用 `default` 設定檔。",
+    "newConfig": "新增設定檔",
+    "editConfig": "編輯設定檔",
+    "manageConfigs": "管理設定檔...",
+    "configName": "名稱",
+    "fillConfigName": "輸入設定檔名稱",
+    "confirmDelete": "確定要刪除設定檔 \"{name}\"？此操作無法復原。",
+    "pleaseEnterName": "請輸入設定檔名稱",
+    "createFailed": "建立新設定檔失敗",
+    "deleteFailed": "刪除設定檔失敗",
+    "updateFailed": "更新設定檔失敗"
   },
   "buttons": {
-    "cancel": "Cancel",
-    "create": "Create",
-    "update": "Update"
+    "cancel": "取消",
+    "create": "建立",
+    "update": "更新"
   },
   "codeEditor": {
-    "title": "Edit Config File"
+    "title": "編輯設定檔"
   },
   "fileUpload": {
-    "button": "Manage File",
-    "dialogTitle": "Upload 咗嘅 File",
-    "dropzone": "Upload 新 File",
-    "allowedTypes": "容許 Type：{types}",
-    "empty": "暫時冇 Upload 咗嘅 File",
-    "statusMissing": "File Missing",
-    "statusUnconfigured": "未加落 Config",
-    "uploadSuccess": "Upload 咗 {count} 個 File",
-    "uploadFailed": "Upload 失敗",
-    "loadFailed": "攞 File List 失敗",
-    "fileTooLarge": "File 太大（Limit {max} MB）：{name}",
-    "deleteSuccess": "Delete 咗 File",
-    "deleteFailed": "Delete 失敗",
-    "addToConfig": "加咗落 Config",
-    "fileCount": "File：{count}",
-    "done": "搞掂"
+    "button": "管理檔案",
+    "dialogTitle": "已上載的檔案",
+    "dropzone": "上載新檔案",
+    "allowedTypes": "允許的類型：{types}",
+    "empty": "暫無已上載的檔案",
+    "statusMissing": "檔案遺失",
+    "statusUnconfigured": "未加入設定",
+    "uploadSuccess": "成功上載了 {count} 個檔案",
+    "uploadFailed": "上載失敗",
+    "loadFailed": "取得檔案列表失敗",
+    "fileTooLarge": "檔案過大（限制 {max} MB）：{name}",
+    "deleteSuccess": "已刪除檔案",
+    "deleteFailed": "刪除失敗",
+    "addToConfig": "已加入至設定",
+    "fileCount": "檔案數量：{count}",
+    "done": "完成"
   },
   "unsavedChangesWarning": {
-    "dialogTitle": "未 Save 嘅修改",
-    "leavePage": "目前 Config 有未 Save 嘅修改，Switch 前 Save 唔 Save？",
-    "switchConfig": "Switch Config 會冇晒未 Save 嘅修改，係咪 Save 先？",
+    "dialogTitle": "未儲存的修改",
+    "leavePage": "目前設定有未儲存的修改，切換前是否需要儲存？",
+    "switchConfig": "切換設定檔將遺失所有未儲存的修改，是否先儲存？",
     "options": {
-      "save": "Save",
-      "saveAndSwitch": "Save 同 Switch",
-      "discardAndSwitch": "Discard 修改同 Switch",
-      "closeCard": "Close",
-      "confirm": "Confirm",
-      "cancel": "Cancel"
+      "save": "儲存",
+      "saveAndSwitch": "儲存並切換",
+      "discardAndSwitch": "捨棄修改並切換",
+      "closeCard": "關閉",
+      "confirm": "確認",
+      "cancel": "取消"
     }
   }
 }

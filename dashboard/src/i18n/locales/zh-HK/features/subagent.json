@@ -1,66 +1,66 @@
 {
   "page": {
     "title": "SubAgent 編排",
-    "beta": "Experimental",
-    "subtitle": "Main LLM 可以直接用自己 Tool，都可以經 handoff 分派畀各個 SubAgent。"
+    "beta": "實驗性功能",
+    "subtitle": "Main LLM 可以直接使用自己的工具，也可以透過 handoff 分派給各個 SubAgent。"
   },
   "actions": {
-    "refresh": "Refresh",
-    "save": "Save",
-    "add": "Add SubAgent",
-    "delete": "Delete",
-    "close": "Close"
+    "refresh": "重新整理",
+    "save": "儲存",
+    "add": "新增 SubAgent",
+    "delete": "刪除",
+    "close": "關閉"
   },
   "switches": {
-    "enable": "Enable SubAgent 編排",
-    "enableHint": "Enable SubAgent 功能",
-    "dedupe": "Main LLM 去重重複 Tool（同 SubAgent 重疊嘅 Tool 會 Hide 咗）",
-    "dedupeHint": "喺 Main Agent 度 Remove 重複 Tool"
+    "enable": "啟用 SubAgent 編排",
+    "enableHint": "啟用 SubAgent 功能",
+    "dedupe": "Main LLM 移除重複工具（與 SubAgent 重疊的工具將會被隱藏）",
+    "dedupeHint": "在 Main Agent 中移除重複工具"
   },
   "description": {
-    "disabled": "唔 Enable：SubAgent 閂咗；Main LLM 按 persona 規則 Mount Tool（預設全部），再直接 Call。",
-    "enabled": "Enable：Main LLM 會 Keep 自己 Tool 再 Mount transfer_to_* 委派 Tool。如果開咗「去重重複 Tool」，同 SubAgent 指定嘅 Tool 重疊嗰 Part 會喺 Main LLM Tool 集度 Remove 走。"
+    "disabled": "不啟用：SubAgent 已關閉；Main LLM 會按人格規則掛載工具（預設為全部），然後直接呼叫。",
+    "enabled": "啟用：Main LLM 會保留自己的工具，並掛載 transfer_to_* 委派工具。如果啟用了「移除重複工具」，與 SubAgent 指定的工具重疊的部分將會從 Main LLM 工具集中移除。"
   },
   "section": {
-    "title": "SubAgents Config",
-    "globalSettings": "Global Settings"
+    "title": "SubAgents 設定",
+    "globalSettings": "全域設定"
   },
   "cards": {
-    "statusEnabled": "Enable 咗",
-    "statusDisabled": "Disable 咗",
+    "statusEnabled": "已啟用",
+    "statusDisabled": "已停用",
     "unnamed": "未命名 SubAgent",
     "transferPrefix": "transfer_to_{name}",
-    "switchLabel": "Enable",
-    "previewTitle": "Preview：Main LLM 會睇到嘅 handoff Tool",
-    "personaChip": "Persona: {id}",
-    "noDescription": "暫時冇 Description"
+    "switchLabel": "啟用",
+    "previewTitle": "預覽：Main LLM 會看到的 handoff 工具",
+    "personaChip": "人格: {id}",
+    "noDescription": "暫無描述"
   },
   "form": {
-    "nameLabel": "Agent 名（畀 transfer_to_{name} 用）",
-    "nameHint": "建議用英文細階+Underline，而且要 Global Unique",
-    "providerLabel": "Chat Provider（Optional）",
-    "providerHint": "留空代表跟 Global Default provider。",
-    "personaLabel": "揀人格 Config",
-    "personaHint": "SubAgent 會直接 Inherit 揀咗嘅 Persona 嘅 System Config 同 Tool。喺人格 Config 頁面 Manage 同 Create 人格。",
-    "personaPreview": "人格 Preview",
-    "descriptionLabel": "對 Main LLM 嘅 Description（用嚟決定 Handoff 唔 Handoff）",
-    "descriptionHint": "呢段會當做 transfer_to_* Tool 嘅 Description 畀 Main LLM 睇，建議精簡清晰。"
+    "nameLabel": "Agent 名稱（提供給 transfer_to_{name} 使用）",
+    "nameHint": "建議使用英文小寫加上底線，並且必須是全域唯一 (Global Unique)",
+    "providerLabel": "Chat Provider (選填)",
+    "providerHint": "留空代表跟隨全域預設 Provider。",
+    "personaLabel": "選擇人格設定",
+    "personaHint": "SubAgent 會直接繼承所選人格的系統設定與工具。請在人格設定頁面管理與建立人格。",
+    "personaPreview": "人格預覽",
+    "descriptionLabel": "提供給 Main LLM 的描述（用於決定是否進行 Handoff）",
+    "descriptionHint": "這段文字會作為 transfer_to_* 工具的描述提供給 Main LLM，建議保持精簡清晰。"
   },
   "messages": {
-    "loadConfigFailed": "攞 Config 失敗",
-    "loadPersonaFailed": "攞 Persona List 失敗",
-    "nameMissing": "有未填名嘅 SubAgent",
-    "nameInvalid": "SubAgent 名 Invalid：淨係容許英文細階/數字/Underline，同埋要字母開頭",
-    "nameDuplicate": "SubAgent 名 Duplicate 咗：{name}",
-    "personaMissing": "SubAgent {name} 未揀 Persona",
-    "saveSuccess": "Save 成功",
-    "saveFailed": "Save 失敗",
-    "nameRequired": "名必填",
-    "namePattern": "淨係 Support 細階字母、數字同 Underline"
+    "loadConfigFailed": "獲取設定失敗",
+    "loadPersonaFailed": "獲取人格列表失敗",
+    "nameMissing": "有未填寫名稱的 SubAgent",
+    "nameInvalid": "SubAgent 名稱無效：僅容許英文小寫、數字及底線，並且必須以字母開頭",
+    "nameDuplicate": "SubAgent 名稱重複：{name}",
+    "personaMissing": "SubAgent {name} 未選擇人格",
+    "saveSuccess": "儲存成功",
+    "saveFailed": "儲存失敗",
+    "nameRequired": "名稱為必填",
+    "namePattern": "僅支援小寫字母、數字與底線"
   },
   "empty": {
-    "title": "未 Config SubAgent",
-    "subtitle": "Add 一個新嘅 SubAgent 開始",
-    "action": "Create 第一個 Agent"
+    "title": "未設定 SubAgent",
+    "subtitle": "新增一個新的 SubAgent 開始",
+    "action": "建立第一個 Agent"
   }
 }

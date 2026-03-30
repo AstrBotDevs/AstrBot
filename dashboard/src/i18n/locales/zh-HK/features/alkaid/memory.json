@@ -1,20 +1,20 @@
 {
-  "title": "Long Term Memory",
-  "subtitle": "AI Assistant 嘅 Long Term Memory 管理",
+  "title": "長期記憶 (Long Term Memory)",
+  "subtitle": "AI 助手的長期記憶管理",
   "memories": {
-    "title": "Memory List",
-    "content": "Memory 內容",
+    "title": "記憶列表",
+    "content": "記憶內容",
     "importance": "重要程度",
-    "createTime": "Create 時間",
-    "lastAccess": "最後 Access",
-    "category": "Category"
+    "createTime": "建立時間",
+    "lastAccess": "最後存取",
+    "category": "類別"
   },
   "categories": {
-    "personal": "個人 Info",
-    "preferences": "Preference",
-    "conversations": "對話 History",
-    "facts": "Fact Info",
-    "skills": "Skill Knowledge"
+    "personal": "個人資訊",
+    "preferences": "偏好設定",
+    "conversations": "對話紀錄",
+    "facts": "事實資訊",
+    "skills": "技能知識"
   },
   "importance": {
     "high": "高",
@@ -22,76 +22,76 @@
     "low": "低"
   },
   "actions": {
-    "view": "睇 Details",
-    "edit": "Edit",
-    "delete": "Delete",
-    "pin": "Pin",
-    "unpin": "Unpin"
+    "view": "查看詳情",
+    "edit": "編輯",
+    "delete": "刪除",
+    "pin": "釘選",
+    "unpin": "取消釘選"
   },
   "filters": {
     "all": "全部",
-    "category": "按 Category",
+    "category": "按類別",
     "importance": "按重要程度",
-    "dateRange": "按時間 Range",
-    "title": "Filter",
-    "userIdLabel": "Filter User ID",
-    "filterButton": "Filter",
-    "resetButton": "Reset Filter",
-    "refreshButton": "Refresh Graph"
+    "dateRange": "按時間範圍",
+    "title": "篩選",
+    "userIdLabel": "篩選 User ID",
+    "filterButton": "篩選",
+    "resetButton": "重設篩選",
+    "refreshButton": "重新整理圖表"
   },
   "search": {
-    "title": "Search Memory",
+    "title": "搜尋記憶",
     "userIdLabel": "User ID",
-    "queryLabel": "入 Keyword",
-    "searchButton": "Search",
-    "resultsTitle": "Search 結果",
-    "noResults": "搵唔到相關 Memory 內容",
-    "similarity": "Similarity",
-    "noTextContent": "冇 Text 內容"
+    "queryLabel": "輸入關鍵字",
+    "searchButton": "搜尋",
+    "resultsTitle": "搜尋結果",
+    "noResults": "找不到相關記憶內容",
+    "similarity": "相似度 (Similarity)",
+    "noTextContent": "無文字內容"
   },
   "addMemory": {
-    "title": "Add Memory Data",
-    "textLabel": "入 Text 內容",
+    "title": "新增記憶資料",
+    "textLabel": "輸入文字內容",
     "userIdLabel": "User ID",
-    "summarizeLabel": "需要 Summary",
-    "addButton": "Add Data"
+    "summarizeLabel": "需要摘要",
+    "addButton": "新增資料"
   },
   "nodeDetails": {
-    "title": "Node Details",
+    "title": "節點 (Node) 詳情",
     "id": "ID",
-    "type": "Type",
-    "name": "名",
+    "type": "類型",
+    "name": "名稱",
     "userId": "User ID",
-    "timestamp": "Timestamp"
+    "timestamp": "時間戳記"
   },
   "graphStats": {
-    "title": "Graph 統計",
-    "nodeCount": "Node 數量",
-    "edgeCount": "Edge 數量"
+    "title": "圖表統計",
+    "nodeCount": "節點數量",
+    "edgeCount": "邊緣數量"
   },
   "factDialog": {
-    "title": "Memory Fact",
+    "title": "記憶事實 (Memory Fact)",
     "id": "ID",
-    "docId": "Document ID",
-    "createdAt": "Create 時間",
-    "updatedAt": "Update 時間",
+    "docId": "文件 ID",
+    "createdAt": "建立時間",
+    "updatedAt": "更新時間",
     "metadata": "Metadata",
-    "metadataKey": "Key",
-    "metadataValue": "Value",
-    "loading": "Load 緊...",
-    "close": "Close",
-    "noValue": "冇",
-    "unknown": "Unknown"
+    "metadataKey": "鍵值 (Key)",
+    "metadataValue": "內容 (Value)",
+    "loading": "正在載入...",
+    "close": "關閉",
+    "noValue": "無",
+    "unknown": "未知"
   },
   "messages": {
-    "searchQueryRequired": "請入 Search Keyword",
-    "searchSuccess": "搵到 {count} 條相關 Memory",
-    "searchNoResults": "搵唔到相關 Memory 內容",
-    "searchError": "Search 失敗",
-    "addSuccess": "Memory Data Add 成功！",
-    "addError": "Add Memory Data 失敗",
-    "factDetailsError": "攞 Memory Details 失敗",
-    "metadataParseError": "Parse 唔到 Metadata",
-    "relationNoMemoryData": "呢個 Relation 冇關聯嘅 Memory Data"
+    "searchQueryRequired": "請輸入搜尋關鍵字",
+    "searchSuccess": "找到 {count} 條相關記憶",
+    "searchNoResults": "找不到相關記憶內容",
+    "searchError": "搜尋失敗",
+    "addSuccess": "記憶資料新增成功！",
+    "addError": "新增記憶資料失敗",
+    "factDetailsError": "獲取記憶詳情失敗",
+    "metadataParseError": "無法解析 Metadata",
+    "relationNoMemoryData": "此關聯沒有相關的記憶資料"
   }
 }

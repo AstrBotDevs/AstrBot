@@ -1,95 +1,95 @@
 {
   "title": "指令管理",
   "summary": {
-    "total": "Show 嘅指令數",
-    "disabled": "Disable 咗",
-    "conflicts": "有 Conflict"
+    "total": "顯示的指令數",
+    "disabled": "已停用",
+    "conflicts": "發生衝突"
   },
   "conflictAlert": {
-    "title": "Detect 到指令 Conflict",
-    "description": "目前有 {count} 對指令有 Conflict，Conflict 嘅指令會同時 Trigger 多個 Plugin 回應，可能會搞到有 Unexpected Behavior。",
-    "hint": "請撳「Rename」Button 改 Conflict 指令嘅名嚟 Resolve Conflict。"
+    "title": "偵測到指令衝突",
+    "description": "目前有 {count} 對指令發生衝突，衝突的指令會同時觸發多個插件回應，可能會導致非預期的行為。",
+    "hint": "請點擊「重新命名」按鈕修改衝突指令的名稱來解決衝突。"
   },
   "table": {
     "headers": {
-      "command": "Command",
-      "type": "Type",
-      "plugin": "所屬 Plugin",
-      "description": "Description",
-      "permission": "Permission",
-      "status": "Status",
-      "actions": "Action"
+      "command": "指令",
+      "type": "類型",
+      "plugin": "所屬插件",
+      "description": "描述",
+      "permission": "權限",
+      "status": "狀態",
+      "actions": "操作"
     }
   },
   "type": {
-    "command": "Command",
-    "group": "Command Group",
-    "subCommand": "Sub-command"
+    "command": "指令",
+    "group": "指令群組",
+    "subCommand": "子指令"
   },
   "status": {
-    "enabled": "Enable 咗",
-    "disabled": "Disable 咗",
-    "conflict": "有 Conflict"
+    "enabled": "已啟用",
+    "disabled": "已停用",
+    "conflict": "發生衝突"
   },
   "permission": {
     "everyone": "所有人",
-    "admin": "Admin"
+    "admin": "管理員"
   },
   "tooltips": {
-    "enable": "Enable 指令",
-    "disable": "Disable 指令",
-    "rename": "Rename 指令",
-    "viewDetails": "睇 Details"
+    "enable": "啟用指令",
+    "disable": "停用指令",
+    "rename": "重新命名指令",
+    "viewDetails": "查看詳情"
   },
   "dialogs": {
     "rename": {
-      "title": "Rename 指令",
-      "newName": "新指令名",
-      "aliases": "Manage Alias",
-      "addAlias": "Add Alias",
-      "cancel": "Cancel",
-      "confirm": "Confirm"
+      "title": "重新命名指令",
+      "newName": "新指令名稱",
+      "aliases": "管理別名",
+      "addAlias": "新增別名",
+      "cancel": "取消",
+      "confirm": "確認"
     },
     "details": {
-      "title": "指令 Details",
-      "type": "指令 Type",
-      "handler": "Handler",
-      "module": "Module Path",
-      "originalCommand": "Original Command",
-      "effectiveCommand": "Effective Command",
-      "parentGroup": "所屬 Command Group",
-      "subCommands": "Sub-command List",
-      "aliases": "Alias",
-      "permission": "Permission Requirement",
-      "conflictStatus": "Conflict Status"
+      "title": "指令詳情",
+      "type": "指令類型",
+      "handler": "處理常式 (Handler)",
+      "module": "模組路徑",
+      "originalCommand": "原始指令",
+      "effectiveCommand": "生效指令",
+      "parentGroup": "所屬指令群組",
+      "subCommands": "子指令列表",
+      "aliases": "別名",
+      "permission": "權限要求",
+      "conflictStatus": "衝突狀態"
     }
   },
   "messages": {
-    "toggleSuccess": "指令 Status Update 咗",
-    "toggleFailed": "Update 指令 Status 失敗",
-    "renameSuccess": "指令 Rename 咗",
-    "renameFailed": "Rename 失敗",
-    "loadFailed": "Load 指令 List 失敗",
-    "updateSuccess": "Update 成功",
-    "updateFailed": "Update 失敗"
+    "toggleSuccess": "指令狀態已更新",
+    "toggleFailed": "更新指令狀態失敗",
+    "renameSuccess": "指令已重新命名",
+    "renameFailed": "重新命名失敗",
+    "loadFailed": "載入指令列表失敗",
+    "updateSuccess": "更新成功",
+    "updateFailed": "更新失敗"
   },
   "search": {
-    "placeholder": "Search 指令..."
+    "placeholder": "搜尋指令..."
   },
   "empty": {
-    "noCommands": "暫時冇指令",
-    "noCommandsDesc": "目前 Filter 下搵唔到任何指令"
+    "noCommands": "暫無指令",
+    "noCommandsDesc": "目前篩選條件下找不到任何指令"
   },
   "filters": {
-    "all": "All",
-    "enabled": "Enable 咗",
-    "disabled": "Disable 咗",
-    "conflict": "有 Conflict",
-    "byPlugin": "按 Plugin Filter",
-    "byType": "按 Type Filter",
-    "byPermission": "按 Permission Filter",
-    "byStatus": "按 Status Filter",
-    "showSystemPlugins": "Show System Plugin 指令",
-    "systemPluginConflictHint": "有涉及 System Plugin 嘅 Conflict，要 Resolve 咗先可以 Hide"
+    "all": "全部",
+    "enabled": "已啟用",
+    "disabled": "已停用",
+    "conflict": "發生衝突",
+    "byPlugin": "按插件篩選",
+    "byType": "按類型篩選",
+    "byPermission": "按權限篩選",
+    "byStatus": "按狀態篩選",
+    "showSystemPlugins": "顯示系統插件指令",
+    "systemPluginConflictHint": "有涉及系統插件的衝突，需要先解決才能隱藏"
   }
 }

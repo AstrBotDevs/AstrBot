@@ -5,33 +5,33 @@
     "evening": "晚安，歡迎使用 AstrBot",
     "newYear": "新年快樂！"
   },
-  "subtitle": "可以搞掂 Basic Guide 先，平台同對話 Provider 都 Support 遲啲先 Config。",
+  "subtitle": "可以先完成快速入門指南，平台與對話供應商都支援稍後再作設定。",
   "announcement": {
-    "title": "Announcement"
+    "title": "系統公告"
   },
   "onboard": {
-    "title": "Quick Guide",
-    "subtitle": "Welcome 頁可以一 Click 搞掂 Init。",
-    "step1Title": "Config 平台機械人",
-    "step1Desc": "將 AstrBot Connect 去 QQ、飛書、企業微信、Telegram 等 IM 平台。",
-    "step2Title": "Config AI Model",
-    "step2Desc": "幫 AstrBot Config AI Model。",
-    "configure": "去 Config",
-    "skip": "Skip",
-    "pending": "Pending",
-    "completed": "搞掂咗",
-    "skipped": "Skip 咗",
-    "platformLoadFailed": "Load 平台 Config 失敗",
-    "providerLoadFailed": "Load Provider Config 失敗",
-    "providerUpdateFailed": "Update default Config File 嘅 Default 對話 Provider 失敗",
-    "providerDefaultUpdated": "已經將 default Config File 嘅 Default 對話 Provider Set 做 {id}"
+    "title": "快速入門指南",
+    "subtitle": "歡迎頁面可以一鍵完成初始化設定。",
+    "step1Title": "設定平台機械人",
+    "step1Desc": "將 AstrBot 連線至 QQ、飛書、企業微信、Telegram 等通訊平台。",
+    "step2Title": "配置 AI 模型",
+    "step2Desc": "為 AstrBot 配置 AI 模型。",
+    "configure": "前往設定",
+    "skip": "略過",
+    "pending": "等待中",
+    "completed": "已完成",
+    "skipped": "已略過",
+    "platformLoadFailed": "載入平台設定失敗",
+    "providerLoadFailed": "載入供應商設定失敗",
+    "providerUpdateFailed": "更新 default 設定檔的預設對話供應商失敗",
+    "providerDefaultUpdated": "已經將 default 設定檔的預設對話供應商設為 {id}"
   },
   "resources": {
-    "title": "相關 Resource",
-    "githubDesc": "畀 AstrBot 撳個 Star 啦！",
-    "docsTitle": "Document",
-    "docsDesc": "睇吓 AstrBot 嘅官方 Document。",
+    "title": "相關資源",
+    "githubDesc": "為 AstrBot 給一顆 Star 吧！",
+    "docsTitle": "官方文件",
+    "docsDesc": "查看 AstrBot 的官方文件。",
     "afdianTitle": "愛發電",
-    "afdianDesc": "經愛發電 Support AstrBot Team。"
+    "afdianDesc": "透過愛發電支持 AstrBot 團隊。"
   }
 }

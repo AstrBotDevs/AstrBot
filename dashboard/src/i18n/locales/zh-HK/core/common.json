@@ -1,133 +1,133 @@
 {
-  "save": "Save",
-  "cancel": "Cancel",
-  "close": "Close",
-  "copy": "Copy",
-  "copied": "Copy 咗",
-  "copyFailed": "Copy 失敗",
-  "delete": "Delete",
-  "edit": "Edit",
-  "add": "Add",
+  "save": "儲存",
+  "cancel": "取消",
+  "close": "關閉",
+  "copy": "複製",
+  "copied": "已複製",
+  "copyFailed": "複製失敗",
+  "delete": "刪除",
+  "edit": "編輯",
+  "add": "新增",
   "confirm": "確認",
-  "loading": "Load緊...",
+  "loading": "載入中...",
   "success": "成功",
-  "error": "Error",
-  "warning": "Warning",
-  "info": "Info",
-  "name": "名",
-  "description": "Description",
+  "error": "錯誤",
+  "warning": "警告",
+  "info": "資訊",
+  "name": "名稱",
+  "description": "描述",
   "author": "作者",
   "status": "狀態",
   "actions": "操作",
-  "enable": "Enable",
-  "disable": "Disable",
-  "enabled": "Enable 咗",
-  "disabled": "Disable 咗",
-  "reload": "Reload",
-  "configure": "Config",
-  "install": "Install",
-  "uninstall": "Uninstall",
-  "update": "Update",
+  "enable": "啟用",
+  "disable": "停用",
+  "enabled": "已啟用",
+  "disabled": "已停用",
+  "reload": "重新載入",
+  "configure": "設定",
+  "install": "安裝",
+  "uninstall": "解除安裝",
+  "update": "更新",
   "language": "語言",
-  "settings": "Settings",
+  "settings": "設定",
   "locale": "zh-HK",
   "type": "輸入",
-  "press": "撳",
-  "longPress": "長撳",
-  "yes": "係",
-  "no": "唔係",
-  "imagePreview": "圖片 Preview",
-  "autoDetect": "Auto Detect",
+  "press": "點擊",
+  "longPress": "長按",
+  "yes": "是",
+  "no": "否",
+  "imagePreview": "圖片預覽",
+  "autoDetect": "自動偵測",
   "dialog": {
     "confirmTitle": "確認操作",
-    "confirmMessage": "你肯定要執行呢個操作？",
+    "confirmMessage": "你確定要執行此操作？",
     "confirmButton": "確定",
-    "cancelButton": "Cancel"
+    "cancelButton": "取消"
   },
   "restart": {
-    "waiting": "等緊 AstrBot Restart...",
-    "maxRetriesReached": "Pull 狀態已經去到極限，請人手 Check 吓。"
+    "waiting": "正在等待 AstrBot 重新啟動...",
+    "maxRetriesReached": "輪詢狀態已達上限，請手動檢查。"
   },
   "readme": {
-    "title": "Plugin 說明文件",
+    "title": "插件說明文件",
     "buttons": {
-      "viewOnGithub": "喺 GitHub 睇 Repo",
-      "refresh": "Refresh 文件"
+      "viewOnGithub": "在 GitHub 查看 Repo",
+      "refresh": "重新整理文件"
     },
-    "loading": "Load緊 README 文件...",
+    "loading": "正在載入 README 文件...",
     "errors": {
-      "fetchFailed": "攞 README 失敗",
-      "fetchError": "攞 README 嗰陣發生 Error"
+      "fetchFailed": "取得 README 失敗",
+      "fetchError": "取得 README 時發生錯誤"
     },
     "empty": {
-      "title": "呢個 Plugin 冇提供文件 Link 或者 GitHub Repo 網址。",
-      "subtitle": "請去 Plugin 市場睇吓或者搵 Plugin 作者攞多啲資料。"
+      "title": "此插件未提供文件連結或 GitHub Repo 網址。",
+      "subtitle": "請前往插件市場查看或向插件作者索取更多資訊。"
     }
   },
   "changelog": {
     "title": "更新日誌",
-    "loading": "Load緊更新日誌...",
+    "loading": "正在載入更新日誌...",
     "empty": {
-      "title": "呢個 Plugin 冇提供更新日誌",
-      "subtitle": "Developer 可以喺 Plugin 目錄加個 CHANGELOG.md 嚟提供更新日誌"
+      "title": "此插件未提供更新日誌",
+      "subtitle": "開發者可以在插件目錄中加入 CHANGELOG.md 來提供更新日誌"
     }
   },
   "editor": {
-    "fullscreen": "Full Screen 編輯",
-    "editingTitle": "Edit內容"
+    "fullscreen": "全螢幕編輯",
+    "editingTitle": "編輯內容"
   },
   "templateList": {
-    "addEntry": "Add Item",
-    "empty": "暫時冇 Item，請揀 Template 加落去",
-    "missingTemplate": "搵唔到對應嘅 Template，請 Delete 完重新加過。",
-    "unknownTemplate": "未指定 Template"
+    "addEntry": "新增項目",
+    "empty": "暫無項目，請選擇模板以新增",
+    "missingTemplate": "找不到對應的模板，請刪除後重新新增。",
+    "unknownTemplate": "未指定模板"
   },
   "list": {
-    "addItemPlaceholder": "加新 Item，撳 Enter 確認",
-    "addButton": "Add",
-    "addMore": "加多啲",
-    "batchImport": "Batch Import",
-    "batchImportTitle": "Batch Import",
-    "batchImportLabel": "每一行一個 Item",
-    "batchImportPlaceholder": "例如：\nItem 1\nItem 2\nItem 3",
-    "batchImportHint": "每一行會當做一個獨立嘅 Item，空行會自動 Skip",
-    "batchImportButton": "Import {count} 項",
-    "noItems": "暫時冇 Item",
-    "noItemsHint": "暫時冇 Item，喺上面打字之後撳 Enter 加落去",
-    "inputPlaceholder": "打完字撳 Enter 加落去",
-    "editTitle": "改 List Item",
+    "addItemPlaceholder": "新增項目，按 Enter 確認",
+    "addButton": "新增",
+    "addMore": "載入更多",
+    "batchImport": "批次匯入",
+    "batchImportTitle": "批次匯入",
+    "batchImportLabel": "每行一個項目",
+    "batchImportPlaceholder": "例如：\n項目 1\n項目 2\n項目 3",
+    "batchImportHint": "每一行將視為一個獨立的項目，空白行會自動略過",
+    "batchImportButton": "匯入 {count} 項",
+    "noItems": "暫無項目",
+    "noItemsHint": "暫無項目，在上方輸入文字後按 Enter 新增",
+    "inputPlaceholder": "輸入完成後按 Enter 新增",
+    "editTitle": "編輯列表項目",
     "modifyButton": "修改"
   },
   "itemCard": {
-    "enabled": "Enable 咗",
-    "disabled": "Disable 咗",
-    "delete": "Delete",
-    "edit": "Edit",
-    "copy": "Copy",
-    "noData": "暫時冇 Data"
+    "enabled": "已啟用",
+    "disabled": "已停用",
+    "delete": "刪除",
+    "edit": "編輯",
+    "copy": "複製",
+    "noData": "暫無資料"
   },
   "objectEditor": {
-    "dialogTitle": "改 Key-Value",
-    "noItems": "暫時冇 Item",
-    "noParams": "暫時冇 Parameter",
-    "presets": "Preset",
-    "newKeyLabel": "新 Key 名",
-    "valueTypeLabel": "Value Type",
-    "keyExists": "Key 名已經存在",
-    "invalidJson": "JSON Format 錯咗",
+    "dialogTitle": "編輯鍵值 (Key-Value)",
+    "noItems": "暫無項目",
+    "noParams": "暫無參數",
+    "presets": "預設",
+    "newKeyLabel": "新鍵名",
+    "valueTypeLabel": "值類型",
+    "keyExists": "鍵名已存在",
+    "invalidJson": "JSON 格式錯誤",
     "placeholders": {
-      "keyName": "Key 名",
-      "stringValue": "String Value",
-      "numberValue": "Number",
+      "keyName": "鍵名",
+      "stringValue": "字串值",
+      "numberValue": "數值",
       "jsonValue": "JSON"
     }
   },
   "firstNotice": {
     "title": "首次提示",
-    "loading": "Load緊首次提示...",
+    "loading": "正在載入首次提示...",
     "empty": {
-      "title": "暫時冇首次提示內容",
-      "subtitle": "搵唔到 FIRST_NOTICE.md 或者個 File 係空嘅。"
+      "title": "暫無首次提示內容",
+      "subtitle": "找不到 FIRST_NOTICE.md 或者是空白檔案。"
     }
   }
 }

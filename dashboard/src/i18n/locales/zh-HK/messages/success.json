@@ -1,23 +1,23 @@
 {
   "operation": {
-    "saved": "Save 成功",
-    "created": "Create 成功",
-    "updated": "Update 成功",
-    "deleted": "Delete 成功",
-    "uploaded": "Upload 成功",
-    "downloaded": "Download 成功",
-    "imported": "Import 成功",
-    "exported": "Export 成功",
-    "copied": "Copy 成功",
-    "sent": "Send 成功"
+    "saved": "儲存成功",
+    "created": "建立成功",
+    "updated": "更新成功",
+    "deleted": "刪除成功",
+    "uploaded": "上載成功",
+    "downloaded": "下載成功",
+    "imported": "匯入成功",
+    "exported": "匯出成功",
+    "copied": "複製成功",
+    "sent": "傳送成功"
   },
   "connection": {
-    "connected": "Connect 成功",
-    "authenticated": "Login 成功",
-    "synchronized": "Sync 成功"
+    "connected": "連線成功",
+    "authenticated": "登入成功",
+    "synchronized": "同步成功"
   },
   "validation": {
-    "valid": "Validate Pass",
+    "valid": "驗證通過",
     "completed": "操作完成"
   }
 }

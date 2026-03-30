@@ -1,10 +1,10 @@
 {
-  "title": "Trace",
+  "title": "追蹤日誌 (Trace)",
   "autoScroll": {
-    "enabled": "Auto Scroll：開",
-    "disabled": "Auto Scroll：閂"
+    "enabled": "自動捲動：開",
+    "disabled": "自動捲動：關"
   },
-  "hint": "目前淨係 Record 部分 AstrBot Main Agent 嘅 Model Call Path，遲啲會繼續完善。",
-  "recording": "Record 緊",
-  "paused": "Pause 咗"
+  "hint": "目前僅記錄部分 AstrBot Main Agent 的模型呼叫路徑，後續會繼續完善。",
+  "recording": "記錄中",
+  "paused": "已暫停"
 }
