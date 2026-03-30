@@ -110,7 +110,8 @@ class LogRoute(Route):
                     data={
                         "logs": logs,
                     },
-                ).to_json()
+                )
+                .to_json()
             )
         except Exception as e:
             logger.error(f"获取日志历史失败: {e}")

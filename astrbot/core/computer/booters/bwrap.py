@@ -331,8 +331,12 @@ class BwrapBooter(ComputerBooter):
             )
 
     async def shutdown(self) -> None:
-        if self.config and await asyncio.to_thread(os.path.exists, self.config.workspace_dir):
-            await asyncio.to_thread(shutil.rmtree, self.config.workspace_dir, ignore_errors=True)
+        if self.config and await asyncio.to_thread(
+            os.path.exists, self.config.workspace_dir
+        ):
+            await asyncio.to_thread(
+                shutil.rmtree, self.config.workspace_dir, ignore_errors=True
+            )
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         if not self._fs or not self.config:

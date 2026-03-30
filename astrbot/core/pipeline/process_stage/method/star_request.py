@@ -19,7 +19,7 @@ class StarRequestSubStage(Stage):
         self.identifier = ctx.astrbot_config["provider_settings"]["identifier"]
         self.ctx = ctx
 
-    async def process(
+    async def process(  # type: ignore[invalid-method-override]
         self,
         event: AstrMessageEvent,
     ) -> AsyncGenerator[Any, None]:

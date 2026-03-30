@@ -92,6 +92,23 @@ class WeixinOCClient:
         return data[:-pad_len]
 
     @staticmethod
+    def _build_media_cipher(key: bytes):
+        # Weixin OC CDN media transport only exchanges an `aeskey`; no IV is
+        # negotiated by the upstream API, so ECB is required for compatibility.
+        # codeql[py/weak-cryptographic-algorithm]
+        return AES.new(key, AES.MODE_ECB)
+
+    @classmethod
+    def encrypt_cdn_payload(cls, data: bytes, key: bytes) -> bytes:
+        cipher = cls._build_media_cipher(key)
+        return cipher.encrypt(cls.pkcs7_pad(data))
+
+    @classmethod
+    def decrypt_cdn_payload(cls, encrypted: bytes, key: bytes) -> bytes:
+        cipher = cls._build_media_cipher(key)
+        return cls.pkcs7_unpad(cipher.decrypt(encrypted))
+
+    @staticmethod
     def parse_media_aes_key(aes_key_value: str) -> bytes:
         normalized = aes_key_value.strip()
         if not normalized:
@@ -133,12 +150,12 @@ class WeixinOCClient:
             hashlib.md5(raw_data).hexdigest(),
             file_key,
         )
-        cipher = AES.new(bytes.fromhex(aes_key_hex), AES.MODE_ECB)
-        encrypted = cipher.encrypt(self.pkcs7_pad(raw_data))
+        key = bytes.fromhex(aes_key_hex)
+        encrypted = self.encrypt_cdn_payload(raw_data, key)
         logger.debug(
             "weixin_oc(%s): encrypt done aes_key_len=%s plain_size=%s cipher_size=%s",
             self.adapter_id,
-            len(bytes.fromhex(aes_key_hex)),
+            len(key),
             len(raw_data),
             len(encrypted),
         )
@@ -200,8 +217,7 @@ class WeixinOCClient:
     ) -> bytes:
         encrypted = await self.download_cdn_bytes(encrypted_query_param)
         key = self.parse_media_aes_key(aes_key_value)
-        cipher = AES.new(key, AES.MODE_ECB)
-        return self.pkcs7_unpad(cipher.decrypt(encrypted))
+        return self.decrypt_cdn_payload(encrypted, key)
 
     async def request_json(
         self,

@@ -95,8 +95,10 @@ class ChatRoute(Route):
         self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
         self.conv_mgr = core_lifecycle.conversation_manager
         self.platform_history_mgr = core_lifecycle.platform_message_history_manager
+        assert self.platform_history_mgr
         self.db = db
         self.umop_config_router = core_lifecycle.umop_config_router
+        assert self.umop_config_router
 
         self.running_convs: dict[str, bool] = {}
 
@@ -198,7 +200,8 @@ class ChatRoute(Route):
                     "filename": filename,
                     "type": attach_type,
                 }
-            ).to_json()
+            )
+            .to_json()
         )
 
     async def _build_user_message_parts(self, message: str | list) -> list[dict]:
@@ -343,7 +346,8 @@ class ChatRoute(Route):
         if not webchat_message_parts_have_content(message_parts):
             return (
                 Response()
-                .error("Message content is empty (reply only is not allowed)").to_json()
+                .error("Message content is empty (reply only is not allowed)")
+                .to_json()
             )
 
         message_id = str(uuid.uuid4())
@@ -712,7 +716,8 @@ class ChatRoute(Route):
                     "failed_count": len(failed_items),
                     "failed_items": failed_items,
                 }
-            ).to_json()
+            )
+            .to_json()
         )
 
     def _extract_attachment_ids(self, history_list) -> list[str]:
@@ -771,7 +776,8 @@ class ChatRoute(Route):
                     "session_id": session.session_id,
                     "platform_id": session.platform_id,
                 }
-            ).to_json()
+            )
+            .to_json()
         )
 
     async def get_sessions(self):

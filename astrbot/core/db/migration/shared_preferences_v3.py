@@ -28,7 +28,7 @@ class SharedPreferences:
             json.dump(self._data, f, indent=4, ensure_ascii=False)
             f.flush()
 
-    def get(self, key, default: _VT = None) -> _VT:
+    def get(self, key, default: _VT = None) -> _VT:  # type: ignore[valid-type]
         return self._data.get(key, default)
 
     def put(self, key, value) -> None:

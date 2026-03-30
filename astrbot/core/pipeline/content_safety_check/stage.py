@@ -20,7 +20,7 @@ class ContentSafetyCheckStage(Stage):
         config = ctx.astrbot_config["content_safety"]
         self.strategy_selector = StrategySelector(config)
 
-    async def process(
+    async def process(  # type: ignore[invalid-method-override]
         self,
         event: AstrMessageEvent,
         check_text: str | None = None,

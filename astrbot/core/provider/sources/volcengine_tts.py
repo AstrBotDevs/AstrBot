@@ -1,8 +1,8 @@
 import base64
 import json
-import os
 import traceback
 import uuid
+from pathlib import Path
 
 import aiohttp
 import anyio
@@ -32,6 +32,19 @@ class ProviderVolcengineTTS(TTSProvider):
             "https://openspeech.bytedance.com/api/v1/tts",
         )
         self.timeout = provider_config.get("timeout", 20)
+
+    @staticmethod
+    def _build_loggable_payload(payload: dict) -> dict:
+        loggable_payload = {
+            "app": dict(payload.get("app", {})),
+            "user": dict(payload.get("user", {})),
+            "audio": dict(payload.get("audio", {})),
+            "request": dict(payload.get("request", {})),
+        }
+        app_payload = loggable_payload.get("app")
+        if isinstance(app_payload, dict) and app_payload.get("token"):
+            app_payload["token"] = "***"
+        return loggable_payload
 
     def _build_request_payload(self, text: str) -> dict:
         return {
@@ -66,10 +79,13 @@ class ProviderVolcengineTTS(TTSProvider):
         }
 
         payload = self._build_request_payload(text)
+        loggable_payload = self._build_loggable_payload(payload)
 
-        # Don't log headers as they contain sensitive API key info
+        # Keep the request metadata useful for debugging without exposing secrets.
         logger.debug(f"请求 URL: {self.api_base}")
-        logger.debug(f"请求体: {json.dumps(payload, ensure_ascii=False)[:100]}...")
+        logger.debug(
+            f"请求体: {json.dumps(loggable_payload, ensure_ascii=False)[:100]}..."
+        )
 
         try:
             async with (
@@ -92,17 +108,14 @@ class ProviderVolcengineTTS(TTSProvider):
                     if "data" in resp_data:
                         audio_data = base64.b64decode(resp_data["data"])
 
-                        temp_dir = get_astrbot_temp_path()
-                        os.makedirs(temp_dir, exist_ok=True)
-                        file_path = os.path.join(
-                            temp_dir,
-                            f"volcengine_tts_{uuid.uuid4()}.mp3",
-                        )
+                        temp_dir = Path(get_astrbot_temp_path())
+                        temp_dir.mkdir(parents=True, exist_ok=True)
+                        file_path = temp_dir / f"volcengine_tts_{uuid.uuid4()}.mp3"
 
                         async with await anyio.open_file(file_path, "wb") as audio_file:
                             await audio_file.write(audio_data)
 
-                        return file_path
+                        return str(file_path)
                     error_msg = resp_data.get("message", "未知错误")
                     raise Exception(f"火山引擎 TTS API 返回错误: {error_msg}")
                 raise Exception(

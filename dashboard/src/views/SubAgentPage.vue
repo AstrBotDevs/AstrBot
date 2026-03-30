@@ -1,27 +1,50 @@
 <template>
   <div class="subagent-page">
-    <div class="d-flex align-center justify-space-between mb-6">
-      <div>
-        <div class="d-flex align-center gap-2 mb-1">
-          <h2 class="text-h5 font-weight-bold">
-            {{ tm("page.title") }}
-          </h2>
-          <v-chip
-            size="x-small"
-            color="orange-darken-2"
-            variant="tonal"
-            label
-            class="font-weight-bold"
-          >
-            {{ tm("page.beta") }}
-          </v-chip>
+    <section class="subagent-hero gel-panel">
+      <div class="hero-copy">
+        <div class="hero-heading-row">
+          <div class="hero-title-wrap">
+            <h2 class="hero-title">
+              {{ tm("page.title") }}
+            </h2>
+            <v-chip
+              size="x-small"
+              color="orange-darken-2"
+              variant="tonal"
+              label
+              class="font-weight-bold"
+            >
+              {{ tm("page.beta") }}
+            </v-chip>
+          </div>
+          <div class="hero-subtitle">
+            {{ tm("page.subtitle") }}
+          </div>
         </div>
-        <div class="text-body-2 text-medium-emphasis">
-          {{ tm("page.subtitle") }}
+
+        <div class="hero-pill-row">
+          <div class="hero-pill">
+            <span class="hero-pill-label">{{ tm("section.title") }}</span>
+            <strong class="hero-pill-value">{{ cfg.agents.length }}</strong>
+          </div>
+          <div class="hero-pill">
+            <span class="hero-pill-label">{{ tm("description.enabled") }}</span>
+            <strong class="hero-pill-value">{{ enabledAgentCount }}</strong>
+          </div>
+          <div class="hero-pill">
+            <span class="hero-pill-label">{{ tm("form.providerLabel") }}</span>
+            <strong class="hero-pill-value">{{ linkedProviderCount }}</strong>
+          </div>
+          <div class="hero-pill">
+            <span class="hero-pill-label">{{ tm("form.personaLabel") }}</span>
+            <strong class="hero-pill-value">{{
+              configuredPersonaCount
+            }}</strong>
+          </div>
         </div>
       </div>
 
-      <div class="d-flex align-center gap-2">
+      <div class="hero-actions">
         <v-btn
           variant="text"
           color="primary"
@@ -41,120 +64,159 @@
           {{ tm("actions.save") }}
         </v-btn>
       </div>
-    </div>
+      <div class="hero-orb hero-orb-a"></div>
+      <div class="hero-orb hero-orb-b"></div>
+    </section>
 
-    <!-- Global Settings Card -->
-    <v-card class="rounded-lg mb-6 border-thin" variant="flat" border>
-      <v-card-text>
-        <div class="d-flex align-center justify-space-between">
+    <v-card class="gel-panel settings-panel" variant="flat">
+      <v-card-text class="settings-panel-body">
+        <div class="panel-heading">
           <div>
-            <div class="text-subtitle-1 font-weight-bold mb-1">
+            <div class="panel-title">
               {{ tm("section.globalSettings") || "Global Settings" }}
             </div>
-            <div class="text-caption text-medium-emphasis">
+            <div class="panel-subtitle">
               {{ mainStateDescription }}
             </div>
           </div>
         </div>
 
-        <v-divider class="my-4" />
-
-        <v-row density="compact">
-          <v-col cols="12" md="6">
+        <div class="setting-grid">
+          <div class="setting-tile" :class="{ 'is-active': cfg.main_enable }">
+            <div class="setting-copy">
+              <div class="setting-title">
+                {{ tm("switches.enable") }}
+              </div>
+              <div class="setting-hint">
+                {{ tm("switches.enableHint") }}
+              </div>
+            </div>
             <v-switch
               v-model="cfg.main_enable"
-              :label="tm('switches.enable')"
               color="primary"
               hide-details
               inset
               density="comfortable"
-            >
-              <template #label>
-                <div class="d-flex flex-column">
-                  <span class="text-body-2 font-weight-medium">{{
-                    tm("switches.enable")
-                  }}</span>
-                  <span class="text-caption text-medium-emphasis">{{
-                    tm("switches.enableHint")
-                  }}</span>
-                </div>
-              </template>
-            </v-switch>
-          </v-col>
-          <v-col cols="12" md="6">
+            />
+          </div>
+
+          <div
+            class="setting-tile"
+            :class="{
+              'is-active': cfg.main_enable && cfg.remove_main_duplicate_tools,
+              'is-muted': !cfg.main_enable,
+            }"
+          >
+            <div class="setting-copy">
+              <div class="setting-title">
+                {{ tm("switches.dedupe") }}
+              </div>
+              <div class="setting-hint">
+                {{ tm("switches.dedupeHint") }}
+              </div>
+            </div>
             <v-switch
               v-model="cfg.remove_main_duplicate_tools"
               :disabled="!cfg.main_enable"
-              :label="tm('switches.dedupe')"
               color="primary"
               hide-details
               inset
               density="comfortable"
-            >
-              <template #label>
-                <div class="d-flex flex-column">
-                  <span class="text-body-2 font-weight-medium">{{
-                    tm("switches.dedupe")
-                  }}</span>
-                  <span class="text-caption text-medium-emphasis">{{
-                    tm("switches.dedupeHint")
-                  }}</span>
-                </div>
-              </template>
-            </v-switch>
-          </v-col>
-        </v-row>
+            />
+          </div>
+        </div>
       </v-card-text>
     </v-card>
 
-    <!-- Agents List Section -->
-    <div class="d-flex align-center justify-space-between mb-4">
-      <div class="d-flex align-center gap-2">
-        <v-icon icon="mdi-robot" color="primary" size="small" />
-        <div class="text-h6 font-weight-bold">
-          {{ tm("section.title") }}
+    <section class="agents-shell gel-panel">
+      <div class="agents-shell-head">
+        <div class="agents-shell-copy">
+          <div class="agents-shell-title">
+            <v-icon icon="mdi-robot" color="primary" size="small" />
+            <span>{{ tm("section.title") }}</span>
+            <v-chip size="small" variant="tonal" color="primary">
+              {{ cfg.agents.length }}
+            </v-chip>
+          </div>
+          <div class="agents-shell-subtitle">
+            {{ tm("cards.noDescription") }}
+          </div>
         </div>
-        <v-chip size="small" variant="tonal" color="primary" class="ml-2">
-          {{ cfg.agents.length }}
-        </v-chip>
+        <v-btn prepend-icon="mdi-plus" color="primary" @click="addAgent">
+          {{ tm("actions.add") }}
+        </v-btn>
       </div>
-      <v-btn prepend-icon="mdi-plus" color="primary" @click="addAgent">
-        {{ tm("actions.add") }}
-      </v-btn>
-    </div>
 
-    <v-expansion-panels variant="popout" class="subagent-panels">
+      <v-expansion-panels
+        v-if="cfg.agents.length > 0"
+        variant="popout"
+        class="subagent-panels"
+      >
       <v-expansion-panel
         v-for="(agent, idx) in cfg.agents"
         :key="agent.__key"
         elevation="0"
-        class="border-thin mb-2 rounded-lg"
-        :class="{ 'border-primary': agent.enabled }"
+        class="agent-panel"
+        :class="{ 'agent-panel--enabled': agent.enabled }"
       >
-        <v-expansion-panel-title class="py-3">
-          <div class="d-flex align-center w-100 gap-4">
-            <!-- Status Indicator -->
-            <v-badge
-              dot
-              :color="agent.enabled ? 'success' : 'grey'"
-              inline
-              class="mr-2"
-            />
+        <v-expansion-panel-title class="agent-panel-title">
+          <div class="agent-title-layout">
+            <div class="agent-leading">
+              <div class="agent-index-badge">
+                {{ String(idx + 1).padStart(2, "0") }}
+              </div>
+              <v-badge
+                dot
+                :color="agent.enabled ? 'success' : 'grey'"
+                inline
+              />
+            </div>
 
-            <!-- Agent Info -->
-            <div class="d-flex flex-column flex-grow-1" style="min-width: 0">
-              <div class="d-flex align-center gap-2">
-                <span class="text-subtitle-1 font-weight-bold text-truncate">
+            <div class="agent-summary">
+              <div class="agent-name-row">
+                <span class="agent-name">
                   {{ agent.name || tm("cards.unnamed") }}
                 </span>
+                <v-chip
+                  size="x-small"
+                  :color="agent.enabled ? 'success' : 'grey'"
+                  variant="tonal"
+                  label
+                >
+                  {{ agent.enabled ? tm("description.enabled") : tm("description.disabled") }}
+                </v-chip>
               </div>
-              <div class="text-caption text-medium-emphasis text-truncate">
+              <div class="agent-description">
                 {{ agent.public_description || tm("cards.noDescription") }}
+              </div>
+              <div
+                v-if="agent.provider_id || agent.persona_id"
+                class="agent-meta-row"
+              >
+                <v-chip
+                  v-if="agent.provider_id"
+                  size="x-small"
+                  variant="outlined"
+                  color="primary"
+                  label
+                >
+                  <v-icon start size="14">mdi-connection</v-icon>
+                  {{ agent.provider_id }}
+                </v-chip>
+                <v-chip
+                  v-if="agent.persona_id"
+                  size="x-small"
+                  variant="outlined"
+                  color="secondary"
+                  label
+                >
+                  <v-icon start size="14">mdi-account-box-outline</v-icon>
+                  {{ agent.persona_id }}
+                </v-chip>
               </div>
             </div>
 
-            <!-- Controls (stop propagation on clicks) -->
-            <div class="d-flex align-center gap-2 flex-shrink-0" @click.stop>
+            <div class="agent-controls" @click.stop>
               <v-switch
                 v-model="agent.enabled"
                 color="success"
@@ -174,11 +236,10 @@
         </v-expansion-panel-title>
 
         <v-expansion-panel-text>
-          <v-divider class="mb-4" />
-          <v-row>
-            <!-- Left Column: Form -->
+          <v-divider class="agent-divider mb-4" />
+          <v-row class="agent-editor-grid">
             <v-col cols="12" md="6">
-              <div class="d-flex flex-column gap-4">
+              <div class="agent-field-stack">
                 <v-text-field
                   v-model="agent.name"
                   :label="tm('form.nameLabel')"
@@ -193,21 +254,12 @@
                   prepend-inner-icon="mdi-account"
                 />
 
-                <div class="d-flex flex-column gap-1">
-                  <div class="text-caption text-medium-emphasis ml-1">
+                <div class="agent-field-group">
+                  <div class="field-group-label">
                     {{ tm("form.providerLabel") }}
                   </div>
-                  <v-card
-                    variant="outlined"
-                    class="pa-0 border-thin rounded bg-transparent"
-                    style="
-                      border-color: rgba(
-                        var(--v-border-color),
-                        var(--v-border-opacity)
-                      );
-                    "
-                  >
-                    <div class="pa-3">
+                  <v-card variant="flat" class="field-card">
+                    <div class="field-card-body">
                       <ProviderSelector
                         v-model="agent.provider_id"
                         provider-type="chat_completion"
@@ -219,21 +271,12 @@
                   </v-card>
                 </div>
 
-                <div class="d-flex flex-column gap-1">
-                  <div class="text-caption text-medium-emphasis ml-1">
+                <div class="agent-field-group">
+                  <div class="field-group-label">
                     {{ tm("form.personaLabel") }}
                   </div>
-                  <v-card
-                    variant="outlined"
-                    class="pa-0 border-thin rounded bg-transparent"
-                    style="
-                      border-color: rgba(
-                        var(--v-border-color),
-                        var(--v-border-opacity)
-                      );
-                    "
-                  >
-                    <div class="pa-3">
+                  <v-card variant="flat" class="field-card">
+                    <div class="field-card-body">
                       <PersonaSelector v-model="agent.persona_id" />
                     </div>
                   </v-card>
@@ -251,41 +294,37 @@
               </div>
             </v-col>
 
-            <!-- Right Column: Preview -->
             <v-col cols="12" md="6">
-              <div class="h-100">
-                <div
-                  class="text-caption font-weight-bold text-medium-emphasis mb-2 ml-1"
-                >
+              <div class="preview-card">
+                <div class="preview-card-label">
                   {{ tm("cards.personaPreview") }}
                 </div>
                 <PersonaQuickPreview
                   :model-value="agent.persona_id"
-                  class="h-100"
+                  class="preview-card-body"
                 />
               </div>
             </v-col>
           </v-row>
         </v-expansion-panel-text>
       </v-expansion-panel>
-    </v-expansion-panels>
+      </v-expansion-panels>
 
-    <!-- Empty State -->
-    <div
-      v-if="cfg.agents.length === 0"
-      class="d-flex flex-column align-center justify-center py-12 text-medium-emphasis"
-    >
-      <v-icon icon="mdi-robot-off" size="64" class="mb-4 opacity-50" />
-      <div class="text-h6">
-        {{ tm("empty.title") }}
+      <div v-else class="empty-state">
+        <div class="empty-state-icon-wrap">
+          <v-icon icon="mdi-robot-off" size="64" class="opacity-70" />
+        </div>
+        <div class="text-h6">
+          {{ tm("empty.title") }}
+        </div>
+        <div class="text-body-2 mb-4">
+          {{ tm("empty.subtitle") }}
+        </div>
+        <v-btn color="primary" variant="tonal" @click="addAgent">
+          {{ tm("empty.action") }}
+        </v-btn>
       </div>
-      <div class="text-body-2 mb-4">
-        {{ tm("empty.subtitle") }}
-      </div>
-      <v-btn color="primary" variant="tonal" @click="addAgent">
-        {{ tm("empty.action") }}
-      </v-btn>
-    </div>
+    </section>
 
     <v-snackbar
       v-model="snackbar.show"
@@ -354,6 +393,18 @@ const mainStateDescription = computed(() =>
   cfg.value.main_enable
     ? tm("description.enabled")
     : tm("description.disabled"),
+);
+
+const enabledAgentCount = computed(
+  () => cfg.value.agents.filter((agent) => agent.enabled).length,
+);
+
+const linkedProviderCount = computed(
+  () => cfg.value.agents.filter((agent) => !!agent.provider_id).length,
+);
+
+const configuredPersonaCount = computed(
+  () => cfg.value.agents.filter((agent) => !!agent.persona_id).length,
 );
 
 function normalizeConfig(raw: any): SubAgentConfig {
@@ -481,14 +532,435 @@ onMounted(() => {
 
 <style scoped>
 .subagent-page {
+  --subagent-surface: rgba(var(--v-theme-surface), 0.94);
+  --subagent-surface-soft: rgba(var(--v-theme-surface), 0.8);
+  --subagent-border: rgba(var(--v-theme-on-surface), 0.1);
+  --subagent-border-strong: rgba(var(--v-theme-primary), 0.18);
+  --subagent-text-muted: rgba(var(--v-theme-on-surface), 0.68);
+  --subagent-text-soft: rgba(var(--v-theme-on-surface), 0.54);
+  --subagent-accent-soft: rgba(var(--v-theme-primary), 0.08);
   padding: 24px;
-  max-width: 1200px;
-  margin: 0 auto;
+  max-width: 1280px;
+  margin: 0 auto 40px;
+}
+
+.gel-panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--subagent-border) !important;
+  border-radius: 28px !important;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(var(--v-theme-surface), 0.98),
+      rgba(var(--v-theme-surface), 0.9)
+    ) !important;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(18px) saturate(1.04);
+}
+
+:global(.v-theme--dark) .subagent-page .gel-panel {
+  background:
+    linear-gradient(
+      145deg,
+      rgba(var(--v-theme-surface), 0.84),
+      rgba(var(--v-theme-surface), 0.72)
+    ) !important;
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.28);
+}
+
+.subagent-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px 30px;
+  margin-bottom: 20px;
+}
+
+.hero-copy,
+.hero-actions {
+  position: relative;
+  z-index: 1;
+}
+
+.hero-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.hero-heading-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hero-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.hero-title {
+  margin: 0;
+  font-size: clamp(1.8rem, 2vw, 2.4rem);
+  line-height: 1.05;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.hero-subtitle {
+  max-width: 760px;
+  color: var(--subagent-text-muted);
+  font-size: 0.98rem;
+  line-height: 1.6;
+}
+
+.hero-pill-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.hero-pill {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  background: rgba(var(--v-theme-on-surface), 0.035);
+}
+
+.hero-pill-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--subagent-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.hero-pill-value {
+  display: block;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.hero-orb {
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+  filter: blur(8px);
+  opacity: 0.55;
+}
+
+.hero-orb-a {
+  width: 180px;
+  height: 180px;
+  right: -48px;
+  top: -44px;
+  background: radial-gradient(
+    circle,
+    rgba(var(--v-theme-primary), 0.22) 0%,
+    rgba(var(--v-theme-primary), 0) 72%
+  );
+}
+
+.hero-orb-b {
+  width: 140px;
+  height: 140px;
+  right: 180px;
+  bottom: -54px;
+  background: radial-gradient(
+    circle,
+    rgba(var(--v-theme-secondary), 0.18) 0%,
+    rgba(var(--v-theme-secondary), 0) 72%
+  );
+}
+
+.settings-panel {
+  margin-bottom: 20px;
+}
+
+.settings-panel-body {
+  padding: 28px !important;
+}
+
+.panel-heading {
+  margin-bottom: 18px;
+}
+
+.panel-title {
+  font-size: 1.08rem;
+  font-weight: 700;
+}
+
+.panel-subtitle {
+  margin-top: 6px;
+  color: var(--subagent-text-muted);
+  font-size: 0.9rem;
+}
+
+.setting-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.setting-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-radius: 22px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  background: rgba(var(--v-theme-on-surface), 0.025);
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.setting-tile.is-active {
+  border-color: var(--subagent-border-strong);
+  background: rgba(var(--v-theme-primary), 0.08);
+}
+
+.setting-tile.is-muted {
+  opacity: 0.72;
+}
+
+.setting-copy {
+  min-width: 0;
+}
+
+.setting-title {
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.setting-hint {
+  margin-top: 6px;
+  color: var(--subagent-text-muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.agents-shell {
+  padding: 28px;
+}
+
+.agents-shell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.agents-shell-copy {
+  min-width: 0;
+}
+
+.agents-shell-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.08rem;
+  font-weight: 700;
+}
+
+.agents-shell-subtitle {
+  margin-top: 8px;
+  color: var(--subagent-text-muted);
+  font-size: 0.9rem;
+}
+
+.subagent-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.agent-panel {
+  border: 1px solid var(--subagent-border) !important;
+  border-radius: 24px !important;
+  background: rgba(var(--v-theme-on-surface), 0.022) !important;
+  overflow: hidden;
+}
+
+.agent-panel--enabled {
+  border-color: rgba(var(--v-theme-primary), 0.22) !important;
+  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.04);
+}
+
+.agent-panel-title {
+  padding: 18px 20px !important;
+}
+
+.agent-title-layout {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.agent-leading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.agent-index-badge {
+  min-width: 44px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(var(--v-theme-primary), 0.1);
+  color: rgb(var(--v-theme-primary));
+  font-weight: 700;
+  font-size: 0.82rem;
+  text-align: center;
+  letter-spacing: 0.08em;
+}
+
+.agent-summary {
+  min-width: 0;
+  flex: 1;
+}
+
+.agent-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.agent-name {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.agent-description {
+  margin-top: 4px;
+  color: var(--subagent-text-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.agent-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.agent-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.agent-divider {
+  border-color: rgba(var(--v-theme-on-surface), 0.08) !important;
 }
 
 .subagent-panels ::v-deep(.v-expansion-panel-text__wrapper) {
+  padding: 0 20px 24px;
+}
+
+.agent-editor-grid {
+  margin: 0;
+}
+
+.agent-field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.agent-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field-group-label {
+  padding-left: 4px;
+  color: var(--subagent-text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.field-card {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08) !important;
+  border-radius: 20px !important;
+  background: rgba(var(--v-theme-on-surface), 0.025) !important;
+}
+
+.field-card-body {
   padding: 16px;
-  padding-bottom: 42px;
+}
+
+.preview-card {
+  height: 100%;
+  min-height: 100%;
+  padding: 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--v-theme-primary), 0.05),
+      rgba(var(--v-theme-on-surface), 0.02)
+    );
+}
+
+.preview-card-label {
+  margin-bottom: 12px;
+  padding-left: 4px;
+  color: var(--subagent-text-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.preview-card-body {
+  height: calc(100% - 28px);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 52px 16px 28px;
+  color: var(--subagent-text-muted);
+  text-align: center;
+}
+
+.empty-state-icon-wrap {
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  margin-bottom: 18px;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-primary), 0.08);
 }
 
 .gap-2 {
@@ -497,5 +969,59 @@ onMounted(() => {
 
 .gap-4 {
   gap: 16px;
+}
+
+@media (max-width: 960px) {
+  .subagent-hero,
+  .agents-shell-head,
+  .agent-title-layout {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hero-actions,
+  .agent-controls {
+    justify-content: flex-end;
+  }
+
+  .hero-pill-row,
+  .setting-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .subagent-page {
+    padding: 16px;
+  }
+
+  .subagent-hero,
+  .settings-panel-body,
+  .agents-shell {
+    padding: 20px;
+  }
+
+  .hero-pill-row,
+  .setting-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .hero-actions > * {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .agent-panel-title {
+    padding: 16px !important;
+  }
+
+  .subagent-panels ::v-deep(.v-expansion-panel-text__wrapper) {
+    padding: 0 16px 20px;
+  }
 }
 </style>

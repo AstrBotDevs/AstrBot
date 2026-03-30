@@ -128,7 +128,7 @@ class ProviderGoogleGenAI(Provider):
 
         raise e
 
-    async def _prepare_query_config(
+    async def _prepare_query_config(  # type: ignore[invalid-method-override]
         self,
         payloads: dict,
         tools: ToolSet | None = None,
@@ -468,7 +468,6 @@ class ProviderGoogleGenAI(Provider):
         """处理内容部分并构建消息链"""
         if not candidate.content:
             logger.warning(f"收到的 candidate.content 为空: {candidate}")
-<<<<<<< HEAD
             raise EmptyModelOutputError(
                 "Gemini candidate content is empty. "
                 f"finish_reason={candidate.finish_reason}"
@@ -494,7 +493,6 @@ class ProviderGoogleGenAI(Provider):
 
         if not result_parts:
             logger.warning(f"收到的 candidate.content.parts 为空: {candidate}")
-<<<<<<< HEAD
             raise EmptyModelOutputError(
                 "Gemini candidate content parts are empty. "
                 f"finish_reason={candidate.finish_reason}"
@@ -644,7 +642,7 @@ class ProviderGoogleGenAI(Provider):
             llm_response.usage = self._extract_usage(result.usage_metadata)
         return llm_response
 
-    async def _query_stream(
+    async def _query_stream(  # type: ignore[invalid-method-override]
         self,
         payloads: dict,
         tools: ToolSet | None,
@@ -769,7 +767,7 @@ class ProviderGoogleGenAI(Provider):
 
         yield final_response
 
-    async def text_chat(
+    async def text_chat(  # type: ignore[invalid-method-override]
         self,
         prompt=None,
         session_id=None,
@@ -827,7 +825,7 @@ class ProviderGoogleGenAI(Provider):
 
         raise Exception("请求失败｡")
 
-    async def text_chat_stream(
+    async def text_chat_stream(  # type: ignore[invalid-method-override]
         self,
         prompt=None,
         session_id=None,
@@ -908,7 +906,7 @@ class ProviderGoogleGenAI(Provider):
         self.chosen_api_key = key
         self._init_client()
 
-    async def assemble_context(
+    async def assemble_context(  # type: ignore[invalid-method-override]
         self,
         text: str,
         image_urls: list[str] | None = None,

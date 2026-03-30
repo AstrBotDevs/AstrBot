@@ -28,7 +28,7 @@ class ProcessStage(Stage):
         self.star_request_sub_stage = StarRequestSubStage()
         await self.star_request_sub_stage.initialize(ctx)
 
-    async def process(
+    async def process(  # type: ignore[invalid-method-override]
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:

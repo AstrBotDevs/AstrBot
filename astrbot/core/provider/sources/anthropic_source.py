@@ -356,7 +356,7 @@ class ProviderAnthropic(Provider):
         )
         return llm_response
 
-    async def _query_stream(
+    async def _query_stream(  # type: ignore[invalid-method-override]
         self,
         payloads: dict,
         tools: ToolSet | None,
@@ -512,7 +512,7 @@ class ProviderAnthropic(Provider):
         )
         yield final_response
 
-    async def text_chat(
+    async def text_chat(  # type: ignore[invalid-method-override]
         self,
         prompt=None,
         session_id=None,
@@ -572,7 +572,7 @@ class ProviderAnthropic(Provider):
 
         return llm_response
 
-    async def text_chat_stream(
+    async def text_chat_stream(  # type: ignore[invalid-method-override]
         self,
         prompt=None,
         session_id=None,
@@ -638,7 +638,7 @@ class ProviderAnthropic(Provider):
             return "image/webp"
         return "image/jpeg"
 
-    async def assemble_context(
+    async def assemble_context(  # type: ignore[invalid-method-override]
         self,
         text: str,
         image_urls: list[str] | None = None,

@@ -34,11 +34,11 @@ def _get_local_tools() -> list[FunctionTool]:
     if _LOCAL_TOOLS_CACHE is None:
         from astrbot.core.computer.tools import ExecuteShellTool, LocalPythonTool
 
-        _LOCAL_TOOLS_CACHE = [
+        _LOCAL_TOOLS_CACHE = [  # type: ignore[assignment]
             ExecuteShellTool(is_local=True),
             LocalPythonTool(),
         ]
-    return list(_LOCAL_TOOLS_CACHE)
+    return list(_LOCAL_TOOLS_CACHE)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +114,7 @@ class ComputerToolProvider:
             SyncSkillReleaseTool,
         )
 
-        all_tools: list[FunctionTool] = [
+        all_tools: list[FunctionTool] = [  # type: ignore[assignment]
             ExecuteShellTool(),
             PythonTool(),
             FileUploadTool(),

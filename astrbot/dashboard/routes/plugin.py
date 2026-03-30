@@ -114,7 +114,8 @@ class PluginRoute(Route):
                         "message": message,
                         "astrbot_version": version_spec,
                     }
-                ).to_json()
+                )
+                .to_json()
             )
         except Exception as e:
             return Response().error(str(e)).to_json()
@@ -123,7 +124,8 @@ class PluginRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
         try:
             data = await request.get_json()
@@ -149,7 +151,8 @@ class PluginRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
 
         data = await request.get_json()
@@ -437,7 +440,8 @@ class PluginRoute(Route):
             _plugin_resp.append(_t)
         return (
             Response()
-            .ok(_plugin_resp, message=self.plugin_manager.failed_plugin_info).to_json()
+            .ok(_plugin_resp, message=self.plugin_manager.failed_plugin_info)
+            .to_json()
         )
 
     async def get_failed_plugins(self):
@@ -509,7 +513,8 @@ class PluginRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
 
         post_data = await request.get_json()
@@ -547,7 +552,8 @@ class PluginRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
 
         try:
@@ -587,7 +593,8 @@ class PluginRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
 
         post_data = await request.get_json()
@@ -611,7 +618,8 @@ class PluginRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
 
         post_data = await request.get_json()
@@ -638,7 +646,8 @@ class PluginRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
 
         post_data = await request.get_json()
@@ -659,7 +668,8 @@ class PluginRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
 
         post_data = await request.get_json()
@@ -711,7 +721,8 @@ class PluginRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
 
         post_data = await request.get_json()
@@ -728,7 +739,8 @@ class PluginRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
 
         post_data = await request.get_json()
@@ -790,7 +802,8 @@ class PluginRoute(Route):
 
             return (
                 Response()
-                .ok({"content": readme_content}, "成功获取README内容").to_json()
+                .ok({"content": readme_content}, "成功获取README内容")
+                .to_json()
             )
         except Exception as e:
             logger.error(f"/api/plugin/readme: {traceback.format_exc()}")
@@ -850,7 +863,8 @@ class PluginRoute(Route):
                         changelog_content = await f.read()
                     return (
                         Response()
-                        .ok({"content": changelog_content}, "成功获取更新日志").to_json()
+                        .ok({"content": changelog_content}, "成功获取更新日志")
+                        .to_json()
                     )
                 except Exception as e:
                     logger.error(f"/api/plugin/changelog: {traceback.format_exc()}")

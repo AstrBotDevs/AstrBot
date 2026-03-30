@@ -30,7 +30,7 @@ class ShipyardBooter(ComputerBooter):
             PythonTool,
         )
 
-        return (
+        return (  # type: ignore[return-value]
             ExecuteShellTool(),
             PythonTool(),
             FileUploadTool(),

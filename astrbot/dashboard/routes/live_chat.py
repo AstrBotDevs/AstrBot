@@ -139,6 +139,7 @@ class LiveChatRoute(Route):
         self.db = db
         self.plugin_manager = core_lifecycle.plugin_manager
         self.platform_history_mgr = core_lifecycle.platform_message_history_manager
+        assert self.platform_history_mgr
         self.sessions: dict[str, LiveChatSession] = {}
         self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
         self.legacy_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")

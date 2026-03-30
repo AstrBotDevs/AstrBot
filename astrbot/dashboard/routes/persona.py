@@ -71,7 +71,8 @@ class PersonaRoute(Route):
                         }
                         for persona in personas
                     ],
-                ).to_json()
+                )
+                .to_json()
             )
         except Exception as e:
             logger.error(f"获取人格列表失败: {e!s}\n{traceback.format_exc()}")
@@ -109,7 +110,8 @@ class PersonaRoute(Route):
                         if persona.updated_at
                         else None,
                     },
-                ).to_json()
+                )
+                .to_json()
             )
         except Exception as e:
             logger.error(f"获取人格详情失败: {e!s}\n{traceback.format_exc()}")
@@ -143,7 +145,8 @@ class PersonaRoute(Route):
             if begin_dialogs and len(begin_dialogs) % 2 != 0:
                 return (
                     Response()
-                    .error("预设对话数量必须为偶数(用户和助手轮流对话)").to_json()
+                    .error("预设对话数量必须为偶数(用户和助手轮流对话)")
+                    .to_json()
                 )
 
             persona = await self.persona_mgr.create_persona(
@@ -179,7 +182,8 @@ class PersonaRoute(Route):
                             else None,
                         },
                     },
-                ).to_json()
+                )
+                .to_json()
             )
         except ValueError as e:
             return Response().error(str(e)).to_json()
@@ -216,7 +220,8 @@ class PersonaRoute(Route):
             if begin_dialogs is not None and len(begin_dialogs) % 2 != 0:
                 return (
                     Response()
-                    .error("预设对话数量必须为偶数(用户和助手轮流对话)").to_json()
+                    .error("预设对话数量必须为偶数(用户和助手轮流对话)")
+                    .to_json()
                 )
 
             update_kwargs = {
@@ -298,7 +303,8 @@ class PersonaRoute(Route):
                             else None,
                         },
                     },
-                ).to_json()
+                )
+                .to_json()
             )
         except ValueError as e:
             return Response().error(str(e)).to_json()
@@ -356,7 +362,8 @@ class PersonaRoute(Route):
                         }
                         for folder in folders
                     ],
-                ).to_json()
+                )
+                .to_json()
             )
         except Exception as e:
             logger.error(f"获取文件夹列表失败: {e!s}\n{traceback.format_exc()}")
@@ -400,7 +407,8 @@ class PersonaRoute(Route):
                         if folder.updated_at
                         else None,
                     },
-                ).to_json()
+                )
+                .to_json()
             )
         except Exception as e:
             logger.error(f"获取文件夹详情失败: {e!s}\n{traceback.format_exc()}")
@@ -444,7 +452,8 @@ class PersonaRoute(Route):
                             else None,
                         },
                     },
-                ).to_json()
+                )
+                .to_json()
             )
         except Exception as e:
             logger.error(f"创建文件夹失败: {e!s}\n{traceback.format_exc()}")
@@ -517,12 +526,14 @@ class PersonaRoute(Route):
                 if not all(k in item for k in ("id", "type", "sort_order")):
                     return (
                         Response()
-                        .error("每个 item 必须包含 id, type, sort_order 字段").to_json()
+                        .error("每个 item 必须包含 id, type, sort_order 字段")
+                        .to_json()
                     )
                 if item["type"] not in ("persona", "folder"):
                     return (
                         Response()
-                        .error("type 字段必须是 'persona' 或 'folder'").to_json()
+                        .error("type 字段必须是 'persona' 或 'folder'")
+                        .to_json()
                     )
 
             await self.persona_mgr.batch_update_sort_order(items)

@@ -133,7 +133,8 @@ class ConversationRoute(Route):
                         "created_at": conversation.created_at,
                         "updated_at": conversation.updated_at,
                     },
-                ).to_json()
+                )
+                .to_json()
             )
 
         except Exception as e:
@@ -183,7 +184,9 @@ class ConversationRoute(Route):
                 conversations = data.get("conversations", [])
                 if not conversations:
                     return (
-                        Response().error("批量删除时conversations参数不能为空").to_json()
+                        Response()
+                        .error("批量删除时conversations参数不能为空")
+                        .to_json()
                     )
 
                 deleted_count = 0
@@ -221,7 +224,8 @@ class ConversationRoute(Route):
                             "failed_count": len(failed_items),
                             "failed_items": failed_items,
                         },
-                    ).to_json()
+                    )
+                    .to_json()
                 )
             # 单个删除
             user_id = data.get("user_id")

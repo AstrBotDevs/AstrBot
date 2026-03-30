@@ -591,6 +591,7 @@ class AstrBotDashboard:
         host = _resolve_dashboard_value(host_value, field_name="host")
         if not isinstance(host, str) or not host:
             raise ValueError("Dashboard host must be a non-empty string")
+
     @staticmethod
     def _resolve_dashboard_ssl_config(
         ssl_config: dict,
@@ -646,7 +647,7 @@ class AstrBotDashboard:
 
         return True, resolved_ssl_config
 
-    def run(self):
+    async def run(self):
         ip_addr = []
         dashboard_config = self.core_lifecycle.astrbot_config.get("dashboard", {})
         port = (
@@ -674,7 +675,6 @@ class AstrBotDashboard:
                 ssl_config,
             )
         scheme = "https" if ssl_enable else "http"
->>>>>>> origin/master
 
         # Port priority: ASTRBOT_PORT env var > cmd_config.json dashboard.port > default 6185
         env_port = os.environ.get("ASTRBOT_PORT")
@@ -732,7 +732,6 @@ class AstrBotDashboard:
         config.bind = binds
 
         if ssl_enable:
-<<<<<<< HEAD
             cert_file = os.environ.get("ASTRBOT_SSL_CERT") or ssl_config.get(
                 "cert_file", ""
             )
@@ -762,10 +761,6 @@ class AstrBotDashboard:
                 if not await ca_path.is_file():
                     raise ValueError(f"SSL CA 证书文件不存在: {ca_path}")
                 config.ca_certs = str(await ca_path.resolve())
-            config.certfile = resolved_ssl_config["certfile"]
-            config.keyfile = resolved_ssl_config["keyfile"]
-            if "ca_certs" in resolved_ssl_config:
-                config.ca_certs = resolved_ssl_config["ca_certs"]
 
         # 根据配置决定是否禁用访问日志
         disable_access_log = dashboard_config.get("disable_access_log", True)

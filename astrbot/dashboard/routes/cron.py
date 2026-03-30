@@ -84,7 +84,8 @@ class CronRoute(Route):
             if (not run_once) and not cron_expression:
                 return jsonify(
                     Response()
-                    .error("cron_expression is required when run_once=false").to_json()
+                    .error("cron_expression is required when run_once=false")
+                    .to_json()
                 )
             if run_once and cron_expression:
                 cron_expression = None  # ignore cron when run_once specified

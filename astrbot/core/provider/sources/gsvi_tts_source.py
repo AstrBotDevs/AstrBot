@@ -1,7 +1,6 @@
 import uuid
 from pathlib import Path
 
-import aiofiles
 import aiohttp
 
 from astrbot.core.provider.entities import ProviderType
