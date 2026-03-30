@@ -7,7 +7,7 @@ import base64
 import os
 import time
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import ClassVar, cast
 
 from typing_extensions import Self
 
@@ -46,7 +46,7 @@ class ToolImageCache:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
-        return cls._instance
+        return cast(Self, cls._instance)
 
     def __init__(self) -> None:
         if self._initialized:
