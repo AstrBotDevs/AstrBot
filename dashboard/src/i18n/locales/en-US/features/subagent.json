@@ -7,6 +7,8 @@
   "actions": {
     "refresh": "Refresh",
     "save": "Save",
+    "import": "Import JSON",
+    "export": "Export JSON",
     "add": "Add SubAgent",
     "delete": "Delete",
     "close": "Close"
@@ -48,6 +50,11 @@
   "messages": {
     "loadConfigFailed": "Failed to load config",
     "loadPersonaFailed": "Failed to load persona list",
+    "importSuccess": "Configuration imported successfully",
+    "importFailed": "Failed to import configuration",
+    "importInvalidJson": "The imported file must be a valid JSON object",
+    "exportSuccess": "Configuration exported successfully",
+    "exportFailed": "Failed to export configuration",
     "nameMissing": "A SubAgent is missing a name",
     "nameInvalid": "Invalid SubAgent name: only lowercase letters/numbers/underscores, starting with a letter",
     "nameDuplicate": "Duplicate SubAgent name: {name}",
