@@ -114,7 +114,7 @@ class AstrBotConfigManager:
             scope_id="global",
         )
         random_word = abconf_name or uuid.uuid4().hex[:8]
-        abconf_data[abconf_id] = {
+        abconf_data[abconf_id] = {  # type: ignore[index]
             "path": abconf_path,
             "name": random_word,
         }
