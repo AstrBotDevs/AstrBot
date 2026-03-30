@@ -10,9 +10,11 @@
     },
     "actions": {
         "create": "Новая задача",
+        "edit": "Изменить",
         "refresh": "Обновить",
         "delete": "Удалить",
         "cancel": "Отмена",
+        "save": "Сохранить",
         "submit": "Создать"
     },
     "table": {
@@ -22,7 +24,7 @@
             "name": "Имя",
             "type": "Тип",
             "cron": "Cron",
-            "session": "ID сессии",
+            "targetSessions": "Целевые сессии",
             "nextRun": "Следующий запуск",
             "lastRun": "Последний запуск",
             "note": "Описание",
@@ -40,6 +42,7 @@
     },
     "form": {
         "title": "Создать задачу",
+        "editTitle": "Изменить задачу",
         "chatHint": "Вы можете ставить задачи прямо в чате, AstrBot создаст их автоматически без заполнения этой формы.",
         "runOnce": "Разовая задача",
         "name": "Имя задачи",
@@ -47,16 +50,18 @@
         "cron": "Cron-выражения",
         "cronPlaceholder": "0 9 * * *",
         "runAt": "Время запуска",
-        "session": "Целевая сессия (platform_id:message_type:session_id)",
+        "targetSessions": "Целевые сессии (по одной на строку)",
+        "targetSessionsPlaceholder": "wuju:GroupMessage:203014918\nwuju:GroupMessage:1043307527",
         "timezone": "Часовой пояс (опционально, напр. Europe/Moscow)",
         "enabled": "Включено"
     },
     "messages": {
         "loadFailed": "Ошибка загрузки задач",
         "updateFailed": "Ошибка обновления",
+        "updateSuccess": "Сохранено",
         "deleteSuccess": "Удалено",
         "deleteFailed": "Ошибка удаления",
-        "sessionRequired": "Укажите сессию",
+        "targetSessionsRequired": "Укажите хотя бы одну целевую сессию",
         "noteRequired": "Заполните описание",
         "cronRequired": "Укажите Cron-выражение",
         "runAtRequired": "Выберите время запуска",
