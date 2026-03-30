@@ -110,6 +110,7 @@ class InternalAgentSubStage(Stage):
 
         self.computer_use_runtime = settings.get("computer_use_runtime")
         self.sandbox_cfg = settings.get("sandbox", {})
+        self.local_working_dir = settings.get("local_working_dir", "")
 
         # Proactive capability configuration
         proactive_cfg = settings.get("proactive_capability", {})
@@ -142,6 +143,7 @@ class InternalAgentSubStage(Stage):
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
             computer_use_runtime=self.computer_use_runtime,
+            local_working_dir=self.local_working_dir,
             sandbox_cfg=self.sandbox_cfg,
             tool_providers=_tool_providers,
             add_cron_tools=self.add_cron_tools,

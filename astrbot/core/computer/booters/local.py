@@ -6,21 +6,17 @@ import os
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from astrbot.api import logger
-from astrbot.core.computer.olayer import (
-    FileSystemComponent,
-    PythonComponent,
-    ShellComponent,
-)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_root,
     get_astrbot_temp_path,
 )
 
+from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
 
 _BLOCKED_COMMAND_PATTERNS = [
@@ -45,59 +41,52 @@ def _is_safe_command(command: str) -> bool:
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
 
 
-def _ensure_safe_path(path: str) -> str:
+def _ensure_safe_path(path: str, extra_allowed_roots: list[str] | None = None) -> str:
     abs_path = os.path.abspath(path)
     allowed_roots = [
         os.path.abspath(get_astrbot_root()),
         os.path.abspath(get_astrbot_data_path()),
         os.path.abspath(get_astrbot_temp_path()),
     ]
+    if extra_allowed_roots:
+        for root in extra_allowed_roots:
+            if root:
+                allowed_roots.append(os.path.abspath(root))
     if not any(abs_path.startswith(root) for root in allowed_roots):
         raise PermissionError("Path is outside the allowed computer roots.")
     return abs_path
 
 
-def _decode_bytes_with_fallback(
-    output: bytes | None,
-    *,
-    preferred_encoding: str | None = None,
-) -> str:
+def _decode_shell_output(output: bytes | None) -> str:
     if output is None:
         return ""
 
     preferred = locale.getpreferredencoding(False) or "utf-8"
-    attempted_encodings: list[str] = []
-
-    def _try_decode(encoding: str) -> str | None:
-        normalized = encoding.lower()
-        if normalized in attempted_encodings:
-            return None
-        attempted_encodings.append(normalized)
-        try:
-            return output.decode(encoding)
-        except (LookupError, UnicodeDecodeError):
-            return None
-
-    for encoding in filter(None, [preferred_encoding, "utf-8", "utf-8-sig"]):
-        if decoded := _try_decode(encoding):
-            return decoded
+    try:
+        return output.decode("utf-8")
+    except (LookupError, UnicodeDecodeError):
+        pass
 
     if os.name == "nt":
-        for encoding in ("mbcs", "cp936", "gbk", "gb18030", preferred):
-            if decoded := _try_decode(encoding):
-                return decoded
-    elif decoded := _try_decode(preferred):
-        return decoded
+        for encoding in ("mbcs", "cp936", "gbk", "gb18030"):
+            try:
+                return output.decode(encoding)
+            except (LookupError, UnicodeDecodeError):
+                continue
+
+    try:
+        return output.decode(preferred)
+    except (LookupError, UnicodeDecodeError):
+        pass
 
     return output.decode("utf-8", errors="replace")
 
 
-def _decode_shell_output(output: bytes | None) -> str:
-    return _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
-
-
 @dataclass
 class LocalShellComponent(ShellComponent):
+    _work_dir: str = field(default="", repr=False)
+    _extra_allowed_roots: list[str] = field(default_factory=list, repr=False)
+
     async def exec(
         self,
         command: str,
@@ -114,12 +103,17 @@ class LocalShellComponent(ShellComponent):
             run_env = os.environ.copy()
             if env:
                 run_env.update({str(k): str(v) for k, v in env.items()})
-            working_dir = _ensure_safe_path(cwd) if cwd else get_astrbot_root()
+            if cwd:
+                working_dir = _ensure_safe_path(cwd, self._extra_allowed_roots)
+            elif self._work_dir:
+                working_dir = self._work_dir
+            else:
+                working_dir = get_astrbot_root()
             if background:
                 # `command` is intentionally executed through the current shell so
                 # local computer-use behavior matches existing tool semantics.
                 # Safety relies on `_is_safe_command()` and the allowed-root checks.
-                proc = subprocess.Popen(  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+                proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                     command,
                     shell=shell,
                     cwd=working_dir,
@@ -131,7 +125,7 @@ class LocalShellComponent(ShellComponent):
             # `command` is intentionally executed through the current shell so
             # local computer-use behavior matches existing tool semantics.
             # Safety relies on `_is_safe_command()` and the allowed-root checks.
-            result = subprocess.run(  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+            result = subprocess.run(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                 command,
                 shell=shell,
                 cwd=working_dir,
@@ -150,6 +144,8 @@ class LocalShellComponent(ShellComponent):
 
 @dataclass
 class LocalPythonComponent(PythonComponent):
+    _work_dir: str = field(default="", repr=False)
+
     async def exec(
         self,
         code: str,
@@ -157,6 +153,8 @@ class LocalPythonComponent(PythonComponent):
         timeout: int = 30,
         silent: bool = False,
     ) -> dict[str, Any]:
+        work_dir = self._work_dir if self._work_dir else get_astrbot_root()
+
         def _run() -> dict[str, Any]:
             try:
                 result = subprocess.run(
@@ -164,6 +162,7 @@ class LocalPythonComponent(PythonComponent):
                     timeout=timeout,
                     capture_output=True,
                     text=True,
+                    cwd=work_dir,
                 )
                 stdout = "" if silent else result.stdout
                 stderr = result.stderr if result.returncode != 0 else ""
@@ -186,11 +185,13 @@ class LocalPythonComponent(PythonComponent):
 
 @dataclass
 class LocalFileSystemComponent(FileSystemComponent):
+    _extra_allowed_roots: list[str] = field(default_factory=list, repr=False)
+
     async def create_file(
         self, path: str, content: str = "", mode: int = 0o644
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = _ensure_safe_path(path)
+            abs_path = _ensure_safe_path(path, self._extra_allowed_roots)
             os.makedirs(os.path.dirname(abs_path), exist_ok=True)
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -201,13 +202,9 @@ class LocalFileSystemComponent(FileSystemComponent):
 
     async def read_file(self, path: str, encoding: str = "utf-8") -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = _ensure_safe_path(path)
-            with open(abs_path, "rb") as f:
-                raw_content = f.read()
-            content = _decode_bytes_with_fallback(
-                raw_content,
-                preferred_encoding=encoding,
-            )
+            abs_path = _ensure_safe_path(path, self._extra_allowed_roots)
+            with open(abs_path, encoding=encoding) as f:
+                content = f.read()
             return {"success": True, "content": content}
 
         return await asyncio.to_thread(_run)
@@ -216,7 +213,7 @@ class LocalFileSystemComponent(FileSystemComponent):
         self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = _ensure_safe_path(path)
+            abs_path = _ensure_safe_path(path, self._extra_allowed_roots)
             os.makedirs(os.path.dirname(abs_path), exist_ok=True)
             with open(abs_path, mode, encoding=encoding) as f:
                 f.write(content)
@@ -226,7 +223,7 @@ class LocalFileSystemComponent(FileSystemComponent):
 
     async def delete_file(self, path: str) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = _ensure_safe_path(path)
+            abs_path = _ensure_safe_path(path, self._extra_allowed_roots)
             if os.path.isdir(abs_path):
                 shutil.rmtree(abs_path)
             else:
@@ -239,7 +236,7 @@ class LocalFileSystemComponent(FileSystemComponent):
         self, path: str = ".", show_hidden: bool = False
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            abs_path = _ensure_safe_path(path)
+            abs_path = _ensure_safe_path(path, self._extra_allowed_roots)
             entries = os.listdir(abs_path)
             if not show_hidden:
                 entries = [e for e in entries if not e.startswith(".")]
@@ -249,10 +246,34 @@ class LocalFileSystemComponent(FileSystemComponent):
 
 
 class LocalBooter(ComputerBooter):
-    def __init__(self) -> None:
-        self._fs = LocalFileSystemComponent()
-        self._python = LocalPythonComponent()
-        self._shell = LocalShellComponent()
+    def __init__(self, work_dir: str = "") -> None:
+        self._work_dir = work_dir
+        self._extra_allowed_roots: list[str] = []
+
+        # Auto-create work directory if configured and not exists
+        if work_dir:
+            abs_work_dir = os.path.abspath(work_dir)
+            if not os.path.exists(abs_work_dir):
+                try:
+                    os.makedirs(abs_work_dir, exist_ok=True)
+                    logger.info(f"Created local working directory: {abs_work_dir}")
+                except OSError as e:
+                    logger.warning(
+                        f"Failed to create local working directory {abs_work_dir}: {e}"
+                    )
+            self._extra_allowed_roots = [abs_work_dir]
+
+        self._fs = LocalFileSystemComponent(
+            _extra_allowed_roots=self._extra_allowed_roots
+        )
+        self._python = LocalPythonComponent(_work_dir=work_dir)
+        self._shell = LocalShellComponent(
+            _work_dir=work_dir, _extra_allowed_roots=self._extra_allowed_roots
+        )
+
+    @property
+    def work_dir(self) -> str:
+        return self._work_dir
 
     async def boot(self, session_id: str) -> None:
         logger.info(f"Local computer booter initialized for session: {session_id}")
