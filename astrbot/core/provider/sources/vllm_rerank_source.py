@@ -43,9 +43,8 @@ class VLLMRerankProvider(RerankProvider):
         self.provider_config = provider_config
         self.provider_settings = provider_settings
         self.auth_key = provider_config.get("rerank_api_key", "")
-        self.base_url = provider_config.get("rerank_api_base", "http://127.0.0.1:8000")
-        self.base_url = self.base_url.rstrip("/")
-        self.endpoint_url = self._resolve_rerank_endpoint(self.base_url)
+        base_url = provider_config.get("rerank_api_base", "http://127.0.0.1:8000")
+        self.endpoint_url = self._resolve_rerank_endpoint(base_url)
         self.timeout = provider_config.get("timeout", 20)
         self.model = provider_config.get("rerank_model", "BAAI/bge-reranker-base")
 
