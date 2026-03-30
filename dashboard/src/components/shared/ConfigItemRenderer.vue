@@ -243,20 +243,20 @@
       @update:model-value="emitUpdate"
     />
 
-    <ListConfigItem
-      v-else-if="itemMeta?.type === 'list'"
-      :model-value="modelValue"
-      class="config-field"
-      @update:model-value="emitUpdate"
-    />
+    <div v-else-if="itemMeta?.type === 'list'" class="config-field">
+      <ListConfigItem
+        :model-value="modelValue"
+        @update:model-value="emitUpdate"
+      />
+    </div>
 
-    <ObjectEditor
-      v-else-if="itemMeta?.type === 'dict'"
-      :model-value="modelValue"
-      :item-meta="itemMeta"
-      class="config-field"
-      @update:model-value="emitUpdate"
-    />
+    <div v-else-if="itemMeta?.type === 'dict'" class="config-field">
+      <ObjectEditor
+        :model-value="modelValue"
+        :item-meta="itemMeta"
+        @update:model-value="emitUpdate"
+      />
+    </div>
 
     <v-text-field
       v-else

@@ -13,14 +13,15 @@
       </span>
     </div>
     <div v-if="isExpanded" class="reasoning-content animate-fade-in">
-      <MarkdownRender
-        :key="`reasoning-${isDark ? 'dark' : 'light'}`"
-        :content="reasoning"
-        class="reasoning-text markdown-content"
-        :typewriter="false"
-        :is-dark="isDark"
-        :style="isDark ? { opacity: '0.85' } : {}"
-      />
+      <div class="reasoning-text markdown-content">
+        <MarkdownRender
+          :key="`reasoning-${isDark ? 'dark' : 'light'}`"
+          :content="reasoning"
+          :typewriter="false"
+          :is-dark="isDark"
+          :style="isDark ? { opacity: '0.85' } : {}"
+        />
+      </div>
     </div>
   </div>
 </template>

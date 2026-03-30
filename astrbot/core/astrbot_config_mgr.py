@@ -42,19 +42,19 @@ class AstrBotConfigManager:
         self.confs: dict[str, AstrBotConfig] = {}
         """uuid / "default" -> AstrBotConfig"""
         self.confs["default"] = default_config
-        self.abconf_data = None
+        self.abconf_data: dict | None = None
         self._load_all_configs()
 
     def _get_abconf_data(self) -> dict:
         """获取所有的 abconf 数据"""
         if self.abconf_data is None:
-            self.abconf_data = self.sp.get(
+            self.abconf_data: dict = self.sp.get(
                 "abconf_mapping",
                 {},
                 scope="global",
                 scope_id="global",
             )
-        return self.abconf_data
+        return self.abconf_data  # type: ignore[return-value]
 
     def _load_all_configs(self) -> None:
         """Load all configurations from the shared preferences."""
@@ -107,7 +107,7 @@ class AstrBotConfigManager:
         abconf_name: str | None = None,
     ) -> None:
         """保存配置文件的映射关系"""
-        abconf_data = self.sp.get(
+        abconf_data: dict = self.sp.get(
             "abconf_mapping",
             {},
             scope="global",

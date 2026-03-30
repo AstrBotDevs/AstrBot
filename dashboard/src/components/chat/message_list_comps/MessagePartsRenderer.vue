@@ -65,37 +65,43 @@
     </div>
 
     <!-- Text (Markdown) -->
-    <MarkdownRender
+    <div
       v-else-if="
         renderPart.type === 'part' &&
         renderPart.part?.type === 'plain' &&
         renderPart.part?.text?.trim()
       "
       :key="`${renderPart.key}-${isDark ? 'dark' : 'light'}`"
-      custom-id="message-list"
-      :custom-html-tags="['ref']"
-      :content="normalizeMarkdownContent(renderPart.part?.text)"
-      :typewriter="false"
       class="markdown-content"
-      :is-dark="isDark"
-      :monaco-options="{ theme: isDark ? 'vs-dark' : 'vs-light' }"
-    />
+    >
+      <MarkdownRender
+        custom-id="message-list"
+        :custom-html-tags="['ref']"
+        :content="normalizeMarkdownContent(renderPart.part?.text)"
+        :typewriter="false"
+        :is-dark="isDark"
+        :monaco-options="{ theme: isDark ? 'vs-dark' : 'vs-light' }"
+      />
+    </div>
 
     <!-- Text (Markdown) -->
-    <MarkdownRender
+    <div
       v-else-if="
         renderPart.type === 'part' &&
         renderPart.part?.type === 'plain' &&
         renderPart.part?.text?.trim()
       "
       :key="`${renderPart.key}-${isDark ? 'dark' : 'light'}`"
-      custom-id="message-list"
-      :custom-html-tags="['ref']"
-      :content="renderPart.part?.text"
-      :typewriter="false"
       class="markdown-content"
-      :is-dark="isDark"
-    />
+    >
+      <MarkdownRender
+        custom-id="message-list"
+        :custom-html-tags="['ref']"
+        :content="renderPart.part?.text"
+        :typewriter="false"
+        :is-dark="isDark"
+      />
+    </div>
 
     <!-- Image -->
     <div

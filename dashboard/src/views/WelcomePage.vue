@@ -253,11 +253,12 @@
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm("announcement.title") }}
             </div>
-            <MarkdownRender
-              :content="welcomeAnnouncement"
-              :typewriter="false"
-              class="welcome-announcement-markdown markdown-content"
-            />
+            <div class="welcome-announcement-markdown markdown-content">
+              <MarkdownRender
+                :content="welcomeAnnouncement"
+                :typewriter="false"
+              />
+            </div>
           </v-card>
         </v-col>
       </v-row>

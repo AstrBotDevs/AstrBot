@@ -854,11 +854,12 @@ const isChristmas = computed(() => {
               overflow-y: auto;
             "
           >
-            <MarkdownRender
-              :content="releaseMessage"
-              :typewriter="false"
-              class="markdown-content"
-            />
+            <div class="markdown-content">
+              <MarkdownRender
+                :content="releaseMessage"
+                :typewriter="false"
+              />
+            </div>
           </div>
 
           <div class="mb-4 mt-4">
@@ -1022,11 +1023,12 @@ const isChristmas = computed(() => {
         {{ selectedReleaseTag }}
       </v-card-title>
       <v-card-text style="font-size: 14px; max-height: 400px; overflow-y: auto">
-        <MarkdownRender
-          :content="selectedReleaseNotes"
-          :typewriter="false"
-          class="markdown-content"
-        />
+        <div class="markdown-content">
+          <MarkdownRender
+            :content="selectedReleaseNotes"
+            :typewriter="false"
+          />
+        </div>
       </v-card-text>
       <v-card-actions>
         <v-spacer />

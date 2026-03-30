@@ -1005,14 +1005,8 @@ export default {
 
 .unsaved-changes-banner {
   border-radius: 8px;
-}
-
-.v-theme--light .unsaved-changes-banner {
-  background-color: #f1f4f9 !important;
-}
-
-.v-theme--dark .unsaved-changes-banner {
-  background-color: #2d2d2d !important;
+  background-color: rgba(var(--v-theme-warning), 0.1) !important;
+  border: 1px solid rgba(var(--v-theme-warning), 0.16) !important;
 }
 
 .unsaved-changes-banner-wrap {

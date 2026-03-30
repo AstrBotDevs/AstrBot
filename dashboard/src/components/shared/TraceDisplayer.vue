@@ -1,8 +1,7 @@
 <script setup>
 import { shallowRef, onMounted, onBeforeUnmount } from "vue";
-import axios from "axios";
 import { EventSourcePolyfill } from "event-source-polyfill";
-import { resolveApiUrl } from "@/utils/request";
+import axios, { resolveApiUrl } from "@/utils/request";
 
 let isMounted = false;
 const events = shallowRef([]);

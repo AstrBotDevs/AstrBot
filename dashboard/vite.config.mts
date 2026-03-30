@@ -44,6 +44,10 @@ function mdiFontDownload() {
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const basePath = env.VITE_BASE_PATH || process.env.BASE_PATH || "/";
+  const devApiProxyTarget =
+    env.VITE_DEV_API_PROXY_TARGET ||
+    process.env.VITE_DEV_API_PROXY_TARGET ||
+    "";
 
   return {
     base: command === "build" ? basePath : "/",
@@ -85,6 +89,14 @@ export default defineConfig(({ command, mode }) => {
     server: {
       host: "::",
       port: 3000,
+      proxy: devApiProxyTarget
+        ? {
+            "/api": {
+              target: devApiProxyTarget,
+              changeOrigin: true,
+            },
+          }
+        : undefined,
     },
   };
 });

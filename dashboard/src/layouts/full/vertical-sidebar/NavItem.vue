@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { useI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
-import { computed } from "vue";
+import { computed, useAttrs } from "vue";
 import { useRoute } from "vue-router";
+
+defineOptions({
+  inheritAttrs: false,
+});
 
 const props = defineProps({ item: Object, level: Number });
 const { t } = useI18n();
 const customizer = useCustomizerStore();
 const route = useRoute();
+const attrs = useAttrs();
 
 const itemStyle = computed(() => {
   const lvl = props.level ?? 0;
@@ -32,6 +37,7 @@ const isItemActive = computed(() => {
     v-if="item.children"
     :value="item.title"
     :class="{ 'group-bordered': customizer.mini_sidebar }"
+    v-bind="attrs"
   >
     <template #activator="{ props }">
       <v-list-item
@@ -75,6 +81,7 @@ const isItemActive = computed(() => {
     :disabled="item.disabled"
     :target="item.type === 'external' ? '_blank' : ''"
     :style="itemStyle"
+    v-bind="attrs"
   >
     <template #prepend>
       <v-icon

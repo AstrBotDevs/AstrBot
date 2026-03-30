@@ -205,11 +205,12 @@ getCurrentVersion();
             {{ changelogError }}
           </v-alert>
           <div v-else-if="changelogContent" class="changelog-content">
-            <MarkdownRender
-              :content="changelogContent"
-              :typewriter="false"
-              class="markdown-content"
-            />
+            <div class="markdown-content">
+              <MarkdownRender
+                :content="changelogContent"
+                :typewriter="false"
+              />
+            </div>
           </div>
         </div>
       </v-card-text>

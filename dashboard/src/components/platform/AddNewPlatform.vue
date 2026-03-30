@@ -14,7 +14,7 @@
     >
       <v-card-text
         ref="dialogScrollContainer"
-        class="pa-4 ml-2"
+        class="pa-4 ml-2 add-platform-body"
         style="overflow-y: auto"
       >
         <div class="d-flex align-start" style="width: 100%">
@@ -40,8 +40,7 @@
                   rounded="md"
                   density="compact"
                   hide-details
-                  class="mt-6"
-                  style="max-width: 30%; min-width: 300px"
+                  class="mt-6 platform-type-field"
                 >
                   <template #item="{ props: itemProps, item }">
                     <v-list-item v-bind="itemProps">
@@ -98,8 +97,7 @@
                   rounded="md"
                   density="compact"
                   hide-details
-                  class="mt-6"
-                  style="max-width: 30%; min-width: 300px"
+                  class="mt-6 platform-type-field"
                   disabled
                 />
                 <div class="mt-3">
@@ -173,7 +171,7 @@
                   </v-radio>
                   <div
                     v-if="aBConfigRadioVal === '0'"
-                    class="d-flex align-center ml-10 my-2"
+                    class="d-flex align-center ml-10 my-2 config-mode-field-row"
                   >
                     <v-select
                       v-model="selectedAbConfId"
@@ -185,7 +183,7 @@
                       rounded="md"
                       density="compact"
                       hide-details
-                      style="max-width: 30%; min-width: 200px"
+                      class="config-file-field"
                     />
                     <v-btn
                       icon
@@ -204,7 +202,7 @@
                   />
                   <div
                     v-if="aBConfigRadioVal === '1'"
-                    class="d-flex align-center"
+                    class="d-flex align-center config-mode-field-row"
                   >
                     <v-text-field
                       v-model="selectedAbConfId"
@@ -213,8 +211,7 @@
                       rounded="md"
                       density="compact"
                       hide-details
-                      style="max-width: 30%; min-width: 200px"
-                      class="ml-10 my-2"
+                      class="ml-10 my-2 config-file-field"
                     />
                   </div>
                 </v-radio-group>
@@ -265,7 +262,9 @@
               </div>
 
               <div v-else>
-                <div class="mb-3 d-flex align-center justify-space-between">
+                <div
+                  class="mb-3 d-flex align-center justify-space-between route-toolbar"
+                >
                   <div>
                     <v-btn
                       v-if="isEditingRoutes"
@@ -302,11 +301,11 @@
                   :no-data-text="tm('createDialog.noRouteRules')"
                   hide-default-footer
                   :items-per-page="-1"
-                  class="mt-2"
+                  class="mt-2 platform-route-table"
                   variant="outlined"
                 >
                   <template #item.source="{ item }">
-                    <div class="d-flex align-center" style="min-width: 250px">
+                    <div class="d-flex align-center route-source-field">
                       <v-select
                         v-if="isEditingRoutes"
                         v-model="item.messageType"
@@ -316,7 +315,7 @@
                         variant="outlined"
                         density="compact"
                         hide-details
-                        style="max-width: 140px"
+                        class="route-message-type-field"
                       />
                       <small v-else>{{
                         getMessageTypeLabel(item.messageType)
@@ -339,7 +338,7 @@
                   </template>
 
                   <template #item.configId="{ item }">
-                    <div class="d-flex align-center">
+                    <div class="d-flex align-center route-config-cell">
                       <v-select
                         v-if="isEditingRoutes"
                         v-model="item.configId"
@@ -348,7 +347,7 @@
                         item-value="id"
                         variant="outlined"
                         density="compact"
-                        style="min-width: 200px"
+                        class="route-config-field"
                         hide-details
                       />
                       <div v-else>
@@ -1373,6 +1372,10 @@ export default {
   font-size: 12px;
 }
 
+.add-platform-body {
+  overscroll-behavior: contain;
+}
+
 .platform-option-logo {
   width: 32px;
   height: 32px;
@@ -1384,6 +1387,39 @@ export default {
   width: 20px;
   height: 20px;
   object-fit: contain;
+}
+
+.platform-type-field {
+  width: min(100%, 320px);
+  max-width: 100%;
+}
+
+.config-file-field {
+  width: min(100%, 320px);
+  max-width: 100%;
+}
+
+.route-source-field {
+  min-width: 250px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.route-message-type-field {
+  width: 140px;
+  max-width: 140px;
+  flex: 0 0 140px;
+}
+
+.route-config-cell {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.route-config-field {
+  width: 100%;
+  min-width: 200px;
+  max-width: 260px;
 }
 
 .config-drawer-overlay {
@@ -1410,5 +1446,78 @@ export default {
   flex: 1;
   overflow-y: auto;
   padding: 16px 16px 24px 16px;
+}
+
+@media (max-width: 700px) {
+  .add-platform-body {
+    padding: 16px !important;
+    margin-left: 0 !important;
+  }
+
+  .platform-option-logo {
+    width: 28px;
+    height: 28px;
+    margin-right: 12px;
+  }
+
+  .platform-selection-logo {
+    width: 18px;
+    height: 18px;
+  }
+
+  .platform-type-field,
+  .config-file-field {
+    width: 100%;
+  }
+
+  .config-mode-field-row {
+    margin-left: 0 !important;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .route-toolbar {
+    align-items: flex-start !important;
+    gap: 8px;
+    flex-direction: column;
+  }
+
+  .route-source-field {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .route-message-type-field {
+    width: 100%;
+    max-width: none;
+    flex-basis: 100%;
+  }
+
+  .route-config-field {
+    min-width: 0;
+    max-width: none;
+  }
+
+  .platform-route-table .v-table__wrapper {
+    overflow-x: auto;
+  }
+
+  .platform-route-table .v-table__wrapper > table {
+    min-width: 640px;
+  }
+
+  .config-drawer-card {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+    margin: 8px;
+  }
+
+  .config-drawer-header {
+    padding: 12px 14px 10px 14px;
+  }
+
+  .config-drawer-content {
+    padding: 12px 12px 20px 12px;
+  }
 }
 </style>

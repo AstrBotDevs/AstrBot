@@ -395,13 +395,24 @@ function getSpecialSubtype(value) {
 <style scoped>
 /* === Reactor glassmorphism card === */
 .config-reactor-card {
+  --config-accent-rgb: var(--v-theme-primary);
+  --config-surface-rgb: var(--v-theme-surface);
+  --config-on-surface-rgb: var(--v-theme-on-surface);
   margin-bottom: 16px;
   padding-bottom: 8px;
-  background: rgba(15, 15, 22, 0.45) !important;
-  backdrop-filter: blur(20px) saturate(1.2);
-  border: 1px solid rgba(0, 242, 255, 0.08) !important;
+  background: rgba(var(--config-surface-rgb), 0.94) !important;
+  backdrop-filter: blur(18px) saturate(1.08);
+  border: 1px solid rgba(var(--config-on-surface-rgb), 0.08) !important;
   border-radius: 24px !important;
-  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.6) !important;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08) !important;
+}
+
+:global(.v-theme--dark) .config-reactor-card {
+  background: rgba(var(--config-surface-rgb), 0.72) !important;
+  border-color: rgba(var(--config-accent-rgb), 0.12) !important;
+  box-shadow:
+    inset 0 0 20px rgba(0, 0, 0, 0.35),
+    0 18px 48px rgba(0, 0, 0, 0.28) !important;
 }
 
 .config-section {
@@ -412,7 +423,7 @@ function getSpecialSubtype(value) {
 .config-title {
   font-size: 1.1rem;
   font-weight: 600;
-  color: rgba(0, 242, 255, 0.9) !important;
+  color: rgba(var(--config-on-surface-rgb), 0.92) !important;
   font-family: "JetBrains Mono", "Fira Code", monospace;
   letter-spacing: 0.5px;
   display: flex;
@@ -424,29 +435,33 @@ function getSpecialSubtype(value) {
   display: inline-block;
   width: 3px;
   height: 1.1em;
-  background: linear-gradient(180deg, #00F2FF 0%, rgba(0, 242, 255, 0.2) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(var(--config-accent-rgb), 0.95) 0%,
+    rgba(var(--config-accent-rgb), 0.16) 100%
+  );
   border-radius: 2px;
   flex-shrink: 0;
-  box-shadow: 0 0 8px rgba(0, 242, 255, 0.6);
+  box-shadow: 0 0 10px rgba(var(--config-accent-rgb), 0.24);
 }
 
 .config-hint {
   font-size: 0.75rem;
-  color: rgba(228, 225, 230, 0.5);
+  color: rgba(var(--config-on-surface-rgb), 0.62);
   margin-top: 4px;
   line-height: 1.5;
 }
 
 .config-hint ::v-deep(a),
 .property-hint ::v-deep(a) {
-  color: rgba(0, 242, 255, 0.7);
+  color: rgba(var(--config-accent-rgb), 0.85);
   text-decoration: none;
-  border-bottom: 1px solid rgba(0, 242, 255, 0.3);
+  border-bottom: 1px solid rgba(var(--config-accent-rgb), 0.28);
   transition: border-color 0.2s;
 }
 .config-hint ::v-deep(a:hover),
 .property-hint ::v-deep(a:hover) {
-  border-bottom-color: #00F2FF;
+  border-bottom-color: rgba(var(--config-accent-rgb), 0.8);
 }
 
 .metadata-key,
@@ -472,11 +487,11 @@ function getSpecialSubtype(value) {
 }
 
 .nested-container {
-  border: 1px solid rgba(0, 242, 255, 0.06);
+  border: 1px solid rgba(var(--config-on-surface-rgb), 0.08);
   border-radius: 12px;
   padding: 12px;
   margin: 12px 0;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(var(--config-accent-rgb), 0.04);
 }
 
 .config-row {
@@ -488,7 +503,7 @@ function getSpecialSubtype(value) {
 }
 
 .config-row:hover {
-  background: rgba(0, 242, 255, 0.03);
+  background: rgba(var(--config-accent-rgb), 0.05);
 }
 
 .property-info {
@@ -498,12 +513,12 @@ function getSpecialSubtype(value) {
 .property-name {
   font-size: 0.875rem;
   font-weight: 500;
-  color: rgba(228, 225, 230, 0.85);
+  color: rgba(var(--config-on-surface-rgb), 0.88);
 }
 
 .property-hint {
   font-size: 0.72rem;
-  color: rgba(228, 225, 230, 0.4);
+  color: rgba(var(--config-on-surface-rgb), 0.62);
   margin-top: 2px;
   line-height: 1.4;
 }
@@ -522,7 +537,7 @@ function getSpecialSubtype(value) {
 }
 
 .config-divider {
-  border-color: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(var(--config-on-surface-rgb), 0.08) !important;
   margin-left: 24px;
 }
 
@@ -537,12 +552,20 @@ function getSpecialSubtype(value) {
   top: 4px;
   right: 4px;
   z-index: 10;
-  background-color: rgba(0, 0, 0, 0.3);
+  background-color: rgba(var(--config-on-surface-rgb), 0.08);
   border-radius: 4px;
 }
 
+:global(.v-theme--dark) .editor-fullscreen-btn {
+  background-color: rgba(0, 0, 0, 0.28);
+}
+
 .editor-fullscreen-btn:hover {
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(var(--config-on-surface-rgb), 0.14);
+}
+
+:global(.v-theme--dark) .editor-fullscreen-btn:hover {
+  background-color: rgba(0, 0, 0, 0.42);
 }
 
 .plugin-set-display-row {
@@ -564,8 +587,8 @@ function getSpecialSubtype(value) {
 }
 
 .selected-plugins-full-width {
-  background: rgba(0, 242, 255, 0.04);
-  border: 1px solid rgba(0, 242, 255, 0.08);
+  background: rgba(var(--config-accent-rgb), 0.04);
+  border: 1px solid rgba(var(--config-accent-rgb), 0.1);
   border-radius: 10px;
   padding: 12px;
 }
