@@ -107,7 +107,7 @@ class AstrBotConfigManager:
         abconf_name: str | None = None,
     ) -> None:
         """保存配置文件的映射关系"""
-        abconf_data: dict = self.sp.get(
+        abconf_data = self.sp.get(
             "abconf_mapping",
             {},
             scope="global",
