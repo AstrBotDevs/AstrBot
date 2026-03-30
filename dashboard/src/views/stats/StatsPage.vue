@@ -814,6 +814,10 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
+.token-side-column > * {
+  min-width: 0;
+}
+
 .stat-card {
   border: 1px solid var(--stats-border);
   border-radius: 16px;
@@ -917,6 +921,8 @@ onBeforeUnmount(() => {
   font-size: 19px;
   font-weight: 650;
   letter-spacing: -0.02em;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .section-subtitle {
@@ -1052,9 +1058,14 @@ onBeforeUnmount(() => {
 
 .token-total-value {
   margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
   font-size: clamp(32px, 3vw, 44px);
   line-height: 1.02;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .token-meta-list {
@@ -1100,6 +1111,12 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.token-total-card .card-label,
+.token-total-card .card-note,
+.token-side-column .section-subtitle {
+  overflow-wrap: anywhere;
 }
 
 .empty-state {
