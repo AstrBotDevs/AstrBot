@@ -76,7 +76,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         if isinstance(segment, Image | Record):
             # 根据 prefer_base64 配置决定是否尝试透传
             file_uri = await AiocqhttpMessageEvent._resolve_file_uri(
-                segment, prefer_base64=prefer_base64,
+                segment,
+                prefer_base64=prefer_base64,
             )
             if file_uri is not None:
                 return {
@@ -118,16 +119,22 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         for segment in message_chain.chain:
             if isinstance(segment, At):
                 # At 组件后插入一个空格，避免与后续文本粘连
-                d = await AiocqhttpMessageEvent._from_segment_to_dict(segment, prefer_base64=prefer_base64)
+                d = await AiocqhttpMessageEvent._from_segment_to_dict(
+                    segment, prefer_base64=prefer_base64
+                )
                 ret.append(d)
                 ret.append({"type": "text", "data": {"text": " "}})
             elif isinstance(segment, Plain):
                 if not segment.text.strip():
                     continue
-                d = await AiocqhttpMessageEvent._from_segment_to_dict(segment, prefer_base64=prefer_base64)
+                d = await AiocqhttpMessageEvent._from_segment_to_dict(
+                    segment, prefer_base64=prefer_base64
+                )
                 ret.append(d)
             else:
-                d = await AiocqhttpMessageEvent._from_segment_to_dict(segment, prefer_base64=prefer_base64)
+                d = await AiocqhttpMessageEvent._from_segment_to_dict(
+                    segment, prefer_base64=prefer_base64
+                )
                 ret.append(d)
         return ret
 
@@ -182,7 +189,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             isinstance(seg, Node | Nodes | File) for seg in message_chain.chain
         )
         if not send_one_by_one:
-            ret = await cls._parse_onebot_json(message_chain, prefer_base64=prefer_base64)
+            ret = await cls._parse_onebot_json(
+                message_chain, prefer_base64=prefer_base64
+            )
             if not ret:
                 return
             await cls._dispatch_send(bot, event, is_group, session_id, ret)
@@ -206,7 +215,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 d = await cls._from_segment_to_dict(seg, prefer_base64=prefer_base64)
                 await cls._dispatch_send(bot, event, is_group, session_id, [d])
             else:
-                messages = await cls._parse_onebot_json(MessageChain([seg]), prefer_base64=prefer_base64)
+                messages = await cls._parse_onebot_json(
+                    MessageChain([seg]), prefer_base64=prefer_base64
+                )
                 if not messages:
                     continue
                 await cls._dispatch_send(bot, event, is_group, session_id, messages)
