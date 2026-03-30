@@ -45,7 +45,8 @@
     "advanced": "Advanced Settings",
     "security": "Security Settings",
     "appearance": "Appearance Settings",
-    "notification": "Notification Settings"
+    "notification": "Notification Settings",
+    "moreConfig": "More Settings"
   },
   "general": {
     "botName": "Bot Name",
@@ -80,13 +81,16 @@
     "title": "Configuration Management",
     "description": "AstrBot supports separate configuration files for different bots. The `default` configuration is used by default.",
     "newConfig": "New Configuration",
+    "copyConfig": "Copy Configuration",
     "editConfig": "Edit Configuration",
     "manageConfigs": "Manage Configurations...",
     "configName": "Name",
     "fillConfigName": "Enter configuration name",
     "confirmDelete": "Are you sure you want to delete the configuration \"{name}\"? This action cannot be undone.",
     "pleaseEnterName": "Please enter a configuration name",
+    "nameExists": "Configuration name already exists. Please use another name.",
     "createFailed": "Failed to create new configuration",
+    "copyFailed": "Failed to copy configuration",
     "deleteFailed": "Failed to delete configuration",
     "updateFailed": "Failed to update configuration"
   },

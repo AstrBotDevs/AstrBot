@@ -1,8 +1,8 @@
 import base64
 import json
 from collections.abc import AsyncGenerator
+from typing import Literal
 
-import aiofiles
 import anthropic
 import httpx
 from anthropic import AsyncAnthropic
@@ -13,6 +13,7 @@ from anthropic.types.usage import Usage
 from astrbot import logger
 from astrbot.api.provider import Provider
 from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.io import download_image_by_url
@@ -29,6 +30,23 @@ from ..register import register_provider_adapter
     "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
+    @staticmethod
+    def _ensure_usable_response(
+        llm_response: LLMResponse,
+        *,
+        completion_id: str | None = None,
+        stop_reason: str | None = None,
+    ) -> None:
+        has_text_output = bool((llm_response.completion_text or "").strip())
+        has_reasoning_output = bool(llm_response.reasoning_content.strip())
+        has_tool_output = bool(llm_response.tools_call_args)
+        if has_text_output or has_reasoning_output or has_tool_output:
+            return
+        raise EmptyModelOutputError(
+            "Anthropic completion has no usable output. "
+            f"completion_id={completion_id}, stop_reason={stop_reason}"
+        )
+
     @staticmethod
     def _normalize_custom_headers(provider_config: dict) -> dict[str, str] | None:
         custom_headers = provider_config.get("custom_headers", {})
@@ -118,10 +136,10 @@ class ProviderAnthropic(Provider):
         """准备 Anthropic API 的请求 payload
 
         Args:
-            messages: OpenAI 格式的消息列表,包含用户输入和系统提示等信息
+            messages: OpenAI 格式的消息列表，包含用户输入和系统提示等信息
         Returns:
             system_prompt: 系统提示内容
-            new_messages: 处理后的消息列表,去除系统提示
+            new_messages: 处理后的消息列表，去除系统提示
 
         """
         system_prompt = ""
@@ -156,7 +174,7 @@ class ProviderAnthropic(Provider):
 
                 if "tool_calls" in message and isinstance(message["tool_calls"], list):
                     for tool_call in message["tool_calls"]:
-                        blocks.append(
+                        blocks.append(  # noqa: PERF401
                             {
                                 "type": "tool_use",
                                 "name": tool_call["function"]["name"],
@@ -259,6 +277,11 @@ class ProviderAnthropic(Provider):
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
+                payloads["tool_choice"] = {
+                    "type": "any"
+                    if payloads.get("tool_choice") == "required"
+                    else "auto"
+                }
 
         extra_body = self.provider_config.get("custom_extra_body", {})
 
@@ -284,7 +307,9 @@ class ProviderAnthropic(Provider):
         logger.debug(f"completion: {completion}")
 
         if len(completion.content) == 0:
-            raise Exception("API 返回的 completion 为空｡")
+            raise EmptyModelOutputError(
+                f"Anthropic completion is empty. completion_id={completion.id}"
+            )
 
         llm_response = LLMResponse(role="assistant")
 
@@ -312,10 +337,9 @@ class ProviderAnthropic(Provider):
         if not llm_response.completion_text and not llm_response.tools_call_args:
             # Guard clause: raise early if no valid content at all
             if not llm_response.reasoning_content:
-                raise ValueError(
-                    f"Anthropic API returned unparsable completion: "
-                    f"no text, tool_use, or thinking content found. "
-                    f"Completion: {completion}"
+                raise EmptyModelOutputError(
+                    "Anthropic completion has no usable output. "
+                    f"completion_id={completion.id}, stop_reason={completion.stop_reason}"
                 )
 
             # We have reasoning content (ThinkingBlock) - this is valid
@@ -325,6 +349,11 @@ class ProviderAnthropic(Provider):
             )
             llm_response.completion_text = ""  # Ensure empty string, not None
 
+        self._ensure_usable_response(
+            llm_response,
+            completion_id=completion.id,
+            stop_reason=completion.stop_reason,
+        )
         return llm_response
 
     async def _query_stream(
@@ -335,6 +364,11 @@ class ProviderAnthropic(Provider):
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
+                payloads["tool_choice"] = {
+                    "type": "any"
+                    if payloads.get("tool_choice") == "required"
+                    else "auto"
+                }
 
         # 用于累积工具调用信息
         tool_use_buffer = {}
@@ -371,7 +405,7 @@ class ProviderAnthropic(Provider):
                             id=id,
                         )
                     elif event.content_block.type == "tool_use":
-                        # 工具使用块开始,初始化缓冲区
+                        # 工具使用块开始，初始化缓冲区
                         tool_use_buffer[event.index] = {
                             "id": event.content_block.id,
                             "name": event.content_block.name,
@@ -443,7 +477,7 @@ class ProviderAnthropic(Provider):
                                 id=id,
                             )
                         except json.JSONDecodeError:
-                            # JSON 解析失败,跳过这个工具调用
+                            # JSON 解析失败，跳过这个工具调用
                             logger.warning(f"工具调用参数 JSON 解析失败: {tool_info}")
 
                         # 清理缓冲区
@@ -471,6 +505,11 @@ class ProviderAnthropic(Provider):
             final_response.tools_call_name = [call["name"] for call in final_tool_calls]
             final_response.tools_call_ids = [call["id"] for call in final_tool_calls]
 
+        self._ensure_usable_response(
+            final_response,
+            completion_id=id,
+            stop_reason=None,
+        )
         yield final_response
 
     async def text_chat(
@@ -484,6 +523,7 @@ class ProviderAnthropic(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -517,6 +557,8 @@ class ProviderAnthropic(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": new_messages, "model": model}
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:
@@ -541,6 +583,7 @@ class ProviderAnthropic(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ):
         if contexts is None:
@@ -573,6 +616,8 @@ class ProviderAnthropic(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": new_messages, "model": model}
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:
@@ -599,7 +644,7 @@ class ProviderAnthropic(Provider):
         image_urls: list[str] | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
     ):
-        """组装上下文,支持文本和图片"""
+        """组装上下文，支持文本和图片"""
 
         async def resolve_image_url(image_url: str) -> dict | None:
             if image_url.startswith("http"):
@@ -612,7 +657,7 @@ class ProviderAnthropic(Provider):
                 image_data, mime_type = await self.encode_image_bs64(image_url)
 
             if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空,将忽略｡")
+                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                 return None
 
             return {
@@ -630,17 +675,17 @@ class ProviderAnthropic(Provider):
 
         content = []
 
-        # 1. 用户原始发言(OpenAI 建议:用户发言在前)
+        # 1. 用户原始发言（OpenAI 建议：用户发言在前）
         if text:
             content.append({"type": "text", "text": text})
         elif image_urls:
-            # 如果没有文本但有图片,添加占位文本
+            # 如果没有文本但有图片，添加占位文本
             content.append({"type": "text", "text": "[图片]"})
         elif extra_user_content_parts:
-            # 如果只有额外内容块,也需要添加占位文本
+            # 如果只有额外内容块，也需要添加占位文本
             content.append({"type": "text", "text": " "})
 
-        # 2. 额外的内容块(系统提醒､指令等)
+        # 2. 额外的内容块（系统提醒、指令等）
         if extra_user_content_parts:
             for block in extra_user_content_parts:
                 if isinstance(block, TextPart):
@@ -659,7 +704,7 @@ class ProviderAnthropic(Provider):
                 if image_dict:
                     content.append(image_dict)
 
-        # 如果只有主文本且没有额外内容块和图片,返回简单格式以保持向后兼容
+        # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (
             text
             and not extra_user_content_parts
@@ -673,7 +718,7 @@ class ProviderAnthropic(Provider):
         return {"role": "user", "content": content}
 
     async def encode_image_bs64(self, image_url: str) -> tuple[str, str]:
-        """将图片转换为 base64,同时检测实际 MIME 类型"""
+        """将图片转换为 base64，同时检测实际 MIME 类型"""
         if image_url.startswith("base64://"):
             raw_base64 = image_url.replace("base64://", "")
             try:
@@ -682,8 +727,8 @@ class ProviderAnthropic(Provider):
             except Exception:
                 mime_type = "image/jpeg"
             return f"data:{mime_type};base64,{raw_base64}", mime_type
-        async with aiofiles.open(image_url, "rb") as f:
-            image_bytes = await f.read()
+        with open(image_url, "rb") as f:
+            image_bytes = f.read()
             mime_type = self._detect_image_mime_type(image_bytes)
             image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
             return f"data:{mime_type};base64,{image_bs64}", mime_type

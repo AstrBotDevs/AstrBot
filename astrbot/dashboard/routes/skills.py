@@ -2,7 +2,6 @@ import os
 import re
 import shutil
 import traceback
-import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -43,6 +42,17 @@ def _to_bool(value: Any, default: bool = False) -> bool:
 
 
 _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _next_available_temp_path(temp_dir: str, filename: str) -> str:
+    stem = Path(filename).stem
+    suffix = Path(filename).suffix
+    candidate = filename
+    index = 1
+    while os.path.exists(os.path.join(temp_dir, candidate)):
+        candidate = f"{stem}_{index}{suffix}"
+        index += 1
+    return os.path.join(temp_dir, candidate)
 
 
 class SkillsRoute(Route):
@@ -165,11 +175,24 @@ class SkillsRoute(Route):
 
             temp_dir = get_astrbot_temp_path()
             os.makedirs(temp_dir, exist_ok=True)
-            temp_path = os.path.join(temp_dir, filename)
+            skill_mgr = SkillManager()
+            temp_path = _next_available_temp_path(temp_dir, filename)
             await file.save(temp_path)
 
-            skill_mgr = SkillManager()
-            skill_name = skill_mgr.install_skill_from_zip(temp_path, overwrite=True)
+            try:
+                try:
+                    skill_name = skill_mgr.install_skill_from_zip(
+                        temp_path, overwrite=False, skill_name_hint=Path(filename).stem
+                    )
+                except TypeError:
+                    # Backward compatibility for callers that do not accept skill_name_hint
+                    skill_name = skill_mgr.install_skill_from_zip(
+                        temp_path, overwrite=False
+                    )
+            except Exception:
+                # Keep behavior consistent with previous implementation
+                # and bubble up install errors (including duplicates).
+                raise
 
             try:
                 await sync_skills_to_active_sandboxes()
@@ -209,6 +232,7 @@ class SkillsRoute(Route):
 
             succeeded = []
             failed = []
+            skipped = []
             skill_mgr = SkillManager()
             temp_dir = get_astrbot_temp_path()
             os.makedirs(temp_dir, exist_ok=True)
@@ -227,14 +251,42 @@ class SkillsRoute(Route):
                         )
                         continue
 
-                    temp_path = os.path.join(
-                        temp_dir, f"batch_{uuid.uuid4().hex}_{filename}"
-                    )
+                    temp_path = _next_available_temp_path(temp_dir, filename)
                     await file.save(temp_path)
 
-                    skill_name = skill_mgr.install_skill_from_zip(
-                        temp_path, overwrite=True
-                    )
+                    try:
+                        skill_name = skill_mgr.install_skill_from_zip(
+                            temp_path,
+                            overwrite=False,
+                            skill_name_hint=Path(filename).stem,
+                        )
+                    except TypeError:
+                        # Backward compatibility for monkeypatched implementations in tests
+                        try:
+                            skill_name = skill_mgr.install_skill_from_zip(
+                                temp_path, overwrite=False
+                            )
+                        except FileExistsError:
+                            skipped.append(
+                                {
+                                    "filename": filename,
+                                    "name": Path(filename).stem,
+                                    "error": "Skill already exists.",
+                                }
+                            )
+                            skill_name = None
+                    except FileExistsError:
+                        skipped.append(
+                            {
+                                "filename": filename,
+                                "name": Path(filename).stem,
+                                "error": "Skill already exists.",
+                            }
+                        )
+                        skill_name = None
+
+                    if skill_name is None:
+                        continue
                     succeeded.append({"filename": filename, "name": skill_name})
 
                 except Exception as e:
@@ -256,8 +308,10 @@ class SkillsRoute(Route):
 
             total = len(file_list)
             success_count = len(succeeded)
+            skipped_count = len(skipped)
+            failed_count = len(failed)
 
-            if success_count == total:
+            if failed_count == 0 and success_count == total:
                 message = f"All {total} skill(s) uploaded successfully."
                 return (
                     Response()
@@ -266,18 +320,35 @@ class SkillsRoute(Route):
                             "total": total,
                             "succeeded": succeeded,
                             "failed": failed,
+                            "skipped": skipped,
                         },
                         message,
                     )
                     .__dict__
                 )
-            if success_count == 0:
+            if failed_count == 0 and success_count == 0:
+                message = f"All {total} file(s) were skipped."
+                return (
+                    Response()
+                    .ok(
+                        {
+                            "total": total,
+                            "succeeded": succeeded,
+                            "failed": failed,
+                            "skipped": skipped,
+                        },
+                        message,
+                    )
+                    .__dict__
+                )
+            if success_count == 0 and skipped_count == 0:
                 message = f"Upload failed for all {total} file(s)."
                 resp = Response().error(message)
                 resp.data = {
                     "total": total,
                     "succeeded": succeeded,
                     "failed": failed,
+                    "skipped": skipped,
                 }
                 return resp.__dict__
 
@@ -289,6 +360,7 @@ class SkillsRoute(Route):
                         "total": total,
                         "succeeded": succeeded,
                         "failed": failed,
+                        "skipped": skipped,
                     },
                     message,
                 )

@@ -91,6 +91,8 @@ class Main(Star):
                         controller: SessionController,
                         event: AstrMessageEvent,
                     ) -> None:
+                        if not event.message_str or not event.message_str.strip():
+                            return
                         event.message_obj.message.insert(
                             0,
                             Comp.At(qq=event.get_self_id(), name=event.get_self_id()),

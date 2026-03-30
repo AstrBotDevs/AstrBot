@@ -6,7 +6,7 @@ import hashlib
 import io
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote
@@ -47,6 +47,17 @@ class OpenClawLoginSession:
     base_url: str | None = None
     user_id: str | None = None
     error: str | None = None
+
+
+@dataclass
+class TypingSessionState:
+    ticket: str | None = None
+    ticket_context_token: str | None = None
+    refresh_after: float = 0.0
+    keepalive_task: asyncio.Task | None = None
+    cancel_task: asyncio.Task | None = None
+    owners: set[str] = field(default_factory=set)
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 @register_platform_adapter(
@@ -105,7 +116,16 @@ class WeixinOCAdapter(Platform):
         self._sync_buf = ""
         self._qr_expired_count = 0
         self._context_tokens: dict[str, str] = {}
+        self._typing_states: dict[str, TypingSessionState] = {}
         self._last_inbound_error = ""
+        self._typing_keepalive_interval_s = max(
+            1,
+            int(platform_config.get("weixin_oc_typing_keepalive_interval", 5)),
+        )
+        self._typing_ticket_ttl_s = max(
+            5,
+            int(platform_config.get("weixin_oc_typing_ticket_ttl", 60)),
+        )
 
         self.token = str(platform_config.get("weixin_oc_token", "")).strip() or None
         self.account_id = (
@@ -131,6 +151,316 @@ class WeixinOCAdapter(Platform):
         self.client.cdn_base_url = self.cdn_base_url
         self.client.api_timeout_ms = self.api_timeout_ms
         self.client.token = self.token
+
+    def _get_typing_state(self, user_id: str) -> TypingSessionState:
+        state = self._typing_states.get(user_id)
+        if state is None:
+            state = TypingSessionState()
+            self._typing_states[user_id] = state
+        return state
+
+    def _typing_supported_for(self, user_id: str) -> bool:
+        if not self.token:
+            return False
+        return bool(self._context_tokens.get(user_id))
+
+    async def _cancel_task_safely(
+        self,
+        task: asyncio.Task | None,
+        *,
+        log_message: str | None = None,
+        log_args: tuple[Any, ...] = (),
+    ) -> None:
+        if task is None or task.done():
+            return
+
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            if log_message is not None:
+                logger.warning(log_message, *log_args, exc_info=True)
+
+    async def _ensure_typing_ticket(
+        self,
+        user_id: str,
+        state: TypingSessionState,
+    ) -> str | None:
+        now = time.monotonic()
+        context_token = self._context_tokens.get(user_id)
+        if not context_token:
+            return None
+
+        if (
+            state.ticket
+            and state.ticket_context_token == context_token
+            and state.refresh_after > now
+        ):
+            return state.ticket
+
+        payload = await self.client.get_typing_config(user_id, context_token)
+        if int(payload.get("ret") or 0) != 0:
+            logger.warning(
+                "weixin_oc(%s): getconfig failed for %s: %s",
+                self.meta().id,
+                user_id,
+                payload.get("errmsg", ""),
+            )
+            return None
+
+        ticket = str(payload.get("typing_ticket", "")).strip()
+        if not ticket:
+            return None
+
+        state.ticket = ticket
+        state.ticket_context_token = context_token
+        state.refresh_after = time.monotonic() + self._typing_ticket_ttl_s
+        return ticket
+
+    async def _send_typing_state(
+        self,
+        user_id: str,
+        ticket: str,
+        *,
+        cancel: bool,
+    ) -> None:
+        payload = await self.client.send_typing_state(user_id, ticket, cancel=cancel)
+        if int(payload.get("ret") or 0) != 0:
+            raise RuntimeError(
+                f"sendtyping failed for {user_id}: {payload.get('errmsg', '')}"
+            )
+
+    async def _run_typing_keepalive(self, user_id: str) -> None:
+        restart_needed = False
+        try:
+            await self._typing_keepalive_loop(user_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            state = self._typing_states.get(user_id)
+            if state is not None:
+                async with state.lock:
+                    state.refresh_after = 0.0
+                    restart_needed = (
+                        bool(state.owners) and not self._shutdown_event.is_set()
+                    )
+            logger.warning(
+                "weixin_oc(%s): typing keepalive failed for %s: %s",
+                self.meta().id,
+                user_id,
+                e,
+            )
+        finally:
+            state = self._typing_states.get(user_id)
+            current_task = asyncio.current_task()
+            if state is not None and state.keepalive_task is current_task:
+                state.keepalive_task = None
+
+        if not restart_needed:
+            return
+
+        await asyncio.sleep(self._typing_keepalive_interval_s)
+        state = self._typing_states.get(user_id)
+        if state is None or self._shutdown_event.is_set():
+            return
+
+        async with state.lock:
+            if not state.owners or state.keepalive_task is not None:
+                return
+            state.keepalive_task = asyncio.create_task(
+                self._run_typing_keepalive(user_id)
+            )
+
+    async def _typing_keepalive_loop(self, user_id: str) -> None:
+        while not self._shutdown_event.is_set():
+            await asyncio.sleep(self._typing_keepalive_interval_s)
+            state = self._typing_states.get(user_id)
+            if state is None:
+                return
+
+            async with state.lock:
+                if not state.owners:
+                    return
+                try:
+                    ticket = await self._ensure_typing_ticket(user_id, state)
+                except Exception as e:
+                    state.refresh_after = 0.0
+                    logger.warning(
+                        "weixin_oc(%s): refresh typing ticket failed for %s: %s",
+                        self.meta().id,
+                        user_id,
+                        e,
+                    )
+                    continue
+                if not ticket:
+                    continue
+                try:
+                    await self._send_typing_state(user_id, ticket, cancel=False)
+                except Exception as e:
+                    state.refresh_after = 0.0
+                    logger.warning(
+                        "weixin_oc(%s): typing keepalive send failed for %s: %s",
+                        self.meta().id,
+                        user_id,
+                        e,
+                    )
+
+    async def _delayed_cancel_typing(self, user_id: str, ticket: str) -> None:
+        await asyncio.sleep(0)
+        state = self._typing_states.get(user_id)
+        if state is None:
+            return
+
+        current_task = asyncio.current_task()
+        async with state.lock:
+            if state.cancel_task is not current_task:
+                return
+            if state.owners or state.keepalive_task is not None:
+                state.cancel_task = None
+                return
+
+        try:
+            await self._send_typing_state(user_id, ticket, cancel=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning(
+                "weixin_oc(%s): cancel typing failed for %s: %s",
+                self.meta().id,
+                user_id,
+                e,
+            )
+        finally:
+            state = self._typing_states.get(user_id)
+            if state is None:
+                return
+            async with state.lock:
+                if state.cancel_task is current_task:
+                    state.cancel_task = None
+
+    async def start_typing(self, user_id: str, owner_id: str) -> None:
+        state = self._get_typing_state(user_id)
+        cancel_task: asyncio.Task | None = None
+        async with state.lock:
+            if owner_id in state.owners:
+                return
+            if not self._typing_supported_for(user_id):
+                return
+            if state.cancel_task is not None and not state.cancel_task.done():
+                cancel_task = state.cancel_task
+                cancel_task.cancel()
+                state.cancel_task = None
+            try:
+                ticket = await self._ensure_typing_ticket(user_id, state)
+            except Exception as e:
+                logger.warning(
+                    "weixin_oc(%s): ensure typing ticket failed for %s: %s",
+                    self.meta().id,
+                    user_id,
+                    e,
+                )
+                return
+            if not ticket:
+                return
+
+            state.ticket = ticket
+            state.owners.add(owner_id)
+            if state.keepalive_task is not None and not state.keepalive_task.done():
+                return
+
+            try:
+                await self._send_typing_state(user_id, ticket, cancel=False)
+            except Exception as e:
+                state.refresh_after = 0.0
+                logger.warning(
+                    "weixin_oc(%s): send typing failed for %s: %s",
+                    self.meta().id,
+                    user_id,
+                    e,
+                )
+
+            task = asyncio.create_task(self._run_typing_keepalive(user_id))
+            state.keepalive_task = task
+
+        if cancel_task is not None:
+            await self._cancel_task_safely(
+                cancel_task,
+                log_message="weixin_oc(%s): ignored error from cancelled typing task",
+                log_args=(self.meta().id,),
+            )
+
+    async def stop_typing(self, user_id: str, owner_id: str) -> None:
+        state = self._typing_states.get(user_id)
+        if state is None:
+            return
+
+        task: asyncio.Task | None = None
+        async with state.lock:
+            if owner_id not in state.owners:
+                return
+            state.owners.remove(owner_id)
+
+            if state.owners:
+                return
+
+            task = state.keepalive_task
+            state.keepalive_task = None
+
+        await self._cancel_task_safely(
+            task,
+            log_message="weixin_oc(%s): typing keepalive stop failed for %s",
+            log_args=(self.meta().id, user_id),
+        )
+
+        async with state.lock:
+            if state.owners:
+                return
+            ticket = state.ticket
+            if ticket:
+                if state.cancel_task is None or state.cancel_task.done():
+                    state.cancel_task = asyncio.create_task(
+                        self._delayed_cancel_typing(user_id, ticket)
+                    )
+
+    async def _cleanup_typing_tasks(self) -> None:
+        tasks: list[asyncio.Task] = []
+        cancels: list[tuple[str, str]] = []
+        for user_id, state in list(self._typing_states.items()):
+            if state.ticket and (
+                state.owners
+                or state.keepalive_task is not None
+                or state.cancel_task is not None
+            ):
+                cancels.append((user_id, state.ticket))
+            state.owners.clear()
+            if state.keepalive_task is not None and not state.keepalive_task.done():
+                tasks.append(state.keepalive_task)
+                state.keepalive_task.cancel()
+                state.keepalive_task = None
+            if state.cancel_task is not None and not state.cancel_task.done():
+                tasks.append(state.cancel_task)
+                state.cancel_task.cancel()
+                state.cancel_task = None
+
+        for task in tasks:
+            await self._cancel_task_safely(
+                task,
+                log_message="weixin_oc(%s): typing cleanup failed",
+                log_args=(self.meta().id,),
+            )
+
+        for user_id, ticket in cancels:
+            try:
+                await self._send_typing_state(user_id, ticket, cancel=True)
+            except Exception as e:
+                logger.warning(
+                    "weixin_oc(%s): typing cleanup cancel failed for %s: %s",
+                    self.meta().id,
+                    user_id,
+                    e,
+                )
 
     def _load_account_state(self) -> None:
         if not self.token:
@@ -263,10 +593,10 @@ class WeixinOCAdapter(Platform):
             len(str(payload.get("upload_param", ""))),
         )
         upload_param = str(payload.get("upload_param", "")).strip()
-        if not upload_param:
-            raise RuntimeError("getuploadurl returned empty upload_param")
+        upload_full_url = str(payload.get("upload_full_url", "")).strip()
 
         encrypted_query_param = await self.client.upload_to_cdn(
+            upload_full_url,
             upload_param,
             file_key,
             aes_key_hex,
@@ -895,16 +1225,31 @@ class WeixinOCAdapter(Platform):
                         await asyncio.sleep(self.qr_poll_interval)
                     continue
 
-                await self._poll_inbound_updates()
+                try:
+                    await self._poll_inbound_updates()
+                except asyncio.TimeoutError:
+                    logger.debug(
+                        "weixin_oc(%s): inbound long-poll timeout",
+                        self.meta().id,
+                    )
+                except Exception as e:
+                    logger.error(
+                        "weixin_oc(%s): poll inbound updates failed, will retry after 5 seconds: %s",
+                        self.meta().id,
+                        e,
+                    )
+                    await asyncio.sleep(5)
         except asyncio.CancelledError:
             raise
         except Exception as e:
             logger.exception("weixin_oc(%s): run failed: %s", self.meta().id, e)
         finally:
+            await self._cleanup_typing_tasks()
             await self.client.close()
 
     async def terminate(self) -> None:
         self._shutdown_event.set()
+        await self._cleanup_typing_tasks()
 
     def get_stats(self) -> dict:
         stat = super().get_stats()

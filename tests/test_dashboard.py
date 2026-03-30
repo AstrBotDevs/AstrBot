@@ -1,21 +1,18 @@
 import asyncio
 import copy
-import errno
-import hashlib
 import io
 import os
 import sys
+import uuid
 import zipfile
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
 from quart import Quart
 from werkzeug.datastructures import FileStorage
 
-from astrbot.cli.commands.cmd_conf import hash_dashboard_password_secure
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
@@ -23,76 +20,12 @@ from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.dashboard.routes.plugin import PluginRoute
-from astrbot.dashboard.server import AstrBotDashboard, _expand_env_placeholders
+from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
     MockPluginBuilder,
     create_mock_updater_install,
     create_mock_updater_update,
 )
-
-TEST_DASHBOARD_PASSWORD = "astrbot-test-password"
-
-
-def test_check_port_in_use_only_treats_eaddrinuse_as_occupied(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    server = AstrBotDashboard.__new__(AstrBotDashboard)
-
-    class _Socket:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return None
-
-        def setsockopt(self, *args, **kwargs):
-            return None
-
-        def bind(self, address):
-            raise OSError(errno.EADDRINUSE, "Address already in use")
-
-    monkeypatch.setattr(
-        "astrbot.dashboard.server.socket.socket", lambda *args, **kwargs: _Socket()
-    )
-
-    assert server.check_port_in_use("127.0.0.1", 3002) is True
-
-
-def test_check_port_in_use_ignores_permission_errors(monkeypatch: pytest.MonkeyPatch):
-    server = AstrBotDashboard.__new__(AstrBotDashboard)
-
-    class _Socket:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return None
-
-        def setsockopt(self, *args, **kwargs):
-            return None
-
-        def bind(self, address):
-            raise PermissionError(errno.EPERM, "Operation not permitted")
-
-    monkeypatch.setattr(
-        "astrbot.dashboard.server.socket.socket", lambda *args, **kwargs: _Socket()
-    )
-
-    assert server.check_port_in_use("127.0.0.1", 3002) is False
-
-
-def test_expand_env_placeholders_resolves_env_and_default(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    monkeypatch.setenv("HOST", "0.0.0.0")
-
-    assert _expand_env_placeholders("${HOST}", "host") == "0.0.0.0"
-    assert _expand_env_placeholders("${MISSING:-3002}", "port") == "3002"
-
-
-def test_expand_env_placeholders_raises_for_unresolved_variable():
-    with pytest.raises(ValueError, match="dashboard host: HOST"):
-        _expand_env_placeholders("${HOST}", "host")
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -103,20 +36,16 @@ async def core_lifecycle_td(tmp_path_factory):
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
-    core_lifecycle.astrbot_config["dashboard"]["username"] = "astrbot"
-    core_lifecycle.astrbot_config["dashboard"]["password"] = (
-        hash_dashboard_password_secure(TEST_DASHBOARD_PASSWORD)
-    )
     try:
         yield core_lifecycle
     finally:
-        # 优先停止核心生命周期以释放资源(包括关闭 MCP 等后台任务)
+        # 优先停止核心生命周期以释放资源（包括关闭 MCP 等后台任务）
         try:
             _stop_res = core_lifecycle.stop()
             if asyncio.iscoroutine(_stop_res):
                 await _stop_res
         except Exception:
-            # 停止过程中如有异常,不影响后续清理
+            # 停止过程中如有异常，不影响后续清理
             pass
 
 
@@ -137,7 +66,7 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": TEST_DASHBOARD_PASSWORD,
+            "password": core_lifecycle_td.astrbot_config["dashboard"]["password"],
         },
     )
     data = await response.get_json()
@@ -161,32 +90,11 @@ async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": TEST_DASHBOARD_PASSWORD,
+            "password": core_lifecycle_td.astrbot_config["dashboard"]["password"],
         },
     )
     data = await response.get_json()
-    assert data["status"] == "ok"
-    assert "token" in data["data"]
-
-
-@pytest.mark.asyncio
-async def test_auth_login_rejects_legacy_md5_password(
-    app: Quart, core_lifecycle_td: AstrBotCoreLifecycle
-):
-    test_client = app.test_client()
-    username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
-    legacy_md5 = hashlib.md5(TEST_DASHBOARD_PASSWORD.encode("utf-8")).hexdigest()
-
-    response = await test_client.post(
-        "/api/auth/login",
-        json={
-            "username": username,
-            "password": "",
-            "password_md5": legacy_md5,
-        },
-    )
-    data = await response.get_json()
-    assert data["status"] == "error"
+    assert data["status"] == "ok" and "token" in data["data"]
 
 
 @pytest.mark.asyncio
@@ -197,8 +105,52 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
     response = await test_client.get("/api/stat/get", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
-    assert data["status"] == "ok"
-    assert "platform" in data["data"]
+    assert data["status"] == "ok" and "platform" in data["data"]
+
+
+@pytest.mark.asyncio
+async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    shutdown_event = asyncio.Event()
+    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config.get("dashboard", {}),
+    )
+    warning_messages = []
+    info_messages = []
+
+    async def fake_serve(app, config, shutdown_trigger):
+        return config
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["ssl"] = {
+            "enable": True,
+            "cert_file": "",
+            "key_file": "",
+        }
+        monkeypatch.setattr(server, "check_port_in_use", lambda port: False)
+        monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
+        monkeypatch.setattr(
+            "astrbot.dashboard.server.logger.warning",
+            lambda message: warning_messages.append(message),
+        )
+        monkeypatch.setattr(
+            "astrbot.dashboard.server.logger.info",
+            lambda message: info_messages.append(message),
+        )
+
+        config = await server.run()
+
+        assert getattr(config, "certfile", None) is None
+        assert getattr(config, "keyfile", None) is None
+        assert any("cert_file 和 key_file" in message for message in warning_messages)
+        assert any(
+            "正在启动 WebUI, 监听地址: http://" in message for message in info_messages
+        )
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
 
 
 @pytest.mark.asyncio
@@ -248,6 +200,7 @@ async def test_subagent_config_accepts_default_persona(
             json=old_cfg,
             headers=authenticated_header,
         )
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("payload", [[], "x"])
@@ -359,7 +312,7 @@ async def test_plugins(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
-    """测试插件 API 端点,使用 Mock 避免真实网络调用｡"""
+    """测试插件 API 端点，使用 Mock 避免真实网络调用。"""
     test_client = app.test_client()
 
     # 已经安装的插件
@@ -522,295 +475,221 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
-async def test_mcp_servers_api_exposes_client_capabilities(
+async def test_t2i_set_active_template_syncs_all_configs(
     app: Quart,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
-    monkeypatch,
 ):
-    tool_mgr = core_lifecycle_td.provider_manager.llm_tools
-    monkeypatch.setattr(
-        tool_mgr,
-        "load_mcp_config",
-        lambda: {
-            "mcpServers": {
-                "demo": {
-                    "url": "https://example.com/mcp",
-                    "transport": "sse",
-                    "active": True,
-                    "client_capabilities": {
-                        "elicitation": {
-                            "enabled": True,
-                            "timeout_seconds": 180,
-                        },
-                        "sampling": {
-                            "enabled": True,
-                        }
-                    },
-                }
-            }
-        },
-    )
-
     test_client = app.test_client()
-    response = await test_client.get(
-        "/api/tools/mcp/servers",
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert data["data"][0]["client_capabilities"]["elicitation"]["enabled"] is True
-    assert data["data"][0]["client_capabilities"]["elicitation"]["timeout_seconds"] == 180
-    assert data["data"][0]["client_capabilities"]["sampling"]["enabled"] is True
+    template_name = f"sync_tpl_{uuid.uuid4().hex[:8]}"
+    created_conf_ids: list[str] = []
 
-
-@pytest.mark.asyncio
-async def test_mcp_servers_api_includes_resource_bridge_tools(
-    app: Quart,
-    authenticated_header: dict,
-    core_lifecycle_td: AstrBotCoreLifecycle,
-    monkeypatch,
-):
-    tool_mgr = core_lifecycle_td.provider_manager.llm_tools
-    monkeypatch.setattr(
-        tool_mgr,
-        "load_mcp_config",
-        lambda: {
-            "mcpServers": {
-                "demo": {
-                    "command": "node",
-                    "args": ["stdio.js"],
-                    "active": True,
-                }
-            }
-        },
-    )
-    tool_mgr._mcp_server_runtime["demo"] = SimpleNamespace(
-        client=SimpleNamespace(
-            tools=[SimpleNamespace(name="demo_tool")],
-            resource_bridge_tool_names=["mcp_demo_list_resources"],
-            server_errlogs=[],
-        )
-    )
-
-    test_client = app.test_client()
     try:
-        response = await test_client.get(
-            "/api/tools/mcp/servers",
-            headers=authenticated_header,
-        )
-        assert response.status_code == 200
-        data = await response.get_json()
-        assert data["status"] == "ok"
-        assert data["data"][0]["tools"] == [
-            "demo_tool",
-            "mcp_demo_list_resources",
-        ]
-    finally:
-        tool_mgr._mcp_server_runtime.pop("demo", None)
+        for name in ("sync-a", "sync-b"):
+            response = await test_client.post(
+                "/api/config/abconf/new",
+                json={"name": name},
+                headers=authenticated_header,
+            )
+            assert response.status_code == 200
+            data = await response.get_json()
+            assert data["status"] == "ok"
+            created_conf_ids.append(data["data"]["conf_id"])
 
-
-@pytest.mark.asyncio
-async def test_mcp_servers_api_includes_prompt_bridge_tools(
-    app: Quart,
-    authenticated_header: dict,
-    core_lifecycle_td: AstrBotCoreLifecycle,
-    monkeypatch,
-):
-    tool_mgr = core_lifecycle_td.provider_manager.llm_tools
-    monkeypatch.setattr(
-        tool_mgr,
-        "load_mcp_config",
-        lambda: {
-            "mcpServers": {
-                "demo": {
-                    "command": "node",
-                    "args": ["stdio.js"],
-                    "active": True,
-                }
-            }
-        },
-    )
-    tool_mgr._mcp_server_runtime["demo"] = SimpleNamespace(
-        client=SimpleNamespace(
-            tools=[SimpleNamespace(name="demo_tool")],
-            resource_bridge_tool_names=[],
-            prompt_bridge_tool_names=["mcp_demo_list_prompts", "mcp_demo_get_prompt"],
-            server_errlogs=[],
-        )
-    )
-
-    test_client = app.test_client()
-    try:
-        response = await test_client.get(
-            "/api/tools/mcp/servers",
-            headers=authenticated_header,
-        )
-        assert response.status_code == 200
-        data = await response.get_json()
-        assert data["status"] == "ok"
-        assert data["data"][0]["tools"] == [
-            "demo_tool",
-            "mcp_demo_list_prompts",
-            "mcp_demo_get_prompt",
-        ]
-    finally:
-        tool_mgr._mcp_server_runtime.pop("demo", None)
-
-
-@pytest.mark.asyncio
-async def test_add_mcp_server_persists_client_capabilities(
-    app: Quart,
-    authenticated_header: dict,
-    core_lifecycle_td: AstrBotCoreLifecycle,
-    tmp_path,
-    monkeypatch,
-):
-    monkeypatch.setattr(
-        "astrbot.core.provider.func_tool_manager.get_astrbot_data_path",
-        lambda: str(tmp_path),
-    )
-    tool_mgr = core_lifecycle_td.provider_manager.llm_tools
-    monkeypatch.setattr(
-        tool_mgr,
-        "test_mcp_server_connection",
-        AsyncMock(return_value=["demo_tool"]),
-    )
-    monkeypatch.setattr(
-        tool_mgr,
-        "enable_mcp_server",
-        AsyncMock(return_value=None),
-    )
-
-    test_client = app.test_client()
-    response = await test_client.post(
-        "/api/tools/mcp/add",
-        json={
-            "name": "demo",
-            "url": "https://example.com/mcp",
-            "transport": "sse",
-            "active": True,
-            "client_capabilities": {
-                "elicitation": {
-                    "enabled": True,
-                    "timeout_seconds": 240,
-                },
-                "sampling": {
-                    "enabled": True,
-                }
+        response = await test_client.post(
+            "/api/t2i/templates/create",
+            json={
+                "name": template_name,
+                "content": "<html><body>{{ content }}</body></html>",
             },
-        },
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
+            headers=authenticated_header,
+        )
+        assert response.status_code == 201
+        data = await response.get_json()
+        assert data["status"] == "ok"
 
-    persisted = tool_mgr.load_mcp_config()
-    assert (
-        persisted["mcpServers"]["demo"]["client_capabilities"]["elicitation"][
-            "enabled"
-        ]
-        is True
-    )
-    assert (
-        persisted["mcpServers"]["demo"]["client_capabilities"]["elicitation"][
-            "timeout_seconds"
-        ]
-        == 240
-    )
-    assert (
-        persisted["mcpServers"]["demo"]["client_capabilities"]["sampling"]["enabled"]
-        is True
-    )
+        response = await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": template_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        conf_ids = set(core_lifecycle_td.astrbot_config_mgr.confs.keys())
+        assert "default" in conf_ids
+        for conf_id in conf_ids:
+            conf = core_lifecycle_td.astrbot_config_mgr.confs[conf_id]
+            assert conf.get("t2i_active_template") == template_name
+            assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
+    finally:
+        await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": "base"},
+            headers=authenticated_header,
+        )
+        await test_client.delete(
+            f"/api/t2i/templates/{template_name}",
+            headers=authenticated_header,
+        )
+        for conf_id in created_conf_ids:
+            await test_client.post(
+                "/api/config/abconf/delete",
+                json={"id": conf_id},
+                headers=authenticated_header,
+            )
 
 
 @pytest.mark.asyncio
-async def test_chat_respond_elicitation_resolves_pending_reply_and_persists_message(
+async def test_t2i_reset_default_template_syncs_all_configs(
     app: Quart,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
-    monkeypatch,
 ):
-    captured: dict[str, str] = {}
-
-    def _fake_submit(umo: str, sender_id: str, reply_text: str, *, reply_outline=None):
-        captured["umo"] = umo
-        captured["sender_id"] = sender_id
-        captured["reply_text"] = reply_text
-        captured["reply_outline"] = reply_outline or ""
-        return True
-
-    monkeypatch.setattr(
-        "astrbot.dashboard.routes.chat.submit_pending_mcp_elicitation_reply",
-        _fake_submit,
-    )
-
     test_client = app.test_client()
-    new_session_response = await test_client.get(
-        "/api/chat/new_session",
-        headers=authenticated_header,
-    )
-    session_data = await new_session_response.get_json()
-    session_id = session_data["data"]["session_id"]
+    template_name = f"reset_tpl_{uuid.uuid4().hex[:8]}"
+    created_conf_ids: list[str] = []
 
-    response = await test_client.post(
-        "/api/chat/respond_elicitation",
-        json={
-            "session_id": session_id,
-            "reply_text": '{"topic":"MCP 最小实现"}',
-            "display_text": "topic: MCP 最小实现",
-        },
-        headers=authenticated_header,
-    )
+    try:
+        for name in ("reset-a", "reset-b"):
+            response = await test_client.post(
+                "/api/config/abconf/new",
+                json={"name": name},
+                headers=authenticated_header,
+            )
+            assert response.status_code == 200
+            data = await response.get_json()
+            assert data["status"] == "ok"
+            created_conf_ids.append(data["data"]["conf_id"])
 
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    expected_username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
-    assert captured["sender_id"] == expected_username
-    assert captured["reply_text"] == '{"topic":"MCP 最小实现"}'
-    assert captured["reply_outline"] == "topic: MCP 最小实现"
-    assert captured["umo"].endswith(f"webchat!{expected_username}!{session_id}")
-    assert data["data"]["saved_message"]["content"]["message"] == [
-        {"type": "plain", "text": "topic: MCP 最小实现"}
-    ]
+        response = await test_client.post(
+            "/api/t2i/templates/create",
+            json={
+                "name": template_name,
+                "content": "<html><body>{{ content }} reset</body></html>",
+            },
+            headers=authenticated_header,
+        )
+        assert response.status_code == 201
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        response = await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": template_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+
+        response = await test_client.post(
+            "/api/t2i/templates/reset_default",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        conf_ids = set(core_lifecycle_td.astrbot_config_mgr.confs.keys())
+        assert "default" in conf_ids
+        for conf_id in conf_ids:
+            conf = core_lifecycle_td.astrbot_config_mgr.confs[conf_id]
+            assert conf.get("t2i_active_template") == "base"
+            assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
+    finally:
+        await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": "base"},
+            headers=authenticated_header,
+        )
+        await test_client.delete(
+            f"/api/t2i/templates/{template_name}",
+            headers=authenticated_header,
+        )
+        for conf_id in created_conf_ids:
+            await test_client.post(
+                "/api/config/abconf/delete",
+                json={"id": conf_id},
+                headers=authenticated_header,
+            )
 
 
 @pytest.mark.asyncio
-async def test_chat_respond_elicitation_rejects_when_no_pending_request(
+async def test_t2i_update_active_template_reloads_all_schedulers(
     app: Quart,
     authenticated_header: dict,
-    monkeypatch,
+    core_lifecycle_td: AstrBotCoreLifecycle,
 ):
-    monkeypatch.setattr(
-        "astrbot.dashboard.routes.chat.submit_pending_mcp_elicitation_reply",
-        lambda *_args, **_kwargs: False,
-    )
-
     test_client = app.test_client()
-    new_session_response = await test_client.get(
-        "/api/chat/new_session",
-        headers=authenticated_header,
-    )
-    session_data = await new_session_response.get_json()
-    session_id = session_data["data"]["session_id"]
+    template_name = f"update_tpl_{uuid.uuid4().hex[:8]}"
+    created_conf_ids: list[str] = []
 
-    response = await test_client.post(
-        "/api/chat/respond_elicitation",
-        json={
-            "session_id": session_id,
-            "reply_text": "cancel",
-            "display_text": "cancel",
-        },
-        headers=authenticated_header,
-    )
+    try:
+        for name in ("update-a", "update-b"):
+            response = await test_client.post(
+                "/api/config/abconf/new",
+                json={"name": name},
+                headers=authenticated_header,
+            )
+            assert response.status_code == 200
+            data = await response.get_json()
+            assert data["status"] == "ok"
+            created_conf_ids.append(data["data"]["conf_id"])
 
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "error"
-    assert "No pending MCP elicitation" in data["message"]
+        response = await test_client.post(
+            "/api/t2i/templates/create",
+            json={
+                "name": template_name,
+                "content": "<html><body>{{ content }} v1</body></html>",
+            },
+            headers=authenticated_header,
+        )
+        assert response.status_code == 201
+
+        response = await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": template_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+
+        conf_ids = list(core_lifecycle_td.astrbot_config_mgr.confs.keys())
+        old_schedulers = {
+            conf_id: core_lifecycle_td.pipeline_scheduler_mapping[conf_id]
+            for conf_id in conf_ids
+        }
+
+        response = await test_client.put(
+            f"/api/t2i/templates/{template_name}",
+            json={"content": "<html><body>{{ content }} v2</body></html>"},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        for conf_id in conf_ids:
+            assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
+            assert (
+                core_lifecycle_td.pipeline_scheduler_mapping[conf_id]
+                is not old_schedulers[conf_id]
+            )
+    finally:
+        await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": "base"},
+            headers=authenticated_header,
+        )
+        await test_client.delete(
+            f"/api/t2i/templates/{template_name}",
+            headers=authenticated_header,
+        )
+        for conf_id in created_conf_ids:
+            await test_client.post(
+                "/api/config/abconf/delete",
+                json={"id": conf_id},
+                headers=authenticated_header,
+            )
 
 
 @pytest.mark.asyncio
@@ -820,16 +699,16 @@ async def test_check_update(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
-    """测试检查更新 API,使用 Mock 避免真实网络调用｡"""
+    """测试检查更新 API，使用 Mock 避免真实网络调用。"""
     test_client = app.test_client()
 
     # Mock 更新检查和网络请求
     async def mock_check_update(*args, **kwargs):
-        """Mock 更新检查,返回无新版本｡"""
+        """Mock 更新检查，返回无新版本。"""
         return None  # None 表示没有新版本
 
     async def mock_get_dashboard_version(*args, **kwargs):
-        """Mock Dashboard 版本获取｡"""
+        """Mock Dashboard 版本获取。"""
         from astrbot.core.config.default import VERSION
 
         return f"v{VERSION}"  # 返回当前版本

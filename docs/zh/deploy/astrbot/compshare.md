@@ -86,4 +86,4 @@ AstrBot 支持接入优云智算提供的模型 API。
 
 ## 更多功能
 
-更多功能情参考 [AstrBot 官方文档](https://docs.astrbot.app)。
+更多功能请参考 [AstrBot 官方文档](https://docs.astrbot.app)。

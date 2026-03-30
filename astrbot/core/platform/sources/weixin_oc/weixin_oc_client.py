@@ -108,11 +108,21 @@ class WeixinOCClient:
 
     async def upload_to_cdn(
         self,
+        upload_full_url: str,
         upload_param: str,
         file_key: str,
         aes_key_hex: str,
         media_path: Path,
     ) -> str:
+        if upload_full_url:
+            cdn_url = upload_full_url
+        elif upload_param:
+            cdn_url = self._build_cdn_upload_url(upload_param, file_key)
+        else:
+            raise ValueError(
+                "CDN upload URL missing (need upload_full_url or upload_param)"
+            )
+
         raw_data = media_path.read_bytes()
         logger.debug(
             "weixin_oc(%s): prepare CDN upload file=%s size=%s md5=%s filekey=%s",
@@ -135,7 +145,6 @@ class WeixinOCClient:
         await self.ensure_http_session()
         assert self._http_session is not None
         timeout = aiohttp.ClientTimeout(total=self.api_timeout_ms / 1000)
-        cdn_url = self._build_cdn_upload_url(upload_param, file_key)
 
         async with self._http_session.post(
             cdn_url,
@@ -226,3 +235,44 @@ class WeixinOCClient:
             if not text:
                 return {}
             return cast(dict[str, Any], json.loads(text))
+
+    async def get_typing_config(
+        self,
+        user_id: str,
+        context_token: str,
+    ) -> dict[str, Any]:
+        return await self.request_json(
+            "POST",
+            "ilink/bot/getconfig",
+            payload={
+                "ilink_user_id": user_id,
+                "context_token": context_token,
+                "base_info": {
+                    "channel_version": "astrbot",
+                },
+            },
+            token_required=True,
+            timeout_ms=self.api_timeout_ms,
+        )
+
+    async def send_typing_state(
+        self,
+        user_id: str,
+        typing_ticket: str,
+        *,
+        cancel: bool,
+    ) -> dict[str, Any]:
+        return await self.request_json(
+            "POST",
+            "ilink/bot/sendtyping",
+            payload={
+                "ilink_user_id": user_id,
+                "typing_ticket": typing_ticket,
+                "status": 2 if cancel else 1,
+                "base_info": {
+                    "channel_version": "astrbot",
+                },
+            },
+            token_required=True,
+            timeout_ms=self.api_timeout_ms,
+        )
