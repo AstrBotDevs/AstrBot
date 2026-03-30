@@ -1,146 +1,146 @@
 {
   "page": {
-    "description": "Manage 人格角色 Set"
+    "description": "管理人格角色設定"
   },
   "buttons": {
-    "create": "Create 人格",
-    "createFirst": "Create 第一個人格",
-    "edit": "Edit",
-    "delete": "Delete",
-    "cancel": "Cancel",
-    "save": "Save",
-    "move": "Move",
-    "addDialogPair": "Add 對話 Pair"
+    "create": "建立人格",
+    "createFirst": "建立第一個人格",
+    "edit": "編輯",
+    "delete": "刪除",
+    "cancel": "取消",
+    "save": "儲存",
+    "move": "移動",
+    "addDialogPair": "新增對話組合"
   },
   "labels": {
-    "presetDialogs": "Preset 對話 ({count} 對)",
-    "createdAt": "Create 時間",
-    "updatedAt": "Update 時間"
+    "presetDialogs": "預設對話 ({count} 組)",
+    "createdAt": "建立時間",
+    "updatedAt": "更新時間"
   },
   "form": {
     "personaId": "人格 ID",
     "systemPrompt": "System Prompt",
-    "customErrorMessage": "自訂 Error Reply Message (Optional)",
-    "customErrorMessageHelp": "當呢個人格嘅 LLM Request 失敗 (例如 Connect Fail) 嗰陣，優先 Send 呢條 Error Message；留空就會 Send Default Error Message。",
-    "presetDialogs": "Preset 對話",
-    "presetDialogsHelp": "加啲 Preset 嘅對話落去幫機械人理解返個角色。",
-    "userMessage": "User Message",
-    "assistantMessage": "AI Reply",
-    "tools": "Tool / MCP Tool 選擇",
-    "toolsHelp": "幫呢個人格揀可以用嘅外部 Tool。外部 Tool 畀咗 AI 接觸外部環境嘅能力，例如 Search、計數、攞 Info 等。",
-    "toolsSelection": "Tool 選擇 Action",
-    "selectAllTools": "Select All Tool",
-    "clearAllTools": "Clear Selection",
-    "allSelected": "Select All",
-    "mcpServersQuickSelect": "MCP Server Quick Select",
-    "searchTools": "Search Tool",
-    "selectedTools": "揀咗嘅 Tool",
-    "noToolsAvailable": "暫時冇 Tool 用得",
-    "noToolsFound": "搵唔到 Match 嘅 Tool",
-    "loadingTools": "Load 緊 Tool...",
-    "allToolsAvailable": "用晒所有可用 Tool",
-    "noToolsSelected": "未揀任何 Tool",
+    "customErrorMessage": "自訂錯誤回覆訊息 (選填)",
+    "customErrorMessageHelp": "當此人格的 LLM 請求失敗（例如連線失敗）時，會優先發送此錯誤訊息；留空則會發送預設錯誤訊息。",
+    "presetDialogs": "預設對話",
+    "presetDialogsHelp": "加入一些預設對話，以協助機械人理解角色設定。",
+    "userMessage": "用戶訊息 (User Message)",
+    "assistantMessage": "AI 回覆 (Assistant Message)",
+    "tools": "工具 / MCP 工具選擇",
+    "toolsHelp": "為此人格選擇可使用的外部工具。外部工具賦予了 AI 接觸外部環境的能力，例如搜尋、計算、獲取資訊等。",
+    "toolsSelection": "工具選擇操作",
+    "selectAllTools": "全選工具",
+    "clearAllTools": "清除選擇",
+    "allSelected": "全選",
+    "mcpServersQuickSelect": "MCP Server 快速選擇",
+    "searchTools": "搜尋工具",
+    "selectedTools": "已選工具",
+    "noToolsAvailable": "暫無可用工具",
+    "noToolsFound": "找不到符合的工具",
+    "loadingTools": "正在載入工具...",
+    "allToolsAvailable": "使用所有可用工具",
+    "noToolsSelected": "未選擇任何工具",
     "skills": "Skills 選擇",
-    "skillsHelp": "幫呢個人格揀可以用嘅 Skills。Skills 會畀 AI 提供可 Re-use 嘅 Flow 同 Spec。",
-    "skillsAllAvailable": "預設用晒全部 Skills",
-    "skillsSelectSpecific": "揀指定 Skills",
-    "searchSkills": "Search Skills",
-    "selectedSkills": "揀咗嘅 Skills",
-    "noSkillsAvailable": "暫時冇 Skills 用得",
-    "noSkillsFound": "搵唔到 Match 嘅 Skills",
-    "loadingSkills": "Load 緊 Skills...",
-    "allSkillsAvailable": "用晒所有可用 Skills",
-    "noSkillsSelected": "未揀任何 Skills",
-    "skillsRuntimeNoneWarning": "Computer Use 運行環境係無，Skills 可能冇辦法畀 Agent 正常 Run，因為冇 Enable 運行環境。",
-    "createInFolder": "會喺「{folder}」度 Create",
+    "skillsHelp": "為此人格選擇可使用的Skills。Skills 會為 AI 提供可重複使用的流程與規格。",
+    "skillsAllAvailable": "預設使用所有 Skills",
+    "skillsSelectSpecific": "選擇指定 Skills",
+    "searchSkills": "搜尋 Skills",
+    "selectedSkills": "已選 Skills",
+    "noSkillsAvailable": "暫無可用 Skills",
+    "noSkillsFound": "找不到符合的 Skills",
+    "loadingSkills": "正在載入 Skills...",
+    "allSkillsAvailable": "使用所有可用 Skills",
+    "noSkillsSelected": "未選擇任何 Skills",
+    "skillsRuntimeNoneWarning": "Computer Use 的運行環境未設定，Skills 可能無法讓 Agent 正常運行，因為未啟用運行環境。",
+    "createInFolder": "將會在「{folder}」中建立",
     "rootFolder": "全部人格"
   },
   "dialog": {
     "create": {
-      "title": "Create 新人格"
+      "title": "建立新人格"
     },
     "edit": {
-      "title": "Edit 人格"
+      "title": "編輯人格"
     }
   },
   "empty": {
-    "title": "暫時冇人格 Config",
-    "description": "Create 返個啦！",
-    "folderEmpty": "呢個 Folder 係空嘅",
-    "folderEmptyDescription": "Create 新人格或者 Folder 開始玩"
+    "title": "暫無人格設定",
+    "description": "請立即建立一個！",
+    "folderEmpty": "此資料夾是空的",
+    "folderEmptyDescription": "建立新人格或資料夾以開始"
   },
   "validation": {
-    "required": "呢個 Field 係必填",
-    "minLength": "最少要 {min} 個字",
-    "alphanumeric": "淨係可以有字母、數字、Underline 同 Dash",
-    "dialogRequired": "{type} 唔可以空",
-    "personaIdExists": "呢個人格名已經存在"
+    "required": "此欄位為必填",
+    "minLength": "最少需要 {min} 個字元",
+    "alphanumeric": "僅容許字母、數字、底線與破折號",
+    "dialogRequired": "欄位 {type} 不能為空",
+    "personaIdExists": "此人格名稱已經存在"
   },
   "messages": {
-    "loadError": "Load 人格 List 失敗",
-    "saveSuccess": "Save 成功",
-    "saveError": "Save 失敗",
-    "deleteConfirm": "肯定要 Delete 人格 \"{id}\"？呢個 Action 冇得 Undo。",
-    "deleteSuccess": "Delete 成功",
-    "deleteError": "Delete 失敗"
+    "loadError": "載入人格列表失敗",
+    "saveSuccess": "儲存成功",
+    "saveError": "儲存失敗",
+    "deleteConfirm": "確定要刪除人格 \"{id}\"？此操作無法復原。",
+    "deleteSuccess": "刪除成功",
+    "deleteError": "刪除失敗"
   },
   "persona": {
     "personasTitle": "人格",
-    "toolsCount": "個 Tool",
+    "toolsCount": "個工具",
     "skillsCount": "個 Skills",
     "contextMenu": {
-      "moveTo": "Move 去..."
+      "moveTo": "移動至..."
     },
     "messages": {
-      "moveSuccess": "人格 Move 成功",
-      "moveError": "Move 人格失敗"
+      "moveSuccess": "人格移動成功",
+      "moveError": "移動人格失敗"
     }
   },
   "folder": {
-    "sidebarTitle": "Folder",
-    "rootFolder": "Root Directory",
-    "foldersTitle": "Folder",
-    "noFolders": "暫時冇 Folder",
-    "createButton": "Create Folder",
-    "searchPlaceholder": "Search Folder...",
+    "sidebarTitle": "資料夾",
+    "rootFolder": "根目錄",
+    "foldersTitle": "資料夾",
+    "noFolders": "暫無資料夾",
+    "createButton": "建立資料夾",
+    "searchPlaceholder": "搜尋資料夾...",
     "form": {
-      "name": "Folder 名",
-      "description": "Description (Optional)"
+      "name": "資料夾名稱",
+      "description": "描述 (選填)"
     },
     "validation": {
-      "nameRequired": "Folder 名唔可以空"
+      "nameRequired": "資料夾名稱不能為空"
     },
     "contextMenu": {
-      "open": "Open",
-      "rename": "Rename",
-      "moveTo": "Move 去...",
-      "delete": "Delete"
+      "open": "開啟",
+      "rename": "重新命名",
+      "moveTo": "移動至...",
+      "delete": "刪除"
     },
     "createDialog": {
-      "title": "Create 新 Folder",
-      "createButton": "Create"
+      "title": "建立新資料夾",
+      "createButton": "建立"
     },
     "renameDialog": {
-      "title": "Rename Folder"
+      "title": "重新命名資料夾"
     },
     "deleteDialog": {
-      "title": "Delete Folder",
-      "message": "肯定要 Delete Folder \"{name}\"？",
-      "warning": "Folder 入面嘅所有人格會 Move 晒去 Root Directory。"
+      "title": "刪除資料夾",
+      "message": "確定要刪除資料夾 \"{name}\"？",
+      "warning": "資料夾內的所有人格將會移至根目錄。"
     },
     "messages": {
-      "createSuccess": "Folder Create 成功",
-      "createError": "Create Folder 失敗",
-      "renameSuccess": "Folder Rename 成功",
-      "renameError": "Rename Folder 失敗",
-      "deleteSuccess": "Folder Delete 成功",
-      "deleteError": "Delete Folder 失敗"
+      "createSuccess": "資料夾建立成功",
+      "createError": "建立資料夾失敗",
+      "renameSuccess": "資料夾重新命名成功",
+      "renameError": "重新命名資料夾失敗",
+      "deleteSuccess": "資料夾刪除成功",
+      "deleteError": "刪除資料夾失敗"
     }
   },
   "moveDialog": {
-    "title": "Move 去 Folder",
-    "description": "幫 \"{name}\" 揀 Target Folder",
-    "success": "Move 成功",
-    "error": "Move 失敗"
+    "title": "移動至資料夾",
+    "description": "為 \"{name}\" 選擇目標資料夾",
+    "success": "移動成功",
+    "error": "移動失敗"
   }
 }
