@@ -209,6 +209,7 @@ DEFAULT_CONFIG = {
     "provider_ltm_settings": {
         "group_icl_enable": False,
         "group_message_max_cnt": 300,
+        "context_prompt": "You are now in a chatroom. The chat history is as follows: \n",
         "image_caption": False,
         "image_caption_provider_id": "",
         "active_reply": {
@@ -3867,6 +3868,10 @@ CONFIG_METADATA_3 = {
                     "provider_ltm_settings.group_message_max_cnt": {
                         "description": "最大消息数量",
                         "type": "int",
+                    },
+                    "provider_ltm_settings.context_prompt": {
+                        "description": "上下文感知提示词",
+                        "type": "text",
                     },
                     "provider_ltm_settings.image_caption": {
                         "description": "自动理解图片",
