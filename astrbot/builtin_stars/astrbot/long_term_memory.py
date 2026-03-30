@@ -41,6 +41,10 @@ class LongTermMemory:
             "context_prompt",
             "You are now in a chatroom. The chat history is as follows: \n",
         )
+        active_reply_suffix_prompt = cfg["provider_ltm_settings"].get(
+            "active_reply_suffix_prompt",
+            "Please react to it. Only output your response and do not output any other information. You MUST use the SAME language as the chatroom is using.",
+        )
         active_reply = cfg["provider_ltm_settings"]["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
         ar_method = active_reply["method"]
@@ -50,6 +54,7 @@ class LongTermMemory:
         ret = {
             "max_cnt": max_cnt,
             "context_prompt": context_prompt,
+            "active_reply_suffix_prompt": active_reply_suffix_prompt,
             "image_caption": image_caption,
             "image_caption_prompt": image_caption_prompt,
             "image_caption_provider_id": image_caption_provider_id,
@@ -166,8 +171,7 @@ class LongTermMemory:
             req.prompt = (
                 f"{cfg['context_prompt']}{chats_str}"
                 f"\nNow, a new message is coming: `{prompt}`. "
-                "Please react to it. Only output your response and do not output any other information. "
-                "You MUST use the SAME language as the chatroom is using."
+                f"{cfg['active_reply_suffix_prompt']}"
             )
             req.contexts = []  # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
         else:
