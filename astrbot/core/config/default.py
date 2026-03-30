@@ -1826,7 +1826,7 @@ CONFIG_METADATA_2 = {
                     "rerank_api_base": {
                         "description": "重排序模型 API Base URL",
                         "type": "string",
-                        "hint": "AstrBot 会在请求时在末尾加上 /v1/rerank。",
+                        "hint": "纯域名地址会自动补 /v1/rerank；带路径或完整 rerank 端点的地址保持原样。",
                     },
                     "rerank_api_key": {
                         "description": "API Key",
