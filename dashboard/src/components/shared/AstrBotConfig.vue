@@ -52,11 +52,11 @@ const providerHint = computed(() => {
   const hint = props.iterable?.hint
   if (typeof hint !== 'string' || !hint) return ''
 
-  if (
-    hint === 'provider_group.provider.openai_embedding.hint'
-    || hint === 'provider_group.provider.gemini_embedding.hint'
-  ) {
-    return ''
+  // Embedding 类型的提示在 embedding_api_base 字段旁边显示，不在卡片标题处重复显示
+  if (hint.startsWith('provider_group.provider.') && hint.endsWith('.hint')) {
+    const providerKey = hint.slice('provider_group.provider.'.length, -'.hint'.length)
+    const embeddingTypes = ['openai_embedding', 'gemini_embedding', 'zhipu_embedding', 'volcengine_embedding', 'ollama_embedding']
+    if (embeddingTypes.includes(providerKey)) return ''
   }
 
   return hint
@@ -67,6 +67,7 @@ const getItemHint = (itemKey, itemMeta) => {
 
   if (itemKey !== 'embedding_api_base') return ''
 
+  // 所有 openai_embedding 类型的预设（包括智谱、火山、Ollama）共享 openai_embedding 的提示
   const providerType = props.iterable?.type
   if (providerType === 'openai_embedding') {
     return getRaw('provider_group.provider.openai_embedding.hint')

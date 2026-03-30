@@ -1234,7 +1234,16 @@
                 "description": "Адрес прокси-сервера"
             },
             "openai_embedding": {
-                "hint": "Если тест не проходит, попробуйте добавить /v1 в конец embedding_api_base для совместимости с некоторыми версиями OpenAI API."
+                "hint": "Для OpenAI и совместимых embedding-сервисов. AstrBot добавляет /v1 только если API Base URL не содержит пути; URL с путями (например /api/paas/v4, /api/v3) сохраняются без изменений."
+            },
+            "zhipu_embedding": {
+                "hint": "Пресет Zhipu: https://open.bigmodel.cn/api/paas/v4 и embedding-3, путь /api/paas/v4 сохраняется."
+            },
+            "volcengine_embedding": {
+                "hint": "Пресет Volcengine: https://ark.cn-beijing.volces.com/api/v3 и doubao-embedding-vision, путь /api/v3 сохраняется."
+            },
+            "ollama_embedding": {
+                "hint": "Пресет Ollama: локальный http://127.0.0.1:11434, модель embeddinggemma, 768 измерений. Перед использованием выполните ollama pull embeddinggemma."
             },
             "gemini_embedding": {
                 "hint": "Gemini Embedding не требует ручного добавления /v1beta."

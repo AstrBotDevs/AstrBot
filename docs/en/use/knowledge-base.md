@@ -10,7 +10,9 @@
 
 Open the service provider page, click "Add Service Provider", and select Embedding.
 
-Currently, AstrBot supports embedding vector services compatible with OpenAI API and Gemini API.
+Currently, AstrBot includes built-in presets for OpenAI Embedding, Zhipu Embedding, Volcengine Embedding, Ollama Embedding, and Gemini Embedding.
+
+To connect other OpenAI-compatible embedding services, use the OpenAI Embedding preset. When `embedding api base` only contains the host, AstrBot automatically appends `/v1`. If the URL already contains a path (e.g., Zhipu `/api/paas/v4` or Volcengine `/api/v3`), AstrBot preserves that path as-is.
 
 Click on the provider card above to enter the configuration page and fill in the configuration.
 
